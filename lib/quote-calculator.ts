@@ -1,5 +1,5 @@
 // GateGuard Quote Calculator
-// Auto-generates line items and totals from site survey inputs
+// Generates line items and totals from site survey inputs
 
 import {
   SiteSurvey,
@@ -33,103 +33,259 @@ export function calculateLineItems(survey: SiteSurvey, property: QuoteProperty):
     editable: false,
   });
 
-  // ── Vehicular Gate Setup Fees ──────────────────────────────────────────────
-  for (const gate of survey.vehicularGates) {
-    if (gate.qty <= 0) continue;
-    const price = gate.condition === 'working'
-      ? PRICING.setup.workingGate
-      : PRICING.setup.nonWorkingGate;
-    const label = gate.condition === 'working' ? 'Working' : 'Non-Working';
-    items.push({
-      id: makeId(),
-      description: `${label} Vehicular Gate — Setup Fee`,
-      qty: gate.qty,
-      unitPrice: price,
-      total: price * gate.qty,
-      recurring: false,
-      editable: true,
-    });
-  }
+  // ── Access Control — Tier 1 (Mobile Pass) ─────────────────────────────────
+  if (survey.accessTier === 'tier1_mobile') {
+    const t1 = survey.tier1;
+    const p = PRICING.tier1;
 
-  // ── Amenity Door / Pedestrian Gate Setup Fees ─────────────────────────────
-  for (const door of survey.amenityDoors) {
-    if (door.qty <= 0) continue;
-    const price = door.condition === 'working'
-      ? PRICING.setup.workingDoor
-      : PRICING.setup.nonWorkingDoor;
-    const label = door.condition === 'working' ? 'Working' : 'Non-Working';
-    items.push({
-      id: makeId(),
-      description: `${label} Pedestrian Gate / Amenity Door — Setup Fee`,
-      qty: door.qty,
-      unitPrice: price,
-      total: price * door.qty,
-      recurring: false,
-      editable: true,
-    });
-  }
-
-  // ── Callbox Installation ───────────────────────────────────────────────────
-  for (const cb of survey.callboxes) {
-    if (cb.qty <= 0) continue;
-    if (cb.tier === 'tier2_replace') {
+    if (t1.primaryDoors.qty > 0) {
+      const unitPrice = t1.primaryDoors.condition === 'working' ? p.primaryDoor.working : p.primaryDoor.nonWorking;
       items.push({
         id: makeId(),
-        description: 'Callbox Installation — Unifi Gate Access (replaces existing)',
-        qty: cb.qty,
-        unitPrice: PRICING.setup.newCallbox,
-        total: PRICING.setup.newCallbox * cb.qty,
-        recurring: false,
-        editable: true,
-      });
-    } else if (cb.tier === 'tier1_remove') {
-      items.push({
-        id: makeId(),
-        description: 'Callbox Removal & GateGuard QR Sign Installation',
-        qty: cb.qty,
-        unitPrice: 0,
-        total: 0,
+        description: `Primary Door — Controller + Reader (${t1.primaryDoors.condition === 'working' ? 'Working' : 'Non-Working'})`,
+        qty: t1.primaryDoors.qty,
+        unitPrice,
+        total: unitPrice * t1.primaryDoors.qty,
         recurring: false,
         editable: true,
       });
     }
-    // tier3_retain = no charge, excluded from scope
+
+    if (t1.secondaryDoors.qty > 0) {
+      const unitPrice = t1.secondaryDoors.condition === 'working' ? p.secondaryDoor.working : p.secondaryDoor.nonWorking;
+      items.push({
+        id: makeId(),
+        description: `Secondary Door — Controller Only (${t1.secondaryDoors.condition === 'working' ? 'Working' : 'Non-Working'})`,
+        qty: t1.secondaryDoors.qty,
+        unitPrice,
+        total: unitPrice * t1.secondaryDoors.qty,
+        recurring: false,
+        editable: true,
+      });
+    }
+
+    if (t1.guestGates.qty > 0) {
+      const unitPrice = t1.guestGates.condition === 'working' ? p.guestGate.working : p.guestGate.nonWorking;
+      items.push({
+        id: makeId(),
+        description: `Guest Gate — App-Only Controller (${t1.guestGates.condition === 'working' ? 'Working' : 'Non-Working'})`,
+        qty: t1.guestGates.qty,
+        unitPrice,
+        total: unitPrice * t1.guestGates.qty,
+        recurring: false,
+        editable: true,
+      });
+    }
+
+    if (t1.residentGates.qty > 0) {
+      const unitPrice = t1.residentGates.condition === 'working' ? p.residentGate.working : p.residentGate.nonWorking;
+      items.push({
+        id: makeId(),
+        description: `Resident Gate — Reader (${t1.residentGates.condition === 'working' ? 'Working' : 'Non-Working'})`,
+        qty: t1.residentGates.qty,
+        unitPrice,
+        total: unitPrice * t1.residentGates.qty,
+        recurring: false,
+        editable: true,
+      });
+    }
+
+    if (t1.callbox) {
+      items.push({
+        id: makeId(),
+        description: 'Video Callbox Installation',
+        qty: 1,
+        unitPrice: p.callbox,
+        total: p.callbox,
+        recurring: false,
+        editable: true,
+      });
+    }
   }
 
-  // ── Camera Setup + Monitoring ──────────────────────────────────────────────
-  const { newCameras, existingCameras } = survey.cameras;
+  // ── Access Control — Tier 2 (Ubiquity/Unifi) ──────────────────────────────
+  if (survey.accessTier === 'tier2_ubiquity') {
+    const t2 = survey.tier2;
+    const p = PRICING.tier2;
 
-  if (newCameras > 0) {
+    if (t2.accessPoints.qty > 0) {
+      const unitPrice = t2.accessPoints.condition === 'working' ? p.accessPoint.working : p.accessPoint.nonWorking;
+      items.push({
+        id: makeId(),
+        description: `Unifi Access Point — Reader + Controller (${t2.accessPoints.condition === 'working' ? 'Working' : 'Non-Working'})`,
+        qty: t2.accessPoints.qty,
+        unitPrice,
+        total: unitPrice * t2.accessPoints.qty,
+        recurring: false,
+        editable: true,
+      });
+    }
+
+    if (t2.callbox) {
+      items.push({
+        id: makeId(),
+        description: 'Unifi Video Callbox Installation',
+        qty: 1,
+        unitPrice: p.callbox,
+        total: p.callbox,
+        recurring: false,
+        editable: true,
+      });
+    }
+  }
+
+  // ── Network / Backhaul ─────────────────────────────────────────────────────
+  const net = survey.network;
+  if (net.backhaul.needed && net.backhaul.qty > 0) {
+    const isBillable = net.backhaul.billing === 'billable';
+    items.push({
+      id: makeId(),
+      description: `Network Backhaul${isBillable ? '' : ' (Included)'}`,
+      qty: net.backhaul.qty,
+      unitPrice: isBillable ? PRICING.network.backhaulSetup : 0,
+      total: isBillable ? PRICING.network.backhaulSetup * net.backhaul.qty : 0,
+      recurring: false,
+      billing: net.backhaul.billing,
+      editable: true,
+    });
+  }
+
+  if (net.radioLinks.needed && net.radioLinks.qty > 0) {
+    const isBillable = net.radioLinks.billing === 'billable';
+    items.push({
+      id: makeId(),
+      description: `Radio Link Bridge${isBillable ? '' : ' (Included)'}`,
+      qty: net.radioLinks.qty,
+      unitPrice: isBillable ? PRICING.network.radioLinkSetup : 0,
+      total: isBillable ? PRICING.network.radioLinkSetup * net.radioLinks.qty : 0,
+      recurring: false,
+      billing: net.radioLinks.billing,
+      editable: true,
+    });
+  }
+
+  // ── Cameras ────────────────────────────────────────────────────────────────
+  const cam = survey.cameras;
+
+  if (cam.new.monitored > 0) {
     items.push({
       id: makeId(),
       description: 'New Camera Installation (included with service contract)',
-      qty: newCameras,
-      unitPrice: PRICING.cameras.newCameraSetup,
+      qty: cam.new.monitored,
+      unitPrice: PRICING.cameras.newMonitoredSetup,
       total: 0,
       recurring: false,
+      billing: 'included',
       editable: false,
     });
     items.push({
       id: makeId(),
       description: 'Camera Cloud Monitoring — New Cameras',
-      qty: newCameras,
-      unitPrice: PRICING.cameras.newCameraMonthly,
-      total: PRICING.cameras.newCameraMonthly * newCameras,
+      qty: cam.new.monitored,
+      unitPrice: PRICING.cameras.newMonitoredMonthly,
+      total: PRICING.cameras.newMonitoredMonthly * cam.new.monitored,
       recurring: true,
       period: 'monthly',
       editable: true,
     });
   }
 
-  if (existingCameras > 0) {
+  if (cam.new.standalone > 0) {
     items.push({
       id: makeId(),
-      description: 'Camera Cloud Monitoring — Existing Cameras (monitoring only)',
-      qty: existingCameras,
-      unitPrice: PRICING.cameras.existingCameraMonthly,
-      total: PRICING.cameras.existingCameraMonthly * existingCameras,
+      description: 'New Camera Installation — Standalone (billable)',
+      qty: cam.new.standalone,
+      unitPrice: PRICING.cameras.newStandaloneSetup,
+      total: PRICING.cameras.newStandaloneSetup * cam.new.standalone,
+      recurring: false,
+      billing: 'billable',
+      editable: true,
+    });
+  }
+
+  if (cam.existing.monitored > 0) {
+    items.push({
+      id: makeId(),
+      description: 'Existing Camera Reprogramming (included with monitoring)',
+      qty: cam.existing.monitored,
+      unitPrice: PRICING.cameras.existingMonitoredSetup,
+      total: 0,
+      recurring: false,
+      billing: 'included',
+      editable: false,
+    });
+    items.push({
+      id: makeId(),
+      description: 'Camera Cloud Monitoring — Existing Cameras',
+      qty: cam.existing.monitored,
+      unitPrice: PRICING.cameras.existingMonitoredMonthly,
+      total: PRICING.cameras.existingMonitoredMonthly * cam.existing.monitored,
       recurring: true,
       period: 'monthly',
+      editable: true,
+    });
+  }
+
+  if (cam.existing.standalone > 0) {
+    items.push({
+      id: makeId(),
+      description: 'Existing Camera Reprogramming — Billable Labor',
+      qty: cam.existing.standalone,
+      unitPrice: PRICING.cameras.existingStandaloneSetup,
+      total: PRICING.cameras.existingStandaloneSetup * cam.existing.standalone,
+      recurring: false,
+      billing: 'billable',
+      editable: true,
+    });
+  }
+
+  // ── Optional Add-Ons ───────────────────────────────────────────────────────
+  const addOns = survey.addOns;
+
+  if (addOns.lprCameras.qty > 0) {
+    items.push({
+      id: makeId(),
+      description: 'LPR Camera Installation',
+      qty: addOns.lprCameras.qty,
+      unitPrice: PRICING.cameras.lprSetup,
+      total: PRICING.cameras.lprSetup * addOns.lprCameras.qty,
+      recurring: false,
+      editable: true,
+    });
+    items.push({
+      id: makeId(),
+      description: 'LPR Camera Monitoring & Analytics',
+      qty: addOns.lprCameras.qty,
+      unitPrice: PRICING.cameras.lprMonthly,
+      total: PRICING.cameras.lprMonthly * addOns.lprCameras.qty,
+      recurring: true,
+      period: 'monthly',
+      editable: true,
+    });
+  }
+
+  if (addOns.gateMaintenance) {
+    items.push({
+      id: makeId(),
+      description: 'Physical Gate Maintenance & Repair Service',
+      qty: 1,
+      unitPrice: PRICING.addOns.gateMaintenanceMonthly,
+      total: PRICING.addOns.gateMaintenanceMonthly,
+      recurring: true,
+      period: 'monthly',
+      editable: true,
+    });
+  }
+
+  if (addOns.equipmentReplacement) {
+    items.push({
+      id: makeId(),
+      description: 'Missing / Damaged Equipment Replacement Allowance',
+      qty: 1,
+      unitPrice: PRICING.addOns.equipmentReplacement,
+      total: PRICING.addOns.equipmentReplacement,
+      recurring: false,
+      billing: 'billable',
       editable: true,
     });
   }
@@ -150,11 +306,9 @@ export function calculateTotals(lineItems: QuoteLineItem[], property: QuotePrope
   const yearOneTotal = setupTotal + (monthlyTotal * 12);
   const contractValue = setupTotal + (monthlyTotal * contractMonths);
 
-  // Payment schedule
   const depositDue = setupTotal * PRICING.contract.depositPercent + monthlyTotal;
   const goLivePayment = setupTotal * PRICING.contract.goLivePercent + monthlyTotal;
 
-  // Dealer MRR override (up to $2.50/unit/month)
   const units = property.units || 0;
   const dealerMRR = Math.min(units * PRICING.monthly.dealerOverrideMax, monthlyTotal * 0.25);
 

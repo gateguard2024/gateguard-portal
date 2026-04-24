@@ -3,15 +3,20 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Building2, MapPin, Users, ChevronRight, ChevronLeft,
-  Plus, Minus, Check, DollarSign, FileText,
-  Camera, Shield, Phone, Mail, Loader2,
+  Building2, Shield, DollarSign, FileText,
+  ChevronRight, ChevronLeft,
+  Plus, Minus, Check,
+  Camera, Network, Radio, Wifi,
+  Loader2,
 } from 'lucide-react';
 import {
   calculateLineItems, calculateTotals, generateQuoteNumber,
-  formatCurrency, getValidUntilDate,
+  formatCurrency,
 } from '@/lib/quote-calculator';
-import { QuoteProperty, SiteSurvey, GateCondition, CallboxTier } from '@/types/quote';
+import {
+  QuoteProperty, SiteSurvey,
+  AccessTier, GateCondition, BillingMode,
+} from '@/types/quote';
 
 // ── Step definitions ──────────────────────────────────────────────────────────
 const STEPS = [
@@ -29,13 +34,34 @@ const defaultProperty: QuoteProperty = {
 };
 
 const defaultSurvey: SiteSurvey = {
-  vehicularGates: [{ condition: 'working', qty: 1 }],
-  amenityDoors: [],
-  callboxes: [{ tier: 'tier2_replace', qty: 1 }],
-  cameras: { newCameras: 0, existingCameras: 0 },
+  accessTier: 'tier1_mobile',
+  network: {
+    backhaul:   { needed: false, qty: 1, billing: 'included' },
+    radioLinks: { needed: false, qty: 1, billing: 'included' },
+  },
+  tier1: {
+    primaryDoors:   { qty: 1, condition: 'working' },
+    secondaryDoors: { qty: 0, condition: 'working' },
+    guestGates:     { qty: 0, condition: 'working' },
+    residentGates:  { qty: 0, condition: 'working' },
+    callbox: true,
+  },
+  tier2: {
+    accessPoints: { qty: 0, condition: 'working' },
+    callbox: false,
+  },
+  cameras: {
+    existing: { monitored: 0, standalone: 0 },
+    new:      { monitored: 0, standalone: 0 },
+  },
+  addOns: {
+    lprCameras: { qty: 0 },
+    gateMaintenance: false,
+    equipmentReplacement: false,
+  },
 };
 
-// ── Reusable counter ──────────────────────────────────────────────────────────
+// ── Reusable primitives ───────────────────────────────────────────────────────
 function Counter({ value, onChange, min = 0 }: { value: number; onChange: (v: number) => void; min?: number }) {
   return (
     <div className="flex items-center gap-2">
@@ -52,7 +78,6 @@ function Counter({ value, onChange, min = 0 }: { value: number; onChange: (v: nu
   );
 }
 
-// ── Field wrapper ─────────────────────────────────────────────────────────────
 function Field({ label, children, required }: { label: string; children: React.ReactNode; required?: boolean }) {
   return (
     <div className="space-y-1.5">
@@ -78,6 +103,81 @@ function Input({ value, onChange, placeholder, type = 'text' }: {
   );
 }
 
+function ConditionToggle({ value, onChange }: { value: GateCondition; onChange: (v: GateCondition) => void }) {
+  return (
+    <div className="flex gap-1.5">
+      {(['working', 'non_working'] as GateCondition[]).map(c => (
+        <button key={c} onClick={() => onChange(c)}
+          className={`px-2.5 py-1 rounded-md border text-xs font-medium transition-colors ${
+            value === c
+              ? c === 'working'
+                ? 'bg-emerald-400/10 border-emerald-400/30 text-emerald-400'
+                : 'bg-amber-400/10 border-amber-400/30 text-amber-400'
+              : 'bg-background border-border text-muted-foreground hover:text-foreground'
+          }`}>
+          {c === 'working' ? '✓ Working' : '⚠ Non-Working'}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function BillingToggle({ value, onChange }: { value: BillingMode; onChange: (v: BillingMode) => void }) {
+  return (
+    <div className="flex gap-1.5">
+      {(['included', 'billable'] as BillingMode[]).map(b => (
+        <button key={b} onClick={() => onChange(b)}
+          className={`px-2.5 py-1 rounded-md border text-xs font-medium capitalize transition-colors ${
+            value === b
+              ? b === 'included'
+                ? 'bg-brand-400/10 border-brand-400/30 text-brand-400'
+                : 'bg-violet-400/10 border-violet-400/30 text-violet-400'
+              : 'bg-background border-border text-muted-foreground hover:text-foreground'
+          }`}>
+          {b === 'included' ? 'Included' : 'Billable'}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Survey row: label + optional sublabel + condition/billing toggle + counter
+function SurveyRow({
+  label, sub, condition, onCondition, count, onCount, price,
+}: {
+  label: string; sub?: string;
+  condition?: GateCondition; onCondition?: (v: GateCondition) => void;
+  count: number; onCount: (v: number) => void;
+  price?: string;
+}) {
+  return (
+    <div className="flex items-center gap-3 py-3 border-t border-border first:border-0 first:pt-0">
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-foreground">{label}</p>
+        {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+      </div>
+      {condition !== undefined && onCondition && (
+        <ConditionToggle value={condition} onChange={onCondition} />
+      )}
+      <Counter value={count} onChange={onCount} />
+      {price && <p className="text-xs text-muted-foreground w-20 text-right">{price}</p>}
+    </div>
+  );
+}
+
+// Section card
+function Section({ title, icon: Icon, children }: { title: string; icon?: React.ElementType; children: React.ReactNode }) {
+  return (
+    <div className="bg-card border border-border rounded-xl p-5 space-y-1">
+      <div className="flex items-center gap-2 mb-3">
+        {Icon && <Icon className="w-4 h-4 text-brand-400" />}
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function NewQuotePage() {
   const router = useRouter();
@@ -89,9 +189,8 @@ export default function NewQuotePage() {
   const prop = (key: keyof QuoteProperty) => (val: string) =>
     setProperty(p => ({ ...p, [key]: key === 'units' ? parseInt(val) || 0 : val }));
 
-  // Derived line items + totals (recalculated live)
   const lineItems = calculateLineItems(survey, property);
-  const totals = calculateTotals(lineItems, property);
+  const totals    = calculateTotals(lineItems, property);
 
   // ── Step 1: Property ────────────────────────────────────────────────────────
   const Step1 = () => (
@@ -121,7 +220,7 @@ export default function NewQuotePage() {
         <Field label="Total Units" required>
           <Input value={property.units || ''} onChange={prop('units')} placeholder="120" type="number" />
         </Field>
-        <div className="col-span-1" />
+        <div />
       </div>
 
       <div className="border-t border-border pt-5">
@@ -147,7 +246,6 @@ export default function NewQuotePage() {
         </div>
       </div>
 
-      {/* Live monthly estimate */}
       {property.units > 0 && (
         <div className="bg-brand-400/5 border border-brand-400/20 rounded-xl p-4">
           <p className="text-xs text-brand-400 font-semibold uppercase tracking-wide mb-1">Estimated Monthly Service</p>
@@ -165,163 +263,316 @@ export default function NewQuotePage() {
   );
 
   // ── Step 2: Site Survey ─────────────────────────────────────────────────────
-  const Step2 = () => (
-    <div className="space-y-6">
+  const Step2 = () => {
+    const set = <K extends keyof SiteSurvey>(key: K, val: SiteSurvey[K]) =>
+      setSurvey(s => ({ ...s, [key]: val }));
 
-      {/* Vehicular Gates */}
-      <div className="bg-card border border-border rounded-xl p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-foreground">Vehicular Gates</p>
-          <button
-            onClick={() => setSurvey(s => ({ ...s, vehicularGates: [...s.vehicularGates, { condition: 'working', qty: 1 }] }))}
-            className="text-xs text-brand-400 hover:text-brand-300 flex items-center gap-1"
-          >
-            <Plus className="w-3.5 h-3.5" /> Add gate type
-          </button>
+    const t1 = survey.tier1;
+    const t2 = survey.tier2;
+    const net = survey.network;
+
+    return (
+      <div className="space-y-5">
+
+        {/* Access Tier Selector */}
+        <div className="grid grid-cols-2 gap-3">
+          {([
+            {
+              tier: 'tier1_mobile' as AccessTier,
+              label: 'Tier 1 — Mobile Pass',
+              sub: 'Door-specific access points. Primary doors get controller + reader; secondary doors and guest gates get controller only.',
+            },
+            {
+              tier: 'tier2_ubiquity' as AccessTier,
+              label: 'Tier 2 — Ubiquity / Unifi',
+              sub: 'Every access point gets a reader. Full Unifi stack with callbox integration.',
+            },
+          ]).map(({ tier, label, sub }) => (
+            <button key={tier} onClick={() => set('accessTier', tier)}
+              className={`text-left p-4 rounded-xl border transition-all ${
+                survey.accessTier === tier
+                  ? 'border-brand-400/50 bg-brand-400/5'
+                  : 'border-border bg-background hover:bg-card'
+              }`}>
+              <div className="flex items-start gap-2">
+                <div className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                  survey.accessTier === tier ? 'border-brand-400' : 'border-border'
+                }`}>
+                  {survey.accessTier === tier && <div className="w-2 h-2 rounded-full bg-brand-400" />}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{label}</p>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{sub}</p>
+                </div>
+              </div>
+            </button>
+          ))}
         </div>
-        {survey.vehicularGates.map((gate, i) => (
-          <div key={i} className="flex items-center gap-4 py-3 border-t border-border first:border-0 first:pt-0">
-            <div className="flex gap-2">
-              {(['working','non_working'] as GateCondition[]).map(c => (
-                <button key={c} onClick={() => setSurvey(s => {
-                  const g = [...s.vehicularGates]; g[i] = { ...g[i], condition: c }; return { ...s, vehicularGates: g };
-                })}
-                  className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                    gate.condition === c
-                      ? c === 'working' ? 'bg-emerald-400/10 border-emerald-400/30 text-emerald-400' : 'bg-amber-400/10 border-amber-400/30 text-amber-400'
-                      : 'bg-background border-border text-muted-foreground hover:text-foreground'
-                  }`}>
-                  {c === 'working' ? '✓ Working' : '⚠ Non-Working'}
-                </button>
-              ))}
+
+        {/* Tier 1 Access Points */}
+        {survey.accessTier === 'tier1_mobile' && (
+          <Section title="Access Points — Tier 1 (Mobile Pass)" icon={Shield}>
+            <SurveyRow
+              label="Primary Doors"
+              sub="Controller + Reader — residents tap to enter"
+              condition={t1.primaryDoors.condition}
+              onCondition={c => setSurvey(s => ({ ...s, tier1: { ...s.tier1, primaryDoors: { ...s.tier1.primaryDoors, condition: c } } }))}
+              count={t1.primaryDoors.qty}
+              onCount={v => setSurvey(s => ({ ...s, tier1: { ...s.tier1, primaryDoors: { ...s.tier1.primaryDoors, qty: v } } }))}
+              price={t1.primaryDoors.condition === 'working' ? '$500 ea.' : '$750 ea.'}
+            />
+            <SurveyRow
+              label="Secondary Doors"
+              sub="Controller only — amenity rooms, utility doors"
+              condition={t1.secondaryDoors.condition}
+              onCondition={c => setSurvey(s => ({ ...s, tier1: { ...s.tier1, secondaryDoors: { ...s.tier1.secondaryDoors, condition: c } } }))}
+              count={t1.secondaryDoors.qty}
+              onCount={v => setSurvey(s => ({ ...s, tier1: { ...s.tier1, secondaryDoors: { ...s.tier1.secondaryDoors, qty: v } } }))}
+              price={t1.secondaryDoors.condition === 'working' ? '$350 ea.' : '$500 ea.'}
+            />
+            <SurveyRow
+              label="Guest Gates"
+              sub="App-only controller — no reader, app controls gate"
+              condition={t1.guestGates.condition}
+              onCondition={c => setSurvey(s => ({ ...s, tier1: { ...s.tier1, guestGates: { ...s.tier1.guestGates, condition: c } } }))}
+              count={t1.guestGates.qty}
+              onCount={v => setSurvey(s => ({ ...s, tier1: { ...s.tier1, guestGates: { ...s.tier1.guestGates, qty: v } } }))}
+              price={t1.guestGates.condition === 'working' ? '$350 ea.' : '$500 ea.'}
+            />
+            <SurveyRow
+              label="Resident Gates"
+              sub="Reader only — exit tap or credential check"
+              condition={t1.residentGates.condition}
+              onCondition={c => setSurvey(s => ({ ...s, tier1: { ...s.tier1, residentGates: { ...s.tier1.residentGates, condition: c } } }))}
+              count={t1.residentGates.qty}
+              onCount={v => setSurvey(s => ({ ...s, tier1: { ...s.tier1, residentGates: { ...s.tier1.residentGates, qty: v } } }))}
+              price={t1.residentGates.condition === 'working' ? '$200 ea.' : '$350 ea.'}
+            />
+            {/* Callbox toggle */}
+            <div className="flex items-center justify-between py-3 border-t border-border">
+              <div>
+                <p className="text-sm text-foreground">Video Callbox</p>
+                <p className="text-xs text-muted-foreground">GateGuard / Unifi video entry — $2,500 installed</p>
+              </div>
+              <button onClick={() => setSurvey(s => ({ ...s, tier1: { ...s.tier1, callbox: !s.tier1.callbox } }))}
+                className={`w-12 h-6 rounded-full border-2 transition-all relative ${
+                  t1.callbox ? 'bg-brand-400 border-brand-400' : 'bg-background border-border'
+                }`}>
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
+                  t1.callbox ? 'left-6' : 'left-0.5'
+                }`} />
+              </button>
             </div>
-            <div className="flex-1" />
-            <Counter value={gate.qty} onChange={qty => setSurvey(s => {
-              const g = [...s.vehicularGates]; g[i] = { ...g[i], qty }; return { ...s, vehicularGates: g };
-            })} min={0} />
-            <p className="text-xs text-muted-foreground w-20 text-right">
-              {formatCurrency(gate.condition === 'working' ? 500 : 750)} ea.
-            </p>
-          </div>
-        ))}
-      </div>
-
-      {/* Pedestrian Gates / Amenity Doors */}
-      <div className="bg-card border border-border rounded-xl p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-foreground">Pedestrian Gates / Amenity Doors</p>
-          <button
-            onClick={() => setSurvey(s => ({ ...s, amenityDoors: [...s.amenityDoors, { condition: 'working', qty: 1 }] }))}
-            className="text-xs text-brand-400 hover:text-brand-300 flex items-center gap-1"
-          >
-            <Plus className="w-3.5 h-3.5" /> Add
-          </button>
-        </div>
-        {survey.amenityDoors.length === 0 && (
-          <p className="text-sm text-muted-foreground text-center py-4">No amenity doors added</p>
+          </Section>
         )}
-        {survey.amenityDoors.map((door, i) => (
-          <div key={i} className="flex items-center gap-4 py-3 border-t border-border first:border-0 first:pt-0">
-            <div className="flex gap-2">
-              {(['working','non_working'] as GateCondition[]).map(c => (
-                <button key={c} onClick={() => setSurvey(s => {
-                  const d = [...s.amenityDoors]; d[i] = { ...d[i], condition: c }; return { ...s, amenityDoors: d };
-                })}
-                  className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                    door.condition === c
-                      ? c === 'working' ? 'bg-emerald-400/10 border-emerald-400/30 text-emerald-400' : 'bg-amber-400/10 border-amber-400/30 text-amber-400'
-                      : 'bg-background border-border text-muted-foreground hover:text-foreground'
-                  }`}>
-                  {c === 'working' ? '✓ Working' : '⚠ Non-Working'}
-                </button>
-              ))}
-            </div>
-            <div className="flex-1" />
-            <Counter value={door.qty} onChange={qty => setSurvey(s => {
-              const d = [...s.amenityDoors]; d[i] = { ...d[i], qty }; return { ...s, amenityDoors: d };
-            })} min={0} />
-            <p className="text-xs text-muted-foreground w-20 text-right">
-              {formatCurrency(door.condition === 'working' ? 500 : 750)} ea.
-            </p>
-          </div>
-        ))}
-      </div>
 
-      {/* Callboxes */}
-      <div className="bg-card border border-border rounded-xl p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-foreground">Callboxes</p>
-          <button
-            onClick={() => setSurvey(s => ({ ...s, callboxes: [...s.callboxes, { tier: 'tier2_replace', qty: 1 }] }))}
-            className="text-xs text-brand-400 hover:text-brand-300 flex items-center gap-1"
-          >
-            <Plus className="w-3.5 h-3.5" /> Add
-          </button>
-        </div>
-        {survey.callboxes.map((cb, i) => (
-          <div key={i} className="space-y-2 py-3 border-t border-border first:border-0 first:pt-0">
-            <div className="flex gap-2 flex-wrap">
-              {([
-                { tier: 'tier1_remove', label: 'Tier 1 — Remove (QR Sign)', price: 'Included' },
-                { tier: 'tier2_replace', label: 'Tier 2 — Replace (Unifi)', price: '$2,500' },
-                { tier: 'tier3_retain', label: 'Tier 3 — Retain (Legacy)', price: 'N/A' },
-              ] as const).map(({ tier, label, price }) => (
-                <button key={tier} onClick={() => setSurvey(s => {
-                  const c = [...s.callboxes]; c[i] = { ...c[i], tier }; return { ...s, callboxes: c };
-                })}
-                  className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                    cb.tier === tier
-                      ? 'bg-brand-400/10 border-brand-400/30 text-brand-400'
-                      : 'bg-background border-border text-muted-foreground hover:text-foreground'
-                  }`}>
-                  {label} <span className="opacity-60">{price}</span>
-                </button>
-              ))}
+        {/* Tier 2 Access Points */}
+        {survey.accessTier === 'tier2_ubiquity' && (
+          <Section title="Access Points — Tier 2 (Ubiquity / Unifi)" icon={Shield}>
+            <SurveyRow
+              label="Access Points"
+              sub="Every point gets reader + controller via Unifi stack"
+              condition={t2.accessPoints.condition}
+              onCondition={c => setSurvey(s => ({ ...s, tier2: { ...s.tier2, accessPoints: { ...s.tier2.accessPoints, condition: c } } }))}
+              count={t2.accessPoints.qty}
+              onCount={v => setSurvey(s => ({ ...s, tier2: { ...s.tier2, accessPoints: { ...s.tier2.accessPoints, qty: v } } }))}
+              price={t2.accessPoints.condition === 'working' ? '$500 ea.' : '$750 ea.'}
+            />
+            <div className="flex items-center justify-between py-3 border-t border-border">
+              <div>
+                <p className="text-sm text-foreground">Unifi Video Callbox</p>
+                <p className="text-xs text-muted-foreground">$2,500 installed</p>
+              </div>
+              <button onClick={() => setSurvey(s => ({ ...s, tier2: { ...s.tier2, callbox: !s.tier2.callbox } }))}
+                className={`w-12 h-6 rounded-full border-2 transition-all relative ${
+                  t2.callbox ? 'bg-brand-400 border-brand-400' : 'bg-background border-border'
+                }`}>
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
+                  t2.callbox ? 'left-6' : 'left-0.5'
+                }`} />
+              </button>
             </div>
-            <div className="flex items-center justify-end gap-3">
-              <Counter value={cb.qty} onChange={qty => setSurvey(s => {
-                const c = [...s.callboxes]; c[i] = { ...c[i], qty }; return { ...s, callboxes: c };
-              })} min={0} />
-            </div>
-          </div>
-        ))}
-      </div>
+          </Section>
+        )}
 
-      {/* Cameras */}
-      <div className="bg-card border border-border rounded-xl p-5">
-        <p className="text-sm font-semibold text-foreground mb-4">Cameras</p>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-foreground">New Camera Installations</p>
-              <p className="text-xs text-muted-foreground">Free with contract · $100/mo monitoring</p>
+        {/* Network / Backhaul */}
+        <Section title="Network Infrastructure" icon={Network}>
+          {/* Backhaul */}
+          <div className="py-2">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <p className="text-sm text-foreground">Network Backhaul</p>
+                <p className="text-xs text-muted-foreground">Dedicated network run to gate/panel location</p>
+              </div>
+              <button onClick={() => setSurvey(s => ({ ...s, network: { ...s.network, backhaul: { ...s.network.backhaul, needed: !s.network.backhaul.needed } } }))}
+                className={`w-12 h-6 rounded-full border-2 transition-all relative ${
+                  net.backhaul.needed ? 'bg-brand-400 border-brand-400' : 'bg-background border-border'
+                }`}>
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
+                  net.backhaul.needed ? 'left-6' : 'left-0.5'
+                }`} />
+              </button>
             </div>
-            <Counter
-              value={survey.cameras.newCameras}
-              onChange={v => setSurvey(s => ({ ...s, cameras: { ...s.cameras, newCameras: v } }))}
-            />
+            {net.backhaul.needed && (
+              <div className="flex items-center gap-4 pl-4 mt-2">
+                <BillingToggle
+                  value={net.backhaul.billing}
+                  onChange={b => setSurvey(s => ({ ...s, network: { ...s.network, backhaul: { ...s.network.backhaul, billing: b } } }))}
+                />
+                <Counter
+                  value={net.backhaul.qty}
+                  onChange={v => setSurvey(s => ({ ...s, network: { ...s.network, backhaul: { ...s.network.backhaul, qty: v } } }))}
+                  min={1}
+                />
+                {net.backhaul.billing === 'billable' && (
+                  <p className="text-xs text-muted-foreground">$500 ea.</p>
+                )}
+              </div>
+            )}
           </div>
-          <div className="flex items-center justify-between border-t border-border pt-4">
-            <div>
-              <p className="text-sm text-foreground">Existing Cameras (monitoring only)</p>
-              <p className="text-xs text-muted-foreground">No setup fee · $85/mo monitoring</p>
+
+          {/* Radio Links */}
+          <div className="py-2 border-t border-border">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <p className="text-sm text-foreground">Radio Link Bridge</p>
+                <p className="text-xs text-muted-foreground">Wireless backhaul for locations without cable run</p>
+              </div>
+              <button onClick={() => setSurvey(s => ({ ...s, network: { ...s.network, radioLinks: { ...s.network.radioLinks, needed: !s.network.radioLinks.needed } } }))}
+                className={`w-12 h-6 rounded-full border-2 transition-all relative ${
+                  net.radioLinks.needed ? 'bg-brand-400 border-brand-400' : 'bg-background border-border'
+                }`}>
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
+                  net.radioLinks.needed ? 'left-6' : 'left-0.5'
+                }`} />
+              </button>
             </div>
-            <Counter
-              value={survey.cameras.existingCameras}
-              onChange={v => setSurvey(s => ({ ...s, cameras: { ...s.cameras, existingCameras: v } }))}
-            />
+            {net.radioLinks.needed && (
+              <div className="flex items-center gap-4 pl-4 mt-2">
+                <BillingToggle
+                  value={net.radioLinks.billing}
+                  onChange={b => setSurvey(s => ({ ...s, network: { ...s.network, radioLinks: { ...s.network.radioLinks, billing: b } } }))}
+                />
+                <Counter
+                  value={net.radioLinks.qty}
+                  onChange={v => setSurvey(s => ({ ...s, network: { ...s.network, radioLinks: { ...s.network.radioLinks, qty: v } } }))}
+                  min={1}
+                />
+                {net.radioLinks.billing === 'billable' && (
+                  <p className="text-xs text-muted-foreground">$750 ea.</p>
+                )}
+              </div>
+            )}
           </div>
-        </div>
+        </Section>
+
+        {/* Cameras */}
+        <Section title="Cameras" icon={Camera}>
+          {/* Existing cameras */}
+          <div className="pb-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Existing Cameras</p>
+            <div className="space-y-0">
+              <div className="flex items-center justify-between py-2.5">
+                <div>
+                  <p className="text-sm text-foreground">Monitored</p>
+                  <p className="text-xs text-muted-foreground">Reprogramming included · $85/mo monitoring</p>
+                </div>
+                <Counter
+                  value={survey.cameras.existing.monitored}
+                  onChange={v => setSurvey(s => ({ ...s, cameras: { ...s.cameras, existing: { ...s.cameras.existing, monitored: v } } }))}
+                />
+              </div>
+              <div className="flex items-center justify-between py-2.5 border-t border-border">
+                <div>
+                  <p className="text-sm text-foreground">Standalone (no monitoring)</p>
+                  <p className="text-xs text-muted-foreground">Reprogramming labor billable · $150/camera</p>
+                </div>
+                <Counter
+                  value={survey.cameras.existing.standalone}
+                  onChange={v => setSurvey(s => ({ ...s, cameras: { ...s.cameras, existing: { ...s.cameras.existing, standalone: v } } }))}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* New cameras */}
+          <div className="pt-3 border-t border-border">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">New Cameras</p>
+            <div className="space-y-0">
+              <div className="flex items-center justify-between py-2.5">
+                <div>
+                  <p className="text-sm text-foreground">Monitored</p>
+                  <p className="text-xs text-muted-foreground">Hardware included with contract · $100/mo monitoring</p>
+                </div>
+                <Counter
+                  value={survey.cameras.new.monitored}
+                  onChange={v => setSurvey(s => ({ ...s, cameras: { ...s.cameras, new: { ...s.cameras.new, monitored: v } } }))}
+                />
+              </div>
+              <div className="flex items-center justify-between py-2.5 border-t border-border">
+                <div>
+                  <p className="text-sm text-foreground">Standalone (billable)</p>
+                  <p className="text-xs text-muted-foreground">Full install billable · $350/camera · no monitoring MRR</p>
+                </div>
+                <Counter
+                  value={survey.cameras.new.standalone}
+                  onChange={v => setSurvey(s => ({ ...s, cameras: { ...s.cameras, new: { ...s.cameras.new, standalone: v } } }))}
+                />
+              </div>
+            </div>
+          </div>
+        </Section>
+
+        {/* Optional Add-Ons */}
+        <Section title="Optional Add-Ons" icon={Wifi}>
+          {/* LPR cameras */}
+          <SurveyRow
+            label="LPR Cameras"
+            sub="License plate recognition · $1,500 install · $150/mo"
+            count={survey.addOns.lprCameras.qty}
+            onCount={v => setSurvey(s => ({ ...s, addOns: { ...s.addOns, lprCameras: { qty: v } } }))}
+          />
+          {/* Gate maintenance */}
+          <div className="flex items-center justify-between py-3 border-t border-border">
+            <div>
+              <p className="text-sm text-foreground">Physical Gate Maintenance & Repair</p>
+              <p className="text-xs text-muted-foreground">Ongoing monthly service · $250/mo</p>
+            </div>
+            <button onClick={() => setSurvey(s => ({ ...s, addOns: { ...s.addOns, gateMaintenance: !s.addOns.gateMaintenance } }))}
+              className={`w-12 h-6 rounded-full border-2 transition-all relative ${
+                survey.addOns.gateMaintenance ? 'bg-brand-400 border-brand-400' : 'bg-background border-border'
+              }`}>
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
+                survey.addOns.gateMaintenance ? 'left-6' : 'left-0.5'
+              }`} />
+            </button>
+          </div>
+          {/* Equipment replacement */}
+          <div className="flex items-center justify-between py-3 border-t border-border">
+            <div>
+              <p className="text-sm text-foreground">Missing Equipment Replacement</p>
+              <p className="text-xs text-muted-foreground">Allowance for damaged or missing hardware · $500</p>
+            </div>
+            <button onClick={() => setSurvey(s => ({ ...s, addOns: { ...s.addOns, equipmentReplacement: !s.addOns.equipmentReplacement } }))}
+              className={`w-12 h-6 rounded-full border-2 transition-all relative ${
+                survey.addOns.equipmentReplacement ? 'bg-brand-400 border-brand-400' : 'bg-background border-border'
+              }`}>
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
+                survey.addOns.equipmentReplacement ? 'left-6' : 'left-0.5'
+              }`} />
+            </button>
+          </div>
+        </Section>
+
       </div>
-    </div>
-  );
+    );
+  };
 
   // ── Step 3: Line Items ──────────────────────────────────────────────────────
   const Step3 = () => (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">Review and adjust line items below. All pricing auto-calculated from your survey.</p>
+      <p className="text-sm text-muted-foreground">All pricing auto-calculated from your survey. Items marked "Included" are at $0 — value is built into the contract.</p>
 
-      {/* One-time */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="px-5 py-3 border-b border-border bg-background/50">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">One-Time Setup Fees</p>
@@ -337,11 +588,20 @@ export default function NewQuotePage() {
           </thead>
           <tbody className="divide-y divide-border">
             {lineItems.filter(i => !i.recurring).map(item => (
-              <tr key={item.id}>
-                <td className="px-5 py-3 text-sm text-foreground">{item.description}</td>
+              <tr key={item.id} className={item.billing === 'included' ? 'opacity-60' : ''}>
+                <td className="px-5 py-3 text-sm text-foreground">
+                  {item.description}
+                  {item.billing === 'included' && (
+                    <span className="ml-2 text-xs text-brand-400 font-medium">INCLUDED</span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-sm text-right text-muted-foreground">{item.qty}</td>
-                <td className="px-4 py-3 text-sm text-right text-muted-foreground">{formatCurrency(item.unitPrice)}</td>
-                <td className="px-5 py-3 text-sm text-right font-medium text-foreground">{formatCurrency(item.total)}</td>
+                <td className="px-4 py-3 text-sm text-right text-muted-foreground">
+                  {item.total === 0 ? '—' : formatCurrency(item.unitPrice)}
+                </td>
+                <td className="px-5 py-3 text-sm text-right font-medium text-foreground">
+                  {item.total === 0 ? '—' : formatCurrency(item.total)}
+                </td>
               </tr>
             ))}
             <tr className="bg-background/50">
@@ -352,7 +612,6 @@ export default function NewQuotePage() {
         </table>
       </div>
 
-      {/* Monthly */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="px-5 py-3 border-b border-border bg-background/50">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Monthly Recurring</p>
@@ -362,7 +621,7 @@ export default function NewQuotePage() {
             <tr className="border-b border-border">
               <th className="text-left text-xs text-muted-foreground px-5 py-2">Description</th>
               <th className="text-right text-xs text-muted-foreground px-4 py-2">Qty</th>
-              <th className="text-right text-xs text-muted-foreground px-4 py-2">Unit Price</th>
+              <th className="text-right text-xs text-muted-foreground px-4 py-2">Unit</th>
               <th className="text-right text-xs text-muted-foreground px-5 py-2">Monthly</th>
             </tr>
           </thead>
@@ -390,12 +649,12 @@ export default function NewQuotePage() {
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-4">
         {[
-          { label: 'One-Time Setup', value: formatCurrency(totals.setupTotal), sub: 'Total setup fees', color: 'text-foreground' },
-          { label: 'Monthly Recurring', value: `${formatCurrency(totals.monthlyTotal)}/mo`, sub: '60-month term', color: 'text-brand-400' },
-          { label: 'Deposit Due at Signing', value: formatCurrency(totals.depositDue), sub: '50% setup + 1st month', color: 'text-amber-400' },
-          { label: 'Go-Live Payment', value: formatCurrency(totals.goLivePayment), sub: '50% setup + 1st month', color: 'text-blue-400' },
-          { label: 'Contract Value (5 yr)', value: formatCurrency(totals.contractValue), sub: 'Setup + 60 months recurring', color: 'text-foreground' },
-          { label: 'Dealer Override MRR', value: `${formatCurrency(totals.dealerMRR)}/mo`, sub: 'Up to $2.50/unit/mo', color: 'text-violet-400' },
+          { label: 'One-Time Setup',         value: formatCurrency(totals.setupTotal),          sub: 'Total setup fees',              color: 'text-foreground' },
+          { label: 'Monthly Recurring',      value: `${formatCurrency(totals.monthlyTotal)}/mo`, sub: '60-month term',                 color: 'text-brand-400' },
+          { label: 'Deposit Due at Signing', value: formatCurrency(totals.depositDue),           sub: '50% setup + 1st month',         color: 'text-amber-400' },
+          { label: 'Go-Live Payment',        value: formatCurrency(totals.goLivePayment),        sub: '50% setup + 1st month',         color: 'text-blue-400' },
+          { label: 'Contract Value (5 yr)',  value: formatCurrency(totals.contractValue),        sub: 'Setup + 60 months recurring',   color: 'text-foreground' },
+          { label: 'Dealer Override MRR',    value: `${formatCurrency(totals.dealerMRR)}/mo`,   sub: 'Up to $2.50/unit/mo',           color: 'text-violet-400' },
         ].map(item => (
           <div key={item.label} className="bg-card border border-border rounded-xl p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">{item.label}</p>
@@ -414,6 +673,8 @@ export default function NewQuotePage() {
           <span className="text-foreground">{property.units}</span>
           <span className="text-muted-foreground">Location</span>
           <span className="text-foreground">{property.city}, {property.state}</span>
+          <span className="text-muted-foreground">Access Tier</span>
+          <span className="text-foreground">{survey.accessTier === 'tier1_mobile' ? 'Tier 1 — Mobile Pass' : 'Tier 2 — Ubiquity'}</span>
           <span className="text-muted-foreground">Contact</span>
           <span className="text-foreground">{property.contactName || '—'}</span>
         </div>
@@ -424,7 +685,7 @@ export default function NewQuotePage() {
         <div>
           <p className="text-sm font-medium text-foreground">Ready to generate proposal</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            This will create a shareable proposal link valid for 30 days. You can edit before sending.
+            Creates a shareable proposal link valid for 30 days. You can edit before sending.
           </p>
         </div>
       </div>
@@ -437,7 +698,7 @@ export default function NewQuotePage() {
 
   async function handleCreate() {
     setSaving(true);
-    // TODO: Save to Supabase
+    const _qn = generateQuoteNumber(); // eslint-disable-line @typescript-eslint/no-unused-vars
     await new Promise(r => setTimeout(r, 800));
     router.push('/quotes/q2/proposal');
   }
@@ -445,7 +706,6 @@ export default function NewQuotePage() {
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
 
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-foreground">New Quote</h1>
         <p className="text-sm text-muted-foreground mt-0.5">Build a proposal in under 2 minutes</p>
@@ -455,7 +715,7 @@ export default function NewQuotePage() {
       <div className="flex items-center gap-0">
         {STEPS.map((s, i) => {
           const Icon = s.icon;
-          const done = step > s.id;
+          const done   = step > s.id;
           const active = step === s.id;
           return (
             <div key={s.id} className="flex items-center flex-1">
@@ -463,22 +723,20 @@ export default function NewQuotePage() {
                 onClick={() => done && setStep(s.id)}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
                   active ? 'bg-brand-400/10 text-brand-400' :
-                  done ? 'text-emerald-400 cursor-pointer hover:bg-emerald-400/5' :
-                  'text-muted-foreground'
+                  done   ? 'text-emerald-400 cursor-pointer hover:bg-emerald-400/5' :
+                           'text-muted-foreground'
                 }`}
               >
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border
                   ${active ? 'border-brand-400 bg-brand-400 text-navy' :
-                    done ? 'border-emerald-400 bg-emerald-400/20 text-emerald-400' :
-                    'border-border bg-background text-muted-foreground'}`}
+                    done   ? 'border-emerald-400 bg-emerald-400/20 text-emerald-400' :
+                             'border-border bg-background text-muted-foreground'}`}
                 >
                   {done ? <Check className="w-3.5 h-3.5" /> : s.id}
                 </div>
                 <span className="text-xs font-medium hidden sm:block">{s.label}</span>
               </button>
-              {i < STEPS.length - 1 && (
-                <div className="flex-1 h-px bg-border mx-1" />
-              )}
+              {i < STEPS.length - 1 && <div className="flex-1 h-px bg-border mx-1" />}
             </div>
           );
         })}
@@ -494,9 +752,9 @@ export default function NewQuotePage() {
       <div className="flex items-center justify-between">
         <button
           onClick={() => step > 1 ? setStep(s => s - 1) : undefined}
+          disabled={step === 1}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium transition-colors
             ${step === 1 ? 'opacity-30 cursor-not-allowed text-muted-foreground' : 'text-foreground hover:bg-card'}`}
-          disabled={step === 1}
         >
           <ChevronLeft className="w-4 h-4" /> Back
         </button>
