@@ -79,6 +79,7 @@ export default function DashboardPage() {
         {/* Main content */}
         <div className="grid grid-cols-3 gap-5">
           {/* Accounts table */}
+          {/* TODO: Add a search/filter input to this All Accounts panel — filter by name, tier, status, or assigned dealer */}
           <div className="col-span-2 bg-card border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-3 border-b border-border">
               <div className="flex items-center gap-2">
