@@ -57,4 +57,17 @@ declare module 'lucide-react' {
   export const Mail: Icon;
   export const Send: Icon;
   export const Palette: Icon;
+  // Quote tool additions
+  export const ChevronLeft: Icon;
+  export const ChevronUp: Icon;
+  export const Check: Icon;
+  export const Minus: Icon;
+  export const Loader2: Icon;
+  export const Copy: Icon;
+  export const ArrowUpRight: Icon;
+  export const Filter: Icon;
+  export const RefreshCw: Icon;
+  export const Trash2: Icon;
+  export const Edit2: Icon;
+  export const Link2: Icon;
 }
