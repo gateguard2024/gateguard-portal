@@ -12,57 +12,30 @@
 
 @layer base {
   :root {
-    /* Portal is dark-locked — :root mirrors .dark */
-    --background:       214 40% 28%;
-    --foreground:       213 31% 96%;
-    --card:             214 38% 34%;
-    --card-foreground:  213 31% 96%;
-    --popover:          214 38% 34%;
-    --popover-foreground: 213 31% 96%;
-    --primary:          217 91% 53%;
+    /* GateGuard OS — Light mode (portal is light-locked) */
+    --background:         210 20% 95%;   /* very light cool grey backdrop */
+    --foreground:         215 25% 15%;   /* near-black text */
+    --card:               0 0% 100%;     /* pure white tiles */
+    --card-foreground:    215 25% 15%;
+    --popover:            0 0% 100%;
+    --popover-foreground: 215 25% 15%;
+    --primary:            217 91% 53%;   /* #2563EB — GateGuard blue */
     --primary-foreground: 0 0% 100%;
-    --secondary:        215 35% 38%;
-    --secondary-foreground: 213 31% 96%;
-    --muted:            215 35% 38%;
-    --muted-foreground: 215 20% 72%;
-    --accent:           215 35% 38%;
-    --accent-foreground: 213 31% 96%;
-    --destructive:      0 63% 50%;
-    --destructive-foreground: 213 31% 96%;
-    --border:           215 32% 40%;
-    --input:            215 35% 38%;
-    --ring:             217 91% 53%;
-    --radius:           0.5rem;
-    --sidebar-bg:       214 55% 8%;
-    --sidebar-text:     213 20% 72%;
-    --sidebar-border:   215 44% 14%;
-  }
-
-  .dark {
-    /* GateGuard dark mode — lighter mid-navy bg, deep sidebar for contrast */
-    --background:       214 40% 28%;   /* noticeably lighter navy */
-    --foreground:       213 31% 96%;   /* near-white text */
-    --card:             214 38% 34%;   /* cards clearly float above bg */
-    --card-foreground:  213 31% 96%;
-    --popover:          214 38% 34%;
-    --popover-foreground: 213 31% 96%;
-    --primary:          217 91% 53%;   /* #2563EB — GateGuard blue */
-    --primary-foreground: 0 0% 100%;
-    --secondary:        215 35% 38%;
-    --secondary-foreground: 213 31% 96%;
-    --muted:            215 35% 38%;
-    --muted-foreground: 215 20% 72%;   /* bright muted text */
-    --accent:           215 35% 38%;
-    --accent-foreground: 213 31% 96%;
-    --destructive:      0 63% 50%;
-    --destructive-foreground: 213 31% 96%;
-    --border:           215 32% 40%;
-    --input:            215 35% 38%;
-    --ring:             217 91% 53%;
-    /* Sidebar — deep navy, high contrast against lighter main area */
-    --sidebar-bg:       214 55% 8%;
-    --sidebar-text:     213 20% 72%;
-    --sidebar-border:   215 44% 14%;
+    --secondary:          210 16% 93%;
+    --secondary-foreground: 215 25% 15%;
+    --muted:              210 16% 93%;
+    --muted-foreground:   215 16% 46%;
+    --accent:             210 16% 93%;
+    --accent-foreground:  215 25% 15%;
+    --destructive:        0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border:             214 20% 88%;
+    --input:              214 20% 88%;
+    --ring:               217 91% 53%;
+    --radius:             0.5rem;
+    --sidebar-bg:         214 55% 8%;    /* deep navy sidebar — unchanged */
+    --sidebar-text:       213 20% 72%;
+    --sidebar-border:     215 44% 14%;
   }
 }
 
@@ -138,7 +111,7 @@
   background-size: cover;
   background-position: center top;
   background-repeat: no-repeat;
-  opacity: 0.08;
+  opacity: 0.05;
   pointer-events: none;
   z-index: 0;
 }
