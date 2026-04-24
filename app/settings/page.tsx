@@ -4,7 +4,7 @@ import { useState } from "react";
 import { TopBar } from "@/components/layout/TopBar";
 import {
   Settings, Zap, Users, Bell, Palette, DollarSign,
-  Edit2, Check, X, ChevronDown, ChevronRight,
+  Edit2, Check, XCircle, ChevronDown, ChevronRight,
 } from "lucide-react";
 import { PRICING } from "@/types/quote";
 
@@ -47,7 +47,7 @@ function PriceCell({
         />
         <span className="text-xs text-muted-foreground">{suffix}</span>
         <button onClick={commit} className="text-emerald-400 hover:text-emerald-300 ml-1"><Check size={12} /></button>
-        <button onClick={() => { setDraft(String(value)); setEditing(false); }} className="text-red-400 hover:text-red-300"><X size={12} /></button>
+        <button onClick={() => { setDraft(String(value)); setEditing(false); }} className="text-red-400 hover:text-red-300"><XCircle size={12} /></button>
       </div>
     );
   }
