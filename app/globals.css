@@ -6,65 +6,64 @@
 
 /* ===================================================
    GateGuard OS — Design Tokens
-   Brand sourced from gateguard.co
-   Primary: #22d3ee (cyan-400)
+   Brand: #2563EB (royal blue — from GateGuard logo)
    Dark bg: #0A192F (navy)
    =================================================== */
 
 @layer base {
   :root {
-    /* Light mode */
-    --background:       0 0% 98%;
-    --foreground:       222 47% 8%;
-    --card:             0 0% 100%;
-    --card-foreground:  222 47% 8%;
-    --popover:          0 0% 100%;
-    --popover-foreground: 222 47% 8%;
-    --primary:          189 96% 53%;    /* #22d3ee */
-    --primary-foreground: 222 47% 8%;
-    --secondary:        210 20% 94%;
-    --secondary-foreground: 222 47% 20%;
-    --muted:            210 20% 94%;
-    --muted-foreground: 215 16% 47%;
-    --accent:           210 20% 92%;
-    --accent-foreground: 222 47% 8%;
+    /* Light mode (fallback — portal is dark-locked) */
+    --background:       220 15% 13%;
+    --foreground:       213 31% 91%;
+    --card:             220 20% 16%;
+    --card-foreground:  213 31% 91%;
+    --popover:          220 20% 16%;
+    --popover-foreground: 213 31% 91%;
+    --primary:          217 91% 53%;    /* #2563EB */
+    --primary-foreground: 0 0% 100%;
+    --secondary:        220 20% 20%;
+    --secondary-foreground: 213 31% 91%;
+    --muted:            220 20% 20%;
+    --muted-foreground: 215 16% 50%;
+    --accent:           220 20% 20%;
+    --accent-foreground: 213 31% 91%;
     --destructive:      0 84% 60%;
     --destructive-foreground: 0 0% 98%;
-    --border:           214 32% 88%;
-    --input:            214 32% 88%;
-    --ring:             189 96% 53%;
+    --border:           220 20% 22%;
+    --input:            220 20% 20%;
+    --ring:             217 91% 53%;
     --radius:           0.5rem;
     /* Sidebar */
-    --sidebar-bg:       222 47% 8%;
-    --sidebar-text:     213 31% 75%;
-    --sidebar-border:   222 47% 15%;
+    --sidebar-bg:       214 53% 8%;
+    --sidebar-text:     213 20% 60%;
+    --sidebar-border:   215 44% 14%;
   }
 
   .dark {
-    /* Dark mode — GateGuard #0A192F navy base */
-    --background:       214 53% 11%;    /* #0A192F */
+    /* GateGuard dark mode — navy base + grey-tinted main bg for contrast */
+    --background:       220 15% 13%;   /* slightly grey-dark — contrasts sidebar */
     --foreground:       213 31% 91%;
-    --card:             215 44% 13%;    /* #0d1f38 */
+    --card:             214 44% 15%;   /* navy card surface */
     --card-foreground:  213 31% 91%;
-    --popover:          215 44% 13%;
+    --popover:          214 44% 15%;
     --popover-foreground: 213 31% 91%;
-    --primary:          189 96% 53%;    /* #22d3ee — GateGuard cyan */
-    --primary-foreground: 214 53% 8%;
+    --primary:          217 91% 53%;   /* #2563EB — GateGuard blue */
+    --primary-foreground: 0 0% 100%;
     --secondary:        215 44% 18%;
     --secondary-foreground: 213 31% 91%;
     --muted:            215 44% 18%;
-    --muted-foreground: 215 20% 55%;
+    --muted-foreground: 215 20% 52%;
     --accent:           215 44% 18%;
     --accent-foreground: 213 31% 91%;
     --destructive:      0 63% 45%;
     --destructive-foreground: 213 31% 91%;
     --border:           215 44% 20%;
     --input:            215 44% 18%;
-    --ring:             189 96% 53%;
-    /* Sidebar */
-    --sidebar-bg:       216 53% 8%;     /* slightly darker than bg */
-    --sidebar-text:     213 20% 60%;
-    --sidebar-border:   215 44% 15%;
+    --ring:             217 91% 53%;
+    /* Sidebar — stays deeper navy for contrast against grey-dark main */
+    --sidebar-bg:       214 53% 7%;
+    --sidebar-text:     213 20% 58%;
+    --sidebar-border:   215 44% 13%;
   }
 }
 
@@ -79,17 +78,17 @@
    =================================================== */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { @apply bg-transparent; }
-::-webkit-scrollbar-thumb { @apply rounded-full; background: rgba(34, 211, 238, 0.2); }
-::-webkit-scrollbar-thumb:hover { background: rgba(34, 211, 238, 0.4); }
+::-webkit-scrollbar-thumb { @apply rounded-full; background: rgba(37, 99, 235, 0.25); }
+::-webkit-scrollbar-thumb:hover { background: rgba(37, 99, 235, 0.45); }
 
 /* ===================================================
-   AI Search glow — GateGuard cyan
+   AI Search glow — GateGuard blue
    =================================================== */
 .ai-search-glow {
-  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.25), 0 0 24px rgba(34, 211, 238, 0.08);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.25), 0 0 24px rgba(37, 99, 235, 0.08);
 }
 .ai-search-glow:focus-within {
-  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.45), 0 0 36px rgba(34, 211, 238, 0.12);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.45), 0 0 36px rgba(37, 99, 235, 0.12);
 }
 
 /* ===================================================
@@ -104,21 +103,21 @@
    GateGuard brand glow — used on primary CTAs
    =================================================== */
 .gg-glow {
-  box-shadow: 0 0 20px rgba(34, 211, 238, 0.25), 0 4px 14px rgba(34, 211, 238, 0.15);
+  box-shadow: 0 0 20px rgba(37, 99, 235, 0.30), 0 4px 14px rgba(37, 99, 235, 0.18);
 }
 .gg-glow:hover {
-  box-shadow: 0 0 30px rgba(34, 211, 238, 0.35), 0 4px 20px rgba(34, 211, 238, 0.2);
+  box-shadow: 0 0 32px rgba(37, 99, 235, 0.42), 0 4px 20px rgba(37, 99, 235, 0.25);
 }
 
 /* ===================================================
    Hierarchy tier badges
    =================================================== */
-.tier-corporate     { @apply bg-brand-400/10 text-brand-400 border border-brand-400/20; }
-.tier-mso           { @apply bg-violet-400/10 text-violet-400 border border-violet-400/20; }
-.tier-dealer        { @apply bg-blue-400/10 text-blue-400 border border-blue-400/20; }
-.tier-partner       { @apply bg-emerald-400/10 text-emerald-400 border border-emerald-400/20; }
-.tier-client        { @apply bg-amber-400/10 text-amber-400 border border-amber-400/20; }
-.tier-employee      { @apply bg-zinc-400/10 text-zinc-400 border border-zinc-400/20; }
+.tier-corporate  { @apply bg-brand-400/10 text-brand-400 border border-brand-400/20; }
+.tier-mso        { @apply bg-violet-400/10 text-violet-400 border border-violet-400/20; }
+.tier-dealer     { @apply bg-sky-400/10 text-sky-400 border border-sky-400/20; }
+.tier-partner    { @apply bg-emerald-400/10 text-emerald-400 border border-emerald-400/20; }
+.tier-client     { @apply bg-amber-400/10 text-amber-400 border border-amber-400/20; }
+.tier-employee   { @apply bg-zinc-400/10 text-zinc-400 border border-zinc-400/20; }
 
 /* ===================================================
    Live camera pulse
@@ -128,3 +127,19 @@
   50% { opacity: 0.6; transform: scale(1.15); }
 }
 .live-dot { animation: live-pulse 1.5s ease-in-out infinite; }
+
+/* ===================================================
+   Gate background image — gate-bg.jpg at 8% opacity
+   Add /public/gate-bg.jpg to enable
+   =================================================== */
+.gate-bg-layer {
+  position: fixed;
+  inset: 0;
+  background-image: url('/gate-bg.jpg');
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  opacity: 0.08;
+  pointer-events: none;
+  z-index: 0;
+}

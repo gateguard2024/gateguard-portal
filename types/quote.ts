@@ -3,75 +3,90 @@
 
 export type QuoteStatus = 'draft' | 'sent' | 'viewed' | 'accepted' | 'declined' | 'expired';
 
-export type AccessTier = 'tier1_mobile' | 'tier2_ubiquity';
+export type AccessTier = 'tier1_mobile' | 'tier2_gg';
 
 export type GateCondition = 'working' | 'non_working';
 
 export type BillingMode = 'included' | 'billable';
 
-// ── Kept for backwards compatibility ─────────────────────────────────────────
-export type CallboxTier = 'tier1_remove' | 'tier2_replace' | 'tier3_retain';
-
-// ── Network / Backhaul ────────────────────────────────────────────────────────
-export interface NetworkSurvey {
-  backhaul: {
-    needed: boolean;
-    qty: number;
-    billing: BillingMode;
-  };
-  radioLinks: {
-    needed: boolean;
-    qty: number;
-    billing: BillingMode;
-  };
-}
-
 // ── Access Control — Tier 1 (Mobile Pass Only) ────────────────────────────────
-// Primary doors:  controller + reader  (residents tap in)
-// Secondary doors: controller only    (amenity doors without reader)
-// Guest gates:    controller only     (app-controlled, no reader needed)
-// Resident gates: reader only         (exit / read-only gate)
-// Callbox:        optional video callbox at entry
+// Sites can have a mix of working and non-working hardware at each point type
 export interface Tier1AccessSurvey {
-  primaryDoors: { qty: number; condition: GateCondition };
-  secondaryDoors: { qty: number; condition: GateCondition };
-  guestGates: { qty: number; condition: GateCondition };
-  residentGates: { qty: number; condition: GateCondition };
+  primaryDoors:   { working: number; nonWorking: number }; // controller + reader
+  secondaryDoors: { working: number; nonWorking: number }; // controller only
+  guestGates:     { working: number; nonWorking: number }; // app-only controller
+  residentGates:  { working: number; nonWorking: number }; // reader only
   callbox: boolean;
 }
 
-// ── Access Control — Tier 2 (Ubiquity/Unifi) ─────────────────────────────────
-// Every access point gets a reader + controller via Unifi stack
+// ── Access Control — Tier 2 (GateGuard Integrated) ───────────────────────────
+// Every access point gets a full reader + controller
 export interface Tier2AccessSurvey {
-  accessPoints: { qty: number; condition: GateCondition };
+  accessPoints: { working: number; nonWorking: number };
   callbox: boolean;
+}
+
+// ── Network Infrastructure ────────────────────────────────────────────────────
+export interface NetworkItem {
+  qty: number;
+  billing: BillingMode;
+}
+
+export interface NetworkSurvey {
+  router:      NetworkItem;   // always at least 1
+  switch4port: NetworkItem;   // 4-port PoE switch
+  switch8port: NetworkItem;   // 8-port PoE switch
+  switch16port: NetworkItem;  // 16-port PoE switch
+  radioSmall:  NetworkItem;   // small PTP radio
+  radioMedium: NetworkItem;   // medium PTP radio
+  radioLarge:  NetworkItem;   // large PTP radio
+  enclosure:   NetworkItem;   // weatherproof enclosure
 }
 
 // ── Cameras ───────────────────────────────────────────────────────────────────
 export interface CameraSurvey {
   existing: {
-    monitored: number;   // reprogramming included — charged via monitoring MRR
-    standalone: number;  // reprogramming billed as one-time labor
+    monitored: number;   // reprogramming included — $85/mo monitoring
+    standalone: number;  // reprogramming billable — $150 labor, no MRR
   };
   new: {
-    monitored: number;   // hardware free with contract — charged via monitoring MRR
-    standalone: number;  // full installation labor + hardware billable
+    // billing='included': hardware free with contract, $100/mo monitoring
+    // billing='billable':  hardware billed $350/unit, $85/mo monitoring
+    monitored: { qty: number; billing: BillingMode };
+    standalone: number;  // full install billable $350, no monitoring MRR
   };
+}
+
+// ── Gate Maintenance ──────────────────────────────────────────────────────────
+export interface GateMaintenanceSurvey {
+  enabled: boolean;
+  initialRepairCost: number;          // entered by agent
+  initialRepairBilling: BillingMode;
+  entryGates: number;                 // count for $250/gate/mo ongoing maintenance
+}
+
+// ── Custom / Missing Equipment Items ─────────────────────────────────────────
+export interface CustomSurveyItem {
+  id: string;
+  description: string;
+  qty: number;
+  unitPrice: number;
+  billing: BillingMode;
 }
 
 // ── Optional Add-Ons ──────────────────────────────────────────────────────────
 export interface AddOnsSurvey {
-  lprCameras: { qty: number };
-  gateMaintenance: boolean;         // ongoing monthly service
-  equipmentReplacement: boolean;    // line item for missing/damaged parts
+  lprCameras: { qty: number };        // always billable install + required MRR
+  gateMaintenance: GateMaintenanceSurvey;
+  customItems: CustomSurveyItem[];    // agent-entered custom line items
 }
 
 // ── Composite Site Survey ──────────────────────────────────────────────────────
 export interface SiteSurvey {
   accessTier: AccessTier;
   network: NetworkSurvey;
-  tier1: Tier1AccessSurvey;         // used when accessTier === 'tier1_mobile'
-  tier2: Tier2AccessSurvey;         // used when accessTier === 'tier2_ubiquity'
+  tier1: Tier1AccessSurvey;
+  tier2: Tier2AccessSurvey;
   cameras: CameraSurvey;
   addOns: AddOnsSurvey;
 }
@@ -83,19 +98,20 @@ export interface QuoteLineItem {
   qty: number;
   unitPrice: number;
   total: number;
-  recurring: boolean;       // true = monthly recurring, false = one-time
+  recurring: boolean;
   period?: 'monthly';
-  billing?: BillingMode;    // 'included' | 'billable' (for network/camera items)
+  billing?: BillingMode;
   editable?: boolean;
 }
 
 export interface QuoteTotals {
-  setupTotal: number;
+  setupTotal: number;           // all one-time items (for display)
+  billableSetupTotal: number;   // one-time billable items only (drives deposit)
   monthlyTotal: number;
   yearOneTotal: number;
   contractValue: number;
-  depositDue: number;
-  goLivePayment: number;
+  depositDue: number;           // billableSetup × 50% + 1st month
+  goLivePayment: number;        // billableSetup × 50% + 1st month (at launch event)
   dealerMRR: number;
 }
 
@@ -143,72 +159,62 @@ export const PRICING = {
     dealerOverrideMax: 2.50,
   },
 
-  // Access Control — Tier 1 (Mobile Pass)
+  // Tier 1 (Mobile Pass) — per access point
   tier1: {
-    primaryDoor: {
-      working: 500.00,        // controller + reader, working hardware
-      nonWorking: 750.00,     // controller + reader, new hardware
-    },
-    secondaryDoor: {
-      working: 350.00,        // controller only, working hardware
-      nonWorking: 500.00,     // controller only, new hardware
-    },
-    guestGate: {
-      working: 350.00,        // controller only (app), working
-      nonWorking: 500.00,     // controller only (app), new
-    },
-    residentGate: {
-      working: 200.00,        // reader only, working hardware
-      nonWorking: 350.00,     // reader only, new hardware
-    },
-    callbox: 2500.00,         // Unifi / GateGuard video callbox
-  },
-
-  // Access Control — Tier 2 (Ubiquity/Unifi — every point gets reader)
-  tier2: {
-    accessPoint: {
-      working: 500.00,        // full reader + controller, working
-      nonWorking: 750.00,     // full reader + controller, new hardware
-    },
+    primaryDoor:   { working: 500.00,  nonWorking: 750.00  },  // controller + reader
+    secondaryDoor: { working: 350.00,  nonWorking: 500.00  },  // controller only
+    guestGate:     { working: 350.00,  nonWorking: 500.00  },  // app-only controller
+    residentGate:  { working: 200.00,  nonWorking: 350.00  },  // reader only
     callbox: 2500.00,
   },
 
-  // Network Infrastructure
+  // Tier 2 (GateGuard Integrated) — every point gets reader + controller
+  tier2: {
+    accessPoint: { working: 500.00, nonWorking: 750.00 },
+    callbox: 2500.00,
+  },
+
+  // Network Infrastructure — one-time setup, included or billable
   network: {
-    backhaulSetup: 500.00,    // per backhaul run — billable or included
-    radioLinkSetup: 750.00,   // per radio link bridge — billable or included
-    backhaulMonthly: 0.00,    // recurring (typically included in MRR)
+    router:       350.00,
+    switch4port:  200.00,
+    switch8port:  350.00,
+    switch16port: 600.00,
+    radioSmall:   500.00,
+    radioMedium:  800.00,
+    radioLarge:   1200.00,
+    enclosure:    250.00,
   },
 
   // Cameras
   cameras: {
-    // Monitored new cameras — hardware free with contract
-    newMonitoredSetup: 0.00,
-    newMonitoredMonthly: 100.00,
-    // Standalone new cameras — billable install + no MRR
-    newStandaloneSetup: 350.00,
-    newStandaloneMonthly: 0.00,
-    // Existing monitored — reprogramming included
-    existingMonitoredSetup: 0.00,
-    existingMonitoredMonthly: 85.00,
-    // Existing standalone — reprogramming billable, no MRR
-    existingStandaloneSetup: 150.00,
-    existingStandaloneMonthly: 0.00,
-    // LPR cameras
-    lprSetup: 1500.00,
-    lprMonthly: 150.00,
+    // New cameras — monitored (billing=included): hardware free, $100/mo
+    newMonitoredIncludedSetup:   0.00,
+    newMonitoredIncludedMonthly: 100.00,
+    // New cameras — monitored (billing=billable): hardware billed, $85/mo
+    newMonitoredBillableSetup:   350.00,
+    newMonitoredBillableMonthly: 85.00,
+    // New cameras — standalone (always billable): full install, no MRR
+    newStandaloneSetup:          350.00,
+    // Existing cameras — monitored: reprogramming included, $85/mo
+    existingMonitoredSetup:      0.00,
+    existingMonitoredMonthly:    85.00,
+    // Existing cameras — standalone: reprogramming billable, no MRR
+    existingStandaloneSetup:     150.00,
+    // LPR cameras — always billable install + required MRR
+    lprSetup:                    1500.00,
+    lprMonthly:                  150.00,
   },
 
   // Add-ons
   addOns: {
-    gateMaintenanceMonthly: 250.00,   // physical gate maintenance & repair
-    equipmentReplacement: 500.00,     // budgeted allowance for missing equipment
+    gateMaintenancePerGate: 250.00,   // per entry gate per month (up to 2 leafs)
   },
 
   contract: {
     months: 60,
-    depositPercent: 0.50,
-    goLivePercent: 0.50,
+    depositPercent: 0.50,   // % of billable setup at signing
+    goLivePercent:  0.50,   // % of billable setup at launch event
   },
 
   earlyTermination: {

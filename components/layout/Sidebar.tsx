@@ -1,9 +1,10 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, Camera, Shield, FileText,
-  Wrench, CreditCard, Settings, ChevronRight, Zap,
+  Wrench, CreditCard, Settings, ChevronRight,
   Radio, MessageSquare, BarChart3, ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -61,9 +62,8 @@ export function Sidebar() {
     )}>
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 h-16 border-b border-[hsl(var(--sidebar-border))]">
-        {/* GateGuard shield mark */}
-        <div className="w-8 h-8 shrink-0 rounded-lg bg-brand-400/10 border border-brand-400/30 flex items-center justify-center gg-glow">
-          <Shield size={16} className="text-brand-400" />
+        <div className="w-9 h-9 shrink-0 rounded-lg overflow-hidden flex items-center justify-center">
+          <Image src="/logo.png" alt="GateGuard" width={36} height={36} className="object-contain" priority />
         </div>
         {!collapsed && (
           <div className="flex-1 min-w-0">

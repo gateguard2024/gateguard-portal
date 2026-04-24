@@ -14,13 +14,14 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="dark" suppressHydrationWarning>
       <body className={inter.className}>
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
-          <div className="flex h-screen overflow-hidden">
+        <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark" disableTransitionOnChange>
+          <div className="flex h-screen overflow-hidden relative">
+            {/* Gate background image at 8% opacity — place gate-bg.jpg in /public to activate */}
+            <div className="gate-bg-layer" aria-hidden="true" />
             <Sidebar />
-            {/* ml-64 matches sidebar width; sidebar handles collapse internally */}
-            <main className="flex-1 flex flex-col ml-64 overflow-y-auto min-w-0 transition-all duration-200">
+            <main className="flex-1 flex flex-col ml-64 overflow-y-auto min-w-0 transition-all duration-200 relative z-10">
               {children}
             </main>
           </div>

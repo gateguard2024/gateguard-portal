@@ -43,19 +43,19 @@ module.exports = {
           DEFAULT:    "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        // GateGuard brand — sourced from gateguard.co
+        // GateGuard brand — royal blue from GateGuard logo
         brand: {
-          50:  "#ecfeff",
-          100: "#cffafe",
-          200: "#a5f3fc",
-          300: "#67e8f9",
-          400: "#22d3ee",   // PRIMARY: exact gateguard.co cyan
-          500: "#06b6d4",
-          600: "#0891b2",
-          700: "#0e7490",
-          800: "#155e75",
-          900: "#0a0f1a",   // darkest bg
-          950: "#050505",   // near-black bg
+          50:  "#eff6ff",
+          100: "#dbeafe",
+          200: "#bfdbfe",
+          300: "#93c5fd",
+          400: "#2563eb",   // PRIMARY: GateGuard logo blue
+          500: "#1d4ed8",   // hover / active
+          600: "#1e40af",
+          700: "#1e3a8a",
+          800: "#1e3270",
+          900: "#0a192f",   // darkest bg / navy
+          950: "#060d1a",   // near-black bg
         },
         navy: {
           DEFAULT: "#0A192F",  // GateGuard dark background
