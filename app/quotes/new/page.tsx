@@ -335,10 +335,10 @@ export default function NewQuotePage() {
           <SectionCard title="Access Points — Tier 1 (Mobile Pass)" icon={Shield}>
             <div className="space-y-4">
               {([
-                { label: 'Primary Doors', sub: 'Controller + Reader', key: 'primaryDoors' as const, wp: '$500', nwp: '$750' },
-                { label: 'Secondary Doors', sub: 'Controller Only — amenity rooms, utility doors', key: 'secondaryDoors' as const, wp: '$350', nwp: '$500' },
-                { label: 'Guest Gates', sub: 'App-Only Controller — no reader', key: 'guestGates' as const, wp: '$350', nwp: '$500' },
-                { label: 'Resident Gates', sub: 'Reader Only — exit tap', key: 'residentGates' as const, wp: '$200', nwp: '$350' },
+                { label: 'Resident Vehicle Gates', sub: 'Resident-credentialed vehicular entry — controller + reader', key: 'residentGates' as const, wp: '$200', nwp: '$350' },
+                { label: 'Guest Vehicle Gates', sub: 'App-only guest vehicular entry — controller, no reader', key: 'guestGates' as const, wp: '$350', nwp: '$500' },
+                { label: 'Primary Common Doors', sub: 'Main pedestrian entries — controller + reader', key: 'primaryDoors' as const, wp: '$500', nwp: '$750' },
+                { label: 'Secondary Common Doors', sub: 'Amenity rooms, utility doors — controller only', key: 'secondaryDoors' as const, wp: '$350', nwp: '$500' },
               ]).map(({ label, sub, key, wp, nwp }, i) => (
                 <div key={key} className={i > 0 ? 'pt-4 border-t border-border' : ''}>
                   <div className="flex items-start justify-between gap-4">
@@ -503,8 +503,8 @@ export default function NewQuotePage() {
           <div className="pt-4 border-t border-border">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <p className="text-sm text-foreground">Physical Gate Maintenance & Repair</p>
-                <p className="text-xs text-muted-foreground">$250/mo per entry gate (up to 2 leafs)</p>
+                <p className="text-sm text-foreground">Entry Gate Repair Plan</p>
+                <p className="text-xs text-muted-foreground">Initial repair + $250/mo per entry gate (up to 2 leafs)</p>
               </div>
               <Toggle checked={gm.enabled} onChange={() => setSurvey(s => ({ ...s, addOns: { ...s.addOns, gateMaintenance: { ...s.addOns.gateMaintenance, enabled: !s.addOns.gateMaintenance.enabled } } }))} />
             </div>
@@ -512,7 +512,7 @@ export default function NewQuotePage() {
               <div className="bg-background/60 border border-border rounded-lg p-4 space-y-4 mt-2">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
-                    <p className="text-sm text-foreground">Initial Repair Cost</p>
+                    <p className="text-sm text-foreground">Initial Gate Repair Cost</p>
                     <p className="text-xs text-muted-foreground mb-2">Enter estimated repair labor + parts</p>
                     <BillingToggle
                       value={gm.initialRepairBilling}

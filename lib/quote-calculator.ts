@@ -139,11 +139,11 @@ export function calculateLineItems(survey: SiteSurvey, property: QuoteProperty):
   const gm = survey.addOns.gateMaintenance;
   if (gm.enabled) {
     if (gm.initialRepairCost > 0) {
-      items.push({ id: makeId(), description: 'Physical Gate Initial Repair' + (gm.initialRepairBilling === 'included' ? ' (Included)' : ''), qty: 1, unitPrice: gm.initialRepairBilling === 'billable' ? gm.initialRepairCost : 0, total: gm.initialRepairBilling === 'billable' ? gm.initialRepairCost : 0, recurring: false, billing: gm.initialRepairBilling, editable: true });
+      items.push({ id: makeId(), description: 'Entry Gate Repair — Initial Service' + (gm.initialRepairBilling === 'included' ? ' (Included)' : ''), qty: 1, unitPrice: gm.initialRepairBilling === 'billable' ? gm.initialRepairCost : 0, total: gm.initialRepairBilling === 'billable' ? gm.initialRepairCost : 0, recurring: false, billing: gm.initialRepairBilling, editable: true });
     }
     if (gm.entryGates > 0) {
       const maintMonthly = PRICING.addOns.gateMaintenancePerGate * gm.entryGates;
-      items.push({ id: makeId(), description: `Physical Gate Maintenance & Repair — ${gm.entryGates} entry gate${gm.entryGates > 1 ? 's' : ''} (up to 2 leafs each)`, qty: gm.entryGates, unitPrice: PRICING.addOns.gateMaintenancePerGate, total: maintMonthly, recurring: true, period: 'monthly', billing: 'billable', editable: true });
+      items.push({ id: makeId(), description: `Entry Gate Repair Plan — ${gm.entryGates} gate${gm.entryGates > 1 ? 's' : ''} (up to 2 leafs each)`, qty: gm.entryGates, unitPrice: PRICING.addOns.gateMaintenancePerGate, total: maintMonthly, recurring: true, period: 'monthly', billing: 'billable', editable: true });
     }
   }
 

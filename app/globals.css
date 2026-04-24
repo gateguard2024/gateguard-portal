@@ -12,58 +12,57 @@
 
 @layer base {
   :root {
-    /* Light mode (fallback — portal is dark-locked) */
-    --background:       220 15% 13%;
-    --foreground:       213 31% 91%;
-    --card:             220 20% 16%;
-    --card-foreground:  213 31% 91%;
-    --popover:          220 20% 16%;
-    --popover-foreground: 213 31% 91%;
-    --primary:          217 91% 53%;    /* #2563EB */
+    /* Portal is dark-locked — :root mirrors .dark */
+    --background:       214 45% 18%;
+    --foreground:       213 31% 94%;
+    --card:             214 42% 22%;
+    --card-foreground:  213 31% 94%;
+    --popover:          214 42% 22%;
+    --popover-foreground: 213 31% 94%;
+    --primary:          217 91% 53%;
     --primary-foreground: 0 0% 100%;
-    --secondary:        220 20% 20%;
-    --secondary-foreground: 213 31% 91%;
-    --muted:            220 20% 20%;
-    --muted-foreground: 215 16% 50%;
-    --accent:           220 20% 20%;
-    --accent-foreground: 213 31% 91%;
-    --destructive:      0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
-    --border:           220 20% 22%;
-    --input:            220 20% 20%;
+    --secondary:        215 38% 26%;
+    --secondary-foreground: 213 31% 94%;
+    --muted:            215 38% 26%;
+    --muted-foreground: 215 20% 68%;
+    --accent:           215 38% 26%;
+    --accent-foreground: 213 31% 94%;
+    --destructive:      0 63% 50%;
+    --destructive-foreground: 213 31% 94%;
+    --border:           215 38% 28%;
+    --input:            215 38% 26%;
     --ring:             217 91% 53%;
     --radius:           0.5rem;
-    /* Sidebar */
-    --sidebar-bg:       214 53% 8%;
-    --sidebar-text:     213 20% 60%;
+    --sidebar-bg:       214 55% 8%;
+    --sidebar-text:     213 20% 68%;
     --sidebar-border:   215 44% 14%;
   }
 
   .dark {
-    /* GateGuard dark mode — navy base + grey-tinted main bg for contrast */
-    --background:       220 15% 13%;   /* slightly grey-dark — contrasts sidebar */
-    --foreground:       213 31% 91%;
-    --card:             214 44% 15%;   /* navy card surface */
-    --card-foreground:  213 31% 91%;
-    --popover:          214 44% 15%;
-    --popover-foreground: 213 31% 91%;
+    /* GateGuard dark mode — readable navy, sidebar stays deeper for contrast */
+    --background:       214 45% 18%;   /* medium navy — readable, not near-black */
+    --foreground:       213 31% 94%;   /* bright white text */
+    --card:             214 42% 22%;   /* cards float above bg */
+    --card-foreground:  213 31% 94%;
+    --popover:          214 42% 22%;
+    --popover-foreground: 213 31% 94%;
     --primary:          217 91% 53%;   /* #2563EB — GateGuard blue */
     --primary-foreground: 0 0% 100%;
-    --secondary:        215 44% 18%;
-    --secondary-foreground: 213 31% 91%;
-    --muted:            215 44% 18%;
-    --muted-foreground: 215 20% 52%;
-    --accent:           215 44% 18%;
-    --accent-foreground: 213 31% 91%;
-    --destructive:      0 63% 45%;
-    --destructive-foreground: 213 31% 91%;
-    --border:           215 44% 20%;
-    --input:            215 44% 18%;
+    --secondary:        215 38% 26%;
+    --secondary-foreground: 213 31% 94%;
+    --muted:            215 38% 26%;
+    --muted-foreground: 215 20% 68%;   /* lighter grey — pops more */
+    --accent:           215 38% 26%;
+    --accent-foreground: 213 31% 94%;
+    --destructive:      0 63% 50%;
+    --destructive-foreground: 213 31% 94%;
+    --border:           215 38% 28%;
+    --input:            215 38% 26%;
     --ring:             217 91% 53%;
-    /* Sidebar — stays deeper navy for contrast against grey-dark main */
-    --sidebar-bg:       214 53% 7%;
-    --sidebar-text:     213 20% 58%;
-    --sidebar-border:   215 44% 13%;
+    /* Sidebar — deeper navy for clear contrast against main */
+    --sidebar-bg:       214 55% 8%;
+    --sidebar-text:     213 20% 68%;   /* brighter sidebar text */
+    --sidebar-border:   215 44% 14%;
   }
 }
 
