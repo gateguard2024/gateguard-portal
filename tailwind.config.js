@@ -1,11 +1,10 @@
-import type { Config } from "tailwindcss";
-
-const config: Config = {
+/** @type {import('tailwindcss').Config} */
+module.exports = {
   darkMode: ["class"],
   content: [
-    "./pages/**/*.{ts,tsx}",
-    "./components/**/*.{ts,tsx}",
-    "./app/**/*.{ts,tsx}",
+    "./pages/**/*.{js,ts,jsx,tsx}",
+    "./components/**/*.{js,ts,jsx,tsx}",
+    "./app/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {
@@ -16,16 +15,16 @@ const config: Config = {
           100: "#cffafe",
           200: "#a5f3fc",
           300: "#67e8f9",
-          400: "#22d3ee",   // ← PRIMARY: exact gateguard.co cyan
+          400: "#22d3ee",   // PRIMARY: exact gateguard.co cyan
           500: "#06b6d4",
           600: "#0891b2",
           700: "#0e7490",
           800: "#155e75",
-          900: "#0a0f1a",   // ← darkest bg
-          950: "#050505",   // ← near-black bg
+          900: "#0a0f1a",   // darkest bg
+          950: "#050505",   // near-black bg
         },
         navy: {
-          DEFAULT: "#0A192F",  // ← GateGuard dark background
+          DEFAULT: "#0A192F",  // GateGuard dark background
           light:   "#0f2644",
           dark:    "#061120",
           card:    "#0d1f38",
@@ -63,5 +62,3 @@ const config: Config = {
   },
   plugins: [require("tailwindcss-animate")],
 };
-
-export default config;
