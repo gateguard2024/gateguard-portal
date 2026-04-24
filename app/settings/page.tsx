@@ -123,25 +123,35 @@ const team = [
   { name: "Maria Larson",   email: "mlarson@gateguard.co",  role: "dealer_staff", status: "active" },
 ];
 
+// ── Mutable pricing types ──────────────────────────────────────────────────
+type WNPair   = { working: number; nonWorking: number };
+type Monthly  = { perUnit: number; minimum: number; dealerOverrideMax: number };
+type T1State  = { residentGate: WNPair; guestGate: WNPair; primaryDoor: WNPair; secondaryDoor: WNPair; callbox: number };
+type T2State  = { accessPoint: WNPair; callbox: number };
+type NetState = { router: number; switch4port: number; switch8port: number; switch16port: number; radioSmall: number; radioMedium: number; radioLarge: number; enclosure: number };
+type CamState = { newMonitoredIncludedSetup: number; newMonitoredIncludedMonthly: number; newMonitoredBillableSetup: number; newMonitoredBillableMonthly: number; newStandaloneSetup: number; existingMonitoredSetup: number; existingMonitoredMonthly: number; existingStandaloneSetup: number; lprSetup: number; lprMonthly: number };
+type AddOnState  = { gateMaintenancePerGate: number };
+type ContractState = { months: number; depositPercent: number; goLivePercent: number };
+
 // ── Main page ──────────────────────────────────────────────────────────────
 export default function SettingsPage() {
   // ── Pricing state (mirrors PRICING constants; TODO: persist to Supabase) ─
-  const [monthly, setMonthly] = useState({ ...PRICING.monthly });
-  const [t1, setT1] = useState({
+  const [monthly,  setMonthly]  = useState<Monthly>({ ...PRICING.monthly });
+  const [t1, setT1] = useState<T1State>({
     residentGate:   { ...PRICING.tier1.residentGate   },
     guestGate:      { ...PRICING.tier1.guestGate      },
     primaryDoor:    { ...PRICING.tier1.primaryDoor    },
     secondaryDoor:  { ...PRICING.tier1.secondaryDoor  },
     callbox:        PRICING.tier1.callbox,
   });
-  const [t2, setT2] = useState({
+  const [t2, setT2] = useState<T2State>({
     accessPoint:    { ...PRICING.tier2.accessPoint    },
     callbox:        PRICING.tier2.callbox,
   });
-  const [network, setNetwork] = useState({ ...PRICING.network });
-  const [cameras, setCameras] = useState({ ...PRICING.cameras });
-  const [addOns,  setAddOns]  = useState({ ...PRICING.addOns  });
-  const [contract, setContract] = useState({ ...PRICING.contract });
+  const [network,  setNetwork]  = useState<NetState>({ ...PRICING.network });
+  const [cameras,  setCameras]  = useState<CamState>({ ...PRICING.cameras });
+  const [addOns,   setAddOns]   = useState<AddOnState>({ ...PRICING.addOns });
+  const [contract, setContract] = useState<ContractState>({ ...PRICING.contract });
 
   const [saved, setSaved] = useState(false);
   function handleSave() {
