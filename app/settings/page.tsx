@@ -167,6 +167,7 @@ export default function SettingsPage() {
 
         {/* ── PRICING CONFIGURATION ──────────────────────────────────────── */}
         <div className="bg-card border border-border rounded-xl overflow-hidden">
+          {/* TODO: Wrap this entire Pricing Configuration block in a top-level collapsible accordion so it doesn't dominate the settings page. The SectionHeader should act as the toggle — collapsed by default, expands to reveal all PricingCards. Same pattern as PricingCard but at the section level. */}
           <SectionHeader icon={DollarSign} title="Pricing Configuration" subtitle="Click any price to edit. Changes apply to all new quotes." />
           <div className="p-5 space-y-4">
 
