@@ -6,6 +6,7 @@ import {
   LayoutDashboard, Users, Camera, Shield, FileText,
   Wrench, CreditCard, Settings, ChevronRight,
   Radio, MessageSquare, BarChart3, ChevronDown,
+  Network,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -17,6 +18,7 @@ const navSections = [
       { label: "Dashboard",      href: "/",             icon: LayoutDashboard },
       { label: "Customers",      href: "/customers",    icon: Users           },
       { label: "CRM",            href: "/crm",          icon: MessageSquare },
+      { label: "Organizations",  href: "/admin",        icon: Network       },
     ],
   },
   {

@@ -70,6 +70,9 @@ declare module 'lucide-react' {
   export const Trash2: Icon;
   export const Edit2: Icon;
   export const Link2: Icon;
+  // Admin / Org additions
+  export const Globe: Icon;
+  export const Copy: Icon;
   // CRM additions
   export const Hash: Icon;
   export const Circle: Icon;
