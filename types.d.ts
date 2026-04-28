@@ -70,4 +70,22 @@ declare module 'lucide-react' {
   export const Trash2: Icon;
   export const Edit2: Icon;
   export const Link2: Icon;
+  // CRM additions
+  export const Hash: Icon;
+  export const Circle: Icon;
+  export const AlertCircle: Icon;
+  export const ArrowRight: Icon;
+  export const Paperclip: Icon;
+  export const PhoneCall: Icon;
+  export const Video: Icon;
+  export const StickyNote: Icon;
+  export const CheckSquare: Icon;
+  export const Flame: Icon;
+  export const LayoutGrid: Icon;
+  export const List: Icon;
+  export const SlidersHorizontal: Icon;
+  export const Target: Icon;
+  export const CheckCircle: Icon;
+  export const TrendingDown: Icon;
+  export const Pencil: Icon;
 }

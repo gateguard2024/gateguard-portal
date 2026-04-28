@@ -16,7 +16,7 @@ const navSections = [
     items: [
       { label: "Dashboard",      href: "/",             icon: LayoutDashboard },
       { label: "Customers",      href: "/customers",    icon: Users           },
-      { label: "CRM",            href: "/crm",          icon: MessageSquare, badge: "Soon" },
+      { label: "CRM",            href: "/crm",          icon: MessageSquare },
     ],
   },
   {
