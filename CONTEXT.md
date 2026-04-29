@@ -216,6 +216,32 @@ Things a dealer needs that are currently fragmented across multiple tools:
 14. **Equipment procurement** — quote accepted → auto-generate equipment list → one-click PO to distributor
 15. **Knowledge base** — install manuals, troubleshooting guides, accessible in field on mobile
 
+### Equipment Procurement + Fulfillment Loop (DESIGN READY — not yet built)
+When a dealer wins a deal, the quote already contains a structured BOM (bill of materials). The flow:
+1. **Dealer** — "Order Equipment" button on won opportunity → auto-generates PO from quote line items → submitted to GateGuard
+2. **GateGuard fulfillment** — internal order queue shows incoming POs; staff marks each unit as:
+   - Programmed (serial numbers logged, device config applied — seeds the asset register for that property)
+   - Tested (QA checklist signed off)
+   - Shipped (tracking number pushed back to dealer portal)
+3. **Dealer** sees live order status (Received → Programming → QA → Shipped → Delivered)
+4. **Asset register** auto-populated from serial numbers logged at programming — no re-entry on install
+- Key insight: BOM is already structured data from the quote; serial numbers at programming time = automatic asset seeding
+- Future: One-click PO to distributor (equipment procurement from GG to supplier)
+
+### Field Tech Knowledge Base + Guided Troubleshooting (DESIGN READY — not yet built)
+A symptom-driven, AI-assisted troubleshooting assistant for field technicians. Goal: replace tribal knowledge and phone calls back to the office.
+**Architecture:**
+- **Vector repository** — all product manuals, install guides, wiring diagrams, config docs ingested as embeddings (Supabase pgvector or Pinecone)
+- **Guided Q&A flow** (mobile-optimized):
+  1. "What's the symptom?" — free text + common symptom quick-picks
+  2. "What's the model/product?" — dropdown seeded from the property's asset register
+  3. Guided yes/no questions (power present? error code showing? last known good state?)
+  4. Returns: ranked likely causes + exact step-by-step resolution with test points (expected voltage/resistance readings), photos, and wiring diagrams pulled from the manual
+- **Resolution feedback loop** — tech marks resolution as solved/unsolved; novel solutions can be flagged and added to the KB
+- **Over time**: self-improving from real field resolution data
+- **Pages needed**: `/kb` (search + symptom entry), `/kb/[article]` (step-by-step guide with visuals), `/kb/admin` (document ingestion + management)
+- **Tech stack**: Supabase pgvector for embeddings, GPT-4o or Claude for Q&A reasoning, PDF-to-chunk pipeline for ingesting manuals
+
 ### Future
 - **EagleEye live API** — replace mock camera data
 - **Brivo live API** — replace mock access control data
