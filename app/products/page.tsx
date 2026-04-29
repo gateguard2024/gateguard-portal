@@ -31,6 +31,19 @@ interface Product {
   active: boolean;
 }
 
+// ─── Error helper — Supabase errors are plain objects, not Error instances ────
+const getErrMsg = (err: unknown): string => {
+  if (!err) return "Unknown error";
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object") {
+    const e = err as Record<string, unknown>;
+    if (typeof e.message === "string") return e.message;
+    if (typeof e.error_description === "string") return e.error_description;
+    try { return JSON.stringify(e); } catch { /* ignore */ }
+  }
+  return String(err);
+};
+
 // ─── DB ↔ App mappers ─────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -473,7 +486,7 @@ export default function ProductsPage() {
         setProducts(data.map(fromDb));
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = getErrMsg(err);
       setDbError(msg);
     } finally {
       setLoading(false);
@@ -524,7 +537,7 @@ export default function ProductsPage() {
       setModal(null);
       setEditing(null);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = getErrMsg(err);
       setDbError(msg);
     } finally {
       setSaving(false);
@@ -546,7 +559,7 @@ export default function ProductsPage() {
         return [...prev.filter(p => !skus.has(p.sku)), ...imported];
       });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = getErrMsg(err);
       setDbError(msg);
     } finally {
       setSaving(false);
@@ -561,8 +574,7 @@ export default function ProductsPage() {
       .update({ sell_price: v })
       .eq("id", id);
     if (error) {
-      setDbError(error.message);
-      // Revert optimistic update on failure
+      setDbError(getErrMsg(error));
       loadProducts();
     }
   };
@@ -578,7 +590,7 @@ export default function ProductsPage() {
       .update({ active: newVal })
       .eq("id", id);
     if (error) {
-      setDbError(error.message);
+      setDbError(getErrMsg(error));
       loadProducts();
     }
   };
@@ -593,7 +605,7 @@ export default function ProductsPage() {
       .delete()
       .in("id", ids);
     if (error) {
-      setDbError(error.message);
+      setDbError(getErrMsg(error));
       loadProducts();
     }
   };
@@ -606,7 +618,7 @@ export default function ProductsPage() {
       .delete()
       .eq("id", id);
     if (error) {
-      setDbError(error.message);
+      setDbError(getErrMsg(error));
       loadProducts();
     }
   };
