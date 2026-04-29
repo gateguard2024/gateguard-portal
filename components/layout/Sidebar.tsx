@@ -8,6 +8,7 @@ import {
   Radio, MessageSquare, BarChart3, ChevronDown,
   Network, Truck, Package, Repeat, TrendingUp,
   Globe, ClipboardList, Headphones, FileCheck,
+  Megaphone, Map, BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -63,6 +64,14 @@ const navSections: { label: string; items: NavItem[] }[] = [
       { label: "Onboarding",     href: "/onboarding",   icon: ClipboardList   },
       { label: "Communications", href: "/communications", icon: Headphones    },
       { label: "Customer Portal", href: "/portal",      icon: Globe           },
+      { label: "Site Survey",    href: "/survey",       icon: Map             },
+      { label: "Knowledge Base", href: "/kb",           icon: BookOpen        },
+    ],
+  },
+  {
+    label: "Marketing",
+    items: [
+      { label: "Marketing Hub",  href: "/marketing",   icon: Megaphone        },
     ],
   },
 ];

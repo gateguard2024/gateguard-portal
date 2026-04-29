@@ -116,4 +116,19 @@ declare module 'lucide-react' {
   export const PenSquare: Icon;
   export const FileCheck: Icon;
   export const UserCheck: Icon;
+  // Marketing + Survey + KB additions
+  export const Megaphone: Icon;
+  export const Share2: Icon;
+  export const Image: Icon;
+  export const Layout: Icon;
+  export const Map: Icon;
+  export const Ruler: Icon;
+  export const BookOpen: Icon;
+  export const Crosshair: Icon;
+  export const Rss: Icon;
+  export const PenTool: Icon;
+  export const Coins: Icon;
+  export const Star: Icon;
+  export const BarChart2: Icon;
+  export const ThumbsUp: Icon;
 }
