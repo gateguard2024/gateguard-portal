@@ -141,4 +141,12 @@ declare module 'lucide-react' {
   export const Unlock: Icon;
   export const Key: Icon;
   export const QrCode: Icon;
+  // Products / admin additions
+  export const Upload: Icon;
+  export const ToggleLeft: Icon;
+  export const ToggleRight: Icon;
+  export const Layers: Icon;
+  export const Hammer: Icon;
+  export const HardHat: Icon;
+  export const ClipboardCheck: Icon;
 }
