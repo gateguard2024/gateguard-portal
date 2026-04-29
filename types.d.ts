@@ -62,6 +62,7 @@ declare module 'lucide-react' {
   export const ChevronUp: Icon;
   export const Check: Icon;
   export const Minus: Icon;
+  export const X: Icon;
   export const Loader2: Icon;
   export const Copy: Icon;
   export const ArrowUpRight: Icon;
