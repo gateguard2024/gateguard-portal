@@ -137,4 +137,8 @@ declare module 'lucide-react' {
   export const Server: Icon;
   export const HardDrive: Icon;
   export const WifiOff: Icon;
+  export const Lock: Icon;
+  export const Unlock: Icon;
+  export const Key: Icon;
+  export const QrCode: Icon;
 }

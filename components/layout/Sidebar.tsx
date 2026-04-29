@@ -72,6 +72,7 @@ const navSections: { label: string; items: NavItem[] }[] = [
       { label: "Product Catalog", href: "/products",    icon: Layers          },
       { label: "Energy",         href: "/energy",       icon: Zap             },
       { label: "Network Infra",  href: "/network",      icon: Server          },
+      { label: "Delivery Hub",   href: "/deliveries",   icon: Package         },
     ],
   },
   {

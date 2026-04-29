@@ -242,6 +242,56 @@ A symptom-driven, AI-assisted troubleshooting assistant for field technicians. G
 - **Pages needed**: `/kb` (search + symptom entry), `/kb/[article]` (step-by-step guide with visuals), `/kb/admin` (document ingestion + management)
 - **Tech stack**: Supabase pgvector for embeddings, GPT-4o or Claude for Q&A reasoning, PDF-to-chunk pipeline for ingesting manuals
 
+### Delivery Hub — Package Lockers + Carrier Access + Who/What/Where/When Tracking
+The most complete delivery tracking system in the multifamily security space. Every delivery, every carrier, every property — logged in real time with camera evidence.
+
+**The vision:** When anything crosses the gate or enters the building — a package, a food delivery, a postal carrier, an Amazon driver — GateGuard knows about it, logs it, notifies the right resident, and ties it to a camera snapshot. No manual entry. Full audit trail forever.
+
+**Core integrations:**
+
+*Smart Lockers:*
+- **Luxer One** (primary) — API integration for locker status, deposits, pickups. When a package is deposited: locker ID logged, carrier logged, resident notified via SMS + community channel TV display + app push. Overdue threshold alerts (24h+) sent to property manager.
+- Future: Amazon Hub Locker, Package Concierge, Parcel Pending, Butterfly MX lockers
+
+*Carrier Programs (automated gate/building access):*
+- **Amazon Key for Business** — Amazon drivers receive one-time gate access codes via Amazon's B2B API. GateGuard generates and logs the code, opens the gate, records the entry with camera snapshot. Zero human involvement.
+- **USPS Carrier Access** — Scheduled access windows (Mon–Sat 9am–5pm). Carriers use standard USPS access methods; entry logged automatically by gate event.
+- **UPS My Choice for Business** — UPS API integration for delivery tracking + driver access codes.
+- **FedEx Delivery Manager** — FedEx Business API integration; delivery photo confirmation pulled and logged.
+- **USPS Informed Delivery** — Pre-scan alert before mail arrives; residents see what's coming before it lands.
+- **Regional carriers** (OnTrac, LSO, LaserShip) — Guest access code fallback via Twilio SMS to driver's number.
+
+*Gig & Food Delivery (Uber, DoorDash, Instacart, GrubHub, Shipt, Amazon Fresh):*
+- When a resident places an order on any platform, GateGuard auto-generates a time-limited one-time gate code (valid window: configurable, default 45 min).
+- Code is sent to the driver via platform API webhook or SMS fallback.
+- Entry logged with: platform, timestamp, unit #, driver ID, camera snapshot.
+- Resident notified when code is used (confirmation the food arrived).
+- **Future: Uber API integration** — order created in Uber app → webhook fires → GateGuard generates code → code delivered to Uber driver → gate opens → delivery logged with full metadata.
+
+**The who/what/where/when data model (every event logged):**
+- WHO: Carrier identity (Amazon, UPS, FedEx, Uber driver ID, USPS)
+- WHAT: Package tracking number (if available from carrier API), food order ID, delivery type
+- WHERE: Gate A/B/C, locker bank + unit, door drop location, unit # destination
+- WHEN: Precise timestamp with camera snapshot
+- OUTCOME: Delivered to locker / door drop / handed to resident / access granted
+- PICKUP: When resident retrieved it, how long it sat
+
+**Revenue model for this module:**
+- Included in GateGuard Standard tier (access control properties)
+- Luxer One integration fee: pass-through at cost + $49/mo management fee per property
+- Locker utilization report: included, drives upsell conversation for additional locker banks
+
+**Pages built:** `/deliveries` — Live Feed | Package Lockers | Carrier Access | Delivery History
+
+**Future additions:**
+- Amazon Hub Locker native integration
+- USPS API (Informed Delivery)
+- Resident delivery preferences (leave at door / locker / hold for pickup)
+- Package insurance / lost package tracking
+- HOA rules enforcement (large deliveries require prior approval)
+
+---
+
 ### Native Site Survey + System Design Tool (replaces System Surveyor)
 System Surveyor is the current standard — dealers take an aerial/floor plan view and mark camera placements, door positions, gate locations, panel locations, and cable runs. The goal is a native version that is tightly integrated with the rest of the platform.
 **Why native beats System Surveyor:**
