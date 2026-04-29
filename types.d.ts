@@ -72,7 +72,6 @@ declare module 'lucide-react' {
   export const Link2: Icon;
   // Admin / Org additions
   export const Globe: Icon;
-  export const Copy: Icon;
   // CRM additions
   export const Hash: Icon;
   export const Circle: Icon;
@@ -91,4 +90,29 @@ declare module 'lucide-react' {
   export const CheckCircle: Icon;
   export const TrendingDown: Icon;
   export const Pencil: Icon;
+  // Dispatch / Field additions
+  export const Truck: Icon;
+  export const Navigation: Icon;
+  export const Route: Icon;
+  export const Activity: Icon;
+  // Inventory additions
+  export const Package: Icon;
+  export const Layers: Icon;
+  // Renewals additions
+  export const Repeat: Icon;
+  export const RotateCcw: Icon;
+  // Revenue additions
+  export const PieChart: Icon;
+  // Communications additions
+  export const Headphones: Icon;
+  export const PhoneIncoming: Icon;
+  export const PhoneOutgoing: Icon;
+  export const MessageCircle: Icon;
+  export const GitBranch: Icon;
+  export const Inbox: Icon;
+  // Onboarding / Contracts additions
+  export const ClipboardList: Icon;
+  export const PenSquare: Icon;
+  export const FileCheck: Icon;
+  export const UserCheck: Icon;
 }

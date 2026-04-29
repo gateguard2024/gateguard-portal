@@ -6,7 +6,8 @@ import {
   LayoutDashboard, Users, Camera, Shield, FileText,
   Wrench, CreditCard, Settings, ChevronRight,
   Radio, MessageSquare, BarChart3, ChevronDown,
-  Network,
+  Network, Truck, Package, Repeat, TrendingUp,
+  Globe, ClipboardList, Headphones, FileCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -42,13 +43,26 @@ const navSections: { label: string; items: NavItem[] }[] = [
     items: [
       { label: "Quotes",         href: "/quotes",       icon: FileText        },
       { label: "Billing",        href: "/billing",      icon: CreditCard      },
+      { label: "Renewals",       href: "/renewals",     icon: Repeat          },
+      { label: "Revenue",        href: "/revenue",      icon: TrendingUp      },
+      { label: "Contracts",      href: "/contracts",    icon: FileCheck       },
     ],
   },
   {
     label: "Field",
     items: [
       { label: "Maintenance",    href: "/maintenance",  icon: Wrench          },
+      { label: "Dispatch",       href: "/dispatch",     icon: Truck           },
+      { label: "Inventory",      href: "/inventory",    icon: Package         },
       { label: "Reports",        href: "/reports",      icon: BarChart3, badge: "Soon" },
+    ],
+  },
+  {
+    label: "Platform",
+    items: [
+      { label: "Onboarding",     href: "/onboarding",   icon: ClipboardList   },
+      { label: "Communications", href: "/communications", icon: Headphones    },
+      { label: "Customer Portal", href: "/portal",      icon: Globe           },
     ],
   },
 ];
