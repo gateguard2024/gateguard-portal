@@ -156,15 +156,73 @@ From Salesforce screenshots shared 2026-04-27:
 10. **Supabase replace mock data** — swap all mock arrays for real Supabase queries
 11. **Email server** — pick from Resend / SendGrid / Postmark; wire to invite flow + activity emails
 12. **Twilio** — SMS alerts for tech dispatch, 2FA, dealer notifications
-13. **Payment routing** — Stripe Connect primary candidate; per-tier revenue split (GG cut → MSO cut → Dealer cut) configurable in admin settings; QuickBooks as accounting layer
+
+### Payment & Accounting Architecture (DECIDED)
+- **Stripe Connect** — primary payment processor; handles revenue split at transaction time
+  - GateGuard takes platform fee, remainder routes to dealer
+  - MSO and Channel Partner cuts configured per-org in admin settings
+  - Connected accounts per dealer — they get paid directly
+- **QuickBooks — Native API only** (no Make/Zapier — too fragile, recurring cost, no control)
+  - GateGuard OS is system of record for WHAT is billed
+  - QuickBooks is accounting layer only — receives invoices, customers, payments
+  - Sync: new customer won → QB customer; invoice generated → QB invoice; payment received → QB payment posted
+  - Do NOT push journal entries only — loses AR aging, customer balances, overdue tracking
+  - Payroll, 1099s, bank reconciliation stay in QB directly (not touched by GateGuard OS)
+  - Each dealer org can optionally connect their own QB account
+- **Phase:** Stripe Connect first, then QB native API after Stripe is live
+
+### Maintenance Module — MaintainX-Inspired Gaps to Build
+MaintainX is the gold standard for field service. Our maintenance module needs:
+- **Procedure templates / checklists** — step-by-step job cards per job type (camera install, gate install, PM visit). Tech must check off each step. Attached to work orders.
+- **Parts & inventory** — track stock at warehouse + per-tech van. WO completion auto-decrements. Low-stock alerts.
+- **Photo attachments on WOs** — techs attach before/after photos from mobile
+- **Cost tracking per WO** — labor hours (auto from time-in/time-out) + parts cost = job profitability
+- **Dispatcher board** — real-time view of all open jobs, which tech is assigned, ETA, status. Like a Kanban but for field ops.
+- **Tech mobile view** — mobile-optimized work order interface; turn-by-turn nav to job site; signature capture on completion
+- **Automated customer notifications** — "Tech is on the way" SMS; "Your job is complete" with summary
+
+### Customer-Facing Billing Portal (NEEDED — "/billing/customer" or subdomain)
+End customers need their own billing section to:
+- View their active subscription — what cameras, doors, services they're paying for
+- See and pay invoices online (ACH / card via Stripe)
+- Download invoice history / statements
+- Update payment method on file
+- View contract terms and renewal date
+- Submit a support/service request
+- This should be white-labeled per dealer (dealer's logo, not GateGuard's)
+
+### "Your GateGuard" Subscription Management (dealer-facing)
+Dealers need to manage the GateGuard platform subscription they pay to us:
+- View their own GateGuard OS subscription tier and what's included
+- See their monthly platform fee (based on # of active customers/properties)
+- Upgrade/downgrade plan
+- Billing history for what they pay GateGuard
+
+### Holy Grail — What's Missing for Dealers (Full Gap List)
+Things a dealer needs that are currently fragmented across multiple tools:
+1. **Dispatcher board** — real-time map/board of techs + jobs in flight (replaces phone calls)
+2. **Tech mobile app** — native-feeling WO experience in the field (replaces paper/texts)
+3. **Install checklists** — standardized procedure per job type (replaces tribal knowledge)
+4. **Parts inventory** — van stock + warehouse (replaces spreadsheets)
+5. **Contract e-sign** — generate service agreement on deal close, send for signature (replaces DocuSign separate tool)
+6. **Customer onboarding checklist** — "Contract signed → Equipment ordered → Install scheduled → EagleEye provisioned → Brivo provisioned → Customer portal live → Welcome email sent" (replaces manual tracking)
+7. **Customer billing portal** — end customer self-serve (replaces emailed PDFs)
+8. **Renewal tracking** — which customers renew when; auto-alert 60/30/14 days out (replaces spreadsheet)
+9. **Property health score** — cameras online %, WO backlog, days since PM, access events — single number per property
+10. **Revenue dashboard** — MRR trend, new ARR, churn, projected vs actual for the dealer's book
+11. **Commission tracking** — rep and channel partner commissions calculated automatically on close
+12. **SLA tracker** — response time and resolution time per customer vs their contracted SLA
+13. **Two-way SMS/email** — inbound customer message → auto-creates work order or CRM activity
+14. **Equipment procurement** — quote accepted → auto-generate equipment list → one-click PO to distributor
+15. **Knowledge base** — install manuals, troubleshooting guides, accessible in field on mobile
 
 ### Future
-14. **EagleEye live API** — replace mock camera data
-15. **Brivo live API** — replace mock access control data
-16. **SOC page** — multi-account camera monitoring grid
-17. **QuickBooks sync** — invoice/payment sync
-18. **White-label portals** — per-dealer branding, subdomain routing
-19. **AI features** — video search, proposal generator, anomaly detection
+- **EagleEye live API** — replace mock camera data
+- **Brivo live API** — replace mock access control data
+- **SOC page** — full GGSOC.com integration (currently opens ggsoc.com in new tab)
+- **White-label portals** — per-dealer branding, subdomain routing (dealers.gateguard.co/[slug])
+- **AI features** — video search, proposal generator from property type, anomaly detection, churn prediction
+- **Resident mobile app** — gate entry, guest passes, visitor log, intercom-to-phone
 
 ---
 
