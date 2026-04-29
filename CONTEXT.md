@@ -242,6 +242,63 @@ A symptom-driven, AI-assisted troubleshooting assistant for field technicians. G
 - **Pages needed**: `/kb` (search + symptom entry), `/kb/[article]` (step-by-step guide with visuals), `/kb/admin` (document ingestion + management)
 - **Tech stack**: Supabase pgvector for embeddings, GPT-4o or Claude for Q&A reasoning, PDF-to-chunk pipeline for ingesting manuals
 
+### Native Site Survey + System Design Tool (replaces System Surveyor)
+System Surveyor is the current standard — dealers take an aerial/floor plan view and mark camera placements, door positions, gate locations, panel locations, and cable runs. The goal is a native version that is tightly integrated with the rest of the platform.
+**Why native beats System Surveyor:**
+- Site survey drawing is directly tied to the work order (tech opens drawing from WO, not a separate app)
+- Marked devices auto-populate the BOM on the quote — select "4MP Dome Camera" on the drawing, it appears as a line item
+- Completed drawing becomes an attachment on the proposal (customer sees a professional site plan)
+- Installed devices on the drawing seed the asset register at that property (camera placed at "NW corner" = asset created with location tag)
+- Future: AI suggests camera placement based on property type + square footage
+**Tech approach:** Canvas-based drawing tool (Konva.js or Fabric.js), aerial tiles via Google Maps API or Mapbox, device library with drag-and-drop icons per product category
+**Pages needed:** `/survey` (new survey from work order), `/survey/[id]` (drawing canvas), device library, proposal export with embedded plan
+
+### Marketing & Lead Generation Platform (DESIGN READY — not yet built)
+A full in-platform marketing arm. Three distinct capabilities:
+
+**1. GateGuard Social Scheduler (HootSuite-style)**
+- Schedule and publish posts across GateGuard's own social channels (Facebook, Instagram, LinkedIn, X/Twitter)
+- Content calendar view, post composer with image/video upload, AI-generated caption suggestions
+- Analytics: reach, engagement, follower growth per channel
+- Route: `/marketing/social`
+
+**2. Dealer Social Media Management**
+- GateGuard creates branded content (posts, graphics, videos) and pushes it to connected dealer social accounts
+- Dealers authorize GateGuard to post on their behalf (OAuth to their FB/IG/LinkedIn)
+- Dealers can approve/reject or auto-approve scheduled posts from GateGuard
+- Each piece of content is customized with the dealer's logo/name/phone before publishing
+- Creates consistent brand presence across the entire dealer network automatically
+- Route: `/marketing/dealer-social`
+
+**3. Co-Op Marketing Pool + Lead Generation (ORIGINAL — no competitor has this)**
+This is the flagship differentiator. How it works:
+- Each dealer opts in and contributes a monthly amount to the co-op fund (e.g., $200–$2,000/mo based on territory size)
+- GateGuard runs centralized Google Ads, Meta Ads, and SEO campaigns targeting property managers, HOA boards, and commercial property owners
+- Leads come in through GateGuard-owned landing pages (geo-targeted, property-type-targeted)
+- Leads are routed to the nearest/best-fit dealer automatically based on: geography, dealer tier, co-op contribution level, capacity
+- Dealer receives the lead in their GateGuard CRM instantly — no manual hand-off
+- Dashboard shows: co-op balance, leads received, cost-per-lead, conversion rate, ROI
+- GateGuard takes a platform management fee (10–15%) off the top; the rest goes directly to campaigns
+- Dealers who contribute more get territory exclusivity and priority routing
+- Route: `/marketing/coop`
+**Why this wins:** This is the franchise co-op advertising model (like how McDonald's pools ad spend) applied to the security dealer channel. No competitor offers this. It makes GateGuard OS a revenue driver for dealers, not just a cost center. A dealer who gets 3 qualified leads/month from the pool and converts 1 at $50K easily justifies $500/mo contribution.
+
+### Dealer Website Hosting (included in platform)
+Dealers currently pay separately for website hosting. GateGuard OS should include:
+- Hosted dealer landing page / microsite at `[dealer-slug].gateguard.co` or custom domain
+- Template-based builder: hero, services, testimonials, contact form, "Get a Free Quote" CTA
+- Quote requests from the dealer website feed directly into the GateGuard CRM as leads
+- White-labeled — dealer's branding, not GateGuard's (unless dealer opts for "Powered by GateGuard" badge)
+- Route: `/marketing/website`
+
+### HouseCall Pro Feature Gaps to Absorb
+Previously used HouseCall Pro modules that need native equivalents in GateGuard OS:
+- **Online booking** — customers/property managers can book a site survey or service call from the dealer website, slots pulled from dispatch availability
+- **Customer notifications** — automated job status texts ("tech is on the way", "job complete", "invoice ready")
+- **Instant invoicing** — tech completes job → invoice generated on mobile → customer pays on the spot via card reader or payment link
+- **Review requests** — auto-send Google Review / Yelp request after job completion
+- **Recurring service agreements** — schedule recurring PM visits, auto-invoice monthly
+
 ### Future
 - **EagleEye live API** — replace mock camera data
 - **Brivo live API** — replace mock access control data
@@ -249,6 +306,8 @@ A symptom-driven, AI-assisted troubleshooting assistant for field technicians. G
 - **White-label portals** — per-dealer branding, subdomain routing (dealers.gateguard.co/[slug])
 - **AI features** — video search, proposal generator from property type, anomaly detection, churn prediction
 - **Resident mobile app** — gate entry, guest passes, visitor log, intercom-to-phone
+- **Central station integration** — place systems on/off test, create CS accounts (like FieldHub/WorkHorse)
+- **Property health score** — cameras online %, open WOs, days since PM, contract status = one number per property
 
 ---
 
