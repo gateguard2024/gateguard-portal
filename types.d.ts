@@ -131,4 +131,10 @@ declare module 'lucide-react' {
   export const Star: Icon;
   export const BarChart2: Icon;
   export const ThumbsUp: Icon;
+  export const Tv: Icon;
+  export const Bolt: Icon;
+  export const Plug: Icon;
+  export const Server: Icon;
+  export const HardDrive: Icon;
+  export const WifiOff: Icon;
 }
