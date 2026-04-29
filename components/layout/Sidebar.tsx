@@ -11,7 +11,15 @@ import {
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 
-const navSections = [
+type NavItem = {
+  label: string;
+  href: string;
+  icon: React.ElementType;
+  badge?: string;
+  external?: boolean;
+};
+
+const navSections: { label: string; items: NavItem[] }[] = [
   {
     label: "Operations",
     items: [
@@ -26,7 +34,7 @@ const navSections = [
     items: [
       { label: "Cameras",        href: "/cameras",      icon: Camera          },
       { label: "Access Control", href: "/access",       icon: Shield          },
-      { label: "SOC",            href: "/soc",          icon: Radio, badge: "Soon" },
+      { label: "SOC",            href: "https://ggsoc.com", icon: Radio, external: true },
     ],
   },
   {
@@ -105,14 +113,17 @@ export function Sidebar() {
             <div className="space-y-0.5">
               {section.items.map((item) => {
                 const Icon = item.icon;
-                const isActive = item.href === "/"
+                const isExternal = item.external;
+                const isActive = !isExternal && (item.href === "/"
                   ? pathname === "/"
-                  : pathname.startsWith(item.href);
+                  : pathname.startsWith(item.href));
                 const isSoon = item.badge === "Soon";
                 return (
                   <Link
                     key={item.href}
                     href={isSoon ? "#" : item.href}
+                    target={isExternal ? "_blank" : undefined}
+                    rel={isExternal ? "noopener noreferrer" : undefined}
                     className={cn(
                       "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all group relative",
                       isActive
