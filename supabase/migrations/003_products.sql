@@ -45,7 +45,14 @@ CREATE INDEX IF NOT EXISTS products_sku_idx      ON public.products (sku);
 -- Enable Row Level Security
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 
--- Authenticated users (dealers/admins) can read all active products
+-- Drop existing policies if they exist (safe to re-run)
+DROP POLICY IF EXISTS "Authenticated users can read products"  ON public.products;
+DROP POLICY IF EXISTS "Authenticated users can insert products" ON public.products;
+DROP POLICY IF EXISTS "Authenticated users can update products" ON public.products;
+DROP POLICY IF EXISTS "Authenticated users can delete products" ON public.products;
+DROP POLICY IF EXISTS "Public can read active products"         ON public.products;
+
+-- Authenticated users (dealers/admins) can read all products
 CREATE POLICY "Authenticated users can read products"
   ON public.products FOR SELECT
   TO authenticated
