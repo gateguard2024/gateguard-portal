@@ -1,7 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
+
+// ─── Diagnostic engine types (shared with /tech) ──────────────────────────────
+type StepType = "question" | "action" | "resolved" | "escalate";
+interface DiagStep {
+  type: StepType;
+  text: string;
+  detail: string | null;
+  manual_ref: { url: string | null; page: number | null; section: string | null } | null;
+  session_id: string;
+}
+interface DiagHistory { question: string; answer: string; }
+
+const STEP_COLORS: Record<StepType, { bg: string; border: string; text: string; badge: string }> = {
+  question: { bg: "bg-blue-50",   border: "border-blue-200",  text: "text-blue-800",  badge: "bg-blue-100 text-blue-700"  },
+  action:   { bg: "bg-amber-50",  border: "border-amber-200", text: "text-amber-800", badge: "bg-amber-100 text-amber-700" },
+  resolved: { bg: "bg-emerald-50",border: "border-emerald-200",text:"text-emerald-800",badge:"bg-emerald-100 text-emerald-700"},
+  escalate: { bg: "bg-red-50",    border: "border-red-200",   text: "text-red-800",   badge: "bg-red-100 text-red-700"    },
+};
 import {
   Zap,
   Plus,
@@ -207,6 +225,53 @@ export default function KBPage() {
   const [errorCode, setErrorCode] = useState("");
   const [activeChip, setActiveChip] = useState<string | null>(null);
 
+  // ── Diagnostic state ────────────────────────────────────────────────────────
+  const [diagActive,   setDiagActive]   = useState(false);
+  const [diagLoading,  setDiagLoading]  = useState(false);
+  const [diagHistory,  setDiagHistory]  = useState<DiagHistory[]>([]);
+  const [diagCurrent,  setDiagCurrent]  = useState<DiagStep | null>(null);
+  const [diagSession,  setDiagSession]  = useState<string | null>(null);
+  const [diagFreeText, setDiagFreeText] = useState("");
+  const diagBottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { diagBottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [diagHistory, diagCurrent]);
+
+  async function runDiagnostic() {
+    if (!symptom.trim()) return;
+    setDiagActive(true);
+    setDiagHistory([]);
+    setDiagCurrent(null);
+    setDiagSession(null);
+    await fetchDiagStep([]);
+  }
+
+  async function fetchDiagStep(h: DiagHistory[]) {
+    setDiagLoading(true);
+    const res = await fetch("/api/kb/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symptom, product_id: undefined, error_code: errorCode || undefined, history: h, session_id: diagSession }),
+    });
+    const data = await res.json();
+    setDiagLoading(false);
+    if (data.error) { alert(data.error); return; }
+    if (!diagSession && data.session_id) setDiagSession(data.session_id);
+    setDiagCurrent(data as DiagStep);
+  }
+
+  async function diagAnswer(ans: string) {
+    if (!diagCurrent) return;
+    const newH: DiagHistory[] = [...diagHistory, { question: diagCurrent.text, answer: ans }];
+    setDiagHistory(newH);
+    setDiagCurrent(null);
+    if (diagCurrent.type === "resolved" || diagCurrent.type === "escalate") return;
+    await fetchDiagStep(newH);
+  }
+
+  function resetDiag() {
+    setDiagActive(false); setDiagHistory([]); setDiagCurrent(null); setDiagSession(null); setDiagFreeText("");
+  }
+
   const QUICK_CHIPS = [
     "Gate won't open",
     "Camera offline",
@@ -349,6 +414,7 @@ export default function KBPage() {
             </div>
 
             <button
+              onClick={runDiagnostic}
               className={cn(
                 "w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all shadow-sm",
                 symptom || product
@@ -356,8 +422,91 @@ export default function KBPage() {
                   : "bg-gray-100 text-gray-400 cursor-not-allowed"
               )}
             >
-              <Zap size={14} /> Run Diagnostic →
+              <Zap size={14} /> {diagActive ? "Restart Diagnostic" : "Run Diagnostic →"}
             </button>
+
+            {/* ── Live diagnostic results ─────────────────────────────────── */}
+            {diagActive && (
+              <div className="mt-4 border border-gray-200 rounded-xl overflow-hidden">
+                <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-gray-600">AI Diagnostic — "{symptom}"</span>
+                  <div className="flex items-center gap-2">
+                    {diagSession && (
+                      <a href={`/tech?session=${diagSession}`} target="_blank" rel="noopener noreferrer"
+                        className="text-[10px] text-blue-500 hover:underline">
+                        📱 Open on mobile
+                      </a>
+                    )}
+                    <button onClick={resetDiag} className="text-[10px] text-gray-400 hover:text-gray-600">✕ Clear</button>
+                  </div>
+                </div>
+
+                <div className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
+                  {/* History */}
+                  {diagHistory.map((h, i) => (
+                    <div key={i} className="px-4 py-2.5 flex items-center justify-between gap-3 bg-white">
+                      <p className="text-xs text-gray-600 flex-1">Step {i+1}: {h.question}</p>
+                      <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full",
+                        h.answer === "Yes" ? "bg-emerald-100 text-emerald-700" : h.answer === "No" ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"
+                      )}>{h.answer}</span>
+                    </div>
+                  ))}
+
+                  {/* Loading */}
+                  {diagLoading && (
+                    <div className="px-4 py-3 flex items-center gap-2 bg-white">
+                      <div className="w-4 h-4 border-2 border-blue-200 border-t-blue-500 rounded-full animate-spin" />
+                      <p className="text-xs text-gray-400">Searching manuals…</p>
+                    </div>
+                  )}
+
+                  {/* Current step */}
+                  {diagCurrent && !diagLoading && (() => {
+                    const cfg = STEP_COLORS[diagCurrent.type];
+                    return (
+                      <div className={cn("px-4 py-3", cfg.bg)}>
+                        <div className="flex items-start justify-between gap-2 mb-1.5">
+                          <span className={cn("text-[10px] font-bold uppercase tracking-widest", cfg.text)}>
+                            {diagCurrent.type}
+                          </span>
+                          {diagCurrent.manual_ref?.url && (
+                            <a href={`${diagCurrent.manual_ref.url}${diagCurrent.manual_ref.page ? `#page=${diagCurrent.manual_ref.page}` : ""}`}
+                              target="_blank" rel="noopener noreferrer"
+                              className="text-[10px] text-blue-500 hover:underline flex-shrink-0">
+                              📄 p.{diagCurrent.manual_ref.page}
+                            </a>
+                          )}
+                        </div>
+                        <p className="text-sm font-semibold text-gray-900 mb-1">{diagCurrent.text}</p>
+                        {diagCurrent.detail && <p className="text-xs text-gray-600 mb-2">{diagCurrent.detail}</p>}
+
+                        {diagCurrent.type === "question" && (
+                          <div className="flex gap-2 mt-2">
+                            <button onClick={() => diagAnswer("Yes")} className="flex-1 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-colors">Yes</button>
+                            <button onClick={() => diagAnswer("No")}  className="flex-1 py-1.5 rounded-lg bg-red-500    text-white text-xs font-semibold hover:bg-red-600    transition-colors">No</button>
+                          </div>
+                        )}
+                        {diagCurrent.type === "action" && (
+                          <div className="flex gap-2 mt-2">
+                            <input type="text" value={diagFreeText} onChange={e => setDiagFreeText(e.target.value)}
+                              placeholder="What do you observe?" className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-gray-300 focus:outline-none focus:border-blue-400" />
+                            <button onClick={() => diagAnswer("Done")} className="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-semibold">Done</button>
+                            <button onClick={() => { if (diagFreeText.trim()) { diagAnswer(diagFreeText); setDiagFreeText(""); }}} className="px-3 py-1.5 rounded-lg bg-blue-500 text-white text-xs font-semibold">→</button>
+                          </div>
+                        )}
+                        {(diagCurrent.type === "resolved" || diagCurrent.type === "escalate") && (
+                          <div className="flex gap-2 mt-2">
+                            <button onClick={resetDiag} className="flex-1 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-xs font-semibold hover:bg-gray-300">New Session</button>
+                            {diagCurrent.type === "escalate" && <button onClick={() => diagAnswer("Continue")} className="flex-1 py-1.5 rounded-lg bg-red-100 text-red-700 text-xs font-semibold">Keep Going</button>}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+                <div ref={diagBottomRef} />
+              </div>
+            )}
           </div>
         </div>
 
