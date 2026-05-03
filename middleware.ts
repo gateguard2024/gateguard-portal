@@ -1,44 +1,48 @@
 /**
  * middleware.ts
  *
- * Clerk auth middleware for portal.gateguard.co
+ * Auth middleware for portal.gateguard.co
  *
- * Public routes (no Clerk session required):
- *   /tech          — field tech tool (uses x-tech-code header auth instead)
- *   /api/kb/ask    — also accepts x-tech-code (checked inside the route)
- *   /api/kb/products — also accepts x-tech-code (checked inside the route)
- *   /sign-in, /sign-up, /sso-callback
+ * /tech and its API routes bypass Clerk entirely — they use
+ * x-tech-code header auth handled inside the route handlers.
  *
  * Everything else requires a valid Clerk session.
  */
 
+import { NextRequest, NextResponse } from 'next/server'
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
-import { NextResponse } from 'next/server'
 
-const isPublic = createRouteMatcher([
-  '/tech(.*)',
-  '/api/kb/ask(.*)',
-  '/api/kb/products(.*)',
-  '/sign-in(.*)',
-  '/sign-up(.*)',
-  '/sso-callback(.*)',
-])
+// These paths never touch Clerk — short-circuit immediately
+function isBypassPath(pathname: string): boolean {
+  return (
+    pathname.startsWith('/tech') ||
+    pathname.startsWith('/api/kb/ask') ||
+    pathname.startsWith('/api/kb/products') ||
+    pathname.startsWith('/sign-in') ||
+    pathname.startsWith('/sign-up') ||
+    pathname.startsWith('/sso-callback') ||
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/favicon')
+  )
+}
 
-export default clerkMiddleware(async (auth, req) => {
-  if (!isPublic(req)) {
-    const { userId } = await auth()
-    if (!userId) {
-      const signInUrl = new URL('/sign-in', req.url)
-      signInUrl.searchParams.set('redirect_url', req.url)
-      return NextResponse.redirect(signInUrl)
-    }
+const isProtected = createRouteMatcher(['/(.*)')
+
+export default clerkMiddleware(async (auth, req: NextRequest) => {
+  // Hard bypass — never run Clerk for these paths
+  if (isBypassPath(req.nextUrl.pathname)) {
+    return NextResponse.next()
+  }
+
+  // Require Clerk session for everything else
+  const { userId } = await auth()
+  if (!userId) {
+    const signInUrl = new URL('/sign-in', req.url)
+    signInUrl.searchParams.set('redirect_url', req.url)
+    return NextResponse.redirect(signInUrl)
   }
 })
 
 export const config = {
-  matcher: [
-    // Skip Next.js internals and static files
-    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-    '/(api|trpc)(.*)',
-  ],
+  matcher: ['/(.*)'],
 }
