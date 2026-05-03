@@ -38,10 +38,11 @@ export async function POST(req: NextRequest) {
     const storagePath = `${product_id}/${safeName}`
     const db          = serviceDb()
 
-    // Create a signed URL valid for 10 minutes — enough for any upload
+    // Create a signed URL valid for 10 minutes.
+    // upsert: true allows re-uploading a revised manual for the same product.
     const { data, error } = await db.storage
       .from('manuals')
-      .createSignedUploadUrl(storagePath)
+      .createSignedUploadUrl(storagePath, { upsert: true })
 
     if (error) throw new Error(`Signed URL: ${error.message}`)
 
