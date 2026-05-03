@@ -234,7 +234,7 @@ function TechTool() {
   const [prevScreen,      setPrevScreen]     = useState<Screen | null>(null)
   const [wiringInitMapId, setWiringInitMapId] = useState<string | null>(null)
   const [installChecked,  setInstallChecked]  = useState<Set<string>>(new Set())
-  const [expandedPhases,  setExpandedPhases]  = useState<Set<string>>(new Set(INSTALL_PHASES.map(p => p.id)))
+  const [expandedPhases,  setExpandedPhases]  = useState<Set<string>>(new Set<string>(['preinstall']))
 
   const bottomRef   = useRef<HTMLDivElement>(null)
   const photoRef    = useRef<HTMLInputElement>(null)
@@ -778,7 +778,7 @@ function TechTool() {
           <div style={{ height: '100%', background: C.green, transition: 'width 0.4s', width: `${pct}%` }} />
         </div>
 
-        <div className="gg-install" style={{ flex: 1, overflowY: 'auto', padding: '12px 16px 32px', display: 'flex', flexDirection: 'column', gap: 12, scrollbarWidth: 'none' } as React.CSSProperties}>
+        <div className="gg-install" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '12px 16px 32px', display: 'flex', flexDirection: 'column', gap: 12, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
 
           {/* System summary */}
           <div style={{ background: C.bgCard, borderRadius: 12, padding: '14px 16px', border: `1px solid ${C.border}` }}>
@@ -815,25 +815,26 @@ function TechTool() {
 
             return (
               <div key={phase.id} style={{ background: C.bgCard, borderRadius: 12, border: `1px solid ${isComplete ? `${phase.color}40` : C.border}`, overflow: 'hidden' }}>
-                {/* Phase header */}
-                <button
+                {/* Phase header — div avoids browser button-sizing bugs inside overflow:hidden */}
+                <div
+                  role="button" tabIndex={0}
                   onClick={() => togglePhase(phase.id)}
-                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                  onKeyDown={e => e.key === 'Enter' && togglePhase(phase.id)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', cursor: 'pointer', userSelect: 'none' }}
                 >
-                  <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>{phase.icon}</span>
+                  <div style={{ width: 28, height: 28, borderRadius: 7, flexShrink: 0, background: `${phase.color}18`, border: `1px solid ${phase.color}40`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ width: 10, height: 10, borderRadius: isComplete ? '50%' : 2, background: isComplete ? phase.color : `${phase.color}80` }} />
+                  </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: isComplete ? phase.color : C.textPrimary, letterSpacing: '0.1em' }}>
                       {phase.title}
                     </div>
-                    <div style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.06em', marginTop: 2 }}>
-                      {phaseDone}/{phaseSteps.length} complete
+                    <div style={{ fontFamily: MONO, fontSize: 8, color: isComplete ? phase.color : C.textMuted, letterSpacing: '0.06em', marginTop: 2 }}>
+                      {isComplete ? '✓ COMPLETE' : `${phaseDone}/${phaseSteps.length} complete`}
                     </div>
                   </div>
-                  {isComplete && (
-                    <span style={{ fontFamily: MONO, fontSize: 10, color: phase.color, flexShrink: 0 }}>✓</span>
-                  )}
-                  <span style={{ color: C.textMuted, fontSize: 14, flexShrink: 0, transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'none', display: 'inline-block' }}>›</span>
-                </button>
+                  <span style={{ color: C.textMuted, fontSize: 16, flexShrink: 0, transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'none', display: 'inline-block', lineHeight: 1 }}>›</span>
+                </div>
 
                 {/* Steps */}
                 {isExpanded && (
