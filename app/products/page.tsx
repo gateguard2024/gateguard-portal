@@ -495,7 +495,8 @@ function ImportModal({ onImport, onClose, saving }: { onImport:(rows:Omit<Produc
         dealerCost:Number(c[8]?.replace(/[^0-9.]/g,""))||0,
         sellPrice:Number(c[9]?.replace(/[^0-9.]/g,""))||0,
         adiSku:c[10]??"", imageUrl:c[11]??"",
-        active:c[12]?.toLowerCase()!=="n" });
+        active:c[12]?.toLowerCase()!=="n",
+        tags:[], fieldService:false, manualUrl:"" });
     }
     if (!rows.length) { setError("No valid rows found."); return; }
     setPreview(rows);

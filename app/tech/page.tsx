@@ -835,51 +835,51 @@ function TechTool() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const S: Record<string, React.CSSProperties> = {
   shell:        { minHeight: '100dvh', maxHeight: '100dvh', background: C.bg, display: 'flex', flexDirection: 'column', fontFamily: SANS, maxWidth: 480, margin: '0 auto', overflow: 'hidden' },
-  pinCard:      { width: '100%', maxWidth: 340, padding: '32px 24px', background: C.bgCard, borderRadius: 16, border: `1px solid ${C.border}`, margin: '0 16px' },
-  pinLogo:      { width: 52, height: 52, borderRadius: 14, background: 'rgba(56,189,248,0.1)', border: `1px solid rgba(56,189,248,0.25)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.blue, margin: '0 auto', letterSpacing: '0.05em' },
-  topBar:       { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: C.bgDeep, borderBottom: `1px solid ${C.border}`, flexShrink: 0 },
-  diagHeader:   { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: C.bgDeep, borderBottom: `1px solid ${C.border}`, flexShrink: 0 },
-  ggMark:       { width: 34, height: 34, borderRadius: 8, background: 'rgba(56,189,248,0.1)', border: `1px solid rgba(56,189,248,0.25)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 11, fontWeight: 700, color: C.blue, flexShrink: 0, letterSpacing: '0.05em' },
+  pinCard:      { width: '100%', maxWidth: 340, padding: '32px 24px', background: C.bgCard, borderRadius: 20, border: `1px solid ${C.border}`, margin: '0 16px', boxShadow: '0 4px 32px rgba(15,23,42,0.08)' },
+  pinLogo:      { width: 52, height: 52, borderRadius: 14, background: 'rgba(107,126,255,0.1)', border: `1px solid rgba(107,126,255,0.25)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.blue, margin: '0 auto', letterSpacing: '0.05em' },
+  topBar:       { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: C.bgCard, borderBottom: `1px solid ${C.border}`, flexShrink: 0, boxShadow: '0 1px 0 rgba(15,23,42,0.06)' },
+  diagHeader:   { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: C.bgCard, borderBottom: `1px solid ${C.border}`, flexShrink: 0 },
+  ggMark:       { width: 34, height: 34, borderRadius: 9, background: 'rgba(107,126,255,0.1)', border: `1px solid rgba(107,126,255,0.25)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 11, fontWeight: 700, color: C.blue, flexShrink: 0, letterSpacing: '0.05em' },
   topBarTitle:  { fontFamily: MONO, fontSize: 11, fontWeight: 700, color: C.textPrimary, letterSpacing: '0.08em' },
   topBarSub:    { fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.12em', marginTop: 2 },
-  statusPill:   { fontFamily: MONO, fontSize: 9, color: C.green, letterSpacing: '0.12em', border: `1px solid rgba(16,185,129,0.25)`, borderRadius: 4, padding: '3px 7px', flexShrink: 0 },
+  statusPill:   { fontFamily: MONO, fontSize: 9, color: C.green, letterSpacing: '0.12em', border: `1px solid rgba(5,150,105,0.3)`, borderRadius: 5, padding: '3px 7px', flexShrink: 0, background: 'rgba(5,150,105,0.07)' },
   sessionId:    { fontFamily: MONO, fontSize: 13, fontWeight: 700, color: C.textPrimary, letterSpacing: '0.06em' },
-  iconBtn:      { width: 34, height: 34, borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: `1px solid ${C.border}`, color: C.textSecondary, fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: MONO },
-  progressBar:  { height: 2, background: 'rgba(255,255,255,0.05)', flexShrink: 0 },
+  iconBtn:      { width: 34, height: 34, borderRadius: 8, background: C.bgInput, border: `1px solid ${C.border}`, color: C.textSecondary, fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: MONO },
+  progressBar:  { height: 2, background: C.border, flexShrink: 0 },
   progressFill: { height: '100%', background: C.blue, transition: 'width 0.4s ease' },
-  legendStrip:  { display: 'flex', gap: 20, padding: '10px 16px', borderTop: `1px solid ${C.border}`, fontFamily: MONO, fontSize: 9, letterSpacing: '0.1em', flexShrink: 0, background: C.bgDeep },
+  legendStrip:  { display: 'flex', gap: 20, padding: '10px 16px', borderTop: `1px solid ${C.border}`, fontFamily: MONO, fontSize: 9, letterSpacing: '0.1em', flexShrink: 0, background: C.bgCard },
   fieldLabel:   { fontFamily: MONO, fontSize: 9, letterSpacing: '0.16em', color: C.textMuted, marginBottom: -4 },
   textarea:     { width: '100%', background: C.bgInput, border: `1px solid ${C.borderMed}`, borderRadius: 10, padding: '13px 14px', color: C.textPrimary, fontSize: 14, lineHeight: 1.6, outline: 'none', resize: 'none', fontFamily: SANS, boxSizing: 'border-box' },
   monoInput:    { width: '100%', background: C.bgInput, border: `1px solid ${C.borderMed}`, borderRadius: 8, padding: '11px 13px', color: C.textPrimary, fontSize: 13, outline: 'none', fontFamily: MONO, letterSpacing: '0.04em', boxSizing: 'border-box' },
-  chip:         { padding: '6px 12px', borderRadius: 4, border: '1px solid', fontFamily: MONO, fontSize: 10, letterSpacing: '0.08em', cursor: 'pointer' },
-  primaryBtn:   { width: '100%', padding: '16px', borderRadius: 10, background: C.green, border: 'none', color: C.bgDeep, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
-  historyLog:   { margin: '0 16px 12px', background: C.bgCard, borderRadius: 10, overflow: 'hidden', border: `1px solid ${C.border}` },
-  logLabel:     { fontFamily: MONO, fontSize: 9, letterSpacing: '0.18em', color: C.textMuted, padding: '8px 12px', borderBottom: `1px solid ${C.border}`, background: C.bgDeep },
-  logRow:       { display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 12px', borderBottom: `1px solid rgba(255,255,255,0.04)` },
+  chip:         { padding: '6px 12px', borderRadius: 5, border: '1px solid', fontFamily: MONO, fontSize: 10, letterSpacing: '0.08em', cursor: 'pointer' },
+  primaryBtn:   { width: '100%', padding: '16px', borderRadius: 12, background: C.blue, border: 'none', color: '#FFFFFF', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em', boxShadow: '0 2px 8px rgba(107,126,255,0.25)' },
+  historyLog:   { margin: '0 16px 12px', background: C.bgCard, borderRadius: 12, overflow: 'hidden', border: `1px solid ${C.border}` },
+  logLabel:     { fontFamily: MONO, fontSize: 9, letterSpacing: '0.18em', color: C.textMuted, padding: '8px 12px', borderBottom: `1px solid ${C.border}`, background: C.bgInput },
+  logRow:       { display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 12px', borderBottom: `1px solid ${C.border}` },
   logNum:       { fontFamily: MONO, fontSize: 10, fontWeight: 700, color: C.textMuted, flexShrink: 0, letterSpacing: '0.04em' },
   logText:      { fontFamily: SANS, fontSize: 12, color: C.textSecondary, flex: 1, lineHeight: 1.4 },
   logAns:       { fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', flexShrink: 0 },
-  stepCard:     { borderRadius: 12, border: '1px solid', padding: '16px', marginBottom: 4 },
+  stepCard:     { borderRadius: 14, border: '1px solid', padding: '16px', marginBottom: 4, boxShadow: '0 1px 4px rgba(15,23,42,0.06)' },
   stepHeader:   { display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 },
-  stepNum:      { fontFamily: MONO, fontSize: 42, fontWeight: 700, lineHeight: 1, letterSpacing: '-0.02em', flexShrink: 0, opacity: 0.9 },
+  stepNum:      { fontFamily: MONO, fontSize: 42, fontWeight: 700, lineHeight: 1, letterSpacing: '-0.02em', flexShrink: 0, opacity: 0.85 },
   stepTypeLabel:{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: '0.18em', marginBottom: 4 },
   manualRef:    { fontFamily: MONO, fontSize: 9, color: C.blue, letterSpacing: '0.08em', textDecoration: 'none', display: 'inline-block', marginTop: 2 },
   stepText:     { fontFamily: SANS, fontSize: 17, fontWeight: 600, color: C.textPrimary, lineHeight: 1.45 },
-  detailBlock:  { marginTop: 12, padding: '11px 13px', background: 'rgba(0,0,0,0.25)', borderRadius: 7, borderLeft: `2px solid rgba(255,255,255,0.1)`, fontFamily: MONO, fontSize: 12, color: C.textSecondary, lineHeight: 1.7, letterSpacing: '0.01em', whiteSpace: 'pre-line' },
+  detailBlock:  { marginTop: 12, padding: '11px 13px', background: C.bgInput, borderRadius: 8, borderLeft: `3px solid ${C.borderMed}`, fontFamily: MONO, fontSize: 12, color: C.textSecondary, lineHeight: 1.7, letterSpacing: '0.01em', whiteSpace: 'pre-line' },
   divider:      { height: 1, background: C.border, margin: '16px 0' },
   answerRow:    { display: 'flex', gap: 10 },
-  yesBtn:       { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '16px 12px', borderRadius: 10, background: 'rgba(16,185,129,0.1)', border: `1px solid rgba(16,185,129,0.3)`, cursor: 'pointer' },
-  noBtn:        { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '16px 12px', borderRadius: 10, background: 'rgba(239,68,68,0.1)', border: `1px solid rgba(239,68,68,0.3)`, cursor: 'pointer' },
+  yesBtn:       { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '16px 12px', borderRadius: 12, background: 'rgba(5,150,105,0.07)', border: `1px solid rgba(5,150,105,0.25)`, cursor: 'pointer' },
+  noBtn:        { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '16px 12px', borderRadius: 12, background: 'rgba(220,38,38,0.07)', border: `1px solid rgba(220,38,38,0.25)`, cursor: 'pointer' },
   btnLabel:     { fontFamily: MONO, fontSize: 22, fontWeight: 700, letterSpacing: '0.05em', color: C.textPrimary },
   btnSub:       { fontFamily: MONO, fontSize: 8, letterSpacing: '0.14em', color: C.textMuted },
-  doneBtn:      { width: '100%', padding: '14px', borderRadius: 10, background: 'rgba(245,158,11,0.1)', border: `1px solid rgba(245,158,11,0.3)`, color: C.amber, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.12em' },
-  sendBtn:      { padding: '11px 16px', borderRadius: 8, background: 'rgba(56,189,248,0.1)', border: `1px solid rgba(56,189,248,0.25)`, color: C.blue, fontSize: 16, cursor: 'pointer', fontFamily: MONO },
-  ghostSmBtn:   { width: '100%', padding: '10px', borderRadius: 8, background: 'transparent', border: `1px solid ${C.border}`, color: C.textMuted, fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em', cursor: 'pointer' },
-  logFixBtn:    { flex: 1, padding: '12px', borderRadius: 10, background: 'rgba(245,158,11,0.08)', border: `1px solid rgba(245,158,11,0.2)`, color: C.amber, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
-  newSessionBtn:{ flex: 1, padding: '12px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: `1px solid ${C.border}`, color: C.textSecondary, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
-  keepGoingBtn: { flex: 1, padding: '12px', borderRadius: 10, background: 'rgba(239,68,68,0.08)', border: `1px solid rgba(239,68,68,0.2)`, color: C.red, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
-  footer:       { display: 'flex', justifyContent: 'space-between', padding: '8px 16px', borderTop: `1px solid ${C.border}`, background: C.bgDeep, fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', flexShrink: 0 },
-  spinner:      { width: 18, height: 18, borderRadius: '50%', border: `2px solid rgba(56,189,248,0.15)`, borderTopColor: C.blue, animation: 'spin 0.7s linear infinite', flexShrink: 0 },
+  doneBtn:      { width: '100%', padding: '14px', borderRadius: 12, background: 'rgba(217,119,6,0.08)', border: `1px solid rgba(217,119,6,0.25)`, color: C.amber, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.12em' },
+  sendBtn:      { padding: '11px 16px', borderRadius: 9, background: 'rgba(107,126,255,0.1)', border: `1px solid rgba(107,126,255,0.25)`, color: C.blue, fontSize: 16, cursor: 'pointer', fontFamily: MONO },
+  ghostSmBtn:   { width: '100%', padding: '10px', borderRadius: 9, background: 'transparent', border: `1px solid ${C.border}`, color: C.textMuted, fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em', cursor: 'pointer' },
+  logFixBtn:    { flex: 1, padding: '12px', borderRadius: 12, background: 'rgba(217,119,6,0.07)', border: `1px solid rgba(217,119,6,0.2)`, color: C.amber, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
+  newSessionBtn:{ flex: 1, padding: '12px', borderRadius: 12, background: C.bgInput, border: `1px solid ${C.border}`, color: C.textSecondary, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
+  keepGoingBtn: { flex: 1, padding: '12px', borderRadius: 12, background: 'rgba(220,38,38,0.07)', border: `1px solid rgba(220,38,38,0.2)`, color: C.red, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
+  footer:       { display: 'flex', justifyContent: 'space-between', padding: '8px 16px', borderTop: `1px solid ${C.border}`, background: C.bgCard, fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', flexShrink: 0 },
+  spinner:      { width: 18, height: 18, borderRadius: '50%', border: `2px solid ${C.border}`, borderTopColor: C.blue, animation: 'spin 0.7s linear infinite', flexShrink: 0 },
 }
 
 // ─── Export ───────────────────────────────────────────────────────────────────
@@ -890,9 +890,9 @@ export default function TechPage() {
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
         @keyframes spin { to { transform: rotate(360deg); } }
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        html, body { margin: 0; background: ${C.bgDeep}; overscroll-behavior: none; }
+        html, body { margin: 0; background: ${C.bg}; overscroll-behavior: none; }
         button:active { opacity: 0.75; }
-        ::placeholder { color: rgba(232,236,240,0.2); }
+        ::placeholder { color: rgba(15,23,42,0.28); }
         input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
         .gg-chips::-webkit-scrollbar, .gg-list::-webkit-scrollbar { display: none; }
       `}</style>
