@@ -333,35 +333,50 @@ function ProductModal({ product, onSave, onClose, saving }: { product:Partial<Pr
       setPdfStatus("Save the product first, then upload the manual.");
       return;
     }
-    // Client-side size guard — Vercel payload limit is ~4.5 MB
     const MB = file.size / (1024 * 1024);
-    if (MB > 20) {
-      setPdfStatus(`❌ File is ${MB.toFixed(1)} MB — max 20 MB. Compress the PDF and retry.`);
+    if (MB > 100) {
+      setPdfStatus(`❌ File is ${MB.toFixed(1)} MB — max 100 MB.`);
       return;
     }
-    if (MB > 4) {
-      setPdfStatus(`⚠️ Large file (${MB.toFixed(1)} MB) — uploading may take a moment…`);
-    }
     setUploadingPdf(true);
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("product_id", product.id);
+    setPdfStatus(`Uploading ${MB.toFixed(1)} MB…`);
     try {
-      const res = await fetch("/api/kb/process", { method: "POST", body: fd });
-      // Vercel returns plain-text "Request Entity Too Large" on 413 — never parse blindly
-      const ct = res.headers.get("content-type") ?? "";
-      if (res.status === 413) {
-        throw new Error(`PDF too large for upload (${MB.toFixed(1)} MB). Compress it below 4 MB and retry.`);
+      // ── Step 1: get a signed upload URL (tiny JSON round-trip to Vercel) ──
+      const urlRes = await fetch("/api/kb/upload-url", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ product_id: product.id, filename: file.name }),
+      });
+      if (!urlRes.ok) {
+        const e = await urlRes.json().catch(() => ({ error: `HTTP ${urlRes.status}` }));
+        throw new Error(e.error ?? "Could not get upload URL");
       }
-      let d: Record<string, unknown> = {};
-      if (ct.includes("application/json")) {
-        d = await res.json();
-      } else {
-        const txt = await res.text();
-        if (!res.ok) throw new Error(txt || `Upload failed (${res.status})`);
+      const { signedUrl, publicUrl } = await urlRes.json();
+
+      // ── Step 2: PUT the PDF directly to Supabase Storage ──────────────
+      // Binary never touches Vercel — no size limit.
+      setPdfStatus(`Sending to storage…`);
+      const putRes = await fetch(signedUrl, {
+        method:  "PUT",
+        headers: { "Content-Type": "application/pdf" },
+        body:    file,
+      });
+      if (!putRes.ok) {
+        const txt = await putRes.text().catch(() => "");
+        throw new Error(`Storage upload failed (${putRes.status})${txt ? `: ${txt}` : ""}`);
       }
-      if (!res.ok) throw new Error((d.error as string) ?? "Upload failed");
-      set("manualUrl", (d.manualUrl as string) ?? form.manualUrl);
+
+      // ── Step 3: trigger chunking + embedding with just the URL ─────────
+      setPdfStatus(`Indexing chunks…`);
+      const procRes = await fetch("/api/kb/process", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ product_id: product.id, manual_url: publicUrl }),
+      });
+      const d = await procRes.json().catch(() => ({ error: `HTTP ${procRes.status}` }));
+      if (!procRes.ok) throw new Error(d.error ?? "Processing failed");
+
+      set("manualUrl", (d.manualUrl as string) ?? publicUrl);
       setPdfStatus(`✅ ${d.chunksCreated} chunks indexed`);
     } catch (e: unknown) {
       setPdfStatus(`❌ ${e instanceof Error ? e.message : "Upload failed"}`);
