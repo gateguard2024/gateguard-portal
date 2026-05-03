@@ -12,12 +12,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-
-// Allow up to 20 MB bodies and 60 s execution for PDF processing
-export const maxDuration = 60
-export const dynamic     = 'force-dynamic'
 import { auth }                       from '@clerk/nextjs/server'
 import { processManual, serviceDb }   from '@/lib/vectorize'
+
+// Allow 60 s execution for PDF chunking + embedding
+export const maxDuration = 60
+export const dynamic     = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
   const { userId } = await auth()
@@ -59,9 +59,24 @@ export async function POST(req: NextRequest) {
       if (!productId || !manualUrl) {
         return NextResponse.json({ error: 'product_id and manual_url required' }, { status: 400 })
       }
-      const res    = await fetch(manualUrl)
-      if (!res.ok) throw new Error(`Fetch PDF failed: ${res.status}`)
-      pdfBuffer    = Buffer.from(await res.arrayBuffer())
+
+      // If it's a Supabase Storage URL, download directly via service role —
+      // avoids HTTP 400/403 that a plain fetch() can hit on bucket policy.
+      const STORAGE_PREFIX = '/storage/v1/object/public/manuals/'
+      if (manualUrl.includes(STORAGE_PREFIX)) {
+        const storagePath = manualUrl.split(STORAGE_PREFIX)[1]?.split('?')[0]
+        const db          = serviceDb()
+        const { data: fileBlob, error: dlErr } = await db.storage
+          .from('manuals')
+          .download(storagePath)
+        if (dlErr || !fileBlob) throw new Error(`Storage download failed: ${dlErr?.message ?? 'no data'}`)
+        pdfBuffer = Buffer.from(await fileBlob.arrayBuffer())
+      } else {
+        // External URL (e.g. manufacturer PDF link)
+        const res = await fetch(manualUrl)
+        if (!res.ok) throw new Error(`Fetch PDF failed: ${res.status}`)
+        pdfBuffer = Buffer.from(await res.arrayBuffer())
+      }
     }
 
     const result = await processManual({ productId, pdfBuffer, manualUrl })
