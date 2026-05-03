@@ -45,25 +45,25 @@ interface Product {
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
-  bg:            '#111318',
-  bgDeep:        '#0C0F14',
-  bgCard:        '#181C23',
-  bgInput:       '#1C2028',
-  border:        'rgba(255,255,255,0.07)',
-  borderMed:     'rgba(255,255,255,0.12)',
-  textPrimary:   '#E8ECF0',
-  textSecondary: 'rgba(232,236,240,0.45)',
-  textMuted:     'rgba(232,236,240,0.22)',
-  blue:    '#38BDF8',
-  amber:   '#F59E0B',
-  green:   '#10B981',
-  red:     '#EF4444',
-  purple:  '#A78BFA',
-  blueAlpha:   'rgba(56,189,248,0.08)',
-  amberAlpha:  'rgba(245,158,11,0.08)',
-  greenAlpha:  'rgba(16,185,129,0.08)',
-  redAlpha:    'rgba(239,68,68,0.08)',
-  purpleAlpha: 'rgba(167,139,250,0.08)',
+  bg:            '#F1F5F9',
+  bgDeep:        '#E8EEF6',
+  bgCard:        '#FFFFFF',
+  bgInput:       '#F8FAFC',
+  border:        'rgba(15,23,42,0.08)',
+  borderMed:     'rgba(15,23,42,0.15)',
+  textPrimary:   '#0F172A',
+  textSecondary: '#64748B',
+  textMuted:     '#94A3B8',
+  blue:    '#6B7EFF',
+  amber:   '#D97706',
+  green:   '#059669',
+  red:     '#DC2626',
+  purple:  '#7C3AED',
+  blueAlpha:   'rgba(107,126,255,0.09)',
+  amberAlpha:  'rgba(217,119,6,0.09)',
+  greenAlpha:  'rgba(5,150,105,0.09)',
+  redAlpha:    'rgba(220,38,38,0.09)',
+  purpleAlpha: 'rgba(124,58,237,0.09)',
 }
 
 const STEP_CFG: Record<StepType, {
@@ -330,7 +330,7 @@ function TechTool() {
     })
 
     const brandInitials = (b: string) => b.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase()
-    const PALETTE = ['#38BDF8','#818CF8','#34D399','#FB923C','#F472B6','#A78BFA']
+    const PALETTE = ['#6B7EFF','#7C3AED','#059669','#D97706','#E11D48','#0EA5E9']
     const brandHues: Record<string, string> = {}
     serviceProds.forEach(p => {
       if (!brandHues[p.brand]) brandHues[p.brand] = PALETTE[Object.keys(brandHues).length % PALETTE.length]

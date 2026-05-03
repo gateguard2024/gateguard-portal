@@ -18,12 +18,12 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isTech   = pathname.startsWith('/tech')
 
-  // Tech tool: full-screen, dark, no portal chrome at all
+  // Tech tool: full-screen, light, no portal chrome at all
   if (isTech) {
     return (
       <div style={{
         minHeight: '100dvh',
-        background: '#0C0F14',
+        background: '#F1F5F9',
         overscrollBehavior: 'none',
       }}>
         {children}
