@@ -18,7 +18,7 @@ import { CableGuide }   from '@/components/tech/CableGuide'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type StepType = 'question' | 'action' | 'measure' | 'select' | 'photo' | 'resolved' | 'escalate'
-type Screen   = 'pin' | 'home' | 'choice' | 'symptom' | 'diag' | 'wiring' | 'cable'
+type Screen   = 'pin' | 'home' | 'choice' | 'symptom' | 'diag' | 'wiring' | 'cable' | 'install'
 
 interface Step {
   type:       StepType
@@ -110,6 +110,84 @@ const MONO = '"IBM Plex Mono", "SFMono-Regular", "Consolas", monospace'
 const SANS = '"IBM Plex Sans", -apple-system, system-ui, sans-serif'
 
 function pad2(n: number) { return String(n).padStart(2, '0') }
+
+// ─── Demo: Install Commissioning Phases ───────────────────────────────────────
+interface InstallStep {
+  id:           string
+  text:         string
+  detail?:      string
+  type:         'check' | 'wire' | 'test'
+  wiringMapId?: string   // if set, shows "📐 VIEW WIRING" button
+}
+interface InstallPhase {
+  id:    string
+  title: string
+  icon:  string
+  color: string
+  steps: InstallStep[]
+}
+
+const DEMO_SYSTEM_DEVICES = [
+  { label: 'G3 Intercom',       sku: 'UA-G3-Intercom',    color: '#6B7EFF' },
+  { label: 'Access Hub Mini',   sku: 'UA-Hub-Door-Mini',  color: '#7C3AED' },
+  { label: 'Brivo ACS300',      sku: 'ACS300',            color: '#0EA5E9' },
+  { label: 'DoorKing 6050 ×2',  sku: 'DK-6050',           color: '#059669' },
+  { label: 'Photobeam',         sku: 'SAFETY-BEAM',       color: '#D97706' },
+  { label: 'Safety Loops ×2',   sku: 'LOOP-DET',          color: '#E11D48' },
+]
+
+const INSTALL_PHASES: InstallPhase[] = [
+  {
+    id: 'preinstall', title: 'PRE-INSTALL CHECKLIST', icon: '📋', color: '#0EA5E9',
+    steps: [
+      { id: 'pi-1', type: 'check', text: 'All devices on-site: G3 Intercom, Hub Mini, Brivo ACS300, (2) DK6050 operators' },
+      { id: 'pi-2', type: 'check', text: 'DK6050 units pre-programmed — open/close limits set, relay output configured' },
+      { id: 'pi-3', type: 'check', text: 'Brivo ACS300 pre-provisioned in portal with door assignments for this property' },
+      { id: 'pi-4', type: 'check', text: 'G3 Intercom claimed in UniFi Protect — relay output mode enabled in settings' },
+      { id: 'pi-5', type: 'check', text: 'Network ready: PoE switch ports available, VLAN configured for access control' },
+      { id: 'pi-6', type: 'check', text: 'Power confirmed: 110VAC to gate operators, PoE to intercom and hub mini' },
+    ],
+  },
+  {
+    id: 'mount', title: 'MOUNT & POWER UP', icon: '🔩', color: '#D97706',
+    steps: [
+      { id: 'mp-1', type: 'check', text: 'Mount G3 Intercom at gate entry column — eye level, camera aimed for face capture', detail: 'Run CAT6 from nearby PoE switch. Weatherproof enclosure required.' },
+      { id: 'mp-2', type: 'check', text: 'Mount Access Door Hub Mini inside gate control box — rail or surface mount', detail: 'Position near ACS300 for short Wiegand run (<150 ft). Needs PoE.' },
+      { id: 'mp-3', type: 'check', text: 'Mount Brivo ACS300 in control cabinet — secure, ventilated, near hub mini', detail: '12VDC power supply or PoE. CAT6 to PoE switch.' },
+      { id: 'mp-4', type: 'check', text: 'Power up both DK6050 operators — verify loop indicators are solid (no fault)' },
+      { id: 'mp-5', type: 'check', text: 'Confirm PoE LED solid green on G3 Intercom and Hub Mini in UniFi dashboard' },
+    ],
+  },
+  {
+    id: 'wiring', title: 'WIRE CONNECTIONS', icon: '⚡', color: '#7C3AED',
+    steps: [
+      { id: 'w-1', type: 'wire', text: 'G3 Intercom → DK6050 Gate 1 — visitor call release relay',    wiringMapId: 'unifi_intercom_to_dk6050',    detail: '18AWG dry contact: Relay NO → DK6050 OPEN, Relay COM → DK6050 COM' },
+      { id: 'w-2', type: 'wire', text: 'Brivo ACS300 Relay 1 → DK6050 Gate 1 — access control output', wiringMapId: 'acs300_to_dk6050',             detail: 'ACS300 Relay 1 NO → DK6050 OPEN. 18AWG, max 30VDC 1A.' },
+      { id: 'w-3', type: 'wire', text: 'Brivo ACS300 Relay 2 → DK6050 Gate 2 — dual gate second relay',wiringMapId: 'acs300_to_dk6050_door2',        detail: 'ACS300 Relay 2 NO → Gate 2 DK6050 OPEN. Same gauge, separate run.' },
+      { id: 'w-4', type: 'wire', text: 'Photobeam → DK6050 STOP input — safety, stops gate on beam break', wiringMapId: 'photobeam_to_dk6050_stop', detail: 'N.C. output to STOP terminal. Align beam before final commissioning.' },
+      { id: 'w-5', type: 'wire', text: 'Exit loop detector → DK6050 FE input — free exit on vehicle detection', wiringMapId: 'loop_det_to_dk6050_fe', detail: 'N.O. output to FE (Free Exit). Loop must be in clear field, no metal.' },
+      { id: 'w-6', type: 'wire', text: 'Safety loop (under arm) → DK6050 STOP — detects vehicle under gate arm', wiringMapId: 'loop_det_to_dk6050_stop', detail: 'N.C. output to STOP. Inductive loop in pavement directly under arm.' },
+    ],
+  },
+  {
+    id: 'test', title: 'VERIFY & TEST', icon: '✅', color: '#059669',
+    steps: [
+      { id: 't-1', type: 'test', text: 'Brivo portal: test credential — access event triggers Gate 1 relay, arm opens' },
+      { id: 't-2', type: 'test', text: 'G3 Intercom: place call, answer on Protect app, tap Unlock — gate arm opens' },
+      { id: 't-3', type: 'test', text: 'Photobeam safety: block beam while gate closing — arm stops immediately' },
+      { id: 't-4', type: 'test', text: 'Exit loop: drive through zone — gate opens without credential, arm fully clears' },
+      { id: 't-5', type: 'test', text: 'Safety arm loop: trigger manually while arm closing — arm reverses, does not close' },
+    ],
+  },
+  {
+    id: 'signoff', title: 'SIGN OFF', icon: '🏁', color: '#6B7EFF',
+    steps: [
+      { id: 'so-1', type: 'check', text: 'Record all serial numbers and firmware versions in work order notes' },
+      { id: 'so-2', type: 'check', text: 'Photograph each device, each wiring connection, and full system overview' },
+      { id: 'so-3', type: 'check', text: 'Mark work order complete in GateGuard portal — commissioning record saved' },
+    ],
+  },
+]
 function shortSession(id: string | null) {
   if (!id) return '——'
   return '#' + id.replace(/-/g, '').slice(-4).toUpperCase()
@@ -119,6 +197,7 @@ function shortSession(id: string | null) {
 function TechTool() {
   const params   = useSearchParams()
   const presetId = params.get('product_id') ?? undefined
+  const demoParam = params.get('demo') ?? null
 
   // Core state
   const [screen,    setScreen]    = useState<Screen>('pin')
@@ -151,6 +230,12 @@ function TechTool() {
   const [photoAnalysis, setPhotoAnalysis] = useState<string | null>(null)
   const [analyzing,     setAnalyzing]     = useState(false)
 
+  // Demo / install mode state
+  const [prevScreen,      setPrevScreen]     = useState<Screen | null>(null)
+  const [wiringInitMapId, setWiringInitMapId] = useState<string | null>(null)
+  const [installChecked,  setInstallChecked]  = useState<Set<string>>(new Set())
+  const [expandedPhases,  setExpandedPhases]  = useState<Set<string>>(new Set(INSTALL_PHASES.map(p => p.id)))
+
   const bottomRef   = useRef<HTMLDivElement>(null)
   const photoRef    = useRef<HTMLInputElement>(null)
 
@@ -159,6 +244,27 @@ function TechTool() {
     const saved = sessionStorage.getItem('gg_tech_code')
     if (saved) { setTechCode(saved); setScreen('home') }
   }, [])
+
+  // ── Demo mode: install flow bypasses PIN (no API calls needed) ────────────
+  useEffect(() => {
+    if (demoParam === 'install') setScreen('install')
+  }, [demoParam])
+
+  // ── Demo mode: fault scenario — auto-populate after products load ─────────
+  useEffect(() => {
+    if (demoParam !== 'fault') return
+    if (!techCode || products.length === 0 || screen !== 'home') return
+    const target = products.find(p =>
+      p.sku?.toLowerCase().includes('acs300') ||
+      p.brand?.toLowerCase().includes('brivo')
+    ) ?? products.find(p => p.category?.toLowerCase().includes('access')) ?? products[0]
+    if (!target) return
+    setSelected(target)
+    setSymptom("Gate arm stays down — Brivo ACS300 grants access but DK6050 gate operator does not respond. Mobile app shows 'Access Granted' event. Both fob credentials and app unlock fail to open gate. ACS300 relay LED cycles on access attempt.")
+    setConnectedDevices(['UniFi Intercom', 'Safety Loop (under arm)', 'Exit Loop Detector', 'Photobeam'])
+    setScreen('symptom')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoParam, techCode, products.length, screen])
 
   // ── Load products once authenticated ──────────────────────────────────────
   useEffect(() => {
@@ -280,6 +386,7 @@ function TechTool() {
     setHistory([]); setCurrent(null); setSessionId(null)
     setFreeText(''); setLogFixed(false); setMeasureInput('')
     setPhotoData(null); setPhotoAnalysis(null)
+    setPrevScreen(null); setWiringInitMapId(null)
   }
 
   const stepCount  = history.length + (current ? 1 : 0)
@@ -592,13 +699,14 @@ function TechTool() {
     }
     return (
       <WiringGuide
+        defaultMapId={wiringInitMapId ?? undefined}
         product={{
           name:     selected?.name     ?? '',
           brand:    selected?.brand    ?? '',
           category: selected?.category ?? '',
           sku:      selected?.sku      ?? '',
         }}
-        onBack={() => setScreen('choice')}
+        onBack={() => { setWiringInitMapId(null); setScreen(prevScreen ?? 'choice') }}
         theme={themeObj}
       />
     )
@@ -622,6 +730,201 @@ function TechTool() {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // SCREEN: INSTALL — Commissioning wizard (demo mode)
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (screen === 'install') {
+    const allSteps    = INSTALL_PHASES.flatMap(p => p.steps)
+    const totalSteps  = allSteps.length
+    const doneCount   = allSteps.filter(s => installChecked.has(s.id)).length
+    const pct         = Math.round((doneCount / totalSteps) * 100)
+
+    const toggleCheck = (id: string) =>
+      setInstallChecked(prev => {
+        const next = new Set(prev)
+        next.has(id) ? next.delete(id) : next.add(id)
+        return next
+      })
+    const togglePhase = (id: string) =>
+      setExpandedPhases(prev => {
+        const next = new Set(prev)
+        next.has(id) ? next.delete(id) : next.add(id)
+        return next
+      })
+
+    function launchFault() {
+      // Navigate to fault demo — sessionStorage code will be picked up automatically,
+      // or PIN screen will prompt for code then auto-launch the fault scenario.
+      window.location.href = '/tech?demo=fault'
+    }
+
+    return (
+      <div style={S.shell}>
+        <style>{`.gg-install::-webkit-scrollbar{display:none}`}</style>
+
+        {/* Top bar */}
+        <div style={S.topBar}>
+          <div style={S.ggMark}>GG</div>
+          <div style={{ flex: 1 }}>
+            <div style={S.topBarTitle}>NEW INSTALLATION — DEMO</div>
+            <div style={S.topBarSub}>G3 INTERCOM + HUB MINI + ACS300 + DK6050 ×2</div>
+          </div>
+          <div style={{ fontFamily: MONO, fontSize: 9, color: C.amber, letterSpacing: '0.1em', border: `1px solid rgba(217,119,6,0.3)`, borderRadius: 5, padding: '3px 7px', background: 'rgba(217,119,6,0.07)', flexShrink: 0 }}>
+            ⚡ DEMO
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        <div style={{ height: 3, background: C.border, flexShrink: 0 }}>
+          <div style={{ height: '100%', background: C.green, transition: 'width 0.4s', width: `${pct}%` }} />
+        </div>
+
+        <div className="gg-install" style={{ flex: 1, overflowY: 'auto', padding: '12px 16px 32px', display: 'flex', flexDirection: 'column', gap: 12, scrollbarWidth: 'none' } as React.CSSProperties}>
+
+          {/* System summary */}
+          <div style={{ background: C.bgCard, borderRadius: 12, padding: '14px 16px', border: `1px solid ${C.border}` }}>
+            <div style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.16em', marginBottom: 10 }}>SYSTEM COMPONENTS</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+              {DEMO_SYSTEM_DEVICES.map(d => (
+                <div key={d.sku} style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  background: `${d.color}12`, border: `1px solid ${d.color}30`,
+                  borderRadius: 6, padding: '4px 9px',
+                }}>
+                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: d.color, flexShrink: 0 }} />
+                  <span style={{ fontFamily: MONO, fontSize: 9, color: C.textSecondary, letterSpacing: '0.05em' }}>{d.label}</span>
+                </div>
+              ))}
+            </div>
+            {/* Progress counter */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+              <div style={{ flex: 1, height: 4, background: C.border, borderRadius: 3 }}>
+                <div style={{ height: '100%', background: C.green, borderRadius: 3, transition: 'width 0.4s', width: `${pct}%` }} />
+              </div>
+              <span style={{ fontFamily: MONO, fontSize: 9, color: pct === 100 ? C.green : C.textMuted, letterSpacing: '0.08em', flexShrink: 0 }}>
+                {doneCount}/{totalSteps} STEPS
+              </span>
+            </div>
+          </div>
+
+          {/* Phase cards */}
+          {INSTALL_PHASES.map(phase => {
+            const phaseSteps   = phase.steps
+            const phaseDone    = phaseSteps.filter(s => installChecked.has(s.id)).length
+            const isExpanded   = expandedPhases.has(phase.id)
+            const isComplete   = phaseDone === phaseSteps.length
+
+            return (
+              <div key={phase.id} style={{ background: C.bgCard, borderRadius: 12, border: `1px solid ${isComplete ? `${phase.color}40` : C.border}`, overflow: 'hidden' }}>
+                {/* Phase header */}
+                <button
+                  onClick={() => togglePhase(phase.id)}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                >
+                  <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>{phase.icon}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: isComplete ? phase.color : C.textPrimary, letterSpacing: '0.1em' }}>
+                      {phase.title}
+                    </div>
+                    <div style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.06em', marginTop: 2 }}>
+                      {phaseDone}/{phaseSteps.length} complete
+                    </div>
+                  </div>
+                  {isComplete && (
+                    <span style={{ fontFamily: MONO, fontSize: 10, color: phase.color, flexShrink: 0 }}>✓</span>
+                  )}
+                  <span style={{ color: C.textMuted, fontSize: 14, flexShrink: 0, transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'none', display: 'inline-block' }}>›</span>
+                </button>
+
+                {/* Steps */}
+                {isExpanded && (
+                  <div style={{ borderTop: `1px solid ${C.border}` }}>
+                    {phaseSteps.map((step, idx) => {
+                      const checked = installChecked.has(step.id)
+                      return (
+                        <div key={step.id} style={{
+                          padding: '12px 16px',
+                          borderBottom: idx < phaseSteps.length - 1 ? `1px solid ${C.border}` : 'none',
+                          background: checked ? `${phase.color}06` : 'transparent',
+                        }}>
+                          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                            {/* Checkbox */}
+                            <button
+                              onClick={() => toggleCheck(step.id)}
+                              style={{
+                                width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                                border: `2px solid ${checked ? phase.color : C.borderMed}`,
+                                background: checked ? phase.color : 'transparent',
+                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                marginTop: 1, transition: 'all 0.15s',
+                              }}
+                            >
+                              {checked && <span style={{ color: '#fff', fontSize: 11, lineHeight: 1, fontWeight: 700 }}>✓</span>}
+                            </button>
+
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontFamily: SANS, fontSize: 13, fontWeight: 600, color: checked ? C.textMuted : C.textPrimary, lineHeight: 1.45, textDecoration: checked ? 'line-through' : 'none' }}>
+                                {step.text}
+                              </div>
+                              {step.detail && !checked && (
+                                <div style={{ fontFamily: MONO, fontSize: 10, color: C.textSecondary, marginTop: 5, lineHeight: 1.6, letterSpacing: '0.02em' }}>
+                                  {step.detail}
+                                </div>
+                              )}
+                              {/* Wiring diagram button */}
+                              {step.wiringMapId && (
+                                <button
+                                  onClick={() => {
+                                    setPrevScreen('install')
+                                    setWiringInitMapId(step.wiringMapId!)
+                                    setScreen('wiring')
+                                  }}
+                                  style={{
+                                    marginTop: 7, padding: '5px 11px', borderRadius: 6, cursor: 'pointer',
+                                    background: 'rgba(217,119,6,0.08)', border: `1px solid rgba(217,119,6,0.25)`,
+                                    fontFamily: MONO, fontSize: 9, color: C.amber, letterSpacing: '0.08em', display: 'inline-flex', alignItems: 'center', gap: 5,
+                                  }}
+                                >
+                                  📐 VIEW WIRING DIAGRAM
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+          {/* Fault demo CTA */}
+          <div style={{ marginTop: 8, background: C.bgCard, borderRadius: 12, border: `1px solid rgba(220,38,38,0.2)`, padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: C.red, letterSpacing: '0.14em', fontWeight: 700 }}>⚠ DEMO SCENARIO 2</div>
+            <div style={{ fontFamily: SANS, fontSize: 14, fontWeight: 600, color: C.textPrimary, lineHeight: 1.4 }}>
+              System installed and running. Simulate a live fault — AI-guided troubleshooting ending in a bad wire discovery.
+            </div>
+            <div style={{ fontFamily: MONO, fontSize: 10, color: C.textSecondary, lineHeight: 1.6 }}>
+              Brivo grants access, DK6050 doesn't respond. Walk through the full AI diagnostic until the wiring fault is identified, then jump to the cable guide.
+            </div>
+            <button
+              onClick={launchFault}
+              style={{
+                width: '100%', padding: '16px', borderRadius: 12,
+                background: 'rgba(220,38,38,0.08)', border: `1px solid rgba(220,38,38,0.3)`,
+                color: C.red, fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', cursor: 'pointer',
+              }}
+            >
+              SIMULATE FAULT SCENARIO →
+            </button>
+          </div>
+
+        </div>
+      </div>
+    )
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // SCREEN: SYMPTOM
   // ═══════════════════════════════════════════════════════════════════════════
   if (screen === 'symptom') {
@@ -629,11 +932,16 @@ function TechTool() {
     return (
       <div style={S.shell}>
         <div style={S.topBar}>
-          <button style={S.iconBtn} onClick={() => setScreen('choice')}>‹</button>
+          <button style={S.iconBtn} onClick={() => setScreen(demoParam === 'fault' ? 'home' : 'choice')}>‹</button>
           <div style={{ flex: 1 }}>
             <div style={S.topBarTitle}>{selected?.sku} — {selected?.brand.toUpperCase()}</div>
             <div style={S.topBarSub}>DESCRIBE THE FAULT</div>
           </div>
+          {demoParam === 'fault' && (
+            <div style={{ fontFamily: MONO, fontSize: 9, color: C.red, letterSpacing: '0.1em', border: `1px solid rgba(220,38,38,0.3)`, borderRadius: 5, padding: '3px 7px', background: 'rgba(220,38,38,0.07)', flexShrink: 0 }}>
+              ⚠ DEMO FAULT
+            </div>
+          )}
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>

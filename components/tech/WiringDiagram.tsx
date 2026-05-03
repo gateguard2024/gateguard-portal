@@ -458,10 +458,11 @@ interface WiringGuideProps {
   product: { name: string; brand: string; category: string; sku: string }
   onBack: () => void
   theme: { bg: string; bgCard: string; border: string; blue: string; textPrimary: string; textSecondary: string; textMuted: string }
+  defaultMapId?: string   // pre-select a specific wiring map (e.g. from install demo)
 }
 
-export function WiringGuide({ product, onBack, theme }: WiringGuideProps) {
-  const [selectedMapId, setSelectedMapId] = useState<string | null>(null)
+export function WiringGuide({ product, onBack, theme, defaultMapId }: WiringGuideProps) {
+  const [selectedMapId, setSelectedMapId] = useState<string | null>(defaultMapId ?? null)
 
   // Find matching device definitions for this product
   const matchedDevices = useMemo(() => {
