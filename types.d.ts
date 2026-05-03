@@ -31,6 +31,8 @@ declare module 'lucide-react' {
   // Security
   export const Camera: Icon;
   export const Shield: Icon;
+  export const ShieldCheck: Icon;
+  export const ShieldAlert: Icon;
   export const Wifi: Icon;
   export const DoorOpen: Icon;
   export const Cpu: Icon;
@@ -129,6 +131,8 @@ declare module 'lucide-react' {
   export const PenTool: Icon;
   export const Coins: Icon;
   export const Star: Icon;
+  export const Award: Icon;
+  export const Info: Icon;
   export const BarChart2: Icon;
   export const ThumbsUp: Icon;
   export const Tv: Icon;
