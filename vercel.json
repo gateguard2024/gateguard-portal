@@ -1,5 +1,12 @@
 {
   "framework": "nextjs",
   "installCommand": "npm install",
-  "buildCommand": "npm run build"
+  "buildCommand": "npm run build",
+  "crons": [
+    {
+      "path": "/api/sync/residents",
+      "schedule": "0 * * * *",
+      "comment": "Brivo → DB → UniFi resident reconciliation — runs every hour"
+    }
+  ]
 }
