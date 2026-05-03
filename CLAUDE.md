@@ -75,5 +75,32 @@ GateGuard runs four distinct applications. Never confuse them.
 - `OPENAI_API_KEY` — for PDF embedding
 - `ANTHROPIC_API_KEY` — for KB diagnostic Claude calls
 - `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- `NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in`, `NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up`
+- `NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/`, `NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/`
 - `BRIVO_API_KEY`, `BRIVO_CLIENT_ID`, `BRIVO_CLIENT_SECRET`
 - `CRON_SECRET` — shared secret Vercel injects into cron requests
+- `TECH_ACCESS_CODE` — PIN code field techs use to access /tech without Clerk
+
+## Master Asset Library (Google Drive)
+All GateGuard brand assets, product photos, manuals, contracts, and company documents live at:
+https://drive.google.com/drive/folders/0AMsXu78d6wafUk9PVA
+
+This is the canonical source for:
+- Product PDF manuals to upload into the KB vector pipeline
+- Brand logos, photos, marketing collateral
+- Legal documents (NDAs, service agreements, distributor agreements)
+- Historical project files
+
+## Manual Upload Pipeline
+PDF manuals → KB vector search flow:
+1. Products are stored in Supabase `products` table with `field_service=true` for tech tool
+2. Upload via `POST /api/kb/process` with `product_id` + PDF file
+3. Pipeline: pdf-parse → chunkText() → embedBatch() (OpenAI) → upsert `manual_chunks`
+4. Products UI at `/products` needs a manual upload button (not yet built — next feature)
+5. After upload, manuals are searchable via `match_knowledge()` RPC in the KB diagnostic engine
+
+## UI Design System
+- Portal: light theme, white cards, `#F8FAFC` bg, `#6B7EFF` brand blue, dark sidebar
+- Tech tool `/tech`: matches portal light theme (updated May 2026) — same `#F1F5F9` bg, white cards
+- Both use IBM Plex Sans + IBM Plex Mono
+- Step type color semantics: blue=VERIFY, amber=ACTION, green=RESOLVED, red=ESCALATE, purple=MEASURE

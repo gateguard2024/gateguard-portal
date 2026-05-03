@@ -29,6 +29,9 @@ interface Product {
   adiSku: string;
   imageUrl: string;
   active: boolean;
+  tags: string[];
+  fieldService: boolean;
+  manualUrl: string;
 }
 
 // ─── Error helper — Supabase errors are plain objects, not Error instances ────
@@ -48,36 +51,42 @@ const getErrMsg = (err: unknown): string => {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const fromDb = (row: any): Product => ({
-  id:          row.id,
-  sku:         row.sku,
-  name:        row.name,
-  brand:       row.brand ?? "",
-  category:    row.category as ProductCategory,
-  subcategory: row.subcategory ?? "",
-  description: row.description ?? "",
-  specs:       row.specs ?? "",
-  msrp:        Number(row.msrp) ?? 0,
-  dealerCost:  Number(row.dealer_cost) ?? 0,
-  sellPrice:   Number(row.sell_price) ?? 0,
-  adiSku:      row.adi_sku ?? "",
-  imageUrl:    row.image_url ?? "",
-  active:      row.active ?? true,
+  id:           row.id,
+  sku:          row.sku,
+  name:         row.name,
+  brand:        row.brand ?? "",
+  category:     row.category as ProductCategory,
+  subcategory:  row.subcategory ?? "",
+  description:  row.description ?? "",
+  specs:        row.specs ?? "",
+  msrp:         Number(row.msrp) ?? 0,
+  dealerCost:   Number(row.dealer_cost) ?? 0,
+  sellPrice:    Number(row.sell_price) ?? 0,
+  adiSku:       row.adi_sku ?? "",
+  imageUrl:     row.image_url ?? "",
+  active:       row.active ?? true,
+  tags:         row.tags ?? [],
+  fieldService: row.field_service ?? false,
+  manualUrl:    row.manual_url ?? "",
 });
 
 const toDb = (p: Omit<Product, "id">) => ({
-  sku:         p.sku,
-  name:        p.name,
-  brand:       p.brand,
-  category:    p.category,
-  subcategory: p.subcategory,
-  description: p.description,
-  specs:       p.specs,
-  msrp:        p.msrp,
-  dealer_cost: p.dealerCost,
-  sell_price:  p.sellPrice,
-  adi_sku:     p.adiSku,
-  image_url:   p.imageUrl,
-  active:      p.active,
+  sku:           p.sku,
+  name:          p.name,
+  brand:         p.brand,
+  category:      p.category,
+  subcategory:   p.subcategory,
+  description:   p.description,
+  specs:         p.specs,
+  msrp:          p.msrp,
+  dealer_cost:   p.dealerCost,
+  sell_price:    p.sellPrice,
+  adi_sku:       p.adiSku,
+  image_url:     p.imageUrl,
+  active:        p.active,
+  tags:          p.tags,
+  field_service: p.fieldService,
+  manual_url:    p.manualUrl,
 });
 
 // ─── Brand color palette for placeholders ─────────────────────────────────────
@@ -243,7 +252,7 @@ const CAT_ICONS: Record<string, React.ElementType> = {
 const emptyProduct = (): Omit<Product,"id"> => ({
   sku:"", name:"", brand:"GateGuard", category:"Camera", subcategory:"",
   description:"", specs:"", msrp:0, dealerCost:0, sellPrice:0,
-  adiSku:"", imageUrl:"", active:true,
+  adiSku:"", imageUrl:"", active:true, tags:[], fieldService:false, manualUrl:"",
 });
 
 const fmt$ = (n: number) => n > 0 ? `$${n.toLocaleString()}` : "—";
@@ -296,9 +305,46 @@ function ProductModal({ product, onSave, onClose, saving }: { product:Partial<Pr
     msrp:product.msrp??0, dealerCost:product.dealerCost??0,
     sellPrice:product.sellPrice??0, adiSku:product.adiSku??"",
     imageUrl:product.imageUrl??"", active:product.active??true,
+    tags:product.tags??[], fieldService:product.fieldService??false,
+    manualUrl:product.manualUrl??"",
   });
-  const set = (k:keyof typeof form, v:string|number|boolean)=>setForm(p=>({...p,[k]:v}));
+  const [tagInput,      setTagInput]      = useState("");
+  const [uploadingPdf,  setUploadingPdf]  = useState(false);
+  const [pdfStatus,     setPdfStatus]     = useState<string|null>(null);
+  const pdfRef = useRef<HTMLInputElement>(null);
+
+  const set = (k:keyof typeof form, v:string|number|boolean|string[])=>setForm(p=>({...p,[k]:v}));
   const m = calcMargin(form.dealerCost, form.sellPrice);
+
+  const addTag = (raw: string) => {
+    const tag = raw.trim().toLowerCase().replace(/[^a-z0-9-_]/g,"");
+    if (!tag || form.tags.includes(tag)) { setTagInput(""); return; }
+    set("tags", [...form.tags, tag]);
+    setTagInput("");
+  };
+  const removeTag = (t: string) => set("tags", form.tags.filter(x=>x!==t));
+
+  const uploadPdf = async (file: File) => {
+    if (!product.id || product.id === "new") {
+      setPdfStatus("Save the product first, then upload the manual.");
+      return;
+    }
+    setUploadingPdf(true); setPdfStatus(null);
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("product_id", product.id);
+    try {
+      const res = await fetch("/api/kb/process", { method:"POST", body:fd });
+      const d   = await res.json();
+      if (!res.ok) throw new Error(d.error ?? "Upload failed");
+      set("manualUrl", d.manualUrl ?? form.manualUrl);
+      setPdfStatus(`✅ ${d.chunksCreated} chunks indexed`);
+    } catch (e:unknown) {
+      setPdfStatus(`❌ ${e instanceof Error ? e.message : "Upload failed"}`);
+    } finally {
+      setUploadingPdf(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
@@ -337,11 +383,76 @@ function ProductModal({ product, onSave, onClose, saving }: { product:Partial<Pr
               <p className="text-xs text-muted-foreground">Image preview</p>
             </div>
           )}
-          <div className="flex items-center gap-3">
-            <button onClick={()=>set("active",!form.active)} className={cn("relative inline-flex h-6 w-11 items-center rounded-full transition-colors",form.active?"bg-blue-600":"bg-slate-200")}>
-              <span className={cn("inline-block h-4 w-4 rounded-full bg-white shadow transition-transform",form.active?"translate-x-6":"translate-x-1")}/>
-            </button>
-            <span className="text-sm font-medium">{form.active?"Active":"Inactive"}</span>
+
+          {/* Tags */}
+          <Field label="Tags">
+            <div className={cn(iCls, "flex flex-wrap gap-1.5 min-h-[38px] cursor-text")} onClick={()=>(document.getElementById("tag-input") as HTMLInputElement)?.focus()}>
+              {form.tags.map(t=>(
+                <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
+                  {t}
+                  <button type="button" onClick={e=>{e.stopPropagation();removeTag(t);}} className="hover:text-blue-900 leading-none">×</button>
+                </span>
+              ))}
+              <input
+                id="tag-input"
+                value={tagInput}
+                onChange={e=>setTagInput(e.target.value)}
+                onKeyDown={e=>{
+                  if(e.key==="Enter"||e.key===","||e.key===" "){e.preventDefault();addTag(tagInput);}
+                  if(e.key==="Backspace"&&!tagInput&&form.tags.length>0){removeTag(form.tags[form.tags.length-1]);}
+                }}
+                onBlur={()=>{if(tagInput.trim())addTag(tagInput);}}
+                placeholder={form.tags.length===0?"e.g. gate, swing, commercial — press Enter to add":""}
+                className="flex-1 min-w-[120px] outline-none bg-transparent text-sm placeholder:text-muted-foreground/50"
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1">Press Enter, comma, or space to add a tag. Used for AI search and filtering.</p>
+          </Field>
+
+          {/* Manual PDF Upload */}
+          <Field label="Service Manual (PDF)">
+            <div className="flex items-center gap-3">
+              <input
+                value={form.manualUrl}
+                onChange={e=>set("manualUrl",e.target.value)}
+                placeholder="Manual URL (auto-filled after upload)"
+                className={cn(iCls,"flex-1")}
+              />
+              <input ref={pdfRef} type="file" accept=".pdf" className="hidden"
+                onChange={e=>{const f=e.target.files?.[0];if(f)uploadPdf(f);}}/>
+              <button type="button"
+                onClick={()=>pdfRef.current?.click()}
+                disabled={uploadingPdf}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors whitespace-nowrap shrink-0">
+                {uploadingPdf?<Loader2 size={12} className="animate-spin"/>:<Upload size={12}/>}
+                {uploadingPdf?"Processing…":"Upload PDF"}
+              </button>
+            </div>
+            {pdfStatus&&(
+              <p className={cn("text-xs mt-1.5 px-2 py-1 rounded-lg",
+                pdfStatus.startsWith("✅")?"bg-emerald-50 text-emerald-700 border border-emerald-200":
+                pdfStatus.startsWith("❌")?"bg-red-50 text-red-700 border border-red-200":
+                "bg-amber-50 text-amber-700 border border-amber-200"
+              )}>{pdfStatus}</p>
+            )}
+            {form.manualUrl&&<a href={form.manualUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-600 hover:underline mt-1 inline-block">View current manual →</a>}
+          </Field>
+
+          {/* Toggles */}
+          <div className="flex items-center gap-6 pt-1">
+            <div className="flex items-center gap-3">
+              <button onClick={()=>set("active",!form.active)} className={cn("relative inline-flex h-6 w-11 items-center rounded-full transition-colors",form.active?"bg-blue-600":"bg-slate-200")}>
+                <span className={cn("inline-block h-4 w-4 rounded-full bg-white shadow transition-transform",form.active?"translate-x-6":"translate-x-1")}/>
+              </button>
+              <span className="text-sm font-medium">{form.active?"Active":"Inactive"}</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <button onClick={()=>set("fieldService",!form.fieldService)} className={cn("relative inline-flex h-6 w-11 items-center rounded-full transition-colors",form.fieldService?"bg-emerald-600":"bg-slate-200")}>
+                <span className={cn("inline-block h-4 w-4 rounded-full bg-white shadow transition-transform",form.fieldService?"translate-x-6":"translate-x-1")}/>
+              </button>
+              <span className="text-sm font-medium">Field Service</span>
+              <span className="text-[10px] text-muted-foreground">(shows in /tech tool)</span>
+            </div>
           </div>
         </div>
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border bg-slate-50/50 sticky bottom-0">
