@@ -3,16 +3,17 @@
  *
  * Auth middleware for portal.gateguard.co
  *
- * /tech and its API routes bypass Clerk entirely — they use
- * x-tech-code header auth handled inside the route handlers.
+ * /tech is a fully public route — Clerk never touches it.
+ * The plain middleware function intercepts /tech first and returns
+ * NextResponse.next() before Clerk's wrapper ever initialises.
  *
- * Everything else requires a valid Clerk session.
+ * Everything else goes through Clerk — requires a valid session.
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextFetchEvent, NextResponse } from 'next/server'
 import { clerkMiddleware } from '@clerk/nextjs/server'
 
-// These paths never touch Clerk — short-circuit immediately
+// Paths that bypass Clerk entirely
 function isBypassPath(pathname: string): boolean {
   return (
     pathname.startsWith('/tech') ||
@@ -20,19 +21,12 @@ function isBypassPath(pathname: string): boolean {
     pathname.startsWith('/api/kb/products') ||
     pathname.startsWith('/sign-in') ||
     pathname.startsWith('/sign-up') ||
-    pathname.startsWith('/sso-callback') ||
-    pathname.startsWith('/_next') ||
-    pathname.startsWith('/favicon')
+    pathname.startsWith('/sso-callback')
   )
 }
 
-export default clerkMiddleware(async (auth, req: NextRequest) => {
-  // Hard bypass — never run Clerk for these paths
-  if (isBypassPath(req.nextUrl.pathname)) {
-    return NextResponse.next()
-  }
-
-  // Require Clerk session for everything else
+// Clerk handler — only invoked for portal routes
+const clerkHandler = clerkMiddleware(async (auth, req) => {
   const { userId } = await auth()
   if (!userId) {
     const signInUrl = new URL('/sign-in', req.url)
@@ -41,6 +35,16 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
   }
 })
 
+// Plain Next.js middleware — runs before Clerk
+export function middleware(req: NextRequest, event: NextFetchEvent) {
+  if (isBypassPath(req.nextUrl.pathname)) {
+    return NextResponse.next()
+  }
+  return clerkHandler(req, event)
+}
+
 export const config = {
-  matcher: ['/(.*)'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon\\.ico).*)',
+  ],
 }
