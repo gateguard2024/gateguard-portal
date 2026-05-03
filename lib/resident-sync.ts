@@ -43,15 +43,23 @@ export async function syncOrgResidents(orgId: string): Promise<SyncResult> {
   const db    = serviceDb()
 
   // Load org config
-  const { data: org, error: orgErr } = await db
+  const { data: orgRaw, error: orgErr } = await db
     .from('organizations')
-    .select([
-      'id', 'name',
-      'brivo_site_id', 'brivo_username', 'brivo_password',
-      'unifi_host', 'unifi_api_key', 'unifi_site_id', 'unifi_resident_group',
-    ].join(', '))
+    .select('id, name, brivo_site_id, brivo_username, brivo_password, unifi_host, unifi_api_key, unifi_site_id, unifi_resident_group')
     .eq('id', orgId)
     .single()
+
+  const org = orgRaw as {
+    id:                   string
+    name:                 string
+    brivo_site_id:        string | null
+    brivo_username:       string | null
+    brivo_password:       string | null
+    unifi_host:           string | null
+    unifi_api_key:        string | null
+    unifi_site_id:        string | null
+    unifi_resident_group: string | null
+  } | null
 
   if (orgErr || !org) {
     return { orgId, orgName: '?', upserted: 0, deactivated: 0, unifiSynced: 0, error: `Org not found: ${orgErr?.message}`, durationMs: Date.now() - start }
