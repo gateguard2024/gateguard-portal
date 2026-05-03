@@ -13,10 +13,12 @@
 
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams }                        from 'next/navigation'
+import { WiringGuide }  from '@/components/tech/WiringDiagram'
+import { CableGuide }   from '@/components/tech/CableGuide'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type StepType = 'question' | 'action' | 'measure' | 'select' | 'photo' | 'resolved' | 'escalate'
-type Screen   = 'pin' | 'home' | 'choice' | 'symptom' | 'diag'
+type Screen   = 'pin' | 'home' | 'choice' | 'symptom' | 'diag' | 'wiring' | 'cable'
 
 interface Step {
   type:       StepType
@@ -430,7 +432,12 @@ function TechTool() {
         <div style={S.legendStrip}>
           <span style={{ color: C.green }}>● AI-READY</span>
           <span style={{ color: C.textMuted }}>● MANUAL PENDING</span>
-          <span style={{ color: C.textMuted, marginLeft: 'auto' }}>{visible.length} DEVICE{visible.length !== 1 ? 'S' : ''}</span>
+          <button
+            onClick={() => setScreen('cable')}
+            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 9, color: C.purple, letterSpacing: '0.08em', padding: 0 }}
+          >
+            🔌 CABLE GUIDE
+          </button>
         </div>
       </div>
     )
@@ -518,6 +525,44 @@ function TechTool() {
             </div>
           </button>
 
+          {/* Wiring Guide */}
+          <button
+            onClick={() => setScreen('wiring')}
+            style={{ padding: '20px', borderRadius: 12, textAlign: 'left', cursor: 'pointer', background: 'rgba(217,119,6,0.06)', border: `1px solid rgba(217,119,6,0.22)` }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ fontSize: 22, lineHeight: 1 }}>📐</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: C.amber, letterSpacing: '0.1em', marginBottom: 3 }}>
+                  WIRING GUIDE
+                </div>
+                <div style={{ fontFamily: SANS, fontSize: 13, color: C.textSecondary }}>
+                  Terminal diagrams for connecting to gates, locks, and readers
+                </div>
+              </div>
+              <span style={{ color: C.amber, fontSize: 18 }}>›</span>
+            </div>
+          </button>
+
+          {/* Cable Guide */}
+          <button
+            onClick={() => setScreen('cable')}
+            style={{ padding: '20px', borderRadius: 12, textAlign: 'left', cursor: 'pointer', background: 'rgba(124,58,237,0.06)', border: `1px solid rgba(124,58,237,0.22)` }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ fontSize: 22, lineHeight: 1 }}>🔌</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: C.purple, letterSpacing: '0.1em', marginBottom: 3 }}>
+                  CABLE GUIDE
+                </div>
+                <div style={{ fontFamily: SANS, fontSize: 13, color: C.textSecondary }}>
+                  CAT cable pinouts · 2-wire series · 2-wire parallel testing
+                </div>
+              </div>
+              <span style={{ color: C.purple, fontSize: 18 }}>›</span>
+            </div>
+          </button>
+
           {/* Manual + Troubleshoot combined */}
           {hasManual && (
             <button
@@ -529,6 +574,46 @@ function TechTool() {
           )}
         </div>
       </div>
+    )
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SCREEN: WIRING GUIDE
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (screen === 'wiring') {
+    const themeObj = {
+      bg: C.bg, bgCard: C.bgCard, border: C.border,
+      blue: C.blue, textPrimary: C.textPrimary,
+      textSecondary: C.textSecondary, textMuted: C.textMuted,
+    }
+    return (
+      <WiringGuide
+        product={{
+          name:     selected?.name     ?? '',
+          brand:    selected?.brand    ?? '',
+          category: selected?.category ?? '',
+          sku:      selected?.sku      ?? '',
+        }}
+        onBack={() => setScreen('choice')}
+        theme={themeObj}
+      />
+    )
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SCREEN: CABLE GUIDE
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (screen === 'cable') {
+    const themeObj = {
+      bg: C.bg, bgCard: C.bgCard, border: C.border,
+      blue: C.blue, textPrimary: C.textPrimary,
+      textSecondary: C.textSecondary, textMuted: C.textMuted,
+    }
+    return (
+      <CableGuide
+        onBack={() => setScreen(selected ? 'choice' : 'home')}
+        theme={themeObj}
+      />
     )
   }
 

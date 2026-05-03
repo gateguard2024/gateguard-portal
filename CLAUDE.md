@@ -100,7 +100,7 @@ GateGuard Corporate (SO — System Operator)
 - `/quotes` — Quote list (draft/sent/viewed/accepted/declined/expired)
 - `/quotes/new` — Quote builder
 - `/quotes/[id]/proposal` — Customer-facing proposal view
-- `/quotes/[token]/approve` — **CLIENT-FACING** approval page (no auth/sidebar). Property managers approve/decline via signed token link. Full-screen branded standalone page.
+- `/quotes/[id]/approve` — **CLIENT-FACING** approval page (no auth/sidebar). Property managers approve/decline via signed token link. Full-screen branded standalone page. (Route uses `[id]` segment — same level as `[id]/proposal`.)
 
 ### Revenue & Billing
 - `/billing` — Invoices + QuickBooks sync, MRR tracking
@@ -167,7 +167,9 @@ GateGuard Corporate (SO — System Operator)
 - `residents` — Brivo-sourced resident roster per org (mac_address for UniFi sync)
 - `sync_log` — immutable log of every Brivo/UniFi sync run
 
-**Planned tables:** `reps` (parent_rep_id, commission_rate, tier), `commissions` (per deal, payout status), `permits` (property, expiry_date, type), `service_packages` (canned job templates)
+**Planned tables (not yet migrated):** `reps` (parent_rep_id, commission_rate, tier), `commissions` (per deal, payout status), `permits` (property, expiry_date, type), `service_packages` (canned job templates)
+
+Note: `/reps`, `/compliance`, `/scorecard`, `/map`, `/reports` pages are built with placeholder data. They need these tables + Supabase RLS wiring to become live.
 
 ---
 
@@ -192,6 +194,33 @@ GateGuard Corporate (SO — System Operator)
 
 ---
 
+## Key Source Files
+
+### /tech tool
+| File | Purpose |
+|------|---------|
+| `app/tech/page.tsx` | All /tech screens in one file. Screens: pin, home, choice, symptom, diag, wiring, cable |
+| `lib/wiring-library.ts` | Device terminal definitions (`DEVICES[]`) + verified wiring maps (`WIRING_MAPS[]`). Add new devices/pairings here. |
+| `components/tech/WiringDiagram.tsx` | SVG wiring diagram renderer. `WiringDiagram` (diagram only) + `WiringGuide` (full screen w/ device selector) |
+| `components/tech/CableGuide.tsx` | 3-tab cable testing guide. Tabs: cat / series / parallel |
+| `app/api/kb/ask/route.ts` | Claude diagnostic API. Accepts: symptom, product_id, error_code, history, connected_devices[] |
+| `app/api/kb/analyze-image/route.ts` | Claude vision for photo steps |
+| `app/api/kb/products/route.ts` | Product list for device picker (auth: x-tech-code header) |
+
+### Portal pages
+| File | Purpose |
+|------|---------|
+| `components/layout/Sidebar.tsx` | Navigation. Add new routes here. |
+| `app/quotes/[id]/approve/page.tsx` | Client-facing quote approval — no auth, no sidebar, full-screen |
+| `app/reps/page.tsx` | Rep hierarchy + commission tracker (placeholder data) |
+| `app/compliance/page.tsx` | Permit tracker (placeholder data) |
+| `app/map/page.tsx` | Territory map (placeholder, needs Mapbox) |
+| `app/scorecard/page.tsx` | Dealer scorecard (placeholder data) |
+| `app/reports/page.tsx` | Roll-up reports (placeholder data) |
+| `app/revenue/page.tsx` | MRR/ARR dashboard (placeholder data) |
+
+---
+
 ## Master Asset Library (Google Drive)
 https://drive.google.com/drive/folders/0AMsXu78d6wafUk9PVA
 
@@ -210,11 +239,13 @@ Canonical source for product PDFs, brand assets, legal docs, historical project 
 
 ---
 
-## /tech Field Tool — Key Differentiator ✅ (v4, May 2026)
+## /tech Field Tool — Key Differentiator ✅ (v5, May 2026)
 
 **This is GateGuard's #1 competitive advantage. Always keep it best-in-class.**
 
-Current capabilities:
+### Current capabilities
+
+**Diagnostics (AI):**
 - PIN auth via TECH_ACCESS_CODE (no Clerk required for field techs)
 - Device picker from live products table (field_service=true), green dot = has manual
 - **Connected devices selector** — tech marks what else is wired (Photobeam, Loop Detector, Callbox, etc.)
@@ -226,12 +257,48 @@ Current capabilities:
 - Manual references: p.XX links to PDF when chunk is matched
 - Session logging to `troubleshoot_sessions`
 - Light theme: #F1F5F9 bg, white cards, #6B7EFF brand blue, IBM Plex Mono
-- Connected devices shown in diag header subtitle
 
-Planned:
+**Wiring Guide (new — choice screen, amber button):**
+- Select a device → pick a connection pairing → see SVG split-panel terminal diagram
+- Left/right device panels with color-coded header bands, terminal dot connectors, bezier wire curves
+- Wires color-coded by type: relay COM=amber, relay NO=green, +V=red, GND=dark, data=blue
+- Wire legend with gauge, required settings strip, caution cards, numbered install notes
+- Verified pairings: Brivo ACS300→DoorKing 6050, ACS300→LiftMaster SL3000, ACS300→Linear OSCO, Wiegand Reader→ACS300, ACS300→Mag Lock
+- `lib/wiring-library.ts` — terminal definitions for 8 devices + 5 wiring maps. Add new pairings by adding to `DEVICES[]` + `WIRING_MAPS[]`
+- `components/tech/WiringDiagram.tsx` — SVG renderer + `WiringGuide` screen component
+
+**Cable Guide (new — choice screen, purple button + home screen shortcut):**
+- **CAT Cable tab**: Interactive T568B pinout (tap any pin for color/pair/PoE detail), 7-step test procedure covering link light, continuity, split pairs, T568A/B mismatch, PoE voltage check, run length limits
+- **2-Wire Series tab**: Circuit diagram showing single-point-of-failure topology, 7 steps to bisect the break location by walking the run with a multimeter
+- **2-Wire Parallel tab**: Bus diagram, 7 steps for isolating which branch vs the main supply is failing; covers overcurrent and ground loop diagnosis
+- `components/tech/CableGuide.tsx` — tab-based component with inline SVG diagrams + expandable step cards
+
+### Planned
 - PWA manifest + service worker (techs "Add to Home Screen")
 - Digital Site Survey mode (walk property, photo each device, pass/warn/fail, auto-generate proposal)
 - Commissioning wizard (new install checklist → as-built PDF)
+- **Smart tester API integration** — see section below
+
+---
+
+## Smart Tester API Integration (Future — /tech)
+
+Field techs use Fluke, IDEAL, and Greenlee cable/network testers daily. Future goal: pull test results directly into the diagnostic session instead of requiring manual entry.
+
+**Target integrations:**
+- **Fluke LINKWARE Live** — Fluke's cloud platform for DSX/DTX cable analyzer results. REST API available. Test results (wiremap, insertion loss, NEXT, return loss) linkable per cable ID. → Auto-populate measure steps with actual tester readings.
+- **IDEAL AnyWARE Cloud** — IDEAL Networks tester cloud. Job-based test result storage with web API. Supports Cat5e/Cat6/fiber certification results.
+- **Greenlee GT-8 / DataScout** — Bluetooth LE export from handheld testers. Some models support direct data transfer via USB or mobile app.
+- **Generic multimeter (short-term)** — No API needed. Let tech photograph the multimeter display → Claude vision extracts the reading and validates it against the expected range for that measure step. Same `/api/kb/analyze-image` endpoint already built.
+
+**Implementation approach:**
+1. Add `tester_brand` + `tester_job_id` optional fields to the `/tech` symptom screen
+2. On measure steps, show a "Import from tester" button if credentials are configured
+3. Dealer configures tester API key in `/settings` → stored per-org in Supabase
+4. Results auto-fill measure step answer + flag pass/fail vs expected range
+5. Store tester report URL in `troubleshoot_sessions` for audit trail
+
+**Immediate workaround (already works today):** Techs can photograph the tester screen on any photo step — Claude vision reads the display and comments on the reading.
 
 ---
 
@@ -250,19 +317,23 @@ Planned:
 ### Phase 1 — Quick Wins (weeks)
 - [x] Connected devices selector on /tech symptom screen
 - [x] System topology awareness in Claude system prompt
+- [x] Wiring Guide — SVG terminal diagrams for common install pairings
+- [x] Cable Guide — CAT cable, 2-wire series, 2-wire parallel testing
 - [ ] Photo evidence on work orders (reuse /tech photo component)
 - [ ] Canned service packages in /products
 - [ ] Automated renewal/PM reminders (Vercel cron + Twilio)
 - [ ] In-app support widget (HelpScout Beacon — one script tag)
 - [ ] PWA manifest for /tech
+- [ ] Smart tester API integration (Fluke LINKWARE / IDEAL AnyWARE — see section above)
 
 ### Phase 2 — Dealer Network (1–2 months)
-- [x] /reps — Rep & commission manager (placeholder built)
-- [x] /compliance — Permit tracker (placeholder built)
-- [x] /map — Territory map (placeholder built)
-- [x] /scorecard — Dealer scorecard (placeholder built)
-- [x] /reports — Roll-up reports (placeholder built)
-- [x] /quotes/[token]/approve — Client approval page (built)
+- [x] /reps — Rep & commission manager (placeholder UI built, needs DB tables)
+- [x] /compliance — Permit tracker (placeholder UI built, needs DB tables)
+- [x] /map — Territory map (placeholder UI built, needs Mapbox token + DB)
+- [x] /scorecard — Dealer scorecard (placeholder UI built, needs DB)
+- [x] /reports — Roll-up reports (placeholder UI built, needs DB)
+- [x] /quotes/[id]/approve — Client approval page (built, full-screen standalone)
+- [ ] Wire dealer-network pages to live Supabase data (migrate reps/permits tables)
 - [ ] SMS thread inside work orders (Twilio ↔ WO ID)
 - [ ] Digital Site Survey (DVI for gates) — enhance /survey
 - [ ] Client portal full build-out (Supabase RLS by org)
@@ -275,3 +346,5 @@ Planned:
 - [ ] Monthly client report auto-PDF
 - [ ] Resident self-service tickets via GateCard → creates WO
 - [ ] Google Reviews post-WO SMS trigger
+- [ ] Expand wiring library (FAAC, BFT, Doorbird, HID controllers, Viking callboxes)
+- [ ] Commissioning wizard (new install checklist → as-built PDF)
