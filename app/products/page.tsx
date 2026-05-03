@@ -314,6 +314,7 @@ function ProductModal({ product, onSave, onClose, saving }: { product:Partial<Pr
   });
   const [tagInput,      setTagInput]      = useState("");
   const [uploadingPdf,  setUploadingPdf]  = useState(false);
+  const [findingPdf,    setFindingPdf]    = useState(false);
   const [pdfStatus,     setPdfStatus]     = useState<string|null>(null);
   const pdfRef = useRef<HTMLInputElement>(null);
 
@@ -377,11 +378,37 @@ function ProductModal({ product, onSave, onClose, saving }: { product:Partial<Pr
       if (!procRes.ok) throw new Error(d.error ?? "Processing failed");
 
       set("manualUrl", (d.manualUrl as string) ?? publicUrl);
-      setPdfStatus(`✅ ${d.chunksCreated} chunks indexed`);
+      setPdfStatus(`✅ ${d.chunksCreated} chunks indexed — wiring auto-building in background`);
     } catch (e: unknown) {
       setPdfStatus(`❌ ${e instanceof Error ? e.message : "Upload failed"}`);
     } finally {
       setUploadingPdf(false);
+    }
+  };
+
+  const findManual = async () => {
+    if (!product.id || product.id === "new") {
+      setPdfStatus("Save the product first, then auto-find the manual.");
+      return;
+    }
+    setFindingPdf(true);
+    setPdfStatus("🔍 Searching manufacturer sites…");
+    try {
+      const res = await fetch("/api/kb/find-manual", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ product_id: product.id }),
+      });
+      const d = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      if (!res.ok) throw new Error(d.error ?? "Search failed");
+      if (d.already)  { setPdfStatus("✅ Manual already uploaded"); return; }
+      if (!d.found)   { setPdfStatus("⚠️ Manual not found online — upload PDF manually"); return; }
+      set("manualUrl", d.manualUrl);
+      setPdfStatus(`✅ Found & indexed ${d.chunksCreated} chunks — wiring auto-building`);
+    } catch (e: unknown) {
+      setPdfStatus(`❌ ${e instanceof Error ? e.message : "Search failed"}`);
+    } finally {
+      setFindingPdf(false);
     }
   };
 
@@ -460,8 +487,16 @@ function ProductModal({ product, onSave, onClose, saving }: { product:Partial<Pr
               <input ref={pdfRef} type="file" accept=".pdf" className="hidden"
                 onChange={e=>{const f=e.target.files?.[0];if(f)uploadPdf(f);}}/>
               <button type="button"
+                onClick={findManual}
+                disabled={findingPdf||uploadingPdf}
+                title="Search manufacturer sites and auto-download the installation manual"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-violet-600 text-white text-xs font-semibold hover:bg-violet-700 disabled:opacity-50 transition-colors whitespace-nowrap shrink-0">
+                {findingPdf?<Loader2 size={12} className="animate-spin"/>:<span>🔍</span>}
+                {findingPdf?"Searching…":"Find Online"}
+              </button>
+              <button type="button"
                 onClick={()=>pdfRef.current?.click()}
-                disabled={uploadingPdf}
+                disabled={uploadingPdf||findingPdf}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors whitespace-nowrap shrink-0">
                 {uploadingPdf?<Loader2 size={12} className="animate-spin"/>:<Upload size={12}/>}
                 {uploadingPdf?"Processing…":"Upload PDF"}

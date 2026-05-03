@@ -6,12 +6,20 @@
  * with color-coded wire curves between connected terminals.
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { createClient } from '@supabase/supabase-js'
 import {
   type WiringMap, type DeviceDef, type DeviceTerminal,
   getDevice, getMap, getCompatiblePartners, matchDeviceToProduct,
   WIRING_MAPS, TERMINAL_COLORS,
 } from '@/lib/wiring-library'
+
+function browserDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  )
+}
 
 const MONO = '"IBM Plex Mono", "SFMono-Regular", Consolas, monospace'
 const SANS = '"IBM Plex Sans", -apple-system, system-ui, sans-serif'
@@ -455,7 +463,7 @@ export function WiringDiagram({ map }: WiringDiagramProps) {
 // ─── WiringGuide screen — device selector + diagram ──────────────────────────
 
 interface WiringGuideProps {
-  product: { name: string; brand: string; category: string; sku: string }
+  product: { id?: string; name: string; brand: string; category: string; sku: string }
   onBack: () => void
   theme: { bg: string; bgCard: string; border: string; blue: string; textPrimary: string; textSecondary: string; textMuted: string }
   defaultMapId?: string   // pre-select a specific wiring map (e.g. from install demo)
@@ -463,8 +471,25 @@ interface WiringGuideProps {
 
 export function WiringGuide({ product, onBack, theme, defaultMapId }: WiringGuideProps) {
   const [selectedMapId, setSelectedMapId] = useState<string | null>(defaultMapId ?? null)
+  const [aiDevice,      setAiDevice]      = useState<DeviceDef | null>(null)
+  const [wiringHints,   setWiringHints]   = useState<string[]>([])
 
-  // Find matching device definitions for this product
+  // Fetch AI-extracted device definition from Supabase if product has an id
+  useEffect(() => {
+    if (!product.id) return
+    browserDb()
+      .from('device_suggestions')
+      .select('device_def, wiring_hints, status')
+      .eq('product_id', product.id)
+      .in('status', ['ai_generated', 'verified'])
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.device_def) setAiDevice(data.device_def as DeviceDef)
+        if (data?.wiring_hints) setWiringHints(data.wiring_hints as string[])
+      })
+  }, [product.id])
+
+  // Find matching device definitions — static library first, then AI supplement
   const matchedDevices = useMemo(() => {
     const matched = matchDeviceToProduct(product)
     if (matched.length > 0) {
@@ -508,6 +533,57 @@ export function WiringGuide({ product, onBack, theme, defaultMapId }: WiringGuid
             <div style={{ fontFamily: MONO, fontSize: 9, color: theme.textMuted, letterSpacing: '0.14em', marginBottom: 12 }}>
               SELECT CONNECTION TYPE
             </div>
+
+            {/* AI-extracted terminal reference (shows alongside or instead of static maps) */}
+            {aiDevice && matchedDevices.length === 0 && (
+              <div style={{
+                background: 'rgba(107,126,255,0.06)', border: '1px solid rgba(107,126,255,0.2)',
+                borderRadius: 12, padding: 16, marginBottom: 14,
+              }}>
+                <div style={{ fontFamily: MONO, fontSize: 9, color: '#6B7EFF', letterSpacing: '0.14em', marginBottom: 10 }}>
+                  ⚡ AI-EXTRACTED TERMINAL MAP
+                </div>
+                <div style={{ fontFamily: MONO, fontSize: 10, color: theme.textPrimary, fontWeight: 700, marginBottom: 6 }}>
+                  {aiDevice.name}
+                </div>
+                {aiDevice.note && (
+                  <div style={{ fontFamily: SANS, fontSize: 11, color: theme.textMuted, marginBottom: 10 }}>
+                    {aiDevice.note}
+                  </div>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {aiDevice.terminals?.map((t) => (
+                    <div key={t.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '6px 10px', background: theme.bgCard, borderRadius: 7,
+                    }}>
+                      <div style={{
+                        width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                        background: TERMINAL_COLORS[t.type] ?? '#94A3B8',
+                      }} />
+                      <div style={{ fontFamily: MONO, fontSize: 9, color: theme.textPrimary, fontWeight: 700, minWidth: 52 }}>
+                        {t.label}
+                      </div>
+                      <div style={{ fontFamily: SANS, fontSize: 10, color: theme.textMuted }}>
+                        {t.desc}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {wiringHints.length > 0 && (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ fontFamily: MONO, fontSize: 9, color: theme.textMuted, letterSpacing: '0.1em', marginBottom: 6 }}>
+                      PAIRING NOTES
+                    </div>
+                    {wiringHints.map((hint, i) => (
+                      <div key={i} style={{ fontFamily: SANS, fontSize: 11, color: theme.textMuted, marginBottom: 4 }}>
+                        • {hint}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {matchedDevices.length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
