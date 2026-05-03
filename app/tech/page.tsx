@@ -82,14 +82,16 @@ const STEP_CFG: Record<StepType, {
 
 // Connected device options — what else might be wired to this device?
 const CONNECTED_OPTS: Record<string, string[]> = {
-  'Gate Operator': ['Photobeam', 'Loop Detector', 'Safety Edge', 'Keypad', 'Callbox', 'Access Reader', 'Exit Loop', 'Battery Backup'],
-  'Barrier Arm':   ['Loop Detector', 'Exit Loop', 'Keypad', 'Access Reader', 'Safety Edge'],
-  'Callbox':       ['Gate Operator', 'Access Reader', 'Camera', 'Door Strike'],
-  'Access Control':['Gate Operator', 'REX Sensor', 'Mag Lock', 'Electric Strike', 'Keypad'],
-  'Camera':        ['NVR/DVR', 'PoE Switch', 'Access Control'],
-  'Intercom':      ['Gate Operator', 'Door Strike', 'Camera'],
+  'Gate Operator':   ['Photobeam', 'Safety Loop (under arm)', 'Exit Loop Detector', 'Safety Edge', 'Keypad', 'Callbox', 'UniFi Intercom', 'Access Reader', 'Battery Backup'],
+  'Barrier Arm':     ['Photobeam', 'Safety Loop (under arm)', 'Exit Loop Detector', 'Keypad', 'Access Reader', 'Safety Edge'],
+  'Callbox':         ['Gate Operator', 'Access Reader', 'Camera', 'Door Strike'],
+  'Video Intercom':  ['Gate Operator', 'Brivo ACS300', 'Door Strike', 'Camera', 'PoE Switch'],
+  'Access Control':  ['Gate Operator', 'REX Sensor', 'Mag Lock', 'Electric Strike', 'Keypad', 'UniFi Intercom', 'Photobeam', 'Loop Detector'],
+  'Access Controller':['Gate Operator', 'REX Sensor', 'Mag Lock', 'Electric Strike', 'Keypad', 'UniFi Intercom', 'Photobeam', 'Loop Detector'],
+  'Camera':          ['NVR/DVR', 'PoE Switch', 'Access Control'],
+  'Intercom':        ['Gate Operator', 'Door Strike', 'Camera'],
 }
-const DEFAULT_CONNECTED_OPTS = ['Photobeam', 'Loop Detector', 'Keypad', 'Callbox', 'Access Reader', 'Safety Edge', 'Gate Operator']
+const DEFAULT_CONNECTED_OPTS = ['Photobeam', 'Safety Loop (under arm)', 'Exit Loop Detector', 'Keypad', 'Callbox', 'UniFi Intercom', 'Brivo ACS300', 'Access Reader', 'Gate Operator']
 
 // Quick-pick faults per device category
 const QUICK_PICKS: Record<string, string[]> = {
@@ -98,7 +100,9 @@ const QUICK_PICKS: Record<string, string[]> = {
   'Access Control': ["WON'T UNLOCK", "ACCESS DENIED", "READER OFFLINE", "NO POWER", "LED FAULT", "COMM ERROR", "CREDENTIAL FAIL"],
   'Camera':         ["NO IMAGE", "OFFLINE", "POOR IMAGE", "IR FAULT", "RECORDING FAIL", "NO POWER", "WRONG ANGLE"],
   'Callbox':        ["NO AUDIO", "NO VIDEO", "WON'T CALL", "NO POWER", "DOOR WON'T UNLOCK", "KEYPAD FAIL", "OFFLINE"],
-  'Intercom':       ["NO AUDIO", "NO VIDEO", "NO POWER", "WON'T CONNECT", "POOR QUALITY"],
+  'Intercom':        ["NO AUDIO", "NO VIDEO", "NO POWER", "WON'T CONNECT", "POOR QUALITY"],
+  'Video Intercom':  ["NO AUDIO", "NO VIDEO", "NO POWER", "WON'T CALL", "RELAY NOT FIRING", "OFFLINE", "APP NOT RECEIVING", "POOR QUALITY", "DOOR WON'T OPEN"],
+  'Safety Device':   ["CONSTANT STOP FAULT", "BEAM MISALIGNED", "NO POWER", "FALSE TRIGGERS", "INTERMITTENT FAULT", "LOOP FAULT", "DETECTOR OFFLINE"],
 }
 const DEFAULT_PICKS = ["NO POWER", "WON'T RESPOND", "COMM ERROR", "FAULT CODE", "INTERMITTENT", "NO COMM"]
 

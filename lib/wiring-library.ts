@@ -235,6 +235,88 @@ export const DEVICES: DeviceDef[] = [
       { id: 'gnd',  label: 'GND', desc: 'Ground / Return',  type: 'gnd', group: 'Power' },
     ],
   },
+
+  // ── UniFi AI Intercom Pro (G4 / AI Pro) ──────────────────────────────────
+  {
+    id: 'unifi_ai_intercom',
+    name: 'AI Intercom Pro',
+    brand: 'Ubiquiti UniFi',
+    category: 'Video Intercom',
+    note: 'PoE powered (802.3af). Relay output is a dry-contact rated 30VDC 1A. Terminal block on rear of unit. G4 and AI Pro share same relay pinout.',
+    terminals: [
+      // PoE network (power + data via Ethernet — no separate terminal)
+      { id: 'poe_rj45',   label: 'PoE',   desc: 'PoE Input — RJ45 to UniFi switch (802.3af)',    type: 'aux',       group: 'Network / Power' },
+      // Relay output (dry contact) — J1
+      { id: 'rly_com',    label: 'COM',   desc: 'Door Relay — Common',                           type: 'relay_com', group: 'Door Relay (J1)' },
+      { id: 'rly_no',     label: 'NO',    desc: 'Door Relay — Normally Open',                    type: 'relay_no',  group: 'Door Relay (J1)' },
+      { id: 'rly_nc',     label: 'NC',    desc: 'Door Relay — Normally Closed',                  type: 'relay_nc',  group: 'Door Relay (J1)' },
+      // Door sense input — J2
+      { id: 'ds_in',      label: 'DS',    desc: 'Door Sensor Input (N.C. contact)',               type: 'input_nc',  group: 'Door Sense (J2)' },
+      { id: 'ds_gnd',     label: 'GND',   desc: 'Door Sensor Ground Reference',                  type: 'gnd',       group: 'Door Sense (J2)' },
+      // 12VDC auxiliary output — J3 (limited current, for small strike only)
+      { id: 'aux_vcc',    label: '+12V',  desc: '12VDC Aux Output (max 300mA — small strike only)', type: 'vcc',    group: 'Aux Power (J3)' },
+      { id: 'aux_gnd',    label: 'GND',   desc: 'Aux Ground',                                    type: 'gnd',       group: 'Aux Power (J3)' },
+    ],
+  },
+
+  // ── UniFi Access Hub Mini ─────────────────────────────────────────────────
+  {
+    id: 'unifi_hub_mini',
+    name: 'Access Hub Mini',
+    brand: 'Ubiquiti UniFi',
+    category: 'Access Controller',
+    note: 'PoE powered. Controls one door/gate. Integrates with UniFi Access app. Terminal block rear-mounted. Lock relay rated 12/24VDC 2A.',
+    terminals: [
+      { id: 'poe_in',     label: 'PoE',    desc: 'PoE Input — RJ45 (802.3at)',                   type: 'aux',       group: 'Network / Power' },
+      // Lock relay — J1
+      { id: 'lk_no',      label: 'NO',     desc: 'Lock Relay — Normally Open',                   type: 'relay_no',  group: 'Lock Relay (J1)' },
+      { id: 'lk_com',     label: 'COM',    desc: 'Lock Relay — Common',                          type: 'relay_com', group: 'Lock Relay (J1)' },
+      { id: 'lk_nc',      label: 'NC',     desc: 'Lock Relay — Normally Closed',                 type: 'relay_nc',  group: 'Lock Relay (J1)' },
+      // REX and door contact — J2
+      { id: 'rex',        label: 'REX',    desc: 'Request to Exit (N.O. to GND)',                type: 'input_no',  group: 'Inputs (J2)' },
+      { id: 'dc',         label: 'DC',     desc: 'Door Contact Sensor (N.C. to GND)',            type: 'input_nc',  group: 'Inputs (J2)' },
+      { id: 'sig_gnd',    label: 'GND',    desc: 'Signal Ground Reference',                      type: 'gnd',       group: 'Inputs (J2)' },
+      // Reader port — J3 (Wiegand or OSDP)
+      { id: 'rd_vcc',     label: '+12V',   desc: 'Reader Power +12VDC (max 300mA)',               type: 'vcc',       group: 'Reader (J3)' },
+      { id: 'rd_gnd',     label: 'GND',    desc: 'Reader Ground',                                type: 'gnd',       group: 'Reader (J3)' },
+      { id: 'rd_d0',      label: 'D0',     desc: 'Wiegand Data 0 / OSDP Data+',                  type: 'data_d0',   group: 'Reader (J3)' },
+      { id: 'rd_d1',      label: 'D1',     desc: 'Wiegand Data 1 / OSDP Data−',                  type: 'data_d1',   group: 'Reader (J3)' },
+    ],
+  },
+
+  // ── Generic Photobeam (Safety / Obstruction Sensor) ───────────────────────
+  {
+    id: 'generic_photobeam',
+    name: 'Photobeam Safety Sensor',
+    brand: 'Generic',
+    category: 'Safety Device',
+    note: 'Retroreflective or through-beam. Output is N.C. (closed when beam clear, opens when obstructed). Used on gate edge/column pairs. BEA, Optex, and NICE all use this pinout.',
+    terminals: [
+      { id: 'pwr_vcc',  label: '+12V',  desc: 'DC Power +12–24VDC',                             type: 'vcc',       group: 'Power' },
+      { id: 'pwr_gnd',  label: 'GND',   desc: 'DC Power Ground',                                type: 'gnd',       group: 'Power' },
+      { id: 'out_nc',   label: 'NC',    desc: 'Safety Output — Normally Closed (opens when beam broken)', type: 'relay_nc', group: 'Output' },
+      { id: 'out_com',  label: 'COM',   desc: 'Safety Output — Common',                         type: 'relay_com', group: 'Output' },
+      { id: 'out_no',   label: 'NO',    desc: 'Safety Output — Normally Open (optional)',        type: 'relay_no',  group: 'Output' },
+    ],
+  },
+
+  // ── Generic Loop Detector (Vehicle Inductive Loop) ────────────────────────
+  {
+    id: 'generic_loop_det',
+    name: 'Vehicle Loop Detector',
+    brand: 'Generic',
+    category: 'Safety Device',
+    note: 'Inductive loop detector. Loop wire buried in pavement (1–3 turns, ~70–200 µH). Relay output closes when vehicle detected. Sensitivity adjustable via DIP switch. Common brands: NORTECH, Diablo Controls, RFT.',
+    terminals: [
+      { id: 'pwr_vcc',  label: '+12V',  desc: 'DC Power +12–24VDC',                             type: 'vcc',       group: 'Power' },
+      { id: 'pwr_gnd',  label: 'GND',   desc: 'DC Power Ground',                                type: 'gnd',       group: 'Power' },
+      { id: 'loop_a',   label: 'LOOP A',desc: 'Inductive Loop Wire — Terminal A',                type: 'aux',       group: 'Loop Input' },
+      { id: 'loop_b',   label: 'LOOP B',desc: 'Inductive Loop Wire — Terminal B',                type: 'aux',       group: 'Loop Input' },
+      { id: 'out_no',   label: 'NO',    desc: 'Relay Output — Normally Open (closes on detect)', type: 'relay_no',  group: 'Output' },
+      { id: 'out_com',  label: 'COM',   desc: 'Relay Output — Common',                          type: 'relay_com', group: 'Output' },
+      { id: 'out_nc',   label: 'NC',    desc: 'Relay Output — Normally Closed',                 type: 'relay_nc',  group: 'Output' },
+    ],
+  },
 ]
 
 // ─── Wiring Maps ──────────────────────────────────────────────────────────────
@@ -356,6 +438,160 @@ export const WIRING_MAPS: WiringMap[] = [
     ],
   },
 
+  // ── Brivo ACS300 → DoorKing 6050 (Door 2 / Second Gate) ─────────────────
+  {
+    id: 'acs300_to_dk6050_door2',
+    deviceAId: 'brivo_acs300',
+    deviceBId: 'dk_6050',
+    title: 'Gate Open via Relay (Door 2 — Dual Gate)',
+    summary: 'Brivo Lock Relay 2 triggers a second DoorKing 6050 open input. Used when controlling two gates or a bi-parting gate.',
+    wires: [
+      { from: 'lk2_com', to: 'ctl_com',  wireColor: '#D97706', gauge: '18 AWG', label: 'COM' },
+      { from: 'lk2_no',  to: 'ctl_open', wireColor: '#059669', gauge: '18 AWG', label: 'OPEN' },
+    ],
+    notes: [
+      'Uses ACS300 Lock Relay 2 (COM2 / NO2) — same wiring as Door 1 but using J3 terminal block.',
+      'Each DoorKing 6050 is a separate unit — each requires its own 120VAC power (electrician).',
+      'For bi-parting (two leaves on same opening), both operators open simultaneously on same credential.',
+      'Configure Lock 2 in Brivo Admin to the same door/credential as Lock 1, or as a separate entry point.',
+      'Pulse duration: set both Lock 1 and Lock 2 to identical timing so both leaves open together.',
+      'Label each relay in Brivo Admin clearly: e.g. "Gate Left Leaf" / "Gate Right Leaf".',
+    ],
+    cautions: [
+      '⚠ Two separate 120VAC circuits — licensed electrician required for both units.',
+      '⚠ Brivo ACS300 relay 2 is rated 30VDC 1A — dry contact only, no AC voltage.',
+      '⚠ For bi-parting gates, verify leaf timing: one leaf must not contact the other.',
+    ],
+    settings: [
+      { device: 'Brivo ACS300', setting: 'Lock 2 Relay Mode', value: 'Momentary (match Lock 1 duration)' },
+      { device: 'DoorKing 6050 (Unit 2)', setting: 'Input Mode', value: 'Single-Button (OPEN triggers arm up)' },
+    ],
+  },
+
+  // ── UniFi AI Intercom → DoorKing 6050 (Visitor Release) ──────────────────
+  {
+    id: 'unifi_intercom_to_dk6050',
+    deviceAId: 'unifi_ai_intercom',
+    deviceBId: 'dk_6050',
+    title: 'Visitor Gate Release via Intercom Relay',
+    summary: 'UniFi AI Intercom dry-contact relay triggers DoorKing 6050 open input when resident/manager grants access through the UniFi app.',
+    wires: [
+      { from: 'rly_com', to: 'ctl_com',  wireColor: '#D97706', gauge: '18 AWG', label: 'COM' },
+      { from: 'rly_no',  to: 'ctl_open', wireColor: '#059669', gauge: '18 AWG', label: 'OPEN' },
+    ],
+    notes: [
+      'UniFi Intercom relay fires when a resident/manager taps "Unlock" in the UniFi Protect or Access app.',
+      'Relay is dry-contact only — it shorts COM to NO for the configured unlock duration (1–10 sec, set in UniFi console).',
+      'DK6050 OPEN and COM inputs receive the momentary short, triggering arm up.',
+      'Set UniFi relay unlock duration to match DK6050 response time — typically 1.5–2 sec.',
+      'This path is for visitor/intercom access only. Resident credential access goes through Brivo ACS300.',
+      'Two unlock paths run in parallel — both correctly trigger the same DK6050 OPEN terminal.',
+      'Run 18 AWG 2-conductor from intercom J1 terminal block to DK6050 J2 control terminal.',
+    ],
+    cautions: [
+      '⚠ UniFi relay is rated 30VDC 1A maximum — dry contact only, no AC.',
+      '⚠ DK6050 J1 (AC power) is 120VAC — do not confuse with J2 control inputs.',
+      '⚠ Verify UniFi console relay mode is set to "Momentary" — not "Toggle" or "Latching".',
+    ],
+    settings: [
+      { device: 'UniFi AI Intercom', setting: 'Relay Mode', value: 'Momentary' },
+      { device: 'UniFi AI Intercom', setting: 'Unlock Duration', value: '1.5–2 sec' },
+      { device: 'UniFi Console', setting: 'Door Type', value: 'Gate (configure in UniFi Access)' },
+    ],
+  },
+
+  // ── Photobeam → DoorKing 6050 Safety (STOP) ──────────────────────────────
+  {
+    id: 'photobeam_to_dk6050_stop',
+    deviceAId: 'generic_photobeam',
+    deviceBId: 'dk_6050',
+    title: 'Photobeam Safety — STOP Input',
+    summary: 'Photobeam N.C. output wired in series with DoorKing 6050 STOP input. Beam broken = gate halts and reverses.',
+    wires: [
+      { from: 'out_nc',  to: 'ctl_stop', wireColor: '#7C3AED', gauge: '18 AWG', label: 'SAFETY' },
+      { from: 'out_com', to: 'ctl_com',  wireColor: '#94A3B8', gauge: '18 AWG', label: 'COM' },
+    ],
+    notes: [
+      'Photobeam output is N.C. (normally closed when beam is clear). When beam is broken, contact opens.',
+      'DK6050 STOP input is "active-low" — opening the N.C. contact triggers a stop and reversal.',
+      'Wire photobeam N.C. terminal → DK6050 STOP, and photobeam COM → DK6050 COM.',
+      'Multiple photobeams can be wired in series on the same STOP circuit — any single break stops the gate.',
+      'Power the photobeam from DK6050 accessory output (+12V / GND on J3) to simplify wiring.',
+      'For dual-opener setups, wire photobeam in series on BOTH gate STOP inputs.',
+      'Align photobeam across the gate opening at vehicle side-mirror height (~40"). Test with a hand.',
+    ],
+    cautions: [
+      '⚠ Never use N.O. output for safety — a broken wire would allow gate to close on obstruction.',
+      '⚠ Verify photobeam alignment after install: partial misalignment causes intermittent STOP faults.',
+      '⚠ Bright sunlight can wash out retroreflective beams — use weatherproof mounting bracket.',
+    ],
+    settings: [
+      { device: 'DoorKing 6050', setting: 'STOP Input Mode', value: 'N.C. Loop (factory default)' },
+      { device: 'Photobeam', setting: 'Output Mode', value: 'N.C. (normally closed when clear)' },
+    ],
+  },
+
+  // ── Loop Detector → DoorKing 6050 Free Exit (FE) ─────────────────────────
+  {
+    id: 'loop_det_to_dk6050_fe',
+    deviceAId: 'generic_loop_det',
+    deviceBId: 'dk_6050',
+    title: 'Exit Loop Detector — Free Exit (FE)',
+    summary: 'Vehicle inductive loop detector output wired to DoorKing 6050 FE (Free Exit) input. Vehicle approaching from inside triggers gate to open automatically.',
+    wires: [
+      { from: 'out_no',  to: 'ctl_fe',  wireColor: '#059669', gauge: '18 AWG', label: 'DETECT' },
+      { from: 'out_com', to: 'ctl_com', wireColor: '#94A3B8', gauge: '18 AWG', label: 'COM' },
+    ],
+    notes: [
+      'Loop detector relay NO closes when vehicle is detected over the buried loop wire.',
+      'DK6050 FE (Free Exit) input: momentary closure triggers gate open — vehicle exits without credential.',
+      'Loop wire is 1–3 turns of 14–16 AWG wire in a saw-cut slot in the pavement, sealed with backer rod + sealant.',
+      'Run the loop lead wire (the twisted pair from the loop to the detector) in separate conduit from AC lines.',
+      'Loop wire connects to detector LOOP A and LOOP B terminals — polarity does not matter.',
+      'Power the loop detector from DK6050 J3 accessory output (+12V / GND) to simplify wiring.',
+      'Sensitivity: start at factory default. Increase if detector misses motorcycles; decrease if false-triggers.',
+      'For safety loop (under the gate arm): wire to STOP input instead of FE — stops gate if car is under arm.',
+    ],
+    cautions: [
+      '⚠ Loop wire requires a saw cut in the pavement — schedule before asphalt is completed.',
+      '⚠ Do not run loop lead wire parallel to 120VAC wiring — causes false detections.',
+      '⚠ Safety loop under the gate arm must use STOP input, not FE — wrong wiring allows arm to close on car.',
+    ],
+    settings: [
+      { device: 'Loop Detector', setting: 'Sensitivity', value: 'Medium (adjust on site — motorcycle test)' },
+      { device: 'Loop Detector', setting: 'Operate Mode', value: 'Presence (relay held while vehicle on loop)' },
+      { device: 'DoorKing 6050', setting: 'FE Input', value: 'N.O. momentary contact (factory default)' },
+    ],
+  },
+
+  // ── Safety Loop Detector → DoorKing 6050 STOP ────────────────────────────
+  {
+    id: 'loop_det_to_dk6050_stop',
+    deviceAId: 'generic_loop_det',
+    deviceBId: 'dk_6050',
+    title: 'Safety Loop Detector — STOP (Under-Arm)',
+    summary: 'Safety loop under the gate arm. Vehicle detected while arm is closing → triggers STOP and reversal. Prevents arm strike.',
+    wires: [
+      { from: 'out_nc',  to: 'ctl_stop', wireColor: '#7C3AED', gauge: '18 AWG', label: 'SAFETY' },
+      { from: 'out_com', to: 'ctl_com',  wireColor: '#94A3B8', gauge: '18 AWG', label: 'COM' },
+    ],
+    notes: [
+      'Safety loop is positioned directly under the gate arm — typically a 3×6 ft rectangle.',
+      'Use N.C. output wired to STOP — this fails safe: broken wire = gate stops (same as photobeam).',
+      'Loop detector must be in "Presence" mode so relay holds closed the entire time a vehicle is detected.',
+      'Can be wired in series with photobeam on the same STOP circuit.',
+      'Safety loop and free-exit loop are separate detectors — two distinct buried loops.',
+    ],
+    cautions: [
+      '⚠ N.C. output required for safety loop — N.O. would allow arm to strike a car on wire break.',
+      '⚠ Safety loop must cover the full arm swing width, not just the center.',
+    ],
+    settings: [
+      { device: 'Loop Detector', setting: 'Output', value: 'N.C. (use NC terminal for STOP wiring)' },
+      { device: 'Loop Detector', setting: 'Operate Mode', value: 'Presence' },
+    ],
+  },
+
   // ── Brivo ACS300 → Mag Lock ───────────────────────────────────────────────
   {
     id: 'acs300_to_maglok',
@@ -415,10 +651,14 @@ export function matchDeviceToProduct(product: {
     // Category match (Gate Operator ↔ Gate Operator)
     if (d.category.toLowerCase() === product.category.toLowerCase()) return true
     // SKU substring in device ID
-    if (q.includes('acs300') && d.id === 'brivo_acs300') return true
-    if (q.includes('acs100') && d.id === 'brivo_acs100') return true
-    if (q.includes('6050')   && d.id === 'dk_6050') return true
-    if (q.includes('sl3000') && d.id === 'lm_sl3000') return true
+    if (q.includes('acs300')               && d.id === 'brivo_acs300') return true
+    if (q.includes('acs100')               && d.id === 'brivo_acs100') return true
+    if (q.includes('6050')                 && d.id === 'dk_6050') return true
+    if (q.includes('sl3000')               && d.id === 'lm_sl3000') return true
+    if ((q.includes('intercom') || q.includes('g4') || q.includes('ai pro')) && d.id === 'unifi_ai_intercom') return true
+    if ((q.includes('hub mini') || q.includes('access hub')) && d.id === 'unifi_hub_mini') return true
+    if ((q.includes('photobeam') || q.includes('photoeye') || q.includes('infrared')) && d.id === 'generic_photobeam') return true
+    if ((q.includes('loop') || q.includes('inductive')) && d.id === 'generic_loop_det') return true
     return false
   })
 }
