@@ -89,6 +89,8 @@ function TechTool() {
   const [codeInput, setCodeInput] = useState('')
   const [codeError, setCodeError] = useState(false)
   const [products,  setProducts]  = useState<Product[]>([])
+  const [search,    setSearch]    = useState('')
+  const [activeCat, setActiveCat] = useState('ALL')
   const [selected,  setSelected]  = useState<Product | null>(null)
   const [symptom,   setSymptom]   = useState('')
   const [errorCode, setErrorCode] = useState('')
@@ -153,9 +155,12 @@ function TechTool() {
       setTechCode(code)
       setProducts(data.products ?? [])
       setScreen('home')
-    } else {
+    } else if (res.status === 401) {
       setCodeError(true)
       setCodeInput('')
+    } else {
+      // Server error (500) — code may be correct but backend issue
+      alert(`Server error (${res.status}) — check Vercel env vars and Supabase migrations. Code may be correct.`)
     }
   }
 
@@ -269,15 +274,42 @@ function TechTool() {
 
   // ── SCREEN: Home — device picker ──────────────────────────────────────────
   if (screen === 'home') {
-    const grouped = products.reduce<Record<string, Product[]>>((acc, p) => {
-      const cat = p.category || 'Other'
-      if (!acc[cat]) acc[cat] = []
-      acc[cat].push(p)
-      return acc
-    }, {})
+    // Strip consumables — tech tool shows serviceable equipment only
+    const EXCLUDE = ['wire', 'hardware', 'cable', 'conduit', 'connector', 'supply']
+    const serviceProds = products.filter(p =>
+      !EXCLUDE.some(x => p.category.toLowerCase().includes(x))
+    )
+
+    // Dynamic category chips from remaining products
+    const cats = ['ALL', ...Array.from(new Set(serviceProds.map(p => p.category || 'Other'))).sort()]
+
+    // Apply search + category filter
+    const q = search.toLowerCase()
+    const visible = serviceProds.filter(p => {
+      const matchCat = activeCat === 'ALL' || p.category === activeCat
+      const matchSearch = !q ||
+        p.name.toLowerCase().includes(q) ||
+        p.brand.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q)
+      return matchCat && matchSearch
+    })
+
+    // Brand initials for avatar
+    const brandInitials = (brand: string) =>
+      brand.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase()
+
+    // Color per brand (deterministic)
+    const brandHues: Record<string, string> = {}
+    const PALETTE = ['#38BDF8','#818CF8','#34D399','#FB923C','#F472B6','#A78BFA']
+    serviceProds.forEach(p => {
+      if (!brandHues[p.brand]) {
+        brandHues[p.brand] = PALETTE[Object.keys(brandHues).length % PALETTE.length]
+      }
+    })
 
     return (
       <div style={S.shell}>
+        {/* Top bar */}
         <div style={S.topBar}>
           <div style={S.ggMark}>GG</div>
           <div style={{ flex: 1 }}>
@@ -287,45 +319,135 @@ function TechTool() {
           <div style={S.statusPill}>● ONLINE</div>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0 40px' }}>
-          {Object.entries(grouped).map(([cat, items]) => (
-            <div key={cat}>
-              <div style={S.catHeader}>{cat.toUpperCase()}</div>
-              {items.map(p => (
-                <button
-                  key={p.id}
-                  style={S.deviceRow}
-                  onClick={() => { setSelected(p); setScreen('symptom') }}
-                >
-                  <div style={{ flex: 1, textAlign: 'left' }}>
-                    <div style={S.deviceBrand}>{p.brand.toUpperCase()}</div>
-                    <div style={S.deviceName}>{p.name}</div>
-                    <div style={S.deviceSku}>{p.sku}</div>
+        {/* Search bar */}
+        <div style={{ padding: '12px 16px 0' }}>
+          <div style={{ position: 'relative' }}>
+            <span style={{
+              position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
+              color: C.textMuted, fontSize: 14, pointerEvents: 'none',
+            }}>⌕</span>
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search by name, brand, or SKU…"
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                background: C.bgInput, border: `1px solid ${C.border}`,
+                borderRadius: 8, padding: '11px 14px 11px 32px',
+                fontFamily: SANS, fontSize: 14, color: C.textPrimary,
+                outline: 'none', WebkitAppearance: 'none',
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Category chips */}
+        {cats.length > 2 && (
+          <div style={{
+            display: 'flex', gap: 6, padding: '10px 16px 2px',
+            overflowX: 'auto', scrollbarWidth: 'none',
+          }}>
+            {cats.map(cat => (
+              <button
+                key={cat}
+                onClick={() => setActiveCat(cat)}
+                style={{
+                  fontFamily: MONO, fontSize: 9, letterSpacing: '0.08em',
+                  padding: '5px 11px', borderRadius: 20,
+                  border: `1px solid ${activeCat === cat ? C.blue : C.border}`,
+                  background: activeCat === cat ? 'rgba(56,189,248,0.12)' : 'transparent',
+                  color: activeCat === cat ? C.blue : C.textMuted,
+                  whiteSpace: 'nowrap', cursor: 'pointer', flexShrink: 0,
+                }}
+              >
+                {cat === 'ALL' ? 'ALL' : cat.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Device list */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '6px 0 40px' }}>
+          {visible.map((p, i) => {
+            const color = brandHues[p.brand] ?? C.blue
+            const hasManual = !!p.manual_url
+            return (
+              <button
+                key={p.id}
+                onClick={() => { setSelected(p); setScreen('symptom') }}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center',
+                  padding: '14px 16px', gap: 14,
+                  background: 'transparent', border: 'none',
+                  borderBottom: `1px solid ${C.border}`,
+                  cursor: 'pointer', textAlign: 'left',
+                  transition: 'background 0.1s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                {/* Brand avatar */}
+                <div style={{
+                  width: 42, height: 42, borderRadius: 10, flexShrink: 0,
+                  background: `${color}18`,
+                  border: `1px solid ${color}30`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: MONO, fontSize: 11, fontWeight: 700,
+                  color, letterSpacing: '0.04em',
+                }}>
+                  {brandInitials(p.brand)}
+                </div>
+
+                {/* Name + meta */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontFamily: SANS, fontSize: 15, fontWeight: 600,
+                    color: C.textPrimary, lineHeight: 1.25,
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  }}>
+                    {p.name}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                    <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.1em',
-                      color:       p.manual_url ? C.green  : C.amber,
-                      border:      `1px solid ${p.manual_url ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)'}`,
-                      borderRadius: 4, padding: '3px 7px',
-                    }}>
-                      {p.manual_url ? 'AI READY' : 'NO MANUAL'}
-                    </span>
-                    <span style={{ fontFamily: MONO, fontSize: 20, color: C.textMuted }}>›</span>
+                  <div style={{
+                    fontFamily: MONO, fontSize: 10, color: C.textMuted,
+                    marginTop: 3, letterSpacing: '0.07em',
+                  }}>
+                    {p.brand.toUpperCase()} · {p.sku}
                   </div>
-                </button>
-              ))}
+                </div>
+
+                {/* Status + chevron */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  <div style={{
+                    width: 7, height: 7, borderRadius: '50%',
+                    background: hasManual ? C.green : C.border,
+                    boxShadow: hasManual ? `0 0 6px ${C.green}` : 'none',
+                  }} />
+                  <span style={{ color: C.textMuted, fontSize: 16, lineHeight: 1 }}>›</span>
+                </div>
+              </button>
+            )
+          })}
+
+          {visible.length === 0 && serviceProds.length > 0 && (
+            <div style={{ color: C.textMuted, textAlign: 'center', marginTop: 60, fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em' }}>
+              NO DEVICES MATCH SEARCH
             </div>
-          ))}
-          {products.length === 0 && (
-            <div style={{ color: C.textMuted, textAlign: 'center', marginTop: 60, fontFamily: MONO, fontSize: 11, letterSpacing: '0.1em' }}>
+          )}
+          {serviceProds.length === 0 && (
+            <div style={{ color: C.textMuted, textAlign: 'center', marginTop: 60, fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em' }}>
               LOADING DEVICE DATABASE…
             </div>
           )}
         </div>
 
+        {/* Legend */}
         <div style={S.legendStrip}>
-          <span style={{ color: C.green }}>● AI-READY — MANUAL INDEXED</span>
-          <span style={{ color: C.amber }}>● MANUAL PENDING</span>
+          <span style={{ color: C.green }}>● AI-READY</span>
+          <span style={{ color: C.textMuted }}>● MANUAL PENDING</span>
+          <span style={{ color: C.textMuted, marginLeft: 'auto' }}>
+            {visible.length} DEVICE{visible.length !== 1 ? 'S' : ''}
+          </span>
         </div>
       </div>
     )
