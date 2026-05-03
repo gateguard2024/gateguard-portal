@@ -12,6 +12,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+
+// Allow up to 20 MB bodies and 60 s execution for PDF processing
+export const maxDuration = 60
+export const dynamic     = 'force-dynamic'
 import { auth }                       from '@clerk/nextjs/server'
 import { processManual, serviceDb }   from '@/lib/vectorize'
 

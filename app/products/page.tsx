@@ -333,17 +333,37 @@ function ProductModal({ product, onSave, onClose, saving }: { product:Partial<Pr
       setPdfStatus("Save the product first, then upload the manual.");
       return;
     }
-    setUploadingPdf(true); setPdfStatus(null);
+    // Client-side size guard — Vercel payload limit is ~4.5 MB
+    const MB = file.size / (1024 * 1024);
+    if (MB > 20) {
+      setPdfStatus(`❌ File is ${MB.toFixed(1)} MB — max 20 MB. Compress the PDF and retry.`);
+      return;
+    }
+    if (MB > 4) {
+      setPdfStatus(`⚠️ Large file (${MB.toFixed(1)} MB) — uploading may take a moment…`);
+    }
+    setUploadingPdf(true);
     const fd = new FormData();
     fd.append("file", file);
     fd.append("product_id", product.id);
     try {
-      const res = await fetch("/api/kb/process", { method:"POST", body:fd });
-      const d   = await res.json();
-      if (!res.ok) throw new Error(d.error ?? "Upload failed");
-      set("manualUrl", d.manualUrl ?? form.manualUrl);
+      const res = await fetch("/api/kb/process", { method: "POST", body: fd });
+      // Vercel returns plain-text "Request Entity Too Large" on 413 — never parse blindly
+      const ct = res.headers.get("content-type") ?? "";
+      if (res.status === 413) {
+        throw new Error(`PDF too large for upload (${MB.toFixed(1)} MB). Compress it below 4 MB and retry.`);
+      }
+      let d: Record<string, unknown> = {};
+      if (ct.includes("application/json")) {
+        d = await res.json();
+      } else {
+        const txt = await res.text();
+        if (!res.ok) throw new Error(txt || `Upload failed (${res.status})`);
+      }
+      if (!res.ok) throw new Error((d.error as string) ?? "Upload failed");
+      set("manualUrl", (d.manualUrl as string) ?? form.manualUrl);
       setPdfStatus(`✅ ${d.chunksCreated} chunks indexed`);
-    } catch (e:unknown) {
+    } catch (e: unknown) {
       setPdfStatus(`❌ ${e instanceof Error ? e.message : "Upload failed"}`);
     } finally {
       setUploadingPdf(false);
