@@ -7,9 +7,16 @@ GateGuard runs four distinct applications. Never confuse them.
 | App | URL | Repo | Purpose |
 |-----|-----|------|---------|
 | SOC Operations | ggsoc.com | gateguard-dispatch-ui | Call center interface for SOC staff. Live production. Twilio, Brivo, Eagle Eye, Supabase. DO NOT BREAK. |
-| Visitor Kiosk (legacy) | stonegate-visitor.vercel.app | (separate) | Single-property Brivo+Twilio kiosk. Being replaced by gatecard.co. Do not build new features here. |
-| GateCard | gatecard.co | gatecard.co | Multi-tenant visitor/resident kiosk. Replaces stonegate. One deployment, N properties. |
-| Dealer Portal | portal.gateguard.co | gateguard-portal (THIS REPO) | Dealer-facing ops + field tech tool. The OS for the GateGuard dealer network. |
+| Visitor Kiosk (legacy) | stonegate-visitor.vercel.app | (separate) | Single-property Brivo+Twilio kiosk. Fully deprecated — replaced by gatecard.co. Do not touch. |
+| GateCard | gatecard.co | gatecard.co | **Property-level platform** — visitor management, resident kiosk, Brivo↔UniFi middleware, tenant self-service. Tier 2 interface deployed at every property. One codebase, N properties. All visitor/resident workflows belong here. |
+| Dealer Portal | portal.gateguard.co | gateguard-portal (THIS REPO) | **Dealer-facing ops + field tech tool.** The OS for the GateGuard dealer network. Dealers, techs, sales reps, and property managers only. NOT residents, NOT visitors. |
+
+**CRITICAL BOUNDARY — enforce every time:**
+- Visitor management → gatecard.co
+- Resident database sync (Brivo ↔ UniFi) → gatecard.co
+- Property kiosk UI → gatecard.co
+- Dealer ops, field service, quoting, billing, KB → THIS REPO (portal)
+- The portal's `/api/sync/residents` route is a LEGACY artifact — new sync work goes in gatecard.co
 
 ---
 
@@ -70,6 +77,8 @@ GateGuard Corporate (SO — System Operator)
 
 **What does NOT belong here:**
 - Visitor kiosk UX → gatecard.co
+- Resident self-service, tenant portal → gatecard.co
+- Brivo ↔ UniFi resident sync middleware → gatecard.co
 - Inbound call handling (Twilio IVR) → gatecard.co
 - SOC monitoring, alarms, live camera feeds → ggsoc.com (gateguard-dispatch-ui)
 
@@ -150,26 +159,32 @@ GateGuard Corporate (SO — System Operator)
 ---
 
 ## Key API Routes
-- `POST /api/kb/process` — upload PDF manual, chunk + embed, store in Supabase Storage
+- `POST /api/kb/process` — chunk + embed a PDF already in Storage (JSON body: product_id, manual_url)
+- `POST /api/kb/upload-url` — get Supabase signed upload URL for direct browser→Storage upload (bypasses Vercel size limit)
+- `POST /api/kb/find-manual` — auto-find + download manufacturer manual, run full pipeline
+- `POST /api/kb/extract-wiring` — Claude reads indexed chunks, extracts terminal definitions → device_suggestions table
 - `POST /api/kb/ask` — AI diagnostic (vector search + Claude). Params: symptom, product_id, error_code, history, session_id, connected_devices[]
 - `POST /api/kb/analyze-image` — Claude vision analysis of tech photos
 - `GET  /api/kb/products` — product list for /tech (auth: x-tech-code header)
-- `GET  /api/sync/residents` — Brivo → DB → UniFi reconciliation (cron + manual)
+- `GET  /api/sync/residents` — LEGACY: Brivo → DB → UniFi sync. **New sync work belongs in gatecard.co, not here.**
 
 ---
 
 ## Database
 - `organizations` — 5-tier hierarchy (corporate → MSO → dealer → partner → client)
 - `products` — equipment library (SKU, specs, manual_url, tags, field_service bool)
-- `manual_chunks` — PDF chunks with 1536-dim embeddings
+- `manual_chunks` — PDF chunks with 1536-dim embeddings (migration 004)
 - `kb_articles` — authored troubleshoot articles with embeddings
 - `troubleshoot_sessions` — diagnostic session logs
-- `residents` — Brivo-sourced resident roster per org (mac_address for UniFi sync)
-- `sync_log` — immutable log of every Brivo/UniFi sync run
+- `device_suggestions` — AI-extracted terminal definitions from manuals (migration 007). JSONB device_def + wiring_hints. status: ai_generated | verified | rejected. One row per product_id.
+- `residents` — LEGACY: Brivo-sourced roster. New resident work → gatecard.co
+- `sync_log` — LEGACY: Brivo/UniFi sync audit log. New sync work → gatecard.co
 
-**Planned tables (not yet migrated):** `reps` (parent_rep_id, commission_rate, tier), `commissions` (per deal, payout status), `permits` (property, expiry_date, type), `service_packages` (canned job templates)
+**Migrations:** 001 initial · 002 CRM · 003 products · 004 KB vectors · 005 DK seed · 006 sync tables · 007 device_suggestions ✅
 
-Note: `/reps`, `/compliance`, `/scorecard`, `/map`, `/reports` pages are built with placeholder data. They need these tables + Supabase RLS wiring to become live.
+**Planned tables (not yet migrated):** `reps`, `commissions`, `permits`, `service_packages`
+
+Note: `/reps`, `/compliance`, `/scorecard`, `/map`, `/reports` are placeholder UI. Need DB tables + Supabase RLS to go live.
 
 ---
 
@@ -199,13 +214,17 @@ Note: `/reps`, `/compliance`, `/scorecard`, `/map`, `/reports` pages are built w
 ### /tech tool
 | File | Purpose |
 |------|---------|
-| `app/tech/page.tsx` | All /tech screens in one file. Screens: pin, home, choice, symptom, diag, wiring, cable |
-| `lib/wiring-library.ts` | Device terminal definitions (`DEVICES[]`) + verified wiring maps (`WIRING_MAPS[]`). Add new devices/pairings here. |
-| `components/tech/WiringDiagram.tsx` | SVG wiring diagram renderer. `WiringDiagram` (diagram only) + `WiringGuide` (full screen w/ device selector) |
-| `components/tech/CableGuide.tsx` | 3-tab cable testing guide. Tabs: cat / series / parallel |
-| `app/api/kb/ask/route.ts` | Claude diagnostic API. Accepts: symptom, product_id, error_code, history, connected_devices[] |
-| `app/api/kb/analyze-image/route.ts` | Claude vision for photo steps |
+| `app/tech/page.tsx` | All /tech screens. Screens: pin, home, choice, symptom, diag, wiring, cable, install. Demo modes: ?demo=install / ?demo=fault |
+| `lib/wiring-library.ts` | Static verified device terminals (27 devices) + wiring maps (19 maps). Add hand-verified pairings here. AI-generated entries live in Supabase device_suggestions instead. |
+| `components/tech/WiringDiagram.tsx` | SVG wiring diagram renderer + WiringGuide screen. Merges static library + Supabase device_suggestions at runtime. |
+| `components/tech/CableGuide.tsx` | 3-tab cable testing guide: CAT / 2-wire series / 2-wire parallel |
+| `app/api/kb/ask/route.ts` | Claude diagnostic API. Params: symptom, product_id, error_code, history, session_id, connected_devices[] |
+| `app/api/kb/analyze-image/route.ts` | Claude vision for photo steps and multimeter readings |
 | `app/api/kb/products/route.ts` | Product list for device picker (auth: x-tech-code header) |
+| `app/api/kb/upload-url/route.ts` | Issues Supabase signed upload URL — client uploads PDF direct, no Vercel size limit |
+| `app/api/kb/process/route.ts` | Chunk + embed a PDF from Storage URL. Also accepts multipart (legacy). |
+| `app/api/kb/find-manual/route.ts` | Auto-find + download manufacturer manual from the internet, run full pipeline |
+| `app/api/kb/extract-wiring/route.ts` | Claude reads manual chunks → extracts DeviceDef terminals → stores in device_suggestions |
 
 ### Portal pages
 | File | Purpose |
@@ -228,18 +247,36 @@ Canonical source for product PDFs, brand assets, legal docs, historical project 
 
 ---
 
-## Manual Upload Pipeline — LIVE ✅ (May 2026)
-1. Products in Supabase `products` table with `field_service=true`
-2. Supabase Storage bucket `manuals` (public) — created May 2026
-3. Upload via `/products` → Edit product → Upload PDF, OR bulk via `scripts/bulk-upload-manuals.mjs`
-4. Pipeline: pdf-parse → chunkText() → embedBatch() (OpenAI text-embedding-3-small) → upsert `manual_chunks`
-5. Searchable via `match_knowledge()` RPC in KB engine
-6. `/tech` shows 📄 p.XX manual refs on AI step cards
-7. OpenAI billing required — platform.openai.com/settings/billing
+## Manual Upload Pipeline — LIVE ✅ (May 2026) — Fully Automatic
+
+**The pipeline is now zero-friction. Three paths, all end at the same place:**
+
+### Path A — Find Online (one click, recommended)
+1. Add product to `/products` with field_service=true
+2. Click **Find Online** button → `POST /api/kb/find-manual`
+3. System searches known manufacturer URL patterns (DoorKing, Brivo, LiftMaster, Ubiquiti, etc.) then Claude URL lookup
+4. PDF downloaded → uploaded to Supabase Storage → chunked + embedded → `products.manual_url` updated
+5. Wiring extraction auto-triggers in background → terminal map in `device_suggestions`
+
+### Path B — Upload PDF (manual file, any size)
+1. Click **Upload PDF** → file picker → select PDF (up to 100 MB)
+2. Step 1: browser calls `POST /api/kb/upload-url` → gets Supabase signed URL (tiny JSON, no Vercel size limit)
+3. Step 2: browser PUTs file **directly to Supabase Storage** — binary never touches Vercel
+4. Step 3: browser calls `POST /api/kb/process` with `{ product_id, manual_url }` → chunks + embeds
+5. Wiring extraction auto-triggers in background
+
+### Path C — Bulk script
+- `scripts/bulk-upload-manuals.mjs` — batch process multiple products
+
+**After any path:**
+- `products.manual_url` is set → green dot on /tech device picker
+- `manual_chunks` populated → AI diagnostic cites manual pages
+- `device_suggestions` populated → wiring guide shows AI terminal map for new devices
+- OpenAI billing required — platform.openai.com/settings/billing
 
 ---
 
-## /tech Field Tool — Key Differentiator ✅ (v5, May 2026)
+## /tech Field Tool — Key Differentiator ✅ (v6, May 2026)
 
 **This is GateGuard's #1 competitive advantage. Always keep it best-in-class.**
 
@@ -249,35 +286,53 @@ Canonical source for product PDFs, brand assets, legal docs, historical project 
 - PIN auth via TECH_ACCESS_CODE (no Clerk required for field techs)
 - Device picker from live products table (field_service=true), green dot = has manual
 - **Connected devices selector** — tech marks what else is wired (Photobeam, Loop Detector, Callbox, etc.)
-- **System topology awareness** — Claude knows device interconnections, guides isolation testing (jumper safety terminals, disconnect callbox relay, etc.)
+- **System topology awareness** — Claude knows device interconnections, guides isolation testing
 - Symptom screen: quick-pick fault chips per category + free text + error code field
 - AI step types: question / action / measure / select / photo / resolved / escalate
 - Measure steps: unit + expected range display (e.g., "115±10 VAC")
 - Photo capture + Claude vision analysis via `/api/kb/analyze-image`
 - Manual references: p.XX links to PDF when chunk is matched
 - Session logging to `troubleshoot_sessions`
-- Light theme: #F1F5F9 bg, white cards, #6B7EFF brand blue, IBM Plex Mono
+- Demo modes: `?demo=install` (commissioning wizard) + `?demo=fault` (fault diagnosis walkthrough)
 
-**Wiring Guide (new — choice screen, amber button):**
-- Select a device → pick a connection pairing → see SVG split-panel terminal diagram
-- Left/right device panels with color-coded header bands, terminal dot connectors, bezier wire curves
+**Wiring Guide (amber button on choice screen):**
+- Select a device → pick a connection pairing → SVG split-panel terminal diagram
+- Color-coded header bands, terminal dot connectors, bezier wire curves
 - Wires color-coded by type: relay COM=amber, relay NO=green, +V=red, GND=dark, data=blue
-- Wire legend with gauge, required settings strip, caution cards, numbered install notes
-- Verified pairings: Brivo ACS300→DoorKing 6050, ACS300→LiftMaster SL3000, ACS300→Linear OSCO, Wiegand Reader→ACS300, ACS300→Mag Lock
-- `lib/wiring-library.ts` — terminal definitions for 8 devices + 5 wiring maps. Add new pairings by adding to `DEVICES[]` + `WIRING_MAPS[]`
-- `components/tech/WiringDiagram.tsx` — SVG renderer + `WiringGuide` screen component
+- Wire legend, required settings strip, caution cards, numbered install notes
+- **Static verified library** (`lib/wiring-library.ts`): 27 devices, 19 wiring maps
+  - Gate operators: DK6050, DK9050, DK1600, LiftMaster SL3000, Linear SW050, Viking G5
+  - Access controllers: Brivo ACS300, ACS6100, ACS100, Brivo 100 single-door
+  - Entry systems: DK1835 callbox, DK2334 VoIP
+  - Safety: DK9409 dual loop, DK9410 single loop, photobeam, generic loop detector
+  - Intercoms: UniFi G3 Intercom, UniFi Access Hub Mini
+  - Locks: Alarm Controls 1200S mag lock, AES-100 electric strike, generic mag lock/strike
+  - Sensors: Securitron EEB2, Bosch DS160 PIR REX
+  - Network: Ubiquiti UCG-Ultra, USW-Flex
+- **AI-generated entries** (`device_suggestions` table): auto-populated after every manual upload. WiringDiagram merges both sources at runtime.
+- `components/tech/WiringDiagram.tsx` — SVG renderer + `WiringGuide` screen. WiringGuide fetches Supabase device_suggestions for current product and shows AI terminal map when no static map exists.
 
-**Cable Guide (new — choice screen, purple button + home screen shortcut):**
-- **CAT Cable tab**: Interactive T568B pinout (tap any pin for color/pair/PoE detail), 7-step test procedure covering link light, continuity, split pairs, T568A/B mismatch, PoE voltage check, run length limits
-- **2-Wire Series tab**: Circuit diagram showing single-point-of-failure topology, 7 steps to bisect the break location by walking the run with a multimeter
-- **2-Wire Parallel tab**: Bus diagram, 7 steps for isolating which branch vs the main supply is failing; covers overcurrent and ground loop diagnosis
-- `components/tech/CableGuide.tsx` — tab-based component with inline SVG diagrams + expandable step cards
+**Cable Guide (purple button + home screen shortcut):**
+- CAT Cable tab: T568B pinout, 7-step continuity/PoE test procedure
+- 2-Wire Series tab: circuit diagram + bisect-the-break procedure
+- 2-Wire Parallel tab: bus diagram + branch isolation procedure
+- `components/tech/CableGuide.tsx`
+
+**Install Demo (`?demo=install`):**
+- Guided commissioning wizard: G3 Intercom + Hub Mini + ACS300 + DK6050 ×2
+- 5 phases: Pre-Install → Mount & Power → Wire → Verify → Sign Off
+- Checkbox progress tracking, wiring diagram deep-links per step, scroll-fixed phases
+
+**Fault Demo (`?demo=fault`):**
+- Auto-populates Brivo ACS300, pre-fills symptom, connected devices pre-selected
+- AI leads to bad-wire diagnosis → shows wiring troubleshooting
 
 ### Planned
 - PWA manifest + service worker (techs "Add to Home Screen")
+- LPR integration (Eagle Eye LPR → auto-trigger Brivo credential or gate relay)
 - Digital Site Survey mode (walk property, photo each device, pass/warn/fail, auto-generate proposal)
 - Commissioning wizard (new install checklist → as-built PDF)
-- **Smart tester API integration** — see section below
+- Smart tester API integration (Fluke LINKWARE / IDEAL AnyWARE)
 
 ---
 
@@ -314,37 +369,45 @@ Field techs use Fluke, IDEAL, and Greenlee cable/network testers daily. Future g
 
 ## Roadmap (May 2026)
 
-### Phase 1 — Quick Wins (weeks)
+### Phase 1 — Quick Wins ✅ Largely Complete
 - [x] Connected devices selector on /tech symptom screen
 - [x] System topology awareness in Claude system prompt
 - [x] Wiring Guide — SVG terminal diagrams for common install pairings
 - [x] Cable Guide — CAT cable, 2-wire series, 2-wire parallel testing
+- [x] Demo modes — ?demo=install commissioning wizard, ?demo=fault fault walkthrough
+- [x] Expand wiring library to 27 devices / 19 maps (dealer eval hardware)
+- [x] Direct-to-Supabase PDF upload (no Vercel size limit)
+- [x] Auto-find manual from manufacturer sites (one-click)
+- [x] Auto-extract wiring terminals via Claude after every upload
+- [x] device_suggestions table — AI wiring data live in portal without code deploy
 - [ ] Photo evidence on work orders (reuse /tech photo component)
 - [ ] Canned service packages in /products
 - [ ] Automated renewal/PM reminders (Vercel cron + Twilio)
 - [ ] In-app support widget (HelpScout Beacon — one script tag)
 - [ ] PWA manifest for /tech
-- [ ] Smart tester API integration (Fluke LINKWARE / IDEAL AnyWARE — see section above)
+- [ ] Smart tester API integration (Fluke LINKWARE / IDEAL AnyWARE)
 
 ### Phase 2 — Dealer Network (1–2 months)
-- [x] /reps — Rep & commission manager (placeholder UI built, needs DB tables)
-- [x] /compliance — Permit tracker (placeholder UI built, needs DB tables)
-- [x] /map — Territory map (placeholder UI built, needs Mapbox token + DB)
-- [x] /scorecard — Dealer scorecard (placeholder UI built, needs DB)
-- [x] /reports — Roll-up reports (placeholder UI built, needs DB)
-- [x] /quotes/[id]/approve — Client approval page (built, full-screen standalone)
+- [x] /reps — Rep & commission manager (placeholder UI)
+- [x] /compliance — Permit tracker (placeholder UI)
+- [x] /map — Territory map (placeholder UI, needs Mapbox)
+- [x] /scorecard — Dealer scorecard (placeholder UI)
+- [x] /reports — Roll-up reports (placeholder UI)
+- [x] /quotes/[id]/approve — Client approval page (live)
+- [ ] LPR integration — Eagle Eye LPR → auto-trigger Brivo credential or gate relay. Registered plate detected → gate opens. No fob, no app. Phase 2 priority.
 - [ ] Wire dealer-network pages to live Supabase data (migrate reps/permits tables)
 - [ ] SMS thread inside work orders (Twilio ↔ WO ID)
 - [ ] Digital Site Survey (DVI for gates) — enhance /survey
 - [ ] Client portal full build-out (Supabase RLS by org)
 - [ ] Property Intelligence Card on dashboard
+- [ ] UI differentiation pass: Space Grotesk headings, LED-glow status dots, tighter card density
 
 ### Phase 3 — Category-Defining (3–6 months)
 - [ ] Predictive maintenance engine (device age + cycles + KB patterns)
 - [ ] Mapbox integration for /map
 - [ ] As-built documentation PDF generator
 - [ ] Monthly client report auto-PDF
-- [ ] Resident self-service tickets via GateCard → creates WO
+- [ ] Resident self-service tickets via GateCard → creates WO in portal
 - [ ] Google Reviews post-WO SMS trigger
-- [ ] Expand wiring library (FAAC, BFT, Doorbird, HID controllers, Viking callboxes)
 - [ ] Commissioning wizard (new install checklist → as-built PDF)
+- [ ] FAAC, BFT, Doorbird, HID, Viking callbox library entries
