@@ -236,13 +236,13 @@ export const DEVICES: DeviceDef[] = [
     ],
   },
 
-  // ── UniFi AI Intercom Pro (G4 / AI Pro) ──────────────────────────────────
+  // ── UniFi G3 Intercom (UA-G3-Intercom) ───────────────────────────────────
   {
     id: 'unifi_ai_intercom',
-    name: 'AI Intercom Pro',
+    name: 'G3 Intercom',
     brand: 'Ubiquiti UniFi',
     category: 'Video Intercom',
-    note: 'PoE powered (802.3af). Relay output is a dry-contact rated 30VDC 1A. Terminal block on rear of unit. G4 and AI Pro share same relay pinout.',
+    note: 'SKU: UA-G3-Intercom. PoE powered (802.3af). Relay output is a dry-contact rated 30VDC 1A. Terminal block on rear of unit. G3 and G4 share the same relay pinout.',
     terminals: [
       // PoE network (power + data via Ethernet — no separate terminal)
       { id: 'poe_rj45',   label: 'PoE',   desc: 'PoE Input — RJ45 to UniFi switch (802.3af)',    type: 'aux',       group: 'Network / Power' },
@@ -259,13 +259,13 @@ export const DEVICES: DeviceDef[] = [
     ],
   },
 
-  // ── UniFi Access Hub Mini ─────────────────────────────────────────────────
+  // ── UniFi Access Door Hub Mini (UA-Hub-Door-Mini) ────────────────────────
   {
     id: 'unifi_hub_mini',
-    name: 'Access Hub Mini',
+    name: 'Access Door Hub Mini',
     brand: 'Ubiquiti UniFi',
     category: 'Access Controller',
-    note: 'PoE powered. Controls one door/gate. Integrates with UniFi Access app. Terminal block rear-mounted. Lock relay rated 12/24VDC 2A.',
+    note: 'SKU: UA-Hub-Door-Mini. PoE powered. Controls one door/gate. Integrates with UniFi Access app. Terminal block rear-mounted. Lock relay rated 12/24VDC 2A.',
     terminals: [
       { id: 'poe_in',     label: 'PoE',    desc: 'PoE Input — RJ45 (802.3at)',                   type: 'aux',       group: 'Network / Power' },
       // Lock relay — J1
@@ -655,8 +655,8 @@ export function matchDeviceToProduct(product: {
     if (q.includes('acs100')               && d.id === 'brivo_acs100') return true
     if (q.includes('6050')                 && d.id === 'dk_6050') return true
     if (q.includes('sl3000')               && d.id === 'lm_sl3000') return true
-    if ((q.includes('intercom') || q.includes('g4') || q.includes('ai pro')) && d.id === 'unifi_ai_intercom') return true
-    if ((q.includes('hub mini') || q.includes('access hub')) && d.id === 'unifi_hub_mini') return true
+    if ((q.includes('intercom') || q.includes('g3') || q.includes('g4') || q.includes('ua-g3')) && d.id === 'unifi_ai_intercom') return true
+    if ((q.includes('hub mini') || q.includes('hub-door') || q.includes('door hub') || q.includes('ua-hub')) && d.id === 'unifi_hub_mini') return true
     if ((q.includes('photobeam') || q.includes('photoeye') || q.includes('infrared')) && d.id === 'generic_photobeam') return true
     if ((q.includes('loop') || q.includes('inductive')) && d.id === 'generic_loop_det') return true
     return false
