@@ -5,8 +5,7 @@
   "crons": [
     {
       "path": "/api/sync/residents",
-      "schedule": "0 * * * *",
-      "comment": "Brivo → DB → UniFi resident reconciliation — runs every hour"
+      "schedule": "0 * * * *"
     }
   ]
 }
