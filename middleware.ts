@@ -19,6 +19,7 @@ function isBypassPath(pathname: string): boolean {
     pathname.startsWith('/tech') ||
     pathname.startsWith('/api/kb/ask') ||
     pathname.startsWith('/api/kb/products') ||
+    pathname.startsWith('/api/kb/analyze-image') ||
     pathname.startsWith('/sign-in') ||
     pathname.startsWith('/sign-up') ||
     pathname.startsWith('/sso-callback')

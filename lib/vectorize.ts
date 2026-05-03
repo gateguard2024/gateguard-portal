@@ -75,7 +75,7 @@ export async function extractPdfText(buf: Buffer): Promise<string> {
 // ─── Embedding ────────────────────────────────────────────────────────────────
 export async function embedBatch(texts: string[]): Promise<number[][]> {
   const res = await openai().embeddings.create({ model: EMBED_MODEL, input: texts })
-  return res.data.map(d => d.embedding)
+  return res.data.map((d: { embedding: number[] }) => d.embedding)
 }
 
 // ─── Main pipeline ────────────────────────────────────────────────────────────
