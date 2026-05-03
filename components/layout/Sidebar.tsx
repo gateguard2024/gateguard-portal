@@ -9,7 +9,7 @@ import {
   Network, Truck, Package, Repeat, TrendingUp,
   Globe, ClipboardList, Headphones, FileCheck,
   Megaphone, Map, BookOpen, Tv, Zap,
-  Layers, Server,
+  Layers, Server, UserCheck, ShieldCheck, Star, ClipboardCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -56,7 +56,16 @@ const navSections: { label: string; items: NavItem[] }[] = [
       { label: "Maintenance",    href: "/maintenance",  icon: Wrench          },
       { label: "Dispatch",       href: "/dispatch",     icon: Truck           },
       { label: "Inventory",      href: "/inventory",    icon: Package         },
-      { label: "Reports",        href: "/reports",      icon: BarChart3, badge: "Soon" },
+      { label: "Reports",        href: "/reports",      icon: BarChart3       },
+    ],
+  },
+  {
+    label: "Dealer Network",
+    items: [
+      { label: "Reps & Commissions", href: "/reps",      icon: UserCheck       },
+      { label: "Compliance",         href: "/compliance", icon: ShieldCheck     },
+      { label: "Territory Map",      href: "/map",        icon: Map             },
+      { label: "Scorecard",          href: "/scorecard",  icon: Star            },
     ],
   },
   {
@@ -65,7 +74,7 @@ const navSections: { label: string; items: NavItem[] }[] = [
       { label: "Onboarding",     href: "/onboarding",   icon: ClipboardList   },
       { label: "Communications", href: "/communications", icon: Headphones    },
       { label: "Customer Portal", href: "/portal",      icon: Globe           },
-      { label: "Site Survey",    href: "/survey",       icon: Map             },
+      { label: "Site Survey",    href: "/survey",       icon: ClipboardCheck  },
       { label: "Knowledge Base", href: "/kb",           icon: BookOpen        },
       { label: "Community Channel", href: "/channel",   icon: Tv              },
       { label: "Visitor Mgmt",   href: "/visitor",      icon: Users           },
@@ -88,6 +97,7 @@ const integrations = [
   { label: "Brivo",      status: "connected" as const },
   { label: "QuickBooks", status: "pending"   as const },
   { label: "Twilio",     status: "pending"   as const },
+  { label: "Mapbox",     status: "pending"   as const },
 ];
 
 export function Sidebar() {
