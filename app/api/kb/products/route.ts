@@ -34,10 +34,13 @@ export async function GET(req: NextRequest) {
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  // field_service=true scopes the list to serviceable equipment only.
+  // The full catalog (quotes, billing) is excluded from the tech tool.
   const { data, error } = await serviceDb()
     .from('products')
     .select('id, name, brand, category, sku, manual_url, description, specs, tags')
     .eq('active', true)
+    .eq('field_service', true)
     .order('brand')
     .order('name')
 
