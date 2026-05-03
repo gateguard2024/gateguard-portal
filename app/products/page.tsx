@@ -143,8 +143,12 @@ function ProductImage({ product, size = 40, className }: { product: Product; siz
 
 // ─── Seed Data ────────────────────────────────────────────────────────────────
 // Used only on first load when the DB table is empty.
+// tags / fieldService / manualUrl are optional here; defaults filled at seed time.
+type SeedProduct = Omit<Product,"id"|"tags"|"fieldService"|"manualUrl"> & {
+  tags?: string[]; fieldService?: boolean; manualUrl?: string;
+};
 
-const SEED: Omit<Product, "id">[] = [
+const SEED: SeedProduct[] = [
   // CAMERAS
   { sku:"EEN-BRIDGE-300",  name:"Eagle Eye Bridge 300",                brand:"Eagle Eye Networks",      category:"Camera",          subcategory:"Cloud Bridge",    description:"Cloud VMS bridge, connects IP cameras to Eagle Eye cloud",    specs:"Up to 12 cameras, H.264/H.265, local buffering",           msrp:499,  dealerCost:0, sellPrice:0, adiSku:"", imageUrl:"", active:true },
   { sku:"EEN-BRIDGE-600",  name:"Eagle Eye Bridge 600",                brand:"Eagle Eye Networks",      category:"Camera",          subcategory:"Cloud Bridge",    description:"High-capacity cloud bridge for multi-camera sites",           specs:"Up to 32 cameras, 4K support, LTE failover",               msrp:899,  dealerCost:0, sellPrice:0, adiSku:"", imageUrl:"", active:true },
@@ -585,7 +589,7 @@ export default function ProductsPage() {
 
       if (!data || data.length === 0) {
         // First run — seed the table
-        const seedRows = SEED.map(p => toDb(p));
+        const seedRows = SEED.map(p => toDb({ tags:[], fieldService:false, manualUrl:"", ...p }));
         const { data: inserted, error: seedErr } = await supabase
           .from("products")
           .upsert(seedRows, { onConflict: "sku" })
