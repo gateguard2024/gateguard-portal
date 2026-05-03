@@ -337,17 +337,21 @@ function TechTool() {
                 borderRadius: 8, padding: '11px 14px 11px 32px',
                 fontFamily: SANS, fontSize: 14, color: C.textPrimary,
                 outline: 'none', WebkitAppearance: 'none',
+                WebkitTextFillColor: C.textPrimary,
               }}
             />
           </div>
         </div>
 
-        {/* Category chips */}
+        {/* Category chips — hide scrollbar cross-browser */}
+        <style>{`.gg-chips::-webkit-scrollbar{display:none}`}</style>
         {cats.length > 2 && (
-          <div style={{
-            display: 'flex', gap: 6, padding: '10px 16px 2px',
-            overflowX: 'auto', scrollbarWidth: 'none',
-          }}>
+          <div className="gg-chips" style={{
+            display: 'flex', gap: 6,
+            padding: '8px 16px 8px',
+            overflowX: 'auto', flexShrink: 0,
+            scrollbarWidth: 'none', msOverflowStyle: 'none',
+          } as React.CSSProperties}>
             {cats.map(cat => (
               <button
                 key={cat}
@@ -368,7 +372,8 @@ function TechTool() {
         )}
 
         {/* Device list */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '6px 0 40px' }}>
+        <style>{`.gg-list::-webkit-scrollbar{display:none}`}</style>
+        <div className="gg-list" style={{ flex: 1, overflowY: 'auto', padding: '6px 0 40px', scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}>
           {visible.map((p, i) => {
             const color = brandHues[p.brand] ?? C.blue
             const hasManual = !!p.manual_url
