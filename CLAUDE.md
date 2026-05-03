@@ -91,13 +91,16 @@ This is the canonical source for:
 - Legal documents (NDAs, service agreements, distributor agreements)
 - Historical project files
 
-## Manual Upload Pipeline
-PDF manuals → KB vector search flow:
-1. Products are stored in Supabase `products` table with `field_service=true` for tech tool
-2. Upload via `POST /api/kb/process` with `product_id` + PDF file
-3. Pipeline: pdf-parse → chunkText() → embedBatch() (OpenAI) → upsert `manual_chunks`
-4. Products UI at `/products` needs a manual upload button (not yet built — next feature)
-5. After upload, manuals are searchable via `match_knowledge()` RPC in the KB diagnostic engine
+## Manual Upload Pipeline — LIVE ✅
+PDF manuals → KB vector search flow (fully working as of May 2026):
+1. Products stored in Supabase `products` table with `field_service=true` for tech tool
+2. Supabase Storage bucket `manuals` must exist (public) — created May 2026
+3. Upload via Products page (`/products`) → Edit product → Upload PDF button
+4. OR bulk upload via `scripts/bulk-upload-manuals.mjs` (see scripts/ dir)
+5. Pipeline: pdf-parse → chunkText() → embedBatch() (OpenAI text-embedding-3-small) → upsert `manual_chunks`
+6. After upload, manuals are searchable via `match_knowledge()` RPC in KB diagnostic engine
+7. Tech tool `/tech` shows 📄 p.XX manual reference on AI step cards when a chunk is matched
+8. OpenAI billing required — add credits at platform.openai.com/settings/billing
 
 ## UI Design System
 - Portal: light theme, white cards, `#F8FAFC` bg, `#6B7EFF` brand blue, dark sidebar
