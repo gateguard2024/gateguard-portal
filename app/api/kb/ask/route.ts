@@ -28,8 +28,8 @@ function isTechAuthed(req: NextRequest): boolean {
 export async function POST(req: NextRequest) {
   // Tech code checked first — if valid, skip Clerk entirely
   const techOk = isTechAuthed(req)
+  let userId: string | null = null
   if (!techOk) {
-    let userId: string | null = null
     try { const s = await auth(); userId = s.userId } catch { /* no clerk session */ }
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
