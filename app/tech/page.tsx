@@ -78,6 +78,17 @@ const STEP_CFG: Record<StepType, {
   escalate: { accent: C.red,    surface: C.redAlpha,    border: 'rgba(239,68,68,0.18)',   label: 'ESCALATE', numColor: C.red    },
 }
 
+// Connected device options — what else might be wired to this device?
+const CONNECTED_OPTS: Record<string, string[]> = {
+  'Gate Operator': ['Photobeam', 'Loop Detector', 'Safety Edge', 'Keypad', 'Callbox', 'Access Reader', 'Exit Loop', 'Battery Backup'],
+  'Barrier Arm':   ['Loop Detector', 'Exit Loop', 'Keypad', 'Access Reader', 'Safety Edge'],
+  'Callbox':       ['Gate Operator', 'Access Reader', 'Camera', 'Door Strike'],
+  'Access Control':['Gate Operator', 'REX Sensor', 'Mag Lock', 'Electric Strike', 'Keypad'],
+  'Camera':        ['NVR/DVR', 'PoE Switch', 'Access Control'],
+  'Intercom':      ['Gate Operator', 'Door Strike', 'Camera'],
+}
+const DEFAULT_CONNECTED_OPTS = ['Photobeam', 'Loop Detector', 'Keypad', 'Callbox', 'Access Reader', 'Safety Edge', 'Gate Operator']
+
 // Quick-pick faults per device category
 const QUICK_PICKS: Record<string, string[]> = {
   'Gate Operator':  ["WON'T OPEN", "WON'T CLOSE", "NO POWER", "MOTOR HUMS", "ARM STUCK", "LOOP FAULT", "LIMIT FAULT", "NO COMM", "OBSTRUCTION", "BATTERY LOW"],
@@ -114,8 +125,9 @@ function TechTool() {
   const [selected,  setSelected]  = useState<Product | null>(null)
 
   // Symptom state
-  const [symptom,   setSymptom]   = useState('')
-  const [errorCode, setErrorCode] = useState('')
+  const [symptom,          setSymptom]          = useState('')
+  const [errorCode,        setErrorCode]        = useState('')
+  const [connectedDevices, setConnectedDevices] = useState<string[]>([])
 
   // Diagnostic state
   const [history,   setHistory]   = useState<HistoryItem[]>([])
@@ -199,6 +211,7 @@ function TechTool() {
         body: JSON.stringify({
           symptom, error_code: errorCode || undefined,
           product_id: selected?.id, history: h, session_id: sessionId,
+          connected_devices: connectedDevices,
         }),
       })
       const data = await res.json()
@@ -257,6 +270,7 @@ function TechTool() {
 
   function reset() {
     setScreen('home'); setSelected(null); setSymptom(''); setErrorCode('')
+    setConnectedDevices([])
     setHistory([]); setCurrent(null); setSessionId(null)
     setFreeText(''); setLogFixed(false); setMeasureInput('')
     setPhotoData(null); setPhotoAnalysis(null)
@@ -487,7 +501,7 @@ function TechTool() {
 
           {/* Troubleshoot */}
           <button
-            onClick={() => setScreen('symptom')}
+            onClick={() => { setConnectedDevices([]); setScreen('symptom') }}
             style={{ padding: '20px', borderRadius: 12, textAlign: 'left', cursor: 'pointer', background: 'rgba(16,185,129,0.06)', border: `1px solid rgba(16,185,129,0.22)` }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -507,7 +521,7 @@ function TechTool() {
           {/* Manual + Troubleshoot combined */}
           {hasManual && (
             <button
-              onClick={() => { window.open(selected!.manual_url!, '_blank'); setScreen('symptom') }}
+              onClick={() => { setConnectedDevices([]); window.open(selected!.manual_url!, '_blank'); setScreen('symptom') }}
               style={{ padding: '13px 16px', borderRadius: 10, textAlign: 'center', cursor: 'pointer', background: 'transparent', border: `1px solid ${C.border}`, fontFamily: MONO, fontSize: 10, color: C.textMuted, letterSpacing: '0.1em' }}
             >
               OPEN MANUAL + START DIAGNOSTIC ›
@@ -539,8 +553,8 @@ function TechTool() {
             {picks.map(c => (
               <button key={c} onClick={() => setSymptom(c)} style={{
                 ...S.chip,
-                background:  symptom === c ? 'rgba(56,189,248,0.12)' : 'rgba(255,255,255,0.04)',
-                borderColor: symptom === c ? C.blue : 'rgba(255,255,255,0.08)',
+                background:  symptom === c ? C.blueAlpha : C.bgInput,
+                borderColor: symptom === c ? C.blue : C.border,
                 color:       symptom === c ? C.blue : C.textSecondary,
               }}>{c}</button>
             ))}
@@ -562,6 +576,45 @@ function TechTool() {
             placeholder="e.g. E-04 · RED+AMBER FLASH"
             style={S.monoInput}
           />
+
+          {/* Connected devices */}
+          {(() => {
+            const devOpts = CONNECTED_OPTS[selected?.category ?? ''] ?? DEFAULT_CONNECTED_OPTS
+            const toggleDevice = (d: string) =>
+              setConnectedDevices(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])
+            return (
+              <div>
+                <div style={{ ...S.fieldLabel, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  OTHER DEVICES IN THIS SYSTEM
+                  <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, fontWeight: 400, letterSpacing: '0.08em' }}>
+                    SELECT ALL THAT APPLY
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 8 }}>
+                  {devOpts.map(d => {
+                    const on = connectedDevices.includes(d)
+                    return (
+                      <button key={d} onClick={() => toggleDevice(d)} style={{
+                        fontFamily: MONO, fontSize: 9, letterSpacing: '0.06em',
+                        padding: '6px 12px', borderRadius: 20, cursor: 'pointer',
+                        border: `1px solid ${on ? C.blue : C.border}`,
+                        background: on ? C.blueAlpha : C.bgInput,
+                        color: on ? C.blue : C.textSecondary,
+                        transition: 'all 0.12s',
+                      }}>
+                        {on ? '✓ ' : ''}{d.toUpperCase()}
+                      </button>
+                    )
+                  })}
+                </div>
+                {connectedDevices.length > 0 && (
+                  <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, marginTop: 6, letterSpacing: '0.07em' }}>
+                    AI will consider interconnection faults between these devices
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {selected?.specs && (
             <div style={{ background: C.bgCard, borderRadius: 8, padding: '10px 12px', border: `1px solid ${C.border}` }}>
@@ -590,11 +643,16 @@ function TechTool() {
     <div style={S.shell}>
       <div style={S.diagHeader}>
         <button style={S.iconBtn} onClick={reset}>✕</button>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={S.topBarTitle}>{selected?.sku} — {selected?.brand.toUpperCase()}</div>
           <div style={S.topBarSub}>
             {symptom.length > 38 ? symptom.slice(0, 38).toUpperCase() + '…' : symptom.toUpperCase()}
           </div>
+          {connectedDevices.length > 0 && (
+            <div style={{ fontFamily: MONO, fontSize: 8, color: C.blue, letterSpacing: '0.08em', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              + {connectedDevices.join(' · ').toUpperCase()}
+            </div>
+          )}
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           <div style={S.sessionId}>{shortSession(sessionId)}</div>

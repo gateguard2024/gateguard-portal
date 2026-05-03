@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { symptom, product_id, error_code, history = [], session_id } = await req.json()
+    const { symptom, product_id, error_code, history = [], session_id, connected_devices = [] } = await req.json()
     if (!symptom) return NextResponse.json({ error: 'symptom required' }, { status: 400 })
 
     // 1. Build search query
@@ -82,19 +82,65 @@ Step types:
   resolved  → root cause found and fix confirmed
   escalate  → requires factory support, board replacement, or RMA
 
+SYSTEM TOPOLOGY — devices in gate/access systems connect to each other. Reason about the full system, not just the reported device.
+
+Gate Operators (swing, slide, barrier):
+  Safety inputs: photobeams (obstruction), pneumatic/resistive safety edges, loop detectors
+  Control inputs: push-button, keypad, access reader relay, callbox relay output
+  KEY FAILURE PATTERN: photobeam broken/misaligned → safety input held open → gate won't move or reverses
+  KEY FAILURE PATTERN: loop detector fault → constant trigger or no trigger on vehicle loop
+  ISOLATION TEST: jumper the safety/obstruction input terminals → if gate now works, root cause is the safety device NOT the operator
+  Always check safety inputs BEFORE suspecting the operator board
+
+Photobeams / Safety Beams:
+  Alignment: TX LED solid on, RX LED solid green = aligned. RX flashing = misaligned or blocked
+  Power: 12VDC or 24VDC from operator AUX power terminals
+  Output type: normally-closed (NC) dry contact — opens on beam break, closes when clear
+  Isolation test: disconnect beam wires from operator, manually jumper obstruction terminals → gate should run
+  Wiring: NC loop into the operator obstruction/safety terminal pair
+
+Loop Detectors:
+  Sensitivity too high → detects nearby parked cars → holds gate open continuously
+  Loop shorted or open → detector fault LED → gate stuck open or won't trigger
+  LEDs: solid = vehicle present, off = clear, flashing = loop fault
+  Test loop: disconnect loop wires from detector, measure inductance (good loop = 50–500 µH)
+
+Callboxes / Intercoms:
+  Gate relay output wires to operator push-button terminals
+  Stuck relay → gate self-triggers on every call or continuously
+  Isolation test: disconnect callbox relay wires → verify self-triggering stops
+
+Access Readers / Keypads:
+  Relay output wires to operator push-button (trigger) terminals
+  Stuck relay = gate triggers on every credential or continuously
+  Isolation test: disconnect reader relay → gate should stop self-triggering
+
+DIAGNOSTIC STRATEGY for systems with connected_devices listed:
+  1. Check power to all devices first
+  2. Ask tech which other devices are in the system if not specified
+  3. ISOLATE inputs one by one — jumper or disconnect each safety/control input to find which one is causing the fault
+  4. Once the root-cause device is confirmed, shift the diagnostic to that device specifically
+  5. Confirm fix by reconnecting and retesting the full system
+
 Rules:
   - ONE step at a time
-  - Progress: power → wiring → config → sensors → mechanical → replace
-  - Use exact terminal names, LED labels, error codes from the manual
-  - Prefer measure when voltage/resistance data would confirm or rule out a cause
-  - Prefer select when there are distinct observable states (LED colors, positions)
-  - Use photo when visual evidence (damage, display state) would help diagnosis
-  - Keep "text" under 120 chars; put technical detail in "detail"
-  - Always set manual_ref when citing a specific manual passage`,
+  - Sequence: power → safety inputs → control inputs → wiring → configuration → mechanical → board/replace
+  - When connected_devices are present, check them as likely root causes before blaming the primary device
+  - Always guide isolation testing (jumper/disconnect) when a safety circuit is suspect
+  - Use exact terminal names, LED labels, and error codes from the manual passages
+  - Prefer measure when voltage/resistance would confirm or rule out a cause
+  - Prefer select when there are distinct observable states (LED colors, switch positions)
+  - Use photo when visual evidence (damage, alignment, display) would help
+  - Keep "text" under 120 chars; put wiring detail in "detail"
+  - Set manual_ref whenever citing a specific manual passage`,
 
       messages: [{
         role: 'user',
-        content: `Problem: "${symptom}"${error_code ? `\nError code: ${error_code}` : ''}${historyText}\n\nRelevant manual/KB content:\n${context}\n\nWhat is the next diagnostic step?`
+        content: `Problem: "${symptom}"${error_code ? `\nError code: ${error_code}` : ''}${
+          (connected_devices as string[]).length > 0
+            ? `\nConnected devices in this system: ${(connected_devices as string[]).join(', ')}`
+            : ''
+        }${historyText}\n\nRelevant manual/KB content:\n${context}\n\nWhat is the next diagnostic step?`
       }],
     })
 
