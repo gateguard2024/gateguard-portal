@@ -5,20 +5,19 @@
  *
  * Precision instrument aesthetic: IBM Plex Mono, near-black surfaces,
  * large step numbers, semantic-only color, one-screen-one-action.
- * Reference: Snap-on Zeus, Fluke Connect, Boeing MCC aesthetics.
+ *
+ * Auth flow:
+ *   1. Clerk-authed dealer → skips PIN screen, full access
+ *   2. Field tech (no Clerk) → enters TECH_ACCESS_CODE on first visit
+ *      Code is stored in sessionStorage, sent as x-tech-code on all API calls
  */
 
 import { useState, useEffect, useRef, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { useSearchParams }                        from 'next/navigation'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type StepType = 'question' | 'action' | 'resolved' | 'escalate'
+type Screen   = 'pin' | 'home' | 'symptom' | 'diag'
 
 interface Step {
   type:       StepType
@@ -28,18 +27,17 @@ interface Step {
   session_id: string
 }
 
-interface HistoryItem {
-  question: string
-  answer:   string
-}
+interface HistoryItem { question: string; answer: string }
 
 interface Product {
-  id:         string
-  name:       string
-  brand:      string
-  category:   string
-  sku:        string
-  manual_url: string | null
+  id:          string
+  name:        string
+  brand:       string
+  category:    string
+  sku:         string
+  manual_url:  string | null
+  description: string | null
+  tags:        string[] | null
 }
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -53,12 +51,10 @@ const C = {
   textPrimary:  '#E8ECF0',
   textSecondary:'rgba(232,236,240,0.45)',
   textMuted:    'rgba(232,236,240,0.22)',
-  // Semantic — ONLY used for their strict meaning
-  blue:   '#38BDF8',   // verify / question
-  amber:  '#F59E0B',   // action required
-  green:  '#10B981',   // pass / resolved
-  red:    '#EF4444',   // fault / escalate
-  // Derived surfaces
+  blue:   '#38BDF8',
+  amber:  '#F59E0B',
+  green:  '#10B981',
+  red:    '#EF4444',
   blueAlpha:  'rgba(56,189,248,0.08)',
   amberAlpha: 'rgba(245,158,11,0.08)',
   greenAlpha: 'rgba(16,185,129,0.08)',
@@ -66,8 +62,7 @@ const C = {
 }
 
 const STEP_CFG: Record<StepType, {
-  accent: string; surface: string; border: string
-  label: string; numColor: string
+  accent: string; surface: string; border: string; label: string; numColor: string
 }> = {
   question: { accent: C.blue,  surface: C.blueAlpha,  border: 'rgba(56,189,248,0.18)',  label: 'VERIFY',   numColor: C.blue  },
   action:   { accent: C.amber, surface: C.amberAlpha, border: 'rgba(245,158,11,0.18)',  label: 'ACTION',   numColor: C.amber },
@@ -75,9 +70,10 @@ const STEP_CFG: Record<StepType, {
   escalate: { accent: C.red,   surface: C.redAlpha,   border: 'rgba(239,68,68,0.18)',   label: 'ESCALATE', numColor: C.red   },
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-function pad2(n: number) { return String(n).padStart(2, '0') }
+const MONO = '"IBM Plex Mono", "SFMono-Regular", "Consolas", monospace'
+const SANS = '"IBM Plex Sans", -apple-system, system-ui, sans-serif'
 
+function pad2(n: number) { return String(n).padStart(2, '0') }
 function shortSession(id: string | null) {
   if (!id) return '——'
   return '#' + id.replace(/-/g, '').slice(-4).toUpperCase()
@@ -88,7 +84,10 @@ function TechTool() {
   const params   = useSearchParams()
   const presetId = params.get('product_id') ?? undefined
 
-  const [screen,    setScreen]    = useState<'home' | 'symptom' | 'diag'>('home')
+  const [screen,    setScreen]    = useState<Screen>('pin')
+  const [techCode,  setTechCode]  = useState('')
+  const [codeInput, setCodeInput] = useState('')
+  const [codeError, setCodeError] = useState(false)
   const [products,  setProducts]  = useState<Product[]>([])
   const [selected,  setSelected]  = useState<Product | null>(null)
   const [symptom,   setSymptom]   = useState('')
@@ -101,17 +100,30 @@ function TechTool() {
   const [logFixed,  setLogFixed]  = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // Load products
+  // ── On mount: check sessionStorage for saved code ─────────────────────────
   useEffect(() => {
-    supabase.from('products').select('id,name,brand,category,sku,manual_url')
-      .eq('active', true).order('brand').order('name')
-      .then(({ data }) => setProducts(data ?? []))
+    const saved = sessionStorage.getItem('gg_tech_code')
+    if (saved) {
+      setTechCode(saved)
+      setScreen('home')
+    }
   }, [])
 
-  // Auto-select if product_id passed in URL
+  // ── Load products once we have a code ────────────────────────────────────
+  useEffect(() => {
+    if (!techCode && screen !== 'home') return
+    fetch('/api/kb/products', {
+      headers: { 'x-tech-code': techCode },
+    })
+      .then(r => r.json())
+      .then(d => setProducts(d.products ?? []))
+      .catch(() => {})
+  }, [techCode, screen])
+
+  // ── Auto-select product from URL param ───────────────────────────────────
   useEffect(() => {
     if (presetId && products.length > 0) {
-      const p = products.find(p => p.id === presetId)
+      const p = products.find(p => p.id === presetId || p.sku === presetId)
       if (p) { setSelected(p); setScreen('symptom') }
     }
   }, [presetId, products])
@@ -120,6 +132,34 @@ function TechTool() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [history, current, loading])
 
+  // ── Auth helpers ──────────────────────────────────────────────────────────
+  function apiHeaders(): HeadersInit {
+    return { 'Content-Type': 'application/json', 'x-tech-code': techCode }
+  }
+
+  async function submitCode() {
+    setCodeError(false)
+    const code = codeInput.trim().toUpperCase()
+    if (!code) return
+
+    // Validate by hitting the products endpoint
+    const res = await fetch('/api/kb/products', {
+      headers: { 'x-tech-code': code },
+    })
+
+    if (res.ok) {
+      const data = await res.json()
+      sessionStorage.setItem('gg_tech_code', code)
+      setTechCode(code)
+      setProducts(data.products ?? [])
+      setScreen('home')
+    } else {
+      setCodeError(true)
+      setCodeInput('')
+    }
+  }
+
+  // ── Diagnostic helpers ────────────────────────────────────────────────────
   async function startDiag() {
     if (!symptom.trim()) return
     setScreen('diag')
@@ -131,7 +171,7 @@ function TechTool() {
     try {
       const res = await fetch('/api/kb/ask', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: apiHeaders(),
         body:    JSON.stringify({
           symptom,
           error_code:  errorCode || undefined,
@@ -169,7 +209,65 @@ function TechTool() {
   const cfg        = current ? STEP_CFG[current.type] : null
   const isTerminal = current?.type === 'resolved' || current?.type === 'escalate'
 
-  // ── SCREEN: Home ─────────────────────────────────────────────────────────
+  // ── SCREEN: PIN entry ─────────────────────────────────────────────────────
+  if (screen === 'pin') {
+    return (
+      <div style={{ ...S.shell, justifyContent: 'center', alignItems: 'center', gap: 0 }}>
+        <div style={S.pinCard}>
+          {/* Logo */}
+          <div style={{ textAlign: 'center', marginBottom: 28 }}>
+            <div style={S.pinLogo}>GG</div>
+            <div style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.2em', color: C.textMuted, marginTop: 10 }}>
+              GATEGUARD FIELD TOOL
+            </div>
+          </div>
+
+          <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.18em', color: C.textMuted, marginBottom: 8 }}>
+            ACCESS CODE
+          </div>
+
+          <input
+            type="text"
+            value={codeInput}
+            onChange={e => { setCodeInput(e.target.value.toUpperCase()); setCodeError(false) }}
+            onKeyDown={e => e.key === 'Enter' && submitCode()}
+            placeholder="ENTER CODE"
+            maxLength={16}
+            autoFocus
+            autoCapitalize="characters"
+            style={{
+              ...S.monoInput,
+              fontSize: 18,
+              letterSpacing: '0.22em',
+              textAlign: 'center',
+              borderColor: codeError ? C.red : C.borderMed,
+              color: codeError ? C.red : C.textPrimary,
+            }}
+          />
+
+          {codeError && (
+            <div style={{ fontFamily: MONO, fontSize: 10, color: C.red, letterSpacing: '0.1em', marginTop: 8, textAlign: 'center' }}>
+              INVALID CODE — CONTACT YOUR DEALER
+            </div>
+          )}
+
+          <button
+            onClick={submitCode}
+            disabled={!codeInput.trim()}
+            style={{ ...S.primaryBtn, marginTop: 16, opacity: codeInput.trim() ? 1 : 0.25 }}
+          >
+            AUTHENTICATE ›
+          </button>
+
+          <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, textAlign: 'center', marginTop: 20, letterSpacing: '0.1em' }}>
+            CODE PROVIDED BY YOUR GATEGUARD DEALER
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── SCREEN: Home — device picker ──────────────────────────────────────────
   if (screen === 'home') {
     const grouped = products.reduce<Record<string, Product[]>>((acc, p) => {
       const cat = p.category || 'Other'
@@ -180,17 +278,15 @@ function TechTool() {
 
     return (
       <div style={S.shell}>
-        {/* Top bar */}
         <div style={S.topBar}>
           <div style={S.ggMark}>GG</div>
           <div style={{ flex: 1 }}>
             <div style={S.topBarTitle}>GATEGUARD FIELD TOOL</div>
             <div style={S.topBarSub}>SELECT DEVICE</div>
           </div>
-          <div style={S.statusPill}>ONLINE</div>
+          <div style={S.statusPill}>● ONLINE</div>
         </div>
 
-        {/* Device list */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0 40px' }}>
           {Object.entries(grouped).map(([cat, items]) => (
             <div key={cat}>
@@ -207,26 +303,28 @@ function TechTool() {
                     <div style={S.deviceSku}>{p.sku}</div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                    {p.manual_url
-                      ? <span style={{ ...S.statusDot, background: C.green }} title="AI Ready" />
-                      : <span style={{ ...S.statusDot, background: C.amber }} title="No manual" />
-                    }
-                    <span style={S.chevron}>›</span>
+                    <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.1em',
+                      color:       p.manual_url ? C.green  : C.amber,
+                      border:      `1px solid ${p.manual_url ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)'}`,
+                      borderRadius: 4, padding: '3px 7px',
+                    }}>
+                      {p.manual_url ? 'AI READY' : 'NO MANUAL'}
+                    </span>
+                    <span style={{ fontFamily: MONO, fontSize: 20, color: C.textMuted }}>›</span>
                   </div>
                 </button>
               ))}
             </div>
           ))}
           {products.length === 0 && (
-            <div style={{ color: C.textMuted, textAlign: 'center', marginTop: 60, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12 }}>
+            <div style={{ color: C.textMuted, textAlign: 'center', marginTop: 60, fontFamily: MONO, fontSize: 11, letterSpacing: '0.1em' }}>
               LOADING DEVICE DATABASE…
             </div>
           )}
         </div>
 
-        {/* Legend strip */}
         <div style={S.legendStrip}>
-          <span style={{ color: C.green }}>● AI-READY</span>
+          <span style={{ color: C.green }}>● AI-READY — MANUAL INDEXED</span>
           <span style={{ color: C.amber }}>● MANUAL PENDING</span>
         </div>
       </div>
@@ -246,8 +344,6 @@ function TechTool() {
         </div>
 
         <div style={{ flex: 1, padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-
-          {/* Field label */}
           <div style={S.fieldLabel}>FAULT DESCRIPTION</div>
           <textarea
             value={symptom}
@@ -258,29 +354,26 @@ function TechTool() {
             autoFocus
           />
 
-          <div style={S.fieldLabel}>ERROR CODE / LED STATUS <span style={{ color: C.textMuted }}>OPTIONAL</span></div>
+          <div style={S.fieldLabel}>
+            ERROR CODE / LED STATUS <span style={{ color: C.textMuted }}>OPTIONAL</span>
+          </div>
           <input
             type="text"
             value={errorCode}
             onChange={e => setErrorCode(e.target.value)}
-            placeholder="e.g. E-04, RED+AMBER FLASH"
+            placeholder="e.g. E-04 · RED+AMBER FLASH"
             style={S.monoInput}
           />
 
-          {/* Quick select chips */}
           <div style={S.fieldLabel}>QUICK SELECT</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {["WON'T OPEN", "WON'T CLOSE", 'NO POWER', 'MOTOR HUMS', 'ARM STUCK', 'LOOP FAULT', 'LIMIT FAULT', 'NO COMM'].map(c => (
-              <button
-                key={c}
-                onClick={() => setSymptom(c)}
-                style={{
-                  ...S.chip,
-                  background:   symptom === c ? 'rgba(56,189,248,0.12)' : 'rgba(255,255,255,0.04)',
-                  borderColor:  symptom === c ? C.blue : 'rgba(255,255,255,0.08)',
-                  color:        symptom === c ? C.blue : C.textMuted,
-                }}
-              >
+            {["WON'T OPEN","WON'T CLOSE","NO POWER","MOTOR HUMS","ARM STUCK","LOOP FAULT","LIMIT FAULT","NO COMM"].map(c => (
+              <button key={c} onClick={() => setSymptom(c)} style={{
+                ...S.chip,
+                background:  symptom === c ? 'rgba(56,189,248,0.12)' : 'rgba(255,255,255,0.04)',
+                borderColor: symptom === c ? C.blue : 'rgba(255,255,255,0.08)',
+                color:       symptom === c ? C.blue : C.textMuted,
+              }}>
                 {c}
               </button>
             ))}
@@ -303,13 +396,12 @@ function TechTool() {
   // ── SCREEN: Diagnostic flow ───────────────────────────────────────────────
   return (
     <div style={S.shell}>
-      {/* Header bar */}
       <div style={S.diagHeader}>
         <button style={S.iconBtn} onClick={reset}>✕</button>
         <div style={{ flex: 1 }}>
           <div style={S.topBarTitle}>{selected?.sku} — {selected?.brand.toUpperCase()}</div>
-          <div style={S.topBarSub} title={symptom}>
-            {symptom.length > 38 ? symptom.slice(0, 38) + '…' : symptom.toUpperCase()}
+          <div style={S.topBarSub}>
+            {symptom.length > 38 ? symptom.slice(0, 38).toUpperCase() + '…' : symptom.toUpperCase()}
           </div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -323,93 +415,77 @@ function TechTool() {
         <div style={{ ...S.progressFill, width: `${Math.min(stepCount * 12, 100)}%` }} />
       </div>
 
-      {/* Scroll area */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px 0 24px' }}>
 
-        {/* Completed history log */}
+        {/* History log */}
         {history.length > 0 && (
           <div style={S.historyLog}>
             <div style={S.logLabel}>DIAGNOSTIC LOG</div>
             {history.map((h, i) => {
-              const ans = h.answer
-              const ansColor = ans === 'Yes' ? C.green
-                             : ans === 'No'  ? C.red
-                             : C.amber
+              const ansColor = h.answer === 'Yes' ? C.green : h.answer === 'No' ? C.red : C.amber
               return (
                 <div key={i} style={S.logRow}>
                   <span style={S.logNum}>{pad2(i + 1)}</span>
                   <span style={S.logText}>{h.question}</span>
-                  <span style={{ ...S.logAns, color: ansColor }}>
-                    {ans.toUpperCase()}
-                  </span>
+                  <span style={{ ...S.logAns, color: ansColor }}>{h.answer.toUpperCase()}</span>
                 </div>
               )
             })}
           </div>
         )}
 
-        {/* Loading state */}
+        {/* Loading */}
         {loading && (
           <div style={{ padding: '20px 16px', display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={S.spinner} />
-            <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: C.textMuted, letterSpacing: '0.08em' }}>
+            <span style={{ fontFamily: MONO, fontSize: 11, color: C.textMuted, letterSpacing: '0.08em' }}>
               QUERYING VECTOR DATABASE…
             </span>
           </div>
         )}
 
-        {/* Active step card */}
+        {/* Active step */}
         {current && cfg && !loading && (
           <div style={{ padding: '0 16px' }}>
             <div style={{ ...S.stepCard, borderColor: cfg.border, background: cfg.surface }}>
-
-              {/* Step header row */}
               <div style={S.stepHeader}>
                 <div style={{ ...S.stepNum, color: cfg.numColor }}>{pad2(history.length + 1)}</div>
                 <div style={{ flex: 1 }}>
                   <div style={{ ...S.stepTypeLabel, color: cfg.accent }}>{cfg.label}</div>
-                  {selected?.manual_url && current.manual_ref?.url && (
+                  {current.manual_ref?.url && (
                     <a
                       href={`${current.manual_ref.url}${current.manual_ref.page ? `#page=${current.manual_ref.page}` : ''}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      target="_blank" rel="noopener noreferrer"
                       style={S.manualRef}
                     >
                       MANUAL{current.manual_ref.page ? ` P.${current.manual_ref.page}` : ''}
-                      {current.manual_ref.section ? ` · ${current.manual_ref.section.toUpperCase().slice(0, 28)}` : ''}
+                      {current.manual_ref.section ? ` · ${current.manual_ref.section.toUpperCase().slice(0,28)}` : ''}
                     </a>
                   )}
                 </div>
               </div>
 
-              {/* Main instruction */}
               <div style={S.stepText}>{current.text}</div>
 
-              {/* Detail / procedure block */}
               {current.detail && (
-                <div style={S.detailBlock}>
-                  {current.detail}
-                </div>
+                <div style={S.detailBlock}>{current.detail}</div>
               )}
 
-              {/* Divider */}
               <div style={S.divider} />
 
-              {/* YES / NO */}
               {current.type === 'question' && (
                 <div style={S.answerRow}>
                   <button style={S.yesBtn} onClick={() => answer('Yes')}>
-                    <span style={S.btnLabel}>YES</span>
-                    <span style={S.btnSub}>PASS / CONFIRMED</span>
+                    <span style={S.btnLabel as React.CSSProperties}>YES</span>
+                    <span style={S.btnSub as React.CSSProperties}>PASS / CONFIRMED</span>
                   </button>
                   <button style={S.noBtn} onClick={() => answer('No')}>
-                    <span style={S.btnLabel}>NO</span>
-                    <span style={S.btnSub}>FAIL / NOT PRESENT</span>
+                    <span style={S.btnLabel as React.CSSProperties}>NO</span>
+                    <span style={S.btnSub as React.CSSProperties}>FAIL / NOT PRESENT</span>
                   </button>
                 </div>
               )}
 
-              {/* ACTION */}
               {current.type === 'action' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <button style={S.doneBtn} onClick={() => answer('Done')}>
@@ -422,45 +498,25 @@ function TechTool() {
                       onChange={e => setFreeText(e.target.value)}
                       placeholder="Describe what you observed…"
                       style={{ ...S.monoInput, flex: 1, margin: 0 }}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' && freeText.trim()) {
-                          answer(freeText); setFreeText('')
-                        }
-                      }}
+                      onKeyDown={e => { if (e.key === 'Enter' && freeText.trim()) { answer(freeText); setFreeText('') }}}
                     />
                     <button
                       style={S.sendBtn}
-                      onClick={() => { if (freeText.trim()) { answer(freeText); setFreeText('') } }}
-                    >
-                      ›
-                    </button>
+                      onClick={() => { if (freeText.trim()) { answer(freeText); setFreeText('') }}}
+                    >›</button>
                   </div>
                 </div>
               )}
 
-              {/* RESOLVED / ESCALATE */}
               {isTerminal && (
                 <div style={{ display: 'flex', gap: 10 }}>
-                  {!logFixed && (
-                    <button
-                      style={S.logFixBtn}
-                      onClick={() => setLogFixed(true)}
-                    >
-                      LOG FIX
-                    </button>
-                  )}
-                  {logFixed && (
-                    <div style={{ ...S.logFixBtn, background: C.greenAlpha, borderColor: 'rgba(16,185,129,0.3)', color: C.green, cursor: 'default' }}>
-                      ✓ LOGGED
-                    </div>
-                  )}
-                  <button style={S.newSessionBtn} onClick={reset}>
-                    NEW SESSION
-                  </button>
+                  {!logFixed
+                    ? <button style={S.logFixBtn} onClick={() => setLogFixed(true)}>LOG FIX</button>
+                    : <div style={{ ...S.logFixBtn, background: C.greenAlpha, borderColor: 'rgba(16,185,129,0.3)', color: C.green, cursor: 'default' }}>✓ LOGGED</div>
+                  }
+                  <button style={S.newSessionBtn} onClick={reset}>NEW SESSION</button>
                   {current.type === 'escalate' && (
-                    <button style={S.keepGoingBtn} onClick={() => answer('Keep diagnosing')}>
-                      CONTINUE
-                    </button>
+                    <button style={S.keepGoingBtn} onClick={() => answer('Keep diagnosing')}>CONTINUE</button>
                   )}
                 </div>
               )}
@@ -471,12 +527,9 @@ function TechTool() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Status footer */}
       <div style={S.footer}>
         <span style={{ color: C.green }}>● ONLINE</span>
-        <span style={{ color: C.textMuted }}>
-          STEP {pad2(stepCount)} · {shortSession(sessionId)}
-        </span>
+        <span style={{ color: C.textMuted }}>STEP {pad2(stepCount)} · {shortSession(sessionId)}</span>
         {selected?.manual_url
           ? <span style={{ color: C.blue }}>AI-READY</span>
           : <span style={{ color: C.amber }}>NO MANUAL</span>
@@ -487,79 +540,56 @@ function TechTool() {
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
-const MONO = '"IBM Plex Mono", "SFMono-Regular", "Consolas", monospace'
-const SANS = '"IBM Plex Sans", -apple-system, system-ui, sans-serif'
-
 const S: Record<string, React.CSSProperties> = {
-  shell:        { minHeight: '100dvh', maxHeight: '100dvh', background: C.bg, display: 'flex', flexDirection: 'column', fontFamily: SANS, maxWidth: 480, margin: '0 auto', overflowY: 'hidden' },
-
-  // Top bar
+  shell:        { minHeight: '100dvh', maxHeight: '100dvh', background: C.bg, display: 'flex', flexDirection: 'column', fontFamily: SANS, maxWidth: 480, margin: '0 auto', overflow: 'hidden' },
+  pinCard:      { width: '100%', maxWidth: 340, padding: '32px 24px', background: C.bgCard, borderRadius: 16, border: `1px solid ${C.border}`, margin: '0 16px' },
+  pinLogo:      { width: 52, height: 52, borderRadius: 14, background: 'rgba(56,189,248,0.1)', border: `1px solid rgba(56,189,248,0.25)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.blue, margin: '0 auto', letterSpacing: '0.05em' },
   topBar:       { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: C.bgDeep, borderBottom: `1px solid ${C.border}`, flexShrink: 0 },
   diagHeader:   { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: C.bgDeep, borderBottom: `1px solid ${C.border}`, flexShrink: 0 },
   ggMark:       { width: 34, height: 34, borderRadius: 8, background: 'rgba(56,189,248,0.1)', border: `1px solid rgba(56,189,248,0.25)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 11, fontWeight: 700, color: C.blue, flexShrink: 0, letterSpacing: '0.05em' },
-  topBarTitle:  { fontFamily: MONO, fontSize: 11, fontWeight: 700, color: C.textPrimary, letterSpacing: '0.08em', margin: 0 },
+  topBarTitle:  { fontFamily: MONO, fontSize: 11, fontWeight: 700, color: C.textPrimary, letterSpacing: '0.08em' },
   topBarSub:    { fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.12em', marginTop: 2 },
   statusPill:   { fontFamily: MONO, fontSize: 9, color: C.green, letterSpacing: '0.12em', border: `1px solid rgba(16,185,129,0.25)`, borderRadius: 4, padding: '3px 7px', flexShrink: 0 },
   sessionId:    { fontFamily: MONO, fontSize: 13, fontWeight: 700, color: C.textPrimary, letterSpacing: '0.06em' },
   iconBtn:      { width: 34, height: 34, borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: `1px solid ${C.border}`, color: C.textSecondary, fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: MONO },
-
-  // Progress
   progressBar:  { height: 2, background: 'rgba(255,255,255,0.05)', flexShrink: 0 },
   progressFill: { height: '100%', background: C.blue, transition: 'width 0.4s ease' },
-
-  // Device list
   catHeader:    { fontFamily: MONO, fontSize: 9, letterSpacing: '0.18em', color: C.textMuted, padding: '18px 16px 6px' },
   deviceRow:    { width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: `1px solid ${C.border}`, background: 'transparent', cursor: 'pointer', textAlign: 'left' },
-  deviceBrand:  { fontFamily: MONO, fontSize: 9, letterSpacing: '0.14em', color: C.blue, margin: 0 },
+  deviceBrand:  { fontFamily: MONO, fontSize: 9, letterSpacing: '0.14em', color: C.blue },
   deviceName:   { fontFamily: SANS, fontSize: 15, fontWeight: 600, color: C.textPrimary, margin: '3px 0 2px' },
-  deviceSku:    { fontFamily: MONO, fontSize: 10, color: C.textMuted, margin: 0 },
-  statusDot:    { width: 7, height: 7, borderRadius: '50%', flexShrink: 0 },
-  chevron:      { fontFamily: MONO, fontSize: 20, color: C.textMuted, flexShrink: 0 },
+  deviceSku:    { fontFamily: MONO, fontSize: 10, color: C.textMuted },
   legendStrip:  { display: 'flex', gap: 20, padding: '10px 16px', borderTop: `1px solid ${C.border}`, fontFamily: MONO, fontSize: 9, letterSpacing: '0.1em', flexShrink: 0, background: C.bgDeep },
-
-  // Symptom entry
   fieldLabel:   { fontFamily: MONO, fontSize: 9, letterSpacing: '0.16em', color: C.textMuted, marginBottom: -6 },
   textarea:     { width: '100%', background: C.bgInput, border: `1px solid ${C.borderMed}`, borderRadius: 10, padding: '13px 14px', color: C.textPrimary, fontSize: 14, lineHeight: 1.6, outline: 'none', resize: 'none', fontFamily: SANS, boxSizing: 'border-box' },
   monoInput:    { width: '100%', background: C.bgInput, border: `1px solid ${C.borderMed}`, borderRadius: 8, padding: '11px 13px', color: C.textPrimary, fontSize: 13, outline: 'none', fontFamily: MONO, letterSpacing: '0.04em', boxSizing: 'border-box' },
   chip:         { padding: '6px 12px', borderRadius: 4, border: '1px solid', fontFamily: MONO, fontSize: 10, letterSpacing: '0.08em', cursor: 'pointer' },
   primaryBtn:   { width: '100%', padding: '16px', borderRadius: 10, background: C.blue, border: 'none', color: C.bgDeep, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
-
-  // History log
   historyLog:   { margin: '0 16px 12px', background: C.bgCard, borderRadius: 10, overflow: 'hidden', border: `1px solid ${C.border}` },
   logLabel:     { fontFamily: MONO, fontSize: 9, letterSpacing: '0.18em', color: C.textMuted, padding: '8px 12px', borderBottom: `1px solid ${C.border}`, background: C.bgDeep },
   logRow:       { display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 12px', borderBottom: `1px solid rgba(255,255,255,0.04)` },
   logNum:       { fontFamily: MONO, fontSize: 10, fontWeight: 700, color: C.textMuted, flexShrink: 0, letterSpacing: '0.04em' },
   logText:      { fontFamily: SANS, fontSize: 12, color: C.textSecondary, flex: 1, lineHeight: 1.4 },
   logAns:       { fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', flexShrink: 0 },
-
-  // Active step card
   stepCard:     { borderRadius: 12, border: '1px solid', padding: '16px', background: C.bgCard },
   stepHeader:   { display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 },
   stepNum:      { fontFamily: MONO, fontSize: 42, fontWeight: 700, lineHeight: 1, letterSpacing: '-0.02em', flexShrink: 0, opacity: 0.9 },
   stepTypeLabel:{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: '0.18em', marginBottom: 4 },
   manualRef:    { fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.1em', textDecoration: 'none', borderBottom: `1px solid ${C.border}` },
-  stepText:     { fontFamily: SANS, fontSize: 17, fontWeight: 600, color: C.textPrimary, lineHeight: 1.45, marginBottom: 0 },
+  stepText:     { fontFamily: SANS, fontSize: 17, fontWeight: 600, color: C.textPrimary, lineHeight: 1.45 },
   detailBlock:  { marginTop: 12, padding: '11px 13px', background: 'rgba(0,0,0,0.25)', borderRadius: 7, borderLeft: `2px solid rgba(255,255,255,0.1)`, fontFamily: MONO, fontSize: 12, color: C.textSecondary, lineHeight: 1.7, letterSpacing: '0.01em', whiteSpace: 'pre-line' },
   divider:      { height: 1, background: C.border, margin: '16px 0' },
-
-  // Answer buttons
   answerRow:    { display: 'flex', gap: 10 },
   yesBtn:       { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '16px 12px', borderRadius: 10, background: 'rgba(16,185,129,0.1)', border: `1px solid rgba(16,185,129,0.3)`, cursor: 'pointer' },
   noBtn:        { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '16px 12px', borderRadius: 10, background: 'rgba(239,68,68,0.1)', border: `1px solid rgba(239,68,68,0.3)`, cursor: 'pointer' },
-  btnLabel:     { fontFamily: MONO, fontSize: 22, fontWeight: 700, letterSpacing: '0.05em', color: C.textPrimary } as React.CSSProperties,
-  btnSub:       { fontFamily: MONO, fontSize: 8, letterSpacing: '0.14em', color: C.textMuted } as React.CSSProperties,
-
+  btnLabel:     { fontFamily: MONO, fontSize: 22, fontWeight: 700, letterSpacing: '0.05em', color: C.textPrimary },
+  btnSub:       { fontFamily: MONO, fontSize: 8, letterSpacing: '0.14em', color: C.textMuted },
   doneBtn:      { width: '100%', padding: '14px', borderRadius: 10, background: 'rgba(245,158,11,0.1)', border: `1px solid rgba(245,158,11,0.3)`, color: C.amber, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.12em' },
   sendBtn:      { padding: '11px 16px', borderRadius: 8, background: 'rgba(56,189,248,0.1)', border: `1px solid rgba(56,189,248,0.25)`, color: C.blue, fontSize: 16, cursor: 'pointer', fontFamily: MONO },
-
   logFixBtn:    { flex: 1, padding: '12px', borderRadius: 10, background: 'rgba(245,158,11,0.08)', border: `1px solid rgba(245,158,11,0.2)`, color: C.amber, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
   newSessionBtn:{ flex: 1, padding: '12px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: `1px solid ${C.border}`, color: C.textSecondary, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
   keepGoingBtn: { flex: 1, padding: '12px', borderRadius: 10, background: 'rgba(239,68,68,0.08)', border: `1px solid rgba(239,68,68,0.2)`, color: C.red, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
-
-  // Footer
   footer:       { display: 'flex', justifyContent: 'space-between', padding: '8px 16px', borderTop: `1px solid ${C.border}`, background: C.bgDeep, fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', flexShrink: 0 },
-
-  // Spinner
   spinner:      { width: 18, height: 18, borderRadius: '50%', border: `2px solid rgba(56,189,248,0.15)`, borderTopColor: C.blue, animation: 'spin 0.7s linear infinite', flexShrink: 0 },
 }
 

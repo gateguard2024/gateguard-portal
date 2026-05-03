@@ -19,9 +19,17 @@ import { auth }                        from '@clerk/nextjs/server'
 import Anthropic                       from '@anthropic-ai/sdk'
 import { searchKnowledge, serviceDb }  from '@/lib/vectorize'
 
+function isTechAuthed(req: NextRequest): boolean {
+  const code      = req.headers.get('x-tech-code')
+  const validCode = process.env.TECH_ACCESS_CODE
+  return !!(validCode && code && code === validCode)
+}
+
 export async function POST(req: NextRequest) {
   const { userId } = await auth()
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!userId && !isTechAuthed(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   try {
     const { symptom, product_id, error_code, history = [], session_id } = await req.json()
