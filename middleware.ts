@@ -10,7 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+import { clerkMiddleware } from '@clerk/nextjs/server'
 
 // These paths never touch Clerk — short-circuit immediately
 function isBypassPath(pathname: string): boolean {
@@ -25,8 +25,6 @@ function isBypassPath(pathname: string): boolean {
     pathname.startsWith('/favicon')
   )
 }
-
-const isProtected = createRouteMatcher(['/(.*)')
 
 export default clerkMiddleware(async (auth, req: NextRequest) => {
   // Hard bypass — never run Clerk for these paths
