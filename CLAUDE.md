@@ -164,6 +164,7 @@ GateGuard Corporate (SO — System Operator)
 - `POST /api/kb/find-manual` — auto-find + download manufacturer manual, run full pipeline
 - `POST /api/kb/extract-wiring` — Claude reads indexed chunks, extracts terminal definitions → device_suggestions table
 - `POST /api/kb/ask` — AI diagnostic (vector search + Claude). Params: symptom, product_id, error_code, history, session_id, connected_devices[]
+- `POST /api/kb/resolve` — Resolution capture + learning loop. Params: session_id, product_id, symptom, history, resolution_note. Updates troubleshoot_sessions.resolved + auto-embeds a kb_article so AI learns the fix. Auth: x-tech-code.
 - `POST /api/kb/analyze-image` — Claude vision analysis of tech photos
 - `GET  /api/kb/products` — product list for /tech (auth: x-tech-code header)
 - `GET  /api/sync/residents` — LEGACY: Brivo → DB → UniFi sync. **New sync work belongs in gatecard.co, not here.**
@@ -214,17 +215,19 @@ Note: `/reps`, `/compliance`, `/scorecard`, `/map`, `/reports` are placeholder U
 ### /tech tool
 | File | Purpose |
 |------|---------|
-| `app/tech/page.tsx` | All /tech screens. Screens: pin, home, choice, symptom, diag, wiring, cable, install. Demo modes: ?demo=install / ?demo=fault |
+| `app/tech/page.tsx` | All /tech screens. Screens: pin, home, choice, symptom, diag, wiring, cable, install, survey, survey_add. Demo modes: ?demo=install / ?demo=fault |
 | `lib/wiring-library.ts` | Static verified device terminals (27 devices) + wiring maps (19 maps). Add hand-verified pairings here. AI-generated entries live in Supabase device_suggestions instead. |
-| `components/tech/WiringDiagram.tsx` | SVG wiring diagram renderer + WiringGuide screen. Merges static library + Supabase device_suggestions at runtime. |
+| `components/tech/WiringDiagram.tsx` | SVG wiring diagram renderer + WiringGuide screen. Merges static library + Supabase device_suggestions at runtime. Terminal group separators show connector block ID badges (J2, J6, etc.). |
 | `components/tech/CableGuide.tsx` | 3-tab cable testing guide: CAT / 2-wire series / 2-wire parallel |
 | `app/api/kb/ask/route.ts` | Claude diagnostic API. Params: symptom, product_id, error_code, history, session_id, connected_devices[] |
 | `app/api/kb/analyze-image/route.ts` | Claude vision for photo steps and multimeter readings |
 | `app/api/kb/products/route.ts` | Product list for device picker (auth: x-tech-code header) |
-| `app/api/kb/upload-url/route.ts` | Issues Supabase signed upload URL — client uploads PDF direct, no Vercel size limit |
+| `app/api/kb/upload-url/route.ts` | Issues Supabase signed upload URL — auto-creates "manuals" bucket if missing — client uploads PDF direct, no Vercel size limit |
 | `app/api/kb/process/route.ts` | Chunk + embed a PDF from Storage URL. Also accepts multipart (legacy). |
 | `app/api/kb/find-manual/route.ts` | Auto-find + download manufacturer manual from the internet, run full pipeline |
 | `app/api/kb/extract-wiring/route.ts` | Claude reads manual chunks → extracts DeviceDef terminals → stores in device_suggestions |
+| `app/api/kb/survey-proposal/route.ts` | Takes site walk device inventory → Claude Haiku → returns structured proposal (summary, line items with priority, recommendations, install notes). Auth: x-tech-code. |
+| `app/api/kb/resolve/route.ts` | Resolution capture + learning loop. Updates troubleshoot_sessions.resolved + embeds kb_article from symptom+history+fix note. Auth: x-tech-code. |
 
 ### Portal pages
 | File | Purpose |
@@ -289,10 +292,15 @@ Canonical source for product PDFs, brand assets, legal docs, historical project 
 - **System topology awareness** — Claude knows device interconnections, guides isolation testing
 - Symptom screen: quick-pick fault chips per category + free text + error code field
 - AI step types: question / action / measure / select / photo / resolved / escalate
-- Measure steps: unit + expected range display (e.g., "115±10 VAC")
+- **Measure steps — enhanced (v7):**
+  - Unit + expected range display (e.g., "115±10 VAC")
+  - ⊕ METER button: tap to expand inline meter guide panel
+  - **Meter guide panel**: SVG multimeter diagram with arc dial (needle points to correct function), probe jack diagram (red V/Ω jack vs black COM), range advice, ⚠ danger + ○ warning cautions. 7 configs: VAC, VDC, Ω, A, mA, ms/Hz. Cautions include: "never use DC mode on AC circuits", "power off before measuring Ω", "use dedicated A jack not VΩ jack".
+  - **Real-time pass/fail**: as tech types a value, immediately shows ✓ IN SPEC (green) or ✗ OUT OF SPEC (red) with expected range. Parses: `115±10`, `>12`, `0-24`, `≤1`, plain numbers (±10% tolerance).
 - Photo capture + Claude vision analysis via `/api/kb/analyze-image`
 - Manual references: p.XX links to PDF when chunk is matched
 - Session logging to `troubleshoot_sessions`
+- **Resolution capture + learning loop (v8):** On `resolved` step, tech sees "DID THIS FIX IT?" Y/N. If YES → "WHAT FIXED IT?" textarea + SUBMIT. POST to `/api/kb/resolve` → sets `troubleshoot_sessions.resolved=true, resolution_note` + auto-embeds a `kb_articles` row. Future sessions with similar symptoms will surface the fix via vector search. If NO → continues diagnostic with `answer('No — issue persists')`.
 - Demo modes: `?demo=install` (commissioning wizard) + `?demo=fault` (fault diagnosis walkthrough)
 
 **Wiring Guide (amber button on choice screen):**
@@ -300,6 +308,7 @@ Canonical source for product PDFs, brand assets, legal docs, historical project 
 - Color-coded header bands, terminal dot connectors, bezier wire curves
 - Wires color-coded by type: relay COM=amber, relay NO=green, +V=red, GND=dark, data=blue
 - Wire legend, required settings strip, caution cards, numbered install notes
+- **Connector block labels (v7)**: terminal group separators now show the physical connector ID (J2, J6, etc.) as a colored badge pill + group name text. Connected groups = blue badge. Techs can immediately see which physical block to use.
 - **Static verified library** (`lib/wiring-library.ts`): 27 devices, 19 wiring maps
   - Gate operators: DK6050, DK9050, DK1600, LiftMaster SL3000, Linear SW050, Viking G5
   - Access controllers: Brivo ACS300, ACS6100, ACS100, Brivo 100 single-door
@@ -311,6 +320,14 @@ Canonical source for product PDFs, brand assets, legal docs, historical project 
   - Network: Ubiquiti UCG-Ultra, USW-Flex
 - **AI-generated entries** (`device_suggestions` table): auto-populated after every manual upload. WiringDiagram merges both sources at runtime.
 - `components/tech/WiringDiagram.tsx` — SVG renderer + `WiringGuide` screen. WiringGuide fetches Supabase device_suggestions for current product and shows AI terminal map when no static map exists.
+
+**Site Survey (📍 button on home screen — v7):**
+- Tech taps 📍 SITE SURVEY from the home screen (no device selection needed)
+- **Survey screen**: property name, scrollable device inventory list, ⚡ GENERATE PROPOSAL button
+- **Add Device screen**: name, brand, model, location, condition (Good/Fair/Poor), action (Keep/Service/Replace/New Install), notes. Tap existing device to edit or delete.
+- **AI proposal generation**: `POST /api/kb/survey-proposal` — Claude Haiku analyzes inventory → returns: 2-3 sentence summary, line items with qty + priority (urgent/recommended/optional), recommendations, install notes
+- Proposal renders inline with 📋 COPY PROPOSAL TEXT button for pasting into email/quote
+- Framework designed to feed into portal quote builder (Phase 2)
 
 **Cable Guide (purple button + home screen shortcut):**
 - CAT Cable tab: T568B pinout, 7-step continuity/PoE test procedure
@@ -330,7 +347,8 @@ Canonical source for product PDFs, brand assets, legal docs, historical project 
 ### Planned
 - PWA manifest + service worker (techs "Add to Home Screen")
 - LPR integration (Eagle Eye LPR → auto-trigger Brivo credential or gate relay)
-- Digital Site Survey mode (walk property, photo each device, pass/warn/fail, auto-generate proposal)
+- Site Survey photo capture per device (already wired to photoRef, needs UI hookup)
+- Site Survey → push directly to portal quote builder (portal auth required)
 - Commissioning wizard (new install checklist → as-built PDF)
 - Smart tester API integration (Fluke LINKWARE / IDEAL AnyWARE)
 
@@ -380,12 +398,20 @@ Field techs use Fluke, IDEAL, and Greenlee cable/network testers daily. Future g
 - [x] Auto-find manual from manufacturer sites (one-click)
 - [x] Auto-extract wiring terminals via Claude after every upload
 - [x] device_suggestions table — AI wiring data live in portal without code deploy
+- [x] Wiring diagram connector block ID badges (J2, J6, etc.) on group separators
+- [x] Measure step: ⊕ METER button → inline guide (SVG dial, probe jacks, cautions)
+- [x] Measure step: real-time pass/fail validation against expected range
+- [x] Site Survey module — 📍 SITE SURVEY button, device inventory, AI proposal generator
+- [x] PDF chunking fix — large paragraphs sub-split by sentence; hard 8192-token cap in embedBatch
+- [x] Supabase "manuals" bucket auto-created on first upload if missing
 - [ ] Photo evidence on work orders (reuse /tech photo component)
 - [ ] Canned service packages in /products
 - [ ] Automated renewal/PM reminders (Vercel cron + Twilio)
 - [ ] In-app support widget (HelpScout Beacon — one script tag)
 - [ ] PWA manifest for /tech
 - [ ] Smart tester API integration (Fluke LINKWARE / IDEAL AnyWARE)
+- [ ] Site Survey photo capture per device
+- [ ] Site Survey → push to quote builder
 
 ### Phase 2 — Dealer Network (1–2 months)
 - [x] /reps — Rep & commission manager (placeholder UI)
@@ -397,7 +423,8 @@ Field techs use Fluke, IDEAL, and Greenlee cable/network testers daily. Future g
 - [ ] LPR integration — Eagle Eye LPR → auto-trigger Brivo credential or gate relay. Registered plate detected → gate opens. No fob, no app. Phase 2 priority.
 - [ ] Wire dealer-network pages to live Supabase data (migrate reps/permits tables)
 - [ ] SMS thread inside work orders (Twilio ↔ WO ID)
-- [ ] Digital Site Survey (DVI for gates) — enhance /survey
+- [x] Site Survey framework — /tech survey + survey_add screens + AI proposal (live in /tech)
+- [ ] Site Survey: photo per device, push to /quotes quote builder
 - [ ] Client portal full build-out (Supabase RLS by org)
 - [ ] Property Intelligence Card on dashboard
 - [ ] UI differentiation pass: Space Grotesk headings, LED-glow status dots, tighter card density

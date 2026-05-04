@@ -115,16 +115,36 @@ Access Readers / Keypads:
   Stuck relay = gate triggers on every credential or continuously
   Isolation test: disconnect reader relay → gate should stop self-triggering
 
+FUNDAMENTAL FIRST STEPS — MANDATORY ORDER:
+When diagnostic history is empty (first step of a new session), ALWAYS follow this order before any device-specific testing:
+  STEP 1 — POWER: "Does the device have power?" Verify supply voltage at the device terminals (measure step with expected range). No power = fix power before anything else. Do NOT skip this.
+  STEP 2 — WIRING INTEGRITY: "Inspect all wiring connections at the device." Are any wires loose, disconnected, corroded, or damaged? Have the tech visually check every terminal on the device. Loose wires cause 40%+ of reported faults.
+  STEP 3 — OBVIOUS PHYSICAL: Any visible damage, burnt smell, moisture, or indicator LEDs showing fault state?
+  Only AFTER these three fundamentals are confirmed normal should you proceed to device-specific or system-level diagnosis.
+
 DIAGNOSTIC STRATEGY for systems with connected_devices listed:
-  1. Check power to all devices first
+  1. ALWAYS start with the fundamentals above (power, wiring, physical) — even for complex symptoms
   2. Ask tech which other devices are in the system if not specified
   3. ISOLATE inputs one by one — jumper or disconnect each safety/control input to find which one is causing the fault
   4. Once the root-cause device is confirmed, shift the diagnostic to that device specifically
   5. Confirm fix by reconnecting and retesting the full system
 
+EASY BEFORE COMPLEX — always progress in this order:
+  1. Power present? (measure)
+  2. Wiring secure and undamaged? (action/photo)
+  3. Status LEDs — what are they showing? (question/select)
+  4. Safety/obstruction inputs — are they clear? (question/action)
+  5. Control inputs — are they triggering correctly? (question/measure)
+  6. Configuration settings — DIP switches, limits, sensitivity (action)
+  7. Mechanical — springs, tracks, limits, physical obstructions (action)
+  8. Board/component failure — only after all above are ruled out (escalate)
+  Never jump to step 4+ without confirming steps 1-2 first.
+
 Rules:
   - ONE step at a time
-  - Sequence: power → safety inputs → control inputs → wiring → configuration → mechanical → board/replace
+  - NEVER start with a complex or specific test when a basic check (power, wiring) has not yet been confirmed
+  - When history is empty: ALWAYS start with power verification
+  - When history has 1 step: ALWAYS check wiring integrity next unless power was the problem
   - When connected_devices are present, check them as likely root causes before blaming the primary device
   - Always guide isolation testing (jumper/disconnect) when a safety circuit is suspect
   - Use exact terminal names, LED labels, and error codes from the manual passages
@@ -140,7 +160,11 @@ Rules:
           (connected_devices as string[]).length > 0
             ? `\nConnected devices in this system: ${(connected_devices as string[]).join(', ')}`
             : ''
-        }${historyText}\n\nRelevant manual/KB content:\n${context}\n\nWhat is the next diagnostic step?`
+        }
+Steps completed so far: ${(history as any[]).length === 0 ? 'NONE — this is step 1. You MUST start with power verification.' : (history as any[]).length === 1 ? '1 step done. If power was confirmed OK, your next step MUST be wiring inspection.' : `${(history as any[]).length} steps done.`}
+${historyText}
+
+Relevant manual/KB content:\n${context}\n\nWhat is the next diagnostic step?`
       }],
     })
 

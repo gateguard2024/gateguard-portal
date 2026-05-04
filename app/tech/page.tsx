@@ -467,6 +467,12 @@ function TechTool() {
   const [measureInput,    setMeasureInput]    = useState('')
   const [showMeterGuide,  setShowMeterGuide]  = useState(false)
 
+  // Resolution capture state
+  const [resolutionConfirmed,  setResolutionConfirmed]  = useState<'yes' | 'no' | null>(null)
+  const [resolutionNote,       setResolutionNote]       = useState('')
+  const [resolutionSubmitting, setResolutionSubmitting] = useState(false)
+  const [resolutionSaved,      setResolutionSaved]      = useState(false)
+
   // Photo step state
   const [photoData,     setPhotoData]     = useState<string | null>(null)
   const [photoAnalysis, setPhotoAnalysis] = useState<string | null>(null)
@@ -600,9 +606,35 @@ function TechTool() {
     setHistory(newH)
     setCurrent(null)
     setMeasureInput('')
+    setShowMeterGuide(false)
     setPhotoData(null); setPhotoAnalysis(null)
+    setResolutionConfirmed(null); setResolutionNote('')
     if (current.type === 'resolved' || current.type === 'escalate') return
     await fetchStep(newH)
+  }
+
+  // ── Resolution submission ──────────────────────────────────────────────────
+  async function submitResolution() {
+    if (!resolutionNote.trim()) return
+    setResolutionSubmitting(true)
+    try {
+      await fetch('/api/kb/resolve', {
+        method: 'POST', headers: apiHeaders(),
+        body: JSON.stringify({
+          session_id:      sessionId,
+          product_id:      selected?.id,
+          symptom,
+          history,
+          resolution_note: resolutionNote.trim(),
+        }),
+      })
+      setResolutionSaved(true)
+    } catch {
+      // Silently fail — don't block the tech from moving on
+      setResolutionSaved(true)
+    } finally {
+      setResolutionSubmitting(false)
+    }
   }
 
   // ── Photo capture ─────────────────────────────────────────────────────────
@@ -644,6 +676,7 @@ function TechTool() {
     setFreeText(''); setLogFixed(false); setMeasureInput('')
     setPhotoData(null); setPhotoAnalysis(null)
     setPrevScreen(null); setWiringInitMapId(null)
+    setResolutionConfirmed(null); setResolutionNote(''); setResolutionSubmitting(false); setResolutionSaved(false)
   }
 
   const stepCount  = history.length + (current ? 1 : 0)
@@ -1999,16 +2032,97 @@ function TechTool() {
                 </div>
               )}
 
-              {/* ── Terminal ── */}
-              {isTerminal && (
+              {/* ── Terminal: escalate ── */}
+              {current.type === 'escalate' && (
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  {!logFixed
-                    ? <button style={S.logFixBtn} onClick={() => setLogFixed(true)}>LOG FIX</button>
-                    : <div style={{ ...S.logFixBtn, background: C.greenAlpha, borderColor: 'rgba(16,185,129,0.3)', color: C.green, cursor: 'default' }}>✓ LOGGED</div>
-                  }
                   <button style={S.newSessionBtn} onClick={reset}>NEW SESSION</button>
-                  {current.type === 'escalate' && (
-                    <button style={S.keepGoingBtn} onClick={() => answer('Continue diagnosing')}>CONTINUE</button>
+                  <button style={S.keepGoingBtn} onClick={() => answer('Continue diagnosing')}>CONTINUE</button>
+                </div>
+              )}
+
+              {/* ── Terminal: resolved — resolution capture + learning loop ── */}
+              {current.type === 'resolved' && (
+                <div>
+                  {/* Did this fix it? */}
+                  {resolutionConfirmed === null && !resolutionSaved && (
+                    <div>
+                      <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', color: C.textMuted, marginBottom: 10 }}>
+                        DID THIS FIX IT?
+                      </div>
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        <button
+                          style={{ flex: 1, padding: '14px 12px', borderRadius: 12, background: 'rgba(5,150,105,0.08)', border: `1px solid rgba(5,150,105,0.3)`, color: C.green, fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: '0.1em', cursor: 'pointer' }}
+                          onClick={() => setResolutionConfirmed('yes')}
+                        >
+                          ✓ YES
+                        </button>
+                        <button
+                          style={{ flex: 1, padding: '14px 12px', borderRadius: 12, background: 'rgba(220,38,38,0.07)', border: `1px solid rgba(220,38,38,0.25)`, color: C.red, fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: '0.1em', cursor: 'pointer' }}
+                          onClick={() => answer('No — issue persists')}
+                        >
+                          ✗ NO
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Yes → capture what fixed it */}
+                  {resolutionConfirmed === 'yes' && !resolutionSaved && (
+                    <div>
+                      <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.16em', color: C.green, marginBottom: 8 }}>
+                        ✓ GREAT — WHAT FIXED IT?
+                      </div>
+                      <div style={{ fontFamily: SANS, fontSize: 12, color: C.textMuted, marginBottom: 10, lineHeight: 1.5 }}>
+                        Your note gets saved to our knowledge base so the AI learns from this fix.
+                      </div>
+                      <textarea
+                        value={resolutionNote}
+                        onChange={e => setResolutionNote(e.target.value)}
+                        placeholder="e.g. Replaced faulty photobeam receiver — RX LED was showing misaligned but beam was actually damaged internally. Swapped unit, re-aligned, gate resumed normal operation."
+                        rows={4}
+                        style={{ ...S.textarea, fontSize: 13, marginBottom: 10 }}
+                      />
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        <button
+                          onClick={submitResolution}
+                          disabled={!resolutionNote.trim() || resolutionSubmitting}
+                          style={{
+                            flex: 2, padding: '13px', borderRadius: 12,
+                            background: resolutionNote.trim() ? C.blue : C.bgInput,
+                            border: resolutionNote.trim() ? 'none' : `1px solid ${C.border}`,
+                            color: resolutionNote.trim() ? '#FFF' : C.textMuted,
+                            fontFamily: MONO, fontSize: 11, fontWeight: 700,
+                            letterSpacing: '0.1em', cursor: resolutionNote.trim() ? 'pointer' : 'not-allowed',
+                            opacity: resolutionSubmitting ? 0.6 : 1,
+                          }}
+                        >
+                          {resolutionSubmitting ? 'SAVING…' : 'SUBMIT & SAVE TO KB ›'}
+                        </button>
+                        <button
+                          style={{ flex: 1, padding: '13px', borderRadius: 12, background: C.bgInput, border: `1px solid ${C.border}`, color: C.textMuted, fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', cursor: 'pointer' }}
+                          onClick={() => { setResolutionSaved(true) }}
+                        >
+                          SKIP
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Saved confirmation */}
+                  {resolutionSaved && (
+                    <div>
+                      <div style={{ padding: '12px 14px', borderRadius: 10, background: 'rgba(5,150,105,0.08)', border: `1px solid rgba(5,150,105,0.25)`, marginBottom: 10 }}>
+                        <div style={{ fontFamily: MONO, fontSize: 10, color: C.green, letterSpacing: '0.14em', fontWeight: 700 }}>
+                          {resolutionNote.trim() ? '✓ RESOLUTION SAVED TO KNOWLEDGE BASE' : '✓ SESSION CLOSED'}
+                        </div>
+                        {resolutionNote.trim() && (
+                          <div style={{ fontFamily: SANS, fontSize: 12, color: C.textSecondary, marginTop: 4, lineHeight: 1.4 }}>
+                            The AI will surface this fix in future sessions with similar symptoms.
+                          </div>
+                        )}
+                      </div>
+                      <button style={{ ...S.newSessionBtn, width: '100%' }} onClick={reset}>NEW SESSION</button>
+                    </div>
                   )}
                 </div>
               )}
