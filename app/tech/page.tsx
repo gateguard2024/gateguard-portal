@@ -459,7 +459,10 @@ function TechTool() {
   const [history,   setHistory]   = useState<HistoryItem[]>([])
   const [current,   setCurrent]   = useState<Step | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
-  const [loading,   setLoading]   = useState(false)
+  const [loading,      setLoading]      = useState(false)
+  const [loadingStage, setLoadingStage] = useState<'searching' | 'generating' | null>(null)
+  const [diagError,    setDiagError]    = useState<string | null>(null)
+  const [lastHistory,  setLastHistory]  = useState<HistoryItem[]>([])  // for retry
   const [freeText,  setFreeText]  = useState('')
   const [logFixed,  setLogFixed]  = useState(false)
 
@@ -574,15 +577,29 @@ function TechTool() {
   // ── Diagnostic helpers ────────────────────────────────────────────────────
   async function startDiag() {
     if (!symptom.trim()) return
+    setDiagError(null)
     setScreen('diag'); await fetchStep([])
   }
 
   async function fetchStep(h: HistoryItem[]) {
     setLoading(true)
+    setLoadingStage('searching')
+    setDiagError(null)
     setCurrent(null)
+    setLastHistory(h)
+
+    // Show "generating" after 3s so the tech knows it's still working
+    const stageTimer = setTimeout(() => setLoadingStage('generating'), 3000)
+
+    // Abort after 55s — surface a clean retry instead of infinite spinner
+    const controller = new AbortController()
+    const abortTimer = setTimeout(() => controller.abort(), 55000)
+
     try {
       const res = await fetch('/api/kb/ask', {
-        method: 'POST', headers: apiHeaders(),
+        method: 'POST',
+        headers: apiHeaders(),
+        signal: controller.signal,
         body: JSON.stringify({
           symptom, error_code: errorCode || undefined,
           product_id: selected?.id, history: h, session_id: sessionId,
@@ -594,9 +611,15 @@ function TechTool() {
       if (!sessionId && data.session_id) setSessionId(data.session_id)
       setCurrent(data as Step)
     } catch (err: any) {
-      alert('Diagnostic error: ' + err.message)
+      const msg = err.name === 'AbortError'
+        ? 'Request timed out — tap RETRY to try again'
+        : (err.message || 'Network error')
+      setDiagError(msg)
     } finally {
+      clearTimeout(stageTimer)
+      clearTimeout(abortTimer)
       setLoading(false)
+      setLoadingStage(null)
     }
   }
 
@@ -677,6 +700,7 @@ function TechTool() {
     setPhotoData(null); setPhotoAnalysis(null)
     setPrevScreen(null); setWiringInitMapId(null)
     setResolutionConfirmed(null); setResolutionNote(''); setResolutionSubmitting(false); setResolutionSaved(false)
+    setDiagError(null); setLastHistory([]); setLoadingStage(null)
   }
 
   const stepCount  = history.length + (current ? 1 : 0)
@@ -1741,13 +1765,38 @@ function TechTool() {
           </div>
         )}
 
-        {/* Loading */}
+        {/* Loading — staged messaging so tech knows it's working */}
         {loading && (
           <div style={{ padding: '20px 16px', display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={S.spinner} />
-            <span style={{ fontFamily: MONO, fontSize: 11, color: C.textMuted, letterSpacing: '0.08em' }}>
-              ANALYZING FAULT…
-            </span>
+            <div>
+              <div style={{ fontFamily: MONO, fontSize: 11, color: C.textMuted, letterSpacing: '0.08em' }}>
+                {loadingStage === 'generating' ? 'GENERATING NEXT STEP…' : 'SEARCHING MANUALS…'}
+              </div>
+              {loadingStage === 'generating' && (
+                <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.06em', marginTop: 3, opacity: 0.6 }}>
+                  CROSS-REFERENCING MANUAL SPECS
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Error + retry — shown instead of spinner when request fails or times out */}
+        {!loading && diagError && (
+          <div style={{ margin: '0 16px', padding: '14px 16px', borderRadius: 12, background: 'rgba(220,38,38,0.06)', border: `1px solid rgba(220,38,38,0.2)` }}>
+            <div style={{ fontFamily: MONO, fontSize: 10, color: C.red, letterSpacing: '0.14em', fontWeight: 700, marginBottom: 8 }}>
+              ⚠ CONNECTION ERROR
+            </div>
+            <div style={{ fontFamily: SANS, fontSize: 13, color: C.textSecondary, marginBottom: 12, lineHeight: 1.5 }}>
+              {diagError}
+            </div>
+            <button
+              onClick={() => fetchStep(lastHistory)}
+              style={{ padding: '10px 18px', borderRadius: 9, background: C.blue, border: 'none', color: '#FFF', fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', cursor: 'pointer' }}
+            >
+              RETRY ›
+            </button>
           </div>
         )}
 

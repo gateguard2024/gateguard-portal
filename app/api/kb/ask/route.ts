@@ -10,6 +10,9 @@ import { auth }                       from '@clerk/nextjs/server'
 import Anthropic                      from '@anthropic-ai/sdk'
 import { searchKnowledge, serviceDb } from '@/lib/vectorize'
 
+export const maxDuration = 60   // Vercel Pro: up to 60s. Prevents silent timeout at step 3-4.
+export const dynamic     = 'force-dynamic'
+
 function isTechAuthed(req: NextRequest): boolean {
   const code      = req.headers.get('x-tech-code')
   const validCode = process.env.TECH_ACCESS_CODE
@@ -152,7 +155,14 @@ Rules:
   - Prefer select when there are distinct observable states (LED colors, switch positions)
   - Use photo when visual evidence (damage, alignment, display) would help
   - Keep "text" under 120 chars; put wiring detail in "detail"
-  - Set manual_ref whenever citing a specific manual passage`,
+  - Set manual_ref whenever citing a specific manual passage
+
+CRITICAL — VOLTAGE AND MEASUREMENT ACCURACY:
+  - For measure steps, voltage/resistance/current values MUST come from the manual content provided above.
+  - The SYSTEM TOPOLOGY section gives generic guidance only — NEVER use its values as the expected range in a measure step unless no manual content exists for this device.
+  - If the manual content above contains the spec (e.g. "24VDC", "115VAC ±10%", "12VDC"), use that exact value as the expected range.
+  - If no manual content mentions the specific spec, set expected to null and use detail to tell the tech where to find it (e.g. "See nameplate on device or check spec sheet for rated input voltage").
+  - Wrong voltage ranges in the field cause real damage — accuracy matters more than speed here.`,
 
       messages: [{
         role: 'user',
