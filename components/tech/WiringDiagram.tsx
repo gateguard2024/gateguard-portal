@@ -117,16 +117,51 @@ function DevicePanel({ device, visibleTerminals, side, connectedIds, highlightId
         const prevGroup = i > 0 ? visibleTerminals[i - 1].group : null
         const showGroup = t.group && t.group !== prevGroup
 
+        // Extract connector ID badge: "Lock Relay 1 (J2)" → "J2"
+        const connBadge = (group: string) => {
+          const m = group.match(/\(([^)]+)\)/)
+          if (m) return m[1]
+          return group.split(' ').slice(-1)[0] ?? group
+        }
+
         return (
           <g key={t.id}>
-            {/* Group label line */}
-            {showGroup && i > 0 && (
-              <line
-                x1={panelX + 6} y1={y - ROW_H / 2 + 2}
-                x2={panelX + DEV_W - 6} y2={y - ROW_H / 2 + 2}
-                stroke="#E2E8F0" strokeWidth={0.5} strokeDasharray="2 2"
-              />
-            )}
+            {/* Group separator — connector block id + name */}
+            {showGroup && i > 0 && (() => {
+              const badge      = connBadge(t.group!)
+              const lineY      = y - ROW_H / 2 + 2
+              const badgeW     = Math.min(badge.length * 5.5 + 10, 52)
+              const badgeX     = isLeft ? panelX + 4 : panelX + DEV_W - badgeW - 4
+              const groupShort = (t.group ?? '').replace(/\s*\([^)]*\)/, '').trim()
+              const groupLabel = groupShort.length > 16 ? groupShort.slice(0, 15) + '…' : groupShort
+              const textX      = isLeft ? badgeX + badgeW + 4 : badgeX - 4
+              return (
+                <g>
+                  <line
+                    x1={panelX + 4} y1={lineY}
+                    x2={panelX + DEV_W - 4} y2={lineY}
+                    stroke="#E2E8F0" strokeWidth={0.5} strokeDasharray="2 2"
+                  />
+                  <rect x={badgeX} y={lineY - 5} width={badgeW} height={10} rx={3}
+                    fill={isConn ? '#6B7EFF' : '#E2E8F0'} opacity={0.9}
+                  />
+                  <text x={badgeX + badgeW / 2} y={lineY + 3.5} textAnchor="middle"
+                    fontFamily={MONO} fontSize={6.5} fontWeight="bold"
+                    fill={isConn ? '#FFFFFF' : '#64748B'} letterSpacing="0.06em"
+                  >
+                    {badge}
+                  </text>
+                  {groupLabel && (
+                    <text x={textX} y={lineY + 3.5}
+                      textAnchor={isLeft ? 'start' : 'end'}
+                      fontFamily={MONO} fontSize={6} fill="#94A3B8" letterSpacing="0.04em"
+                    >
+                      {groupLabel}
+                    </text>
+                  )}
+                </g>
+              )
+            })()}
 
             {/* Row background on hover target */}
             <rect

@@ -38,6 +38,10 @@ export async function POST(req: NextRequest) {
     const storagePath = `${product_id}/${safeName}`
     const db          = serviceDb()
 
+    // Ensure the "manuals" bucket exists (idempotent — safe to call on every request).
+    // createBucket returns an error if the bucket already exists, which we silently ignore.
+    await db.storage.createBucket('manuals', { public: true }).catch(() => {/* already exists */})
+
     // Create a signed URL valid for 10 minutes.
     // upsert: true allows re-uploading a revised manual for the same product.
     const { data, error } = await db.storage

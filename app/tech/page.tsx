@@ -18,7 +18,35 @@ import { CableGuide }   from '@/components/tech/CableGuide'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type StepType = 'question' | 'action' | 'measure' | 'select' | 'photo' | 'resolved' | 'escalate'
-type Screen   = 'pin' | 'home' | 'choice' | 'symptom' | 'diag' | 'wiring' | 'cable' | 'install'
+type Screen   = 'pin' | 'home' | 'choice' | 'symptom' | 'diag' | 'wiring' | 'cable' | 'install' | 'survey' | 'survey_add'
+
+// ─── Site Survey Types ────────────────────────────────────────────────────────
+interface SurveyDevice {
+  id:          string
+  name:        string
+  brand:       string
+  model:       string
+  location:    string
+  condition:   'good' | 'fair' | 'poor'
+  action:      'keep' | 'service' | 'replace' | 'new_install'
+  notes:       string
+  photoDataUrl?: string
+}
+
+interface ProposalLineItem {
+  description: string
+  qty:         number
+  note:        string
+  priority:    'urgent' | 'recommended' | 'optional'
+}
+
+interface SurveyProposal {
+  summary:         string
+  lineItems:       ProposalLineItem[]
+  recommendations: string[]
+  urgentItems:     string[]
+  installNotes:    string[]
+}
 
 interface Step {
   type:       StepType
@@ -80,7 +108,220 @@ const STEP_CFG: Record<StepType, {
   escalate: { accent: C.red,    surface: C.redAlpha,    border: 'rgba(239,68,68,0.18)',   label: 'ESCALATE', numColor: C.red    },
 }
 
-// Connected device options — what else might be wired to this device?
+// ─── Meter configuration per unit type ───────────────────────────────────────
+interface MeterCaution { text: string; level: 'danger' | 'warn' }
+interface MeterConfig {
+  setting:  string    // dial position label
+  range:    string    // range advice
+  jackPos:  string    // + probe jack
+  jackNeg:  string    // − probe jack
+  dialPos:  string    // short token for SVG highlight
+  cautions: MeterCaution[]
+}
+
+const METER_CONFIGS: Record<string, MeterConfig> = {
+  VAC: {
+    setting: 'AC Voltage  V~',
+    range:   'Auto-range or set ABOVE expected value',
+    jackPos: 'V / VΩmA',
+    jackNeg: 'COM',
+    dialPos: 'V~',
+    cautions: [
+      { text: 'LIVE VOLTAGE — do not touch bare probe tips or circuit contacts', level: 'danger' },
+      { text: 'Never use DC voltage (V—) mode on AC circuits — misleading reading, possible meter damage', level: 'danger' },
+      { text: 'Set range to auto or one step above expected before making contact', level: 'warn' },
+      { text: 'Inspect probe insulation before use — cracked insulation is a shock hazard', level: 'warn' },
+    ],
+  },
+  VDC: {
+    setting: 'DC Voltage  V—',
+    range:   'Auto-range or set ABOVE expected value',
+    jackPos: 'V / VΩmA',
+    jackNeg: 'COM',
+    dialPos: 'V—',
+    cautions: [
+      { text: 'Red probe (+) to positive, black probe (COM) to negative for correct polarity', level: 'warn' },
+      { text: 'Do NOT probe AC mains in DC mode — reading near 0 masks live danger', level: 'danger' },
+      { text: 'Verify COM is in the COM jack, not the A (current) jack', level: 'warn' },
+    ],
+  },
+  'Ω': {
+    setting: 'Resistance  Ω',
+    range:   'Auto-range or estimated range',
+    jackPos: 'V / VΩmA',
+    jackNeg: 'COM',
+    dialPos: 'Ω',
+    cautions: [
+      { text: 'POWER OFF and capacitors discharged before measuring resistance — live voltage destroys meter and gives false readings', level: 'danger' },
+      { text: 'Disconnect at least one lead of the component — parallel paths give false low readings', level: 'warn' },
+      { text: 'Short probes together first — confirm ~0 Ω and zero out lead resistance', level: 'warn' },
+    ],
+  },
+  A: {
+    setting: 'Current  A',
+    range:   'Start at highest range, step down',
+    jackPos: 'A (dedicated current jack)',
+    jackNeg: 'COM',
+    dialPos: 'A',
+    cautions: [
+      { text: 'USE the dedicated A jack — using VΩ jack for current blows the fuse or destroys meter', level: 'danger' },
+      { text: 'Meter goes IN SERIES — break the circuit to insert the meter', level: 'danger' },
+      { text: 'Always start on highest range and step down to avoid fuse damage', level: 'warn' },
+    ],
+  },
+  mA: {
+    setting: 'Milliamps  mA',
+    range:   'mA range',
+    jackPos: 'mA / VΩmA',
+    jackNeg: 'COM',
+    dialPos: 'mA',
+    cautions: [
+      { text: 'Use mA jack if present — do not use the V/Ω jack for current measurement', level: 'danger' },
+      { text: 'Meter in series — break circuit to insert', level: 'danger' },
+      { text: 'mA fuse blows easily at low overload — start on highest range', level: 'warn' },
+    ],
+  },
+  ms: {
+    setting: 'Frequency / Time  Hz',
+    range:   'Hz or timing mode',
+    jackPos: 'V / VΩmA',
+    jackNeg: 'COM',
+    dialPos: 'Hz',
+    cautions: [
+      { text: 'Most field meters measure frequency (Hz), not delay time in ms — use oscilloscope for precise timing', level: 'warn' },
+      { text: 'Apply to signal-level voltages only, not power lines', level: 'warn' },
+    ],
+  },
+}
+
+// Normalize unit strings to a config key
+function meterConfigKey(unit: string): string {
+  const u = unit.trim()
+  if (/^v?ac$/i.test(u) || u === 'VAC') return 'VAC'
+  if (/^v?dc$/i.test(u) || u === 'VDC' || u === 'V') return 'VDC'
+  if (u === 'Ω' || u.toLowerCase() === 'ohm' || u.toLowerCase() === 'ohms') return 'Ω'
+  if (u === 'A' || u.toLowerCase() === 'amp' || u.toLowerCase() === 'amps') return 'A'
+  if (u.toLowerCase() === 'ma' || u.toLowerCase() === 'milliamp') return 'mA'
+  if (u.toLowerCase() === 'ms' || u.toLowerCase() === 'hz') return 'ms'
+  return 'VDC'  // default fallback
+}
+
+// Parse expected strings like "115±10", ">12", "0-24", "0", "12"
+function parseMeasureExpected(expected: string): { min: number; max: number } | null {
+  const s = expected.trim()
+  // 115±10
+  const pm = s.match(/^([+-]?\d+\.?\d*)\s*[±]\s*(\d+\.?\d*)$/)
+  if (pm) { const c = parseFloat(pm[1]), d = parseFloat(pm[2]); return { min: c - d, max: c + d } }
+  // 0-24 or 0–24
+  const rng = s.match(/^([+-]?\d+\.?\d*)\s*[-–]\s*(\d+\.?\d*)$/)
+  if (rng) return { min: parseFloat(rng[1]), max: parseFloat(rng[2]) }
+  // >12 or ≥12
+  const gt = s.match(/^([>≥])\s*=?\s*([+-]?\d+\.?\d*)$/)
+  if (gt) { const v = parseFloat(gt[2]); return { min: gt[1] === '≥' ? v : v + 0.001, max: Infinity } }
+  // <1 or ≤1
+  const lt = s.match(/^([<≤])\s*=?\s*([+-]?\d+\.?\d*)$/)
+  if (lt) { const v = parseFloat(lt[2]); return { min: -Infinity, max: lt[1] === '≤' ? v : v - 0.001 } }
+  // plain number — ±10% tolerance, except 0 which uses ±0.5
+  const num = s.match(/^([+-]?\d+\.?\d*)$/)
+  if (num) { const v = parseFloat(num[1]); return v === 0 ? { min: -0.5, max: 0.5 } : { min: v * 0.9, max: v * 1.1 } }
+  return null
+}
+
+function checkMeasureResult(input: string, expected: string): 'pass' | 'fail' | null {
+  const val = parseFloat(input)
+  if (isNaN(val)) return null
+  const range = parseMeasureExpected(expected)
+  if (!range) return null
+  return (val >= range.min && val <= range.max) ? 'pass' : 'fail'
+}
+
+// ─── Meter Guide SVG ──────────────────────────────────────────────────────────
+function MeterGuideSVG({ dialPos }: { dialPos: string }) {
+  // Dial positions arranged in a semicircle (left to right)
+  const positions = ['OFF', 'V~', 'V—', 'mA', 'A', 'Ω', 'Hz', 'DIODE']
+  const cx = 88, cy = 116, r = 56
+  const startAngle = Math.PI         // left (180°)
+  const endAngle   = 0               // right (0°)
+  const total      = positions.length - 1
+
+  return (
+    <svg viewBox="0 0 176 210" style={{ width: '100%', maxWidth: 200, display: 'block', margin: '0 auto' }}>
+      {/* Meter body */}
+      <rect x={4} y={4} width={168} height={202} rx={14} fill="#1E293B" />
+      <rect x={8} y={8} width={160} height={194} rx={12} fill="#0F172A" stroke="#334155" strokeWidth={1} />
+
+      {/* Display */}
+      <rect x={18} y={16} width={140} height={42} rx={6} fill="#0D1117" stroke="#1E293B" strokeWidth={1} />
+      <text x={88} y={34} textAnchor="middle" fontFamily='"IBM Plex Mono",monospace' fontSize={9} fill="#475569" letterSpacing="0.12em">READING</text>
+      <text x={88} y={51} textAnchor="middle" fontFamily='"IBM Plex Mono",monospace' fontSize={14} fontWeight="bold" fill="#94A3B8" letterSpacing="0.08em">— — —</text>
+
+      {/* Dial arc background */}
+      <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`} fill="none" stroke="#1E293B" strokeWidth={18} strokeLinecap="round" />
+      <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`} fill="none" stroke="#334155" strokeWidth={16} strokeLinecap="round" />
+
+      {/* Dial position labels */}
+      {positions.map((pos, i) => {
+        const angle  = startAngle + (endAngle - startAngle) * (i / total)
+        // offset inward from arc
+        const pr  = r - 4
+        const lx  = cx + pr * Math.cos(angle)
+        const ly  = cy - pr * Math.sin(angle)
+        const isActive = pos === dialPos
+        return (
+          <g key={pos}>
+            {isActive && (
+              <circle cx={lx} cy={ly} r={9} fill="#7C3AED" opacity={0.9} />
+            )}
+            <text
+              x={lx} y={ly + 3.5}
+              textAnchor="middle"
+              fontFamily='"IBM Plex Mono",monospace'
+              fontSize={isActive ? 7 : 6}
+              fontWeight={isActive ? 'bold' : 'normal'}
+              fill={isActive ? '#FFFFFF' : '#475569'}
+            >
+              {pos}
+            </text>
+          </g>
+        )
+      })}
+
+      {/* Dial pointer needle */}
+      {(() => {
+        const idx    = positions.indexOf(dialPos)
+        const i      = idx >= 0 ? idx : 0
+        const angle  = startAngle + (endAngle - startAngle) * (i / total)
+        const nx     = cx + (r - 18) * Math.cos(angle)
+        const ny     = cy - (r - 18) * Math.sin(angle)
+        return (
+          <g>
+            <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#7C3AED" strokeWidth={2.5} strokeLinecap="round" />
+            <circle cx={cx} cy={cy} r={4} fill="#334155" stroke="#7C3AED" strokeWidth={1.5} />
+          </g>
+        )
+      })()}
+
+      {/* Probe jack labels */}
+      <rect x={18} y={152} width={64} height={24} rx={5} fill="#1E293B" stroke="#374151" strokeWidth={1} />
+      <text x={50} y={162} textAnchor="middle" fontFamily='"IBM Plex Mono",monospace' fontSize={7} fill="#64748B" letterSpacing="0.06em">COM</text>
+      <text x={50} y={171} textAnchor="middle" fontFamily='"IBM Plex Mono",monospace' fontSize={8} fontWeight="bold" fill="#94A3B8">−</text>
+      <circle cx={50} cy={180} r={5} fill="#1E293B" stroke="#374151" strokeWidth={1.5} />
+
+      <rect x={94} y={152} width={64} height={24} rx={5} fill="#1E293B" stroke="#374151" strokeWidth={1} />
+      <text x={126} y={162} textAnchor="middle" fontFamily='"IBM Plex Mono",monospace' fontSize={7} fill="#64748B" letterSpacing="0.06em">VΩmA</text>
+      <text x={126} y={171} textAnchor="middle" fontFamily='"IBM Plex Mono",monospace' fontSize={8} fontWeight="bold" fill="#EF4444">+</text>
+      <circle cx={126} cy={180} r={5} fill="#1E293B" stroke="#EF4444" strokeWidth={1.5} />
+
+      {/* Probe lines */}
+      <line x1={50} y1={185} x2={50} y2={198} stroke="#64748B" strokeWidth={2} strokeLinecap="round" />
+      <line x1={126} y1={185} x2={126} y2={198} stroke="#EF4444" strokeWidth={2} strokeLinecap="round" />
+      <text x={50} y={207} textAnchor="middle" fontFamily='"IBM Plex Mono",monospace' fontSize={6} fill="#475569">BLACK</text>
+      <text x={126} y={207} textAnchor="middle" fontFamily='"IBM Plex Mono",monospace' fontSize={6} fill="#EF4444">RED</text>
+    </svg>
+  )
+}
+
+// ─── Connected device options — what else might be wired to this device?
 const CONNECTED_OPTS: Record<string, string[]> = {
   'Gate Operator':   ['Photobeam', 'Safety Loop (under arm)', 'Exit Loop Detector', 'Safety Edge', 'Keypad', 'Callbox', 'UniFi Intercom', 'Access Reader', 'Battery Backup'],
   'Barrier Arm':     ['Photobeam', 'Safety Loop (under arm)', 'Exit Loop Detector', 'Keypad', 'Access Reader', 'Safety Edge'],
@@ -223,12 +464,28 @@ function TechTool() {
   const [logFixed,  setLogFixed]  = useState(false)
 
   // Measure step state
-  const [measureInput, setMeasureInput] = useState('')
+  const [measureInput,    setMeasureInput]    = useState('')
+  const [showMeterGuide,  setShowMeterGuide]  = useState(false)
 
   // Photo step state
   const [photoData,     setPhotoData]     = useState<string | null>(null)
   const [photoAnalysis, setPhotoAnalysis] = useState<string | null>(null)
   const [analyzing,     setAnalyzing]     = useState(false)
+
+  // Survey state
+  const [surveyDevices,   setSurveyDevices]   = useState<SurveyDevice[]>([])
+  const [surveyPropName,  setSurveyPropName]  = useState('')
+  const [editingDevice,   setEditingDevice]   = useState<SurveyDevice | null>(null)
+  const [surveyProposal,  setSurveyProposal]  = useState<SurveyProposal | null>(null)
+  const [surveyLoading,   setSurveyLoading]   = useState(false)
+  // Fields for survey_add form
+  const [sdName,      setSdName]      = useState('')
+  const [sdBrand,     setSdBrand]     = useState('')
+  const [sdModel,     setSdModel]     = useState('')
+  const [sdLocation,  setSdLocation]  = useState('')
+  const [sdCondition, setSdCondition] = useState<SurveyDevice['condition']>('good')
+  const [sdAction,    setSdAction]    = useState<SurveyDevice['action']>('keep')
+  const [sdNotes,     setSdNotes]     = useState('')
 
   // Demo / install mode state
   const [prevScreen,      setPrevScreen]     = useState<Screen | null>(null)
@@ -543,12 +800,20 @@ function TechTool() {
         <div style={S.legendStrip}>
           <span style={{ color: C.green }}>● AI-READY</span>
           <span style={{ color: C.textMuted }}>● MANUAL PENDING</span>
-          <button
-            onClick={() => setScreen('cable')}
-            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 9, color: C.purple, letterSpacing: '0.08em', padding: 0 }}
-          >
-            🔌 CABLE GUIDE
-          </button>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 12, alignItems: 'center' }}>
+            <button
+              onClick={() => setScreen('cable')}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 9, color: C.purple, letterSpacing: '0.08em', padding: 0 }}
+            >
+              🔌 CABLE GUIDE
+            </button>
+            <button
+              onClick={() => { setSurveyProposal(null); setScreen('survey') }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 9, color: '#0D9488', letterSpacing: '0.08em', padding: 0 }}
+            >
+              📍 SITE SURVEY
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -926,6 +1191,367 @@ function TechTool() {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // SCREEN: SURVEY — site walk inventory + proposal generator
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (screen === 'survey') {
+    const TEAL    = '#0D9488'
+    const tealBg  = 'rgba(13,148,136,0.09)'
+    const condColor = (c: SurveyDevice['condition']) =>
+      c === 'good' ? C.green : c === 'fair' ? C.amber : C.red
+    const actionLabel = (a: SurveyDevice['action']) =>
+      ({ keep: 'KEEP', service: 'SERVICE', replace: 'REPLACE', new_install: 'NEW INSTALL' })[a]
+    const actionColor = (a: SurveyDevice['action']) =>
+      a === 'keep' ? C.green : a === 'service' ? C.amber : a === 'replace' ? C.red : TEAL
+    const priorityColor = (p: string) =>
+      p === 'urgent' ? C.red : p === 'recommended' ? C.amber : C.textMuted
+
+    async function generateProposal() {
+      if (!surveyDevices.length) return
+      setSurveyLoading(true)
+      setSurveyProposal(null)
+      try {
+        const res = await fetch('/api/kb/survey-proposal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-tech-code': techCode },
+          body: JSON.stringify({ propertyName: surveyPropName, devices: surveyDevices }),
+        })
+        const data = await res.json()
+        if (data.proposal) setSurveyProposal(data.proposal)
+      } catch { /* silent */ } finally {
+        setSurveyLoading(false)
+      }
+    }
+
+    function startAddDevice(existing?: SurveyDevice) {
+      if (existing) {
+        setSdName(existing.name); setSdBrand(existing.brand); setSdModel(existing.model)
+        setSdLocation(existing.location); setSdCondition(existing.condition)
+        setSdAction(existing.action); setSdNotes(existing.notes)
+        setEditingDevice(existing)
+      } else {
+        setSdName(''); setSdBrand(''); setSdModel(''); setSdLocation('')
+        setSdCondition('good'); setSdAction('keep'); setSdNotes('')
+        setEditingDevice(null)
+      }
+      setScreen('survey_add')
+    }
+
+    return (
+      <div style={S.shell}>
+        <div style={S.topBar}>
+          <button style={S.iconBtn} onClick={() => setScreen('home')}>‹</button>
+          <div style={{ flex: 1 }}>
+            <div style={S.topBarTitle}>SITE SURVEY</div>
+            <div style={S.topBarSub}>{surveyDevices.length} DEVICE{surveyDevices.length !== 1 ? 'S' : ''} DOCUMENTED</div>
+          </div>
+          <div style={{ fontFamily: MONO, fontSize: 9, color: TEAL, letterSpacing: '0.1em' }}>📍 WALK MODE</div>
+        </div>
+
+        <div style={{ padding: '12px 16px 0' }}>
+          <input
+            value={surveyPropName}
+            onChange={e => setSurveyPropName(e.target.value)}
+            placeholder="Property name (optional)…"
+            style={{ width: '100%', boxSizing: 'border-box', background: C.bgInput, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 14px', fontFamily: SANS, fontSize: 14, color: C.textPrimary, outline: 'none', WebkitAppearance: 'none', WebkitTextFillColor: C.textPrimary }}
+          />
+        </div>
+
+        {/* Device list */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0 8px', scrollbarWidth: 'none' } as React.CSSProperties}>
+          {surveyDevices.length === 0 && (
+            <div style={{ color: C.textMuted, textAlign: 'center', marginTop: 48, fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em', lineHeight: 2 }}>
+              NO DEVICES YET{'\n'}TAP + ADD DEVICE TO START
+            </div>
+          )}
+          {surveyDevices.map((d, idx) => (
+            <button
+              key={d.id}
+              onClick={() => startAddDevice(d)}
+              style={{ width: '100%', display: 'flex', alignItems: 'flex-start', padding: '13px 16px', gap: 12, background: 'transparent', border: 'none', borderBottom: `1px solid ${C.border}`, cursor: 'pointer', textAlign: 'left' }}
+            >
+              {/* Index */}
+              <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, background: tealBg, border: `1px solid ${TEAL}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 10, fontWeight: 700, color: TEAL }}>
+                {String(idx + 1).padStart(2, '0')}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: SANS, fontSize: 14, fontWeight: 600, color: C.textPrimary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {d.name || 'Unnamed Device'}
+                </div>
+                <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, marginTop: 2, letterSpacing: '0.06em' }}>
+                  {[d.brand, d.model].filter(Boolean).join(' · ')}
+                  {d.location && ` — ${d.location.toUpperCase()}`}
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+                <span style={{ fontFamily: MONO, fontSize: 8, letterSpacing: '0.08em', color: condColor(d.condition), fontWeight: 700 }}>
+                  ● {d.condition.toUpperCase()}
+                </span>
+                <span style={{ fontFamily: MONO, fontSize: 8, letterSpacing: '0.08em', color: actionColor(d.action) }}>
+                  {actionLabel(d.action)}
+                </span>
+              </div>
+            </button>
+          ))}
+
+          {/* Proposal output */}
+          {surveyProposal && (
+            <div style={{ margin: '12px 16px 0', padding: 16, borderRadius: 12, background: C.bgCard, border: `1px solid ${C.border}` }}>
+              <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', color: TEAL, marginBottom: 8 }}>AI PROPOSAL DRAFT</div>
+              <p style={{ fontFamily: SANS, fontSize: 13, color: C.textPrimary, lineHeight: 1.6, margin: '0 0 12px' }}>{surveyProposal.summary}</p>
+
+              {surveyProposal.urgentItems?.length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontFamily: MONO, fontSize: 8, color: C.red, letterSpacing: '0.1em', marginBottom: 6 }}>⚠ URGENT</div>
+                  {surveyProposal.urgentItems.map((item, i) => (
+                    <div key={i} style={{ fontFamily: SANS, fontSize: 12, color: C.red, lineHeight: 1.5, paddingLeft: 12, borderLeft: `2px solid ${C.red}`, marginBottom: 4 }}>{item}</div>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.1em', marginBottom: 6 }}>LINE ITEMS</div>
+                {surveyProposal.lineItems.map((item, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 6, padding: '6px 10px', borderRadius: 6, background: C.bgInput, border: `1px solid ${C.border}` }}>
+                    <span style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, flexShrink: 0, marginTop: 1 }}>×{item.qty}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontFamily: SANS, fontSize: 12, color: C.textPrimary, fontWeight: 500 }}>{item.description}</div>
+                      <div style={{ fontFamily: SANS, fontSize: 11, color: C.textMuted, marginTop: 1 }}>{item.note}</div>
+                    </div>
+                    <span style={{ fontFamily: MONO, fontSize: 8, color: priorityColor(item.priority), letterSpacing: '0.08em', flexShrink: 0, marginTop: 2 }}>
+                      {item.priority.toUpperCase()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {surveyProposal.recommendations?.length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.1em', marginBottom: 6 }}>RECOMMENDATIONS</div>
+                  {surveyProposal.recommendations.map((r, i) => (
+                    <div key={i} style={{ fontFamily: SANS, fontSize: 12, color: C.textSecondary, lineHeight: 1.5, paddingLeft: 10, borderLeft: `2px solid ${C.border}`, marginBottom: 4 }}>• {r}</div>
+                  ))}
+                </div>
+              )}
+
+              {surveyProposal.installNotes?.length > 0 && (
+                <div>
+                  <div style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.1em', marginBottom: 6 }}>INSTALL NOTES</div>
+                  {surveyProposal.installNotes.map((n, i) => (
+                    <div key={i} style={{ fontFamily: SANS, fontSize: 11, color: C.textMuted, lineHeight: 1.5, paddingLeft: 10, borderLeft: `2px solid ${C.border}`, marginBottom: 4 }}>• {n}</div>
+                  ))}
+                </div>
+              )}
+
+              <button
+                onClick={() => {
+                  const text = [
+                    `SITE SURVEY — ${surveyPropName || 'Property'}`,
+                    `${surveyDevices.length} devices documented`,
+                    '',
+                    surveyProposal.summary,
+                    '',
+                    'LINE ITEMS:',
+                    ...surveyProposal.lineItems.map(i => `  ×${i.qty}  ${i.description} [${i.priority}]`),
+                    '',
+                    'RECOMMENDATIONS:',
+                    ...surveyProposal.recommendations.map(r => `  • ${r}`),
+                  ].join('\n')
+                  navigator.clipboard?.writeText(text).catch(() => {})
+                }}
+                style={{ marginTop: 8, width: '100%', padding: '10px', borderRadius: 8, border: `1px solid ${TEAL}40`, background: tealBg, fontFamily: MONO, fontSize: 10, color: TEAL, letterSpacing: '0.08em', cursor: 'pointer' }}
+              >
+                📋 COPY PROPOSAL TEXT
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Bottom actions */}
+        <div style={{ padding: '10px 16px 16px', display: 'flex', gap: 8, borderTop: `1px solid ${C.border}` }}>
+          <button
+            onClick={() => startAddDevice()}
+            style={{ flex: 1, padding: '13px', borderRadius: 10, border: `1px solid ${TEAL}40`, background: tealBg, fontFamily: MONO, fontSize: 10, color: TEAL, letterSpacing: '0.1em', cursor: 'pointer', fontWeight: 700 }}
+          >
+            + ADD DEVICE
+          </button>
+          {surveyDevices.length > 0 && (
+            <button
+              onClick={generateProposal}
+              disabled={surveyLoading}
+              style={{ flex: 1.5, padding: '13px', borderRadius: 10, border: 'none', background: surveyLoading ? C.bgInput : TEAL, fontFamily: MONO, fontSize: 10, color: surveyLoading ? C.textMuted : '#FFFFFF', letterSpacing: '0.1em', cursor: surveyLoading ? 'default' : 'pointer', fontWeight: 700 }}
+            >
+              {surveyLoading ? 'GENERATING…' : '⚡ GENERATE PROPOSAL'}
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SCREEN: SURVEY_ADD — add or edit a device on the site walk
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (screen === 'survey_add') {
+    const TEAL   = '#0D9488'
+    const tealBg = 'rgba(13,148,136,0.09)'
+
+    const condOpts:   SurveyDevice['condition'][] = ['good', 'fair', 'poor']
+    const actionOpts: { value: SurveyDevice['action']; label: string; color: string }[] = [
+      { value: 'keep',        label: 'KEEP',         color: C.green  },
+      { value: 'service',     label: 'SERVICE',      color: C.amber  },
+      { value: 'replace',     label: 'REPLACE',      color: C.red    },
+      { value: 'new_install', label: 'NEW INSTALL',  color: TEAL     },
+    ]
+    const condColor = (c: SurveyDevice['condition']) =>
+      c === 'good' ? C.green : c === 'fair' ? C.amber : C.red
+
+    function saveDevice() {
+      if (!sdName.trim()) return
+      const dev: SurveyDevice = {
+        id:        editingDevice?.id ?? crypto.randomUUID(),
+        name:      sdName.trim(),
+        brand:     sdBrand.trim(),
+        model:     sdModel.trim(),
+        location:  sdLocation.trim(),
+        condition: sdCondition,
+        action:    sdAction,
+        notes:     sdNotes.trim(),
+      }
+      setSurveyDevices(prev =>
+        editingDevice
+          ? prev.map(d => d.id === editingDevice.id ? dev : d)
+          : [...prev, dev]
+      )
+      setSurveyProposal(null)  // invalidate any existing proposal
+      setScreen('survey')
+    }
+
+    function deleteDevice() {
+      if (!editingDevice) return
+      setSurveyDevices(prev => prev.filter(d => d.id !== editingDevice.id))
+      setSurveyProposal(null)
+      setScreen('survey')
+    }
+
+    const inputStyle: React.CSSProperties = {
+      width: '100%', boxSizing: 'border-box',
+      background: C.bgInput, border: `1px solid ${C.border}`,
+      borderRadius: 8, padding: '10px 14px',
+      fontFamily: SANS, fontSize: 14, color: C.textPrimary,
+      outline: 'none', WebkitAppearance: 'none',
+      WebkitTextFillColor: C.textPrimary,
+      marginBottom: 10,
+    }
+    const labelStyle: React.CSSProperties = {
+      fontFamily: MONO, fontSize: 9, letterSpacing: '0.1em',
+      color: C.textMuted, marginBottom: 5, display: 'block',
+    }
+
+    return (
+      <div style={S.shell}>
+        <div style={S.topBar}>
+          <button style={S.iconBtn} onClick={() => setScreen('survey')}>‹</button>
+          <div style={{ flex: 1 }}>
+            <div style={S.topBarTitle}>{editingDevice ? 'EDIT DEVICE' : 'ADD DEVICE'}</div>
+            <div style={S.topBarSub}>SITE SURVEY</div>
+          </div>
+          {editingDevice && (
+            <button
+              onClick={deleteDevice}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 9, color: C.red, letterSpacing: '0.08em', padding: '4px 8px' }}
+            >
+              DELETE
+            </button>
+          )}
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 8px', scrollbarWidth: 'none' } as React.CSSProperties}>
+
+          <label style={labelStyle}>DEVICE NAME *</label>
+          <input
+            value={sdName} onChange={e => setSdName(e.target.value)}
+            placeholder="e.g. DoorKing 6050 Gate Operator"
+            style={inputStyle}
+            autoFocus
+          />
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>BRAND</label>
+              <input value={sdBrand} onChange={e => setSdBrand(e.target.value)} placeholder="e.g. DoorKing" style={inputStyle} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>MODEL / SKU</label>
+              <input value={sdModel} onChange={e => setSdModel(e.target.value)} placeholder="e.g. DK-6050" style={inputStyle} />
+            </div>
+          </div>
+
+          <label style={labelStyle}>LOCATION ON SITE</label>
+          <input
+            value={sdLocation} onChange={e => setSdLocation(e.target.value)}
+            placeholder="e.g. Entry Gate, Exit Lane, Front Panel…"
+            style={inputStyle}
+          />
+
+          <label style={labelStyle}>CONDITION</label>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+            {condOpts.map(c => (
+              <button key={c} onClick={() => setSdCondition(c)} style={{
+                flex: 1, padding: '10px 4px', borderRadius: 8, cursor: 'pointer',
+                border: `1px solid ${sdCondition === c ? condColor(c) : C.border}`,
+                background: sdCondition === c ? `${condColor(c)}15` : 'transparent',
+                fontFamily: MONO, fontSize: 9, letterSpacing: '0.08em',
+                color: sdCondition === c ? condColor(c) : C.textMuted, fontWeight: sdCondition === c ? 700 : 400,
+              }}>
+                {c.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          <label style={labelStyle}>RECOMMENDED ACTION</label>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+            {actionOpts.map(o => (
+              <button key={o.value} onClick={() => setSdAction(o.value)} style={{
+                flex: '1 0 auto', padding: '10px 6px', borderRadius: 8, cursor: 'pointer',
+                border: `1px solid ${sdAction === o.value ? o.color : C.border}`,
+                background: sdAction === o.value ? `${o.color}15` : 'transparent',
+                fontFamily: MONO, fontSize: 9, letterSpacing: '0.08em',
+                color: sdAction === o.value ? o.color : C.textMuted, fontWeight: sdAction === o.value ? 700 : 400,
+              }}>
+                {o.label}
+              </button>
+            ))}
+          </div>
+
+          <label style={labelStyle}>NOTES</label>
+          <textarea
+            value={sdNotes} onChange={e => setSdNotes(e.target.value)}
+            placeholder="Age, damage, error codes, owner notes…"
+            rows={3}
+            style={{ ...inputStyle, resize: 'none', lineHeight: 1.6, fontFamily: SANS } as React.CSSProperties}
+          />
+        </div>
+
+        <div style={{ padding: '10px 16px 16px', borderTop: `1px solid ${C.border}` }}>
+          <button
+            onClick={saveDevice}
+            disabled={!sdName.trim()}
+            style={{
+              width: '100%', padding: '14px', borderRadius: 10, border: 'none',
+              background: sdName.trim() ? TEAL : C.bgInput,
+              fontFamily: MONO, fontSize: 11, letterSpacing: '0.1em', fontWeight: 700,
+              color: sdName.trim() ? '#FFFFFF' : C.textMuted,
+              cursor: sdName.trim() ? 'pointer' : 'default',
+            }}
+          >
+            {editingDevice ? '✓ SAVE CHANGES' : '+ SAVE DEVICE'}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // SCREEN: SYMPTOM
   // ═══════════════════════════════════════════════════════════════════════════
   if (screen === 'symptom') {
@@ -1120,11 +1746,95 @@ function TechTool() {
                 <div style={S.detailBlock}>{current.detail}</div>
               )}
 
-              {/* Measure: expected spec */}
-              {current.type === 'measure' && current.expected && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, padding: '8px 12px', background: 'rgba(167,139,250,0.06)', borderRadius: 7, border: '1px solid rgba(167,139,250,0.15)' }}>
-                  <span style={{ fontFamily: MONO, fontSize: 9, color: C.purple, letterSpacing: '0.1em' }}>EXPECTED</span>
-                  <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.textPrimary }}>{current.expected} {current.unit}</span>
+              {/* Measure: expected spec + meter guide toggle */}
+              {current.type === 'measure' && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {current.expected ? (
+                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(167,139,250,0.06)', borderRadius: 7, border: '1px solid rgba(167,139,250,0.15)' }}>
+                        <span style={{ fontFamily: MONO, fontSize: 9, color: C.purple, letterSpacing: '0.1em' }}>EXPECTED</span>
+                        <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.textPrimary }}>{current.expected} {current.unit}</span>
+                      </div>
+                    ) : (
+                      <div style={{ flex: 1 }} />
+                    )}
+                    {/* Meter guide toggle */}
+                    <button
+                      onClick={() => setShowMeterGuide(v => !v)}
+                      title="Meter setup guide"
+                      style={{
+                        flexShrink: 0, width: 38, height: 38, borderRadius: 8,
+                        border: `1px solid ${showMeterGuide ? C.purple : C.border}`,
+                        background: showMeterGuide ? 'rgba(124,58,237,0.1)' : C.bgInput,
+                        cursor: 'pointer', display: 'flex', flexDirection: 'column',
+                        alignItems: 'center', justifyContent: 'center', gap: 1,
+                        fontFamily: MONO, fontSize: 7, color: showMeterGuide ? C.purple : C.textMuted,
+                        letterSpacing: '0.04em',
+                      }}
+                    >
+                      <span style={{ fontSize: 16, lineHeight: 1 }}>⊕</span>
+                      <span>METER</span>
+                    </button>
+                  </div>
+
+                  {/* Meter guide panel */}
+                  {showMeterGuide && (() => {
+                    const cfg = METER_CONFIGS[meterConfigKey(current.unit ?? '')] ?? METER_CONFIGS.VDC
+                    return (
+                      <div style={{ marginTop: 10, borderRadius: 10, border: `1px solid rgba(124,58,237,0.2)`, background: 'rgba(124,58,237,0.04)', overflow: 'hidden' }}>
+                        {/* Header */}
+                        <div style={{ padding: '8px 12px', borderBottom: `1px solid rgba(124,58,237,0.1)`, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontFamily: MONO, fontSize: 8, letterSpacing: '0.12em', color: C.purple, fontWeight: 700 }}>METER SETUP</span>
+                          <span style={{ fontFamily: MONO, fontSize: 9, color: C.textPrimary, fontWeight: 700 }}>{cfg.setting}</span>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 0 }}>
+                          {/* SVG meter */}
+                          <div style={{ width: 110, flexShrink: 0, padding: '10px 8px 10px 10px' }}>
+                            <MeterGuideSVG dialPos={cfg.dialPos} />
+                          </div>
+
+                          {/* Info column */}
+                          <div style={{ flex: 1, padding: '10px 10px 10px 4px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {/* Range */}
+                            <div style={{ padding: '6px 8px', borderRadius: 6, background: 'rgba(124,58,237,0.07)', border: '1px solid rgba(124,58,237,0.12)' }}>
+                              <div style={{ fontFamily: MONO, fontSize: 7, color: C.purple, letterSpacing: '0.1em', marginBottom: 3 }}>RANGE</div>
+                              <div style={{ fontFamily: SANS, fontSize: 11, color: C.textPrimary, lineHeight: 1.4 }}>{cfg.range}</div>
+                            </div>
+
+                            {/* Probes */}
+                            <div style={{ padding: '6px 8px', borderRadius: 6, background: C.bgInput, border: `1px solid ${C.border}` }}>
+                              <div style={{ fontFamily: MONO, fontSize: 7, color: C.textMuted, letterSpacing: '0.1em', marginBottom: 4 }}>PROBE JACKS</div>
+                              <div style={{ display: 'flex', gap: 6 }}>
+                                <div style={{ flex: 1, textAlign: 'center', padding: '4px 2px', borderRadius: 5, background: '#7F1D1D', border: '1px solid #EF4444' }}>
+                                  <div style={{ fontFamily: MONO, fontSize: 8, color: '#EF4444', fontWeight: 700 }}>+  RED</div>
+                                  <div style={{ fontFamily: MONO, fontSize: 7, color: '#FCA5A5', marginTop: 1 }}>{cfg.jackPos}</div>
+                                </div>
+                                <div style={{ flex: 1, textAlign: 'center', padding: '4px 2px', borderRadius: 5, background: '#0F172A', border: '1px solid #475569' }}>
+                                  <div style={{ fontFamily: MONO, fontSize: 8, color: '#94A3B8', fontWeight: 700 }}>−  BLK</div>
+                                  <div style={{ fontFamily: MONO, fontSize: 7, color: '#64748B', marginTop: 1 }}>{cfg.jackNeg}</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Cautions */}
+                        <div style={{ borderTop: `1px solid rgba(124,58,237,0.1)`, padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                          {cfg.cautions.map((c, i) => (
+                            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                              <span style={{ fontFamily: MONO, fontSize: 9, color: c.level === 'danger' ? '#EF4444' : '#D97706', flexShrink: 0, marginTop: 1 }}>
+                                {c.level === 'danger' ? '⚠' : '○'}
+                              </span>
+                              <span style={{ fontFamily: SANS, fontSize: 11, color: c.level === 'danger' ? '#FCA5A5' : C.textSecondary, lineHeight: 1.45 }}>
+                                {c.text}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
 
@@ -1163,6 +1873,7 @@ function TechTool() {
               {/* ── Measure ── */}
               {current.type === 'measure' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {/* Input row */}
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <input
                       type="number" inputMode="decimal" value={measureInput}
@@ -1177,6 +1888,38 @@ function TechTool() {
                       </div>
                     )}
                   </div>
+
+                  {/* Real-time pass/fail indicator */}
+                  {measureInput && current.expected && (() => {
+                    const result = checkMeasureResult(measureInput, current.expected)
+                    const range  = parseMeasureExpected(current.expected)
+                    if (!result) return null
+                    const isPass = result === 'pass'
+                    return (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '10px 14px', borderRadius: 8,
+                        background: isPass ? 'rgba(5,150,105,0.08)' : 'rgba(220,38,38,0.08)',
+                        border: `1px solid ${isPass ? 'rgba(5,150,105,0.25)' : 'rgba(220,38,38,0.25)'}`,
+                      }}>
+                        <span style={{ fontSize: 18 }}>{isPass ? '✓' : '✗'}</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, color: isPass ? C.green : C.red, letterSpacing: '0.1em' }}>
+                            {isPass ? 'IN SPEC' : 'OUT OF SPEC'}
+                          </div>
+                          <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, marginTop: 2 }}>
+                            {range && isFinite(range.min) && isFinite(range.max)
+                              ? `Expected ${range.min.toFixed(1)} – ${range.max.toFixed(1)} ${current.unit ?? ''}`
+                              : `Expected ${current.expected} ${current.unit ?? ''}`}
+                          </div>
+                        </div>
+                        <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: isPass ? C.green : C.red }}>
+                          {parseFloat(measureInput).toFixed(1)} {current.unit ?? ''}
+                        </span>
+                      </div>
+                    )
+                  })()}
+
                   <button
                     onClick={() => { if (measureInput) answer(`${measureInput} ${current.unit || ''}`.trim()) }}
                     disabled={!measureInput}
