@@ -18,7 +18,7 @@ import { CableGuide }   from '@/components/tech/CableGuide'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type StepType = 'question' | 'action' | 'measure' | 'select' | 'photo' | 'resolved' | 'escalate'
-type Screen   = 'pin' | 'home' | 'choice' | 'symptom' | 'diag' | 'wiring' | 'cable' | 'install' | 'survey' | 'survey_add'
+type Screen   = 'pin' | 'home' | 'choice' | 'symptom' | 'diag' | 'wiring' | 'cable' | 'install' | 'survey' | 'survey_add' | 'survey_transcript'
 
 // ─── Site Survey Types ────────────────────────────────────────────────────────
 interface SurveyDevice {
@@ -496,6 +496,14 @@ function TechTool() {
   const [sdAction,    setSdAction]    = useState<SurveyDevice['action']>('keep')
   const [sdNotes,     setSdNotes]     = useState('')
 
+  // Voice transcript state
+  const [transcriptText,       setTranscriptText]       = useState('')
+  const [transcriptParsing,    setTranscriptParsing]    = useState(false)
+  const [transcriptError,      setTranscriptError]      = useState<string | null>(null)
+  const [parsedDevices,        setParsedDevices]        = useState<SurveyDevice[]>([])
+  const [parsedSelected,       setParsedSelected]       = useState<Set<string>>(new Set())
+  const [parsedPropertyName,   setParsedPropertyName]   = useState<string | null>(null)
+
   // Demo / install mode state
   const [prevScreen,      setPrevScreen]     = useState<Screen | null>(null)
   const [wiringInitMapId, setWiringInitMapId] = useState<string | null>(null)
@@ -591,9 +599,9 @@ function TechTool() {
     // Show "generating" after 3s so the tech knows it's still working
     const stageTimer = setTimeout(() => setLoadingStage('generating'), 3000)
 
-    // Abort after 55s — surface a clean retry instead of infinite spinner
+    // Abort after 20s — surface a clean retry instead of infinite spinner
     const controller = new AbortController()
-    const abortTimer = setTimeout(() => controller.abort(), 55000)
+    const abortTimer = setTimeout(() => controller.abort(), 20000)
 
     try {
       const res = await fetch('/api/kb/ask', {
@@ -1424,22 +1432,37 @@ function TechTool() {
         </div>
 
         {/* Bottom actions */}
-        <div style={{ padding: '10px 16px 16px', display: 'flex', gap: 8, borderTop: `1px solid ${C.border}` }}>
-          <button
-            onClick={() => startAddDevice()}
-            style={{ flex: 1, padding: '13px', borderRadius: 10, border: `1px solid ${TEAL}40`, background: tealBg, fontFamily: MONO, fontSize: 10, color: TEAL, letterSpacing: '0.1em', cursor: 'pointer', fontWeight: 700 }}
-          >
-            + ADD DEVICE
-          </button>
-          {surveyDevices.length > 0 && (
+        <div style={{ padding: '10px 16px 16px', borderTop: `1px solid ${C.border}` }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
             <button
-              onClick={generateProposal}
-              disabled={surveyLoading}
-              style={{ flex: 1.5, padding: '13px', borderRadius: 10, border: 'none', background: surveyLoading ? C.bgInput : TEAL, fontFamily: MONO, fontSize: 10, color: surveyLoading ? C.textMuted : '#FFFFFF', letterSpacing: '0.1em', cursor: surveyLoading ? 'default' : 'pointer', fontWeight: 700 }}
+              onClick={() => startAddDevice()}
+              style={{ flex: 1, padding: '13px', borderRadius: 10, border: `1px solid ${TEAL}40`, background: tealBg, fontFamily: MONO, fontSize: 10, color: TEAL, letterSpacing: '0.1em', cursor: 'pointer', fontWeight: 700 }}
             >
-              {surveyLoading ? 'GENERATING…' : '⚡ GENERATE PROPOSAL'}
+              + ADD DEVICE
             </button>
-          )}
+            {surveyDevices.length > 0 && (
+              <button
+                onClick={generateProposal}
+                disabled={surveyLoading}
+                style={{ flex: 1.5, padding: '13px', borderRadius: 10, border: 'none', background: surveyLoading ? C.bgInput : TEAL, fontFamily: MONO, fontSize: 10, color: surveyLoading ? C.textMuted : '#FFFFFF', letterSpacing: '0.1em', cursor: surveyLoading ? 'default' : 'pointer', fontWeight: 700 }}
+              >
+                {surveyLoading ? 'GENERATING…' : '⚡ GENERATE PROPOSAL'}
+              </button>
+            )}
+          </div>
+          <button
+            onClick={() => {
+              setTranscriptText('')
+              setTranscriptError(null)
+              setParsedDevices([])
+              setParsedSelected(new Set())
+              setParsedPropertyName(null)
+              setScreen('survey_transcript')
+            }}
+            style={{ width: '100%', padding: '11px', borderRadius: 10, border: `1px solid rgba(107,126,255,0.25)`, background: C.blueAlpha, fontFamily: MONO, fontSize: 10, color: C.blue, letterSpacing: '0.1em', cursor: 'pointer', fontWeight: 700 }}
+          >
+            🎤 PASTE VOICE NOTES
+          </button>
         </div>
       </div>
     )
@@ -1603,6 +1626,244 @@ function TechTool() {
           >
             {editingDevice ? '✓ SAVE CHANGES' : '+ SAVE DEVICE'}
           </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SCREEN: SURVEY_TRANSCRIPT — paste voice notes, AI extracts device list
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (screen === 'survey_transcript') {
+    const TEAL   = '#0D9488'
+    const tealBg = 'rgba(13,148,136,0.09)'
+    const condColor = (c: SurveyDevice['condition']) =>
+      c === 'good' ? C.green : c === 'fair' ? C.amber : C.red
+    const actionLabel = (a: SurveyDevice['action']) =>
+      ({ keep: 'KEEP', service: 'SERVICE', replace: 'REPLACE', new_install: 'NEW INSTALL' })[a]
+    const actionColor = (a: SurveyDevice['action']) =>
+      a === 'keep' ? C.green : a === 'service' ? C.amber : a === 'replace' ? C.red : TEAL
+
+    async function parseTranscript() {
+      if (!transcriptText.trim()) return
+      setTranscriptParsing(true)
+      setTranscriptError(null)
+      setParsedDevices([])
+      setParsedSelected(new Set())
+      setParsedPropertyName(null)
+      try {
+        const res = await fetch('/api/kb/parse-survey-transcript', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-tech-code': techCode },
+          body: JSON.stringify({ transcript: transcriptText, propertyName: surveyPropName || undefined }),
+        })
+        const data = await res.json()
+        if (data.error) throw new Error(data.error)
+        const devices: SurveyDevice[] = data.devices ?? []
+        setParsedDevices(devices)
+        setParsedPropertyName(data.propertyName ?? null)
+        // Pre-select all by default
+        setParsedSelected(new Set(devices.map((d: SurveyDevice) => d.id)))
+      } catch (err: any) {
+        setTranscriptError(err.message || 'Parse failed — try again')
+      } finally {
+        setTranscriptParsing(false)
+      }
+    }
+
+    function addSelectedDevices() {
+      const toAdd = parsedDevices.filter(d => parsedSelected.has(d.id))
+      if (toAdd.length === 0) return
+      setSurveyDevices(prev => {
+        // Avoid duplicates by id
+        const existing = new Set(prev.map(d => d.id))
+        return [...prev, ...toAdd.filter(d => !existing.has(d.id))]
+      })
+      if (parsedPropertyName && !surveyPropName) {
+        setSurveyPropName(parsedPropertyName)
+      }
+      setSurveyProposal(null)
+      setScreen('survey')
+    }
+
+    function toggleDevice(id: string) {
+      setParsedSelected(prev => {
+        const next = new Set(prev)
+        if (next.has(id)) next.delete(id); else next.add(id)
+        return next
+      })
+    }
+
+    return (
+      <div style={S.shell}>
+        <div style={S.topBar}>
+          <button style={S.iconBtn} onClick={() => setScreen('survey')}>‹</button>
+          <div style={{ flex: 1 }}>
+            <div style={S.topBarTitle}>VOICE NOTES</div>
+            <div style={S.topBarSub}>AI DEVICE EXTRACTION</div>
+          </div>
+          <div style={{ fontFamily: MONO, fontSize: 9, color: C.blue, letterSpacing: '0.1em' }}>🎤 PLAUD</div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px 8px', scrollbarWidth: 'none' } as React.CSSProperties}>
+
+          {/* Instructions */}
+          {parsedDevices.length === 0 && (
+            <div style={{ background: C.blueAlpha, border: `1px solid rgba(107,126,255,0.2)`, borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+              <div style={{ fontFamily: MONO, fontSize: 9, color: C.blue, letterSpacing: '0.1em', marginBottom: 6 }}>HOW TO USE</div>
+              <div style={{ fontFamily: SANS, fontSize: 12, color: C.textSecondary, lineHeight: 1.65 }}>
+                Walk the property narrating what you see. Paste the Plaud transcript below — AI will extract every device automatically.
+              </div>
+              <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, marginTop: 8, lineHeight: 1.8 }}>
+                EXAMPLE: "Main gate has a DoorKing 6050, looks beat up. Side entry has a new Brivo reader installed last month…"
+              </div>
+            </div>
+          )}
+
+          {/* Transcript input — shown only before parse */}
+          {parsedDevices.length === 0 && (
+            <>
+              <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.1em', marginBottom: 6 }}>PASTE TRANSCRIPT OR TYPE NOTES</div>
+              <textarea
+                value={transcriptText}
+                onChange={e => setTranscriptText(e.target.value)}
+                placeholder="Paste your Plaud transcript or type site walk notes here…"
+                rows={10}
+                style={{
+                  width: '100%', boxSizing: 'border-box', resize: 'vertical',
+                  background: C.bgInput, border: `1px solid ${C.borderMed}`,
+                  borderRadius: 10, padding: '12px 14px',
+                  fontFamily: SANS, fontSize: 13, color: C.textPrimary,
+                  lineHeight: 1.65, outline: 'none',
+                  WebkitAppearance: 'none', WebkitTextFillColor: C.textPrimary,
+                  minHeight: 180,
+                } as React.CSSProperties}
+                autoFocus
+              />
+              {transcriptError && (
+                <div style={{ marginTop: 8, padding: '10px 12px', borderRadius: 8, background: C.redAlpha, border: `1px solid rgba(220,38,38,0.2)`, fontFamily: SANS, fontSize: 12, color: C.red }}>
+                  ⚠ {transcriptError}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Parsed results */}
+          {parsedDevices.length > 0 && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div style={{ fontFamily: MONO, fontSize: 9, color: TEAL, letterSpacing: '0.1em' }}>
+                  {parsedDevices.length} DEVICE{parsedDevices.length !== 1 ? 'S' : ''} FOUND — DESELECT TO SKIP
+                </div>
+                <button
+                  onClick={() => {
+                    setParsedDevices([])
+                    setParsedSelected(new Set())
+                    setTranscriptError(null)
+                  }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.08em' }}
+                >
+                  ← REPASTE
+                </button>
+              </div>
+
+              {parsedPropertyName && !surveyPropName && (
+                <div style={{ marginBottom: 10, padding: '8px 12px', borderRadius: 8, background: tealBg, border: `1px solid ${TEAL}30`, fontFamily: SANS, fontSize: 12, color: TEAL }}>
+                  📍 Property detected: <strong>{parsedPropertyName}</strong>
+                </div>
+              )}
+
+              {parsedDevices.map((d) => {
+                const selected = parsedSelected.has(d.id)
+                return (
+                  <button
+                    key={d.id}
+                    onClick={() => toggleDevice(d.id)}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'flex-start',
+                      padding: '12px 14px', gap: 12,
+                      background: selected ? C.bgCard : 'transparent',
+                      border: `1px solid ${selected ? `${TEAL}40` : C.border}`,
+                      borderRadius: 10, marginBottom: 8, cursor: 'pointer', textAlign: 'left',
+                      opacity: selected ? 1 : 0.45,
+                    }}
+                  >
+                    {/* Checkbox */}
+                    <div style={{
+                      width: 20, height: 20, borderRadius: 6, flexShrink: 0, marginTop: 1,
+                      background: selected ? TEAL : 'transparent',
+                      border: `2px solid ${selected ? TEAL : C.borderMed}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontFamily: MONO, fontSize: 10, color: '#FFF',
+                    }}>
+                      {selected ? '✓' : ''}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: SANS, fontSize: 13, fontWeight: 600, color: C.textPrimary }}>
+                        {d.name || 'Unknown Device'}
+                      </div>
+                      {(d.brand || d.model) && (
+                        <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, marginTop: 2, letterSpacing: '0.06em' }}>
+                          {[d.brand, d.model].filter(Boolean).join(' · ')}
+                        </div>
+                      )}
+                      {d.location && (
+                        <div style={{ fontFamily: SANS, fontSize: 11, color: C.textSecondary, marginTop: 2 }}>
+                          📍 {d.location}
+                        </div>
+                      )}
+                      {d.notes && (
+                        <div style={{ fontFamily: SANS, fontSize: 11, color: C.textMuted, marginTop: 3, fontStyle: 'italic' }}>
+                          {d.notes}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+                      <span style={{ fontFamily: MONO, fontSize: 8, letterSpacing: '0.08em', color: condColor(d.condition), fontWeight: 700 }}>
+                        ● {d.condition.toUpperCase()}
+                      </span>
+                      <span style={{ fontFamily: MONO, fontSize: 8, letterSpacing: '0.08em', color: actionColor(d.action) }}>
+                        {actionLabel(d.action)}
+                      </span>
+                    </div>
+                  </button>
+                )
+              })}
+            </>
+          )}
+        </div>
+
+        {/* Bottom action */}
+        <div style={{ padding: '10px 16px 16px', borderTop: `1px solid ${C.border}` }}>
+          {parsedDevices.length === 0 ? (
+            <button
+              onClick={parseTranscript}
+              disabled={transcriptParsing || !transcriptText.trim()}
+              style={{
+                width: '100%', padding: '14px', borderRadius: 10, border: 'none',
+                background: transcriptParsing || !transcriptText.trim() ? C.bgInput : C.blue,
+                fontFamily: MONO, fontSize: 11, letterSpacing: '0.1em', fontWeight: 700,
+                color: transcriptParsing || !transcriptText.trim() ? C.textMuted : '#FFFFFF',
+                cursor: transcriptParsing || !transcriptText.trim() ? 'default' : 'pointer',
+              }}
+            >
+              {transcriptParsing ? 'EXTRACTING DEVICES…' : '⚡ EXTRACT DEVICES'}
+            </button>
+          ) : (
+            <button
+              onClick={addSelectedDevices}
+              disabled={parsedSelected.size === 0}
+              style={{
+                width: '100%', padding: '14px', borderRadius: 10, border: 'none',
+                background: parsedSelected.size === 0 ? C.bgInput : TEAL,
+                fontFamily: MONO, fontSize: 11, letterSpacing: '0.1em', fontWeight: 700,
+                color: parsedSelected.size === 0 ? C.textMuted : '#FFFFFF',
+                cursor: parsedSelected.size === 0 ? 'default' : 'pointer',
+              }}
+            >
+              + ADD {parsedSelected.size} DEVICE{parsedSelected.size !== 1 ? 'S' : ''} TO SURVEY
+            </button>
+          )}
         </div>
       </div>
     )

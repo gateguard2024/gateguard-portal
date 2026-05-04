@@ -227,6 +227,7 @@ Note: `/reps`, `/compliance`, `/scorecard`, `/map`, `/reports` are placeholder U
 | `app/api/kb/find-manual/route.ts` | Auto-find + download manufacturer manual from the internet, run full pipeline |
 | `app/api/kb/extract-wiring/route.ts` | Claude reads manual chunks → extracts DeviceDef terminals → stores in device_suggestions |
 | `app/api/kb/survey-proposal/route.ts` | Takes site walk device inventory → Claude Haiku → returns structured proposal (summary, line items with priority, recommendations, install notes). Auth: x-tech-code. |
+| `app/api/kb/parse-survey-transcript/route.ts` | Accepts a Plaud voice transcript or typed site walk notes → Claude Haiku → extracts structured SurveyDevice[] list (name, brand, model, location, condition, action, notes) + auto-detects property name. Auth: x-tech-code. |
 | `app/api/kb/resolve/route.ts` | Resolution capture + learning loop. Updates troubleshoot_sessions.resolved + embeds kb_article from symptom+history+fix note. Auth: x-tech-code. |
 
 ### Portal pages
@@ -326,6 +327,7 @@ Canonical source for product PDFs, brand assets, legal docs, historical project 
 - **Survey screen**: property name, scrollable device inventory list, ⚡ GENERATE PROPOSAL button
 - **Add Device screen**: name, brand, model, location, condition (Good/Fair/Poor), action (Keep/Service/Replace/New Install), notes. Tap existing device to edit or delete.
 - **AI proposal generation**: `POST /api/kb/survey-proposal` — Claude Haiku analyzes inventory → returns: 2-3 sentence summary, line items with qty + priority (urgent/recommended/optional), recommendations, install notes
+- **Plaud voice transcript → device inventory (v9)**: 🎤 PASTE VOICE NOTES button on survey screen opens `survey_transcript` screen. Tech pastes Plaud transcript (or types notes). `POST /api/kb/parse-survey-transcript` → Claude Haiku extracts structured device list with condition/action inferred from language. Review + deselect screen before adding. All selected devices added to survey in one tap. Property name auto-detected from transcript.
 - Proposal renders inline with 📋 COPY PROPOSAL TEXT button for pasting into email/quote
 - Framework designed to feed into portal quote builder (Phase 2)
 

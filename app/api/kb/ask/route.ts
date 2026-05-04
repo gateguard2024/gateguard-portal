@@ -31,37 +31,81 @@ export async function POST(req: NextRequest) {
     const { symptom, product_id, error_code, history = [], session_id, connected_devices = [] } = await req.json()
     if (!symptom) return NextResponse.json({ error: 'symptom required' }, { status: 400 })
 
-    // 1. Build search query
-    const recentContext = (history as any[]).slice(-3)
-      .map((h: any) => `${h.question} → ${h.answer}`).join('; ')
-    const searchQuery = [symptom, error_code, recentContext].filter(Boolean).join('. ')
+    const db  = serviceDb()
+    const historyLen = (history as any[]).length
 
-    // 2. Vector search
-    const chunks = await searchKnowledge(searchQuery, product_id, 6, 0.40)
+    // 1. Chunks — cached on step 2+, fresh search on step 1
+    //    Step 1 embeds the symptom and runs pgvector search (slowest path).
+    //    Steps 2+ pull the same chunks from DB by ID — no OpenAI embedding call,
+    //    no pgvector scan, ~10x faster. This is what fixes the step-4 stall.
+    let chunks: Awaited<ReturnType<typeof searchKnowledge>> = []
 
-    // 3. Manual context
+    if (session_id && historyLen > 0) {
+      // Fast path: reuse cached chunks from this session
+      const { data: sess } = await db
+        .from('troubleshoot_sessions')
+        .select('chunks_used')
+        .eq('id', session_id)
+        .single()
+
+      const chunkIds: string[] = sess?.chunks_used ?? []
+      if (chunkIds.length > 0) {
+        const { data: rows } = await db
+          .from('manual_chunks')
+          .select('id, product_id, content, manual_url, page_number, section_title')
+          .in('id', chunkIds.slice(0, 5))
+
+        chunks = (rows ?? []).map((c: any) => ({
+          source:        'manual' as const,
+          id:            c.id,
+          product_id:    c.product_id,
+          product_name:  '',
+          product_sku:   '',
+          manual_url:    c.manual_url,
+          page_number:   c.page_number,
+          section_title: c.section_title,
+          content:       c.content,
+          similarity:    0.85,
+        }))
+      }
+
+      // If session had no chunks (e.g. no manual), fall through to a lightweight search
+      if (chunks.length === 0) {
+        chunks = await searchKnowledge(symptom, product_id, 3, 0.40)
+      }
+    } else {
+      // Step 1: full vector search
+      const recentContext = (history as any[]).slice(-2)
+        .map((h: any) => `${h.question} → ${h.answer}`).join('; ')
+      const searchQuery = [symptom, error_code, recentContext].filter(Boolean).join('. ')
+      chunks = await searchKnowledge(searchQuery, product_id, 6, 0.40)
+    }
+
+    // 2. Manual context string
     const context = chunks.length > 0
       ? chunks.map((c, i) =>
-          `[${i + 1}] ${c.source === 'manual' ? `${c.product_name} manual` : 'KB article'}` +
+          `[${i + 1}] ${c.source === 'manual' ? `${c.product_name || 'Device'} manual` : 'KB article'}` +
           `${c.page_number ? ` p.${c.page_number}` : ''}` +
           `${c.section_title ? ` — ${c.section_title}` : ''}\n${c.content}`
         ).join('\n\n---\n\n')
       : 'No specific manual content found — use general field troubleshooting knowledge.'
 
-    // 4. History text
-    const historyText = (history as any[]).length > 0
+    // 3. History text — only include last 6 steps to keep prompt tight on long sessions
+    const recentHistory = (history as any[]).slice(-6)
+    const historyText = recentHistory.length > 0
       ? '\n\nDiagnostic history:\n' +
-        (history as any[]).map((h: any, i: number) =>
-          `Step ${i + 1}: "${h.question}" → ${h.answer}`
+        recentHistory.map((h: any, i: number) =>
+          `Step ${(history as any[]).length - recentHistory.length + i + 1}: "${h.question}" → ${h.answer}`
         ).join('\n')
       : ''
 
-    // 5. Claude
+    // 4. Claude — fewer tokens needed on later steps (step instructions are short)
+    const maxTokens = historyLen >= 3 ? 450 : 600
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
     const message = await client.messages.create({
       model:      'claude-haiku-4-5-20251001',
-      max_tokens: 600,
+      max_tokens: maxTokens,
       system: `You are GateGuard's field diagnostic AI for dealers and technicians servicing multifamily access control equipment.
 You have real manual passages below. Use them for specific part names, terminal labels, LED colors, error codes, and voltage specs.
 
@@ -193,9 +237,8 @@ Relevant manual/KB content:\n${context}\n\nWhat is the next diagnostic step?`
       }
     }
 
-    // 6. Log session
-    const db  = serviceDb()
-    let   sid = session_id
+    // 5. Log session
+    let sid = session_id
 
     if (!sid) {
       const { data } = await db.from('troubleshoot_sessions')
