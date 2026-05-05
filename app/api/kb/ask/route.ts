@@ -131,6 +131,38 @@ Step types:
 
 SYSTEM TOPOLOGY — devices in gate/access systems connect to each other. Reason about the full system, not just the reported device.
 
+KNOWN TERMINAL MAPS — use these specific labels whenever the device is being diagnosed, regardless of whether the manual passages below mention them:
+
+DoorKing 6050 Traffic Arm Operator:
+  J1 (AC Power — ELECTRICIAN ONLY): L (Hot 120VAC), N (Neutral), G (Ground/Earth)
+  J2 (Control Inputs — dry contact N.O. to COM): OPEN, COM, CLOSE, STOP, FE (Free Exit / Request to Exit)
+  J3 (Accessory Power output): +12V (12VDC out), GND
+  J4 (Gate Status Relay — closed when gate is open): S-COM, S-NO
+  Key notes: OPEN and CLOSE trigger the arm direction; STOP halts mid-travel; FE triggers exit open without loop; bridge OPEN to COM via pushbutton or relay
+
+DoorKing 9050 Vehicular Barrier:
+  P3 (Control): OPEN, CLOSE, STOP, COMMON (dry contact N.O. to COMMON)
+  P4 (Safety/Obstruction): SAFETY IN (+), SAFETY IN (-) — NC loop from photobeam
+  P6 (Status Relay): STATUS COM, STATUS N.O., STATUS N.C.
+  P7 (Accessory Power): 12VDC, GND
+
+DoorKing 1835 Callbox:
+  TB1 (Gate relay output): COM, N.O. — wires to operator OPEN/COM
+  TB2 (Door strike relay): COM, N.O.
+  TB3 (Power input): 16-26VAC or 12-24VDC
+
+Brivo ACS300 / ACS6100 Access Controller:
+  Reader port: D0, D1, LED, BUZ, GND, +12V (Wiegand 26-bit)
+  Lock relay: COM, N.O., N.C.
+  REX input: REX, GND (N.O. button to GND)
+  Door contact: DOOR, GND (N.C. loop)
+  Power: 12VDC in, GND
+
+LiftMaster SL3000 Slide Gate Operator:
+  J3 (Control): OPEN, CLOSE, STOP, COMMON
+  J4 (Safety): EDGE (safety edge), SHADOW (loop), ENTRAP (entrapment loop)
+  J5 (Accessories): +12V, GND
+
 Gate Operators (swing, slide, barrier):
   Safety inputs: photobeams (obstruction), pneumatic/resistive safety edges, loop detectors
   Control inputs: push-button, keypad, access reader relay, callbox relay output
@@ -194,7 +226,7 @@ Rules:
   - When history has 1 step: ALWAYS check wiring integrity next unless power was the problem
   - When connected_devices are present, check them as likely root causes before blaming the primary device
   - Always guide isolation testing (jumper/disconnect) when a safety circuit is suspect
-  - Use exact terminal names, LED labels, and error codes from the manual passages
+  - Use exact terminal names, LED labels, and error codes from EITHER the manual passages OR the KNOWN TERMINAL MAPS in the SYSTEM TOPOLOGY section — always cite the specific label (e.g. "OPEN terminal", "FE terminal", "J2 pin 3") rather than saying "check the terminals"
   - Prefer measure when voltage/resistance would confirm or rule out a cause
   - Prefer select when there are distinct observable states (LED colors, switch positions)
   - Use photo when visual evidence (damage, alignment, display) would help
@@ -202,10 +234,12 @@ Rules:
   - Set manual_ref whenever citing a specific manual passage
 
 CRITICAL — VOLTAGE AND MEASUREMENT ACCURACY:
+  - This restriction applies ONLY to measurement values (voltage ranges, resistance values, current specs) in measure steps — NOT to terminal names, LED labels, or error codes.
   - For measure steps, voltage/resistance/current values MUST come from the manual content provided above.
-  - The SYSTEM TOPOLOGY section gives generic guidance only — NEVER use its values as the expected range in a measure step unless no manual content exists for this device.
+  - The SYSTEM TOPOLOGY section gives generic guidance only — NEVER use its generic voltage values (e.g. "12VDC from AUX") as the expected range in a measure step unless no manual content exists for this device.
   - If the manual content above contains the spec (e.g. "24VDC", "115VAC ±10%", "12VDC"), use that exact value as the expected range.
   - If no manual content mentions the specific spec, set expected to null and use detail to tell the tech where to find it (e.g. "See nameplate on device or check spec sheet for rated input voltage").
+  - HOWEVER: terminal labels from the KNOWN TERMINAL MAPS (J2: OPEN, COM, CLOSE, STOP, FE, etc.) MUST always be cited — never say "check terminals" when the label is in the map above.
   - Wrong voltage ranges in the field cause real damage — accuracy matters more than speed here.`,
 
       messages: [{
