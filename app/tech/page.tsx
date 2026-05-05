@@ -112,39 +112,42 @@ interface Product {
 }
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
-// Dark navy bg + lifted card surfaces — field-grade contrast for outdoor use.
+// Two-tone: dark navy header strip + clean white content area.
+// Reference: IntraMD (dark hero bar → white list), BMW (dark top → white sheet).
 const C = {
-  bg:            '#0B1728',   // deep navy — primary background
-  bgDeep:        '#070F1C',   // deeper / beneath cards (detail block bg)
-  bgCard:        '#1A3255',   // card surfaces — clearly lighter, lifts off bg
-  bgInput:       '#0F1E35',   // input fields — darker than card (inset feel)
-  border:        'rgba(100,160,255,0.18)',
-  borderMed:     'rgba(100,160,255,0.30)',
-  textPrimary:   '#E8F0FF',   // bright near-white, blue-tinted — readable outdoors
-  textSecondary: '#7FA8D4',   // secondary text
-  textMuted:     '#4A6B8A',   // muted labels
+  bg:            '#EEF2FF',   // light lavender-white — content area background
+  bgDeep:        '#E2E8F6',   // slightly deeper — nested panels, detail blocks
+  bgCard:        '#FFFFFF',   // pure white — card surfaces (max contrast)
+  bgInput:       '#F1F5FD',   // very light — input fields
+  topBarBg:      '#0B1728',   // dark navy — topBar / header ONLY
+  border:        'rgba(107,126,255,0.14)',
+  borderMed:     'rgba(107,126,255,0.22)',
+  textPrimary:   '#0D1E3A',   // near-black navy — main text on white
+  textSecondary: '#4A6A8A',   // mid blue-gray — secondary text
+  textMuted:     '#8BA5C4',   // light — muted labels
+  textOnDark:    '#E8F0FF',   // for text ON the dark topBar
   blue:    '#6B7EFF',
   amber:   '#F59E0B',
   green:   '#10B981',
   red:     '#F87171',
   purple:  '#A78BFA',
-  blueAlpha:   'rgba(107,126,255,0.16)',
-  amberAlpha:  'rgba(245,158,11,0.16)',
-  greenAlpha:  'rgba(16,185,129,0.16)',
-  redAlpha:    'rgba(248,113,113,0.16)',
-  purpleAlpha: 'rgba(167,139,250,0.16)',
+  blueAlpha:   'rgba(107,126,255,0.10)',
+  amberAlpha:  'rgba(245,158,11,0.10)',
+  greenAlpha:  'rgba(16,185,129,0.10)',
+  redAlpha:    'rgba(248,113,113,0.10)',
+  purpleAlpha: 'rgba(167,139,250,0.10)',
 }
 
 const STEP_CFG: Record<StepType, {
   accent: string; surface: string; border: string; label: string; numColor: string
 }> = {
-  question: { accent: C.blue,   surface: C.blueAlpha,   border: 'rgba(107,126,255,0.30)',  label: 'VERIFY',   numColor: C.blue   },
-  action:   { accent: C.amber,  surface: C.amberAlpha,  border: 'rgba(245,158,11,0.30)',   label: 'ACTION',   numColor: C.amber  },
-  measure:  { accent: C.purple, surface: C.purpleAlpha, border: 'rgba(167,139,250,0.30)',  label: 'MEASURE',  numColor: C.purple },
-  select:   { accent: C.blue,   surface: C.blueAlpha,   border: 'rgba(107,126,255,0.30)',  label: 'SELECT',   numColor: C.blue   },
-  photo:    { accent: C.amber,  surface: C.amberAlpha,  border: 'rgba(245,158,11,0.30)',   label: 'CAPTURE',  numColor: C.amber  },
-  resolved: { accent: C.green,  surface: C.greenAlpha,  border: 'rgba(16,185,129,0.30)',   label: 'RESOLVED', numColor: C.green  },
-  escalate: { accent: C.red,    surface: C.redAlpha,    border: 'rgba(248,113,113,0.30)',  label: 'ESCALATE', numColor: C.red    },
+  question: { accent: C.blue,   surface: 'rgba(107,126,255,0.07)',  border: 'rgba(107,126,255,0.22)',  label: 'VERIFY',   numColor: C.blue   },
+  action:   { accent: C.amber,  surface: 'rgba(245,158,11,0.07)',   border: 'rgba(245,158,11,0.22)',   label: 'ACTION',   numColor: C.amber  },
+  measure:  { accent: C.purple, surface: 'rgba(167,139,250,0.07)',  border: 'rgba(167,139,250,0.22)',  label: 'MEASURE',  numColor: C.purple },
+  select:   { accent: C.blue,   surface: 'rgba(107,126,255,0.07)',  border: 'rgba(107,126,255,0.22)',  label: 'SELECT',   numColor: C.blue   },
+  photo:    { accent: C.amber,  surface: 'rgba(245,158,11,0.07)',   border: 'rgba(245,158,11,0.22)',   label: 'CAPTURE',  numColor: C.amber  },
+  resolved: { accent: C.green,  surface: 'rgba(16,185,129,0.07)',   border: 'rgba(16,185,129,0.22)',   label: 'RESOLVED', numColor: C.green  },
+  escalate: { accent: C.red,    surface: 'rgba(248,113,113,0.07)',  border: 'rgba(248,113,113,0.22)',  label: 'ESCALATE', numColor: C.red    },
 }
 
 // ─── Meter configuration per unit type ───────────────────────────────────────
@@ -842,26 +845,28 @@ function TechTool() {
           <div style={S.statusPill}>● ONLINE</div>
         </div>
 
-        <div style={{ padding: '12px 16px 0' }}>
+        {/* Search bar */}
+        <div style={{ padding: '10px 12px 0' }}>
           <div style={{ position: 'relative' }}>
-            <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: C.textMuted, fontSize: 16, pointerEvents: 'none' }}>⌕</span>
+            <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: C.textMuted, fontSize: 17, pointerEvents: 'none', lineHeight: 1 }}>⌕</span>
             <input
               type="text" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search by name, brand, or SKU…"
-              style={{ width: '100%', boxSizing: 'border-box', background: C.bgInput, border: `1px solid ${C.border}`, borderRadius: 10, padding: '13px 14px 13px 36px', fontFamily: SANS, fontSize: 15, color: C.textPrimary, outline: 'none', WebkitAppearance: 'none', WebkitTextFillColor: C.textPrimary }}
+              style={{ width: '100%', boxSizing: 'border-box', background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 14px 14px 40px', fontFamily: SANS, fontSize: 15, color: C.textPrimary, outline: 'none', WebkitAppearance: 'none', WebkitTextFillColor: C.textPrimary, boxShadow: '0 1px 6px rgba(107,126,255,0.08)' }}
             />
           </div>
         </div>
 
+        {/* Category filter chips */}
         {cats.length > 2 && (
-          <div className="gg-chips" style={{ display: 'flex', gap: 6, padding: '8px 16px', overflowX: 'auto', flexShrink: 0, scrollbarWidth: 'none' } as React.CSSProperties}>
+          <div className="gg-chips" style={{ display: 'flex', gap: 6, padding: '8px 12px', overflowX: 'auto', flexShrink: 0, scrollbarWidth: 'none' } as React.CSSProperties}>
             {cats.map(cat => (
               <button key={cat} onClick={() => setActiveCat(cat)} style={{
                 fontFamily: MONO, fontSize: 9, letterSpacing: '0.08em',
                 padding: '7px 13px', borderRadius: 20, whiteSpace: 'nowrap',
                 cursor: 'pointer', flexShrink: 0,
                 border: `1px solid ${activeCat === cat ? C.blue : C.border}`,
-                background: activeCat === cat ? 'rgba(107,126,255,0.22)' : C.bgCard,
+                background: activeCat === cat ? 'rgba(107,126,255,0.12)' : C.bgCard,
                 color: activeCat === cat ? C.blue : C.textMuted,
               }}>
                 {cat === 'ALL' ? 'ALL' : cat.toUpperCase()}
@@ -870,60 +875,107 @@ function TechTool() {
           </div>
         )}
 
-        <div className="gg-list" style={{ flex: 1, overflowY: 'auto', padding: '4px 0 40px', scrollbarWidth: 'none' } as React.CSSProperties}>
+        {/* ── Device list — padded wrapper prevents iOS overflow ── */}
+        <div className="gg-list" style={{ flex: 1, overflowY: 'auto', padding: '6px 12px 8px', scrollbarWidth: 'none' } as React.CSSProperties}>
           {visible.map(p => {
             const color     = brandHues[p.brand] ?? C.blue
             const hasManual = !!p.manual_url
             return (
-              <button key={p.id}
-                onClick={() => { setSelected(p); setScreen('choice') }}
-                style={{ width: 'calc(100% - 24px)', display: 'flex', alignItems: 'center', padding: '14px 14px', gap: 14, background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 14, cursor: 'pointer', textAlign: 'left', margin: '0 12px 7px' }}
-                onMouseEnter={e => (e.currentTarget.style.background = '#1E3A60')}
-                onMouseLeave={e => (e.currentTarget.style.background = C.bgCard)}
-              >
-                <div style={{ width: 46, height: 46, borderRadius: 12, flexShrink: 0, background: `${color}20`, border: `1px solid ${color}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 12, fontWeight: 700, color, letterSpacing: '0.04em' }}>
-                  {brandInitials(p.brand)}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: SANS, fontSize: 15, fontWeight: 600, color: C.textPrimary, lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {p.name}
+              // Wrapper div owns the horizontal padding; button is 100% of it.
+              // This avoids iOS Safari's broken width:calc on button elements.
+              <div key={p.id} style={{ marginBottom: 8 }}>
+                <button
+                  onClick={() => { setSelected(p); setScreen('choice') }}
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    display: 'flex', alignItems: 'center',
+                    padding: '16px 14px', gap: 14,
+                    background: C.bgCard,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 16,
+                    cursor: 'pointer', textAlign: 'left',
+                    boxShadow: '0 1px 6px rgba(107,126,255,0.08)',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = '#EEF2FF')}
+                  onMouseLeave={e => (e.currentTarget.style.background = C.bgCard)}
+                >
+                  {/* Brand avatar */}
+                  <div style={{
+                    width: 50, height: 50, borderRadius: 14, flexShrink: 0,
+                    background: `${color}22`, border: `1.5px solid ${color}55`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontFamily: MONO, fontSize: 13, fontWeight: 700, color, letterSpacing: '0.04em',
+                  }}>
+                    {brandInitials(p.brand)}
                   </div>
-                  <div style={{ fontFamily: MONO, fontSize: 10, color: C.textMuted, marginTop: 4, letterSpacing: '0.07em' }}>
-                    {p.brand.toUpperCase()} · {p.sku}
+
+                  {/* Text block — flex:1 + minWidth:0 enables proper ellipsis */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontFamily: SANS, fontSize: 16, fontWeight: 700,
+                      color: C.textPrimary, lineHeight: 1.3,
+                      overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                    }}>
+                      {p.name}
+                    </div>
+                    <div style={{
+                      fontFamily: MONO, fontSize: 10, color: C.textSecondary,
+                      marginTop: 4, letterSpacing: '0.06em',
+                      overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                    }}>
+                      {p.brand.toUpperCase()} · {p.sku}
+                    </div>
                   </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: hasManual ? C.green : C.border, boxShadow: hasManual ? `0 0 8px ${C.green}` : 'none' }} />
-                  <span style={{ color: C.textSecondary, fontSize: 18 }}>›</span>
-                </div>
-              </button>
+
+                  {/* Right indicator — always visible, fixed width */}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, flexShrink: 0, width: 24 }}>
+                    <div style={{
+                      width: 8, height: 8, borderRadius: '50%',
+                      background: hasManual ? C.green : C.textMuted,
+                      boxShadow: hasManual ? `0 0 8px ${C.green}88` : 'none',
+                    }} />
+                    <span style={{ color: C.textSecondary, fontSize: 16, lineHeight: 1 }}>›</span>
+                  </div>
+                </button>
+              </div>
             )
           })}
           {visible.length === 0 && serviceProds.length > 0 && (
-            <div style={{ color: C.textMuted, textAlign: 'center', marginTop: 60, fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em' }}>NO DEVICES MATCH</div>
+            <div style={{ color: C.textMuted, textAlign: 'center', marginTop: 60, fontFamily: MONO, fontSize: 11, letterSpacing: '0.1em' }}>NO DEVICES MATCH</div>
           )}
           {serviceProds.length === 0 && (
-            <div style={{ color: C.textMuted, textAlign: 'center', marginTop: 60, fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em' }}>LOADING…</div>
+            <div style={{ color: C.textMuted, textAlign: 'center', marginTop: 60, fontFamily: MONO, fontSize: 11, letterSpacing: '0.1em' }}>LOADING…</div>
           )}
         </div>
 
+        {/* ── Bottom navigation bar ── */}
         <div style={S.legendStrip}>
-          <span style={{ color: C.green }}>● AI-READY</span>
-          <span style={{ color: C.textMuted }}>● MANUAL PENDING</span>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 12, alignItems: 'center' }}>
-            <button
-              onClick={() => setScreen('cable')}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 9, color: C.purple, letterSpacing: '0.08em', padding: 0 }}
-            >
-              🔌 CABLE GUIDE
-            </button>
-            <button
-              onClick={() => { setSurveyProposal(null); setScreen('survey') }}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 9, color: '#0D9488', letterSpacing: '0.08em', padding: 0 }}
-            >
-              📍 SITE SURVEY
-            </button>
+          {/* DIAGNOSE — currently active */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: `2.5px solid ${C.blue}` }}>
+            <span style={{ fontSize: 20 }}>🔍</span>
+            <span style={{ fontFamily: MONO, fontSize: 8, fontWeight: 700, color: C.blue, letterSpacing: '0.08em' }}>DIAGNOSE</span>
           </div>
+          {/* WIRING */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent' }}>
+            <span style={{ fontSize: 20 }}>⚡</span>
+            <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.08em' }}>WIRING</span>
+          </div>
+          {/* CABLE — opens cable guide */}
+          <button
+            onClick={() => setScreen('cable')}
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}
+          >
+            <span style={{ fontSize: 20 }}>🔌</span>
+            <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.08em' }}>CABLE</span>
+          </button>
+          {/* SURVEY */}
+          <button
+            onClick={() => { setSurveyProposal(null); setScreen('survey') }}
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}
+          >
+            <span style={{ fontSize: 20 }}>📍</span>
+            <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.08em' }}>SURVEY</span>
+          </button>
         </div>
       </div>
     )
@@ -949,7 +1001,7 @@ function TechTool() {
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '20px 16px', gap: 12 }}>
           {/* Device info */}
-          <div style={{ background: C.bgCard, borderRadius: 12, padding: '16px', border: `1px solid ${C.border}`, marginBottom: 8 }}>
+          <div style={{ background: C.bgCard, borderRadius: 12, padding: '16px', border: `1px solid ${C.border}`, marginBottom: 8, boxShadow: '0 2px 8px rgba(107,126,255,0.08)' }}>
             <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.14em', marginBottom: 6 }}>
               {selected?.category.toUpperCase()}
             </div>
@@ -2688,54 +2740,70 @@ function TechTool() {
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
-// All sizes tuned for minimum 44px touch targets — outdoor / gloved use.
+// Two-tone layout: dark navy topBar + clean white/light content.
+// Touch targets ≥44px — outdoor / gloved use.
 const S: Record<string, React.CSSProperties> = {
   shell:        { minHeight: '100dvh', maxHeight: '100dvh', background: C.bg, display: 'flex', flexDirection: 'column', fontFamily: SANS, maxWidth: 480, margin: '0 auto', overflow: 'hidden' },
-  pinCard:      { width: '100%', maxWidth: 360, padding: '36px 28px', background: C.bgCard, borderRadius: 24, border: `1px solid ${C.borderMed}`, margin: '0 20px', boxShadow: '0 12px 48px rgba(0,0,0,0.6)' },
-  pinLogo:      { width: 64, height: 64, borderRadius: 18, background: 'rgba(107,126,255,0.22)', border: `1px solid rgba(107,126,255,0.45)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 18, fontWeight: 700, color: C.blue, margin: '0 auto', letterSpacing: '0.05em' },
-  topBar:       { display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: C.bgCard, borderBottom: `1px solid ${C.border}`, flexShrink: 0, boxShadow: '0 2px 16px rgba(0,0,0,0.4)' },
-  diagHeader:   { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: C.bgCard, borderBottom: `1px solid ${C.border}`, flexShrink: 0 },
-  ggMark:       { width: 38, height: 38, borderRadius: 10, background: 'rgba(107,126,255,0.15)', border: `1px solid rgba(107,126,255,0.35)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 12, fontWeight: 700, color: C.blue, flexShrink: 0, letterSpacing: '0.05em' },
-  topBarTitle:  { fontFamily: MONO, fontSize: 12, fontWeight: 700, color: C.textPrimary, letterSpacing: '0.08em' },
-  topBarSub:    { fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.12em', marginTop: 2 },
-  statusPill:   { fontFamily: MONO, fontSize: 9, color: C.green, letterSpacing: '0.12em', border: `1px solid rgba(16,185,129,0.35)`, borderRadius: 5, padding: '4px 8px', flexShrink: 0, background: 'rgba(16,185,129,0.1)' },
-  sessionId:    { fontFamily: MONO, fontSize: 13, fontWeight: 700, color: C.textPrimary, letterSpacing: '0.06em' },
-  iconBtn:      { width: 40, height: 40, borderRadius: 10, background: C.bgInput, border: `1px solid ${C.borderMed}`, color: C.textSecondary, fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: MONO },
-  progressBar:  { height: 3, background: C.bgInput, flexShrink: 0 },
+
+  // ── PIN screen card (centered on light bg) ───────────────────────────────
+  pinCard:      { width: '100%', maxWidth: 360, padding: '36px 28px', background: C.bgCard, borderRadius: 24, border: `1px solid ${C.borderMed}`, margin: '0 20px', boxShadow: '0 4px 32px rgba(107,126,255,0.14)' },
+  pinLogo:      { width: 64, height: 64, borderRadius: 18, background: 'rgba(107,126,255,0.12)', border: `1px solid rgba(107,126,255,0.28)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 18, fontWeight: 700, color: C.blue, margin: '0 auto', letterSpacing: '0.05em' },
+
+  // ── Top bar — DARK NAVY (header identity strip, always dark) ─────────────
+  topBar:       { display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: C.topBarBg, borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0, boxShadow: '0 2px 12px rgba(0,0,0,0.35)' },
+  diagHeader:   { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: C.topBarBg, borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 },
+  ggMark:       { width: 38, height: 38, borderRadius: 10, background: 'rgba(107,126,255,0.20)', border: '1px solid rgba(107,126,255,0.40)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 12, fontWeight: 700, color: C.blue, flexShrink: 0, letterSpacing: '0.05em' },
+  topBarTitle:  { fontFamily: MONO, fontSize: 12, fontWeight: 700, color: C.textOnDark, letterSpacing: '0.08em' },
+  topBarSub:    { fontFamily: MONO, fontSize: 9, color: 'rgba(160,190,255,0.6)', letterSpacing: '0.12em', marginTop: 2 },
+  statusPill:   { fontFamily: MONO, fontSize: 9, color: C.green, letterSpacing: '0.12em', border: '1px solid rgba(16,185,129,0.40)', borderRadius: 5, padding: '4px 8px', flexShrink: 0, background: 'rgba(16,185,129,0.12)' },
+  sessionId:    { fontFamily: MONO, fontSize: 13, fontWeight: 700, color: C.textOnDark, letterSpacing: '0.06em' },
+  // Back / close button lives ON the dark topBar
+  iconBtn:      { width: 40, height: 40, borderRadius: 10, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(200,220,255,0.85)', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: MONO },
+
+  // ── Progress / indicators ─────────────────────────────────────────────────
+  progressBar:  { height: 3, background: C.bgDeep, flexShrink: 0 },
   progressFill: { height: '100%', background: C.blue, transition: 'width 0.4s ease' },
-  legendStrip:  { display: 'flex', gap: 20, padding: '10px 16px', borderTop: `1px solid ${C.border}`, fontFamily: MONO, fontSize: 9, letterSpacing: '0.1em', flexShrink: 0, background: C.bgCard },
+
+  // ── Bottom navigation bar (replaces legendStrip) ──────────────────────────
+  legendStrip:  { display: 'flex', borderTop: `1px solid ${C.border}`, background: C.bgCard, flexShrink: 0, boxShadow: '0 -2px 12px rgba(107,126,255,0.07)' },
+
+  // ── Form elements (on white/light content area) ───────────────────────────
   fieldLabel:   { fontFamily: MONO, fontSize: 9, letterSpacing: '0.16em', color: C.textMuted, marginBottom: -4 },
-  textarea:     { width: '100%', background: C.bgInput, border: `1px solid ${C.borderMed}`, borderRadius: 10, padding: '14px 15px', color: C.textPrimary, fontSize: 15, lineHeight: 1.65, outline: 'none', resize: 'none', fontFamily: SANS, boxSizing: 'border-box' },
-  monoInput:    { width: '100%', background: C.bgInput, border: `1px solid ${C.borderMed}`, borderRadius: 10, padding: '13px 14px', color: C.textPrimary, fontSize: 14, outline: 'none', fontFamily: MONO, letterSpacing: '0.04em', boxSizing: 'border-box' },
+  textarea:     { width: '100%', background: C.bgInput, border: `1px solid ${C.border}`, borderRadius: 10, padding: '14px 15px', color: C.textPrimary, fontSize: 15, lineHeight: 1.65, outline: 'none', resize: 'none', fontFamily: SANS, boxSizing: 'border-box' },
+  monoInput:    { width: '100%', background: C.bgInput, border: `1px solid ${C.border}`, borderRadius: 10, padding: '13px 14px', color: C.textPrimary, fontSize: 14, outline: 'none', fontFamily: MONO, letterSpacing: '0.04em', boxSizing: 'border-box' },
   chip:         { padding: '8px 14px', borderRadius: 6, border: '1px solid', fontFamily: MONO, fontSize: 10, letterSpacing: '0.08em', cursor: 'pointer' },
-  primaryBtn:   { width: '100%', padding: '18px', borderRadius: 14, background: C.blue, border: 'none', color: '#FFFFFF', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em', boxShadow: '0 4px 16px rgba(107,126,255,0.35)' },
-  historyLog:   { margin: '0 16px 12px', background: C.bgCard, borderRadius: 12, overflow: 'hidden', border: `1px solid ${C.border}` },
+  primaryBtn:   { width: '100%', padding: '18px', borderRadius: 14, background: C.blue, border: 'none', color: '#FFFFFF', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em', boxShadow: '0 4px 16px rgba(107,126,255,0.30)' },
+
+  // ── Diagnostic history log ────────────────────────────────────────────────
+  historyLog:   { margin: '0 16px 12px', background: C.bgCard, borderRadius: 12, overflow: 'hidden', border: `1px solid ${C.border}`, boxShadow: '0 1px 4px rgba(107,126,255,0.07)' },
   logLabel:     { fontFamily: MONO, fontSize: 9, letterSpacing: '0.18em', color: C.textMuted, padding: '8px 12px', borderBottom: `1px solid ${C.border}`, background: C.bgInput },
   logRow:       { display: 'flex', alignItems: 'baseline', gap: 10, padding: '9px 12px', borderBottom: `1px solid ${C.border}` },
   logNum:       { fontFamily: MONO, fontSize: 10, fontWeight: 700, color: C.textMuted, flexShrink: 0, letterSpacing: '0.04em' },
   logText:      { fontFamily: SANS, fontSize: 13, color: C.textSecondary, flex: 1, lineHeight: 1.45 },
   logAns:       { fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', flexShrink: 0 },
-  stepCard:     { borderRadius: 16, border: '1px solid', padding: '18px', marginBottom: 4, boxShadow: '0 2px 12px rgba(0,0,0,0.25)' },
+
+  // ── Step cards (white with subtle shadow on light bg) ─────────────────────
+  stepCard:     { borderRadius: 16, border: '1px solid', padding: '18px', marginBottom: 4, boxShadow: '0 2px 10px rgba(107,126,255,0.10)', background: C.bgCard },
   stepHeader:   { display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 },
   stepNum:      { fontFamily: MONO, fontSize: 44, fontWeight: 700, lineHeight: 1, letterSpacing: '-0.02em', flexShrink: 0, opacity: 0.9 },
   stepTypeLabel:{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: '0.18em', marginBottom: 4 },
   manualRef:    { fontFamily: MONO, fontSize: 9, color: C.blue, letterSpacing: '0.08em', textDecoration: 'none', display: 'inline-block', marginTop: 2 },
   stepText:     { fontFamily: SANS, fontSize: 18, fontWeight: 600, color: C.textPrimary, lineHeight: 1.5 },
-  detailBlock:  { marginTop: 12, padding: '12px 14px', background: C.bgDeep, borderRadius: 8, borderLeft: `3px solid ${C.borderMed}`, fontFamily: MONO, fontSize: 12, color: C.textSecondary, lineHeight: 1.75, letterSpacing: '0.01em', whiteSpace: 'pre-line' },
+  detailBlock:  { marginTop: 12, padding: '12px 14px', background: C.bgDeep, borderRadius: 8, borderLeft: `3px solid rgba(107,126,255,0.20)`, fontFamily: MONO, fontSize: 12, color: C.textSecondary, lineHeight: 1.75, letterSpacing: '0.01em', whiteSpace: 'pre-line' },
   divider:      { height: 1, background: C.border, margin: '16px 0' },
   answerRow:    { display: 'flex', gap: 10 },
-  yesBtn:       { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '18px 12px', borderRadius: 14, background: 'rgba(16,185,129,0.12)', border: `1px solid rgba(16,185,129,0.35)`, cursor: 'pointer' },
-  noBtn:        { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '18px 12px', borderRadius: 14, background: 'rgba(248,113,113,0.12)', border: `1px solid rgba(248,113,113,0.35)`, cursor: 'pointer' },
+  yesBtn:       { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '18px 12px', borderRadius: 14, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.28)', cursor: 'pointer' },
+  noBtn:        { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '18px 12px', borderRadius: 14, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.28)', cursor: 'pointer' },
   btnLabel:     { fontFamily: MONO, fontSize: 24, fontWeight: 700, letterSpacing: '0.05em', color: C.textPrimary },
   btnSub:       { fontFamily: MONO, fontSize: 9, letterSpacing: '0.14em', color: C.textMuted },
-  doneBtn:      { width: '100%', padding: '15px', borderRadius: 13, background: 'rgba(245,158,11,0.1)', border: `1px solid rgba(245,158,11,0.30)`, color: C.amber, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.12em' },
-  sendBtn:      { padding: '12px 18px', borderRadius: 10, background: 'rgba(107,126,255,0.12)', border: `1px solid rgba(107,126,255,0.30)`, color: C.blue, fontSize: 16, cursor: 'pointer', fontFamily: MONO },
+  doneBtn:      { width: '100%', padding: '15px', borderRadius: 13, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', color: C.amber, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.12em' },
+  sendBtn:      { padding: '12px 18px', borderRadius: 10, background: 'rgba(107,126,255,0.08)', border: '1px solid rgba(107,126,255,0.22)', color: C.blue, fontSize: 16, cursor: 'pointer', fontFamily: MONO },
   ghostSmBtn:   { width: '100%', padding: '12px', borderRadius: 10, background: 'transparent', border: `1px solid ${C.border}`, color: C.textMuted, fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em', cursor: 'pointer' },
-  logFixBtn:    { flex: 1, padding: '14px', borderRadius: 13, background: 'rgba(245,158,11,0.1)', border: `1px solid rgba(245,158,11,0.28)`, color: C.amber, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
+  logFixBtn:    { flex: 1, padding: '14px', borderRadius: 13, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.22)', color: C.amber, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
   newSessionBtn:{ flex: 1, padding: '14px', borderRadius: 13, background: C.bgInput, border: `1px solid ${C.border}`, color: C.textSecondary, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
-  keepGoingBtn: { flex: 1, padding: '14px', borderRadius: 13, background: 'rgba(248,113,113,0.1)', border: `1px solid rgba(248,113,113,0.28)`, color: C.red, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
+  keepGoingBtn: { flex: 1, padding: '14px', borderRadius: 13, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.22)', color: C.red, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
   footer:       { display: 'flex', justifyContent: 'space-between', padding: '9px 16px', borderTop: `1px solid ${C.border}`, background: C.bgCard, fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', flexShrink: 0 },
-  spinner:      { width: 20, height: 20, borderRadius: '50%', border: `2px solid ${C.bgInput}`, borderTopColor: C.blue, animation: 'spin 0.7s linear infinite', flexShrink: 0 },
+  spinner:      { width: 20, height: 20, borderRadius: '50%', border: `2px solid ${C.bgDeep}`, borderTopColor: C.blue, animation: 'spin 0.7s linear infinite', flexShrink: 0 },
 }
 
 // ─── Export ───────────────────────────────────────────────────────────────────
@@ -2747,8 +2815,8 @@ export default function TechPage() {
         @keyframes spin { to { transform: rotate(360deg); } }
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         html, body { margin: 0; background: ${C.bg}; overscroll-behavior: none; }
-        button:active { opacity: 0.75; }
-        ::placeholder { color: rgba(100,150,210,0.35); }
+        button:active { opacity: 0.80; }
+        ::placeholder { color: rgba(74,106,138,0.45); }
         input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
         .gg-chips::-webkit-scrollbar, .gg-list::-webkit-scrollbar { display: none; }
       `}</style>
