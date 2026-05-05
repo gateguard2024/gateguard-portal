@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
   // The full catalog (quotes, billing) is excluded from the tech tool.
   const { data, error } = await serviceDb()
     .from('products')
-    .select('id, name, brand, category, sku, manual_url, description, specs, tags')
+    .select('id, name, brand, category, sku, manual_url, description, specs, tags, image_url')
     .eq('active', true)
     .eq('field_service', true)
     .order('brand')

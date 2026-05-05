@@ -106,6 +106,7 @@ interface Product {
   category:    string
   sku:         string
   manual_url:  string | null
+  image_url:   string | null
   description: string | null
   specs:       string | null
   tags:        string[] | null
@@ -899,14 +900,32 @@ function TechTool() {
                   onMouseEnter={e => (e.currentTarget.style.background = '#EEF2FF')}
                   onMouseLeave={e => (e.currentTarget.style.background = C.bgCard)}
                 >
-                  {/* Brand avatar */}
+                  {/* Brand avatar — product image if available, else initials */}
                   <div style={{
                     width: 50, height: 50, borderRadius: 14, flexShrink: 0,
-                    background: `${color}22`, border: `1.5px solid ${color}55`,
+                    background: p.image_url ? C.bgInput : `${color}18`,
+                    border: p.image_url ? `1px solid ${C.border}` : `1.5px solid ${color}44`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    overflow: 'hidden',
                     fontFamily: MONO, fontSize: 13, fontWeight: 700, color, letterSpacing: '0.04em',
                   }}>
-                    {brandInitials(p.brand)}
+                    {p.image_url ? (
+                      <img
+                        src={p.image_url}
+                        alt={p.name}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 4 }}
+                        onError={e => {
+                          // On broken image — hide img, show parent initials
+                          const el = e.currentTarget
+                          el.style.display = 'none'
+                          el.parentElement!.style.background = `${color}18`
+                          el.parentElement!.style.border = `1.5px solid ${color}44`
+                          el.insertAdjacentHTML('afterend', `<span style="font-family:monospace;font-size:13px;font-weight:700;color:${color}">${brandInitials(p.brand)}</span>`)
+                        }}
+                      />
+                    ) : (
+                      brandInitials(p.brand)
+                    )}
                   </div>
 
                   {/* Text block — flex:1 + minWidth:0 enables proper ellipsis */}
