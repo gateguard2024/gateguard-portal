@@ -112,38 +112,39 @@ interface Product {
 }
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
+// Dark navy bg + lifted card surfaces — field-grade contrast for outdoor use.
 const C = {
-  bg:            '#F1F5F9',
-  bgDeep:        '#E8EEF6',
-  bgCard:        '#FFFFFF',
-  bgInput:       '#F8FAFC',
-  border:        'rgba(15,23,42,0.08)',
-  borderMed:     'rgba(15,23,42,0.15)',
-  textPrimary:   '#0F172A',
-  textSecondary: '#64748B',
-  textMuted:     '#94A3B8',
+  bg:            '#0B1728',   // deep navy — primary background
+  bgDeep:        '#070F1C',   // deeper / beneath cards (detail block bg)
+  bgCard:        '#1A3255',   // card surfaces — clearly lighter, lifts off bg
+  bgInput:       '#0F1E35',   // input fields — darker than card (inset feel)
+  border:        'rgba(100,160,255,0.18)',
+  borderMed:     'rgba(100,160,255,0.30)',
+  textPrimary:   '#E8F0FF',   // bright near-white, blue-tinted — readable outdoors
+  textSecondary: '#7FA8D4',   // secondary text
+  textMuted:     '#4A6B8A',   // muted labels
   blue:    '#6B7EFF',
-  amber:   '#D97706',
-  green:   '#059669',
-  red:     '#DC2626',
-  purple:  '#7C3AED',
-  blueAlpha:   'rgba(107,126,255,0.09)',
-  amberAlpha:  'rgba(217,119,6,0.09)',
-  greenAlpha:  'rgba(5,150,105,0.09)',
-  redAlpha:    'rgba(220,38,38,0.09)',
-  purpleAlpha: 'rgba(124,58,237,0.09)',
+  amber:   '#F59E0B',
+  green:   '#10B981',
+  red:     '#F87171',
+  purple:  '#A78BFA',
+  blueAlpha:   'rgba(107,126,255,0.16)',
+  amberAlpha:  'rgba(245,158,11,0.16)',
+  greenAlpha:  'rgba(16,185,129,0.16)',
+  redAlpha:    'rgba(248,113,113,0.16)',
+  purpleAlpha: 'rgba(167,139,250,0.16)',
 }
 
 const STEP_CFG: Record<StepType, {
   accent: string; surface: string; border: string; label: string; numColor: string
 }> = {
-  question: { accent: C.blue,   surface: C.blueAlpha,   border: 'rgba(56,189,248,0.18)',  label: 'VERIFY',   numColor: C.blue   },
-  action:   { accent: C.amber,  surface: C.amberAlpha,  border: 'rgba(245,158,11,0.18)',  label: 'ACTION',   numColor: C.amber  },
-  measure:  { accent: C.purple, surface: C.purpleAlpha, border: 'rgba(167,139,250,0.18)', label: 'MEASURE',  numColor: C.purple },
-  select:   { accent: C.blue,   surface: C.blueAlpha,   border: 'rgba(56,189,248,0.18)',  label: 'SELECT',   numColor: C.blue   },
-  photo:    { accent: C.amber,  surface: C.amberAlpha,  border: 'rgba(245,158,11,0.18)',  label: 'CAPTURE',  numColor: C.amber  },
-  resolved: { accent: C.green,  surface: C.greenAlpha,  border: 'rgba(16,185,129,0.18)',  label: 'RESOLVED', numColor: C.green  },
-  escalate: { accent: C.red,    surface: C.redAlpha,    border: 'rgba(239,68,68,0.18)',   label: 'ESCALATE', numColor: C.red    },
+  question: { accent: C.blue,   surface: C.blueAlpha,   border: 'rgba(107,126,255,0.30)',  label: 'VERIFY',   numColor: C.blue   },
+  action:   { accent: C.amber,  surface: C.amberAlpha,  border: 'rgba(245,158,11,0.30)',   label: 'ACTION',   numColor: C.amber  },
+  measure:  { accent: C.purple, surface: C.purpleAlpha, border: 'rgba(167,139,250,0.30)',  label: 'MEASURE',  numColor: C.purple },
+  select:   { accent: C.blue,   surface: C.blueAlpha,   border: 'rgba(107,126,255,0.30)',  label: 'SELECT',   numColor: C.blue   },
+  photo:    { accent: C.amber,  surface: C.amberAlpha,  border: 'rgba(245,158,11,0.30)',   label: 'CAPTURE',  numColor: C.amber  },
+  resolved: { accent: C.green,  surface: C.greenAlpha,  border: 'rgba(16,185,129,0.30)',   label: 'RESOLVED', numColor: C.green  },
+  escalate: { accent: C.red,    surface: C.redAlpha,    border: 'rgba(248,113,113,0.30)',  label: 'ESCALATE', numColor: C.red    },
 }
 
 // ─── Meter configuration per unit type ───────────────────────────────────────
@@ -843,11 +844,11 @@ function TechTool() {
 
         <div style={{ padding: '12px 16px 0' }}>
           <div style={{ position: 'relative' }}>
-            <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: C.textMuted, fontSize: 14, pointerEvents: 'none' }}>⌕</span>
+            <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: C.textMuted, fontSize: 16, pointerEvents: 'none' }}>⌕</span>
             <input
               type="text" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search by name, brand, or SKU…"
-              style={{ width: '100%', boxSizing: 'border-box', background: C.bgInput, border: `1px solid ${C.border}`, borderRadius: 8, padding: '11px 14px 11px 32px', fontFamily: SANS, fontSize: 14, color: C.textPrimary, outline: 'none', WebkitAppearance: 'none', WebkitTextFillColor: C.textPrimary }}
+              style={{ width: '100%', boxSizing: 'border-box', background: C.bgInput, border: `1px solid ${C.border}`, borderRadius: 10, padding: '13px 14px 13px 36px', fontFamily: SANS, fontSize: 15, color: C.textPrimary, outline: 'none', WebkitAppearance: 'none', WebkitTextFillColor: C.textPrimary }}
             />
           </div>
         </div>
@@ -857,10 +858,10 @@ function TechTool() {
             {cats.map(cat => (
               <button key={cat} onClick={() => setActiveCat(cat)} style={{
                 fontFamily: MONO, fontSize: 9, letterSpacing: '0.08em',
-                padding: '5px 11px', borderRadius: 20, whiteSpace: 'nowrap',
+                padding: '7px 13px', borderRadius: 20, whiteSpace: 'nowrap',
                 cursor: 'pointer', flexShrink: 0,
                 border: `1px solid ${activeCat === cat ? C.blue : C.border}`,
-                background: activeCat === cat ? 'rgba(56,189,248,0.12)' : 'transparent',
+                background: activeCat === cat ? 'rgba(107,126,255,0.22)' : C.bgCard,
                 color: activeCat === cat ? C.blue : C.textMuted,
               }}>
                 {cat === 'ALL' ? 'ALL' : cat.toUpperCase()}
@@ -876,24 +877,24 @@ function TechTool() {
             return (
               <button key={p.id}
                 onClick={() => { setSelected(p); setScreen('choice') }}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', padding: '14px 16px', gap: 14, background: 'transparent', border: 'none', borderBottom: `1px solid ${C.border}`, cursor: 'pointer', textAlign: 'left' }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                style={{ width: 'calc(100% - 24px)', display: 'flex', alignItems: 'center', padding: '14px 14px', gap: 14, background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 14, cursor: 'pointer', textAlign: 'left', margin: '0 12px 7px' }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#1E3A60')}
+                onMouseLeave={e => (e.currentTarget.style.background = C.bgCard)}
               >
-                <div style={{ width: 42, height: 42, borderRadius: 10, flexShrink: 0, background: `${color}18`, border: `1px solid ${color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 11, fontWeight: 700, color, letterSpacing: '0.04em' }}>
+                <div style={{ width: 46, height: 46, borderRadius: 12, flexShrink: 0, background: `${color}20`, border: `1px solid ${color}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 12, fontWeight: 700, color, letterSpacing: '0.04em' }}>
                   {brandInitials(p.brand)}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: SANS, fontSize: 15, fontWeight: 600, color: C.textPrimary, lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <div style={{ fontFamily: SANS, fontSize: 15, fontWeight: 600, color: C.textPrimary, lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {p.name}
                   </div>
-                  <div style={{ fontFamily: MONO, fontSize: 10, color: C.textMuted, marginTop: 3, letterSpacing: '0.07em' }}>
+                  <div style={{ fontFamily: MONO, fontSize: 10, color: C.textMuted, marginTop: 4, letterSpacing: '0.07em' }}>
                     {p.brand.toUpperCase()} · {p.sku}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                  <div style={{ width: 7, height: 7, borderRadius: '50%', background: hasManual ? C.green : C.border, boxShadow: hasManual ? `0 0 6px ${C.green}` : 'none' }} />
-                  <span style={{ color: C.textMuted, fontSize: 16 }}>›</span>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: hasManual ? C.green : C.border, boxShadow: hasManual ? `0 0 8px ${C.green}` : 'none' }} />
+                  <span style={{ color: C.textSecondary, fontSize: 18 }}>›</span>
                 </div>
               </button>
             )
@@ -972,8 +973,8 @@ function TechTool() {
             disabled={!hasManual}
             style={{
               padding: '20px', borderRadius: 12, textAlign: 'left', cursor: hasManual ? 'pointer' : 'not-allowed',
-              background: hasManual ? 'rgba(56,189,248,0.06)' : 'rgba(255,255,255,0.02)',
-              border: `1px solid ${hasManual ? 'rgba(56,189,248,0.22)' : C.border}`,
+              background: hasManual ? 'rgba(107,126,255,0.10)' : C.bgInput,
+              border: `1px solid ${hasManual ? 'rgba(107,126,255,0.28)' : C.border}`,
               opacity: hasManual ? 1 : 0.45,
             }}
           >
@@ -994,7 +995,7 @@ function TechTool() {
           {/* Troubleshoot */}
           <button
             onClick={() => { setConnectedDevices([]); setScreen('symptom') }}
-            style={{ padding: '20px', borderRadius: 12, textAlign: 'left', cursor: 'pointer', background: 'rgba(16,185,129,0.06)', border: `1px solid rgba(16,185,129,0.22)` }}
+            style={{ padding: '20px', borderRadius: 12, textAlign: 'left', cursor: 'pointer', background: 'rgba(16,185,129,0.10)', border: `1px solid rgba(16,185,129,0.30)` }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ fontSize: 22, lineHeight: 1 }}>🔧</div>
@@ -1013,7 +1014,7 @@ function TechTool() {
           {/* Wiring Guide */}
           <button
             onClick={() => setScreen('wiring')}
-            style={{ padding: '20px', borderRadius: 12, textAlign: 'left', cursor: 'pointer', background: 'rgba(217,119,6,0.06)', border: `1px solid rgba(217,119,6,0.22)` }}
+            style={{ padding: '20px', borderRadius: 12, textAlign: 'left', cursor: 'pointer', background: 'rgba(245,158,11,0.10)', border: `1px solid rgba(245,158,11,0.30)` }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ fontSize: 22, lineHeight: 1 }}>📐</div>
@@ -1032,7 +1033,7 @@ function TechTool() {
           {/* Cable Guide */}
           <button
             onClick={() => setScreen('cable')}
-            style={{ padding: '20px', borderRadius: 12, textAlign: 'left', cursor: 'pointer', background: 'rgba(124,58,237,0.06)', border: `1px solid rgba(124,58,237,0.22)` }}
+            style={{ padding: '20px', borderRadius: 12, textAlign: 'left', cursor: 'pointer', background: 'rgba(167,139,250,0.10)', border: `1px solid rgba(167,139,250,0.30)` }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ fontSize: 22, lineHeight: 1 }}>🔌</div>
@@ -1303,8 +1304,8 @@ function TechTool() {
   // SCREEN: SURVEY — site walk inventory + proposal generator
   // ═══════════════════════════════════════════════════════════════════════════
   if (screen === 'survey') {
-    const TEAL    = '#0D9488'
-    const tealBg  = 'rgba(13,148,136,0.09)'
+    const TEAL    = '#2DD4BF'
+    const tealBg  = 'rgba(45,212,191,0.12)'
     const condColor = (c: SurveyDevice['condition']) =>
       c === 'good' ? C.green : c === 'fair' ? C.amber : C.red
     const actionLabel = (a: SurveyDevice['action']) =>
@@ -1639,8 +1640,8 @@ function TechTool() {
   // SCREEN: SURVEY_ADD — add or edit a device on the site walk
   // ═══════════════════════════════════════════════════════════════════════════
   if (screen === 'survey_add') {
-    const TEAL   = '#0D9488'
-    const tealBg = 'rgba(13,148,136,0.09)'
+    const TEAL   = '#2DD4BF'
+    const tealBg = 'rgba(45,212,191,0.12)'
 
     const condOpts:   SurveyDevice['condition'][] = ['good', 'fair', 'poor']
     const actionOpts: { value: SurveyDevice['action']; label: string; color: string }[] = [
@@ -1802,8 +1803,8 @@ function TechTool() {
   // SCREEN: SURVEY_TRANSCRIPT — paste voice notes, AI extracts device list
   // ═══════════════════════════════════════════════════════════════════════════
   if (screen === 'survey_transcript') {
-    const TEAL   = '#0D9488'
-    const tealBg = 'rgba(13,148,136,0.09)'
+    const TEAL   = '#2DD4BF'
+    const tealBg = 'rgba(45,212,191,0.12)'
     const condColor = (c: SurveyDevice['condition']) =>
       c === 'good' ? C.green : c === 'fair' ? C.amber : C.red
     const actionLabel = (a: SurveyDevice['action']) =>
@@ -2687,53 +2688,54 @@ function TechTool() {
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
+// All sizes tuned for minimum 44px touch targets — outdoor / gloved use.
 const S: Record<string, React.CSSProperties> = {
   shell:        { minHeight: '100dvh', maxHeight: '100dvh', background: C.bg, display: 'flex', flexDirection: 'column', fontFamily: SANS, maxWidth: 480, margin: '0 auto', overflow: 'hidden' },
-  pinCard:      { width: '100%', maxWidth: 340, padding: '32px 24px', background: C.bgCard, borderRadius: 20, border: `1px solid ${C.border}`, margin: '0 16px', boxShadow: '0 4px 32px rgba(15,23,42,0.08)' },
-  pinLogo:      { width: 52, height: 52, borderRadius: 14, background: 'rgba(107,126,255,0.1)', border: `1px solid rgba(107,126,255,0.25)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.blue, margin: '0 auto', letterSpacing: '0.05em' },
-  topBar:       { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: C.bgCard, borderBottom: `1px solid ${C.border}`, flexShrink: 0, boxShadow: '0 1px 0 rgba(15,23,42,0.06)' },
-  diagHeader:   { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: C.bgCard, borderBottom: `1px solid ${C.border}`, flexShrink: 0 },
-  ggMark:       { width: 34, height: 34, borderRadius: 9, background: 'rgba(107,126,255,0.1)', border: `1px solid rgba(107,126,255,0.25)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 11, fontWeight: 700, color: C.blue, flexShrink: 0, letterSpacing: '0.05em' },
-  topBarTitle:  { fontFamily: MONO, fontSize: 11, fontWeight: 700, color: C.textPrimary, letterSpacing: '0.08em' },
+  pinCard:      { width: '100%', maxWidth: 360, padding: '36px 28px', background: C.bgCard, borderRadius: 24, border: `1px solid ${C.borderMed}`, margin: '0 20px', boxShadow: '0 12px 48px rgba(0,0,0,0.6)' },
+  pinLogo:      { width: 64, height: 64, borderRadius: 18, background: 'rgba(107,126,255,0.22)', border: `1px solid rgba(107,126,255,0.45)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 18, fontWeight: 700, color: C.blue, margin: '0 auto', letterSpacing: '0.05em' },
+  topBar:       { display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: C.bgCard, borderBottom: `1px solid ${C.border}`, flexShrink: 0, boxShadow: '0 2px 16px rgba(0,0,0,0.4)' },
+  diagHeader:   { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: C.bgCard, borderBottom: `1px solid ${C.border}`, flexShrink: 0 },
+  ggMark:       { width: 38, height: 38, borderRadius: 10, background: 'rgba(107,126,255,0.15)', border: `1px solid rgba(107,126,255,0.35)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 12, fontWeight: 700, color: C.blue, flexShrink: 0, letterSpacing: '0.05em' },
+  topBarTitle:  { fontFamily: MONO, fontSize: 12, fontWeight: 700, color: C.textPrimary, letterSpacing: '0.08em' },
   topBarSub:    { fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.12em', marginTop: 2 },
-  statusPill:   { fontFamily: MONO, fontSize: 9, color: C.green, letterSpacing: '0.12em', border: `1px solid rgba(5,150,105,0.3)`, borderRadius: 5, padding: '3px 7px', flexShrink: 0, background: 'rgba(5,150,105,0.07)' },
+  statusPill:   { fontFamily: MONO, fontSize: 9, color: C.green, letterSpacing: '0.12em', border: `1px solid rgba(16,185,129,0.35)`, borderRadius: 5, padding: '4px 8px', flexShrink: 0, background: 'rgba(16,185,129,0.1)' },
   sessionId:    { fontFamily: MONO, fontSize: 13, fontWeight: 700, color: C.textPrimary, letterSpacing: '0.06em' },
-  iconBtn:      { width: 34, height: 34, borderRadius: 8, background: C.bgInput, border: `1px solid ${C.border}`, color: C.textSecondary, fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: MONO },
-  progressBar:  { height: 2, background: C.border, flexShrink: 0 },
+  iconBtn:      { width: 40, height: 40, borderRadius: 10, background: C.bgInput, border: `1px solid ${C.borderMed}`, color: C.textSecondary, fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: MONO },
+  progressBar:  { height: 3, background: C.bgInput, flexShrink: 0 },
   progressFill: { height: '100%', background: C.blue, transition: 'width 0.4s ease' },
   legendStrip:  { display: 'flex', gap: 20, padding: '10px 16px', borderTop: `1px solid ${C.border}`, fontFamily: MONO, fontSize: 9, letterSpacing: '0.1em', flexShrink: 0, background: C.bgCard },
   fieldLabel:   { fontFamily: MONO, fontSize: 9, letterSpacing: '0.16em', color: C.textMuted, marginBottom: -4 },
-  textarea:     { width: '100%', background: C.bgInput, border: `1px solid ${C.borderMed}`, borderRadius: 10, padding: '13px 14px', color: C.textPrimary, fontSize: 14, lineHeight: 1.6, outline: 'none', resize: 'none', fontFamily: SANS, boxSizing: 'border-box' },
-  monoInput:    { width: '100%', background: C.bgInput, border: `1px solid ${C.borderMed}`, borderRadius: 8, padding: '11px 13px', color: C.textPrimary, fontSize: 13, outline: 'none', fontFamily: MONO, letterSpacing: '0.04em', boxSizing: 'border-box' },
-  chip:         { padding: '6px 12px', borderRadius: 5, border: '1px solid', fontFamily: MONO, fontSize: 10, letterSpacing: '0.08em', cursor: 'pointer' },
-  primaryBtn:   { width: '100%', padding: '16px', borderRadius: 12, background: C.blue, border: 'none', color: '#FFFFFF', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em', boxShadow: '0 2px 8px rgba(107,126,255,0.25)' },
+  textarea:     { width: '100%', background: C.bgInput, border: `1px solid ${C.borderMed}`, borderRadius: 10, padding: '14px 15px', color: C.textPrimary, fontSize: 15, lineHeight: 1.65, outline: 'none', resize: 'none', fontFamily: SANS, boxSizing: 'border-box' },
+  monoInput:    { width: '100%', background: C.bgInput, border: `1px solid ${C.borderMed}`, borderRadius: 10, padding: '13px 14px', color: C.textPrimary, fontSize: 14, outline: 'none', fontFamily: MONO, letterSpacing: '0.04em', boxSizing: 'border-box' },
+  chip:         { padding: '8px 14px', borderRadius: 6, border: '1px solid', fontFamily: MONO, fontSize: 10, letterSpacing: '0.08em', cursor: 'pointer' },
+  primaryBtn:   { width: '100%', padding: '18px', borderRadius: 14, background: C.blue, border: 'none', color: '#FFFFFF', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em', boxShadow: '0 4px 16px rgba(107,126,255,0.35)' },
   historyLog:   { margin: '0 16px 12px', background: C.bgCard, borderRadius: 12, overflow: 'hidden', border: `1px solid ${C.border}` },
   logLabel:     { fontFamily: MONO, fontSize: 9, letterSpacing: '0.18em', color: C.textMuted, padding: '8px 12px', borderBottom: `1px solid ${C.border}`, background: C.bgInput },
-  logRow:       { display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 12px', borderBottom: `1px solid ${C.border}` },
+  logRow:       { display: 'flex', alignItems: 'baseline', gap: 10, padding: '9px 12px', borderBottom: `1px solid ${C.border}` },
   logNum:       { fontFamily: MONO, fontSize: 10, fontWeight: 700, color: C.textMuted, flexShrink: 0, letterSpacing: '0.04em' },
-  logText:      { fontFamily: SANS, fontSize: 12, color: C.textSecondary, flex: 1, lineHeight: 1.4 },
+  logText:      { fontFamily: SANS, fontSize: 13, color: C.textSecondary, flex: 1, lineHeight: 1.45 },
   logAns:       { fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', flexShrink: 0 },
-  stepCard:     { borderRadius: 14, border: '1px solid', padding: '16px', marginBottom: 4, boxShadow: '0 1px 4px rgba(15,23,42,0.06)' },
+  stepCard:     { borderRadius: 16, border: '1px solid', padding: '18px', marginBottom: 4, boxShadow: '0 2px 12px rgba(0,0,0,0.25)' },
   stepHeader:   { display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 },
-  stepNum:      { fontFamily: MONO, fontSize: 42, fontWeight: 700, lineHeight: 1, letterSpacing: '-0.02em', flexShrink: 0, opacity: 0.85 },
+  stepNum:      { fontFamily: MONO, fontSize: 44, fontWeight: 700, lineHeight: 1, letterSpacing: '-0.02em', flexShrink: 0, opacity: 0.9 },
   stepTypeLabel:{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: '0.18em', marginBottom: 4 },
   manualRef:    { fontFamily: MONO, fontSize: 9, color: C.blue, letterSpacing: '0.08em', textDecoration: 'none', display: 'inline-block', marginTop: 2 },
-  stepText:     { fontFamily: SANS, fontSize: 17, fontWeight: 600, color: C.textPrimary, lineHeight: 1.45 },
-  detailBlock:  { marginTop: 12, padding: '11px 13px', background: C.bgInput, borderRadius: 8, borderLeft: `3px solid ${C.borderMed}`, fontFamily: MONO, fontSize: 12, color: C.textSecondary, lineHeight: 1.7, letterSpacing: '0.01em', whiteSpace: 'pre-line' },
+  stepText:     { fontFamily: SANS, fontSize: 18, fontWeight: 600, color: C.textPrimary, lineHeight: 1.5 },
+  detailBlock:  { marginTop: 12, padding: '12px 14px', background: C.bgDeep, borderRadius: 8, borderLeft: `3px solid ${C.borderMed}`, fontFamily: MONO, fontSize: 12, color: C.textSecondary, lineHeight: 1.75, letterSpacing: '0.01em', whiteSpace: 'pre-line' },
   divider:      { height: 1, background: C.border, margin: '16px 0' },
   answerRow:    { display: 'flex', gap: 10 },
-  yesBtn:       { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '16px 12px', borderRadius: 12, background: 'rgba(5,150,105,0.07)', border: `1px solid rgba(5,150,105,0.25)`, cursor: 'pointer' },
-  noBtn:        { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '16px 12px', borderRadius: 12, background: 'rgba(220,38,38,0.07)', border: `1px solid rgba(220,38,38,0.25)`, cursor: 'pointer' },
-  btnLabel:     { fontFamily: MONO, fontSize: 22, fontWeight: 700, letterSpacing: '0.05em', color: C.textPrimary },
-  btnSub:       { fontFamily: MONO, fontSize: 8, letterSpacing: '0.14em', color: C.textMuted },
-  doneBtn:      { width: '100%', padding: '14px', borderRadius: 12, background: 'rgba(217,119,6,0.08)', border: `1px solid rgba(217,119,6,0.25)`, color: C.amber, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.12em' },
-  sendBtn:      { padding: '11px 16px', borderRadius: 9, background: 'rgba(107,126,255,0.1)', border: `1px solid rgba(107,126,255,0.25)`, color: C.blue, fontSize: 16, cursor: 'pointer', fontFamily: MONO },
-  ghostSmBtn:   { width: '100%', padding: '10px', borderRadius: 9, background: 'transparent', border: `1px solid ${C.border}`, color: C.textMuted, fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em', cursor: 'pointer' },
-  logFixBtn:    { flex: 1, padding: '12px', borderRadius: 12, background: 'rgba(217,119,6,0.07)', border: `1px solid rgba(217,119,6,0.2)`, color: C.amber, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
-  newSessionBtn:{ flex: 1, padding: '12px', borderRadius: 12, background: C.bgInput, border: `1px solid ${C.border}`, color: C.textSecondary, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
-  keepGoingBtn: { flex: 1, padding: '12px', borderRadius: 12, background: 'rgba(220,38,38,0.07)', border: `1px solid rgba(220,38,38,0.2)`, color: C.red, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
-  footer:       { display: 'flex', justifyContent: 'space-between', padding: '8px 16px', borderTop: `1px solid ${C.border}`, background: C.bgCard, fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', flexShrink: 0 },
-  spinner:      { width: 18, height: 18, borderRadius: '50%', border: `2px solid ${C.border}`, borderTopColor: C.blue, animation: 'spin 0.7s linear infinite', flexShrink: 0 },
+  yesBtn:       { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '18px 12px', borderRadius: 14, background: 'rgba(16,185,129,0.12)', border: `1px solid rgba(16,185,129,0.35)`, cursor: 'pointer' },
+  noBtn:        { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '18px 12px', borderRadius: 14, background: 'rgba(248,113,113,0.12)', border: `1px solid rgba(248,113,113,0.35)`, cursor: 'pointer' },
+  btnLabel:     { fontFamily: MONO, fontSize: 24, fontWeight: 700, letterSpacing: '0.05em', color: C.textPrimary },
+  btnSub:       { fontFamily: MONO, fontSize: 9, letterSpacing: '0.14em', color: C.textMuted },
+  doneBtn:      { width: '100%', padding: '15px', borderRadius: 13, background: 'rgba(245,158,11,0.1)', border: `1px solid rgba(245,158,11,0.30)`, color: C.amber, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.12em' },
+  sendBtn:      { padding: '12px 18px', borderRadius: 10, background: 'rgba(107,126,255,0.12)', border: `1px solid rgba(107,126,255,0.30)`, color: C.blue, fontSize: 16, cursor: 'pointer', fontFamily: MONO },
+  ghostSmBtn:   { width: '100%', padding: '12px', borderRadius: 10, background: 'transparent', border: `1px solid ${C.border}`, color: C.textMuted, fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em', cursor: 'pointer' },
+  logFixBtn:    { flex: 1, padding: '14px', borderRadius: 13, background: 'rgba(245,158,11,0.1)', border: `1px solid rgba(245,158,11,0.28)`, color: C.amber, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
+  newSessionBtn:{ flex: 1, padding: '14px', borderRadius: 13, background: C.bgInput, border: `1px solid ${C.border}`, color: C.textSecondary, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
+  keepGoingBtn: { flex: 1, padding: '14px', borderRadius: 13, background: 'rgba(248,113,113,0.1)', border: `1px solid rgba(248,113,113,0.28)`, color: C.red, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: MONO, letterSpacing: '0.1em' },
+  footer:       { display: 'flex', justifyContent: 'space-between', padding: '9px 16px', borderTop: `1px solid ${C.border}`, background: C.bgCard, fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', flexShrink: 0 },
+  spinner:      { width: 20, height: 20, borderRadius: '50%', border: `2px solid ${C.bgInput}`, borderTopColor: C.blue, animation: 'spin 0.7s linear infinite', flexShrink: 0 },
 }
 
 // ─── Export ───────────────────────────────────────────────────────────────────
@@ -2746,7 +2748,7 @@ export default function TechPage() {
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         html, body { margin: 0; background: ${C.bg}; overscroll-behavior: none; }
         button:active { opacity: 0.75; }
-        ::placeholder { color: rgba(15,23,42,0.28); }
+        ::placeholder { color: rgba(100,150,210,0.35); }
         input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
         .gg-chips::-webkit-scrollbar, .gg-list::-webkit-scrollbar { display: none; }
       `}</style>
