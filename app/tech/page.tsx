@@ -460,7 +460,7 @@ function TechTool() {
   const [current,   setCurrent]   = useState<Step | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [loading,      setLoading]      = useState(false)
-  const [loadingStage, setLoadingStage] = useState<'searching' | 'generating' | null>(null)
+  const [loadingStage, setLoadingStage] = useState<'searching' | 'generating' | 'slow' | null>(null)
   const [diagError,    setDiagError]    = useState<string | null>(null)
   const [lastHistory,  setLastHistory]  = useState<HistoryItem[]>([])  // for retry
   const [freeText,  setFreeText]  = useState('')
@@ -596,12 +596,13 @@ function TechTool() {
     setCurrent(null)
     setLastHistory(h)
 
-    // Show "generating" after 3s so the tech knows it's still working
-    const stageTimer = setTimeout(() => setLoadingStage('generating'), 3000)
+    // Show "generating" after 4s, then "slow connection" after 15s
+    const stageTimer  = setTimeout(() => setLoadingStage('generating'), 4000)
+    const slowTimer   = setTimeout(() => setLoadingStage('slow'),       15000)
 
     // Abort after 20s — surface a clean retry instead of infinite spinner
     const controller = new AbortController()
-    const abortTimer = setTimeout(() => controller.abort(), 20000)
+    const abortTimer = setTimeout(() => controller.abort(), 55000)  // 55s — server maxDuration is 60s
 
     try {
       const res = await fetch('/api/kb/ask', {
@@ -625,6 +626,7 @@ function TechTool() {
       setDiagError(msg)
     } finally {
       clearTimeout(stageTimer)
+      clearTimeout(slowTimer)
       clearTimeout(abortTimer)
       setLoading(false)
       setLoadingStage(null)
@@ -2032,13 +2034,11 @@ function TechTool() {
             <div style={S.spinner} />
             <div>
               <div style={{ fontFamily: MONO, fontSize: 11, color: C.textMuted, letterSpacing: '0.08em' }}>
-                {loadingStage === 'generating' ? 'GENERATING NEXT STEP…' : 'SEARCHING MANUALS…'}
+                {loadingStage === 'slow' ? 'STILL WORKING…' : loadingStage === 'generating' ? 'GENERATING NEXT STEP…' : 'SEARCHING MANUALS…'}
               </div>
-              {loadingStage === 'generating' && (
-                <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.06em', marginTop: 3, opacity: 0.6 }}>
-                  CROSS-REFERENCING MANUAL SPECS
-                </div>
-              )}
+              <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.06em', marginTop: 3, opacity: 0.6 }}>
+                {loadingStage === 'slow' ? 'SERVER IS COLD-STARTING — HANG TIGHT' : loadingStage === 'generating' ? 'CROSS-REFERENCING MANUAL SPECS' : 'QUERYING KNOWLEDGE BASE'}
+              </div>
             </div>
           </div>
         )}
