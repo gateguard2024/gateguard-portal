@@ -10,12 +10,14 @@ GateGuard runs four distinct applications. Never confuse them.
 | Visitor Kiosk (legacy) | stonegate-visitor.vercel.app | (separate) | Single-property Brivo+Twilio kiosk. Fully deprecated — replaced by gatecard.co. Do not touch. |
 | GateCard | gatecard.co | gatecard.co | **Property-level platform** — visitor management, resident kiosk, Brivo↔UniFi middleware, tenant self-service. Tier 2 interface deployed at every property. One codebase, N properties. All visitor/resident workflows belong here. |
 | Dealer Portal | portal.gateguard.co | gateguard-portal (THIS REPO) | **Dealer-facing ops + field tech tool.** The OS for the GateGuard dealer network. Dealers, techs, sales reps, and property managers only. NOT residents, NOT visitors. |
+| Client Portal | portal.gateguard.co/[site-slug] | gateguard-portal (THIS REPO) | **Property manager-facing dashboard.** Scoped to a single property. Mirrors Brivo Facility Manager UI with GateGuard branding. Pulls from dealer's Brivo + Eagle Eye credentials — property managers never log into Brivo directly. Route: `app/[site-slug]/page.tsx`. Phase 2. |
 
 **CRITICAL BOUNDARY — enforce every time:**
 - Visitor management → gatecard.co
 - Resident database sync (Brivo ↔ UniFi) → gatecard.co
 - Property kiosk UI → gatecard.co
 - Dealer ops, field service, quoting, billing, KB → THIS REPO (portal)
+- Client portal (property manager dashboard, Brivo/Eagle Eye data) → THIS REPO at `/[site-slug]`
 - The portal's `/api/sync/residents` route is a LEGACY artifact — new sync work goes in gatecard.co
 
 ---
@@ -427,7 +429,7 @@ Field techs use Fluke, IDEAL, and Greenlee cable/network testers daily. Future g
 - [ ] SMS thread inside work orders (Twilio ↔ WO ID)
 - [x] Site Survey framework — /tech survey + survey_add screens + AI proposal (live in /tech)
 - [ ] Site Survey: photo per device, push to /quotes quote builder
-- [ ] Client portal full build-out (Supabase RLS by org)
+- [ ] Client portal full build-out — `portal.gateguard.co/[site-slug]`. Property manager view: KPI cards (Brivo), camera grid (Eagle Eye), event tracker, user/device read-only. Mirrors Brivo Facility Manager layout. Auth: Clerk 'client' role, Supabase RLS scoped to org. Proxy API routes reuse lib/brivo.ts + Eagle Eye integration. No Brivo/Eagle Eye login for property managers. (Task #50)
 - [ ] Property Intelligence Card on dashboard
 - [ ] UI differentiation pass: Space Grotesk headings, LED-glow status dots, tighter card density
 

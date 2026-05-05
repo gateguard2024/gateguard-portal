@@ -34,19 +34,25 @@ export async function POST(req: NextRequest) {
     const db  = serviceDb()
     const historyLen = (history as any[]).length
 
-    // 1. Chunks — cached on step 2+, fresh search on step 1
-    //    Step 1 embeds the symptom and runs pgvector search (slowest path).
-    //    Steps 2+ pull the same chunks from DB by ID — no OpenAI embedding call,
-    //    no pgvector scan, ~10x faster. This is what fixes the step-4 stall.
+    // 1. Chunks + device terminal map — run in parallel where possible
+    //    Step 1: full vector search + secondary wiring search + device_suggestions fetch
+    //    Steps 2+: cached chunk IDs (no OpenAI call) + device_suggestions fetch
     let chunks: Awaited<ReturnType<typeof searchKnowledge>> = []
+
+    // Always fetch device terminal map from device_suggestions (covers all devices with processed manuals)
+    const deviceSuggestionPromise = product_id
+      ? db.from('device_suggestions')
+          .select('device_def, wiring_hints')
+          .eq('product_id', product_id)
+          .neq('status', 'rejected')
+          .maybeSingle()
+      : Promise.resolve({ data: null })
 
     if (session_id && historyLen > 0) {
       // Fast path: reuse cached chunks from this session
-      const { data: sess } = await db
-        .from('troubleshoot_sessions')
-        .select('chunks_used')
-        .eq('id', session_id)
-        .single()
+      const [{ data: sess }] = await Promise.all([
+        db.from('troubleshoot_sessions').select('chunks_used').eq('id', session_id).single(),
+      ])
 
       const chunkIds: string[] = sess?.chunks_used ?? []
       if (chunkIds.length > 0) {
@@ -74,11 +80,56 @@ export async function POST(req: NextRequest) {
         chunks = await searchKnowledge(symptom, product_id, 3, 0.40)
       }
     } else {
-      // Step 1: full vector search
+      // Step 1: full vector search on symptom
       const recentContext = (history as any[]).slice(-2)
         .map((h: any) => `${h.question} → ${h.answer}`).join('; ')
       const searchQuery = [symptom, error_code, recentContext].filter(Boolean).join('. ')
-      chunks = await searchKnowledge(searchQuery, product_id, 6, 0.40)
+
+      // Run symptom search + wiring-specific search in parallel
+      // The wiring search ensures terminal/wiring diagram pages are always in context,
+      // even when the symptom query ("won't close") doesn't semantically match terminal content.
+      const [symptomChunks, wiringChunks] = await Promise.all([
+        searchKnowledge(searchQuery, product_id, 6, 0.40),
+        product_id
+          ? searchKnowledge('terminal block wiring diagram connector pin layout', product_id, 3, 0.30)
+          : Promise.resolve([]),
+      ])
+
+      // Merge, deduplicating by chunk ID — symptom results first (higher relevance)
+      const seen = new Set(symptomChunks.map((c: any) => c.id))
+      chunks = [...symptomChunks]
+      for (const wc of wiringChunks as typeof symptomChunks) {
+        if (!seen.has(wc.id)) { seen.add(wc.id); chunks.push(wc) }
+      }
+    }
+
+    // Resolve device terminal map and format it for the system prompt
+    const { data: suggestion } = await deviceSuggestionPromise
+    let deviceTerminalSection = ''
+    if (suggestion?.device_def) {
+      const def = suggestion.device_def as any
+      const terminals: any[] = def.terminals ?? []
+      if (terminals.length > 0) {
+        // Group terminals by connector block (e.g. "Lock Relay 1 (J2)")
+        const groups: Record<string, string[]> = {}
+        for (const t of terminals) {
+          const g: string = t.group ?? 'Terminals'
+          if (!groups[g]) groups[g] = []
+          groups[g].push(`${t.label} — ${t.desc}`)
+        }
+        const lines = Object.entries(groups)
+          .map(([g, ts]) => `  ${g}:\n    ${ts.join('\n    ')}`)
+          .join('\n')
+        deviceTerminalSection = `\nTHIS DEVICE'S TERMINAL MAP (extracted from indexed manufacturer manual — always use these exact board labels in your steps):
+${def.name ? `Device: ${def.brand ?? ''} ${def.name}`.trim() : ''}
+${def.note ? `Install note: ${def.note}` : ''}
+${lines}`
+        const hints = (suggestion.wiring_hints as string[] | null) ?? []
+        if (hints.length > 0) {
+          deviceTerminalSection += `\nCommon wiring notes: ${hints.slice(0, 5).join(' | ')}`
+        }
+        deviceTerminalSection += '\nIMPORTANT: Use only the labels above when referring to terminals — never use generic phrases like "power terminals" or "input terminals".\n'
+      }
     }
 
     // 2. Manual context string
@@ -107,7 +158,8 @@ export async function POST(req: NextRequest) {
       model:      'claude-haiku-4-5-20251001',
       max_tokens: maxTokens,
       system: `You are GateGuard's field diagnostic AI for dealers and technicians servicing multifamily access control equipment.
-You have real manual passages below. Use them for specific part names, terminal labels, LED colors, error codes, and voltage specs.
+You have real manual passages below AND (when available) the exact terminal map extracted from the manufacturer's manual for this specific device. Always use exact terminal labels from these sources — never generic descriptions.
+${deviceTerminalSection}
 
 Respond ONLY with valid JSON — no prose, no markdown fences. Exact schema:
 {
