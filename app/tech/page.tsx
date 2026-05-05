@@ -18,7 +18,7 @@ import { CableGuide }   from '@/components/tech/CableGuide'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type StepType = 'question' | 'action' | 'measure' | 'select' | 'photo' | 'resolved' | 'escalate'
-type Screen   = 'pin' | 'home' | 'choice' | 'symptom' | 'diag' | 'wiring' | 'cable' | 'install' | 'survey' | 'survey_add' | 'survey_transcript'
+type Screen   = 'pin' | 'home' | 'choice' | 'symptom' | 'diag' | 'wiring' | 'cable' | 'install' | 'survey' | 'survey_add' | 'survey_transcript' | 'training' | 'training_course'
 
 // ─── Site Survey Types ────────────────────────────────────────────────────────
 interface SurveyDevice {
@@ -530,6 +530,7 @@ function TechTool() {
   const [editingDevice,   setEditingDevice]   = useState<SurveyDevice | null>(null)
   const [surveyProposal,  setSurveyProposal]  = useState<SurveyProposal | null>(null)
   const [surveyLoading,   setSurveyLoading]   = useState(false)
+  const [activeCourse,    setActiveCourse]    = useState<string | null>(null)
   // Fields for survey_add form
   const [sdName,      setSdName]      = useState('')
   const [sdBrand,     setSdBrand]     = useState('')
@@ -994,6 +995,14 @@ function TechTool() {
           >
             <span style={{ fontSize: 20 }}>📍</span>
             <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.08em' }}>SURVEY</span>
+          </button>
+          {/* TRAIN */}
+          <button
+            onClick={() => setScreen('training')}
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}
+          >
+            <span style={{ fontSize: 20 }}>🎓</span>
+            <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.08em' }}>TRAIN</span>
           </button>
         </div>
       </div>
@@ -2756,6 +2765,303 @@ function TechTool() {
       </div>
     </div>
   )
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SCREEN: TRAINING — course catalog
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (screen === 'training') {
+    const courses = [
+      {
+        id: 'ul325',
+        title: 'UL 325 — Gate Operator Safety',
+        subtitle: 'Entrapment protection, operator classes, required devices & field compliance',
+        icon: '🚧',
+        color: C.amber,
+        lessons: 6,
+        duration: '~20 min',
+        badge: 'REQUIRED',
+      },
+      {
+        id: 'nec',
+        title: 'NEC 725 — Low Voltage Wiring',
+        subtitle: 'Class 2 circuits, voltage limits, separation rules for access control',
+        icon: '⚡',
+        color: C.blue,
+        lessons: 4,
+        duration: '~15 min',
+        badge: 'COMING SOON',
+        locked: true,
+      },
+      {
+        id: 'brivo',
+        title: 'Brivo ACS — Commissioning',
+        subtitle: 'Panel setup, credential provisioning, door config & reader pairing',
+        icon: '🔐',
+        color: C.green,
+        lessons: 5,
+        duration: '~25 min',
+        badge: 'COMING SOON',
+        locked: true,
+      },
+    ]
+    return (
+      <div style={S.shell}>
+        <div style={S.topBar}>
+          <button style={S.iconBtn} onClick={() => setScreen('home')}>‹</button>
+          <div style={{ flex: 1 }}>
+            <div style={S.topBarTitle}>TRAINING &amp; CERTIFICATION</div>
+            <div style={S.topBarSub}>GATEGUARD FIELD TECH PROGRAM</div>
+          </div>
+          <div style={{ fontFamily: MONO, fontSize: 9, color: C.amber, letterSpacing: '0.1em' }}>🎓 1 ACTIVE</div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+          <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.14em', marginBottom: 14 }}>
+            COURSE CATALOG
+          </div>
+
+          {courses.map(course => (
+            <div
+              key={course.id}
+              onClick={() => { if (!course.locked) { setActiveCourse(course.id); setScreen('training_course') } }}
+              style={{
+                background: C.bgCard,
+                borderRadius: 14,
+                border: `1px solid ${course.locked ? C.border : course.color + '44'}`,
+                padding: '16px',
+                marginBottom: 12,
+                cursor: course.locked ? 'default' : 'pointer',
+                opacity: course.locked ? 0.55 : 1,
+                boxShadow: course.locked ? 'none' : '0 2px 10px rgba(107,126,255,0.08)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                <div style={{ width: 48, height: 48, borderRadius: 12, background: course.color + '18', border: `1.5px solid ${course.color}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>
+                  {course.icon}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <div style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: course.locked ? C.textMuted : C.textPrimary, letterSpacing: '0.04em' }}>{course.title}</div>
+                    <div style={{ fontFamily: MONO, fontSize: 7, fontWeight: 700, color: course.locked ? C.textMuted : course.color, background: (course.locked ? C.border : course.color + '18'), borderRadius: 4, padding: '2px 6px', letterSpacing: '0.08em', flexShrink: 0 }}>
+                      {course.badge}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textSecondary, lineHeight: 1.5, marginBottom: 8 }}>{course.subtitle}</div>
+                  <div style={{ display: 'flex', gap: 14 }}>
+                    <span style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted }}>{course.lessons} lessons</span>
+                    <span style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted }}>{course.duration}</span>
+                  </div>
+                </div>
+                {!course.locked && (
+                  <div style={{ fontFamily: MONO, fontSize: 18, color: course.color, flexShrink: 0 }}>›</div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SCREEN: TRAINING COURSE — UL 325 content
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (screen === 'training_course' && activeCourse === 'ul325') {
+    const sections = [
+      {
+        id: 'overview',
+        title: 'What is UL 325?',
+        icon: '📋',
+        color: C.blue,
+        content: [
+          { type: 'body', text: 'UL 325 is the Underwriters Laboratories safety standard for door, drapery, gate, louver, and window operators and systems. In the gate industry, UL 325 is the primary safety compliance standard governing all vehicular and pedestrian gate operators installed in the United States.' },
+          { type: 'body', text: 'The standard requires that gate operators include entrapment protection to prevent people or objects from being trapped, crushed, or struck by a moving gate.' },
+          { type: 'callout', color: C.amber, title: 'Why It Matters in the Field', text: 'An operator installed without compliant entrapment protection is a liability for the dealer, the property owner, and potentially criminal exposure if injury occurs. This is not optional.' },
+        ],
+      },
+      {
+        id: 'classes',
+        title: 'Gate Operator Classes (I–IV)',
+        icon: '🏷️',
+        color: C.blue,
+        content: [
+          { type: 'table', rows: [
+            { label: 'Class I', value: 'Residential vehicular gate operator — single-family residence', color: C.green },
+            { label: 'Class II', value: 'Commercial or general access — multi-family, business, school', color: C.blue },
+            { label: 'Class III', value: 'Industrial/limited access — for authorized pedestrians only', color: C.amber },
+            { label: 'Class IV', value: 'Restricted access — prisons, security facilities, no unauthorized access', color: C.red },
+          ]},
+          { type: 'callout', color: C.blue, title: 'Class Determines Requirements', text: 'Class II is the most common in multifamily. The entrapment protection requirements are more stringent for Class II than Class I. When in doubt, classify UP.' },
+        ],
+      },
+      {
+        id: 'zones',
+        title: 'Entrapment Protection Zones',
+        icon: '📐',
+        color: C.purple,
+        content: [
+          { type: 'body', text: 'UL 325 defines 8 entrapment protection zones — specific areas around the gate travel path where a person could become trapped. Each zone must be protected by at least one listed entrapment protection device.' },
+          { type: 'table', rows: [
+            { label: 'Zone 1', value: 'Leading edge of gate travel (direction of travel)' },
+            { label: 'Zone 2', value: 'Trailing edge of gate travel' },
+            { label: 'Zone 3', value: 'Post / pillar on the leading edge side' },
+            { label: 'Zone 4', value: 'Post / pillar on the trailing edge side' },
+            { label: 'Zone 5', value: 'Under the gate (bottom edge, vertical lift)' },
+            { label: 'Zone 6', value: 'Between the gate panels (sliding / folding)' },
+            { label: 'Zone 7', value: 'Pinch point between moving and stationary parts' },
+            { label: 'Zone 8', value: 'Any exposed moving mechanical component' },
+          ]},
+          { type: 'callout', color: C.purple, title: 'Field Reality', text: 'For a standard residential swing or slide gate, you primarily worry about Zones 1–4. For industrial or barrier gates, all 8 zones apply. Sketch the gate, mark each zone, then confirm device coverage.' },
+        ],
+      },
+      {
+        id: 'devices',
+        title: 'Required Entrapment Protection Devices',
+        icon: '🔒',
+        color: C.green,
+        content: [
+          { type: 'body', text: 'UL 325 requires at least one PRIMARY and one SECONDARY entrapment protection device for each required zone. The specific combination depends on operator class.' },
+          { type: 'table', rows: [
+            { label: 'Photo Eye (Photobeam)', value: 'PRIMARY — non-contact sensor. Required on leading edge (Zone 1). Must be listed for vehicular gate use.', color: C.blue },
+            { label: 'Safety Edge / Sensing Edge', value: 'PRIMARY or SECONDARY — contact sensor strip on gate edge. Triggers reverse on contact.', color: C.green },
+            { label: 'Loop Detector (Vehicle)', value: 'SECONDARY — detects vehicle presence in gate path. Does NOT count for pedestrian entrapment.', color: C.amber },
+            { label: 'Monitored Entrapment Device', value: 'Active sensor that confirms device is operational. Required by some operators on Class II+.', color: C.purple },
+            { label: 'Obstruction Reset', value: 'After entrapment event, gate must require manual reset before resuming auto-close.', color: C.red },
+          ]},
+          { type: 'callout', color: C.red, title: '⚠ Critical Rule — 2 Device Minimum', text: 'Class II operators require a minimum of TWO entrapment protection devices per protected zone. One photo eye alone is NOT sufficient for a commercial/multifamily install. You must have a photo eye AND a safety edge or secondary device.' },
+        ],
+      },
+      {
+        id: 'placards',
+        title: 'Warning Labels & Placards',
+        icon: '⚠️',
+        color: C.amber,
+        content: [
+          { type: 'body', text: 'UL 325 mandates specific warning labels be permanently attached to the operator. Failure to install required placards makes the installation non-compliant — regardless of device coverage.' },
+          { type: 'table', rows: [
+            { label: 'Operator Placard', value: 'On the operator housing. Includes emergency release instructions, keep-clear warning, and entrapment zone diagram.' },
+            { label: 'Keep Clear Sign', value: 'Posted at gate entry/exit. "WARNING — MOVING GATE CAN CAUSE SEVERE INJURY OR DEATH — KEEP CLEAR"' },
+            { label: 'Emergency Release', value: 'Label on or next to manual release mechanism (breakaway chain, handle, or key switch).' },
+            { label: 'Contact Info', value: 'Installer/service company name and phone number must be affixed to the operator. This is you.' },
+          ]},
+          { type: 'callout', color: C.amber, title: 'Installer Liability', text: 'Your company name goes on the operator. If a future injury occurs and there\'s no installer placard, the trail leads back to whoever last serviced the gate. Always install the label.' },
+        ],
+      },
+      {
+        id: 'testing',
+        title: 'Field Testing & Monthly Test Procedure',
+        icon: '✅',
+        color: C.green,
+        content: [
+          { type: 'body', text: 'After installation and during every service visit, you must verify entrapment protection devices are operational. Document the test in your work order.' },
+          { type: 'table', rows: [
+            { label: 'Step 1 — Visual', value: 'Confirm photo eyes are mounted, aligned, and indicator light shows beam is clear.' },
+            { label: 'Step 2 — Break Beam', value: 'While gate is in motion, break the photo eye beam. Gate must stop and reverse within ≤0.5 seconds.' },
+            { label: 'Step 3 — Safety Edge', value: 'Apply moderate pressure to the sensing edge. Gate must stop and reverse on contact.' },
+            { label: 'Step 4 — Loop Detector', value: 'Activate loop to confirm vehicle detection. Gate should not close on active loop.' },
+            { label: 'Step 5 — Auto-Close Timer', value: 'Verify auto-close delay is set. Gate should not leave open indefinitely.' },
+            { label: 'Step 6 — Manual Release', value: 'Test emergency release. Gate must be manually movable after release engagement.' },
+            { label: 'Step 7 — Document', value: 'Log date, tech initials, and PASS/FAIL for each test point in the work order.' },
+          ]},
+          { type: 'callout', color: C.green, title: '✓ Compliance Check — Leave This on Site', text: 'On every service call where you touch a gate operator, run this checklist and leave a signed copy with the property. If you\'re ever called into a post-incident investigation, your documentation is your proof of compliance.' },
+        ],
+      },
+    ]
+
+    return (
+      <div style={S.shell}>
+        <div style={S.topBar}>
+          <button style={S.iconBtn} onClick={() => setScreen('training')}>‹</button>
+          <div style={{ flex: 1 }}>
+            <div style={S.topBarTitle}>UL 325 — GATE OPERATOR SAFETY</div>
+            <div style={S.topBarSub}>FIELD TECH CERTIFICATION · {sections.length} SECTIONS</div>
+          </div>
+          <div style={{ fontFamily: MONO, fontSize: 9, color: C.amber, letterSpacing: '0.1em' }}>🚧 REQUIRED</div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+
+          {/* Course header */}
+          <div style={{ background: C.bgCard, borderRadius: 14, padding: '16px', marginBottom: 16, border: `1px solid ${C.amber}44`, boxShadow: '0 2px 10px rgba(245,158,11,0.10)' }}>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: C.amber, letterSpacing: '0.14em', marginBottom: 6 }}>UNDERWRITERS LABORATORIES</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.textPrimary, lineHeight: 1.3, marginBottom: 8 }}>Standard for Safety — Door, Drapery, Gate, Louver, and Window Operators and Systems</div>
+            <div style={{ fontSize: 12, color: C.textSecondary, lineHeight: 1.55 }}>
+              The governing safety standard for all gate operator installations in the US. Covers entrapment protection, operator classification, required devices, warning labels, and testing requirements. Compliance is not optional — it is the legal baseline for every install.
+            </div>
+          </div>
+
+          {sections.map((section, si) => (
+            <div key={section.id} style={{ marginBottom: 16 }}>
+              {/* Section header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: section.color + '18', border: `1.5px solid ${section.color}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
+                  {section.icon}
+                </div>
+                <div>
+                  <div style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.14em', marginBottom: 2 }}>SECTION {si + 1} OF {sections.length}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.textPrimary }}>{section.title}</div>
+                </div>
+              </div>
+
+              {/* Section content */}
+              {section.content.map((block: { type: string; text?: string; title?: string; color?: string; rows?: Array<{ label: string; value: string; color?: string }> }, bi) => {
+                if (block.type === 'body') {
+                  return (
+                    <div key={bi} style={{ fontSize: 13, color: C.textSecondary, lineHeight: 1.65, marginBottom: 10, padding: '0 4px' }}>
+                      {block.text}
+                    </div>
+                  )
+                }
+                if (block.type === 'table') {
+                  return (
+                    <div key={bi} style={{ background: C.bgCard, borderRadius: 10, border: `1px solid ${C.border}`, overflow: 'hidden', marginBottom: 10 }}>
+                      {block.rows!.map((row, ri) => (
+                        <div key={ri} style={{ display: 'flex', gap: 12, padding: '10px 14px', borderBottom: ri < block.rows!.length - 1 ? `1px solid ${C.border}` : 'none', alignItems: 'flex-start' }}>
+                          <div style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: row.color ?? section.color, flexShrink: 0, minWidth: 70, paddingTop: 1 }}>{row.label}</div>
+                          <div style={{ fontSize: 12, color: C.textSecondary, lineHeight: 1.5 }}>{row.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                }
+                if (block.type === 'callout') {
+                  return (
+                    <div key={bi} style={{ borderRadius: 10, padding: '12px 14px', marginBottom: 10, background: (block.color ?? C.blue) + '10', border: `1px solid ${(block.color ?? C.blue)}33` }}>
+                      {block.title && <div style={{ fontFamily: MONO, fontSize: 9, fontWeight: 700, color: block.color ?? C.blue, letterSpacing: '0.1em', marginBottom: 5 }}>{block.title}</div>}
+                      <div style={{ fontSize: 12, color: C.textSecondary, lineHeight: 1.6 }}>{block.text}</div>
+                    </div>
+                  )
+                }
+                return null
+              })}
+
+              {si < sections.length - 1 && <div style={{ height: 1, background: C.border, margin: '4px 0 4px' }} />}
+            </div>
+          ))}
+
+          {/* Completion card */}
+          <div style={{ background: C.bgCard, borderRadius: 14, padding: '18px', border: `1px solid ${C.green}44`, boxShadow: '0 2px 10px rgba(16,185,129,0.10)', marginTop: 8, marginBottom: 8 }}>
+            <div style={{ fontFamily: MONO, fontSize: 10, color: C.green, letterSpacing: '0.14em', marginBottom: 6 }}>✓ COURSE COMPLETE</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.textPrimary, marginBottom: 8 }}>UL 325 — Gate Operator Safety</div>
+            <div style={{ fontSize: 12, color: C.textSecondary, lineHeight: 1.6, marginBottom: 14 }}>
+              You covered operator classification (Classes I–IV), all 8 entrapment protection zones, primary and secondary device requirements, warning label placement, and the 7-step field testing procedure.
+            </div>
+            <div style={{ background: C.bgInput, borderRadius: 8, padding: '10px 14px', fontFamily: MONO, fontSize: 10, color: C.textMuted, letterSpacing: '0.1em' }}>
+              PORTAL CERTIFICATION · Coming soon — complete test in portal to receive tech cert badge
+            </div>
+          </div>
+
+          <button
+            style={{ ...S.primaryBtn, marginBottom: 24 }}
+            onClick={() => setScreen('training')}
+          >
+            ← BACK TO COURSES
+          </button>
+
+        </div>
+      </div>
+    )
+  }
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
