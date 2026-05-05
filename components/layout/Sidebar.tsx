@@ -10,6 +10,7 @@ import {
   Globe, ClipboardList, Headphones, FileCheck,
   Megaphone, Map, BookOpen, Tv, Zap,
   Layers, Server, UserCheck, ShieldCheck, Star, ClipboardCheck,
+  GraduationCap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -66,6 +67,7 @@ const navSections: { label: string; items: NavItem[] }[] = [
       { label: "Compliance",         href: "/compliance", icon: ShieldCheck     },
       { label: "Territory Map",      href: "/map",        icon: Map             },
       { label: "Scorecard",          href: "/scorecard",  icon: Star            },
+      { label: "Training & Certification", href: "/training", icon: GraduationCap },
     ],
   },
   {

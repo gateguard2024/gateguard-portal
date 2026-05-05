@@ -503,6 +503,10 @@ function TechTool() {
   const [parsedDevices,        setParsedDevices]        = useState<SurveyDevice[]>([])
   const [parsedSelected,       setParsedSelected]       = useState<Set<string>>(new Set())
   const [parsedPropertyName,   setParsedPropertyName]   = useState<string | null>(null)
+  // Plaud audio upload state
+  const [plaudUploading,       setPlaudUploading]       = useState(false)
+  const [plaudStatus,          setPlaudStatus]          = useState<string | null>(null)
+  const plaudFileRef = useRef<HTMLInputElement>(null)
 
   // Demo / install mode state
   const [prevScreen,      setPrevScreen]     = useState<Screen | null>(null)
@@ -1646,6 +1650,32 @@ function TechTool() {
     const actionColor = (a: SurveyDevice['action']) =>
       a === 'keep' ? C.green : a === 'service' ? C.amber : a === 'replace' ? C.red : TEAL
 
+    // ── Plaud audio upload → transcribe → fill textarea ─────────────────────
+    async function handlePlaudUpload(file: File) {
+      setPlaudUploading(true)
+      setPlaudStatus('Uploading recording…')
+      setTranscriptError(null)
+      try {
+        const form = new FormData()
+        form.append('audio', file)
+        setPlaudStatus('Transcribing with Plaud AI…')
+        const res = await fetch('/api/plaud/transcribe', {
+          method: 'POST',
+          headers: { 'x-tech-code': techCode },
+          body: form,
+        })
+        const data = await res.json()
+        if (data.error) throw new Error(data.error)
+        setTranscriptText(data.transcript ?? '')
+        setPlaudStatus(null)
+      } catch (err: any) {
+        setTranscriptError(err.message || 'Plaud transcription failed')
+        setPlaudStatus(null)
+      } finally {
+        setPlaudUploading(false)
+      }
+    }
+
     async function parseTranscript() {
       if (!transcriptText.trim()) return
       setTranscriptParsing(true)
@@ -1709,12 +1739,25 @@ function TechTool() {
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px 8px', scrollbarWidth: 'none' } as React.CSSProperties}>
 
+          {/* Hidden Plaud file input */}
+          <input
+            ref={plaudFileRef}
+            type="file"
+            accept="audio/*,.m4a,.mp3,.wav,.aac,.ogg,.flac,.mp4"
+            style={{ display: 'none' }}
+            onChange={e => {
+              const file = e.target.files?.[0]
+              if (file) handlePlaudUpload(file)
+              e.target.value = ''
+            }}
+          />
+
           {/* Instructions */}
           {parsedDevices.length === 0 && (
             <div style={{ background: C.blueAlpha, border: `1px solid rgba(107,126,255,0.2)`, borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
               <div style={{ fontFamily: MONO, fontSize: 9, color: C.blue, letterSpacing: '0.1em', marginBottom: 6 }}>HOW TO USE</div>
               <div style={{ fontFamily: SANS, fontSize: 12, color: C.textSecondary, lineHeight: 1.65 }}>
-                Walk the property narrating what you see. Paste the Plaud transcript below — AI will extract every device automatically.
+                Record your site walk on Plaud, then tap <strong>Upload Recording</strong> below — or paste the transcript directly. AI extracts every device automatically.
               </div>
               <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, marginTop: 8, lineHeight: 1.8 }}>
                 EXAMPLE: "Main gate has a DoorKing 6050, looks beat up. Side entry has a new Brivo reader installed last month…"
@@ -1722,10 +1765,38 @@ function TechTool() {
             </div>
           )}
 
+          {/* Plaud upload button — shown before parse, not during upload */}
+          {parsedDevices.length === 0 && (
+            <button
+              onClick={() => plaudFileRef.current?.click()}
+              disabled={plaudUploading || transcriptParsing}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                gap: 8, padding: '13px 16px', borderRadius: 10, marginBottom: 10,
+                border: `1.5px dashed ${plaudUploading ? C.borderMed : 'rgba(107,126,255,0.5)'}`,
+                background: plaudUploading ? C.bgInput : C.blueAlpha,
+                cursor: plaudUploading ? 'default' : 'pointer',
+                fontFamily: MONO, fontSize: 10, letterSpacing: '0.08em',
+                color: plaudUploading ? C.textMuted : C.blue, fontWeight: 700,
+              }}
+            >
+              {plaudUploading ? (
+                <>
+                  <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>◌</span>
+                  {plaudStatus ?? 'PROCESSING…'}
+                </>
+              ) : (
+                <>🎙 UPLOAD PLAUD RECORDING</>
+              )}
+            </button>
+          )}
+
           {/* Transcript input — shown only before parse */}
           {parsedDevices.length === 0 && (
             <>
-              <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.1em', marginBottom: 6 }}>PASTE TRANSCRIPT OR TYPE NOTES</div>
+              <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.1em', marginBottom: 6 }}>
+                {transcriptText ? 'TRANSCRIPT — EDIT IF NEEDED' : 'OR PASTE TRANSCRIPT / TYPE NOTES'}
+              </div>
               <textarea
                 value={transcriptText}
                 onChange={e => setTranscriptText(e.target.value)}
@@ -1740,7 +1811,6 @@ function TechTool() {
                   WebkitAppearance: 'none', WebkitTextFillColor: C.textPrimary,
                   minHeight: 180,
                 } as React.CSSProperties}
-                autoFocus
               />
               {transcriptError && (
                 <div style={{ marginTop: 8, padding: '10px 12px', borderRadius: 8, background: C.redAlpha, border: `1px solid rgba(220,38,38,0.2)`, fontFamily: SANS, fontSize: 12, color: C.red }}>
@@ -1765,7 +1835,7 @@ function TechTool() {
                   }}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.08em' }}
                 >
-                  ← REPASTE
+                  ← RE-ENTER
                 </button>
               </div>
 

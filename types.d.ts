@@ -153,4 +153,10 @@ declare module 'lucide-react' {
   export const Hammer: Icon;
   export const HardHat: Icon;
   export const ClipboardCheck: Icon;
+  // Training & platform additions
+  export const GraduationCap: Icon;
+  export const PlayCircle: Icon;
+  export const School: Icon;
+  export const Medal: Icon;
+  export const CirclePlay: Icon;
 }
