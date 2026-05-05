@@ -40,7 +40,45 @@ interface ProposalLineItem {
   priority:    'urgent' | 'recommended' | 'optional'
 }
 
+interface SowCategoryItem {
+  label:     string
+  condition: 'good' | 'fair' | 'poor'
+  action:    string
+}
+
+interface SowCategory {
+  category: string
+  count:    number
+  items:    SowCategoryItem[]
+}
+
+interface SowWorkItem {
+  name:     string
+  location: string
+  action:   'service' | 'replace' | 'new_install'
+  issue:    string
+  priority: 'urgent' | 'recommended' | 'optional'
+}
+
+interface SowExpectation {
+  scope:        string
+  timeline:     string
+  deliverables: string[]
+  outcomes:     string[]
+}
+
 interface SurveyProposal {
+  // SOW sections
+  whatIsThere: {
+    categories:   SowCategory[]
+    totalGates:   number
+    totalDoors:   number
+    totalDevices: number
+    summary:      string
+  }
+  whatNeedsWork: SowWorkItem[]
+  whatToExpect:  SowExpectation
+  // Legacy fields
   summary:         string
   lineItems:       ProposalLineItem[]
   recommendations: string[]
@@ -1364,74 +1402,197 @@ function TechTool() {
             </button>
           ))}
 
-          {/* Proposal output */}
+          {/* Proposal output — SOW */}
           {surveyProposal && (
-            <div style={{ margin: '12px 16px 0', padding: 16, borderRadius: 12, background: C.bgCard, border: `1px solid ${C.border}` }}>
-              <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', color: TEAL, marginBottom: 8 }}>AI PROPOSAL DRAFT</div>
-              <p style={{ fontFamily: SANS, fontSize: 13, color: C.textPrimary, lineHeight: 1.6, margin: '0 0 12px' }}>{surveyProposal.summary}</p>
+            <div style={{ margin: '12px 16px 0', borderRadius: 12, background: C.bgCard, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
 
-              {surveyProposal.urgentItems?.length > 0 && (
-                <div style={{ marginBottom: 12 }}>
-                  <div style={{ fontFamily: MONO, fontSize: 8, color: C.red, letterSpacing: '0.1em', marginBottom: 6 }}>⚠ URGENT</div>
-                  {surveyProposal.urgentItems.map((item, i) => (
-                    <div key={i} style={{ fontFamily: SANS, fontSize: 12, color: C.red, lineHeight: 1.5, paddingLeft: 12, borderLeft: `2px solid ${C.red}`, marginBottom: 4 }}>{item}</div>
-                  ))}
-                </div>
-              )}
-
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.1em', marginBottom: 6 }}>LINE ITEMS</div>
-                {surveyProposal.lineItems.map((item, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 6, padding: '6px 10px', borderRadius: 6, background: C.bgInput, border: `1px solid ${C.border}` }}>
-                    <span style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, flexShrink: 0, marginTop: 1 }}>×{item.qty}</span>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontFamily: SANS, fontSize: 12, color: C.textPrimary, fontWeight: 500 }}>{item.description}</div>
-                      <div style={{ fontFamily: SANS, fontSize: 11, color: C.textMuted, marginTop: 1 }}>{item.note}</div>
-                    </div>
-                    <span style={{ fontFamily: MONO, fontSize: 8, color: priorityColor(item.priority), letterSpacing: '0.08em', flexShrink: 0, marginTop: 2 }}>
-                      {item.priority.toUpperCase()}
-                    </span>
-                  </div>
-                ))}
+              {/* Header strip */}
+              <div style={{ background: TEAL, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', color: '#fff', fontWeight: 700 }}>STATEMENT OF WORK</div>
+                <div style={{ fontFamily: MONO, fontSize: 8, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.08em' }}>{surveyProposal.whatIsThere.summary}</div>
               </div>
 
-              {surveyProposal.recommendations?.length > 0 && (
-                <div style={{ marginBottom: 12 }}>
-                  <div style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.1em', marginBottom: 6 }}>RECOMMENDATIONS</div>
-                  {surveyProposal.recommendations.map((r, i) => (
-                    <div key={i} style={{ fontFamily: SANS, fontSize: 12, color: C.textSecondary, lineHeight: 1.5, paddingLeft: 10, borderLeft: `2px solid ${C.border}`, marginBottom: 4 }}>• {r}</div>
+              <div style={{ padding: 14 }}>
+
+                {/* Executive summary */}
+                <p style={{ fontFamily: SANS, fontSize: 12, color: C.textPrimary, lineHeight: 1.65, margin: '0 0 14px' }}>{surveyProposal.summary}</p>
+
+                {/* ── SECTION 1: WHAT IS THERE ── */}
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                    <div style={{ width: 3, height: 14, borderRadius: 2, background: '#6B7EFF' }} />
+                    <div style={{ fontFamily: MONO, fontSize: 9, color: '#6B7EFF', letterSpacing: '0.12em', fontWeight: 700 }}>WHAT IS THERE</div>
+                  </div>
+
+                  {/* Count strip */}
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                    {surveyProposal.whatIsThere.totalGates > 0 && (
+                      <div style={{ padding: '3px 8px', borderRadius: 4, background: 'rgba(107,126,255,0.1)', border: '1px solid rgba(107,126,255,0.25)', fontFamily: MONO, fontSize: 9, color: '#6B7EFF', letterSpacing: '0.06em' }}>
+                        🚧 {surveyProposal.whatIsThere.totalGates} GATE{surveyProposal.whatIsThere.totalGates !== 1 ? 'S' : ''}
+                      </div>
+                    )}
+                    {surveyProposal.whatIsThere.totalDoors > 0 && (
+                      <div style={{ padding: '3px 8px', borderRadius: 4, background: 'rgba(107,126,255,0.1)', border: '1px solid rgba(107,126,255,0.25)', fontFamily: MONO, fontSize: 9, color: '#6B7EFF', letterSpacing: '0.06em' }}>
+                        🚪 {surveyProposal.whatIsThere.totalDoors} DOOR ENTRY PT{surveyProposal.whatIsThere.totalDoors !== 1 ? 'S' : ''}
+                      </div>
+                    )}
+                    <div style={{ padding: '3px 8px', borderRadius: 4, background: 'rgba(107,126,255,0.1)', border: '1px solid rgba(107,126,255,0.25)', fontFamily: MONO, fontSize: 9, color: '#6B7EFF', letterSpacing: '0.06em' }}>
+                      📋 {surveyProposal.whatIsThere.totalDevices} TOTAL DEVICES
+                    </div>
+                  </div>
+
+                  {surveyProposal.whatIsThere.categories.map((cat, ci) => (
+                    <div key={ci} style={{ marginBottom: 8, padding: '8px 10px', borderRadius: 8, background: C.bgInput, border: `1px solid ${C.border}` }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontFamily: MONO, fontSize: 9, color: C.textSecondary, letterSpacing: '0.08em', fontWeight: 700 }}>{cat.category.toUpperCase()}</span>
+                        <span style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted }}>×{cat.count}</span>
+                      </div>
+                      {cat.items.map((item, ii) => (
+                        <div key={ii} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: 8, marginBottom: 2 }}>
+                          <span style={{ fontFamily: SANS, fontSize: 11, color: C.textPrimary }}>{item.label}</span>
+                          <span style={{ fontFamily: MONO, fontSize: 8, color: condColor(item.condition as 'good'|'fair'|'poor'), letterSpacing: '0.06em', flexShrink: 0, marginLeft: 6 }}>● {item.condition.toUpperCase()}</span>
+                        </div>
+                      ))}
+                    </div>
                   ))}
                 </div>
-              )}
 
-              {surveyProposal.installNotes?.length > 0 && (
-                <div>
-                  <div style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.1em', marginBottom: 6 }}>INSTALL NOTES</div>
-                  {surveyProposal.installNotes.map((n, i) => (
-                    <div key={i} style={{ fontFamily: SANS, fontSize: 11, color: C.textMuted, lineHeight: 1.5, paddingLeft: 10, borderLeft: `2px solid ${C.border}`, marginBottom: 4 }}>• {n}</div>
-                  ))}
-                </div>
-              )}
+                {/* ── SECTION 2: WHAT NEEDS WORK ── */}
+                {surveyProposal.whatNeedsWork.length > 0 && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <div style={{ width: 3, height: 14, borderRadius: 2, background: C.amber }} />
+                      <div style={{ fontFamily: MONO, fontSize: 9, color: C.amber, letterSpacing: '0.12em', fontWeight: 700 }}>WHAT NEEDS WORK</div>
+                      <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted }}>({surveyProposal.whatNeedsWork.length} item{surveyProposal.whatNeedsWork.length !== 1 ? 's' : ''})</span>
+                    </div>
 
+                    {surveyProposal.whatNeedsWork.map((w, i) => {
+                      const actionBadge = w.action === 'replace'      ? { label: 'REPLACE',  color: C.red }
+                                        : w.action === 'new_install'   ? { label: 'INSTALL',  color: '#6B7EFF' }
+                                        :                                 { label: 'SERVICE',  color: C.amber }
+                      return (
+                        <div key={i} style={{ marginBottom: 6, padding: '8px 10px', borderRadius: 8, background: C.bgInput, border: `1px solid ${w.priority === 'urgent' ? C.red + '60' : C.border}` }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontFamily: SANS, fontSize: 12, color: C.textPrimary, fontWeight: 500 }}>{w.name}</div>
+                              <div style={{ fontFamily: SANS, fontSize: 11, color: C.textMuted, marginTop: 1 }}>📍 {w.location}</div>
+                              <div style={{ fontFamily: SANS, fontSize: 11, color: C.textSecondary, marginTop: 3, lineHeight: 1.4 }}>{w.issue}</div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
+                              <span style={{ fontFamily: MONO, fontSize: 8, color: actionBadge.color, background: actionBadge.color + '18', padding: '2px 6px', borderRadius: 3, letterSpacing: '0.06em' }}>{actionBadge.label}</span>
+                              <span style={{ fontFamily: MONO, fontSize: 8, color: priorityColor(w.priority), letterSpacing: '0.06em' }}>{w.priority.toUpperCase()}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {surveyProposal.whatNeedsWork.length === 0 && (
+                  <div style={{ marginBottom: 14, padding: '8px 10px', borderRadius: 8, background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                    <span style={{ fontFamily: SANS, fontSize: 12, color: '#22C55E' }}>✓ No service or replacement items identified — system is in good condition.</span>
+                  </div>
+                )}
+
+                {/* ── SECTION 3: WHAT TO EXPECT ── */}
+                {surveyProposal.whatToExpect && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <div style={{ width: 3, height: 14, borderRadius: 2, background: '#22C55E' }} />
+                      <div style={{ fontFamily: MONO, fontSize: 9, color: '#22C55E', letterSpacing: '0.12em', fontWeight: 700 }}>WHAT TO EXPECT</div>
+                    </div>
+
+                    {/* Scope + Timeline */}
+                    <div style={{ padding: '8px 10px', borderRadius: 8, background: C.bgInput, border: `1px solid ${C.border}`, marginBottom: 6 }}>
+                      <div style={{ fontFamily: SANS, fontSize: 12, color: C.textPrimary, lineHeight: 1.5, marginBottom: 4 }}>{surveyProposal.whatToExpect.scope}</div>
+                      <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.06em' }}>⏱ {surveyProposal.whatToExpect.timeline}</div>
+                    </div>
+
+                    {/* Deliverables */}
+                    {surveyProposal.whatToExpect.deliverables?.length > 0 && (
+                      <div style={{ marginBottom: 6 }}>
+                        <div style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.1em', marginBottom: 4 }}>DELIVERABLES</div>
+                        {surveyProposal.whatToExpect.deliverables.map((d, i) => (
+                          <div key={i} style={{ fontFamily: SANS, fontSize: 12, color: C.textSecondary, paddingLeft: 10, borderLeft: `2px solid ${C.border}`, marginBottom: 3, lineHeight: 1.45 }}>✓ {d}</div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Outcomes */}
+                    {surveyProposal.whatToExpect.outcomes?.length > 0 && (
+                      <div>
+                        <div style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.1em', marginBottom: 4 }}>OUTCOMES FOR PROPERTY</div>
+                        {surveyProposal.whatToExpect.outcomes.map((o, i) => (
+                          <div key={i} style={{ fontFamily: SANS, fontSize: 12, color: C.textSecondary, paddingLeft: 10, borderLeft: `2px solid rgba(34,197,94,0.4)`, marginBottom: 3, lineHeight: 1.45 }}>→ {o}</div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Urgent items banner */}
+                {surveyProposal.urgentItems?.length > 0 && (
+                  <div style={{ marginBottom: 10, padding: '8px 10px', borderRadius: 8, background: 'rgba(239,68,68,0.07)', border: `1px solid ${C.red}40` }}>
+                    <div style={{ fontFamily: MONO, fontSize: 8, color: C.red, letterSpacing: '0.1em', marginBottom: 4 }}>⚠ IMMEDIATE ATTENTION REQUIRED</div>
+                    {surveyProposal.urgentItems.map((item, i) => (
+                      <div key={i} style={{ fontFamily: SANS, fontSize: 12, color: C.red, lineHeight: 1.5, marginBottom: 2 }}>• {item}</div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Recommendations */}
+                {surveyProposal.recommendations?.length > 0 && (
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.1em', marginBottom: 4 }}>ADDITIONAL RECOMMENDATIONS</div>
+                    {surveyProposal.recommendations.map((r, i) => (
+                      <div key={i} style={{ fontFamily: SANS, fontSize: 11, color: C.textSecondary, lineHeight: 1.5, paddingLeft: 10, borderLeft: `2px solid ${C.border}`, marginBottom: 3 }}>• {r}</div>
+                    ))}
+                  </div>
+                )}
+
+              </div>
+
+              {/* Copy button */}
               <button
                 onClick={() => {
-                  const text = [
-                    `SITE SURVEY — ${surveyPropName || 'Property'}`,
-                    `${surveyDevices.length} devices documented`,
+                  const inv = surveyProposal.whatIsThere
+                  const work = surveyProposal.whatNeedsWork
+                  const exp = surveyProposal.whatToExpect
+                  const lines = [
+                    `STATEMENT OF WORK — ${surveyPropName || 'Property'}`,
+                    `Generated: ${new Date().toLocaleDateString()}`,
+                    '='.repeat(48),
                     '',
                     surveyProposal.summary,
                     '',
-                    'LINE ITEMS:',
-                    ...surveyProposal.lineItems.map(i => `  ×${i.qty}  ${i.description} [${i.priority}]`),
+                    '─── WHAT IS THERE ───────────────────────────────',
+                    inv.summary,
                     '',
-                    'RECOMMENDATIONS:',
-                    ...surveyProposal.recommendations.map(r => `  • ${r}`),
+                    ...inv.categories.flatMap(cat => [
+                      `${cat.category} (${cat.count}):`,
+                      ...cat.items.map(item => `  • ${item.label} [${item.condition}]`),
+                      '',
+                    ]),
+                    '─── WHAT NEEDS WORK ─────────────────────────────',
+                    work.length === 0 ? '  No service or replacement items.' : '',
+                    ...work.map(w => `  [${w.priority.toUpperCase()}] ${w.name} @ ${w.location}\n    → ${w.action.replace('_', ' ')}: ${w.issue}`),
+                    '',
+                    '─── WHAT TO EXPECT ──────────────────────────────',
+                    exp.scope,
+                    `Timeline: ${exp.timeline}`,
+                    '',
+                    'Deliverables:',
+                    ...(exp.deliverables ?? []).map(d => `  ✓ ${d}`),
+                    '',
+                    'Outcomes:',
+                    ...(exp.outcomes ?? []).map(o => `  → ${o}`),
                   ].join('\n')
-                  navigator.clipboard?.writeText(text).catch(() => {})
+                  navigator.clipboard?.writeText(lines).catch(() => {})
                 }}
-                style={{ marginTop: 8, width: '100%', padding: '10px', borderRadius: 8, border: `1px solid ${TEAL}40`, background: tealBg, fontFamily: MONO, fontSize: 10, color: TEAL, letterSpacing: '0.08em', cursor: 'pointer' }}
+                style={{ width: '100%', padding: '11px', borderRadius: 0, border: 'none', borderTop: `1px solid ${C.border}`, background: tealBg, fontFamily: MONO, fontSize: 10, color: TEAL, letterSpacing: '0.08em', cursor: 'pointer' } as React.CSSProperties}
               >
-                📋 COPY PROPOSAL TEXT
+                📋 COPY SOW TEXT
               </button>
             </div>
           )}
