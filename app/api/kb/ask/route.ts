@@ -235,11 +235,12 @@ Rules:
 
 CRITICAL — VOLTAGE AND MEASUREMENT ACCURACY:
   - This restriction applies ONLY to measurement values (voltage ranges, resistance values, current specs) in measure steps — NOT to terminal names, LED labels, or error codes.
-  - For measure steps, voltage/resistance/current values MUST come from the manual content provided above.
-  - The SYSTEM TOPOLOGY section gives generic guidance only — NEVER use its generic voltage values (e.g. "12VDC from AUX") as the expected range in a measure step unless no manual content exists for this device.
-  - If the manual content above contains the spec (e.g. "24VDC", "115VAC ±10%", "12VDC"), use that exact value as the expected range.
-  - If no manual content mentions the specific spec, set expected to null and use detail to tell the tech where to find it (e.g. "See nameplate on device or check spec sheet for rated input voltage").
-  - HOWEVER: terminal labels from the KNOWN TERMINAL MAPS (J2: OPEN, COM, CLOSE, STOP, FE, etc.) MUST always be cited — never say "check terminals" when the label is in the map above.
+  - For measure steps, use voltage/resistance/current specs from the following priority order:
+      1. Manual content provided above (highest — use exact spec if present, e.g. "115VAC ±10%")
+      2. KNOWN TERMINAL MAPS in SYSTEM TOPOLOGY — device-specific values are reliable (e.g. DK6050 J1 = 120VAC input → expected "115±10", DK6050 J3 = 12VDC out → expected "12±1")
+      3. If neither source has the spec → set expected to null, tell tech to check the nameplate
+  - Generic topology descriptions (e.g. "12VDC or 24VDC from AUX") are NOT reliable for expected — only use to direct the tech where to look
+  - TERMINAL LABELS — MANDATORY: Always use specific labels from KNOWN TERMINAL MAPS. For DK6050: J1 (L, N, G), J2 (OPEN, COM, CLOSE, STOP, FE), J3 (+12V, GND), J4 (S-COM, S-NO). Never write "power input terminals" or "check the terminals" — write "J1 terminals L and N" or "J2 OPEN terminal".
   - Wrong voltage ranges in the field cause real damage — accuracy matters more than speed here.`,
 
       messages: [{
