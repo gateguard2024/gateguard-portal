@@ -16,10 +16,14 @@ import { clerkMiddleware } from '@clerk/nextjs/server'
 // Paths that bypass Clerk entirely
 function isBypassPath(pathname: string): boolean {
   return (
+    // /tech tool — field techs auth via x-tech-code header, not Clerk
     pathname.startsWith('/tech') ||
-    pathname.startsWith('/api/kb/ask') ||
-    pathname.startsWith('/api/kb/products') ||
-    pathname.startsWith('/api/kb/analyze-image') ||
+    // All /tech API routes — authenticated via x-tech-code only
+    pathname.startsWith('/api/kb/') ||
+    pathname.startsWith('/api/plaud/') ||
+    // Client-facing pages — no Clerk session required
+    pathname.startsWith('/quotes/') ||
+    // Auth flows
     pathname.startsWith('/sign-in') ||
     pathname.startsWith('/sign-up') ||
     pathname.startsWith('/sso-callback')
@@ -45,7 +49,8 @@ export function middleware(req: NextRequest, event: NextFetchEvent) {
 }
 
 export const config = {
+  // Note: favicon.ico must NOT be escaped — path-to-regexp does not use regex backslash syntax
   matcher: [
-    '/((?!_next/static|_next/image|favicon\\.ico).*)',
+    '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 }
