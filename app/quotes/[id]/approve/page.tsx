@@ -238,71 +238,65 @@ export default function QuoteApprovePage({ params }: { params: { id: string } })
   return (
     <div style={{ fontFamily: SANS, background: CREAM, minHeight: '100vh', color: TEXT }}>
 
-      {/* ── HERO / COVER ─────────────────────────────────────────────────────── */}
-      <div style={{ background: `linear-gradient(160deg, ${NAVY} 0%, ${NAVY2} 100%)`, padding: '0 0 60px', position: 'relative', overflow: 'hidden' }}>
-        {/* subtle grid overlay */}
-        <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(107,126,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(107,126,255,0.04) 1px, transparent 1px)', backgroundSize: '40px 40px', pointerEvents: 'none' }} />
+      {/* ── COVER PAGE — full-height dark navy, centered ─────────────────────── */}
+      <div style={{ background: NAVY, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '80px 32px', position: 'relative' }}>
 
-        {/* top bar */}
-        <div style={{ maxWidth: 760, margin: '0 auto', padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {/* GG logo mark */}
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(107,126,255,0.15)', border: '1.5px solid rgba(107,126,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 900, color: BLUE, letterSpacing: '-1px' }}>GG</div>
-            <div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: WHITE, letterSpacing: '-0.3px' }}>GateGuard</div>
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', letterSpacing: '0.06em' }}>UNRIVALED SECURITY</div>
-            </div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontFamily: MONO, fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.08em' }}>{p.quoteNumber}</div>
-            <div style={{ fontFamily: MONO, fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Valid until {p.validUntil}</div>
-          </div>
+        {/* GateGuard octagon logo mark */}
+        <div style={{
+          width: 100, height: 100, marginBottom: 32,
+          background: 'linear-gradient(135deg, #1B3A6B 0%, #243E72 100%)',
+          border: '2px solid rgba(107,126,255,0.35)',
+          clipPath: 'polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{ fontSize: 28, fontWeight: 900, color: BLUE, fontFamily: MONO, letterSpacing: '-1px' }}>GG</div>
         </div>
 
-        {/* hero text */}
-        <div style={{ maxWidth: 760, margin: '0 auto', padding: '40px 24px 0', position: 'relative', textAlign: 'center' }}>
-          <div style={{ fontFamily: MONO, fontSize: 10, color: BLUE, letterSpacing: '0.15em', marginBottom: 10, textTransform: 'uppercase' }}>PREPARED FOR</div>
-          <h1 style={{ fontSize: 48, fontWeight: 900, color: WHITE, margin: '0 0 6px', letterSpacing: '-1.5px', lineHeight: 1.05 }}>{p.property.name}</h1>
-          <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.55)', marginBottom: 20 }}>{p.property.city}, {p.property.state}</div>
-          <div style={{ display: 'inline-block', background: 'rgba(107,126,255,0.15)', border: '1px solid rgba(107,126,255,0.35)', borderRadius: 6, padding: '6px 18px', fontFamily: MONO, fontSize: 10, color: BLUE, letterSpacing: '0.12em', marginBottom: 32 }}>
-            {p.property.units} UNITS · SECURITY & ACCESS MODERNIZATION
-          </div>
-          <div style={{ maxWidth: 540, margin: '0 auto', fontSize: 16, color: 'rgba(255,255,255,0.7)', fontStyle: 'italic', lineHeight: 1.6 }}>
-            "{p.tagline}"
-          </div>
+        <div style={{ fontFamily: MONO, fontSize: 11, color: 'rgba(160,180,255,0.7)', letterSpacing: '0.22em', marginBottom: 16, textTransform: 'uppercase' }}>
+          P R E P A R E D &nbsp; F O R
+        </div>
+        <h1 style={{ fontSize: 56, fontWeight: 900, color: WHITE, margin: '0 0 10px', letterSpacing: '-2px', lineHeight: 1.0 }}>
+          {p.property.name}
+        </h1>
+        <div style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)', marginBottom: 28 }}>
+          {p.property.city}, {p.property.state}
+        </div>
+        <div style={{ display: 'inline-block', background: 'rgba(107,126,255,0.12)', border: '1px solid rgba(107,126,255,0.30)', borderRadius: 6, padding: '7px 20px', fontFamily: MONO, fontSize: 10, color: BLUE, letterSpacing: '0.14em', marginBottom: 48 }}>
+          {p.property.units} UNITS &nbsp;·&nbsp; SECURITY & ACCESS MODERNIZATION
+        </div>
+        <div style={{ maxWidth: 520, fontSize: 17, color: 'rgba(255,255,255,0.65)', fontStyle: 'italic', lineHeight: 1.65 }}>
+          "{p.tagline}"
+        </div>
+
+        {/* Bottom footer line */}
+        <div style={{ position: 'absolute', bottom: 32, left: 0, right: 0, textAlign: 'center', fontFamily: MONO, fontSize: 9, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.16em' }}>
+          SECURITY &amp; ACCESS CONTROL PROPOSAL &nbsp;·&nbsp; {p.createdAt.toUpperCase()}
         </div>
       </div>
 
-      {/* ── COVER LETTER ────────────────────────────────────────────────────── */}
-      <div style={{ background: WHITE }}>
-        <div style={{ maxWidth: 760, margin: '0 auto', padding: '52px 24px' }}>
-          <div style={{ display: 'flex', gap: 36, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-            <div style={{ flexShrink: 0 }}>
-              {/* Avatar placeholder — replace with real photo URL */}
-              <div style={{ width: 96, height: 96, borderRadius: 14, background: NAVY2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, fontWeight: 900, color: WHITE, letterSpacing: '-1px' }}>RF</div>
-              <div style={{ marginTop: 10 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>{p.preparedBy.name}</div>
-                <div style={{ fontSize: 11, color: MUTED }}>{p.preparedBy.title}</div>
-              </div>
-            </div>
-            <div style={{ flex: 1, minWidth: 260 }}>
-              <h2 style={{ fontSize: 26, fontWeight: 800, color: NAVY, margin: '0 0 18px', letterSpacing: '-0.5px', lineHeight: 1.2 }}>The parking deck incident is a signal. Here's how we answer it.</h2>
-              {p.coverLetter.split('\n\n').map((para, i) => (
-                <p key={i} style={{ fontSize: 14, color: '#374151', lineHeight: 1.75, marginBottom: 14 }}
-                  dangerouslySetInnerHTML={{ __html: para.replace(/Option 3/g, '<strong>Option 3</strong>').replace(/\$\d[\d,K–]+/g, m => `<strong>${m}</strong>`) }}
-                />
-              ))}
-              <div style={{ marginTop: 24, paddingTop: 20, borderTop: `1px solid ${BORDER}` }}>
-                <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-                  <a href={`mailto:${p.preparedBy.email}`} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: BLUE, textDecoration: 'none' }}>
-                    <Mail size={12} />{p.preparedBy.email}
-                  </a>
-                  <a href={`tel:${p.preparedBy.cell}`} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: BLUE, textDecoration: 'none' }}>
-                    <Phone size={12} />{p.preparedBy.phone}
-                  </a>
-                </div>
-              </div>
-            </div>
+      {/* ── COVER LETTER — full-width, personalized heading ─────────────────── */}
+      <div style={{ background: CREAM }}>
+        <div style={{ maxWidth: 720, margin: '0 auto', padding: '64px 32px' }}>
+          <div style={{ fontFamily: MONO, fontSize: 10, color: BLUE, letterSpacing: '0.18em', marginBottom: 18, textTransform: 'uppercase' }}>
+            Gate Guard, LLC
+          </div>
+          <h2 style={{ fontSize: 38, fontWeight: 800, color: NAVY, margin: '0 0 28px', letterSpacing: '-1px', lineHeight: 1.15 }}>
+            {p.property.contactName}, you found<br />the smarter path.
+          </h2>
+          {p.coverLetter.split('\n\n').map((para, i) => (
+            <p key={i} style={{ fontSize: 15, color: '#374151', lineHeight: 1.8, marginBottom: 18 }}
+              dangerouslySetInnerHTML={{ __html: para
+                .replace(/Option\s+(\d)/g, '<strong>Option $1</strong>')
+                .replace(/(\$[\d,]+(?:\s*(?:installed|setup|a month|\/unit\/mo|per unit per month|setup fee)[^.]*)?)/g, '<strong>$1</strong>')
+              }}
+            />
+          ))}
+
+          {/* Wave signature */}
+          <div style={{ fontSize: 22, color: BLUE, margin: '28px 0 18px', letterSpacing: '0.08em' }}>∿∿∿∿∿</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: TEXT, marginBottom: 4 }}>{p.preparedBy.name}</div>
+          <div style={{ fontSize: 13, color: MUTED }}>
+            {p.preparedBy.title}&nbsp;·&nbsp;{p.preparedBy.email}&nbsp;·&nbsp;{p.preparedBy.phone}
           </div>
         </div>
       </div>
@@ -324,12 +318,12 @@ export default function QuoteApprovePage({ params }: { params: { id: string } })
             ))}
           </div>
 
-          {/* Findings grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+          {/* Findings — stacked single column with colored left border */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {p.findings.map((f, i) => (
-              <div key={i} style={{ background: WHITE, borderRadius: 12, padding: '16px 18px', border: `1px solid ${BORDER}`, borderLeft: `3px solid ${f.color}` }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: TEXT, marginBottom: 6, lineHeight: 1.3 }}>{f.title}</div>
-                <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.65 }}>{f.body}</div>
+              <div key={i} style={{ background: WHITE, borderRadius: 12, padding: '18px 20px', border: `1px solid ${BORDER}`, borderLeft: `4px solid ${f.color}` }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: TEXT, marginBottom: 6, lineHeight: 1.3 }}>{f.title}</div>
+                <div style={{ fontSize: 13, color: MUTED, lineHeight: 1.7 }}>{f.body}</div>
               </div>
             ))}
           </div>
@@ -403,46 +397,113 @@ export default function QuoteApprovePage({ params }: { params: { id: string } })
         </div>
       </div>
 
-      {/* ── OPTION 3 FINANCIAL ENGINE ─────────────────────────────────────────── */}
-      <div style={{ background: NAVY2 }}>
-        <div style={{ maxWidth: 760, margin: '0 auto', padding: '52px 24px' }}>
-          <div style={{ fontFamily: MONO, fontSize: 10, color: BLUE, letterSpacing: '0.12em', marginBottom: 6, textTransform: 'uppercase' }}>OPTION 3 · THE FULL TRANSFORMATION</div>
-          <h2 style={{ fontSize: 32, fontWeight: 800, color: WHITE, margin: '0 0 28px', letterSpacing: '-0.8px' }}>Where Security Becomes Asset Value</h2>
-
-          {/* 4-metric strip */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 28 }}>
-            {Object.values(p.financialEngine).map((m, i) => (
-              <div key={i} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '16px 14px' }}>
-                <div style={{ fontSize: 22, fontWeight: 900, color: '#10B981', letterSpacing: '-1px', lineHeight: 1, marginBottom: 6 }}>{m.amount}</div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: WHITE, marginBottom: 4 }}>{m.label}</div>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', lineHeight: 1.5 }}>{m.sub}</div>
-              </div>
-            ))}
+      {/* ── FINANCIAL MODEL — cream bg, left table + right 2×2 stat grid ────── */}
+      <div style={{ background: CREAM }}>
+        <div style={{ maxWidth: 760, margin: '0 auto', padding: '64px 32px' }}>
+          <div style={{ fontFamily: MONO, fontSize: 10, color: BLUE, letterSpacing: '0.14em', marginBottom: 8, textTransform: 'uppercase' }}>
+            {p.options.find(o => o.recommended)
+              ? `Option ${p.options.find(o => o.recommended)!.num} · ${p.options.find(o => o.recommended)!.name} Program`
+              : 'Full Property Program'}
           </div>
+          <h2 style={{ fontSize: 34, fontWeight: 800, color: NAVY, margin: '0 0 32px', letterSpacing: '-0.8px', lineHeight: 1.15 }}>
+            Where Security<br />Becomes a Revenue Line
+          </h2>
 
-          {/* Line item breakdown */}
-          <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, overflow: 'hidden', marginBottom: 20 }}>
+          {/* Split layout: left table + right stat boxes */}
+          <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+
+            {/* Left — itemized table */}
+            <div style={{ flex: '1 1 340px', background: WHITE, borderRadius: 12, overflow: 'hidden', border: `1px solid ${BORDER}` }}>
+              {[
+                { label: `Setup fee — full property install`, value: `$${(p.options.find(o=>o.recommended)||p.options[2]).price.replace(/^\$/,'')} — one time`, bold: false },
+                { label: `Monthly to GateGuard — ${p.property.units} units × ${(p.options.find(o=>o.recommended)||p.options[2]).price.includes('/') ? (p.options.find(o=>o.recommended)||p.options[2]).priceSub.split('/')[0].replace('then ','') : '$15/unit'}`, value: p.financialEngine.toGG.amount + ' / month', bold: false },
+                { label: 'Resident technology fee collected — $10–$12/unit', value: p.financialEngine.collected.amount + ' / month', bold: false },
+                { label: 'Vehicle gates — replaced & managed', value: 'Included', green: true },
+                { label: 'Package room / amenity doors', value: 'Included', green: true },
+                { label: 'Resident mobile app — all access points', value: 'Included', green: true },
+                { label: 'All repairs, parts & maintenance — forever', value: 'Included — zero trip charges', green: true },
+                { label: 'Annual gate licensing fees', value: 'Eliminated Day One', green: true },
+                { label: 'Ownership monthly profit', value: `+${p.financialEngine.profit.amount}/mo → up to ${p.financialEngine.asset.amount} asset value`, bold: true, green: true },
+              ].map((row, i, arr) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, padding: '11px 16px', borderBottom: i < arr.length - 1 ? `1px solid ${BORDER}` : 'none' }}>
+                  <span style={{ fontSize: 12, color: row.bold ? TEXT : MUTED, fontWeight: row.bold ? 700 : 400, lineHeight: 1.45, flex: 1 }}>{row.label}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: row.green ? '#16A34A' : TEXT, textAlign: 'right', flexShrink: 0, letterSpacing: '-0.2px' }}>{row.value}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Right — 2×2 stat boxes */}
+            <div style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 220 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {Object.values(p.financialEngine).map((m, i) => (
+                  <div key={i} style={{ background: NAVY, borderRadius: 12, padding: '18px 16px' }}>
+                    <div style={{ fontSize: 24, fontWeight: 900, color: '#10B981', letterSpacing: '-1px', lineHeight: 1, marginBottom: 8 }}>{m.amount}</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: WHITE, marginBottom: 4, lineHeight: 1.3 }}>{m.label}</div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', lineHeight: 1.5 }}>{m.sub}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* "Bill $X/unit instead?" callout */}
+              <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '14px 16px' }}>
+                <p style={{ fontSize: 12, color: TEXT, lineHeight: 1.6, margin: 0 }}>
+                  <strong>Bill $12/unit instead?</strong> At $12/unit the property collects more per month — adding even greater asset value at an 8% cap rate.
+                </p>
+                <p style={{ fontSize: 12, color: MUTED, lineHeight: 1.6, margin: '8px 0 0' }}>
+                  <strong>Maintained like our other communities:</strong> GateGuard fixes, maintains, and keeps every access point running — no service calls to budget for, no hardware surprises, no annual licensing renewals.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── HOW WE STACK UP — comparison table ────────────────────────────────── */}
+      <div style={{ background: WHITE }}>
+        <div style={{ maxWidth: 760, margin: '0 auto', padding: '64px 32px' }}>
+          <div style={{ fontFamily: MONO, fontSize: 10, color: BLUE, letterSpacing: '0.14em', marginBottom: 8, textTransform: 'uppercase' }}>
+            What the Industry Typically Offers vs. GateGuard
+          </div>
+          <h2 style={{ fontSize: 34, fontWeight: 800, color: NAVY, margin: '0 0 28px', letterSpacing: '-0.8px' }}>How We Stack Up</h2>
+          <p style={{ fontSize: 14, color: MUTED, marginBottom: 28, lineHeight: 1.65 }}>
+            Others in the industry have been known to address access control one door at a time. Here's what that approach typically includes — and what GateGuard delivers instead.
+          </p>
+
+          {/* Comparison table */}
+          <div style={{ borderRadius: 12, overflow: 'hidden', border: `1px solid ${BORDER}` }}>
+            {/* Header row */}
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1.3fr', background: CREAM2 }}>
+              <div style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Feature</div>
+              <div style={{ padding: '12px 12px', fontSize: 10, fontWeight: 700, color: MUTED, letterSpacing: '0.05em', lineHeight: 1.4 }}>TYPICAL:<br/>HARDWARE ONLY</div>
+              <div style={{ padding: '12px 12px', fontSize: 10, fontWeight: 700, color: MUTED, letterSpacing: '0.05em', lineHeight: 1.4 }}>TYPICAL:<br/>SINGLE-DOOR MANAGED</div>
+              <div style={{ padding: '12px 12px', fontSize: 10, fontWeight: 700, color: WHITE, letterSpacing: '0.05em', lineHeight: 1.4, background: NAVY, borderRadius: '0 12px 0 0' }}>GATEGUARD<br/>FULL PROPERTY</div>
+            </div>
+
             {[
-              { label: 'Setup fee — 46 doors × $750', value: '$34,500', note: 'the only upfront cost to ownership', highlight: false },
-              { label: 'Monthly billed to ownership by GateGuard — 360 units × $15', value: '$5,400 / month', note: '', highlight: false },
-              { label: 'Resident technology fee ownership collects — $20–$25/unit', value: '$7,200–$9,000 / month collected', note: '', highlight: false },
-              { label: 'All 41 cameras installed', value: 'No additional charge — included in monthly', note: '', highlight: false },
-              { label: 'Full PMS API integration (Yardi / RealPage / Entrata)', value: 'Included — auto-credential at lease signing', note: '', highlight: false },
-              { label: 'Hikvision/LTS system & DoorKing fees', value: 'Eliminated on day one', note: '', highlight: true, valueColor: '#10B981' },
-              { label: 'All repairs, parts & maintenance — all 46 doors', value: 'Included — zero trip charges, ever', note: '', highlight: true, valueColor: '#10B981' },
-              { label: 'Ownership monthly profit', value: '+$1,800–$3,600 / month → $270K–$540K in asset value', note: '', highlight: true, valueColor: '#10B981', bold: true },
-            ].map((row, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, padding: '12px 18px', borderBottom: i < 7 ? '1px solid rgba(255,255,255,0.06)' : 'none', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 12, color: row.bold ? WHITE : 'rgba(255,255,255,0.6)', fontWeight: row.bold ? 700 : 400 }}>{row.label}</span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: (row as any).valueColor || WHITE, textAlign: 'right', flexShrink: 0 }}>{row.value}</span>
+              { feature: 'Smart access control', col1: '~ Fob/code only', col2: '✓ Full smart', col3: '✓ Full smart', c3green: true },
+              { feature: 'Resident mobile app', col1: '✗', col2: '✓', col3: '✓', c3green: true },
+              { feature: 'Vehicle gate modernization', col1: '✗', col2: '✗', col3: '✓ Both gates', c3green: true },
+              { feature: 'Amenity door access', col1: '✗', col2: '✗', col3: '✓ All doors', c3green: true },
+              { feature: 'Remote credential deactivation at move-out', col1: '✗', col2: '~ Package room only', col3: '✓ All access points', c3green: true },
+              { feature: 'All maintenance & repairs included', col1: '✗ Limited warranty', col2: '✗ Service calls billed', col3: '✓ Forever · zero trip charges', c3green: true },
+              { feature: 'Annual software / licensing fees', col1: 'None (no features)', col2: '$2,400/yr and up', col1muted: true, col2red: true, col3: '$0 — included in monthly', c3green: true },
+              { feature: 'Property generates monthly profit', col1: '✗', col2: '✗', col3: `✓ ${p.financialEngine.profit.amount}/month`, c3green: true },
+              { feature: 'Access points covered', col1: '1 door', col2: '1 door', col3: 'All (gates + amenities + entry)', c3green: true, bold: true },
+            ].map((row, i, arr) => (
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1.3fr', borderBottom: i < arr.length - 1 ? `1px solid ${BORDER}` : 'none' }}>
+                <div style={{ padding: '11px 16px', fontSize: 13, fontWeight: row.bold ? 700 : 400, color: TEXT }}>{row.feature}</div>
+                <div style={{ padding: '11px 12px', fontSize: 12, color: (row as any).col1muted ? MUTED : RED }}>{row.col1}</div>
+                <div style={{ padding: '11px 12px', fontSize: 12, color: (row as any).col2red ? RED : MUTED }}>{row.col2}</div>
+                <div style={{ padding: '11px 12px', fontSize: 12, fontWeight: 700, color: row.c3green ? '#16A34A' : TEXT, background: 'rgba(22,163,74,0.04)' }}>{row.col3}</div>
               </div>
             ))}
           </div>
 
-          {/* Easy Start callout */}
-          <div style={{ background: 'rgba(107,126,255,0.1)', border: '1px solid rgba(107,126,255,0.25)', borderRadius: 10, padding: '14px 18px' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: BLUE }}>📈 Optional Easy Start — 12-Month Ramp: </span>
-            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', lineHeight: 1.65 }}>Add a 12-month introductory period before the 60-month program begins. Month 1: $34,500 setup billed in full, installations begin. Months 2–12: billing ramps from 10% to 100% as the $20/unit tech fee rolls out at lease renewal. Ownership is never cash-negative. Full program rate begins month 13 — by which point residents have funded every dollar.</span>
+          {/* Case for ownership callout */}
+          <div style={{ marginTop: 20, background: NAVY, borderRadius: 10, padding: '16px 20px' }}>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', margin: 0, lineHeight: 1.65 }}>
+              <strong style={{ color: WHITE }}>The case for ownership:</strong> The industry's typical approach solves one door and leaves the rest of the property behind. GateGuard's full program covers every access point, eliminates annual licensing costs, and turns the security budget into a resident amenity that generates profit — all for a lower setup cost than a single-door hardware install from many vendors.
+            </p>
           </div>
         </div>
       </div>
