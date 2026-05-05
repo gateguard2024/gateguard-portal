@@ -196,6 +196,91 @@ const COURSES = [
     ]
   },
   {
+    id: 'ul325-gate-safety',
+    title: 'UL 325 — Gate Operator Safety Standard',
+    category: 'Safety',
+    level: 'Foundation',
+    duration: '2 hrs',
+    modules: 6,
+    status: 'available',
+    badgeColor: 'bg-amber-100 text-amber-700',
+    description: 'The mandatory safety compliance standard governing all vehicular and pedestrian gate operator installations in the United States. Covers operator classification, entrapment protection zones, required devices, warning label placement, and the field testing procedure required at every install and service call.',
+    chapters: [
+      {
+        id: 'ul1',
+        title: 'What is UL 325 and Why It Applies to Every Install',
+        duration: '15 min',
+        content: [
+          { type: 'concept', text: 'UL 325 is the Underwriters Laboratories safety standard for door, drapery, gate, louver, and window operators and systems. In the access control industry, it is the primary safety compliance standard governing all vehicular and pedestrian gate operators installed in the United States.' },
+          { type: 'concept', text: 'The standard requires that every gate operator include entrapment protection — devices and systems that prevent people or objects from being trapped, crushed, or struck by a moving gate. Compliance is not optional. It is the legal baseline for every installation.' },
+          { type: 'warning', text: '⚠ Liability: An operator installed without compliant entrapment protection is a liability for the dealer, the property owner, and can constitute criminal exposure if injury or death occurs. A non-compliant install is not a grey area — it is an uncorrected hazard.' },
+          { type: 'concept', text: 'UL 325 applies to: vehicular slide gates, vehicular swing gates, vertical pivot/lift gates, barrier arm operators, and pedestrian swing gates with automated operators. If a motor moves a gate, UL 325 applies.' },
+          { type: 'tip', text: 'Every GateGuard-installed operator must leave the site UL 325 compliant. If you arrive on a service call and the existing installation is non-compliant, document it, photograph it, and flag it to your dealer principal. Do not leave a known hazard uncorrected without a written record.' },
+        ]
+      },
+      {
+        id: 'ul2',
+        title: 'Gate Operator Classes I – IV',
+        duration: '18 min',
+        content: [
+          { type: 'concept', text: 'UL 325 classifies gate operators into four categories based on the type of access they control and who is expected to use them. The class determines the entrapment protection requirements.' },
+          { type: 'formula', text: 'Operator Classes:\n• Class I — Residential vehicular gate operator. Single-family residence or estate. One to four families.\n• Class II — Commercial or general access vehicular gate operator. Multi-family (5+ units), business, parking facility, public facility, or school.\n• Class III — Industrial/limited access vehicular gate operator. Authorized employees, trucks, or vehicles only. Uninvited pedestrian access is not expected.\n• Class IV — Restricted access vehicular gate operator. Manned facility or supervised area where unauthorized access is actively prevented (prison, secured government, military).' },
+          { type: 'example', text: 'The Hendrix (360-unit multifamily) vehicle entry gate → Class II. A single-family home with a driveway gate → Class I. A distribution warehouse with employee-only truck access → Class III.' },
+          { type: 'warning', text: '⚠ Class II is more stringent than Class I. Multifamily properties, office parks, apartment communities, and condo developments are always Class II minimum. When the classification is unclear, classify UP — the more stringent standard protects you and the property.' },
+          { type: 'tip', text: 'Class II requires a minimum of TWO entrapment protection devices per protected zone. This is the most commonly violated requirement on commercial installs. A single photo eye is not sufficient.' },
+        ]
+      },
+      {
+        id: 'ul3',
+        title: 'Entrapment Protection Zones 1 – 8',
+        duration: '22 min',
+        content: [
+          { type: 'concept', text: 'UL 325 defines 8 entrapment protection zones — specific areas around the gate travel path where a person could become trapped, pinched, or crushed. Each zone that presents an entrapment risk must be protected by at least one listed device.' },
+          { type: 'formula', text: 'Zone Definitions:\n• Zone 1 — Leading edge in the direction of gate travel. Primary risk zone for all operators.\n• Zone 2 — Trailing edge of gate travel (the side moving away from the opening).\n• Zone 3 — Post, pillar, or wall adjacent to the leading edge.\n• Zone 4 — Post, pillar, or wall adjacent to the trailing edge.\n• Zone 5 — Bottom edge of the gate (vertical lift operators — pinch against ground).\n• Zone 6 — Between the panels of a bi-parting or folding gate.\n• Zone 7 — Any pinch point between a moving component and a stationary structure.\n• Zone 8 — Exposed moving mechanical components (drive chains, pinions, arms).' },
+          { type: 'example', text: 'Standard residential slide gate (Class I): primary zones are 1 and 2 (leading and trailing edges). A pedestrian callbox post within 16 inches of the gate travel path creates a Zone 3 hazard — a safety edge or sensor must be mounted to protect that gap.' },
+          { type: 'tip', text: 'Field technique: before selecting your entrapment protection devices, sketch the gate and mark every zone. Walk the full travel path — open to close — and physically identify each zone. A five-minute zone assessment at install prevents callbacks and liability.' },
+          { type: 'concept', text: 'For a standard commercial slide gate, you primarily address Zones 1, 2, 3, and 4. Zone 5 applies to vertical operators. Zones 6, 7, and 8 apply to folding/bi-parting gates and operators with exposed mechanical drive components.' },
+        ]
+      },
+      {
+        id: 'ul4',
+        title: 'Required Entrapment Protection Devices',
+        duration: '25 min',
+        content: [
+          { type: 'concept', text: 'UL 325 requires entrapment protection devices to be listed (tested and certified) for use in vehicular gate applications. Using non-listed devices, or devices in configurations not specified by the operator manufacturer, voids compliance.' },
+          { type: 'formula', text: 'Device Types:\n• Photoelectric beam (photo eye) — non-contact sensing. Beam broken → gate stops and reverses. PRIMARY device. Required on Zone 1 (leading edge) for all operators.\n• Safety edge / sensing edge — contact sensor strip. Pressure applied → gate stops and reverses. Can serve as PRIMARY or SECONDARY device.\n• Loop detector — inductive loop in pavement detects vehicles. Prevents gate from closing on a vehicle in the path. Counts as SECONDARY device. Does NOT protect pedestrians.\n• Monitored entrapment device — active sensor that reports its own operational status to the operator. Required on some operator models for Class II.\n• Obstruction auto-reverse — operator detects increased resistance (stall force) and reverses. SECONDARY only. Cannot be the sole protection device.' },
+          { type: 'warning', text: '⚠ TWO-DEVICE MINIMUM for Class II: Every Class II installation must have a minimum of two independent entrapment protection devices per protected zone. A single photo eye alone does NOT meet Class II requirements. Minimum configuration: photo eye (primary) + safety edge or secondary contact device (secondary).' },
+          { type: 'example', text: 'Compliant Class II slide gate: photo eyes mounted at vehicle height on Zone 1 (leading edge) + safety edge on Zone 2 (trailing edge) + loop detector in gate path. Three devices covering all primary zones.' },
+          { type: 'tip', text: 'After activation of any entrapment protection device, the operator must require manual reset before resuming automatic close operation. If the gate auto-closes after a photo eye trip without manual reset, the operator is misconfigured. Correct it before sign-off.' },
+        ]
+      },
+      {
+        id: 'ul5',
+        title: 'Warning Labels, Placards, and Installer Requirements',
+        duration: '15 min',
+        content: [
+          { type: 'concept', text: 'UL 325 mandates specific warning labels be permanently attached to the operator housing and posted at the gate entry. Failure to install required placards makes the installation non-compliant regardless of device coverage.' },
+          { type: 'formula', text: 'Required Labels:\n• Operator warning placard — affixed to the operator housing. Includes: entrapment hazard warning, emergency release instructions, "keep clear of gate" instruction, and diagram of entrapment zones.\n• Keep clear sign — posted at the gate entry/exit. Standard wording: "WARNING — MOVING GATE CAN CAUSE SEVERE INJURY OR DEATH — KEEP CLEAR OF MOVING GATE"\n• Emergency release label — on or immediately adjacent to the manual release mechanism (breakaway chain, key switch, or pull handle). Must be readable in darkness.\n• Installer identification — your company name and phone number must be permanently affixed to the operator. This is required by UL 325 and by most AHJs (Authorities Having Jurisdiction).' },
+          { type: 'warning', text: '⚠ Your name goes on the operator. If an injury occurs after your installation and the site has no installer label, investigators will look at whoever last permitted or serviced the gate. Install the label. Every time.' },
+          { type: 'example', text: 'DoorKing 6050 installation: DK ships the operator with the required UL 325 placard pre-installed. You still need to add the GateGuard installer label (supplied in your install kit) and post the "KEEP CLEAR" sign at the gate opening.' },
+          { type: 'tip', text: 'Photograph all installed placards as part of your job closeout documentation. Upload to the work order in the GateGuard portal. If a placard is ever disputed, your photo timestamp proves compliance at time of installation.' },
+        ]
+      },
+      {
+        id: 'ul6',
+        title: '7-Step Field Test Procedure — Every Install, Every Service Call',
+        duration: '25 min',
+        content: [
+          { type: 'concept', text: 'After every installation and during every service visit where you touch a gate operator, you must verify that all entrapment protection devices are operational and that the operator responds correctly. Document the test in your work order.' },
+          { type: 'formula', text: 'The 7-Step Field Test:\n\n1. VISUAL — Confirm all entrapment protection devices are mounted, connected, and showing correct status indicators (photo eye alignment LED, sensing edge indicator).\n\n2. PHOTO EYE — With gate in motion, break the beam. Gate must stop and reverse within 0.5 seconds. Test both directions of travel.\n\n3. SAFETY EDGE — Apply moderate hand pressure to the sensing edge surface. Gate must stop and reverse immediately on contact.\n\n4. LOOP DETECTOR — Activate loop input (manually or with a vehicle). Gate must not initiate close cycle while loop is active.\n\n5. AUTO-CLOSE TIMER — Confirm auto-close delay is set appropriately (typically 5–30 seconds). Gate must not remain open indefinitely.\n\n6. MANUAL RELEASE — Test emergency release mechanism. After release engagement, gate must be manually movable without power.\n\n7. RESET VERIFICATION — After any entrapment protection device activation, confirm operator requires manual reset before resuming auto-close. Gate should NOT auto-close after a photo eye or safety edge trip.' },
+          { type: 'example', text: 'Step 2 failure scenario: photo eyes pass the beam test while gate is stationary, but you break the beam while the gate is in motion and the gate does not stop. This means the obstruction input is only checked in the closed/open state, not during travel — a common misconfiguration in older DoorKing units. DIP switch correction required.' },
+          { type: 'warning', text: '⚠ Never sign off on an install without physically running all 7 steps. A visual inspection of wiring does not confirm a device is actually working. The test must be performed with the gate in motion.' },
+          { type: 'tip', text: 'Leave a signed copy of the 7-step test result with the property manager or building engineer. "Passed UL 325 field test — [date] — [tech name] — GateGuard" on your work order is your proof of compliance. In litigation, documentation wins.' },
+        ]
+      },
+    ]
+  },
+  {
     id: 'gateguard-platform',
     title: 'GateGuard Platform Certification',
     category: 'Platform',
@@ -385,7 +470,7 @@ export default function TrainingPage() {
         </div>
         <div className="text-right">
           <div className="text-xs font-semibold text-[#6B7EFF] uppercase tracking-wide mb-1">Your Progress</div>
-          <div className="text-2xl font-bold text-gray-900">0 / 4</div>
+          <div className="text-2xl font-bold text-gray-900">0 / 5</div>
           <div className="text-xs text-gray-400">courses completed</div>
         </div>
       </div>
@@ -396,7 +481,7 @@ export default function TrainingPage() {
         <div>
           <div className="font-semibold text-gray-900 mb-0.5">GateGuard Certified Field Technician</div>
           <div className="text-sm text-gray-500">
-            Complete <strong>Low Voltage Fundamentals</strong> + <strong>Ladder & Jobsite Safety</strong> + <strong>GateGuard Platform</strong> to earn your certification badge.
+            Complete <strong>Low Voltage Fundamentals</strong> + <strong>Ladder & Jobsite Safety</strong> + <strong>UL 325 Gate Safety</strong> + <strong>GateGuard Platform</strong> to earn your certification badge.
             Certified techs are listed in the GateGuard dealer directory and unlock priority support access.
           </div>
         </div>
