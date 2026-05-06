@@ -7,8 +7,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"], weight: ["300","400","500","600","700","800"] });
 
 export const metadata: Metadata = {
-  title: { default: "GateGuard OS", template: "%s — GateGuard OS" },
-  description: "The all-in-one security operations platform for dealers, MSOs, and properties.",
+  title: { default: "GateGuard Nexus", template: "%s — GateGuard Nexus" },
+  description: "The operating system for multifamily access and channel dealer networks.",
   icons: { icon: "/favicon.ico" },
 };
 

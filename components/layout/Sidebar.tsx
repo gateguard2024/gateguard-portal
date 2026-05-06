@@ -10,7 +10,7 @@ import {
   Globe, ClipboardList, Headphones, FileCheck,
   Megaphone, Map, BookOpen, Tv, Zap,
   Layers, Server, UserCheck, ShieldCheck, Star, ClipboardCheck,
-  GraduationCap,
+  GraduationCap, Satellite, ArrowRightLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -29,8 +29,8 @@ const navSections: { label: string; items: NavItem[] }[] = [
     items: [
       { label: "Dashboard",      href: "/",             icon: LayoutDashboard },
       { label: "Customers",      href: "/customers",    icon: Users           },
-      { label: "CRM",            href: "/crm",          icon: MessageSquare },
-      { label: "Organizations",  href: "/admin",        icon: Network       },
+      { label: "CRM",            href: "/crm",          icon: MessageSquare   },
+      { label: "Organizations",  href: "/admin",        icon: Network         },
     ],
   },
   {
@@ -63,33 +63,40 @@ const navSections: { label: string; items: NavItem[] }[] = [
   {
     label: "Dealer Network",
     items: [
-      { label: "Reps & Commissions", href: "/reps",      icon: UserCheck       },
-      { label: "Compliance",         href: "/compliance", icon: ShieldCheck     },
-      { label: "Territory Map",      href: "/map",        icon: Map             },
-      { label: "Scorecard",          href: "/scorecard",  icon: Star            },
-      { label: "Training & Certification", href: "/training", icon: GraduationCap },
+      { label: "Reps & Commissions",      href: "/reps",       icon: UserCheck    },
+      { label: "Compliance",              href: "/compliance", icon: ShieldCheck  },
+      { label: "Territory Map",           href: "/map",        icon: Map          },
+      { label: "Scorecard",               href: "/scorecard",  icon: Star         },
+      { label: "Training & Certification",href: "/training",   icon: GraduationCap},
+    ],
+  },
+  {
+    label: "DirecTV Channel",
+    items: [
+      { label: "ATLAS Dashboard", href: "/directv",  icon: Satellite       },
+      { label: "SARA Bridge",     href: "/migrate",  icon: ArrowRightLeft  },
     ],
   },
   {
     label: "Platform",
     items: [
-      { label: "Onboarding",     href: "/onboarding",   icon: ClipboardList   },
-      { label: "Communications", href: "/communications", icon: Headphones    },
-      { label: "Customer Portal", href: "/portal",      icon: Globe           },
-      { label: "Site Survey",    href: "/survey",       icon: ClipboardCheck  },
-      { label: "Knowledge Base", href: "/kb",           icon: BookOpen        },
-      { label: "Community Channel", href: "/channel",   icon: Tv              },
-      { label: "Visitor Mgmt",   href: "/visitor",      icon: Users           },
-      { label: "Product Catalog", href: "/products",    icon: Layers          },
-      { label: "Energy",         href: "/energy",       icon: Zap             },
-      { label: "Network Infra",  href: "/network",      icon: Server          },
-      { label: "Delivery Hub",   href: "/deliveries",   icon: Package         },
+      { label: "Onboarding",       href: "/onboarding",    icon: ClipboardList  },
+      { label: "Communications",   href: "/communications", icon: Headphones    },
+      { label: "Customer Portal",  href: "/portal",        icon: Globe          },
+      { label: "Site Survey",      href: "/survey",        icon: ClipboardCheck },
+      { label: "Knowledge Base",   href: "/kb",            icon: BookOpen       },
+      { label: "Community Channel",href: "/channel",       icon: Tv             },
+      { label: "Visitor Mgmt",     href: "/visitor",       icon: Users          },
+      { label: "Product Catalog",  href: "/products",      icon: Layers         },
+      { label: "Energy",           href: "/energy",        icon: Zap            },
+      { label: "Network Infra",    href: "/network",       icon: Server         },
+      { label: "Delivery Hub",     href: "/deliveries",    icon: Package        },
     ],
   },
   {
     label: "Marketing",
     items: [
-      { label: "Marketing Hub",  href: "/marketing",   icon: Megaphone        },
+      { label: "Marketing Hub", href: "/marketing", icon: Megaphone },
     ],
   },
 ];
@@ -97,14 +104,29 @@ const navSections: { label: string; items: NavItem[] }[] = [
 const integrations = [
   { label: "EagleEye",   status: "connected" as const },
   { label: "Brivo",      status: "connected" as const },
+  { label: "DirecTV",    status: "connected" as const },
   { label: "QuickBooks", status: "pending"   as const },
   { label: "Twilio",     status: "pending"   as const },
-  { label: "Mapbox",     status: "pending"   as const },
+];
+
+// ── AI ARMY ─────────────────────────────────────────────────────────────────
+const aiAgents = [
+  { name: "ARIA",   role: "Lead Intel",    color: "#6B7EFF", active: true  },
+  { name: "ECHO",   role: "Voice",         color: "#0B7285", active: true  },
+  { name: "SCOUT",  role: "Market",        color: "#7C3AED", active: true  },
+  { name: "BEACON", role: "Client Comms",  color: "#B45309", active: false },
+  { name: "FORGE",  role: "Quote Builder", color: "#0B7285", active: true  },
+  { name: "ATLAS",  role: "DirecTV",       color: "#3B5BDB", active: true  },
+  { name: "SAGE",   role: "Training",      color: "#15803D", active: false },
+  { name: "RELAY",  role: "Tier-1 Support",color: "#6B7EFF", active: false },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [armyExpanded, setArmyExpanded] = useState(false);
+
+  const activeCount = aiAgents.filter(a => a.active).length;
 
   return (
     <aside className={cn(
@@ -112,15 +134,17 @@ export function Sidebar() {
       "bg-[hsl(var(--sidebar-bg))] border-r border-[hsl(var(--sidebar-border))]",
       collapsed ? "w-16" : "w-64"
     )}>
-      {/* Logo */}
+      {/* Logo — Nexus branding */}
       <div className="flex items-center gap-3 px-4 h-16 border-b border-[hsl(var(--sidebar-border))]">
         <div className="w-9 h-9 shrink-0 rounded-lg overflow-hidden flex items-center justify-center">
-          <Image src="/logo.png" alt="GateGuard" width={36} height={36} className="object-contain" priority />
+          <Image src="/logo.png" alt="GateGuard Nexus" width={36} height={36} className="object-contain" priority />
         </div>
         {!collapsed && (
           <div className="flex-1 min-w-0">
             <span className="text-sm font-bold text-white tracking-wide">GateGuard</span>
-            <p className="text-[10px] text-brand-400/80 -mt-0.5 font-medium tracking-widest uppercase">Dealer OS</p>
+            <p className="text-[10px] text-brand-400/80 -mt-0.5 font-bold tracking-widest uppercase" style={{ color: "#6B7EFF" }}>
+              NEXUS
+            </p>
           </div>
         )}
         <button
@@ -143,6 +167,59 @@ export function Sidebar() {
         </div>
       )}
 
+      {/* AI Army panel */}
+      {!collapsed && (
+        <div className="mx-3 mt-2">
+          <button
+            onClick={() => setArmyExpanded(!armyExpanded)}
+            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
+          >
+            {/* pulse dot */}
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: "#6B7EFF" }} />
+              <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: "#6B7EFF" }} />
+            </span>
+            <span className="text-[10px] font-semibold tracking-widest uppercase" style={{ color: "#6B7EFF" }}>
+              AI Army
+            </span>
+            <span className="ml-auto text-[10px] font-medium" style={{ color: "#6B7EFF" }}>
+              {activeCount}/8 active
+            </span>
+            <ChevronDown
+              size={10}
+              className="transition-transform shrink-0"
+              style={{ color: "#6B7EFF", transform: armyExpanded ? "rotate(180deg)" : "rotate(0deg)" }}
+            />
+          </button>
+
+          {armyExpanded && (
+            <div className="mt-1 space-y-0.5 pb-1">
+              {aiAgents.map((agent) => (
+                <div
+                  key={agent.name}
+                  className="flex items-center gap-2 px-2 py-1 rounded"
+                >
+                  <div
+                    className="w-5 h-5 rounded flex items-center justify-center text-[8px] font-bold text-white shrink-0"
+                    style={{ background: agent.active ? agent.color : "#334155" }}
+                  >
+                    {agent.name.slice(0, 2)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[10px] font-semibold text-white">{agent.name}</span>
+                    <span className="text-[9px] text-[hsl(var(--sidebar-text))] ml-1">{agent.role}</span>
+                  </div>
+                  <div className={cn(
+                    "w-1.5 h-1.5 rounded-full shrink-0",
+                    agent.active ? "status-online" : "bg-zinc-600"
+                  )} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
         {navSections.map((section) => (
@@ -160,6 +237,8 @@ export function Sidebar() {
                   ? pathname === "/"
                   : pathname.startsWith(item.href));
                 const isSoon = item.badge === "Soon";
+                // Highlight DirecTV Channel items specially
+                const isDTV = item.href === "/directv" || item.href === "/migrate";
                 return (
                   <Link
                     key={item.href}
@@ -172,15 +251,23 @@ export function Sidebar() {
                         ? "bg-brand-400/10 text-brand-400 border border-brand-400/20"
                         : isSoon
                         ? "text-[hsl(var(--sidebar-text))]/40 cursor-not-allowed"
+                        : isDTV && !isActive
+                        ? "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
                         : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5",
                       collapsed && "justify-center px-0"
                     )}
                     title={collapsed ? item.label : undefined}
                   >
-                    <Icon size={16} className="shrink-0" />
+                    <Icon
+                      size={16}
+                      className="shrink-0"
+                      style={isDTV && !isActive ? { color: "#3B5BDB" } : undefined}
+                    />
                     {!collapsed && (
                       <>
-                        <span className="flex-1">{item.label}</span>
+                        <span className="flex-1" style={isDTV && !isActive ? { color: "#93C5FD" } : undefined}>
+                          {item.label}
+                        </span>
                         {item.badge && (
                           <span className={cn(
                             "text-[9px] px-1.5 py-0.5 rounded-full font-semibold tracking-wide",
