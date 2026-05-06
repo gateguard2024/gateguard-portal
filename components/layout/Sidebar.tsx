@@ -112,7 +112,7 @@ const integrations = [
 // ── AI ARMY ─────────────────────────────────────────────────────────────────
 const aiAgents = [
   { name: "ARIA",   role: "Lead Intel",    color: "#6B7EFF", active: true  },
-  { name: "ECHO",   role: "Voice",         color: "#0B7285", active: true  },
+  { name: "TRINITY", role: "Voice",         color: "#0B7285", active: true  },
   { name: "SCOUT",  role: "Market",        color: "#7C3AED", active: true  },
   { name: "BEACON", role: "Client Comms",  color: "#B45309", active: false },
   { name: "FORGE",  role: "Quote Builder", color: "#0B7285", active: true  },
