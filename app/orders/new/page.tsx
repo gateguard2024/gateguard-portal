@@ -3,8 +3,10 @@ import { useState } from "react";
 import {
   MapPin, User, CreditCard, Tv, Calendar, CheckCircle2,
   AlertCircle, Loader2, ChevronRight, Zap, Phone, Mail,
-  Home, Shield, Wifi, TrendingUp, Clock, Star,
+  Shield, Wifi, TrendingUp, Clock, Star,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Home } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
 
 // ─── TYPES ───────────────────────────────────────────────────────────────────

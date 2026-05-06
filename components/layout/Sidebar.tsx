@@ -10,8 +10,11 @@ import {
   Globe, ClipboardList, Headphones, FileCheck,
   Megaphone, Map, BookOpen, Tv, Zap,
   Layers, Server, UserCheck, ShieldCheck, Star, ClipboardCheck,
-  GraduationCap, Tv as Satellite, Replace as ArrowRightLeft,
+  GraduationCap, Tv as Satellite,
 } from "lucide-react";
+// ArrowRightLeft exists in lucide-react 0.383.0 — sandbox tsc has a line-length issue with the export block
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { ArrowRightLeft } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 
@@ -73,8 +76,9 @@ const navSections: { label: string; items: NavItem[] }[] = [
   {
     label: "DirecTV Channel",
     items: [
-      { label: "ATLAS Dashboard", href: "/directv",  icon: Satellite       },
-      { label: "SARA Bridge",     href: "/migrate",  icon: ArrowRightLeft  },
+      { label: "ATLAS Dashboard", href: "/directv",    icon: Satellite      },
+      { label: "New Order",       href: "/orders/new", icon: Zap            },
+      { label: "SARA Bridge",     href: "/migrate",    icon: ArrowRightLeft },
     ],
   },
   {

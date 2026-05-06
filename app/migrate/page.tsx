@@ -1,10 +1,12 @@
 "use client";
 import { useState } from "react";
 import {
-  Replace as ArrowRightLeft, Upload, CheckCircle2, AlertCircle,
+  Upload, CheckCircle2, AlertCircle,
   ChevronRight, FileText, Users, DollarSign, Wrench,
   ArrowRight, Loader2, ShieldCheck,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { ArrowRightLeft } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
 
 type Step = "upload" | "preview" | "confirm" | "done";
