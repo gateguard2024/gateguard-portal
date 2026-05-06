@@ -11,8 +11,8 @@ const kpis = [
   { label: "Cameras Online",   value: "115/138", sub: "23 offline — 2 properties",      icon: Camera,       color: "text-emerald-400", bg: "bg-emerald-400/10" },
   { label: "Doors / Gates",    value: "124",     sub: "All online",                     icon: Shield,       color: "text-blue-400",    bg: "bg-blue-400/10"    },
   { label: "Bridges / CMVRs",  value: "9/10",    sub: "1 reconnecting",                 icon: Wifi,         color: "text-violet-400",  bg: "bg-violet-400/10"  },
-  { label: "Monthly MRR",      value: "$3,940",  sub: "+12% vs last month",             icon: DollarSign,   color: "text-emerald-400", bg: "bg-emerald-400/10" },
-  { label: "Open Work Orders", value: "4",       sub: "1 high priority",                icon: Wrench,       color: "text-amber-400",   bg: "bg-amber-400/10"   },
+  { label: "Monthly MRR",      value: "$94.2k",  sub: "+12% vs last month",             icon: DollarSign,   color: "text-emerald-400", bg: "bg-emerald-400/10" },
+  { label: "DTV Activations",  value: "1,284",   sub: "91.4% ARS · 78.2% ABP",         icon: Radio,        color: "text-blue-400",    bg: "bg-blue-400/10"    },
   { label: "Active Alerts",    value: "3",       sub: "Last 24 hours",                  icon: AlertTriangle,color: "text-red-400",      bg: "bg-red-400/10"     },
   { label: "Quote Pipeline",   value: "$78.7k",  sub: "5 open quotes",                  icon: TrendingUp,   color: "text-brand-400",   bg: "bg-brand-400/10"   },
 ];
@@ -50,7 +50,7 @@ export default function DashboardPage() {
     <div className="flex flex-col min-h-full">
       <TopBar
         title="Dashboard"
-        subtitle="GateGuard OS — Gate Guard, LLC · System Operator"
+        subtitle="GateGuard Nexus — Gate Guard, LLC · System Operator"
       />
       <div className="flex-1 p-6 space-y-5">
 
@@ -180,8 +180,9 @@ export default function DashboardPage() {
               {[
                 { label: "EagleEye API",  status: "operational" },
                 { label: "Brivo API",     status: "operational" },
+                { label: "DirecTV ATLAS", status: "operational" },
                 { label: "Supabase",      status: "operational" },
-                { label: "Vercel",        status: "operational" },
+                { label: "Vercel Edge",   status: "operational" },
               ].map((s) => (
                 <div key={s.label} className="flex items-center justify-between py-1.5">
                   <span className="text-xs text-muted-foreground">{s.label}</span>

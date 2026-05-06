@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import {
-  ArrowRightLeft, Upload, CheckCircle2, AlertCircle,
+  Replace as ArrowRightLeft, Upload, CheckCircle2, AlertCircle,
   ChevronRight, FileText, Users, DollarSign, Wrench,
   ArrowRight, Loader2, ShieldCheck,
 } from "lucide-react";

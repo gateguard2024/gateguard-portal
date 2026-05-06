@@ -1,40 +1,23 @@
 "use client";
 import { useState } from "react";
 import {
-  Satellite, TrendingUp, TrendingDown, Users, DollarSign,
-  Activity, CheckCircle2, AlertCircle, Clock, ChevronRight,
-  BarChart3, Zap, RefreshCw,
+  Tv as Satellite, TrendingUp, TrendingDown, Users, DollarSign,
+  Activity, CheckCircle2, Clock, ChevronRight,
+  BarChart3, Zap, RefreshCw, MapPin,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  DTV_DEALERS, DTV_ACTIVATIONS, ATLAS_KPIS, DTV_COMMISSION_SUMMARY,
+} from "@/lib/demo-data";
 
-// ── SYNTHETIC DEMO DATA ────────────────────────────────────────────────────
+// ── KPI cards built from shared constants ─────────────────────────────────
 const kpis = [
-  { label: "Active Dealers",   value: "47",      sub: "+3 this month",   trend: "up",   icon: Users },
-  { label: "Total Activations",value: "1,284",   sub: "+112 vs last mo", trend: "up",   icon: Zap },
-  { label: "Avg ARS%",         value: "91.4%",   sub: "Target: 90%+",    trend: "up",   icon: Activity },
-  { label: "Avg ABP%",         value: "78.2%",   sub: "Target: 80%",     trend: "down", icon: BarChart3 },
-  { label: "MRR (Channel)",    value: "$94,200",  sub: "+$6,400 MoM",     trend: "up",   icon: DollarSign },
-  { label: "Est. Commission",  value: "$31,420",  sub: "This month",      trend: "up",   icon: TrendingUp },
-];
-
-const dealers = [
-  { name: "Apex Low Voltage",       activations: 142, ars: 94.2, abp: 82.1, commission: 4_260, status: "elite",  trend: "up"   },
-  { name: "SunState Tech Partners", activations: 118, ars: 92.8, abp: 80.4, commission: 3_540, status: "elite",  trend: "up"   },
-  { name: "Gulf Coast A/V",         activations:  97, ars: 89.1, abp: 77.3, commission: 2_910, status: "active", trend: "flat" },
-  { name: "Metro Access Solutions", activations:  84, ars: 88.4, abp: 75.8, commission: 2_520, status: "active", trend: "up"   },
-  { name: "Lone Star Integrators",  activations:  76, ars: 91.7, abp: 79.2, commission: 2_280, status: "active", trend: "up"   },
-  { name: "Coastal Connect LLC",    activations:  61, ars: 85.3, abp: 71.0, commission: 1_830, status: "watch",  trend: "down" },
-  { name: "Peak Network Services",  activations:  54, ars: 83.9, abp: 68.4, commission: 1_620, status: "watch",  trend: "down" },
-  { name: "Tri-County LV Group",    activations:  48, ars: 90.1, abp: 76.5, commission: 1_440, status: "active", trend: "flat" },
-];
-
-const recentActivations = [
-  { dealer: "Apex Low Voltage",       property: "Sunset Ridge Apts",    units: 248, date: "May 4",  status: "complete" },
-  { dealer: "SunState Tech Partners", property: "The Meridian — Bldg C",units: 192, date: "May 4",  status: "complete" },
-  { dealer: "Metro Access Solutions", property: "Harbor Point Phase 2",  units: 176, date: "May 3",  status: "pending"  },
-  { dealer: "Lone Star Integrators",  property: "Creekview Commons",     units: 144, date: "May 3",  status: "complete" },
-  { dealer: "Gulf Coast A/V",         property: "Bayshore Residences",   units: 120, date: "May 2",  status: "complete" },
-  { dealer: "Apex Low Voltage",       property: "Northgate Plaza — Ph1", units: 108, date: "May 2",  status: "complete" },
+  { label: "Active Dealers",   value: String(ATLAS_KPIS.active_dealers),                sub: "+3 this month",                      trend: "up",   icon: Users      },
+  { label: "Total Activations",value: ATLAS_KPIS.activations_mtd.toLocaleString(),      sub: "+112 vs last mo",                    trend: "up",   icon: Zap        },
+  { label: "Avg ARS%",         value: `${ATLAS_KPIS.ars_pct}%`,                         sub: `Target: ${ATLAS_KPIS.ars_target}%+`, trend: "up",   icon: Activity   },
+  { label: "Avg ABP%",         value: `${ATLAS_KPIS.abp_pct}%`,                         sub: `Target: ${ATLAS_KPIS.abp_target}%`,  trend: "down", icon: BarChart3  },
+  { label: "MRR (Channel)",    value: `$${ATLAS_KPIS.mrr.toLocaleString()}`,             sub: "+$6,400 MoM",                        trend: "up",   icon: DollarSign },
+  { label: "Est. Commission",  value: `$${ATLAS_KPIS.commission_mtd.toLocaleString()}`,  sub: "This month",                         trend: "up",   icon: TrendingUp },
 ];
 
 type Tab = "overview" | "dealers" | "activations" | "commissions";
@@ -239,7 +222,7 @@ export default function DirectTVPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200 dark:border-gray-700">
-                  {["Dealer", "Activations", "ARS%", "ABP%", "Commission MTD", "Status", ""].map((h) => (
+                  {["Dealer", "Location", "Act. MTD", "ARS%", "ABP%", "Commission MTD", "Status", ""].map((h) => (
                     <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-4 py-3">
                       {h}
                     </th>
@@ -247,22 +230,25 @@ export default function DirectTVPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
-                {dealers.map((d) => (
-                  <tr key={d.name} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                {DTV_DEALERS.map((d) => (
+                  <tr key={d.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
                     <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{d.name}</td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{d.activations}</td>
+                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">
+                      <span className="flex items-center gap-1"><MapPin size={10} />{d.city}, {d.state}</span>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{d.activations_mtd}</td>
                     <td className="px-4 py-3">
-                      <span className={cn("font-medium", d.ars >= 90 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400")}>
-                        {d.ars}%
+                      <span className={cn("font-medium", d.ars_pct >= 90 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400")}>
+                        {d.ars_pct}%
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={cn("font-medium", d.abp >= 80 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400")}>
-                        {d.abp}%
+                      <span className={cn("font-medium", d.abp_pct >= 75 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400")}>
+                        {d.abp_pct}%
                       </span>
                     </td>
                     <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
-                      ${d.commission.toLocaleString()}
+                      ${d.commission_mtd.toLocaleString()}
                     </td>
                     <td className="px-4 py-3">
                       <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full", statusBadge[d.status].cls)}>
@@ -285,7 +271,7 @@ export default function DirectTVPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200 dark:border-gray-700">
-                  {["Dealer", "Property", "Units", "Date", "Status"].map((h) => (
+                  {["Order ID", "Customer", "Package", "Install Type", "Dealer", "Date", "ARS", "ABP", "Commission"].map((h) => (
                     <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-4 py-3">
                       {h}
                     </th>
@@ -293,21 +279,33 @@ export default function DirectTVPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
-                {recentActivations.map((a, i) => (
-                  <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                    <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{a.dealer}</td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{a.property}</td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{a.units}</td>
-                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{a.date}</td>
+                {DTV_ACTIVATIONS.map((a) => (
+                  <tr key={a.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                    <td className="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400">{a.id}</td>
                     <td className="px-4 py-3">
-                      {a.status === "complete"
-                        ? <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-xs font-medium">
-                            <CheckCircle2 size={12} /> Complete
-                          </span>
-                        : <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 text-xs font-medium">
-                            <Clock size={12} /> Pending
-                          </span>
-                      }
+                      <p className="font-medium text-gray-900 dark:text-white">{a.customer}</p>
+                      <p className="text-[10px] text-gray-400">{a.city}, {a.state}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300">
+                        {a.package}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">{a.install_type}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{a.dealer_name}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">{a.date}</td>
+                    <td className="px-4 py-3">
+                      {a.ars
+                        ? <CheckCircle2 size={14} className="text-emerald-500" />
+                        : <Clock size={14} className="text-amber-400" />}
+                    </td>
+                    <td className="px-4 py-3">
+                      {a.abp
+                        ? <CheckCircle2 size={14} className="text-emerald-500" />
+                        : <Clock size={14} className="text-amber-400" />}
+                    </td>
+                    <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
+                      ${a.commission.toLocaleString()}
                     </td>
                   </tr>
                 ))}
@@ -319,22 +317,23 @@ export default function DirectTVPage() {
         {/* Tab: Commissions */}
         {tab === "commissions" && (
           <div className="p-5 space-y-4">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-2">
               {[
-                { label: "GateGuard Platform",   amount: "$31,420", note: "15% of channel MRR",  color: "#3B5BDB" },
-                { label: "MSO Override",          amount: "$6,284",  note: "5% of channel MRR",   color: "#0B7285" },
-                { label: "Sales Pro Pool",        amount: "$9,426",  note: "10% of channel MRR",  color: "#7C3AED" },
+                { label: "Activations Commission", amount: DTV_COMMISSION_SUMMARY.activations_commission, note: "Base per-activation",  color: "#3B5BDB" },
+                { label: "ABP Bonus",               amount: DTV_COMMISSION_SUMMARY.abp_bonus,              note: "Avg boxes exceeded",  color: "#0B7285" },
+                { label: "ARS Bonus",               amount: DTV_COMMISSION_SUMMARY.ars_bonus,              note: "ARS target exceeded", color: "#2F9E44" },
+                { label: "Total Payout",            amount: DTV_COMMISSION_SUMMARY.total_payout,           note: `+${DTV_COMMISSION_SUMMARY.pct_change.toFixed(1)}% vs last month`, color: "#7C3AED" },
               ].map((c) => (
                 <div key={c.label} className="rounded-xl border border-gray-200 dark:border-gray-700 p-4">
                   <div className="w-8 h-1 rounded-full mb-3" style={{ background: c.color }} />
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{c.amount}</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">${c.amount.toLocaleString()}</p>
                   <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mt-1">{c.label}</p>
                   <p className="text-[10px] text-gray-400 mt-0.5">{c.note}</p>
                 </div>
               ))}
             </div>
             <p className="text-xs text-gray-400 text-center pt-2">
-              Commission calculations based on $94,200 channel MRR · May 2026 · Paid NET-30
+              Commission calculations based on ${ATLAS_KPIS.mrr.toLocaleString()} channel MRR · May 2026 · Paid NET-30
             </p>
           </div>
         )}

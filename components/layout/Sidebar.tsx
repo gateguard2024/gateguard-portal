@@ -10,7 +10,7 @@ import {
   Globe, ClipboardList, Headphones, FileCheck,
   Megaphone, Map, BookOpen, Tv, Zap,
   Layers, Server, UserCheck, ShieldCheck, Star, ClipboardCheck,
-  GraduationCap, Satellite, ArrowRightLeft,
+  GraduationCap, Tv as Satellite, Replace as ArrowRightLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";

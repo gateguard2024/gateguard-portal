@@ -445,3 +445,59 @@ Field techs use Fluke, IDEAL, and Greenlee cable/network testers daily. Future g
 - [ ] Google Reviews post-WO SMS trigger
 - [ ] Commissioning wizard (new install checklist → as-built PDF)
 - [ ] FAAC, BFT, Doorbird, HID, Viking callbox library entries
+
+---
+
+## SARA Plus Competitive Intelligence — Verified May 2026
+
+**NEXUS BRANCH RULE:** SARA Plus appears ONLY at `/migrate` (SARA Bridge wizard). No other SARA connections, links, or branding anywhere in the codebase. The Sidebar shows "SARA Bridge" under DirecTV Channel — that is the only reference.
+
+### Their Complete Tech Stack (scraped live from saraplus.com + apidocs.saraplus.com)
+
+| Layer | What They Use | Notes |
+|-------|--------------|-------|
+| Web framework | ASP.NET Web Forms — login URL is `/e/servicepages/login.aspx` | Microsoft deprecated this in 2009 |
+| CSS | Bootstrap 5.0.2 (frozen) | Not even current 5.3 |
+| JavaScript | jQuery 3.7.1 | No React, no TypeScript, no components |
+| API protocol | XML over HTTP POST, Basic Auth | SOAP-era. Not REST. Not JSON. |
+| API endpoints | `api.saraplus.com/api/prod` and `api-qa.saraplus.com/api/qa` | Two endpoints, both XML POST |
+| CDN | `files.saraplus.com` | Static assets only |
+| Support | Zendesk at `support.saraplus.com` → `saraplus.zendesk.com` | 3 KB sections, ~7 total articles |
+| API docs | Postman Documenter at `apidocs.saraplus.com` | Not self-hosted |
+| Monitoring | New Relic (account 2665918, confirmed from NREUM JS in page source) | They know it's broken |
+| Error tracking | Sentry (`o1224273.ingest.sentry.io`) | On API docs page |
+| Mobile | iOS + Android, v7.69 (Mar 2026), 2.09/5 stars, ~15K downloads | Crashes, can't rotate, loses orders |
+
+### SARA Plus API — Full Map (3 calls, all wrapping AT&T Gateway)
+
+**PD — Product Details:** Address lookup → available AT&T/DIRECTV products
+Test cases: SELF INSTALL, COMBINED INSTALL, SPLIT INSTALL, ATV+Low Speed, Gift Card
+
+**CC — Credit Check:** Customer credit/fraud screening
+40+ test cases: risk.low/medium/high/unknown/review, debt.pass/fail, ncvc.pass/fail, eSIM eligible/not/locked, fee.dtv/att/abp, wireless downpayment, gfmo (fraud bypass), fde (skip fraud review)
+Test credit cards: MC 5506900140100305 / Amex 345612313521003 / Discover 6510000000000133 / Visa 4761739001010119
+
+**Order Entry:** Submit the order to AT&T Gateway
+
+Response codes (only 6): 0000=Success, 2002=Multiple addresses, 2003=Can't validate, 2005=No offers, 2009=Existing service, 9999=General failure
+Wireless credit codes: CA/AA=Pass, AR=Analyst review, PA=Needs refresh, ER=AT&T API error
+
+### SARA Bridge Demo Data Schema
+When seeding the demo database for the SARA Bridge wizard at `/migrate`, generate:
+- **Customers**: 84 records — name, address, AT&T account number, credit tier (LOW/MEDIUM/HIGH), install type (SELF/COMBINED/SPLIT), service type (DTV/IPBB/ATV/Wireless)
+- **Work Orders**: 312 records — order ID, product, install date, tech name, status
+- **Quotes**: 147 records — customer, products, amounts, sent/accepted/declined
+- **Commission Records**: 1,840 records — pay period, dealer, tech, amount, reconciliation status
+These counts already appear hardcoded in the /migrate Step 2 UI. Seed data should match.
+
+### What SARA Plus Cannot Do (Nexus advantages to demonstrate)
+No AI, no field tech tools, no MRR/ARR, no rep hierarchy, no commissions, no territory map,
+no scorecard, no training, no client portal, no KB, no cameras, no access control, no network mgmt,
+no real-time hardware, carrier-locked (AT&T/DIRECTV/Viasat ONLY), no independent data model.
+
+**Structural trap:** SARA has no real database. It's a window into AT&T's systems. When AT&T changes their gateway, SARA breaks. App store reviews confirm. 70% market share was AT&T certification, not merit.
+
+### AI Army — Agent Names (current, May 2026)
+ARIA (Lead Intel), TRINITY (Voice — formerly ECHO), SCOUT (Market), BEACON (Client Comms),
+FORGE (Quote Builder), ATLAS (DirecTV), SAGE (Training), RELAY (Tier-1 Support)
+NOTE: Agent is named TRINITY not ECHO. Sidebar.tsx reflects this.
