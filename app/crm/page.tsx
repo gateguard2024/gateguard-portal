@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { TopBar } from "@/components/layout/TopBar";
 import {
   LayoutGrid, List, Plus, Search, SlidersHorizontal,
   Building2, User, MapPin, DollarSign,
   Clock, ArrowRight, MoreHorizontal,
-  AlertCircle, TrendingUp,
+  AlertCircle, TrendingUp, RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -36,30 +36,30 @@ interface CRMRecord {
   lastActivity: string;
   lockDaysLeft?: number;
   source?: string;
+  email?: string;
+  phone?: string;
 }
 
-// ── Mock data ──────────────────────────────────────────────────────────────
-const mockRecords: CRMRecord[] = [
-  { id: "1", type: "lead", name: "Riverside Villas", company: "", contact: "Tom Nguyen", propertyType: "Multifamily", units: 84, location: "Atlanta, GA", stage: "new", rep: "J. Torres", repInitials: "JT", lastActivity: "2h ago", lockDaysLeft: 87, source: "Referral" },
-  { id: "2", type: "lead", name: "Park View HOA", company: "", contact: "Sandra Kim", propertyType: "HOA", units: 120, location: "Marietta, GA", stage: "contacted", rep: "R. Feldman", repInitials: "RF", lastActivity: "Yesterday", lockDaysLeft: 74, source: "Web" },
-  { id: "3", type: "lead", name: "Midtown Commons", company: "Elevation Realty", contact: "David Park", propertyType: "Multifamily", units: 210, location: "Atlanta, GA", stage: "qualifying", estSetup: 18000, estMrr: 2100, rep: "J. Torres", repInitials: "JT", lastActivity: "3h ago", lockDaysLeft: 61 },
-  { id: "4", type: "opportunity", name: "Stonegate Townhomes", company: "Pegasus Residential", contact: "Maria Reyes", propertyType: "Multifamily", units: 95, location: "Smyrna, GA", stage: "inquiry", estSetup: 14200, estMrr: 1240, rep: "J. Torres", repInitials: "JT", lastActivity: "1h ago" },
-  { id: "5", type: "opportunity", name: "The Monroe", company: "Elevation Realty", contact: "Chris Wade", propertyType: "Multifamily", units: 178, location: "Decatur, GA", stage: "site_walk", estSetup: 22500, estMrr: 1780, rep: "R. Feldman", repInitials: "RF", lastActivity: "Today" },
-  { id: "6", type: "opportunity", name: "Ashford Glen", company: "Pegasus Residential", contact: "Maria Reyes", propertyType: "HOA", units: 312, location: "Dunwoody, GA", stage: "proposal", estSetup: 31000, estMrr: 3120, rep: "J. Torres", repInitials: "JT", lastActivity: "4h ago" },
-  { id: "7", type: "opportunity", name: "Flint River Estates", company: "", contact: "Jason Bell", propertyType: "Multifamily", units: 64, location: "Macon, GA", stage: "proposal", estSetup: 9800, estMrr: 640, rep: "R. Feldman", repInitials: "RF", lastActivity: "2d ago" },
-  { id: "8", type: "opportunity", name: "Elevate Eagles Landing", company: "Columbia Residential", contact: "Shawn Brooks", propertyType: "Multifamily", units: 148, location: "McDonough, GA", stage: "negotiation", estSetup: 19500, estMrr: 1480, rep: "R. Feldman", repInitials: "RF", lastActivity: "Yesterday" },
-  { id: "9", type: "opportunity", name: "Pegasus at Buckhead", company: "Pegasus Residential", contact: "Maria Reyes", propertyType: "Multifamily", units: 412, location: "Atlanta, GA", stage: "won", estSetup: 48000, estMrr: 4120, rep: "J. Torres", repInitials: "JT", lastActivity: "Last week" },
+// ── Mock OPPORTUNITIES only (leads come from Supabase) ─────────────────────
+const mockOpportunities: CRMRecord[] = [
+  { id: "4",  type: "opportunity", name: "Stonegate Townhomes",    company: "Pegasus Residential",   contact: "Maria Reyes",  propertyType: "Multifamily", units: 95,  location: "Smyrna, GA",      stage: "inquiry",     estSetup: 14200, estMrr: 1240, rep: "J. Torres",   repInitials: "JT", lastActivity: "1h ago" },
+  { id: "5",  type: "opportunity", name: "The Monroe",             company: "Elevation Realty",      contact: "Chris Wade",   propertyType: "Multifamily", units: 178, location: "Decatur, GA",     stage: "site_walk",   estSetup: 22500, estMrr: 1780, rep: "R. Feldman",  repInitials: "RF", lastActivity: "Today" },
+  { id: "6",  type: "opportunity", name: "Ashford Glen",           company: "Pegasus Residential",   contact: "Maria Reyes",  propertyType: "HOA",         units: 312, location: "Dunwoody, GA",    stage: "proposal",    estSetup: 31000, estMrr: 3120, rep: "J. Torres",   repInitials: "JT", lastActivity: "4h ago" },
+  { id: "7",  type: "opportunity", name: "Flint River Estates",    company: "",                      contact: "Jason Bell",   propertyType: "Multifamily", units: 64,  location: "Macon, GA",       stage: "proposal",    estSetup: 9800,  estMrr: 640,  rep: "R. Feldman",  repInitials: "RF", lastActivity: "2d ago" },
+  { id: "8",  type: "opportunity", name: "Elevate Eagles Landing", company: "Columbia Residential",  contact: "Shawn Brooks", propertyType: "Multifamily", units: 148, location: "McDonough, GA",   stage: "negotiation", estSetup: 19500, estMrr: 1480, rep: "R. Feldman",  repInitials: "RF", lastActivity: "Yesterday" },
+  { id: "9",  type: "opportunity", name: "Pegasus at Buckhead",    company: "Pegasus Residential",   contact: "Maria Reyes",  propertyType: "Multifamily", units: 412, location: "Atlanta, GA",     stage: "won",         estSetup: 48000, estMrr: 4120, rep: "J. Torres",   repInitials: "JT", lastActivity: "Last week" },
+  { id: "10", type: "opportunity", name: "Midtown Commons",        company: "Elevation Realty",      contact: "David Park",   propertyType: "Multifamily", units: 210, location: "Atlanta, GA",     stage: "qualifying",  estSetup: 18000, estMrr: 2100, rep: "J. Torres",   repInitials: "JT", lastActivity: "3h ago",  lockDaysLeft: 61 },
 ];
 
 // ── Pipeline columns ───────────────────────────────────────────────────────
 const columns: { stage: Stage; label: string; color: string; dot: string }[] = [
-  { stage: "new",         label: "New Lead",    color: "bg-slate-50 border-slate-200",  dot: "bg-slate-400" },
-  { stage: "contacted",   label: "Contacted",   color: "bg-blue-50 border-blue-200",    dot: "bg-blue-400" },
-  { stage: "qualifying",  label: "Qualifying",  color: "bg-indigo-50 border-indigo-200",dot: "bg-indigo-400" },
-  { stage: "inquiry",     label: "Opportunity", color: "bg-violet-50 border-violet-200",dot: "bg-violet-400" },
-  { stage: "site_walk",   label: "Site Walk",   color: "bg-amber-50 border-amber-200",  dot: "bg-amber-400" },
-  { stage: "proposal",    label: "Proposal",    color: "bg-orange-50 border-orange-200",dot: "bg-orange-400" },
-  { stage: "negotiation", label: "Negotiation", color: "bg-rose-50 border-rose-200",    dot: "bg-rose-400" },
+  { stage: "new",         label: "New Lead",    color: "bg-slate-50 border-slate-200",     dot: "bg-slate-400" },
+  { stage: "contacted",   label: "Contacted",   color: "bg-blue-50 border-blue-200",       dot: "bg-blue-400" },
+  { stage: "qualifying",  label: "Qualifying",  color: "bg-indigo-50 border-indigo-200",   dot: "bg-indigo-400" },
+  { stage: "inquiry",     label: "Opportunity", color: "bg-violet-50 border-violet-200",   dot: "bg-violet-400" },
+  { stage: "site_walk",   label: "Site Walk",   color: "bg-amber-50 border-amber-200",     dot: "bg-amber-400" },
+  { stage: "proposal",    label: "Proposal",    color: "bg-orange-50 border-orange-200",   dot: "bg-orange-400" },
+  { stage: "negotiation", label: "Negotiation", color: "bg-rose-50 border-rose-200",       dot: "bg-rose-400" },
   { stage: "won",         label: "Won",         color: "bg-emerald-50 border-emerald-200", dot: "bg-emerald-500" },
 ];
 
@@ -88,7 +88,7 @@ function fmt(n?: number) {
 
 // ── Pipeline summary bar ───────────────────────────────────────────────────
 function PipelineSummary({ records }: { records: CRMRecord[] }) {
-  const active = records.filter(r => r.stage !== "won" && r.stage !== "lost");
+  const active    = records.filter(r => r.stage !== "won" && r.stage !== "lost");
   const totalSetup = active.reduce((s, r) => s + (r.estSetup || 0), 0);
   const totalMrr   = active.reduce((s, r) => s + (r.estMrr   || 0), 0);
   const leads = records.filter(r => r.type === "lead").length;
@@ -98,11 +98,11 @@ function PipelineSummary({ records }: { records: CRMRecord[] }) {
   return (
     <div className="grid grid-cols-5 gap-3 mb-5">
       {[
-        { label: "Active Leads",   value: leads,          icon: User,       color: "text-blue-600",    bg: "bg-blue-50" },
-        { label: "Opportunities",  value: opps,           icon: TrendingUp, color: "text-violet-600",  bg: "bg-violet-50" },
-        { label: "Won This Month", value: won,            icon: AlertCircle,color: "text-emerald-600", bg: "bg-emerald-50" },
-        { label: "Pipeline Value", value: fmt(totalSetup),icon: DollarSign, color: "text-orange-600",  bg: "bg-orange-50" },
-        { label: "Monthly MRR",    value: fmt(totalMrr),  icon: DollarSign, color: "text-brand-600",   bg: "bg-blue-50" },
+        { label: "New Leads",      value: leads,           icon: User,        color: "text-blue-600",    bg: "bg-blue-50" },
+        { label: "Opportunities",  value: opps,            icon: TrendingUp,  color: "text-violet-600",  bg: "bg-violet-50" },
+        { label: "Won This Month", value: won,             icon: AlertCircle, color: "text-emerald-600", bg: "bg-emerald-50" },
+        { label: "Pipeline Value", value: fmt(totalSetup), icon: DollarSign,  color: "text-orange-600",  bg: "bg-orange-50" },
+        { label: "Monthly MRR",    value: fmt(totalMrr),   icon: DollarSign,  color: "text-brand-600",   bg: "bg-blue-50" },
       ].map(({ label, value, icon: Icon, color, bg }) => (
         <div key={label} className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
           <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0", bg)}>
@@ -120,8 +120,12 @@ function PipelineSummary({ records }: { records: CRMRecord[] }) {
 
 // ── Kanban card ────────────────────────────────────────────────────────────
 function KanbanCard({ record }: { record: CRMRecord }) {
+  const isShowLead = record.source === "Atlanta Show";
   return (
-    <div className="bg-white border border-border rounded-xl p-3.5 hover:border-brand-400/40 hover:shadow-sm transition-all group">
+    <div className={cn(
+      "bg-white border rounded-xl p-3.5 hover:shadow-sm transition-all group",
+      isShowLead ? "border-brand-400/40 ring-1 ring-brand-400/20" : "border-border hover:border-brand-400/40"
+    )}>
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-foreground truncate leading-tight">{record.name}</p>
@@ -135,6 +139,11 @@ function KanbanCard({ record }: { record: CRMRecord }) {
           <MoreHorizontal size={14} />
         </button>
       </div>
+
+      {/* Contact info for show leads */}
+      {isShowLead && record.email && (
+        <p className="text-[10px] text-muted-foreground mb-1.5 truncate">{record.email}</p>
+      )}
 
       <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-2.5">
         <MapPin size={10} className="shrink-0" />
@@ -155,10 +164,18 @@ function KanbanCard({ record }: { record: CRMRecord }) {
 
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <div className="w-5 h-5 rounded-full bg-brand-400/15 border border-brand-400/20 flex items-center justify-center text-[9px] font-bold text-brand-400">
-            {record.repInitials}
-          </div>
-          <span className="text-[10px] text-muted-foreground">{record.rep}</span>
+          {isShowLead ? (
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-brand-400/10 text-brand-400 border border-brand-400/20">
+              Atlanta Show
+            </span>
+          ) : (
+            <>
+              <div className="w-5 h-5 rounded-full bg-brand-400/15 border border-brand-400/20 flex items-center justify-center text-[9px] font-bold text-brand-400">
+                {record.repInitials}
+              </div>
+              <span className="text-[10px] text-muted-foreground">{record.rep}</span>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
           <Clock size={9} />
@@ -231,7 +248,7 @@ function ListView({ records }: { records: CRMRecord[] }) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border bg-muted/30">
-            {["Name / Company", "Stage", "Location", "Units", "Est. Setup", "MRR", "Rep", "Last Activity", ""].map(h => (
+            {["Name / Contact", "Stage", "Location", "Source", "Est. Setup", "MRR", "Rep", "Last Activity", ""].map(h => (
               <th key={h} className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
                 {h}
               </th>
@@ -251,10 +268,8 @@ function ListView({ records }: { records: CRMRecord[] }) {
               <td className="px-4 py-3">
                 <p className="font-semibold text-foreground text-sm">{r.name}</p>
                 <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                  {r.company
-                    ? <><Building2 size={10} />{r.company}</>
-                    : <><User size={10} />{r.contact}</>
-                  }
+                  <User size={10} />{r.contact}
+                  {r.email && <span className="text-muted-foreground/60">· {r.email}</span>}
                 </p>
               </td>
               <td className="px-4 py-3">
@@ -265,7 +280,15 @@ function ListView({ records }: { records: CRMRecord[] }) {
               <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">
                 <div className="flex items-center gap-1"><MapPin size={11} />{r.location}</div>
               </td>
-              <td className="px-4 py-3 text-sm text-center text-muted-foreground">{r.units ?? "—"}</td>
+              <td className="px-4 py-3">
+                {r.source === "Atlanta Show" ? (
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-brand-400/10 text-brand-400 border border-brand-400/20 whitespace-nowrap">
+                    Atlanta Show
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">{r.source || "—"}</span>
+                )}
+              </td>
               <td className="px-4 py-3 text-sm font-medium text-foreground">{fmt(r.estSetup)}</td>
               <td className="px-4 py-3 text-sm font-medium text-brand-400">{r.estMrr ? fmt(r.estMrr)+"/mo" : "—"}</td>
               <td className="px-4 py-3">
@@ -294,11 +317,33 @@ function ListView({ records }: { records: CRMRecord[] }) {
 
 // ── Main page ──────────────────────────────────────────────────────────────
 export default function CRMPage() {
-  const [view, setView]     = useState<"board" | "list">("board");
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | "leads" | "opportunities">("all");
+  const [view, setView]       = useState<"board" | "list">("board");
+  const [search, setSearch]   = useState("");
+  const [filter, setFilter]   = useState<"all" | "leads" | "opportunities">("all");
+  const [leads, setLeads]     = useState<CRMRecord[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = mockRecords.filter(r => {
+  const fetchLeads = async () => {
+    try {
+      const res = await fetch('/api/crm/leads')
+      if (res.ok) setLeads(await res.json())
+    } catch (e) {
+      console.warn('Failed to fetch leads:', e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchLeads()
+    // Auto-refresh every 60s so booth signups appear live
+    const interval = setInterval(fetchLeads, 60000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const allRecords: CRMRecord[] = [...leads, ...mockOpportunities]
+
+  const filtered = allRecords.filter(r => {
     const matchSearch = !search ||
       r.name.toLowerCase().includes(search.toLowerCase()) ||
       (r.company || "").toLowerCase().includes(search.toLowerCase()) ||
@@ -317,6 +362,13 @@ export default function CRMPage() {
         subtitle="Leads, opportunities & pipeline"
         actions={
           <div className="flex items-center gap-2">
+            <button
+              onClick={fetchLeads}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border hover:bg-accent transition-colors text-muted-foreground"
+              title="Refresh leads"
+            >
+              <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+            </button>
             <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border hover:bg-accent transition-colors text-foreground">
               <Plus size={13} /> New Lead
             </button>
@@ -328,11 +380,21 @@ export default function CRMPage() {
       />
 
       <div className="flex-1 p-6">
-        <PipelineSummary records={mockRecords} />
+        <PipelineSummary records={allRecords} />
+
+        {/* Atlanta Show banner — only when leads exist */}
+        {leads.length > 0 && (
+          <div className="flex items-center gap-3 mb-4 px-4 py-3 bg-brand-400/5 border border-brand-400/20 rounded-xl">
+            <div className="w-2 h-2 rounded-full bg-brand-400 animate-pulse shrink-0" />
+            <p className="text-sm font-medium text-foreground">
+              <span className="text-brand-400 font-semibold">{leads.length} lead{leads.length !== 1 ? "s" : ""}</span> captured at the Atlanta Apartment Association show
+            </p>
+            <span className="ml-auto text-[11px] text-muted-foreground">Auto-refreshes every 60s</span>
+          </div>
+        )}
 
         {/* Toolbar */}
         <div className="flex items-center gap-3 mb-4">
-          {/* Search */}
           <div className="relative flex-1 max-w-xs">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -343,7 +405,6 @@ export default function CRMPage() {
             />
           </div>
 
-          {/* Filter tabs */}
           <div className="flex items-center bg-muted/60 rounded-lg p-0.5 border border-border">
             {(["all", "leads", "opportunities"] as const).map(f => (
               <button
@@ -363,7 +424,6 @@ export default function CRMPage() {
 
           <div className="flex-1" />
 
-          {/* View toggle */}
           <div className="flex items-center bg-muted/60 rounded-lg p-0.5 border border-border">
             <button
               onClick={() => setView("board")}
@@ -394,7 +454,6 @@ export default function CRMPage() {
           </button>
         </div>
 
-        {/* View */}
         {view === "board"
           ? <BoardView records={filtered} />
           : <ListView records={filtered} />

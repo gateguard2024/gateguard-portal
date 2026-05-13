@@ -27,6 +27,8 @@ function isBypassPath(pathname: string): boolean {
     pathname.startsWith('/show') ||
     // Show lead API — called from public page
     pathname.startsWith('/api/show-lead') ||
+    // CRM leads API — fetches show_leads for portal CRM
+    pathname.startsWith('/api/crm/leads') ||
     // Auth flows
     pathname.startsWith('/sign-in') ||
     pathname.startsWith('/sign-up') ||
