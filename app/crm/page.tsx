@@ -40,16 +40,6 @@ interface CRMRecord {
   phone?: string;
 }
 
-// ── Mock OPPORTUNITIES only (leads come from Supabase) ─────────────────────
-const mockOpportunities: CRMRecord[] = [
-  { id: "4",  type: "opportunity", name: "Stonegate Townhomes",    company: "Pegasus Residential",   contact: "Maria Reyes",  propertyType: "Multifamily", units: 95,  location: "Smyrna, GA",      stage: "inquiry",     estSetup: 14200, estMrr: 1240, rep: "J. Torres",   repInitials: "JT", lastActivity: "1h ago" },
-  { id: "5",  type: "opportunity", name: "The Monroe",             company: "Elevation Realty",      contact: "Chris Wade",   propertyType: "Multifamily", units: 178, location: "Decatur, GA",     stage: "site_walk",   estSetup: 22500, estMrr: 1780, rep: "R. Feldman",  repInitials: "RF", lastActivity: "Today" },
-  { id: "6",  type: "opportunity", name: "Ashford Glen",           company: "Pegasus Residential",   contact: "Maria Reyes",  propertyType: "HOA",         units: 312, location: "Dunwoody, GA",    stage: "proposal",    estSetup: 31000, estMrr: 3120, rep: "J. Torres",   repInitials: "JT", lastActivity: "4h ago" },
-  { id: "7",  type: "opportunity", name: "Flint River Estates",    company: "",                      contact: "Jason Bell",   propertyType: "Multifamily", units: 64,  location: "Macon, GA",       stage: "proposal",    estSetup: 9800,  estMrr: 640,  rep: "R. Feldman",  repInitials: "RF", lastActivity: "2d ago" },
-  { id: "8",  type: "opportunity", name: "Elevate Eagles Landing", company: "Columbia Residential",  contact: "Shawn Brooks", propertyType: "Multifamily", units: 148, location: "McDonough, GA",   stage: "negotiation", estSetup: 19500, estMrr: 1480, rep: "R. Feldman",  repInitials: "RF", lastActivity: "Yesterday" },
-  { id: "9",  type: "opportunity", name: "Pegasus at Buckhead",    company: "Pegasus Residential",   contact: "Maria Reyes",  propertyType: "Multifamily", units: 412, location: "Atlanta, GA",     stage: "won",         estSetup: 48000, estMrr: 4120, rep: "J. Torres",   repInitials: "JT", lastActivity: "Last week" },
-  { id: "10", type: "opportunity", name: "Midtown Commons",        company: "Elevation Realty",      contact: "David Park",   propertyType: "Multifamily", units: 210, location: "Atlanta, GA",     stage: "qualifying",  estSetup: 18000, estMrr: 2100, rep: "J. Torres",   repInitials: "JT", lastActivity: "3h ago",  lockDaysLeft: 61 },
-];
 
 // ── Pipeline columns ───────────────────────────────────────────────────────
 const columns: { stage: Stage; label: string; color: string; dot: string }[] = [
@@ -341,7 +331,7 @@ export default function CRMPage() {
     return () => clearInterval(interval)
   }, [])
 
-  const allRecords: CRMRecord[] = [...leads, ...mockOpportunities]
+  const allRecords: CRMRecord[] = [...leads]
 
   const filtered = allRecords.filter(r => {
     const matchSearch = !search ||
