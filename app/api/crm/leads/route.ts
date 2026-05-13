@@ -7,33 +7,39 @@ const supabase = createClient(
 )
 
 export async function GET() {
-  const { data, error } = await supabase
-    .from('show_leads')
-    .select('*')
-    .order('created_at', { ascending: false })
+  try {
+    const { data, error } = await supabase
+      .from('show_leads')
+      .select('*')
+      .order('created_at', { ascending: false })
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) {
+      console.error('[/api/crm/leads] Supabase error:', error)
+      return NextResponse.json({ error: error.message, code: error.code }, { status: 500 })
+    }
+
+    const leads = (data || []).map((row: any) => ({
+      id: `show_${row.id}`,
+      type: 'lead' as const,
+      name: row.property_name || row.name,
+      company: '',
+      contact: row.name,
+      propertyType: 'Multifamily',
+      location: 'Atlanta, GA',
+      stage: 'new' as const,
+      rep: 'R. Feldman',
+      repInitials: 'RF',
+      lastActivity: formatAge(row.created_at),
+      source: 'Atlanta Show',
+      phone: row.phone,
+      email: row.email,
+    }))
+
+    return NextResponse.json(leads)
+  } catch (err) {
+    console.error('[/api/crm/leads] Unexpected error:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-
-  const leads = (data || []).map((row: any) => ({
-    id: `show_${row.id}`,
-    type: 'lead' as const,
-    name: row.property_name || row.name,
-    company: '',
-    contact: row.name,
-    propertyType: 'Multifamily',
-    location: 'Atlanta, GA',
-    stage: 'new' as const,
-    rep: 'R. Feldman',
-    repInitials: 'RF',
-    lastActivity: formatAge(row.created_at),
-    source: 'Atlanta Show',
-    phone: row.phone,
-    email: row.email,
-  }))
-
-  return NextResponse.json(leads)
 }
 
 function formatAge(iso: string): string {

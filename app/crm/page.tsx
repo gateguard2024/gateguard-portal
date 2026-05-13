@@ -312,13 +312,23 @@ export default function CRMPage() {
   const [filter, setFilter]   = useState<"all" | "leads" | "opportunities">("all");
   const [leads, setLeads]     = useState<CRMRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const fetchLeads = async () => {
     try {
       const res = await fetch('/api/crm/leads')
-      if (res.ok) setLeads(await res.json())
+      const json = await res.json()
+      if (res.ok) {
+        setLeads(json)
+        setFetchError(null)
+      } else {
+        const msg = json?.error || `HTTP ${res.status}`
+        console.error('CRM leads API error:', json)
+        setFetchError(msg)
+      }
     } catch (e) {
-      console.warn('Failed to fetch leads:', e)
+      console.error('Failed to fetch leads:', e)
+      setFetchError(String(e))
     } finally {
       setLoading(false)
     }
@@ -371,6 +381,15 @@ export default function CRMPage() {
 
       <div className="flex-1 p-6">
         <PipelineSummary records={allRecords} />
+
+        {/* Error banner */}
+        {fetchError && (
+          <div className="flex items-center gap-3 mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl">
+            <AlertCircle size={14} className="text-red-500 shrink-0" />
+            <p className="text-sm text-red-700 font-medium">CRM fetch error: <span className="font-mono text-xs">{fetchError}</span></p>
+            <button onClick={fetchLeads} className="ml-auto text-xs text-red-600 underline">Retry</button>
+          </div>
+        )}
 
         {/* Atlanta Show banner — only when leads exist */}
         {leads.length > 0 && (
