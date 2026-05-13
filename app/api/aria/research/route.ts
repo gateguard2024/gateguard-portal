@@ -130,7 +130,25 @@ Generate intelligence now.`
     const match = raw.match(/\{[\s\S]*\}/)
     if (!match) throw new Error(`ARIA: no JSON in response: ${raw.slice(0, 200)}`)
 
-    const data = JSON.parse(match[0])
+    // Sanitize: replace literal newlines/tabs inside JSON string values
+    // (Claude sometimes writes real \n in email bodies instead of escaped \\n)
+    let jsonStr = match[0]
+    // Replace unescaped control characters inside JSON strings
+    jsonStr = jsonStr.replace(/[\x00-\x09\x0b\x0c\x0e-\x1f]/g, ' ')
+    // Replace literal newlines that appear inside string values (between quotes)
+    // We do this by collapsing runs of whitespace only within string-value positions
+    jsonStr = jsonStr.replace(/"([^"\\]*(\\.[^"\\]*)*)"/g, (match) =>
+      match.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')
+    )
+
+    let data: any
+    try {
+      data = JSON.parse(jsonStr)
+    } catch (parseErr: any) {
+      // Last resort: strip all literal newlines and retry
+      const cleaned = jsonStr.replace(/\n/g, ' ').replace(/\r/g, ' ')
+      data = JSON.parse(cleaned)
+    }
 
     // Validate basic shape
     if (!Array.isArray(data.prospects) || data.prospects.length === 0) {
