@@ -4,7 +4,7 @@ import { useState, useRef, useCallback } from "react";
 import {
   Cpu, Zap, Users, Radio, Target, Mail,
   Building2, User, MapPin, CheckCircle2,
-  ExternalLink, Wand2, Copy, Send,
+  ExternalLink, Star, Copy, Send,
   Loader2, Shield, Package, Wifi, AlertCircle,
   ChevronRight, TrendingUp, Globe,
 } from "lucide-react";
@@ -99,7 +99,7 @@ const PHASES = [
     detail: "Building psychographic profile",
   },
   {
-    id: 5, name: "Campaign Gen", icon: Wand2,
+    id: 5, name: "Campaign Gen", icon: Star,
     sources: ["Claude AI", "A/B variants"],
     detail: "Generating 3 personalized email variants",
   },
