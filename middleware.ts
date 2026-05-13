@@ -23,6 +23,10 @@ function isBypassPath(pathname: string): boolean {
     pathname.startsWith('/api/plaud/') ||
     // Client-facing pages — no Clerk session required
     pathname.startsWith('/quotes/') ||
+    // Conference landing page — public lead capture
+    pathname.startsWith('/show') ||
+    // Show lead API — called from public page
+    pathname.startsWith('/api/show-lead') ||
     // Auth flows
     pathname.startsWith('/sign-in') ||
     pathname.startsWith('/sign-up') ||
