@@ -238,10 +238,10 @@ function handleSubmit(e) {
   e.preventDefault();
   const form = e.target;
   const data = {
-    name: form.name.value,
-    property_name: form.property_name.value,
-    email: form.email.value,
-    phone: form.phone.value
+    name: form.elements['name'].value,
+    property_name: form.elements['property_name'].value,
+    email: form.elements['email'].value,
+    phone: form.elements['phone'].value
   };
 
   // Submit to GateGuard portal API
