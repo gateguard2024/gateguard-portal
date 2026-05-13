@@ -1,5 +1,76 @@
 # GateGuard Portal — Agent Context
 
+---
+
+## THE NORTH STAR — GateGuard AI Engine (Read Every Session)
+
+**Russel's directive, May 2026 — permanent, compounding, non-negotiable:**
+
+> "I want all our AI, including ARIA, to not only be the best but cost-effective and leverage other AI to build our AI engine to a level not even remotely achievable by any other. AI tools are just that — tools that will feed and be at the disposal, like employees, of our more powerful AI engine. And when we think we are the best, it is time to level up again, and then continue this process."
+
+### What This Means in Practice
+
+GateGuard is not building features that use AI. GateGuard is building **an AI engine** that uses features.
+
+The distinction:
+- **Wrong framing**: "We added Claude to our portal"
+- **Right framing**: "We built an AI engine. It runs on Claude today. Tomorrow it will orchestrate Claude + GPT-4o + Gemini + specialized models as interchangeable compute workers under a unified GateGuard intelligence layer."
+
+### The Architecture Vision
+
+```
+GateGuard AI Engine (the brain — our IP, our moat)
+  ├── Orchestration layer — routes tasks to the right model/tool
+  ├── Memory layer — cross-session context, learned patterns, dealer DNA
+  ├── Signal layer — ingests real-world data (reviews, permits, hardware telemetry)
+  └── Output layer — emails, quotes, diagnostics, proposals, alerts
+        ↓ dispatches to:
+        ├── Claude (Anthropic) — reasoning, drafting, KB
+        ├── GPT-4o (OpenAI) — embeddings, vision fallback
+        ├── Gemini — document processing, multimodal
+        ├── Perplexity / Tavily — live web research
+        ├── ElevenLabs / Whisper — voice (TRINITY)
+        ├── Specialized models — LPR, predictive maintenance, churn scoring
+        └── External APIs — Brivo, Eagle Eye, UniFi, DirecTV, Hunter, Apollo
+```
+
+No single model is the engine. The engine is GateGuard's orchestration, memory, and signal layer. Models are interchangeable workers hired and fired based on cost/performance.
+
+### The Compounding Loop
+
+1. Ship a capability (ARIA researches properties)
+2. Measure what works (which signals → which reply rates)
+3. Feed results back into the engine (winning patterns become training data)
+4. Level up — when we're the best at X, begin X+1
+5. Repeat forever
+
+**Current level**: ARIA generates personalized outreach from AI-synthesized data
+**Next level**: ARIA researches real properties via live web search (Tavily)
+**Level after**: ARIA learns which email angles win per property class/manager profile and self-improves
+**Level after that**: ARIA proactively surfaces targets without being asked, ranked by buy probability
+
+### The AI Army — Current Agents
+
+| Agent | Role | Status | Next Level |
+|-------|------|--------|------------|
+| ARIA | Lead Intel + Campaign Gen | Live (Claude-only, synthetic data) | Real web search, self-learning reply rates |
+| TRINITY | Voice (inbound/outbound) | Active | Emotional tone matching, objection handling |
+| SCOUT | Market intelligence | Active | Competitive monitoring, permit filing alerts |
+| BEACON | Client communications | Inactive | Automated QBR drafts, NPS follow-up |
+| FORGE | Quote builder | Active | Auto-quote from site survey, margin optimization |
+| ATLAS | DirecTV channel | Active | MDU contract expiry detection, ARS prediction |
+| SAGE | Training | Inactive | Adaptive learning paths per dealer scorecard |
+| RELAY | Tier-1 support | Inactive | Ticket auto-resolve, escalation prediction |
+
+### Non-Negotiable Principles
+
+- **Cost discipline**: always benchmark model cost vs output quality. Use Haiku where Haiku is enough. Reserve Opus for tasks that genuinely need it.
+- **No vendor lock-in**: the engine abstracts model providers. Swap Claude for any model without rewriting business logic.
+- **Memory is the moat**: what GateGuard knows about each dealer, property, and decision maker compounds over time. That accumulated context is harder to copy than any individual model call.
+- **Every output teaches the engine**: resolved diagnostic sessions → KB articles. Opened emails → campaign templates. Accepted quotes → pricing models. Nothing is throw-away.
+
+---
+
 ## APPLICATION LANDSCAPE (read this first — get it right every time)
 
 GateGuard runs four distinct applications. Never confuse them.
