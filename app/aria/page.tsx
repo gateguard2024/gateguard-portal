@@ -2,11 +2,11 @@
 
 import { useState, useRef, useCallback } from "react";
 import {
-  Brain, Zap, Users, Radio, Target, Mail,
+  Cpu, Zap, Users, Radio, Target, Mail,
   Building2, User, MapPin, CheckCircle2,
-  ExternalLink, Sparkles, Copy, Send,
+  ExternalLink, Wand2, Copy, Send,
   Loader2, Shield, Package, Wifi, AlertCircle,
-  ChevronRight, TrendingUp, BarChart3, Globe,
+  ChevronRight, TrendingUp, Globe,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -94,12 +94,12 @@ const PHASES = [
     detail: "Mining pain points from public posts",
   },
   {
-    id: 4, name: "AI Profiling", icon: Brain,
+    id: 4, name: "AI Profiling", icon: Cpu,
     sources: ["Signal synthesis", "Buy score model"],
     detail: "Building psychographic profile",
   },
   {
-    id: 5, name: "Campaign Gen", icon: Sparkles,
+    id: 5, name: "Campaign Gen", icon: Wand2,
     sources: ["Claude AI", "A/B variants"],
     detail: "Generating 3 personalized email variants",
   },
@@ -285,8 +285,8 @@ export default function ARIAPage() {
             {[
               { label: "Targets Enriched", value: "1,847", icon: Building2 },
               { label: "Campaigns Sent",   value: "312",   icon: Mail      },
-              { label: "Avg Reply Rate",   value: "21.4%", icon: BarChart3 },
-            ].map(({ label, value, icon: Icon }) => (
+              { label: "Avg Reply Rate",   value: "21.4%", icon: TrendingUp },
+            ].map(({ label, value }) => (
               <div key={label} className="text-center">
                 <p className="text-lg font-bold text-gray-900 tabular-nums">{value}</p>
                 <p className="text-[11px] text-gray-400">{label}</p>
@@ -305,7 +305,7 @@ export default function ARIAPage() {
                 isRunning ? "border-[#6B7EFF]/40" : "border-gray-200 focus-within:border-[#6B7EFF]/60 focus-within:shadow-[0_0_0_3px_rgba(107,126,255,0.1)]"
               )}
             >
-              <Brain size={18} className={cn("shrink-0 transition-colors", isRunning ? "text-[#6B7EFF] animate-pulse" : "text-gray-400")} />
+              <Cpu size={18} className={cn("shrink-0 transition-colors", isRunning ? "text-[#6B7EFF] animate-pulse" : "text-gray-400")} />
               <input
                 ref={inputRef}
                 value={query}
@@ -361,7 +361,7 @@ export default function ARIAPage() {
           {/* Query interpretation */}
           {isDone && results?.query_interpretation && (
             <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
-              <Brain size={12} className="text-[#6B7EFF]" />
+              <Cpu size={12} className="text-[#6B7EFF]" />
               <span>ARIA interpreted: <span className="font-medium text-gray-700">{results.query_interpretation}</span></span>
             </div>
           )}
