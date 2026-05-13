@@ -10,7 +10,7 @@ import {
   Globe, ClipboardList, Headphones, FileCheck,
   Megaphone, Map, BookOpen, Tv, Zap,
   Layers, Server, UserCheck, ShieldCheck, Star, ClipboardCheck,
-  GraduationCap, Tv as Satellite,
+  GraduationCap, Tv as Satellite, Crosshair,
 } from "lucide-react";
 // ArrowRightLeft exists in lucide-react 0.383.0 — sandbox tsc has a line-length issue with the export block
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -101,6 +101,7 @@ const navSections: { label: string; items: NavItem[] }[] = [
     label: "Marketing",
     items: [
       { label: "Marketing Hub", href: "/marketing", icon: Megaphone },
+      { label: "ARIA — Lead Intel", href: "/aria", icon: Crosshair, badge: "AI" },
     ],
   },
 ];
@@ -198,27 +199,35 @@ export function Sidebar() {
 
           {armyExpanded && (
             <div className="mt-1 space-y-0.5 pb-1">
-              {aiAgents.map((agent) => (
-                <div
-                  key={agent.name}
-                  className="flex items-center gap-2 px-2 py-1 rounded"
-                >
-                  <div
-                    className="w-5 h-5 rounded flex items-center justify-center text-[8px] font-bold text-white shrink-0"
-                    style={{ background: agent.active ? agent.color : "#334155" }}
+              {aiAgents.map((agent) => {
+                const agentHref = agent.name === "ARIA" ? "/aria" : null;
+                const Wrapper = agentHref ? Link : "div" as any;
+                return (
+                  <Wrapper
+                    key={agent.name}
+                    {...(agentHref ? { href: agentHref } : {})}
+                    className={cn(
+                      "flex items-center gap-2 px-2 py-1 rounded transition-colors",
+                      agentHref ? "hover:bg-white/5 cursor-pointer" : ""
+                    )}
                   >
-                    {agent.name.slice(0, 2)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-[10px] font-semibold text-white">{agent.name}</span>
-                    <span className="text-[9px] text-[hsl(var(--sidebar-text))] ml-1">{agent.role}</span>
-                  </div>
-                  <div className={cn(
-                    "w-1.5 h-1.5 rounded-full shrink-0",
-                    agent.active ? "status-online" : "bg-zinc-600"
-                  )} />
-                </div>
-              ))}
+                    <div
+                      className="w-5 h-5 rounded flex items-center justify-center text-[8px] font-bold text-white shrink-0"
+                      style={{ background: agent.active ? agent.color : "#334155" }}
+                    >
+                      {agent.name.slice(0, 2)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[10px] font-semibold text-white">{agent.name}</span>
+                      <span className="text-[9px] text-[hsl(var(--sidebar-text))] ml-1">{agent.role}</span>
+                    </div>
+                    <div className={cn(
+                      "w-1.5 h-1.5 rounded-full shrink-0",
+                      agent.active ? "status-online" : "bg-zinc-600"
+                    )} />
+                  </Wrapper>
+                );
+              })}
             </div>
           )}
         </div>
@@ -277,8 +286,11 @@ export function Sidebar() {
                             "text-[9px] px-1.5 py-0.5 rounded-full font-semibold tracking-wide",
                             item.badge === "Soon"
                               ? "bg-zinc-700 text-zinc-400"
+                              : item.badge === "AI"
+                              ? "text-white"
                               : "bg-brand-400/20 text-brand-400"
-                          )}>
+                          )}
+                          style={item.badge === "AI" ? { background: "#6B7EFF" } : undefined}>
                             {item.badge}
                           </span>
                         )}
