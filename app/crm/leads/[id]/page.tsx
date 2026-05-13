@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { TopBar } from "@/components/layout/TopBar";
 import {
@@ -276,7 +277,22 @@ function ActivityFeed({ activities }: { activities: ActivityEntry[] }) {
 
 // ── Main page ──────────────────────────────────────────────────────────────
 export default function LeadDetailPage() {
-  const lead = LEAD;
+  const params = useParams();
+  const id = params?.id as string;
+  const [lead, setLead] = useState<typeof LEAD>(LEAD);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!id || !id.startsWith('show_')) return;
+    setLoading(true);
+    fetch(`/api/crm/leads/${id}`)
+      .then(r => r.json())
+      .then(data => {
+        if (!data.error) setLead({ ...LEAD, ...data });
+      })
+      .catch(console.warn)
+      .finally(() => setLoading(false));
+  }, [id]);
 
   return (
     <div className="flex flex-col min-h-full">
