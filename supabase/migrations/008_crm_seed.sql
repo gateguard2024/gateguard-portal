@@ -28,8 +28,9 @@ alter table opportunities alter column forecast_cat set default 'pipeline';
 -- ── Step 2: Allow null dealer_org_id for bulk insert ─────────
 alter table opportunities alter column dealer_org_id drop not null;
 
--- ── Step 3: Disable triggers during seed ─────────────────────
-alter table opportunities disable trigger all;
+-- ── Step 3: Disable user-defined triggers during seed ────────
+-- (use TRIGGER USER, not TRIGGER ALL — ALL requires superuser)
+alter table opportunities disable trigger user;
 
 -- ── Step 4: Insert pipeline seed data ────────────────────────
 -- Skip if rows already exist (idempotent via name check)
@@ -191,7 +192,7 @@ where dealer_org_id is null;
 
 -- ── Step 6: Restore NOT NULL + re-enable triggers ─────────────
 alter table opportunities alter column dealer_org_id set not null;
-alter table opportunities enable trigger all;
+alter table opportunities enable trigger user;
 
 -- ── Step 7: Stage history for closed won deals ────────────────
 insert into opportunity_stage_history
