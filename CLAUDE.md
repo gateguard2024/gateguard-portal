@@ -71,6 +71,36 @@ No single model is the engine. The engine is GateGuard's orchestration, memory, 
 
 ---
 
+## DEPLOYMENT ENVIRONMENTS — Beta vs Live (Starting Week of May 18, 2026)
+
+GateGuard is going live. Two parallel Vercel deployments must exist from this point forward.
+
+| Environment | URL | Vercel Project | Branch | Supabase Project | Purpose |
+|-------------|-----|---------------|--------|-----------------|---------|
+| **Beta** | beta.portal.gateguard.co | gateguard-portal-beta | `beta` | Supabase Beta project | Staging, dealer onboarding, safe to break |
+| **Live** | portal.gateguard.co | gateguard-portal | `main` | Supabase Prod project | Real dealers, real data. NEVER break. |
+
+### Rules for working in this repo going forward
+
+- **All new feature work goes to `beta` branch first.** Never code directly on `main`.
+- **`main` only gets merged into after Russel explicitly approves from beta.**
+- **Production migrations (`main` Supabase) must be reviewed before running** — always test on beta Supabase first.
+- **Env vars are separate** between beta and live Vercel projects. Never copy prod keys to beta.
+- When building features, always ask: "Is this safe to ship to live, or does it go to beta first?"
+- The SOC (`ggsoc.com`) has been live — treat it with the same care as the live portal.
+
+### What's on Live now (as of May 2026)
+- `/tech` field tool v10 — used by real techs in the field
+- `/quotes/[id]/approve` — real clients approving real quotes
+- Show lead capture at `/show` (Atlanta show leads, 30+ captured)
+
+### What's beta-only until further notice
+- CRM (Phase 1) — migration 008 still stabilizing
+- User Management (`/admin/users`) — needs Clerk integration testing
+- Offline PWA (service worker) — needs field testing
+
+---
+
 ## APPLICATION LANDSCAPE (read this first — get it right every time)
 
 GateGuard runs four distinct applications. Never confuse them.
