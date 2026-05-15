@@ -4,470 +4,615 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { TopBar } from "@/components/layout/TopBar";
 import {
-  LayoutGrid, List, Plus, Search, SlidersHorizontal,
-  Building2, User, MapPin, DollarSign,
-  Clock, ArrowRight, MoreHorizontal,
-  AlertCircle, TrendingUp, RefreshCw,
+  RefreshCw, Calendar, ArrowRight, Plus,
+  TrendingUp, Users, CheckCircle2, Zap,
+  Phone, Mail, ClipboardList,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { UserPlus, CalendarClock } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type Stage =
-  | "new" | "contacted" | "qualifying"
-  | "inquiry" | "site_walk" | "proposal" | "negotiation"
-  | "won" | "lost";
+  | "meet_present"
+  | "survey_request"
+  | "propose"
+  | "negotiate"
+  | "won"
+  | "lost";
 
-type RecordType = "lead" | "opportunity";
-
-interface CRMRecord {
+interface Opportunity {
   id: string;
-  type: RecordType;
   name: string;
-  company?: string;
-  contact: string;
-  propertyType: string;
-  units?: number;
-  location: string;
+  account_name: string;
   stage: Stage;
-  estSetup?: number;
-  estMrr?: number;
-  rep: string;
-  repInitials: string;
-  lastActivity: string;
-  lockDaysLeft?: number;
-  source?: string;
-  email?: string;
-  phone?: string;
+  amount: number;
+  close_date: string;
+  owner_name: string;
+  owner_initials: string;
+  won_at?: string;
+  created_at: string;
 }
 
+interface OpportunitiesResponse {
+  records: Opportunity[];
+  grouped: Record<Stage, Opportunity[]>;
+  pipelineTotal: number;
+  counts: { open: number; won: number; lost: number };
+}
 
-// ── Pipeline columns ───────────────────────────────────────────────────────
-const columns: { stage: Stage; label: string; color: string; dot: string }[] = [
-  { stage: "new",         label: "New Lead",    color: "bg-slate-50 border-slate-200",     dot: "bg-slate-400" },
-  { stage: "contacted",   label: "Contacted",   color: "bg-blue-50 border-blue-200",       dot: "bg-blue-400" },
-  { stage: "qualifying",  label: "Qualifying",  color: "bg-indigo-50 border-indigo-200",   dot: "bg-indigo-400" },
-  { stage: "inquiry",     label: "Opportunity", color: "bg-violet-50 border-violet-200",   dot: "bg-violet-400" },
-  { stage: "site_walk",   label: "Site Walk",   color: "bg-amber-50 border-amber-200",     dot: "bg-amber-400" },
-  { stage: "proposal",    label: "Proposal",    color: "bg-orange-50 border-orange-200",   dot: "bg-orange-400" },
-  { stage: "negotiation", label: "Negotiation", color: "bg-rose-50 border-rose-200",       dot: "bg-rose-400" },
-  { stage: "won",         label: "Won",         color: "bg-emerald-50 border-emerald-200", dot: "bg-emerald-500" },
+interface Lead {
+  id: string;
+  contact_name: string;
+  property_name: string;
+  email: string;
+  phone?: string;
+  source?: string;
+  created_at: string;
+  assigned_dealer?: string;
+}
+
+interface Activity {
+  id: string;
+  type: "call" | "email" | "meeting" | "task" | "note";
+  subject: string;
+  due_at: string;
+  completed_at?: string | null;
+  opportunity_name?: string;
+}
+
+// ── Stage Config ──────────────────────────────────────────────────────────
+const STAGE_CONFIG: Record<
+  Stage,
+  { label: string; dot: string; pill: string }
+> = {
+  meet_present: {
+    label: "Meet & Present",
+    dot: "bg-blue-400",
+    pill: "bg-blue-100 text-blue-700",
+  },
+  survey_request: {
+    label: "Survey Request",
+    dot: "bg-violet-400",
+    pill: "bg-violet-100 text-violet-700",
+  },
+  propose: {
+    label: "Propose",
+    dot: "bg-amber-400",
+    pill: "bg-amber-100 text-amber-700",
+  },
+  negotiate: {
+    label: "Negotiate",
+    dot: "bg-orange-400",
+    pill: "bg-orange-100 text-orange-700",
+  },
+  won: {
+    label: "Closed Won",
+    dot: "bg-emerald-500",
+    pill: "bg-emerald-100 text-emerald-700",
+  },
+  lost: {
+    label: "Lost",
+    dot: "bg-red-400",
+    pill: "bg-red-100 text-red-600",
+  },
+};
+
+const ACTIVE_STAGES: Stage[] = [
+  "meet_present",
+  "survey_request",
+  "propose",
+  "negotiate",
 ];
 
-const stageLabel: Record<Stage, string> = {
-  new: "New Lead", contacted: "Contacted", qualifying: "Qualifying",
-  inquiry: "Opportunity", site_walk: "Site Walk", proposal: "Proposal",
-  negotiation: "Negotiation", won: "Won", lost: "Lost",
-};
-
-const stagePill: Record<Stage, string> = {
-  new:         "bg-slate-100 text-slate-600",
-  contacted:   "bg-blue-100 text-blue-700",
-  qualifying:  "bg-indigo-100 text-indigo-700",
-  inquiry:     "bg-violet-100 text-violet-700",
-  site_walk:   "bg-amber-100 text-amber-700",
-  proposal:    "bg-orange-100 text-orange-700",
-  negotiation: "bg-rose-100 text-rose-700",
-  won:         "bg-emerald-100 text-emerald-700",
-  lost:        "bg-red-100 text-red-600",
-};
-
-function fmt(n?: number) {
-  if (!n) return "—";
-  return n >= 1000 ? `$${(n / 1000).toFixed(0)}k` : `$${n}`;
+// ── Helpers ───────────────────────────────────────────────────────────────
+function fmt$(n: number | undefined | null): string {
+  if (n == null) return "$0";
+  if (n >= 1_000_000) return `$${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
+  return `$${n.toFixed(0)}`;
 }
 
-// ── Pipeline summary bar ───────────────────────────────────────────────────
-function PipelineSummary({ records }: { records: CRMRecord[] }) {
-  const active    = records.filter(r => r.stage !== "won" && r.stage !== "lost");
-  const totalSetup = active.reduce((s, r) => s + (r.estSetup || 0), 0);
-  const totalMrr   = active.reduce((s, r) => s + (r.estMrr   || 0), 0);
-  const leads = records.filter(r => r.type === "lead").length;
-  const opps  = records.filter(r => r.type === "opportunity" && r.stage !== "won").length;
-  const won   = records.filter(r => r.stage === "won").length;
-
-  return (
-    <div className="grid grid-cols-5 gap-3 mb-5">
-      {[
-        { label: "New Leads",      value: leads,           icon: User,        color: "text-blue-600",    bg: "bg-blue-50" },
-        { label: "Opportunities",  value: opps,            icon: TrendingUp,  color: "text-violet-600",  bg: "bg-violet-50" },
-        { label: "Won This Month", value: won,             icon: AlertCircle, color: "text-emerald-600", bg: "bg-emerald-50" },
-        { label: "Pipeline Value", value: fmt(totalSetup), icon: DollarSign,  color: "text-orange-600",  bg: "bg-orange-50" },
-        { label: "Monthly MRR",    value: fmt(totalMrr),   icon: DollarSign,  color: "text-brand-600",   bg: "bg-blue-50" },
-      ].map(({ label, value, icon: Icon, color, bg }) => (
-        <div key={label} className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
-          <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0", bg)}>
-            <Icon size={16} className={color} />
-          </div>
-          <div>
-            <p className="text-[11px] text-muted-foreground font-medium">{label}</p>
-            <p className="text-lg font-semibold text-foreground leading-tight">{value}</p>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+function isThisMonth(iso: string | undefined): boolean {
+  if (!iso) return false;
+  const d = new Date(iso);
+  const now = new Date();
+  return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
 }
 
-// ── Kanban card ────────────────────────────────────────────────────────────
-function KanbanCard({ record }: { record: CRMRecord }) {
-  const isShowLead = record.source === "Atlanta Show";
-  return (
-    <div className={cn(
-      "bg-white border rounded-xl p-3.5 hover:shadow-sm transition-all group",
-      isShowLead ? "border-brand-400/40 ring-1 ring-brand-400/20" : "border-border hover:border-brand-400/40"
-    )}>
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-foreground truncate leading-tight">{record.name}</p>
-          {record.company && (
-            <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
-              <Building2 size={10} className="shrink-0" />{record.company}
-            </p>
-          )}
-        </div>
-        <button className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-muted-foreground hover:text-foreground">
-          <MoreHorizontal size={14} />
-        </button>
-      </div>
-
-      {/* Contact info for show leads */}
-      {isShowLead && record.email && (
-        <p className="text-[10px] text-muted-foreground mb-1.5 truncate">{record.email}</p>
-      )}
-
-      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-2.5">
-        <MapPin size={10} className="shrink-0" />
-        <span className="truncate">{record.location}</span>
-        {record.units && <span className="ml-auto shrink-0 font-medium text-foreground">{record.units}u</span>}
-      </div>
-
-      {(record.estSetup || record.estMrr) && (
-        <div className="flex items-center gap-2 mb-2.5 text-[11px]">
-          {record.estSetup && (
-            <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium">{fmt(record.estSetup)}</span>
-          )}
-          {record.estMrr && (
-            <span className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-medium">{fmt(record.estMrr)}/mo</span>
-          )}
-        </div>
-      )}
-
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          {isShowLead ? (
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-brand-400/10 text-brand-400 border border-brand-400/20">
-              Atlanta Show
-            </span>
-          ) : (
-            <>
-              <div className="w-5 h-5 rounded-full bg-brand-400/15 border border-brand-400/20 flex items-center justify-center text-[9px] font-bold text-brand-400">
-                {record.repInitials}
-              </div>
-              <span className="text-[10px] text-muted-foreground">{record.rep}</span>
-            </>
-          )}
-        </div>
-        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-          <Clock size={9} />
-          {record.lastActivity}
-        </div>
-      </div>
-
-      {record.lockDaysLeft !== undefined && (
-        <div className={cn(
-          "mt-2 flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg",
-          record.lockDaysLeft > 30 ? "bg-emerald-50 text-emerald-600" :
-          record.lockDaysLeft > 14 ? "bg-amber-50 text-amber-600" : "bg-red-50 text-red-600"
-        )}>
-          <AlertCircle size={9} />
-          Lock expires in {record.lockDaysLeft}d
-        </div>
-      )}
-    </div>
-  );
+function timeAgo(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
 }
 
-// ── Board view ─────────────────────────────────────────────────────────────
-function BoardView({ records }: { records: CRMRecord[] }) {
-  return (
-    <div className="flex gap-3 overflow-x-auto pb-4 min-h-[520px]">
-      {columns.map(col => {
-        const colRecords = records.filter(r => r.stage === col.stage);
-        const colValue = colRecords.reduce((s, r) => s + (r.estSetup || 0) + (r.estMrr || 0) * 12, 0);
-        return (
-          <div key={col.stage} className="shrink-0 w-[230px]">
-            <div className={cn(
-              "flex items-center justify-between px-3 py-2 rounded-t-xl border border-b-0",
-              col.color
-            )}>
-              <div className="flex items-center gap-2">
-                <div className={cn("w-2 h-2 rounded-full", col.dot)} />
-                <span className="text-xs font-semibold text-foreground">{col.label}</span>
-                <span className="text-[10px] text-muted-foreground bg-white/70 px-1.5 py-0.5 rounded-full font-medium">
-                  {colRecords.length}
-                </span>
-              </div>
-              {colValue > 0 && (
-                <span className="text-[10px] text-muted-foreground font-medium">{fmt(colValue)}</span>
-              )}
-            </div>
-            <div className={cn(
-              "rounded-b-xl border border-t-0 p-2 space-y-2 min-h-[460px]",
-              col.color
-            )}>
-              {colRecords.map(r => (
-                <Link key={r.id} href={r.type === "lead" ? `/crm/leads/${r.id}` : `/crm/opportunities/${r.id}`}>
-                  <KanbanCard record={r} />
-                </Link>
-              ))}
-              <button className="w-full flex items-center justify-center gap-1.5 py-2 text-[11px] text-muted-foreground hover:text-foreground hover:bg-white/60 rounded-lg transition-colors border border-dashed border-border/60">
-                <Plus size={11} /> Add
-              </button>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ── List view ──────────────────────────────────────────────────────────────
-function ListView({ records }: { records: CRMRecord[] }) {
-  return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border bg-muted/30">
-            {["Name / Contact", "Stage", "Location", "Source", "Est. Setup", "MRR", "Rep", "Last Activity", ""].map(h => (
-              <th key={h} className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {records.filter(r => r.stage !== "lost").map((r, i) => (
-            <tr
-              key={r.id}
-              onClick={() => window.location.href = r.type === "lead" ? `/crm/leads/${r.id}` : `/crm/opportunities/${r.id}`}
-              className={cn(
-                "border-b border-border/60 hover:bg-accent/40 transition-colors cursor-pointer",
-                i % 2 === 0 ? "" : "bg-muted/10"
-              )}
-            >
-              <td className="px-4 py-3">
-                <p className="font-semibold text-foreground text-sm">{r.name}</p>
-                <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                  <User size={10} />{r.contact}
-                  {r.email && <span className="text-muted-foreground/60">· {r.email}</span>}
-                </p>
-              </td>
-              <td className="px-4 py-3">
-                <span className={cn("text-[11px] font-semibold px-2.5 py-1 rounded-full", stagePill[r.stage])}>
-                  {stageLabel[r.stage]}
-                </span>
-              </td>
-              <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">
-                <div className="flex items-center gap-1"><MapPin size={11} />{r.location}</div>
-              </td>
-              <td className="px-4 py-3">
-                {r.source === "Atlanta Show" ? (
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-brand-400/10 text-brand-400 border border-brand-400/20 whitespace-nowrap">
-                    Atlanta Show
-                  </span>
-                ) : (
-                  <span className="text-xs text-muted-foreground">{r.source || "—"}</span>
-                )}
-              </td>
-              <td className="px-4 py-3 text-sm font-medium text-foreground">{fmt(r.estSetup)}</td>
-              <td className="px-4 py-3 text-sm font-medium text-brand-400">{r.estMrr ? fmt(r.estMrr)+"/mo" : "—"}</td>
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-6 h-6 rounded-full bg-brand-400/15 border border-brand-400/20 flex items-center justify-center text-[9px] font-bold text-brand-400 shrink-0">
-                    {r.repInitials}
-                  </div>
-                  <span className="text-xs text-muted-foreground">{r.rep}</span>
-                </div>
-              </td>
-              <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                <div className="flex items-center gap-1"><Clock size={11} />{r.lastActivity}</div>
-              </td>
-              <td className="px-4 py-3">
-                <button className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors">
-                  <ArrowRight size={14} />
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// ── Main page ──────────────────────────────────────────────────────────────
-export default function CRMPage() {
-  const [view, setView]       = useState<"board" | "list">("board");
-  const [search, setSearch]   = useState("");
-  const [filter, setFilter]   = useState<"all" | "leads" | "opportunities">("all");
-  const [leads, setLeads]     = useState<CRMRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-
-  const fetchLeads = async () => {
-    try {
-      const res = await fetch('/api/crm/leads')
-      const json = await res.json()
-      if (res.ok) {
-        setLeads(json)
-        setFetchError(null)
-      } else {
-        const msg = json?.error || `HTTP ${res.status}`
-        console.error('CRM leads API error:', json)
-        setFetchError(msg)
-      }
-    } catch (e) {
-      console.error('Failed to fetch leads:', e)
-      setFetchError(String(e))
-    } finally {
-      setLoading(false)
-    }
+function activityIcon(type: Activity["type"]) {
+  switch (type) {
+    case "call":
+      return <Phone size={14} />;
+    case "email":
+      return <Mail size={14} />;
+    case "meeting":
+      return <CalendarClock size={14} />;
+    case "task":
+      return <ClipboardList size={14} />;
+    default:
+      return <ClipboardList size={14} />;
   }
+}
+
+// ── Component ─────────────────────────────────────────────────────────────
+export default function CRMPage() {
+  const [oppsData, setOppsData] = useState<OpportunitiesResponse | null>(null);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [assigningId, setAssigningId] = useState<string | null>(null);
+  const [assignDealer, setAssignDealer] = useState<Record<string, string>>({});
+  const [assigningInProgress, setAssigningInProgress] = useState<string | null>(null);
+
+  const fetchAll = async () => {
+    setLoading(true);
+    try {
+      const [oppsRes, leadsRes, actsRes] = await Promise.all([
+        fetch("/api/crm/opportunities"),
+        fetch("/api/crm/leads"),
+        fetch("/api/crm/activities"),
+      ]);
+      if (oppsRes.ok) setOppsData(await oppsRes.json());
+      if (leadsRes.ok) setLeads(await leadsRes.json());
+      if (actsRes.ok) setActivities(await actsRes.json());
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    fetchLeads()
-    // Auto-refresh every 60s so booth signups appear live
-    const interval = setInterval(fetchLeads, 60000)
-    return () => clearInterval(interval)
-  }, [])
+    fetchAll();
+  }, []);
 
-  const allRecords: CRMRecord[] = [...leads]
+  const handleAssign = async (leadId: string) => {
+    const dealer = assignDealer[leadId];
+    if (!dealer?.trim()) return;
+    setAssigningInProgress(leadId);
+    try {
+      await fetch(`/api/crm/leads/${leadId}/assign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dealer }),
+      });
+      setLeads((prev) =>
+        prev.map((l) =>
+          l.id === leadId ? { ...l, assigned_dealer: dealer } : l
+        )
+      );
+      setAssigningId(null);
+    } finally {
+      setAssigningInProgress(null);
+    }
+  };
 
-  const filtered = allRecords.filter(r => {
-    const matchSearch = !search ||
-      r.name.toLowerCase().includes(search.toLowerCase()) ||
-      (r.company || "").toLowerCase().includes(search.toLowerCase()) ||
-      r.contact.toLowerCase().includes(search.toLowerCase());
-    const matchFilter =
-      filter === "all" ||
-      (filter === "leads" && r.type === "lead") ||
-      (filter === "opportunities" && r.type === "opportunity");
-    return matchSearch && matchFilter;
-  });
+  // Derived data
+  const allRecords = oppsData?.records ?? [];
+  const grouped = oppsData?.grouped ?? ({} as Record<Stage, Opportunity[]>);
+  const pipelineTotal = oppsData?.pipelineTotal ?? 0;
+  const counts = oppsData?.counts ?? { open: 0, won: 0, lost: 0 };
+
+  const wonThisMonth = allRecords.filter(
+    (r) => r.stage === "won" && isThisMonth(r.won_at)
+  );
+  const wonThisMonthAmount = wonThisMonth.reduce((s, r) => s + (r.amount ?? 0), 0);
+
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const upcomingActivities = activities.filter(
+    (a) => !a.completed_at && new Date(a.due_at) <= tomorrow
+  );
+
+  const openOpps = allRecords
+    .filter((r) => r.stage !== "won" && r.stage !== "lost")
+    .sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))
+    .slice(0, 8);
 
   return (
-    <div className="flex flex-col min-h-full">
+    <div className="min-h-screen bg-[#F8FAFC]">
       <TopBar
         title="CRM"
-        subtitle="Leads, opportunities & pipeline"
+        subtitle="Pipeline · Leads · Opportunities"
         actions={
           <div className="flex items-center gap-2">
-            <button
-              onClick={fetchLeads}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border hover:bg-accent transition-colors text-muted-foreground"
-              title="Refresh leads"
+            <Link
+              href="/admin/users"
+              className="px-3 py-1.5 text-sm font-medium border border-border rounded-lg text-foreground hover:bg-accent transition-colors"
             >
-              <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
-            </button>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border hover:bg-accent transition-colors text-foreground">
-              <Plus size={13} /> New Lead
-            </button>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-brand-400 hover:bg-brand-500 text-white transition-colors gg-glow">
-              <Plus size={13} /> New Opportunity
-            </button>
+              <UserPlus size={14} className="inline mr-1.5 -mt-0.5" />
+              Invite to Portal
+            </Link>
+            <Link
+              href="/crm/opportunities?new=1"
+              className="px-3 py-1.5 text-sm font-medium bg-[#6B7EFF] text-white rounded-lg hover:bg-[#5a6de8] transition-colors"
+            >
+              <Plus size={14} className="inline mr-1.5 -mt-0.5" />
+              New Opportunity
+            </Link>
           </div>
         }
       />
 
-      <div className="flex-1 p-6">
-        <PipelineSummary records={allRecords} />
-
-        {/* Error banner */}
-        {fetchError && (
-          <div className="flex items-center gap-3 mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl">
-            <AlertCircle size={14} className="text-red-500 shrink-0" />
-            <p className="text-sm text-red-700 font-medium">CRM fetch error: <span className="font-mono text-xs">{fetchError}</span></p>
-            <button onClick={fetchLeads} className="ml-auto text-xs text-red-600 underline">Retry</button>
-          </div>
-        )}
-
-        {/* Atlanta Show banner — only when leads exist */}
-        {leads.length > 0 && (
-          <div className="flex items-center gap-3 mb-4 px-4 py-3 bg-brand-400/5 border border-brand-400/20 rounded-xl">
-            <div className="w-2 h-2 rounded-full bg-brand-400 animate-pulse shrink-0" />
-            <p className="text-sm font-medium text-foreground">
-              <span className="text-brand-400 font-semibold">{leads.length} lead{leads.length !== 1 ? "s" : ""}</span> captured at the Atlanta Apartment Association show
-            </p>
-            <span className="ml-auto text-[11px] text-muted-foreground">Auto-refreshes every 60s</span>
-          </div>
-        )}
-
-        {/* Toolbar */}
-        <div className="flex items-center gap-3 mb-4">
-          <div className="relative flex-1 max-w-xs">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search leads & opportunities…"
-              className="w-full pl-8 pr-3 py-2 text-sm bg-card border border-border rounded-lg focus:border-brand-400/60 focus:outline-none transition-colors"
-            />
-          </div>
-
-          <div className="flex items-center bg-muted/60 rounded-lg p-0.5 border border-border">
-            {(["all", "leads", "opportunities"] as const).map(f => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={cn(
-                  "px-3 py-1.5 text-xs font-medium rounded-md transition-all capitalize",
-                  filter === f
-                    ? "bg-white text-foreground shadow-sm border border-border"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex-1" />
-
-          <div className="flex items-center bg-muted/60 rounded-lg p-0.5 border border-border">
-            <button
-              onClick={() => setView("board")}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all",
-                view === "board"
-                  ? "bg-white text-foreground shadow-sm border border-border"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <LayoutGrid size={13} /> Board
-            </button>
-            <button
-              onClick={() => setView("list")}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all",
-                view === "list"
-                  ? "bg-white text-foreground shadow-sm border border-border"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <List size={13} /> List
-            </button>
-          </div>
-
-          <button className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-border hover:bg-accent transition-colors text-muted-foreground">
-            <SlidersHorizontal size={13} /> Filter
-          </button>
+      <div className="px-6 py-6 space-y-6">
+        {/* ROW 1 — KPI Cards */}
+        <div className="grid grid-cols-4 gap-4">
+          <KpiCard
+            icon={<TrendingUp size={18} className="text-[#6B7EFF]" />}
+            label="Total Pipeline"
+            value={loading ? "—" : fmt$(pipelineTotal)}
+            sub="Active opportunities"
+            iconBg="bg-[#6B7EFF]/10"
+          />
+          <KpiCard
+            icon={<Zap size={18} className="text-amber-500" />}
+            label="Open Opportunities"
+            value={loading ? "—" : String(counts.open)}
+            sub="Across all active stages"
+            iconBg="bg-amber-50"
+          />
+          <KpiCard
+            icon={<CheckCircle2 size={18} className="text-emerald-500" />}
+            label="Closed Won (Month)"
+            value={loading ? "—" : `${wonThisMonth.length} · ${fmt$(wonThisMonthAmount)}`}
+            sub="Revenue closed this month"
+            iconBg="bg-emerald-50"
+          />
+          <KpiCard
+            icon={
+              <span className="relative flex h-4 w-4">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500" />
+              </span>
+            }
+            label="Show Leads"
+            value={loading ? "—" : String(leads.length)}
+            sub="Inbound from trade shows"
+            iconBg="bg-emerald-50"
+          />
         </div>
 
-        {view === "board"
-          ? <BoardView records={filtered} />
-          : <ListView records={filtered} />
-        }
+        {/* ROW 2 — Pipeline + Activity */}
+        <div className="grid grid-cols-5 gap-4">
+          {/* My Pipeline */}
+          <div className="col-span-3 bg-white rounded-xl border border-border p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-foreground">My Pipeline</h2>
+              <button
+                onClick={fetchAll}
+                className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground transition-colors"
+              >
+                <RefreshCw size={14} />
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              {ACTIVE_STAGES.map((stage) => {
+                const cfg = STAGE_CONFIG[stage];
+                const stageRecords = grouped[stage] ?? [];
+                const total = stageRecords.reduce(
+                  (s, r) => s + (r.amount ?? 0),
+                  0
+                );
+                return (
+                  <Link
+                    key={stage}
+                    href={`/crm/opportunities?stage=${stage}`}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-accent group transition-colors"
+                  >
+                    <span
+                      className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0", cfg.dot)}
+                    />
+                    <span className="flex-1 text-sm font-medium text-foreground">
+                      {cfg.label}
+                    </span>
+                    <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-mono">
+                      {stageRecords.length}
+                    </span>
+                    <span className="text-sm font-semibold text-foreground w-20 text-right">
+                      {fmt$(total)}
+                    </span>
+                    <ArrowRight
+                      size={14}
+                      className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                    />
+                  </Link>
+                );
+              })}
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                Total open pipeline
+              </span>
+              <span className="text-base font-bold text-foreground">
+                {loading ? "—" : fmt$(pipelineTotal)}
+              </span>
+            </div>
+          </div>
+
+          {/* Today's Activity */}
+          <div className="col-span-2 bg-white rounded-xl border border-border p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Calendar size={15} className="text-muted-foreground" />
+              <h2 className="font-semibold text-foreground">Today's Activity</h2>
+            </div>
+
+            {loading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-10 bg-slate-100 rounded-lg animate-pulse" />
+                ))}
+              </div>
+            ) : upcomingActivities.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <p className="text-2xl mb-2">🎯</p>
+                <p className="text-sm text-muted-foreground">
+                  You're clear — go close some deals
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {upcomingActivities.slice(0, 5).map((act) => (
+                  <div
+                    key={act.id}
+                    className="flex items-start gap-2 px-2 py-2 rounded-lg hover:bg-accent"
+                  >
+                    <div className="w-6 h-6 rounded-full bg-[#6B7EFF]/10 flex items-center justify-center text-[#6B7EFF] flex-shrink-0 mt-0.5">
+                      {activityIcon(act.type)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {act.subject}
+                      </p>
+                      {act.opportunity_name && (
+                        <p className="text-xs text-muted-foreground truncate">
+                          {act.opportunity_name}
+                        </p>
+                      )}
+                    </div>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap font-mono">
+                      {new Date(act.due_at).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ROW 3 — Open Opps + Show Leads */}
+        <div className="grid grid-cols-5 gap-4">
+          {/* Open Opportunities Table */}
+          <div className="col-span-3 bg-white rounded-xl border border-border p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-foreground">Open Opportunities</h2>
+              <Link
+                href="/crm/opportunities"
+                className="text-xs text-[#6B7EFF] hover:underline font-medium"
+              >
+                View all →
+              </Link>
+            </div>
+
+            {loading ? (
+              <div className="space-y-2">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="h-10 bg-slate-100 rounded-lg animate-pulse" />
+                ))}
+              </div>
+            ) : openOpps.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                No open opportunities
+              </p>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left text-xs font-medium text-muted-foreground pb-2">
+                      Name
+                    </th>
+                    <th className="text-left text-xs font-medium text-muted-foreground pb-2">
+                      Stage
+                    </th>
+                    <th className="text-right text-xs font-medium text-muted-foreground pb-2">
+                      Amount
+                    </th>
+                    <th className="text-right text-xs font-medium text-muted-foreground pb-2">
+                      Close Date
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {openOpps.map((opp) => {
+                    const cfg = STAGE_CONFIG[opp.stage];
+                    return (
+                      <tr
+                        key={opp.id}
+                        className="border-b border-border/50 last:border-0 hover:bg-slate-50 transition-colors"
+                      >
+                        <td className="py-2.5 pr-3">
+                          <Link
+                            href={`/crm/opportunities/${opp.id}`}
+                            className="text-sm font-medium text-foreground hover:text-[#6B7EFF] transition-colors truncate block max-w-[180px]"
+                          >
+                            {opp.name}
+                          </Link>
+                          <span className="text-xs text-muted-foreground">
+                            {opp.account_name}
+                          </span>
+                        </td>
+                        <td className="py-2.5 pr-3">
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium",
+                              cfg.pill
+                            )}
+                          >
+                            {cfg.label}
+                          </span>
+                        </td>
+                        <td className="py-2.5 text-right text-sm font-semibold text-foreground">
+                          {fmt$(opp.amount)}
+                        </td>
+                        <td className="py-2.5 text-right text-xs text-muted-foreground font-mono">
+                          {opp.close_date
+                            ? new Date(opp.close_date).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                              })
+                            : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Show Leads */}
+          <div className="col-span-2 bg-white rounded-xl border border-border p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
+                </span>
+                <h2 className="font-semibold text-foreground">Atlanta Show Leads</h2>
+                <span className="text-xs font-mono bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full">
+                  {leads.length}
+                </span>
+              </div>
+              {leads.length > 5 && (
+                <Link
+                  href="/crm?filter=leads"
+                  className="text-xs text-[#6B7EFF] hover:underline font-medium"
+                >
+                  View all
+                </Link>
+              )}
+            </div>
+
+            {loading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-14 bg-slate-100 rounded-lg animate-pulse" />
+                ))}
+              </div>
+            ) : leads.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                No show leads yet
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {leads.slice(0, 5).map((lead) => (
+                  <div
+                    key={lead.id}
+                    className="p-3 rounded-lg border border-border hover:bg-slate-50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">
+                          {lead.contact_name}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {lead.property_name}
+                        </p>
+                        <p className="text-xs text-[#6B7EFF] truncate">
+                          {lead.email}
+                        </p>
+                      </div>
+                      {lead.assigned_dealer ? (
+                        <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">
+                          Assigned
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() =>
+                            setAssigningId(assigningId === lead.id ? null : lead.id)
+                          }
+                          className="text-xs border border-[#6B7EFF] text-[#6B7EFF] px-2 py-0.5 rounded-full hover:bg-[#6B7EFF]/10 transition-colors flex-shrink-0"
+                        >
+                          + Assign
+                        </button>
+                      )}
+                    </div>
+
+                    {assigningId === lead.id && (
+                      <div className="mt-2 flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Dealer name…"
+                          value={assignDealer[lead.id] ?? ""}
+                          onChange={(e) =>
+                            setAssignDealer((prev) => ({
+                              ...prev,
+                              [lead.id]: e.target.value,
+                            }))
+                          }
+                          className="flex-1 text-xs border border-border rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
+                        />
+                        <button
+                          onClick={() => handleAssign(lead.id)}
+                          disabled={assigningInProgress === lead.id}
+                          className="text-xs bg-[#6B7EFF] text-white px-2.5 py-1 rounded-lg hover:bg-[#5a6de8] disabled:opacity-50 transition-colors"
+                        >
+                          {assigningInProgress === lead.id ? "…" : "Assign"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
+    </div>
+  );
+}
+
+// ── KPI Card ──────────────────────────────────────────────────────────────
+function KpiCard({
+  icon,
+  label,
+  value,
+  sub,
+  iconBg,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  sub: string;
+  iconBg: string;
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-border p-5">
+      <div className="flex items-start justify-between mb-3">
+        <div
+          className={cn(
+            "w-9 h-9 rounded-lg flex items-center justify-center",
+            iconBg
+          )}
+        >
+          {icon}
+        </div>
+      </div>
+      <p className="text-2xl font-bold text-foreground leading-tight">{value}</p>
+      <p className="text-sm font-medium text-foreground mt-0.5">{label}</p>
+      <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>
     </div>
   );
 }

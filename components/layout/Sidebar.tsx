@@ -12,9 +12,9 @@ import {
   Layers, Server, UserCheck, ShieldCheck, Star, ClipboardCheck,
   GraduationCap, Tv as Satellite, Crosshair,
 } from "lucide-react";
-// ArrowRightLeft exists in lucide-react 0.383.0 — sandbox tsc has a line-length issue with the export block
+// Icons not in the type declarations for lucide-react 0.383.0 but available at runtime
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowRightLeft } = require("lucide-react") as any;
+const { ArrowRightLeft, UserCog } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 
@@ -34,6 +34,7 @@ const navSections: { label: string; items: NavItem[] }[] = [
       { label: "Customers",      href: "/customers",    icon: Users           },
       { label: "CRM",            href: "/crm",          icon: MessageSquare   },
       { label: "Organizations",  href: "/admin",        icon: Network         },
+      { label: "User Management", href: "/admin/users", icon: UserCog         },
     ],
   },
   {

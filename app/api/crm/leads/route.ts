@@ -21,6 +21,12 @@ export async function GET() {
     const leads = (data || []).map((row: any) => ({
       id: `show_${row.id}`,
       type: 'lead' as const,
+      // CRM home page fields
+      contact_name: row.name,
+      property_name: row.property_name || '',
+      created_at: row.created_at,
+      assigned_dealer: row.assigned_dealer ?? null,
+      // Legacy / detail page fields (kept for backward compat)
       name: row.property_name || row.name,
       company: '',
       contact: row.name,
