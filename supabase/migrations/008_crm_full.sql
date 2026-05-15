@@ -126,6 +126,9 @@ alter table opportunities
   alter column stage type text using stage::text,
   alter column opp_type type text using opp_type::text;
 
+-- Make dealer_org_id nullable — seed data and show leads don't always have an org
+alter table opportunities alter column dealer_org_id drop not null;
+
 -- ============================================================
 -- OPPORTUNITY STAGE HISTORY
 -- ============================================================
