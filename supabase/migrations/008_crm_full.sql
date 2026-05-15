@@ -120,14 +120,33 @@ alter table opportunities
   add column if not exists source             text default 'direct',
   add column if not exists assigned_from_lead uuid;
 
--- Force stage + opp_type columns to text in case migration 002 created them
--- as the old opp_stage / opp_type enums with different values
-alter table opportunities
-  alter column stage type text using stage::text,
-  alter column opp_type type text using opp_type::text;
+-- Force enum columns to text — drop defaults first (required by Postgres when
+-- a column default is typed to the old enum), then change type, then restore defaults.
+do $$ begin
+  -- stage column
+  alter table opportunities alter column stage drop default;
+  alter table opportunities alter column stage type text using stage::text;
+  alter table opportunities alter column stage set default 'meet_present';
+exception when others then null; end $$;
+
+do $$ begin
+  -- opp_type column
+  alter table opportunities alter column opp_type drop default;
+  alter table opportunities alter column opp_type type text using opp_type::text;
+  alter table opportunities alter column opp_type set default 'property';
+exception when others then null; end $$;
+
+do $$ begin
+  -- forecast_cat column (may also be an enum from 002)
+  alter table opportunities alter column forecast_cat drop default;
+  alter table opportunities alter column forecast_cat type text using forecast_cat::text;
+  alter table opportunities alter column forecast_cat set default 'pipeline';
+exception when others then null; end $$;
 
 -- Make dealer_org_id nullable — seed data and show leads don't always have an org
-alter table opportunities alter column dealer_org_id drop not null;
+do $$ begin
+  alter table opportunities alter column dealer_org_id drop not null;
+exception when others then null; end $$;
 
 -- ============================================================
 -- OPPORTUNITY STAGE HISTORY
