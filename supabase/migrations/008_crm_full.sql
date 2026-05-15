@@ -59,7 +59,7 @@ create table if not exists opportunities (
 );
 
 alter table opportunities
-  add column if not exists opp_type        opp_type_placeholder text default 'property',
+  add column if not exists opp_type        text default 'property',
   add column if not exists stage           text default 'meet_present',
   add column if not exists probability     integer default 20 check (probability between 0 and 100),
   add column if not exists forecast_cat    text default 'pipeline',
@@ -119,6 +119,12 @@ alter table opportunities
   -- Source
   add column if not exists source             text default 'direct',
   add column if not exists assigned_from_lead uuid;
+
+-- Force stage + opp_type columns to text in case migration 002 created them
+-- as the old opp_stage / opp_type enums with different values
+alter table opportunities
+  alter column stage type text using stage::text,
+  alter column opp_type type text using opp_type::text;
 
 -- ============================================================
 -- OPPORTUNITY STAGE HISTORY
