@@ -36,7 +36,7 @@ interface Opportunity {
 
 interface OpportunitiesResponse {
   records: Opportunity[];
-  grouped: Record<Stage, Opportunity[]>;
+  grouped: Record<Stage, { label: string; records: Opportunity[]; total: number }>;
   pipelineTotal: number;
   counts: { open: number; won: number; lost: number };
 }
@@ -297,7 +297,7 @@ export default function CRMPage() {
             <div className="space-y-1">
               {ACTIVE_STAGES.map((stage) => {
                 const cfg = STAGE_CONFIG[stage];
-                const stageRecords = grouped[stage] ?? [];
+                const stageRecords = grouped[stage]?.records ?? [];
                 const total = stageRecords.reduce(
                   (s, r) => s + (r.amount ?? 0),
                   0
