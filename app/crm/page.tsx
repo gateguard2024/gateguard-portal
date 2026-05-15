@@ -197,7 +197,7 @@ export default function CRMPage() {
 
   // Derived data
   const allRecords = oppsData?.records ?? [];
-  const grouped = oppsData?.grouped ?? ({} as Record<Stage, Opportunity[]>);
+  const grouped = oppsData?.grouped ?? ({} as Record<Stage, { label: string; records: Opportunity[]; total: number }>);
   const pipelineTotal = oppsData?.pipelineTotal ?? 0;
   const counts = oppsData?.counts ?? { open: 0, won: 0, lost: 0 };
 
