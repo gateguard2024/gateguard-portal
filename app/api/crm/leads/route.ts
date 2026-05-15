@@ -10,7 +10,7 @@ export async function GET() {
   try {
     const { data, error } = await supabase
       .from('show_leads')
-      .select('*')
+      .select('*, source, city, state, property_type, contact_title, units, notes')
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -30,13 +30,13 @@ export async function GET() {
       name: row.property_name || row.name,
       company: '',
       contact: row.name,
-      propertyType: 'Multifamily',
-      location: 'Atlanta, GA',
+      propertyType: row.property_type ?? 'Multifamily',
+      location: row.city && row.state ? `${row.city}, ${row.state}` : (row.city ?? 'Atlanta') + ', ' + (row.state ?? 'GA'),
       stage: 'new' as const,
       rep: 'R. Feldman',
       repInitials: 'RF',
       lastActivity: formatAge(row.created_at),
-      source: 'Atlanta Show',
+      source: row.source ?? 'show',
       phone: row.phone,
       email: row.email,
     }))

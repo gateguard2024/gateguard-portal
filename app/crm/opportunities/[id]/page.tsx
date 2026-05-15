@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
 import {
   ChevronRight, Check, Phone, Mail,
@@ -227,12 +227,32 @@ function ActivityIcon({ type, size = 14 }: { type: ActivityType; size?: number }
 // ── Main Component ─────────────────────────────────────────────────────────
 export default function OpportunityDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const id = params?.id as string;
 
   const [opp, setOpp] = useState<Opportunity | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("details");
+
+  // Edit slide-over
+  const [showEdit, setShowEdit] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    account_name: "",
+    amount: "",
+    close_date: "",
+    stage: "" as Stage | "",
+    description: "",
+    next_step: "",
+    probability: "",
+    forecast_cat: "",
+  });
+  const [editSaving, setEditSaving] = useState(false);
+
+  // Delete confirmation
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Activity forms
   const [showLogCall, setShowLogCall] = useState(false);
@@ -333,6 +353,58 @@ export default function OpportunityDetailPage() {
     }
   };
 
+  // Pre-fill edit form when slide-over opens
+  useEffect(() => {
+    if (showEdit && opp) {
+      setEditForm({
+        name: opp.name ?? "",
+        account_name: opp.account_name ?? "",
+        amount: opp.amount != null ? String(opp.amount) : "",
+        close_date: opp.close_date ? opp.close_date.slice(0, 10) : "",
+        stage: opp.stage ?? "",
+        description: opp.description ?? "",
+        next_step: opp.next_step ?? "",
+        probability: opp.probability != null ? String(opp.probability) : "",
+        forecast_cat: opp.forecast_category ?? "",
+      });
+    }
+  }, [showEdit]);
+
+  const saveEdit = async () => {
+    setEditSaving(true);
+    try {
+      await fetch(`/api/crm/opportunities/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editForm.name || undefined,
+          account_name: editForm.account_name || undefined,
+          amount: editForm.amount !== "" ? Number(editForm.amount) : undefined,
+          close_date: editForm.close_date || undefined,
+          stage: editForm.stage || undefined,
+          description: editForm.description || undefined,
+          next_step: editForm.next_step || undefined,
+          probability: editForm.probability !== "" ? Number(editForm.probability) : undefined,
+          forecast_category: editForm.forecast_cat || undefined,
+        }),
+      });
+      await fetchOpp();
+      setShowEdit(false);
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const deleteOpp = async () => {
+    setDeleting(true);
+    try {
+      await fetch(`/api/crm/opportunities/${id}`, { method: "DELETE" });
+      router.push("/crm");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   // ── Loading & Error ──────────────────────────────────────────────────────
   if (loading) {
     return (
@@ -390,11 +462,17 @@ export default function OpportunityDetailPage() {
             <button className="px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-accent transition-colors">
               Follow
             </button>
-            <button className="px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-accent transition-colors flex items-center gap-1">
+            <button
+              onClick={() => setShowEdit(true)}
+              className="px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-accent transition-colors flex items-center gap-1"
+            >
               <Pencil size={12} />
               Edit
             </button>
-            <button className="px-3 py-1.5 text-sm border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1">
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="px-3 py-1.5 text-sm border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1"
+            >
               <Trash2 size={12} />
               Delete
             </button>
@@ -900,6 +978,174 @@ export default function OpportunityDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Edit Slide-Over ────────────────────────────────────────────── */}
+      {showEdit && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/30 z-40"
+            onClick={() => setShowEdit(false)}
+          />
+          {/* Panel */}
+          <div className="fixed inset-y-0 right-0 w-96 bg-white border-l border-border shadow-2xl z-50 flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
+              <h2 className="text-sm font-semibold text-foreground">Edit Opportunity</h2>
+              <button
+                onClick={() => setShowEdit(false)}
+                className="p-1 hover:bg-accent rounded text-muted-foreground"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            {/* Fields */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              <Field label="Opportunity Name">
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                  className={inputCls}
+                  placeholder="e.g. Ashford Glen — Phase 2"
+                />
+              </Field>
+              <Field label="Account Name">
+                <input
+                  type="text"
+                  value={editForm.account_name}
+                  onChange={e => setEditForm({ ...editForm, account_name: e.target.value })}
+                  className={inputCls}
+                  placeholder="e.g. Ashford Glen"
+                />
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Amount ($)">
+                  <input
+                    type="number"
+                    value={editForm.amount}
+                    onChange={e => setEditForm({ ...editForm, amount: e.target.value })}
+                    className={inputCls}
+                    placeholder="0"
+                    min={0}
+                  />
+                </Field>
+                <Field label="Probability (%)">
+                  <input
+                    type="number"
+                    value={editForm.probability}
+                    onChange={e => setEditForm({ ...editForm, probability: e.target.value })}
+                    className={inputCls}
+                    placeholder="0–100"
+                    min={0}
+                    max={100}
+                  />
+                </Field>
+              </div>
+              <Field label="Close Date">
+                <input
+                  type="date"
+                  value={editForm.close_date}
+                  onChange={e => setEditForm({ ...editForm, close_date: e.target.value })}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Stage">
+                <select
+                  value={editForm.stage}
+                  onChange={e => setEditForm({ ...editForm, stage: e.target.value as Stage })}
+                  className={inputCls}
+                >
+                  <option value="">Select stage…</option>
+                  {(Object.keys(STAGE_CONFIG) as Stage[]).map(s => (
+                    <option key={s} value={s}>{STAGE_CONFIG[s].label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Forecast Category">
+                <input
+                  type="text"
+                  value={editForm.forecast_cat}
+                  onChange={e => setEditForm({ ...editForm, forecast_cat: e.target.value })}
+                  className={inputCls}
+                  placeholder="e.g. Commit, Best Case, Pipeline"
+                />
+              </Field>
+              <Field label="Next Step">
+                <input
+                  type="text"
+                  value={editForm.next_step}
+                  onChange={e => setEditForm({ ...editForm, next_step: e.target.value })}
+                  className={inputCls}
+                  placeholder="e.g. Send proposal deck by Friday"
+                />
+              </Field>
+              <Field label="Description">
+                <textarea
+                  value={editForm.description}
+                  onChange={e => setEditForm({ ...editForm, description: e.target.value })}
+                  rows={4}
+                  className={cn(inputCls, "resize-none")}
+                  placeholder="Additional context about this opportunity…"
+                />
+              </Field>
+            </div>
+            {/* Footer */}
+            <div className="flex items-center gap-3 px-5 py-4 border-t border-border flex-shrink-0">
+              <button
+                onClick={() => setShowEdit(false)}
+                className="flex-1 py-2 text-sm border border-border rounded-lg hover:bg-accent transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveEdit}
+                disabled={editSaving || !editForm.name.trim()}
+                className="flex-1 py-2 text-sm font-medium bg-[#6B7EFF] text-white rounded-lg hover:bg-[#5a6de8] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                {editSaving && <RefreshCw size={13} className="animate-spin" />}
+                {editSaving ? "Saving…" : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Delete Confirmation Modal ──────────────────────────────────── */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-border shadow-2xl p-6 w-full max-w-sm">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <Trash2 size={16} className="text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Delete this opportunity?</h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  This cannot be undone. All associated contacts, activities, and stage history will be permanently removed.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+                className="flex-1 py-2 text-sm border border-border rounded-lg hover:bg-accent transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={deleteOpp}
+                disabled={deleting}
+                className="flex-1 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                {deleting && <RefreshCw size={13} className="animate-spin" />}
+                {deleting ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

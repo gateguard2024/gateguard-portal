@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, Users, Camera, Shield, FileText,
   Wrench, CreditCard, Settings, ChevronRight,
@@ -11,12 +11,14 @@ import {
   Megaphone, Map, BookOpen, Tv, Zap,
   Layers, Server, UserCheck, ShieldCheck, Star, ClipboardCheck,
   GraduationCap, Tv as Satellite, Crosshair,
+  User, RefreshCw,
 } from "lucide-react";
 // Icons not in the type declarations for lucide-react 0.383.0 but available at runtime
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowRightLeft, UserCog } = require("lucide-react") as any;
+const { ArrowRightLeft, UserCog, LogOut } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
+import { useUser, useClerk, useSession } from "@clerk/nextjs";
 
 type NavItem = {
   label: string;
@@ -129,8 +131,44 @@ const aiAgents = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [armyExpanded, setArmyExpanded] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const { user } = useUser();
+  const { signOut, openUserProfile } = useClerk();
+  const { session } = useSession();
+
+  const displayName = user ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() : "Russel Feldman";
+  const displayEmail = user?.primaryEmailAddress?.emailAddress ?? "rfeldman@gateguard.co";
+  const initials = displayName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) || "RF";
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    }
+    if (userMenuOpen) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [userMenuOpen]);
+
+  const handleRefreshSession = async () => {
+    setRefreshing(true);
+    try {
+      // Force Clerk to refresh the session token — fixes stale JWT on page loads
+      await session?.touch();
+      // Hard reload the current page so the new token is used immediately
+      router.refresh();
+    } finally {
+      setRefreshing(false);
+      setUserMenuOpen(false);
+    }
+  };
 
   const activeCount = aiAgents.filter(a => a.active).length;
 
@@ -332,27 +370,79 @@ export function Sidebar() {
         </div>
       )}
 
-      {/* Settings + user */}
-      <div className="border-t border-[hsl(var(--sidebar-border))] p-2">
-        <Link
-          href="/settings"
-          className={cn(
-            "flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5 transition-all",
-            collapsed && "justify-center"
-          )}
-        >
-          <Settings size={16} className="shrink-0" />
-          {!collapsed && <span>Settings</span>}
-        </Link>
-        {!collapsed && (
-          <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors mt-0.5">
-            <div className="w-7 h-7 rounded-full bg-brand-400/20 border border-brand-400/30 flex items-center justify-center text-[11px] font-bold text-brand-400 shrink-0">RF</div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-white truncate">Russel Feldman</p>
-              <p className="text-[10px] text-[hsl(var(--sidebar-text))] truncate">rfeldman@gateguard.co</p>
+      {/* User menu */}
+      <div className="border-t border-[hsl(var(--sidebar-border))] p-2 relative" ref={menuRef}>
+        {/* Popout menu — renders above the trigger */}
+        {userMenuOpen && !collapsed && (
+          <div className="absolute bottom-full left-2 right-2 mb-2 bg-[#1E293B] border border-[hsl(var(--sidebar-border))] rounded-xl shadow-2xl overflow-hidden z-50">
+            {/* User info header */}
+            <div className="px-4 py-3 border-b border-[hsl(var(--sidebar-border))]">
+              <p className="text-xs font-semibold text-white truncate">{displayName}</p>
+              <p className="text-[10px] text-[hsl(var(--sidebar-text))] truncate mt-0.5">{displayEmail}</p>
+            </div>
+            {/* Menu items */}
+            <div className="py-1">
+              <button
+                onClick={() => { openUserProfile(); setUserMenuOpen(false); }}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5 transition-colors text-left"
+              >
+                <User size={14} className="shrink-0" />
+                My Account
+              </button>
+              <Link
+                href="/settings"
+                onClick={() => setUserMenuOpen(false)}
+                className="flex items-center gap-3 px-4 py-2.5 text-sm text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5 transition-colors"
+              >
+                <Settings size={14} className="shrink-0" />
+                Settings
+              </Link>
+              <button
+                onClick={handleRefreshSession}
+                disabled={refreshing}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5 transition-colors text-left disabled:opacity-50"
+              >
+                <RefreshCw size={14} className={cn("shrink-0", refreshing && "animate-spin")} />
+                {refreshing ? "Refreshing…" : "Refresh Session"}
+              </button>
+            </div>
+            <div className="border-t border-[hsl(var(--sidebar-border))] py-1">
+              <button
+                onClick={() => signOut({ redirectUrl: "/sign-in" })}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/5 transition-colors text-left"
+              >
+                <LogOut size={14} className="shrink-0" />
+                Sign Out
+              </button>
             </div>
           </div>
         )}
+
+        {/* Trigger — user row */}
+        <button
+          onClick={() => setUserMenuOpen(o => !o)}
+          className={cn(
+            "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors",
+            collapsed && "justify-center",
+            userMenuOpen && "bg-white/5"
+          )}
+        >
+          <div className="w-7 h-7 rounded-full bg-brand-400/20 border border-brand-400/30 flex items-center justify-center text-[11px] font-bold text-brand-400 shrink-0">
+            {initials}
+          </div>
+          {!collapsed && (
+            <>
+              <div className="flex-1 min-w-0 text-left">
+                <p className="text-xs font-medium text-white truncate">{displayName}</p>
+                <p className="text-[10px] text-[hsl(var(--sidebar-text))] truncate">{displayEmail}</p>
+              </div>
+              <ChevronDown
+                size={11}
+                className={cn("text-[hsl(var(--sidebar-text))] transition-transform shrink-0", userMenuOpen && "rotate-180")}
+              />
+            </>
+          )}
+        </button>
       </div>
     </aside>
   );

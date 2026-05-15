@@ -28,7 +28,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const uuid = rawId.replace('show_', '')
     const { data, error } = await supabase
       .from('show_leads')
-      .select('*')
+      .select('*, source, city, state, property_type, contact_title, units, notes')
       .eq('id', uuid)
       .single()
 
@@ -36,28 +36,32 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
+    const location = data.city && data.state
+      ? `${data.city}, ${data.state}`
+      : (data.city ?? 'Atlanta') + ', ' + (data.state ?? 'GA')
+
     return NextResponse.json({
       id: `show_${data.id}`,
       type: 'lead',
       name: data.property_name || data.name,
       contact: data.name,
-      title: 'Property Manager',
+      title: data.contact_title ?? 'Property Manager',
       email: data.email,
       phone: data.phone || '',
       company: '',
-      propertyType: 'Multifamily',
-      units: null,
-      location: 'Atlanta, GA',
-      address: 'Atlanta, GA',
+      propertyType: data.property_type ?? 'Multifamily',
+      units: data.units ?? null,
+      location,
+      address: location,
       stage: 'new',
-      source: 'Atlanta Show',
+      source: data.source ?? 'show',
       rep: 'Russel Feldman',
       repInitials: 'RF',
       lockDaysLeft: null,
       lockExpires: null,
       estSetup: null,
       estMrr: null,
-      notes: '',
+      notes: data.notes ?? '',
       createdAt: formatDate(data.created_at),
       lastActivity: formatAge(data.created_at),
     })

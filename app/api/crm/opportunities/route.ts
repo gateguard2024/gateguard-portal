@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentUser } from '@/lib/current-user'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -81,6 +82,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const stage = body.stage || 'meet_present'
+    const user = await getCurrentUser()
 
     const { data, error } = await supabase
       .from('opportunities')
@@ -88,6 +90,8 @@ export async function POST(req: NextRequest) {
         ...body,
         stage,
         probability: body.probability ?? STAGE_PROB[stage],
+        owner_name: user.name,
+        owner_initials: user.initials,
       })
       .select()
       .single()

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentUser } from '@/lib/current-user'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,9 +20,14 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json()
+  const user = await getCurrentUser()
   const { data, error } = await supabase
     .from('crm_activities')
-    .insert({ ...body, opportunity_id: params.id })
+    .insert({
+      ...body,
+      opportunity_id: params.id,
+      created_by_name: user.name,
+    })
     .select()
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

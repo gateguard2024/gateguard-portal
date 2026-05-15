@@ -6,7 +6,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import {
   RefreshCw, Calendar, ArrowRight, Plus,
   TrendingUp, Users, CheckCircle2, Zap,
-  Phone, Mail, ClipboardList,
+  Phone, Mail, ClipboardList, X,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { UserPlus, CalendarClock } = require("lucide-react") as any;
@@ -153,6 +153,11 @@ export default function CRMPage() {
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [assignDealer, setAssignDealer] = useState<Record<string, string>>({});
   const [assigningInProgress, setAssigningInProgress] = useState<string | null>(null);
+  const [showNewOpp, setShowNewOpp] = useState(false);
+  const [newOppForm, setNewOppForm] = useState({
+    name: "", account_name: "", amount: "", close_date: "", stage: "meet_present", description: ""
+  });
+  const [savingOpp, setSavingOpp] = useState(false);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -195,6 +200,26 @@ export default function CRMPage() {
     }
   };
 
+  const handleCreateOpp = async () => {
+    if (!newOppForm.name.trim()) return;
+    setSavingOpp(true);
+    try {
+      await fetch("/api/crm/opportunities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...newOppForm,
+          amount: newOppForm.amount ? parseFloat(newOppForm.amount) : null,
+        }),
+      });
+      await fetchAll();
+      setShowNewOpp(false);
+      setNewOppForm({ name: "", account_name: "", amount: "", close_date: "", stage: "meet_present", description: "" });
+    } finally {
+      setSavingOpp(false);
+    }
+  };
+
   // Derived data
   const allRecords = oppsData?.records ?? [];
   const grouped = oppsData?.grouped ?? ({} as Record<Stage, { label: string; records: Opportunity[]; total: number }>);
@@ -231,13 +256,13 @@ export default function CRMPage() {
               <UserPlus size={14} className="inline mr-1.5 -mt-0.5" />
               Invite to Portal
             </Link>
-            <Link
-              href="/crm/opportunities?new=1"
+            <button
+              onClick={() => setShowNewOpp(true)}
               className="px-3 py-1.5 text-sm font-medium bg-[#6B7EFF] text-white rounded-lg hover:bg-[#5a6de8] transition-colors"
             >
               <Plus size={14} className="inline mr-1.5 -mt-0.5" />
               New Opportunity
-            </Link>
+            </button>
           </div>
         }
       />
@@ -286,12 +311,20 @@ export default function CRMPage() {
           <div className="col-span-3 bg-white rounded-xl border border-border p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-foreground">My Pipeline</h2>
-              <button
-                onClick={fetchAll}
-                className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground transition-colors"
-              >
-                <RefreshCw size={14} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowNewOpp(true)}
+                  className="px-3 py-1.5 text-xs bg-[#6B7EFF] text-white rounded-lg hover:bg-[#5a6de8] transition-colors font-medium"
+                >
+                  + New
+                </button>
+                <button
+                  onClick={fetchAll}
+                  className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground transition-colors"
+                >
+                  <RefreshCw size={14} />
+                </button>
+              </div>
             </div>
 
             <div className="space-y-1">
@@ -580,6 +613,129 @@ export default function CRMPage() {
           </div>
         </div>
       </div>
+
+      {/* New Opportunity slide-over */}
+      {showNewOpp && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/20 z-40"
+            onClick={() => setShowNewOpp(false)}
+          />
+          {/* Panel */}
+          <div className="fixed inset-y-0 right-0 w-96 bg-white border-l border-border shadow-2xl z-50 flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
+              <h2 className="font-semibold text-foreground">New Opportunity</h2>
+              <button
+                onClick={() => setShowNewOpp(false)}
+                className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Form body */}
+            <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">
+                  Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Parkview Estates — Your GateGuard"
+                  value={newOppForm.name}
+                  onChange={(e) => setNewOppForm((f) => ({ ...f, name: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">
+                  Account Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="Property or company name"
+                  value={newOppForm.account_name}
+                  onChange={(e) => setNewOppForm((f) => ({ ...f, account_name: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">
+                  Amount
+                </label>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={newOppForm.amount}
+                  onChange={(e) => setNewOppForm((f) => ({ ...f, amount: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">
+                  Close Date
+                </label>
+                <input
+                  type="date"
+                  value={newOppForm.close_date}
+                  onChange={(e) => setNewOppForm((f) => ({ ...f, close_date: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">
+                  Stage
+                </label>
+                <select
+                  value={newOppForm.stage}
+                  onChange={(e) => setNewOppForm((f) => ({ ...f, stage: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white"
+                >
+                  <option value="meet_present">Meet &amp; Present</option>
+                  <option value="survey_request">Survey Request</option>
+                  <option value="propose">Propose</option>
+                  <option value="negotiate">Negotiate</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">
+                  Description
+                </label>
+                <textarea
+                  rows={3}
+                  value={newOppForm.description}
+                  onChange={(e) => setNewOppForm((f) => ({ ...f, description: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-border flex-shrink-0">
+              <button
+                onClick={() => setShowNewOpp(false)}
+                className="px-4 py-2 text-sm font-medium text-muted-foreground border border-border rounded-lg hover:bg-accent transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateOpp}
+                disabled={savingOpp || !newOppForm.name.trim()}
+                className="px-4 py-2 text-sm font-medium bg-[#6B7EFF] text-white rounded-lg hover:bg-[#5a6de8] disabled:opacity-50 transition-colors"
+              >
+                {savingOpp ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
