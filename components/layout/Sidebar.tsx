@@ -33,6 +33,7 @@ const navSections: { label: string; items: NavItem[] }[] = [
     label: "Operations",
     items: [
       { label: "Dashboard",      href: "/",             icon: LayoutDashboard },
+      { label: "Operating System", href: "/eos",        icon: Layers          },
       { label: "Customers",      href: "/customers",    icon: Users           },
       { label: "CRM",            href: "/crm",          icon: MessageSquare   },
       { label: "Organizations",  href: "/admin",        icon: Network         },

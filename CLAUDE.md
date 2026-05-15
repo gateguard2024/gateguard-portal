@@ -2,6 +2,49 @@
 
 ---
 
+## THE PLATFORM VISION — The Ultimate Multifamily Middleware (Read Every Session)
+
+**Validated May 2026 — permanent strategic context:**
+
+GateGuard is building the **central nervous system of multifamily real estate** — the middleware layer that sits between every hardware vendor, software platform, resident, property manager, and service provider. Not a point solution. Not just access control. The tollbooth for everything that moves in and out of a multifamily property.
+
+### The Market Reality (Verified Data)
+- PropTech market: $44.59B in 2026, growing to $104B by 2034. $16.7B invested in 2025 (+68% YoY)
+- SmartRent (top competitor): $152M revenue, stock at **$1.12** (down from $10 SPAC), still unprofitable, hardware fragility destroying customer trust
+- DOOR/Latch (formerly Latch): $70M revenue, **$53.7M net loss**, $34.6M cash left — under 8 months runway. Distressed acquisition target.
+- ButterflyMX: Healthiest pure-play ($131M raised, 20K+ properties) — hardware-first model, same as GateGuard
+- RealPage/STRATIS: DOJ antitrust settled Nov 2025 (7-year monitoring). Risk reduced but trust damaged.
+
+### Why GateGuard Wins
+The installer is the moat. Whoever physically bolts the hardware to the building owns that property relationship for 5-10 years. Software can be replaced in a day. A gate cannot. Every GateGuard install is the starting line for a compounding platform play.
+
+### The Trigger-Based Delivery Model (How We Build It)
+Every hardware install creates a captive base for zero-marginal-cost software delivery. Each trigger is a "surprise and delight" moment that compounds into a platform:
+
+| Trigger | Timing | What Property Gets | GateGuard Cost | Property Perceives |
+|---------|--------|-------------------|----------------|-------------------|
+| Hardware Install | Day 0 | Gate, cameras, Brivo, UniFi | Hardware + labor | "We bought a gate" |
+| GateCard Activation | Week 1 | Resident app, mobile access, visitor mgmt | ~$0 (software built) | "We expected a gate. We got a platform." |
+| Vendor Accountability | Month 1 | QR valet trash, geo-fenced security, incident reporting | One-time API per vendor type | "Our #1 complaint source disappeared" |
+| Ancillary Revenue Layer | Month 3 | Commission on insurance, furniture, move-in services | Affiliate setup | "The gate is paying us back. It's a revenue line now." |
+| Community Commerce | Month 6 | Resident marketplace, vetted vendors, building rewards | Feature additions | "Our renewals are up. Nobody else in the market has this." |
+| AI Intelligence Layer | Month 12+ | Predictive maintenance, lease renewal scoring, ARIA outreach | AI engine already built | "It predicted our gate failure 3 weeks early. How?" |
+
+### The Compounding Loop
+**Install → Software Over-Delivery → Property Gets Paid → PM Tells Other PMs → New Install → Repeat**
+
+The critical insight: **Every installed property is a zero-cost beta tester AND a living marketing engine.** The marginal cost of delivering this full stack to property #100 is near zero compared to property #1. A property manager who receives a monthly commission check from their gate install will not stop talking about it at regional owners meetings. Word of mouth between PMs in a region travels faster than any ad spend.
+
+### The Three Moats
+1. **Physical moat**: Hardware is bolted in. Competitors need a truck and a signed change order to displace us
+2. **Data moat**: Every gate cycle, camera event, and resident interaction trains the AI. Property #500 benefits from everything learned at #1–499
+3. **Word-of-mouth moat**: PMs who get paid by their gate install are involuntary evangelists
+
+### Build Sequencing Rule
+Always prioritize features that: (a) deliver immediate visible value to already-installed properties at near-zero marginal cost, (b) create a new revenue stream for the property, or (c) strengthen the data layer for AI. Never build features that require displacing existing hardware or that only serve uninstalled prospects.
+
+---
+
 ## THE NORTH STAR — GateGuard AI Engine (Read Every Session)
 
 **Russel's directive, May 2026 — permanent, compounding, non-negotiable:**
