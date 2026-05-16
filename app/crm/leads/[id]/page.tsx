@@ -240,19 +240,29 @@ function EditLeadModal({ lead, open, onClose, onSaved }: {
 
 // ── Activity Feed ──────────────────────────────────────────────────────────────
 function ActivityFeed({
-  leadId, activities, onActivityAdded,
+  leadId, activities, onActivityAdded, triggerOpen,
 }: {
   leadId: string;
   activities: ActivityEntry[];
   onActivityAdded: (a: ActivityEntry) => void;
+  triggerOpen?: boolean;
 }) {
   const [actType,   setActType]   = useState<ActivityEntry["type"]>("note");
   const [showInput, setShowInput] = useState(false);
   const [subject,   setSubject]   = useState("");
   const [body,      setBody]      = useState("");
   const [dueAt,     setDueAt]     = useState("");
+  const [outcome,   setOutcome]   = useState("");
   const [saving,    setSaving]    = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Open the form when parent signals via triggerOpen prop
+  useEffect(() => {
+    if (triggerOpen) {
+      setShowInput(true);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [triggerOpen]);
 
   const openActivity = (type: ActivityEntry["type"]) => {
     setActType(type);
@@ -271,6 +281,7 @@ function ActivityFeed({
           subject: subject.trim(),
           body: body.trim() || null,
           due_at: dueAt || null,
+          outcome: outcome.trim() || null,
         }),
       });
       const json = await res.json();
@@ -290,6 +301,7 @@ function ActivityFeed({
       setSubject("");
       setBody("");
       setDueAt("");
+      setOutcome("");
     } finally {
       setSaving(false);
     }
@@ -297,7 +309,7 @@ function ActivityFeed({
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSave();
-    if (e.key === "Escape") { setShowInput(false); setSubject(""); setBody(""); }
+    if (e.key === "Escape") { setShowInput(false); setSubject(""); setBody(""); setOutcome(""); }
   };
 
   const formatTime = (iso: string) => {
@@ -354,14 +366,22 @@ function ActivityFeed({
             className="w-full text-sm bg-transparent outline-none placeholder:text-muted-foreground resize-none mb-3"
           />
           {actType === "task" && (
-            <div className="mb-3">
-              <label className="text-[11px] text-muted-foreground mr-2">Due:</label>
+            <div className="mb-3 flex items-center gap-2">
+              <label className="text-[11px] text-muted-foreground">Due:</label>
               <input type="date" value={dueAt} onChange={e => setDueAt(e.target.value)}
                 className="text-[11px] border border-border rounded-lg px-2 py-1 bg-background" />
             </div>
           )}
+          {(actType === "call" || actType === "meeting") && (
+            <input
+              placeholder="What was the outcome?"
+              value={outcome}
+              onChange={e => setOutcome(e.target.value)}
+              className="w-full text-sm bg-transparent outline-none placeholder:text-muted-foreground mb-3 border-b border-border pb-1"
+            />
+          )}
           <div className="flex items-center gap-2 justify-end">
-            <button onClick={() => { setShowInput(false); setSubject(""); setBody(""); }}
+            <button onClick={() => { setShowInput(false); setSubject(""); setBody(""); setOutcome(""); }}
               className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground rounded-lg border border-border hover:bg-accent transition-colors">
               Cancel
             </button>
@@ -455,10 +475,11 @@ export default function LeadDetailPage() {
   const [lead,       setLead]       = useState<Lead>(EMPTY_LEAD);
   const [activities, setActivities] = useState<ActivityEntry[]>([]);
   const [loading,    setLoading]    = useState(true);
-  const [editOpen,   setEditOpen]   = useState(false);
-  const [converting, setConverting] = useState(false);
-  const [marking,    setMarking]    = useState(false);
-  const [toast,      setToast]      = useState<{ msg: string; ok: boolean } | null>(null);
+  const [editOpen,         setEditOpen]         = useState(false);
+  const [converting,       setConverting]       = useState(false);
+  const [marking,          setMarking]          = useState(false);
+  const [toast,            setToast]            = useState<{ msg: string; ok: boolean } | null>(null);
+  const [triggerLogActivity, setTriggerLogActivity] = useState(false);
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok });
@@ -680,12 +701,22 @@ export default function LeadDetailPage() {
             <div className="bg-card border border-border rounded-xl p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-foreground">Activity</h3>
-                <span className="text-[11px] text-muted-foreground">{activities.length} entries</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground">{activities.length} entries</span>
+                  <button
+                    onClick={() => setTriggerLogActivity(v => !v)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-brand-400 hover:bg-brand-500 text-white rounded-lg transition-colors"
+                  >
+                    <Plus size={11} />
+                    Log Activity
+                  </button>
+                </div>
               </div>
               <ActivityFeed
                 leadId={id}
                 activities={activities}
                 onActivityAdded={handleActivityAdded}
+                triggerOpen={triggerLogActivity}
               />
             </div>
           </div>

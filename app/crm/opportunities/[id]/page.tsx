@@ -254,6 +254,15 @@ export default function OpportunityDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Unified Log Activity form
+  const [showLogActivity, setShowLogActivity] = useState(false);
+  const [logActType, setLogActType] = useState<ActivityType>("note");
+  const [logActSubject, setLogActSubject] = useState("");
+  const [logActBody, setLogActBody] = useState("");
+  const [logActDueAt, setLogActDueAt] = useState("");
+  const [logActOutcome, setLogActOutcome] = useState("");
+  const [logActSaving, setLogActSaving] = useState(false);
+
   // Activity forms
   const [showLogCall, setShowLogCall] = useState(false);
   const [showNewTask, setShowNewTask] = useState(false);
@@ -342,6 +351,40 @@ export default function OpportunityDetailPage() {
       setEmailForm({ subject: "", body: "" });
     } finally {
       setActivitySaving(false);
+    }
+  };
+
+  const submitLogActivity = async () => {
+    if (!logActSubject.trim()) return;
+    setLogActSaving(true);
+    try {
+      const res = await fetch(`/api/crm/opportunities/${id}/activities`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: logActType,
+          subject: logActSubject.trim(),
+          body: logActBody.trim() || null,
+          due_at: logActDueAt || null,
+          outcome: logActOutcome.trim() || null,
+          created_by_name: opp?.owner_name ?? "Russel Feldman",
+        }),
+      });
+      const json = await res.json();
+      if (res.ok && json.id) {
+        // Optimistically prepend the new activity
+        setOpp(prev => prev ? {
+          ...prev,
+          activities: [json, ...(prev.activities ?? [])],
+        } : prev);
+      }
+      setShowLogActivity(false);
+      setLogActSubject("");
+      setLogActBody("");
+      setLogActDueAt("");
+      setLogActOutcome("");
+    } finally {
+      setLogActSaving(false);
     }
   };
 
@@ -651,6 +694,107 @@ export default function OpportunityDetailPage() {
           {/* ── ACTIVITY TAB ── */}
           {activeTab === "activity" && (
             <div className="space-y-4">
+              {/* Log Activity — unified button + inline form */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Activity</span>
+                  <button
+                    onClick={() => setShowLogActivity(v => !v)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#6B7EFF] text-white rounded-lg hover:bg-[#5a6de8] transition-colors"
+                  >
+                    <Plus size={12} />
+                    Log Activity
+                  </button>
+                </div>
+
+                {showLogActivity && (
+                  <div className="bg-slate-50 border border-border rounded-xl p-4 space-y-3 mb-4">
+                    {/* Type pills */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {(["call", "email", "meeting", "note", "task"] as ActivityType[]).map(t => (
+                        <button
+                          key={t}
+                          onClick={() => setLogActType(t)}
+                          className={cn(
+                            "px-2.5 py-1 text-[11px] font-medium rounded-lg border capitalize transition-colors",
+                            logActType === t
+                              ? "bg-[#6B7EFF] text-white border-[#6B7EFF]"
+                              : "bg-white border-border text-muted-foreground hover:text-foreground hover:bg-accent"
+                          )}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Subject */}
+                    <input
+                      type="text"
+                      placeholder={
+                        logActType === "call" ? "Call summary…"
+                        : logActType === "email" ? "Email subject…"
+                        : logActType === "task" ? "What needs to happen?"
+                        : logActType === "meeting" ? "Meeting summary…"
+                        : "Add a note…"
+                      }
+                      value={logActSubject}
+                      onChange={e => setLogActSubject(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-white"
+                    />
+
+                    {/* Body */}
+                    <textarea
+                      placeholder="Additional details (optional)…"
+                      value={logActBody}
+                      onChange={e => setLogActBody(e.target.value)}
+                      rows={3}
+                      className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-white resize-none"
+                    />
+
+                    {/* Due date — only for task */}
+                    {logActType === "task" && (
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-muted-foreground whitespace-nowrap">Due date:</label>
+                        <input
+                          type="date"
+                          value={logActDueAt}
+                          onChange={e => setLogActDueAt(e.target.value)}
+                          className="px-2 py-1 text-xs border border-border rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
+                        />
+                      </div>
+                    )}
+
+                    {/* Outcome — only for call/meeting */}
+                    {(logActType === "call" || logActType === "meeting") && (
+                      <input
+                        type="text"
+                        placeholder="What was the outcome?"
+                        value={logActOutcome}
+                        onChange={e => setLogActOutcome(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-white"
+                      />
+                    )}
+
+                    {/* Actions */}
+                    <div className="flex items-center justify-end gap-2 pt-1">
+                      <button
+                        onClick={() => { setShowLogActivity(false); setLogActSubject(""); setLogActBody(""); setLogActDueAt(""); setLogActOutcome(""); }}
+                        className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground rounded-lg border border-border hover:bg-accent transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={submitLogActivity}
+                        disabled={!logActSubject.trim() || logActSaving}
+                        className="px-4 py-1.5 text-xs font-medium bg-[#6B7EFF] text-white rounded-lg hover:bg-[#5a6de8] disabled:opacity-40 transition-colors"
+                      >
+                        {logActSaving ? "Saving…" : "Log It"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Action buttons */}
               <div className="flex items-center gap-2 flex-wrap">
                 <ActivityToggleBtn
