@@ -1,17 +1,46 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { TopBar } from "@/components/layout/TopBar";
 import { cn } from "@/lib/utils";
 import {
-  CheckCircle2, Circle, Clock, AlertTriangle, TrendingUp,
+  CheckCircle2, Circle, Clock, TrendingUp,
   TrendingDown, Minus, Plus, X, ChevronRight, Users,
-  Calendar, Target, Layers,
+  Calendar, Target, Send, Sparkles, ChevronDown,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { Timer, Flag } = require("lucide-react") as any;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+interface CoachMessage {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: Date;
+}
+
+type EOSSection =
+  | "core_values"
+  | "core_focus"
+  | "ten_year_target"
+  | "marketing_strategy"
+  | "three_year_picture"
+  | "one_year_plan"
+  | "rocks"
+  | "issues"
+  | "scorecard"
+  | "l10";
+
+const EOS_SECTIONS: { key: EOSSection; label: string; emoji: string }[] = [
+  { key: "core_values",        label: "Core Values",       emoji: "💎" },
+  { key: "core_focus",         label: "Core Focus",        emoji: "🎯" },
+  { key: "ten_year_target",    label: "10-Year Target",    emoji: "🚀" },
+  { key: "marketing_strategy", label: "Marketing Strategy",emoji: "📣" },
+  { key: "three_year_picture", label: "3-Year Picture",    emoji: "🖼️" },
+  { key: "one_year_plan",      label: "1-Year Plan",       emoji: "📅" },
+  { key: "rocks",              label: "Rocks",             emoji: "🪨" },
+  { key: "issues",             label: "Issues (IDS)",      emoji: "🔥" },
+];
 
 type RockStatus = "On Track" | "At Risk" | "Off Track" | "Complete";
 type IssuePriority = "Critical" | "High" | "Normal";
@@ -834,6 +863,303 @@ function L10Tab() {
   );
 }
 
+// ─── AI EOS Coach Panel ───────────────────────────────────────────────────────
+
+function CoachPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [messages, setMessages] = useState<CoachMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [activeSection, setActiveSection] = useState<EOSSection | null>(null);
+  const [sectionPickerOpen, setSectionPickerOpen] = useState(false);
+  const [initialized, setInitialized] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
+
+  useEffect(() => {
+    if (messages.length) scrollToBottom();
+  }, [messages, scrollToBottom]);
+
+  // Auto-start the coach with an intro message when first opened
+  useEffect(() => {
+    if (open && !initialized) {
+      setInitialized(true);
+      startSession();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const startSession = async () => {
+    setLoading(true);
+    const initMessages: CoachMessage[] = [
+      {
+        role: "user",
+        content: "Hi, I'd like to start an EOS coaching session.",
+        timestamp: new Date(),
+      },
+    ];
+    setMessages(initMessages);
+    await streamCoachResponse(initMessages);
+  };
+
+  const streamCoachResponse = async (msgs: CoachMessage[], section?: EOSSection | null) => {
+    setLoading(true);
+    let assistantText = "";
+
+    try {
+      const res = await fetch("/api/eos/coach", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: msgs.map(m => ({ role: m.role, content: m.content })),
+          section: section ?? activeSection,
+        }),
+      });
+
+      if (!res.ok || !res.body) throw new Error("Coach unavailable");
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+
+      // Add a placeholder assistant message
+      const placeholder: CoachMessage = { role: "assistant", content: "", timestamp: new Date() };
+      setMessages(prev => [...prev, placeholder]);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        assistantText += decoder.decode(value, { stream: true });
+        setMessages(prev => {
+          const updated = [...prev];
+          updated[updated.length - 1] = { ...placeholder, content: assistantText };
+          return updated;
+        });
+      }
+    } catch {
+      setMessages(prev => [
+        ...prev,
+        { role: "assistant", content: "I'm having trouble connecting right now. Please try again.", timestamp: new Date() },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const sendMessage = async () => {
+    if (!input.trim() || loading) return;
+    const userMsg: CoachMessage = { role: "user", content: input.trim(), timestamp: new Date() };
+    const updatedMessages = [...messages, userMsg];
+    setMessages(updatedMessages);
+    setInput("");
+    await streamCoachResponse(updatedMessages);
+  };
+
+  const jumpToSection = async (section: EOSSection) => {
+    setActiveSection(section);
+    setSectionPickerOpen(false);
+    const sectionInfo = EOS_SECTIONS.find(s => s.key === section);
+    const jumpMsg: CoachMessage = {
+      role: "user",
+      content: `Let's work on the ${sectionInfo?.label ?? section} section of the V/TO.`,
+      timestamp: new Date(),
+    };
+    const updatedMessages = [...messages, jumpMsg];
+    setMessages(updatedMessages);
+    await streamCoachResponse(updatedMessages, section);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  // Extract the display text (strip trailing JSON code blocks)
+  const displayContent = (content: string) => {
+    return content.replace(/```json[\s\S]*?```/g, "").trim();
+  };
+
+  const hasJSON = (content: string) => /```json[\s\S]*?"action":\s*"update_vto"/.test(content);
+
+  if (!open) return null;
+
+  const currentSectionInfo = activeSection ? EOS_SECTIONS.find(s => s.key === activeSection) : null;
+
+  return (
+    <div className="fixed inset-y-0 right-0 z-50 flex">
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-black/20 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      {/* Panel */}
+      <div className="relative ml-auto w-[420px] flex flex-col bg-white shadow-2xl border-l border-border h-full">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-gradient-to-r from-[#6B7EFF]/5 to-white shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-[#6B7EFF] flex items-center justify-center">
+              <Sparkles size={14} className="text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-foreground">EOS Coach</p>
+              <p className="text-[10px] text-muted-foreground">Powered by Claude · EOS Implementer AI</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors text-muted-foreground">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Section picker */}
+        <div className="px-4 py-2.5 border-b border-border shrink-0">
+          <div className="relative">
+            <button
+              onClick={() => setSectionPickerOpen(prev => !prev)}
+              className="w-full flex items-center justify-between px-3 py-2 bg-slate-50 border border-border rounded-lg text-sm hover:bg-slate-100 transition-colors"
+            >
+              <span className="text-foreground font-medium">
+                {currentSectionInfo
+                  ? `${currentSectionInfo.emoji} ${currentSectionInfo.label}`
+                  : "📋 All Sections — Open Coaching"}
+              </span>
+              <ChevronDown size={14} className="text-muted-foreground" />
+            </button>
+            {sectionPickerOpen && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-xl shadow-lg z-10 overflow-hidden">
+                <button
+                  onClick={() => { setActiveSection(null); setSectionPickerOpen(false); }}
+                  className="w-full text-left px-3 py-2.5 text-sm hover:bg-slate-50 transition-colors border-b border-border text-muted-foreground"
+                >
+                  📋 Open Coaching (no section)
+                </button>
+                {EOS_SECTIONS.map(s => (
+                  <button
+                    key={s.key}
+                    onClick={() => jumpToSection(s.key)}
+                    className={cn(
+                      "w-full text-left px-3 py-2.5 text-sm hover:bg-slate-50 transition-colors",
+                      activeSection === s.key && "bg-[#6B7EFF]/5 text-[#6B7EFF] font-medium"
+                    )}
+                  >
+                    {s.emoji} {s.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+          {messages.filter(m => !(m.role === "user" && m.content === "Hi, I'd like to start an EOS coaching session.")).map((msg, i) => (
+            <div key={i} className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}>
+              {msg.role === "assistant" && (
+                <div className="w-6 h-6 rounded-full bg-[#6B7EFF] flex items-center justify-center shrink-0 mt-0.5 mr-2">
+                  <Sparkles size={10} className="text-white" />
+                </div>
+              )}
+              <div
+                className={cn(
+                  "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
+                  msg.role === "user"
+                    ? "bg-[#6B7EFF] text-white rounded-tr-sm"
+                    : "bg-slate-50 border border-border text-foreground rounded-tl-sm"
+                )}
+              >
+                <div className="whitespace-pre-wrap">{displayContent(msg.content)}</div>
+                {msg.role === "assistant" && hasJSON(msg.content) && (
+                  <div className="mt-3 pt-3 border-t border-border/50">
+                    <button className="flex items-center gap-1.5 text-xs text-[#6B7EFF] font-semibold hover:underline">
+                      <CheckCircle2 size={12} />
+                      Apply to V/TO
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+          {loading && messages[messages.length - 1]?.role !== "assistant" && (
+            <div className="flex justify-start">
+              <div className="w-6 h-6 rounded-full bg-[#6B7EFF] flex items-center justify-center mr-2 mt-0.5 shrink-0">
+                <Sparkles size={10} className="text-white" />
+              </div>
+              <div className="bg-slate-50 border border-border rounded-2xl rounded-tl-sm px-4 py-3">
+                <div className="flex items-center gap-1.5">
+                  {[0, 150, 300].map(delay => (
+                    <div
+                      key={delay}
+                      className="w-2 h-2 rounded-full bg-[#6B7EFF]/40 animate-bounce"
+                      style={{ animationDelay: `${delay}ms` }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Quick prompts */}
+        {messages.length <= 2 && !loading && (
+          <div className="px-4 pb-2 shrink-0">
+            <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-2">Quick Start</p>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                "Help me define our Core Values",
+                "Build our 10-Year Target",
+                "Let's do our 1-Year Plan",
+                "IDS an issue I'm dealing with",
+              ].map(prompt => (
+                <button
+                  key={prompt}
+                  onClick={() => {
+                    setInput(prompt);
+                    inputRef.current?.focus();
+                  }}
+                  className="text-xs bg-slate-50 border border-border hover:bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-lg transition-colors"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Input */}
+        <div className="px-4 py-3 border-t border-border shrink-0">
+          <div className="flex items-end gap-2">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Talk to your EOS Coach... (Enter to send)"
+              rows={2}
+              disabled={loading}
+              className="flex-1 resize-none border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white placeholder:text-muted-foreground disabled:opacity-50"
+            />
+            <button
+              onClick={sendMessage}
+              disabled={!input.trim() || loading}
+              className="w-10 h-10 rounded-xl bg-[#6B7EFF] text-white flex items-center justify-center hover:bg-[#5B6EEF] transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+            >
+              <Send size={15} />
+            </button>
+          </div>
+          <p className="text-[10px] text-muted-foreground text-center mt-2">
+            AI coaching based on EOS methodology. Not a certified EOS Implementer.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const TABS = ["V/TO", "Rocks", "Scorecard", "Issues", "To-Dos", "L10 Meeting"] as const;
@@ -843,6 +1169,7 @@ export default function EOSPage() {
   const [activeTab, setActiveTab] = useState<Tab>("V/TO");
   const [rocks] = useState<Rock[]>(initialRocks);
   const [issues] = useState<Issue[]>(initialIssues);
+  const [coachOpen, setCoachOpen] = useState(false);
 
   return (
     <div className="flex flex-col min-h-screen bg-[#F8FAFC]">
@@ -859,27 +1186,47 @@ export default function EOSPage() {
               <Flag size={13} />
               Q2 2026
             </div>
+            <button
+              onClick={() => setCoachOpen(true)}
+              className="flex items-center gap-1.5 text-sm font-semibold bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5B6EEF] transition-colors shadow-sm shadow-[#6B7EFF]/30"
+            >
+              <Sparkles size={13} />
+              AI Coach
+            </button>
           </div>
         }
       />
 
       <div className="flex-1 p-6 max-w-7xl mx-auto w-full">
         {/* Tab bar */}
-        <div className="flex items-center gap-1 bg-white border border-border rounded-xl p-1 mb-6 w-fit">
-          {TABS.map(tab => (
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-1 bg-white border border-border rounded-xl p-1 w-fit">
+            {TABS.map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={cn(
+                  "text-sm font-medium px-4 py-2 rounded-lg transition-all",
+                  activeTab === tab
+                    ? "bg-[#6B7EFF] text-white shadow-sm"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                )}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          {/* V/TO Coach hint */}
+          {activeTab === "V/TO" && (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={cn(
-                "text-sm font-medium px-4 py-2 rounded-lg transition-all",
-                activeTab === tab
-                  ? "bg-[#6B7EFF] text-white shadow-sm"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent"
-              )}
+              onClick={() => setCoachOpen(true)}
+              className="flex items-center gap-2 text-xs text-[#6B7EFF] bg-[#6B7EFF]/5 border border-[#6B7EFF]/20 px-3 py-2 rounded-lg hover:bg-[#6B7EFF]/10 transition-colors"
             >
-              {tab}
+              <Sparkles size={12} />
+              <span>Not sure what goes here? Let AI Coach help you build your V/TO →</span>
             </button>
-          ))}
+          )}
         </div>
 
         {/* Tab content */}
@@ -890,6 +1237,20 @@ export default function EOSPage() {
         {activeTab === "To-Dos"     && <TodosTab />}
         {activeTab === "L10 Meeting" && <L10Tab />}
       </div>
+
+      {/* Floating AI Coach button (always visible) */}
+      {!coachOpen && (
+        <button
+          onClick={() => setCoachOpen(true)}
+          className="fixed bottom-6 right-6 flex items-center gap-2 bg-[#6B7EFF] text-white px-4 py-3 rounded-2xl shadow-lg shadow-[#6B7EFF]/30 hover:bg-[#5B6EEF] transition-all hover:scale-105 z-40 font-semibold text-sm"
+        >
+          <Sparkles size={16} />
+          EOS Coach
+        </button>
+      )}
+
+      {/* Coach side panel */}
+      <CoachPanel open={coachOpen} onClose={() => setCoachOpen(false)} />
     </div>
   );
 }

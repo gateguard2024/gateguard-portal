@@ -12,7 +12,8 @@
 
 import { usePathname } from 'next/navigation'
 import { ThemeProvider } from 'next-themes'
-import { Sidebar }      from '@/components/layout/Sidebar'
+import { Sidebar }        from '@/components/layout/Sidebar'
+import { AddToL10Button } from '@/components/layout/AddToL10Button'
 
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -40,6 +41,8 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         <main className="flex-1 flex flex-col ml-64 overflow-y-auto min-w-0 transition-all duration-200 relative z-10">
           {children}
         </main>
+        {/* Ambient EOS L10 button — floats on every portal page */}
+        <AddToL10Button />
       </div>
     </ThemeProvider>
   )

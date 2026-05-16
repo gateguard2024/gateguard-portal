@@ -4,21 +4,24 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, Users, Camera, Shield, FileText,
-  Wrench, CreditCard, Settings, ChevronRight,
-  Radio, MessageSquare, BarChart3, ChevronDown,
+  Wrench, CreditCard, Settings, ChevronRight, ChevronDown,
+  Radio, MessageSquare, BarChart3,
   Network, Truck, Package, Repeat, TrendingUp,
   Globe, ClipboardList, Headphones, FileCheck,
   Megaphone, Map, BookOpen, Tv, Zap,
-  Layers, Server, UserCheck, ShieldCheck, Star, ClipboardCheck,
+  Layers, Server, UserCheck, ShieldCheck, Star,
   GraduationCap, Tv as Satellite, Crosshair,
-  User, RefreshCw,
+  User, RefreshCw, Sparkles, Wrench as TechIcon,
+  ClipboardCheck, Building2,
 } from "lucide-react";
-// Icons not in the type declarations for lucide-react 0.383.0 but available at runtime
+// Icons not in type declarations for lucide-react 0.383.0 but available at runtime
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ArrowRightLeft, UserCog, LogOut } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useUser, useClerk, useSession } from "@clerk/nextjs";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type NavItem = {
   label: string;
@@ -26,109 +29,150 @@ type NavItem = {
   icon: React.ElementType;
   badge?: string;
   external?: boolean;
+  description?: string; // short tooltip description for new users
 };
 
-const navSections: { label: string; items: NavItem[] }[] = [
+type NavSection = {
+  key: string;
+  label: string;
+  icon: React.ElementType;
+  color?: string;
+  items: NavItem[];
+};
+
+// ─── Navigation Architecture ──────────────────────────────────────────────────
+// 7 primary sections, each with an accordion of sub-items.
+// Designed for clarity: a non-technical user can find anything in ≤2 clicks.
+
+const NAV_SECTIONS: NavSection[] = [
   {
+    key: "operations",
     label: "Operations",
+    icon: LayoutDashboard,
     items: [
-      { label: "Dashboard",      href: "/",             icon: LayoutDashboard },
-      { label: "Operating System", href: "/eos",        icon: Layers          },
-      { label: "Customers",      href: "/customers",    icon: Users           },
-      { label: "CRM",            href: "/crm",          icon: MessageSquare   },
-      { label: "Organizations",  href: "/admin",        icon: Network         },
-      { label: "User Management", href: "/admin/users", icon: UserCog         },
+      { label: "Dashboard",    href: "/",            icon: LayoutDashboard, description: "Your command center — KPIs, alerts, activity" },
+      { label: "CRM",          href: "/crm",         icon: MessageSquare,   description: "Leads, opportunities, pipeline" },
+      { label: "Customers",    href: "/customers",   icon: Users,           description: "All customer accounts" },
+      { label: "Quotes",       href: "/quotes",      icon: FileText,        description: "Proposals and approvals" },
+      { label: "Billing",      href: "/billing",     icon: CreditCard,      description: "Invoices and payments" },
+      { label: "Renewals",     href: "/renewals",    icon: Repeat,          description: "Contract renewals and alerts" },
+      { label: "Revenue",      href: "/revenue",     icon: TrendingUp,      description: "MRR/ARR and commission overview" },
+      { label: "Contracts",    href: "/contracts",   icon: FileCheck,       description: "Contract storage" },
     ],
   },
   {
+    key: "field",
+    label: "Field & Tech",
+    icon: TechIcon,
+    items: [
+      { label: "Tech Tool",      href: "/tech",        icon: Sparkles,       description: "AI diagnostic tool for field techs", badge: "AI" },
+      { label: "Knowledge Base", href: "/kb",          icon: BookOpen,       description: "Troubleshooting articles and manuals" },
+      { label: "Products",       href: "/products",    icon: Package,        description: "Equipment catalog and manuals" },
+      { label: "Maintenance",    href: "/maintenance", icon: Wrench,         description: "Work orders and service history" },
+      { label: "Dispatch",       href: "/dispatch",    icon: Truck,          description: "Tech scheduling and job board" },
+      { label: "Inventory",      href: "/inventory",   icon: Package,        description: "Parts, stock, and POs" },
+      { label: "Site Survey",    href: "/survey",      icon: ClipboardCheck, description: "Site walk and proposal builder" },
+      { label: "Reports",        href: "/reports",     icon: BarChart3,      description: "Multi-site rollup and analytics" },
+    ],
+  },
+  {
+    key: "security",
     label: "Security",
+    icon: Shield,
+    color: "#0B7285",
     items: [
-      { label: "Cameras",        href: "/cameras",      icon: Camera          },
-      { label: "Access Control", href: "/access",       icon: Shield          },
-      { label: "SOC",            href: "https://ggsoc.com", icon: Radio, external: true },
+      { label: "Cameras",        href: "/cameras",    icon: Camera,  description: "Eagle Eye live feeds and clips" },
+      { label: "Access Control", href: "/access",     icon: Shield,  description: "Brivo credentials and logs" },
+      { label: "Network",        href: "/network",    icon: Server,  description: "UniFi infrastructure and VLANs" },
+      { label: "SOC",            href: "https://ggsoc.com", icon: Radio, external: true, description: "Live call center (opens ggsoc.com)" },
     ],
   },
   {
-    label: "Revenue",
-    items: [
-      { label: "Quotes",         href: "/quotes",       icon: FileText        },
-      { label: "Billing",        href: "/billing",      icon: CreditCard      },
-      { label: "Renewals",       href: "/renewals",     icon: Repeat          },
-      { label: "Revenue",        href: "/revenue",      icon: TrendingUp      },
-      { label: "Contracts",      href: "/contracts",    icon: FileCheck       },
-    ],
-  },
-  {
-    label: "Field",
-    items: [
-      { label: "Maintenance",    href: "/maintenance",  icon: Wrench          },
-      { label: "Dispatch",       href: "/dispatch",     icon: Truck           },
-      { label: "Inventory",      href: "/inventory",    icon: Package         },
-      { label: "Reports",        href: "/reports",      icon: BarChart3       },
-    ],
-  },
-  {
+    key: "dealer",
     label: "Dealer Network",
+    icon: UserCheck,
+    color: "#7C3AED",
     items: [
-      { label: "Reps & Commissions",      href: "/reps",       icon: UserCheck    },
-      { label: "Compliance",              href: "/compliance", icon: ShieldCheck  },
-      { label: "Territory Map",           href: "/map",        icon: Map          },
-      { label: "Scorecard",               href: "/scorecard",  icon: Star         },
-      { label: "Training & Certification",href: "/training",   icon: GraduationCap},
+      { label: "Reps & Commissions",       href: "/reps",        icon: UserCheck,    description: "Rep hierarchy and payouts" },
+      { label: "Compliance",               href: "/compliance",  icon: ShieldCheck,  description: "Permits, certs, and expiry alerts" },
+      { label: "Territory Map",            href: "/map",         icon: Map,          description: "Property pins by health status" },
+      { label: "Scorecard",                href: "/scorecard",   icon: Star,         description: "Dealer performance metrics" },
+      { label: "Training & Certification", href: "/training",    icon: GraduationCap,description: "Courses and certifications" },
     ],
   },
   {
-    label: "DirecTV Channel",
+    key: "intelligence",
+    label: "Intelligence",
+    icon: Sparkles,
+    color: "#6B7EFF",
     items: [
-      { label: "ATLAS Dashboard", href: "/directv",    icon: Satellite      },
-      { label: "New Order",       href: "/orders/new", icon: Zap            },
-      { label: "SARA Bridge",     href: "/migrate",    icon: ArrowRightLeft },
+      { label: "Operating System (EOS)", href: "/eos",      icon: Layers,        description: "V/TO, Rocks, Scorecard, L10 meetings" },
+      { label: "ARIA — Lead Intel",      href: "/aria",     icon: Crosshair,     description: "AI-powered outreach and lead research", badge: "AI" },
+      { label: "DirecTV / ATLAS",        href: "/directv",  icon: Satellite,     description: "DirecTV channel dashboard and orders" },
+      { label: "New Order",              href: "/orders/new", icon: Zap,          description: "Submit a DirecTV order" },
+      { label: "SARA Bridge",            href: "/migrate",  icon: ArrowRightLeft,description: "Migrate from SARA Plus to Nexus" },
     ],
   },
   {
-    label: "Platform",
-    items: [
-      { label: "Onboarding",       href: "/onboarding",    icon: ClipboardList  },
-      { label: "Communications",   href: "/communications", icon: Headphones    },
-      { label: "Customer Portal",  href: "/portal",        icon: Globe          },
-      { label: "Site Survey",      href: "/survey",        icon: ClipboardCheck },
-      { label: "Knowledge Base",   href: "/kb",            icon: BookOpen       },
-      { label: "Community Channel",href: "/channel",       icon: Tv             },
-      { label: "Visitor Mgmt",     href: "/visitor",       icon: Users          },
-      { label: "Product Catalog",  href: "/products",      icon: Layers         },
-      { label: "Energy",           href: "/energy",        icon: Zap            },
-      { label: "Network Infra",    href: "/network",       icon: Server         },
-      { label: "Delivery Hub",     href: "/deliveries",    icon: Package        },
-    ],
-  },
-  {
+    key: "marketing",
     label: "Marketing",
+    icon: Megaphone,
+    color: "#B45309",
     items: [
-      { label: "Marketing Hub", href: "/marketing", icon: Megaphone },
-      { label: "ARIA — Lead Intel", href: "/aria", icon: Crosshair, badge: "AI" },
+      { label: "Marketing Hub",    href: "/marketing",         icon: Megaphone, description: "Campaigns and content" },
+      { label: "Social",           href: "/marketing/social",  icon: Globe,     description: "GateGuard and dealer social posts" },
+      { label: "Co-op Pool",       href: "/marketing/coop",    icon: Users,     description: "Shared lead pool" },
+      { label: "Dealer Sites",     href: "/marketing/website", icon: Globe,     description: "Hosted dealer landing pages" },
+    ],
+  },
+  {
+    key: "settings",
+    label: "Settings",
+    icon: Settings,
+    items: [
+      { label: "Company Setup",    href: "/onboarding",       icon: Building2,    description: "Company info, logo, team, integrations" },
+      { label: "Organizations",    href: "/admin",            icon: Network,      description: "5-tier org hierarchy" },
+      { label: "User Management",  href: "/admin/users",      icon: UserCog,      description: "Roles and access control" },
+      { label: "Communications",   href: "/communications",   icon: Headphones,   description: "Messaging and notifications" },
+      { label: "Customer Portal",  href: "/portal",           icon: Globe,        description: "Property manager view" },
     ],
   },
 ];
 
 const integrations = [
-  { label: "EagleEye",   status: "connected" as const },
+  { label: "Eagle Eye",   status: "connected" as const },
   { label: "Brivo",      status: "connected" as const },
   { label: "DirecTV",    status: "connected" as const },
   { label: "QuickBooks", status: "pending"   as const },
   { label: "Twilio",     status: "pending"   as const },
 ];
 
-// ── AI ARMY ─────────────────────────────────────────────────────────────────
 const aiAgents = [
-  { name: "ARIA",   role: "Lead Intel",    color: "#6B7EFF", active: true  },
-  { name: "TRINITY", role: "Voice",         color: "#0B7285", active: true  },
-  { name: "SCOUT",  role: "Market",        color: "#7C3AED", active: true  },
-  { name: "BEACON", role: "Client Comms",  color: "#B45309", active: false },
-  { name: "FORGE",  role: "Quote Builder", color: "#0B7285", active: true  },
-  { name: "ATLAS",  role: "DirecTV",       color: "#3B5BDB", active: true  },
-  { name: "SAGE",   role: "Training",      color: "#15803D", active: false },
-  { name: "RELAY",  role: "Tier-1 Support",color: "#6B7EFF", active: false },
+  { name: "ARIA",    role: "Lead Intel",    color: "#6B7EFF", active: true,  href: "/aria" },
+  { name: "TRINITY", role: "Voice",         color: "#0B7285", active: true,  href: null },
+  { name: "SCOUT",   role: "Market",        color: "#7C3AED", active: true,  href: null },
+  { name: "BEACON",  role: "Client Comms",  color: "#B45309", active: false, href: null },
+  { name: "FORGE",   role: "Quote Builder", color: "#0B7285", active: true,  href: null },
+  { name: "ATLAS",   role: "DirecTV",       color: "#3B5BDB", active: true,  href: "/directv" },
+  { name: "SAGE",    role: "Training",      color: "#15803D", active: false, href: null },
+  { name: "RELAY",   role: "Tier-1 Support",color: "#6B7EFF", active: false, href: null },
 ];
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function getSectionForPath(pathname: string): string | null {
+  for (const section of NAV_SECTIONS) {
+    for (const item of section.items) {
+      if (!item.external) {
+        const match = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+        if (match) return section.key;
+      }
+    }
+  }
+  return null;
+}
+
+// ─── Sidebar Component ────────────────────────────────────────────────────────
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -137,7 +181,14 @@ export function Sidebar() {
   const [armyExpanded, setArmyExpanded] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [integrationsExpanded, setIntegrationsExpanded] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Accordion state — which sections are open
+  const activeSection = getSectionForPath(pathname);
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(
+    () => new Set(activeSection ? [activeSection] : ["operations"])
+  );
 
   const { user } = useUser();
   const { signOut, openUserProfile } = useClerk();
@@ -147,7 +198,18 @@ export function Sidebar() {
   const displayEmail = user?.primaryEmailAddress?.emailAddress ?? "rfeldman@gateguard.co";
   const initials = displayName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) || "RF";
 
-  // Close menu when clicking outside
+  // Auto-expand section when route changes
+  useEffect(() => {
+    const section = getSectionForPath(pathname);
+    if (section) {
+      setExpandedSections(prev => {
+        if (prev.has(section)) return prev;
+        return new Set([...prev, section]);
+      });
+    }
+  }, [pathname]);
+
+  // Close user menu on outside click
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -158,12 +220,22 @@ export function Sidebar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [userMenuOpen]);
 
+  const toggleSection = useCallback((key: string) => {
+    setExpandedSections(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
+
   const handleRefreshSession = async () => {
     setRefreshing(true);
     try {
-      // Force Clerk to refresh the session token — fixes stale JWT on page loads
       await session?.touch();
-      // Hard reload the current page so the new token is used immediately
       router.refresh();
     } finally {
       setRefreshing(false);
@@ -171,7 +243,7 @@ export function Sidebar() {
     }
   };
 
-  const activeCount = aiAgents.filter(a => a.active).length;
+  const activeAgentCount = aiAgents.filter(a => a.active).length;
 
   return (
     <aside className={cn(
@@ -179,47 +251,51 @@ export function Sidebar() {
       "bg-[hsl(var(--sidebar-bg))] border-r border-[hsl(var(--sidebar-border))]",
       collapsed ? "w-16" : "w-64"
     )}>
-      {/* Logo — Nexus branding */}
-      <div className="flex items-center gap-3 px-4 h-16 border-b border-[hsl(var(--sidebar-border))]">
+
+      {/* ── Logo ──────────────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-3 px-4 h-16 border-b border-[hsl(var(--sidebar-border))] shrink-0">
         <div className="w-9 h-9 shrink-0 rounded-lg overflow-hidden flex items-center justify-center">
           <Image src="/logo.png" alt="GateGuard Nexus" width={36} height={36} className="object-contain" priority />
         </div>
         {!collapsed && (
           <div className="flex-1 min-w-0">
             <span className="text-sm font-bold text-white tracking-wide">GateGuard</span>
-            <p className="text-[10px] text-brand-400/80 -mt-0.5 font-bold tracking-widest uppercase" style={{ color: "#6B7EFF" }}>
+            <p className="text-[10px] font-bold tracking-widest uppercase -mt-0.5" style={{ color: "#6B7EFF" }}>
               NEXUS
             </p>
           </div>
         )}
         <button
-          onClick={() => setCollapsed(!collapsed)}
-          className={cn("p-1 rounded text-[hsl(var(--sidebar-text))] hover:text-white transition-colors", collapsed && "mx-auto")}
+          onClick={() => setCollapsed(c => !c)}
+          className={cn(
+            "p-1 rounded text-[hsl(var(--sidebar-text))] hover:text-white transition-colors",
+            collapsed && "mx-auto"
+          )}
         >
           <ChevronRight size={13} className={cn("transition-transform", !collapsed && "rotate-180")} />
         </button>
       </div>
 
-      {/* Role context pill */}
+      {/* ── Company context pill ───────────────────────────────────────────── */}
       {!collapsed && (
-        <div className="mx-3 mt-3 px-3 py-2 rounded-lg bg-brand-400/5 border border-brand-400/15 flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-brand-400/20 flex items-center justify-center text-[10px] font-bold text-brand-400">RF</div>
+        <div className="mx-3 mt-3 px-3 py-2 rounded-lg bg-brand-400/5 border border-brand-400/15 flex items-center gap-2 shrink-0">
+          <div className="w-6 h-6 rounded-full bg-brand-400/20 flex items-center justify-center text-[10px] font-bold text-brand-400 shrink-0">
+            RF
+          </div>
           <div className="flex-1 min-w-0">
             <p className="text-[11px] font-semibold text-white truncate">Gate Guard, LLC</p>
             <p className="text-[10px] text-brand-400/80">System Operator (SO)</p>
           </div>
-          <ChevronDown size={11} className="text-[hsl(var(--sidebar-text))]" />
         </div>
       )}
 
-      {/* AI Army panel */}
+      {/* ── AI Army ───────────────────────────────────────────────────────── */}
       {!collapsed && (
-        <div className="mx-3 mt-2">
+        <div className="mx-3 mt-2 shrink-0">
           <button
-            onClick={() => setArmyExpanded(!armyExpanded)}
+            onClick={() => setArmyExpanded(v => !v)}
             className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
           >
-            {/* pulse dot */}
             <span className="relative flex h-2 w-2 shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: "#6B7EFF" }} />
               <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: "#6B7EFF" }} />
@@ -228,7 +304,7 @@ export function Sidebar() {
               AI Army
             </span>
             <span className="ml-auto text-[10px] font-medium" style={{ color: "#6B7EFF" }}>
-              {activeCount}/8 active
+              {activeAgentCount}/8 active
             </span>
             <ChevronDown
               size={10}
@@ -236,19 +312,17 @@ export function Sidebar() {
               style={{ color: "#6B7EFF", transform: armyExpanded ? "rotate(180deg)" : "rotate(0deg)" }}
             />
           </button>
-
           {armyExpanded && (
             <div className="mt-1 space-y-0.5 pb-1">
-              {aiAgents.map((agent) => {
-                const agentHref = agent.name === "ARIA" ? "/aria" : null;
-                const Wrapper = agentHref ? Link : "div" as any;
+              {aiAgents.map(agent => {
+                const Wrapper = agent.href ? Link : ("div" as React.ElementType);
                 return (
                   <Wrapper
                     key={agent.name}
-                    {...(agentHref ? { href: agentHref } : {})}
+                    {...(agent.href ? { href: agent.href } : {})}
                     className={cn(
                       "flex items-center gap-2 px-2 py-1 rounded transition-colors",
-                      agentHref ? "hover:bg-white/5 cursor-pointer" : ""
+                      agent.href && "hover:bg-white/5 cursor-pointer"
                     )}
                   >
                     <div
@@ -273,130 +347,175 @@ export function Sidebar() {
         </div>
       )}
 
-      {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
-        {navSections.map((section) => (
-          <div key={section.label}>
-            {!collapsed && (
-              <p className="text-[10px] uppercase tracking-widest text-[hsl(var(--sidebar-text))]/50 px-3 mb-1.5 font-medium">
-                {section.label}
-              </p>
-            )}
-            <div className="space-y-0.5">
-              {section.items.map((item) => {
-                const Icon = item.icon;
-                const isExternal = item.external;
-                const isActive = !isExternal && (item.href === "/"
-                  ? pathname === "/"
-                  : pathname.startsWith(item.href));
-                const isSoon = item.badge === "Soon";
-                // Highlight DirecTV Channel items specially
-                const isDTV = item.href === "/directv" || item.href === "/migrate";
-                return (
-                  <Link
-                    key={item.href}
-                    href={isSoon ? "#" : item.href}
-                    target={isExternal ? "_blank" : undefined}
-                    rel={isExternal ? "noopener noreferrer" : undefined}
-                    className={cn(
-                      "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all group relative",
-                      isActive
-                        ? "bg-brand-400/10 text-brand-400 border border-brand-400/20"
-                        : isSoon
-                        ? "text-[hsl(var(--sidebar-text))]/40 cursor-not-allowed"
-                        : isDTV && !isActive
-                        ? "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
-                        : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5",
-                      collapsed && "justify-center px-0"
-                    )}
-                    title={collapsed ? item.label : undefined}
-                  >
-                    <Icon
-                      size={16}
-                      className="shrink-0"
-                      style={isDTV && !isActive ? { color: "#3B5BDB" } : undefined}
-                    />
-                    {!collapsed && (
-                      <>
-                        <span className="flex-1" style={isDTV && !isActive ? { color: "#93C5FD" } : undefined}>
-                          {item.label}
-                        </span>
+      {/* ── Main nav (accordion) ──────────────────────────────────────────── */}
+      <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
+        {NAV_SECTIONS.map(section => {
+          const SectionIcon = section.icon;
+          const isExpanded = expandedSections.has(section.key);
+          const isSectionActive = getSectionForPath(pathname) === section.key;
+
+          if (collapsed) {
+            // Collapsed: show section icon only, no accordion
+            return (
+              <div key={section.key} className="relative group">
+                <button
+                  onClick={() => toggleSection(section.key)}
+                  className={cn(
+                    "w-full flex items-center justify-center p-2.5 rounded-lg transition-colors",
+                    isSectionActive
+                      ? "bg-brand-400/10 text-brand-400"
+                      : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
+                  )}
+                  title={section.label}
+                >
+                  <SectionIcon size={18} />
+                </button>
+              </div>
+            );
+          }
+
+          return (
+            <div key={section.key}>
+              {/* Section header — clickable accordion trigger */}
+              <button
+                onClick={() => toggleSection(section.key)}
+                className={cn(
+                  "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left group",
+                  isSectionActive && !isExpanded
+                    ? "bg-brand-400/10 text-brand-400"
+                    : isExpanded
+                    ? "bg-white/8 text-white"
+                    : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
+                )}
+              >
+                <SectionIcon
+                  size={16}
+                  className="shrink-0"
+                  style={section.color && !isSectionActive ? { color: section.color } : undefined}
+                />
+                <span className="flex-1 text-sm font-semibold">{section.label}</span>
+                {isSectionActive && (
+                  <span
+                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{ background: "#6B7EFF" }}
+                  />
+                )}
+                <ChevronDown
+                  size={13}
+                  className={cn(
+                    "transition-transform shrink-0 text-[hsl(var(--sidebar-text))]",
+                    isExpanded && "rotate-180"
+                  )}
+                />
+              </button>
+
+              {/* Sub-items — accordion body */}
+              {isExpanded && (
+                <div className="mt-0.5 ml-3 pl-3 border-l border-white/10 space-y-0.5 pb-1">
+                  {section.items.map(item => {
+                    const Icon = item.icon;
+                    const isActive = !item.external && (
+                      item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)
+                    );
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        target={item.external ? "_blank" : undefined}
+                        rel={item.external ? "noopener noreferrer" : undefined}
+                        className={cn(
+                          "flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all group/item",
+                          isActive
+                            ? "bg-brand-400/10 text-brand-400 border border-brand-400/20"
+                            : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
+                        )}
+                        title={item.description}
+                      >
+                        <Icon size={13} className="shrink-0" />
+                        <span className="flex-1 truncate">{item.label}</span>
                         {item.badge && (
-                          <span className={cn(
-                            "text-[9px] px-1.5 py-0.5 rounded-full font-semibold tracking-wide",
-                            item.badge === "Soon"
-                              ? "bg-zinc-700 text-zinc-400"
-                              : item.badge === "AI"
-                              ? "text-white"
-                              : "bg-brand-400/20 text-brand-400"
-                          )}
-                          style={item.badge === "AI" ? { background: "#6B7EFF" } : undefined}>
+                          <span
+                            className="text-[9px] px-1.5 py-0.5 rounded-full font-bold text-white shrink-0"
+                            style={{ background: item.badge === "AI" ? "#6B7EFF" : "#334155" }}
+                          >
                             {item.badge}
                           </span>
                         )}
-                        {isActive && !item.badge && (
-                          <ChevronRight size={12} className="text-brand-400/60" />
+                        {item.external && (
+                          <span className="text-[9px] text-[hsl(var(--sidebar-text))]/50 shrink-0">↗</span>
                         )}
-                      </>
-                    )}
-                  </Link>
-                );
-              })}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </nav>
 
-      {/* Integrations */}
+      {/* ── Live Integrations ─────────────────────────────────────────────── */}
       {!collapsed && (
-        <div className="px-3 pb-3 border-t border-[hsl(var(--sidebar-border))] pt-3">
-          <p className="text-[10px] uppercase tracking-widest text-[hsl(var(--sidebar-text))]/50 px-1 mb-2 font-medium">Live Integrations</p>
-          <div className="space-y-1">
-            {integrations.map((int) => (
-              <div key={int.label} className="flex items-center gap-2 px-2 py-1">
-                <div className={cn(
-                  "w-1.5 h-1.5 rounded-full",
-                  int.status === "connected" ? "status-online" : "status-warning"
-                )} />
-                <span className="text-[11px] text-[hsl(var(--sidebar-text))]">{int.label}</span>
-                <span className={cn(
-                  "ml-auto text-[10px] font-medium",
-                  int.status === "connected" ? "text-emerald-400" : "text-amber-400"
-                )}>
-                  {int.status === "connected" ? "Live" : "Setup"}
-                </span>
-              </div>
-            ))}
-          </div>
+        <div className="px-2 pb-2 border-t border-[hsl(var(--sidebar-border))] pt-2 shrink-0">
+          <button
+            onClick={() => setIntegrationsExpanded(v => !v)}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+            <span className="text-[10px] uppercase tracking-widest text-[hsl(var(--sidebar-text))]/60 font-medium flex-1 text-left">
+              Live Integrations
+            </span>
+            <span className="text-[10px] text-emerald-400 font-medium">
+              {integrations.filter(i => i.status === "connected").length}/{integrations.length}
+            </span>
+            <ChevronDown
+              size={10}
+              className={cn("transition-transform text-[hsl(var(--sidebar-text))]/50", integrationsExpanded && "rotate-180")}
+            />
+          </button>
+          {integrationsExpanded && (
+            <div className="mt-1 space-y-0.5 px-1">
+              {integrations.map(int => (
+                <div key={int.label} className="flex items-center gap-2 px-3 py-1.5">
+                  <div className={cn(
+                    "w-1.5 h-1.5 rounded-full",
+                    int.status === "connected" ? "status-online" : "status-warning"
+                  )} />
+                  <span className="text-[11px] text-[hsl(var(--sidebar-text))] flex-1">{int.label}</span>
+                  <span className={cn(
+                    "text-[10px] font-medium",
+                    int.status === "connected" ? "text-emerald-400" : "text-amber-400"
+                  )}>
+                    {int.status === "connected" ? "Live" : "Setup"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* User menu */}
-      <div className="border-t border-[hsl(var(--sidebar-border))] p-2 relative" ref={menuRef}>
-        {/* Popout menu — renders above the trigger */}
+      {/* ── User menu ─────────────────────────────────────────────────────── */}
+      <div className="border-t border-[hsl(var(--sidebar-border))] p-2 relative shrink-0" ref={menuRef}>
         {userMenuOpen && !collapsed && (
           <div className="absolute bottom-full left-2 right-2 mb-2 bg-[#1E293B] border border-[hsl(var(--sidebar-border))] rounded-xl shadow-2xl overflow-hidden z-50">
-            {/* User info header */}
             <div className="px-4 py-3 border-b border-[hsl(var(--sidebar-border))]">
               <p className="text-xs font-semibold text-white truncate">{displayName}</p>
               <p className="text-[10px] text-[hsl(var(--sidebar-text))] truncate mt-0.5">{displayEmail}</p>
             </div>
-            {/* Menu items */}
             <div className="py-1">
               <button
                 onClick={() => { openUserProfile(); setUserMenuOpen(false); }}
                 className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5 transition-colors text-left"
               >
-                <User size={14} className="shrink-0" />
-                My Account
+                <User size={14} className="shrink-0" /> My Account
               </button>
               <Link
                 href="/settings"
                 onClick={() => setUserMenuOpen(false)}
                 className="flex items-center gap-3 px-4 py-2.5 text-sm text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5 transition-colors"
               >
-                <Settings size={14} className="shrink-0" />
-                Settings
+                <Settings size={14} className="shrink-0" /> Settings
               </Link>
               <button
                 onClick={handleRefreshSession}
@@ -412,14 +531,11 @@ export function Sidebar() {
                 onClick={() => signOut({ redirectUrl: "/sign-in" })}
                 className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/5 transition-colors text-left"
               >
-                <LogOut size={14} className="shrink-0" />
-                Sign Out
+                <LogOut size={14} className="shrink-0" /> Sign Out
               </button>
             </div>
           </div>
         )}
-
-        {/* Trigger — user row */}
         <button
           onClick={() => setUserMenuOpen(o => !o)}
           className={cn(
@@ -439,7 +555,10 @@ export function Sidebar() {
               </div>
               <ChevronDown
                 size={11}
-                className={cn("text-[hsl(var(--sidebar-text))] transition-transform shrink-0", userMenuOpen && "rotate-180")}
+                className={cn(
+                  "text-[hsl(var(--sidebar-text))] transition-transform shrink-0",
+                  userMenuOpen && "rotate-180"
+                )}
               />
             </>
           )}
