@@ -17,7 +17,7 @@ import {
   closestCorners,
   useDroppable,
 } from "@dnd-kit/core";
-import type { DragStartEvent, DragEndEvent } from "@dnd-kit/core";
+import type { DragStartEvent, DragEndEvent, DragOverEvent } from "@dnd-kit/core";
 import {
   SortableContext,
   verticalListSortingStrategy,
@@ -307,7 +307,7 @@ export default function OpportunitiesPage() {
     setActiveOpp(opp);
   };
 
-  const handleDragOver = (event: { over: { id: string } | null }) => {
+  const handleDragOver = (event: DragOverEvent) => {
     if (!event.over || !data) {
       setOverStage(null);
       return;
