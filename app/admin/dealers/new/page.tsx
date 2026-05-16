@@ -6,7 +6,7 @@ import Link from 'next/link'
 import {
   ChevronLeft, ChevronRight, Building2, Users, Shield,
   CheckCircle2, MapPin, Phone, Mail, Globe, Layers,
-  Star, Wrench, ShoppingBag, ClipboardList, Sparkles,
+  Star, Wrench, Store, ClipboardList, Zap,
   AlertCircle, Copy, ExternalLink,
 } from 'lucide-react'
 
@@ -104,7 +104,7 @@ const TIERS: {
     id: 'sales',
     label: 'Sales Dealer',
     sublabel: 'Sales and referrals only',
-    icon: ShoppingBag,
+    icon: Store,
     color: 'text-sky-600',
     bg: 'bg-sky-50',
     border: 'border-sky-300',
@@ -739,7 +739,7 @@ export default function NewDealerPage() {
               </>
             ) : (
               <>
-                <Sparkles size={16} />
+                <Zap size={16} />
                 Launch Dealer
               </>
             )}
