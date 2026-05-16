@@ -55,11 +55,46 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Fire-and-forget: log new request (future: email dealer)
+  // ── Email notifications (fire-and-forget) ────────────────────────────────────
+  const refNumber  = data.id.slice(0, 8).toUpperCase()
+  const portalBase = process.env.NEXT_PUBLIC_APP_URL ?? 'https://portal.gateguard.co'
+  const portalLink = `${portalBase}/sites/${site_id}?tab=requests`
+
   void (async () => {
     try {
-      console.log(`[request] New request "${title}" for site ${site.name} from ${contact_email ?? 'unknown'}`)
-    } catch (_) { /* non-blocking */ }
+      const { sendRequestEmail, dealerAlertHtml, pmConfirmHtml } = await import('@/lib/email-request')
+
+      // Look up dealer email via site → org
+      const { data: siteOrg } = await supabaseAdmin
+        .from('sites')
+        .select('organizations!org_id ( primary_email )')
+        .eq('id', site_id)
+        .single()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const dealerEmail = (siteOrg as any)?.organizations?.primary_email ?? null
+
+      // 1. Alert the dealer
+      if (dealerEmail) {
+        await sendRequestEmail({
+          to:      dealerEmail,
+          subject: `New Property Request: ${title} — ${site.name}`,
+          text:    `New maintenance request.\n\nProperty: ${site.name}\nTitle: ${title}\nPriority: ${priority_requested}\nFrom: ${contact_name ?? 'Unknown'} <${contact_email ?? 'no email'}>\n\nView: ${portalLink}`,
+          html:    dealerAlertHtml(site.name, title, priority_requested, contact_name ?? '', contact_email ?? '', portalLink),
+        })
+      }
+
+      // 2. Confirm to the property manager
+      if (contact_email) {
+        await sendRequestEmail({
+          to:      contact_email,
+          subject: `Request Received: ${title} (Ref: ${refNumber})`,
+          text:    `Your request has been received.\n\nProperty: ${site.name}\nTitle: ${title}\nRef: ${refNumber}\n\nWe'll follow up with scheduling shortly.`,
+          html:    pmConfirmHtml(site.name, title, refNumber),
+        })
+      }
+    } catch (err) {
+      console.error('[request] Email notification failed:', err)
+    }
   })()
 
   return NextResponse.json({ success: true, request: data }, { status: 201 })
