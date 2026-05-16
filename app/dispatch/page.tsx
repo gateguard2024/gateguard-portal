@@ -5,7 +5,10 @@ import { cn } from "@/lib/utils";
 import {
   RefreshCw, Plus, Zap, Users, Navigation, CheckCircle2,
   MapPin, Clock, Wrench, Camera, DoorOpen, Radio, X, ChevronDown, AlertTriangle,
+  Calendar, ChevronLeft, ChevronRight,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { List } = require("lucide-react") as any;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -336,6 +339,264 @@ function TechRow({ tech, jobs, onStatusChange }: { tech: Tech; jobs: Job[]; onSt
   );
 }
 
+// ─── Calendar Helpers ─────────────────────────────────────────────────────────
+
+/** Returns the Monday of the week containing `d`. */
+function getMondayOf(d: Date): Date {
+  const copy = new Date(d);
+  const day = copy.getDay(); // 0=Sun … 6=Sat
+  const diff = day === 0 ? -6 : 1 - day;
+  copy.setDate(copy.getDate() + diff);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+/** Returns an array of 7 Date objects Mon→Sun starting from monday. */
+function weekDays(monday: Date): Date[] {
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return d;
+  });
+}
+
+/** Format a Date as "YYYY-MM-DD" (local time). */
+function toISO(d: Date): string {
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+/** Extract "YYYY-MM-DD" from a job's eta or scheduled_date string. Returns null if none found. */
+function jobDateKey(eta: string): string | null {
+  if (!eta || eta === "TBD") return null;
+  // ISO date substring e.g. "2025-05-20" or "2025-05-20T09:00"
+  const match = eta.match(/(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : null;
+}
+
+const chipColors: Record<JobType, string> = {
+  Install:     "bg-blue-100 text-blue-800 border-blue-200",
+  Repair:      "bg-rose-100 text-rose-800 border-rose-200",
+  PM:          "bg-violet-100 text-violet-800 border-violet-200",
+  "Site Walk": "bg-teal-100 text-teal-800 border-teal-200",
+};
+
+// ─── Calendar View ────────────────────────────────────────────────────────────
+
+interface CalendarViewProps {
+  jobs:  Job[];
+  techs: Tech[];
+  weekStart: Date;
+  onPrev:    () => void;
+  onNext:    () => void;
+  onToday:   () => void;
+}
+
+function CalendarView({ jobs, techs, weekStart, onPrev, onNext, onToday }: CalendarViewProps) {
+  const days    = weekDays(weekStart);
+  const todayKey = toISO(new Date());
+
+  // jobs with no date OR no assigned tech
+  const unscheduled = jobs.filter(j => {
+    const dk = jobDateKey(j.eta);
+    return !dk || !j.assignedTechId;
+  });
+
+  // build lookup: techId → dayKey → Job[]
+  const cellMap: Record<string, Record<string, Job[]>> = {};
+  for (const tech of techs) cellMap[tech.id] = {};
+  for (const job of jobs) {
+    const dk = jobDateKey(job.eta);
+    if (!dk || !job.assignedTechId) continue;
+    if (!cellMap[job.assignedTechId]) cellMap[job.assignedTechId] = {};
+    if (!cellMap[job.assignedTechId][dk]) cellMap[job.assignedTechId][dk] = [];
+    cellMap[job.assignedTechId][dk].push(job);
+  }
+
+  const weekLabel = days[0].toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    + " – "
+    + days[6].toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+  const TECH_COL_W = "160px";
+  const DAY_COL_W  = "1fr";
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+      {/* Calendar toolbar */}
+      <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onPrev}
+            className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+            aria-label="Previous week"
+          >
+            <ChevronLeft size={15} className="text-slate-500" />
+          </button>
+          <span className="text-sm font-semibold text-slate-800 min-w-[200px] text-center">
+            {weekLabel}
+          </span>
+          <button
+            onClick={onNext}
+            className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+            aria-label="Next week"
+          >
+            <ChevronRight size={15} className="text-slate-500" />
+          </button>
+        </div>
+        <button
+          onClick={onToday}
+          className="text-xs font-medium text-[#6B7EFF] hover:text-blue-700 border border-[#6B7EFF]/30 rounded-lg px-3 py-1.5 hover:bg-[#6B7EFF]/5 transition-colors"
+        >
+          This Week
+        </button>
+      </div>
+
+      {/* Grid */}
+      <div className="overflow-x-auto">
+        <div
+          style={{
+            display:               "grid",
+            gridTemplateColumns:   `${TECH_COL_W} repeat(7, ${DAY_COL_W})`,
+            minWidth:              "900px",
+          }}
+        >
+          {/* Header row */}
+          {/* empty corner */}
+          <div className="border-b border-r border-slate-100 bg-slate-50 px-3 py-2" />
+          {days.map((day) => {
+            const key     = toISO(day);
+            const isToday = key === todayKey;
+            return (
+              <div
+                key={key}
+                className={cn(
+                  "border-b border-r border-slate-100 px-2 py-2 text-center",
+                  isToday ? "bg-[#6B7EFF]" : "bg-slate-50"
+                )}
+              >
+                <p className={cn("text-[10px] font-semibold uppercase tracking-wide",
+                  isToday ? "text-white/80" : "text-slate-400")}>
+                  {day.toLocaleDateString("en-US", { weekday: "short" })}
+                </p>
+                <p className={cn("text-sm font-bold",
+                  isToday ? "text-white" : "text-slate-700")}>
+                  {day.getDate()}
+                </p>
+              </div>
+            );
+          })}
+
+          {/* Tech rows */}
+          {techs.length === 0 ? (
+            <div
+              className="col-span-8 text-center text-sm text-slate-400 py-10"
+              style={{ gridColumn: "1 / -1" }}
+            >
+              No technicians in roster
+            </div>
+          ) : (
+            techs.map((tech) => {
+              const conf = techStatusConfig[tech.status];
+              return [
+                // Tech header cell
+                <div
+                  key={`th-${tech.id}`}
+                  className="border-b border-r border-slate-100 bg-white px-3 py-2.5 flex items-center gap-2"
+                >
+                  <div className={cn(
+                    "w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0",
+                    tech.status === "Offline" ? "bg-slate-400" : "bg-[#2563EB]"
+                  )}>
+                    {tech.initials}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-slate-800 truncate leading-tight">{tech.name}</p>
+                    <span className={cn("inline-block text-[9px] font-medium px-1.5 py-0.5 rounded-full mt-0.5", conf.badge)}>
+                      {conf.label}
+                    </span>
+                  </div>
+                </div>,
+                // Day cells for this tech
+                ...days.map((day) => {
+                  const dk       = toISO(day);
+                  const isToday  = dk === todayKey;
+                  const cellJobs = cellMap[tech.id]?.[dk] ?? [];
+                  return (
+                    <div
+                      key={`td-${tech.id}-${dk}`}
+                      className={cn(
+                        "border-b border-r border-slate-100 px-1.5 py-1.5 min-h-[72px] align-top",
+                        isToday ? "bg-[#6B7EFF]/4" : "bg-white",
+                        "hover:bg-slate-50 transition-colors"
+                      )}
+                    >
+                      {cellJobs.map((job) => {
+                        const chip = chipColors[job.jobType] ?? chipColors.Repair;
+                        const href = job.id ? `/maintenance/${job.id}` : undefined;
+                        const Tag  = href ? "a" : "div";
+                        return (
+                          <Tag
+                            key={job.id}
+                            href={href}
+                            className={cn(
+                              "flex items-center gap-1 text-[10px] font-medium px-1.5 py-1 rounded border mb-1 truncate",
+                              chip,
+                              href ? "cursor-pointer hover:opacity-80" : "cursor-default"
+                            )}
+                            title={`${job.woNumber} · ${job.property}`}
+                          >
+                            <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", priorityDot[job.priority])} />
+                            <span className="truncate">{job.woNumber} {job.property}</span>
+                          </Tag>
+                        );
+                      })}
+                    </div>
+                  );
+                }),
+              ];
+            })
+          )}
+        </div>
+      </div>
+
+      {/* Unscheduled strip */}
+      {unscheduled.length > 0 && (
+        <div className="border-t border-slate-100 px-5 py-3 bg-slate-50">
+          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
+            Unscheduled / Unassigned ({unscheduled.length})
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {unscheduled.map((job) => {
+              const chip = chipColors[job.jobType] ?? chipColors.Repair;
+              const href = job.id ? `/maintenance/${job.id}` : undefined;
+              const Tag  = href ? "a" : "div";
+              return (
+                <Tag
+                  key={job.id}
+                  href={href}
+                  className={cn(
+                    "flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full border",
+                    chip,
+                    href ? "cursor-pointer hover:opacity-80" : "cursor-default"
+                  )}
+                  title={`${job.woNumber} · ${job.property} · ${job.assignedTech ?? "Unassigned"}`}
+                >
+                  <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", priorityDot[job.priority])} />
+                  {job.woNumber} {job.property}
+                  {!job.assignedTechId && (
+                    <span className="text-slate-400 italic ml-1">· unassigned</span>
+                  )}
+                </Tag>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DispatchPage() {
@@ -343,6 +604,12 @@ export default function DispatchPage() {
   const [techs,     setTechs]     = useState<Tech[]>([]);
   const [loading,   setLoading]   = useState(true);
   const [newJobOpen, setNewJobOpen] = useState(false);
+  const [viewMode,  setViewMode]  = useState<"board" | "calendar">("board");
+  const [weekStart, setWeekStart] = useState<Date>(() => getMondayOf(new Date()));
+
+  const handlePrevWeek  = () => setWeekStart(prev => { const d = new Date(prev); d.setDate(d.getDate() - 7); return d; });
+  const handleNextWeek  = () => setWeekStart(prev => { const d = new Date(prev); d.setDate(d.getDate() + 7); return d; });
+  const handleThisWeek  = () => setWeekStart(getMondayOf(new Date()));
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -425,6 +692,33 @@ export default function DispatchPage() {
           <p className="text-sm text-slate-500 mt-0.5">{today}</p>
         </div>
         <div className="flex items-center gap-3">
+          {/* View toggle */}
+          <div className="flex items-center bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+            <button
+              onClick={() => setViewMode("board")}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors",
+                viewMode === "board"
+                  ? "bg-[#6B7EFF] text-white"
+                  : "text-slate-600 hover:bg-slate-50"
+              )}
+            >
+              <List size={14} />
+              Board
+            </button>
+            <button
+              onClick={() => setViewMode("calendar")}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors",
+                viewMode === "calendar"
+                  ? "bg-[#6B7EFF] text-white"
+                  : "text-slate-600 hover:bg-slate-50"
+              )}
+            >
+              <Calendar size={14} />
+              Calendar
+            </button>
+          </div>
           <button
             onClick={fetchData}
             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
@@ -459,78 +753,95 @@ export default function DispatchPage() {
         ))}
       </div>
 
-      {/* Main Board */}
-      <div className="flex gap-5 items-start">
-        {/* Kanban Board */}
-        <div className="flex-[2] min-w-0">
-          {loading ? (
-            <div className="flex items-center justify-center py-20 text-slate-400 text-sm">
-              <RefreshCw size={16} className="animate-spin mr-2" /> Loading jobs…
-            </div>
-          ) : (
-            <div className="grid grid-cols-4 gap-3">
-              {COLUMNS.map((col) => {
-                const colJobs = jobs.filter(j => j.status === col.status);
-                return (
-                  <div key={col.status} className="space-y-2">
-                    <div className={cn(
-                      "flex items-center justify-between px-3 py-2 rounded-lg border",
-                      col.bg, col.accent
-                    )}>
-                      <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
-                        {col.label}
-                      </span>
-                      <span className="text-xs font-bold text-slate-500 bg-white/70 rounded-full px-2 py-0.5 border border-slate-200">
-                        {colJobs.length}
-                      </span>
-                    </div>
-                    <div className="space-y-2">
-                      {colJobs.map(job => (
-                        <JobCard
-                          key={job.id}
-                          job={job}
-                          onStatusChange={(id, s) => handleJobStatusChange(id, s as JobStatus)}
-                        />
-                      ))}
-                      {colJobs.length === 0 && (
-                        <div className="text-center text-[11px] text-slate-400 py-4">No jobs</div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Tech Roster */}
-        <div className="flex-[1] min-w-0 bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="px-4 py-3.5 border-b border-slate-100">
-            <h2 className="text-sm font-semibold text-slate-800">Tech Roster</h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {loading ? "…" : `${techs.length} technicians`}
-            </p>
+      {/* Main Content — Board or Calendar */}
+      {viewMode === "calendar" ? (
+        loading ? (
+          <div className="flex items-center justify-center py-20 text-slate-400 text-sm">
+            <RefreshCw size={16} className="animate-spin mr-2" /> Loading…
           </div>
-          <div className="divide-y divide-slate-50">
+        ) : (
+          <CalendarView
+            jobs={jobs}
+            techs={techs}
+            weekStart={weekStart}
+            onPrev={handlePrevWeek}
+            onNext={handleNextWeek}
+            onToday={handleThisWeek}
+          />
+        )
+      ) : (
+        <div className="flex gap-5 items-start">
+          {/* Kanban Board */}
+          <div className="flex-[2] min-w-0">
             {loading ? (
-              <div className="flex items-center justify-center py-8 text-slate-400 text-sm">
-                <RefreshCw size={14} className="animate-spin mr-1.5" /> Loading…
+              <div className="flex items-center justify-center py-20 text-slate-400 text-sm">
+                <RefreshCw size={16} className="animate-spin mr-2" /> Loading jobs…
               </div>
-            ) : techs.length === 0 ? (
-              <div className="text-center text-sm text-slate-400 py-8">No technicians</div>
             ) : (
-              techs.map(tech => (
-                <TechRow
-                  key={tech.id}
-                  tech={tech}
-                  jobs={jobs}
-                  onStatusChange={handleTechStatusChange}
-                />
-              ))
+              <div className="grid grid-cols-4 gap-3">
+                {COLUMNS.map((col) => {
+                  const colJobs = jobs.filter(j => j.status === col.status);
+                  return (
+                    <div key={col.status} className="space-y-2">
+                      <div className={cn(
+                        "flex items-center justify-between px-3 py-2 rounded-lg border",
+                        col.bg, col.accent
+                      )}>
+                        <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
+                          {col.label}
+                        </span>
+                        <span className="text-xs font-bold text-slate-500 bg-white/70 rounded-full px-2 py-0.5 border border-slate-200">
+                          {colJobs.length}
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        {colJobs.map(job => (
+                          <JobCard
+                            key={job.id}
+                            job={job}
+                            onStatusChange={(id, s) => handleJobStatusChange(id, s as JobStatus)}
+                          />
+                        ))}
+                        {colJobs.length === 0 && (
+                          <div className="text-center text-[11px] text-slate-400 py-4">No jobs</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
+
+          {/* Tech Roster */}
+          <div className="flex-[1] min-w-0 bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="px-4 py-3.5 border-b border-slate-100">
+              <h2 className="text-sm font-semibold text-slate-800">Tech Roster</h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {loading ? "…" : `${techs.length} technicians`}
+              </p>
+            </div>
+            <div className="divide-y divide-slate-50">
+              {loading ? (
+                <div className="flex items-center justify-center py-8 text-slate-400 text-sm">
+                  <RefreshCw size={14} className="animate-spin mr-1.5" /> Loading…
+                </div>
+              ) : techs.length === 0 ? (
+                <div className="text-center text-sm text-slate-400 py-8">No technicians</div>
+              ) : (
+                techs.map(tech => (
+                  <TechRow
+                    key={tech.id}
+                    tech={tech}
+                    jobs={jobs}
+                    onStatusChange={handleTechStatusChange}
+                  />
+                ))
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Map View */}
       <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
