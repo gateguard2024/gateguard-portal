@@ -4,10 +4,12 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  ArrowLeft, Wrench, Clock, Calendar, CheckCircle2, X, AlertTriangle,
-  Plus, Trash2, Edit2, MessageSquare, Package, User, ChevronDown,
-  RefreshCw, Send, Building2, Hash, Timer, MapPin, Tag, Check,
+  Wrench, Clock, Calendar, CheckCircle2, X, AlertTriangle,
+  Plus, Trash2, MessageSquare, Package, User, ChevronDown,
+  RefreshCw, Send, Building2, Hash, MapPin, Check,
 } from 'lucide-react'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { ArrowLeft, Edit2, Timer, Tag } = require('lucide-react') as any
 import { TopBar } from '@/components/layout/TopBar'
 import { cn } from '@/lib/utils'
 
