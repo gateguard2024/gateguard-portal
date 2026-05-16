@@ -132,15 +132,49 @@ GateGuard is going live. Two parallel Vercel deployments must exist from this po
 - When building features, always ask: "Is this safe to ship to live, or does it go to beta first?"
 - The SOC (`ggsoc.com`) has been live — treat it with the same care as the live portal.
 
-### What's on Live now (as of May 2026)
+### What's on Live now (as of May 16, 2026)
 - `/tech` field tool v10 — used by real techs in the field
 - `/quotes/[id]/approve` — real clients approving real quotes
 - Show lead capture at `/show` (Atlanta show leads, 30+ captured)
+- Full CMMS (work order detail, checklist, comments, parts, request portal, email notifications)
+- CRM full wiring — leads list/detail, opportunities detail, kanban
+- Dispatch — job board + tech roster wired to live data
+- `/sites` + `/sites/[id]` — property list + detail with asset tracking
+- `/admin/dealers` + `/admin/dealers/new` — dealer onboarding wizard
+- `/eos` — EOS One mirror (Rocks, Scorecard, Issues, To-Dos, L10)
 
 ### What's beta-only until further notice
-- CRM (Phase 1) — migration 008 still stabilizing
 - User Management (`/admin/users`) — needs Clerk integration testing
 - Offline PWA (service worker) — needs field testing
+- Recurring PM scheduling engine (not yet built)
+- Scheduling calendar view (not yet built)
+
+### ⚠️ Known Build Gotchas (Vercel)
+
+**lucide-react cached version mismatch (RESOLVED May 16 2026)**
+Vercel cache key `Dop7xNgCwYZ1jorsYerLxuHLFa5B` holds an old lucide-react version that doesn't export many modern icons. The fix applied across the entire codebase: any icon not in the "definitely ancient" set is imported via:
+```typescript
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Edit2, Timer, ArrowUpRight } = require('lucide-react') as any
+```
+This bypasses TypeScript module resolution entirely. Do NOT revert these to named ES imports without first verifying Vercel's cache has been busted.
+
+**Safe named imports** (exist in all known cached versions): Plus, X, Check, Clock, Calendar, Search, ChevronLeft/Right/Down/Up, Users, Mail, Phone, Wrench, Shield, Building2, MapPin, User, Settings, Home, FileText, Download, Upload, Eye, EyeOff, Loader, Loader2, RefreshCw, Save, Trash2, AlertTriangle, Info, Bell, Menu, Filter, MoreVertical, MoreHorizontal, Package, Globe, Link, Send, MessageSquare, Star, Key, Copy, ExternalLink, Wifi, CheckCircle2, XCircle, Activity, WifiOff, ArrowLeft, ArrowRight, Hash, Zap, Layers, TrendingUp, ClipboardList
+
+**Always require()**: Edit2, Edit3, Timer, Tag, Inbox, ArrowUpRight, Camera, DoorOpen, BookOpen, Cpu, BarChart3, DollarSign, Network, Tv, Archive, ShieldCheck, AlertCircle, Paperclip, PhoneCall, PhoneIncoming, PhoneOutgoing, Video, StickyNote, CheckSquare, Grid3X3, Truck, RotateCcw, Image, Target, Palette, Radio, GitBranch, SlidersHorizontal, Map, TrendingDown, CreditCard, Hammer, Server, and anything else not in the safe list.
+
+**Supabase PromiseLike vs Promise**
+`PostgrestFilterBuilder` returns `PromiseLike`, not `Promise`. Never use `.catch()` on it directly. Always use:
+```typescript
+// CORRECT fire-and-forget pattern
+void (async () => {
+  try { await supabase.from('table').select() }
+  catch (_) { /* non-blocking */ }
+})()
+```
+
+**`lib/current-user.ts` — `id` must be declared**
+`getCurrentUser()` must extract `const id = user.id` from the Clerk user object before the return statement. If this line goes missing, TypeScript throws "No value exists in scope for shorthand property 'id'".
 
 ---
 
