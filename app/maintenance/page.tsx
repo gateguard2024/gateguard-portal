@@ -7,10 +7,10 @@ import { AISearch } from "@/components/ai/AISearch";
 import {
   Plus, Wrench, CheckCircle2, Clock, AlertTriangle, Calendar,
   User, X, ChevronDown, RefreshCw, Trash2, ChevronRight,
-  ChevronLeft, List,
+  ChevronLeft,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Edit2 } = require('lucide-react') as any;
+const { Edit2, List } = require('lucide-react') as any;
 import { cn } from "@/lib/utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
