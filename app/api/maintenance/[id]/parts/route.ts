@@ -30,11 +30,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Decrement inventory if part_id provided
+  // Decrement inventory if part_id provided (graceful — rpc may not exist yet)
   if (part_id && quantity) {
-    await supabase.rpc('decrement_part_qty', { p_id: part_id, qty: quantity }).catch(() => {
-      // Graceful — rpc may not exist yet, just skip
-    })
+    try {
+      await supabase.rpc('decrement_part_qty', { p_id: part_id, qty: quantity })
+    } catch (_) {
+      // skip if rpc not deployed
+    }
   }
 
   return NextResponse.json({ part: data })
