@@ -132,22 +132,36 @@ GateGuard is going live. Two parallel Vercel deployments must exist from this po
 - When building features, always ask: "Is this safe to ship to live, or does it go to beta first?"
 - The SOC (`ggsoc.com`) has been live — treat it with the same care as the live portal.
 
-### What's on Live now (as of May 16, 2026)
+### What's on Live now (as of May 17, 2026)
 - `/tech` field tool v10 — used by real techs in the field
 - `/quotes/[id]/approve` — real clients approving real quotes
 - Show lead capture at `/show` (Atlanta show leads, 30+ captured)
 - Full CMMS (work order detail, checklist, comments, parts, request portal, email notifications)
-- CRM full wiring — leads list/detail, opportunities detail, kanban
-- Dispatch — job board + tech roster wired to live data
-- `/sites` + `/sites/[id]` — property list + detail with asset tracking
-- `/admin/dealers` + `/admin/dealers/new` — dealer onboarding wizard
+- CRM full wiring — leads list/detail, opportunities detail, kanban with drag-drop
+- CRM Log Activity form — Call/Email/Meeting/Note/Task with outcome tracking
+- Dispatch — job board + tech roster + per-tech week calendar view
+- `/maintenance` — work order list + **scheduling calendar view** (week grid, status-colored chips)
+- `/sites` + `/sites/[id]` — property list + detail with asset tracking + PM schedules tab
+- `/admin/dealers` + `/admin/dealers/new` — 7-tier dealer onboarding wizard with commission config
 - `/eos` — EOS One mirror (Rocks, Scorecard, Issues, To-Dos, L10)
+- `/reps` — Rep hierarchy + commission model breakdown (all tier rates displayed)
+- `/migrate` — SARA Bridge migration wizard (Coming Soon banner)
+
+### Permission layer (built May 2026, pending commit)
+`lib/current-user.ts` exposes `canViewWOs`, `canViewSites`, `canViewCRM`, `canViewCommissions`, `canViewNetwork`, `canViewDispatch`, `canViewSensitive`, `canViewFinancials` booleans computed from `org_tier` + `role`. `lib/org-scope.ts` `resolveOrgScope()` routes each tier to the correct Supabase filter. `components/layout/Sidebar.tsx` gates nav items by `org_tier` so each tier only sees their relevant sections.
 
 ### What's beta-only until further notice
 - User Management (`/admin/users`) — needs Clerk integration testing
 - Offline PWA (service worker) — needs field testing
-- Recurring PM scheduling engine (not yet built)
-- Scheduling calendar view (not yet built)
+- PM scheduling engine API + cron (`/api/pm-schedules`, `/api/cron/pm-schedules`) — tables built, migration 017 must run on prod Supabase first
+
+### Migration 017 — dealer network (MUST RUN ON PROD BEFORE DEALER ONBOARDING GOES LIVE)
+`supabase/migrations/017_dealer_network.sql` adds:
+- `org_tier` enum: `corporate | master_agent | master_dealer | full_dealer | service_dealer | install_contractor | sales_partner | client`
+- `commission_config` table — per-org commission rates with pool validation (sales_partner + service_dealer ≤ $4.00)
+- `dealer_add_ons` table — per-add-on 50/50 splits
+- Columns on `organizations`: `org_tier`, `parent_org_id`, `is_active`, `onboarded_at`
+Run on beta first, verify, then prod.
 
 ### ⚠️ Known Build Gotchas (Vercel)
 

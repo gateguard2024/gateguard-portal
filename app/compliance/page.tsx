@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
 import { TopBar } from "@/components/layout/TopBar";
 import { AISearch } from "@/components/ai/AISearch";
 import {
@@ -5,175 +8,173 @@ import {
   XCircle,
   FileText,
   Plus,
+  Loader2,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ShieldCheck } = require('lucide-react') as any;
+const { ShieldCheck } = require("lucide-react") as any;
 
-type ComplianceStatus = "Compliant" | "Expiring Soon" | "Expired";
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-interface PermitRow {
-  property: string;
+type ComplianceStatus = "compliant" | "expiring_soon" | "expired" | "no_expiry";
+
+interface Permit {
+  id: string;
   type: string;
-  issuedBy: string;
-  issueDate: string;
-  expiryDate: string;
-  daysRemaining: string;
+  label: string | null;
+  site_name: string | null;
+  issued_by: string | null;
+  issue_date: string | null;
+  expiry_date: string | null;
+  days_remaining: number | null;
   status: ComplianceStatus;
+  permit_number: string | null;
 }
 
-const PERMITS: PermitRow[] = [
-  {
-    property: "Angel Oak Properties",
-    type: "Gate Permit",
-    issuedBy: "City of Atlanta",
-    issueDate: "Jan 15, 2026",
-    expiryDate: "Jan 15, 2027",
-    daysRemaining: "258 days",
-    status: "Compliant",
-  },
-  {
-    property: "Angel Oak Properties",
-    type: "Fire Marshal",
-    issuedBy: "Fulton County",
-    issueDate: "Mar 1, 2026",
-    expiryDate: "Sep 1, 2026",
-    daysRemaining: "122 days",
-    status: "Expiring Soon",
-  },
-  {
-    property: "Stonegate Townhomes",
-    type: "Gate Permit",
-    issuedBy: "City of Savannah",
-    issueDate: "Apr 10, 2025",
-    expiryDate: "Apr 10, 2026",
-    daysRemaining: "EXPIRED",
-    status: "Expired",
-  },
-  {
-    property: "Stonegate Townhomes",
-    type: "HOA Certificate",
-    issuedBy: "Chatham HOA",
-    issueDate: "Jan 1, 2026",
-    expiryDate: "Jan 1, 2027",
-    daysRemaining: "243 days",
-    status: "Compliant",
-  },
-  {
-    property: "Pegasus Properties",
-    type: "Gate Permit",
-    issuedBy: "City of Augusta",
-    issueDate: "Feb 20, 2026",
-    expiryDate: "Feb 20, 2027",
-    daysRemaining: "293 days",
-    status: "Compliant",
-  },
-  {
-    property: "3888 Peachtree",
-    type: "City License",
-    issuedBy: "City of Atlanta",
-    issueDate: "Nov 1, 2025",
-    expiryDate: "Nov 1, 2026",
-    daysRemaining: "182 days",
-    status: "Compliant",
-  },
-  {
-    property: "Midwood Gardens",
-    type: "Gate Permit",
-    issuedBy: "DeKalb County",
-    issueDate: "May 5, 2025",
-    expiryDate: "May 5, 2026",
-    daysRemaining: "3 days",
-    status: "Expiring Soon",
-  },
-  {
-    property: "Midwood Gardens",
-    type: "Fire Marshal",
-    issuedBy: "DeKalb County",
-    issueDate: "Aug 10, 2025",
-    expiryDate: "Aug 10, 2026",
-    daysRemaining: "100 days",
-    status: "Compliant",
-  },
-  {
-    property: "Flint River",
-    type: "Gate Permit",
-    issuedBy: "City of Griffin",
-    issueDate: "Jan 1, 2025",
-    expiryDate: "Jan 1, 2026",
-    daysRemaining: "EXPIRED",
-    status: "Expired",
-  },
-  {
-    property: "Elevate Eagles Landing",
-    type: "Gate Permit",
-    issuedBy: "Cherokee County",
-    issueDate: "Mar 15, 2026",
-    expiryDate: "Mar 15, 2027",
-    daysRemaining: "317 days",
-    status: "Compliant",
-  },
-  {
-    property: "Columbia Residential",
-    type: "HOA Certificate",
-    issuedBy: "Richland HOA",
-    issueDate: "Dec 1, 2025",
-    expiryDate: "Jun 1, 2026",
-    daysRemaining: "29 days",
-    status: "Expiring Soon",
-  },
-  {
-    property: "Mitul Patel",
-    type: "Gate Permit",
-    issuedBy: "City of Atlanta",
-    issueDate: "Apr 1, 2026",
-    expiryDate: "Apr 1, 2027",
-    daysRemaining: "333 days",
-    status: "Compliant",
-  },
-];
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const expiredCount = PERMITS.filter((p) => p.status === "Expired").length;
+const PERMIT_TYPE_LABELS: Record<string, string> = {
+  gate_permit:         "Gate Permit",
+  fire_marshal:        "Fire Marshal",
+  hoa_certificate:     "HOA Certificate",
+  city_license:        "City License",
+  electrical_permit:   "Electrical Permit",
+  low_voltage_license: "Low Voltage License",
+  other:               "Other",
+};
+
+function fmtDate(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: ComplianceStatus }) {
-  if (status === "Compliant") {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-400/10 text-emerald-400">
-        Compliant
-      </span>
-    );
+  if (status === "compliant" || status === "no_expiry")
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-400/10 text-emerald-400">Compliant</span>;
+  if (status === "expiring_soon")
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-400/10 text-amber-400">Expiring Soon</span>;
+  return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-400/10 text-red-400">Expired</span>;
+}
+
+function DaysCell({ days, status }: { days: number | null; status: ComplianceStatus }) {
+  if (!days && days !== 0) return <span className="text-muted-foreground">—</span>;
+  if (status === "expired")
+    return <span className="font-semibold text-red-400">EXPIRED</span>;
+  if (status === "expiring_soon")
+    return <span className="font-semibold text-amber-400">{days} days</span>;
+  return <span className="text-foreground">{days} days</span>;
+}
+
+// ─── Add Permit Form ──────────────────────────────────────────────────────────
+
+interface AddPermitFormProps {
+  onSaved: () => void;
+  onCancel: () => void;
+}
+
+function AddPermitForm({ onSaved, onCancel }: AddPermitFormProps) {
+  const [form, setForm] = useState({
+    type: "gate_permit",
+    issued_by: "",
+    permit_number: "",
+    issue_date: "",
+    expiry_date: "",
+  });
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await fetch("/api/permits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      onSaved();
+    } catch (err) { console.error(err); }
+    finally { setSaving(false); }
   }
-  if (status === "Expiring Soon") {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-400/10 text-amber-400">
-        Expiring Soon
-      </span>
-    );
-  }
+
   return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-400/10 text-red-400">
-      Expired
-    </span>
+    <form onSubmit={e => { void handleSubmit(e); }}
+      className="bg-card border border-brand-400/30 rounded-xl p-4 flex flex-wrap gap-3 items-end">
+      <div>
+        <label className="block text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Type *</label>
+        <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
+          className="border border-border rounded-lg px-3 py-2 text-xs bg-background">
+          {Object.entries(PERMIT_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="block text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Issued By</label>
+        <input value={form.issued_by} onChange={e => setForm(f => ({ ...f, issued_by: e.target.value }))}
+          className="border border-border rounded-lg px-3 py-2 text-xs w-40 bg-background"
+          placeholder="City of Atlanta" />
+      </div>
+      <div>
+        <label className="block text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Permit #</label>
+        <input value={form.permit_number} onChange={e => setForm(f => ({ ...f, permit_number: e.target.value }))}
+          className="border border-border rounded-lg px-3 py-2 text-xs w-32 bg-background"
+          placeholder="GP-12345" />
+      </div>
+      <div>
+        <label className="block text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Issue Date</label>
+        <input type="date" value={form.issue_date} onChange={e => setForm(f => ({ ...f, issue_date: e.target.value }))}
+          className="border border-border rounded-lg px-3 py-2 text-xs bg-background" />
+      </div>
+      <div>
+        <label className="block text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Expiry Date</label>
+        <input type="date" value={form.expiry_date} onChange={e => setForm(f => ({ ...f, expiry_date: e.target.value }))}
+          className="border border-border rounded-lg px-3 py-2 text-xs bg-background" />
+      </div>
+      <button type="submit" disabled={saving}
+        className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand-400 text-white text-xs font-semibold hover:bg-brand-500 transition-colors disabled:opacity-50">
+        {saving ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+        Save
+      </button>
+      <button type="button" onClick={onCancel}
+        className="px-4 py-2 rounded-lg border border-border text-xs text-muted-foreground hover:bg-accent/30 transition-colors">
+        Cancel
+      </button>
+    </form>
   );
 }
 
-function DaysCell({ days, status }: { days: string; status: ComplianceStatus }) {
-  if (status === "Expired") {
-    return <span className="font-semibold text-red-400">{days}</span>;
-  }
-  if (status === "Expiring Soon") {
-    return <span className="font-semibold text-amber-400">{days}</span>;
-  }
-  return <span className="text-foreground">{days}</span>;
-}
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CompliancePage() {
+  const [permits,    setPermits]    = useState<Permit[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [showAdd,    setShowAdd]    = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res  = await fetch("/api/permits");
+      const data = await res.json();
+      setPermits(data.permits ?? []);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const expiredCount    = permits.filter(p => p.status === "expired").length;
+  const expiringCount   = permits.filter(p => p.status === "expiring_soon").length;
+  const compliantCount  = permits.filter(p => p.status === "compliant" || p.status === "no_expiry").length;
+
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <TopBar
         title="Compliance & Permits"
         subtitle="Gate permits, inspections, and regulatory deadlines per property"
         actions={
-          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-400 text-white text-xs font-semibold hover:bg-brand-500 transition-colors">
+          <button
+            onClick={() => setShowAdd(v => !v)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-400 text-white text-xs font-semibold hover:bg-brand-500 transition-colors"
+          >
             <Plus size={13} />
             Add Permit
           </button>
@@ -181,8 +182,17 @@ export default function CompliancePage() {
       />
 
       <div className="flex-1 p-6 space-y-6 max-w-screen-xl mx-auto w-full">
+
+        {/* Add Permit Form */}
+        {showAdd && (
+          <AddPermitForm
+            onSaved={() => { setShowAdd(false); void load(); }}
+            onCancel={() => setShowAdd(false)}
+          />
+        )}
+
         {/* Expired Alert Banner */}
-        {expiredCount > 0 && (
+        {!loading && expiredCount > 0 && (
           <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400">
             <XCircle size={16} className="shrink-0" />
             <p className="text-sm font-medium">
@@ -197,41 +207,30 @@ export default function CompliancePage() {
         {/* Stat Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-brand-400/10">
-              <FileText size={16} className="text-brand-400" />
-            </div>
+            <div className="p-2.5 rounded-lg bg-brand-400/10"><FileText size={16} className="text-brand-400" /></div>
             <div>
-              <p className="text-2xl font-bold text-foreground">28</p>
+              <p className="text-2xl font-bold text-foreground">{loading ? "—" : permits.length}</p>
               <p className="text-xs text-muted-foreground">Total Items</p>
             </div>
           </div>
-
           <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-emerald-400/10">
-              <ShieldCheck size={16} className="text-emerald-400" />
-            </div>
+            <div className="p-2.5 rounded-lg bg-emerald-400/10"><ShieldCheck size={16} className="text-emerald-400" /></div>
             <div>
-              <p className="text-2xl font-bold text-foreground">19</p>
+              <p className="text-2xl font-bold text-foreground">{loading ? "—" : compliantCount}</p>
               <p className="text-xs text-muted-foreground">Compliant</p>
             </div>
           </div>
-
           <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-amber-400/10">
-              <AlertTriangle size={16} className="text-amber-400" />
-            </div>
+            <div className="p-2.5 rounded-lg bg-amber-400/10"><AlertTriangle size={16} className="text-amber-400" /></div>
             <div>
-              <p className="text-2xl font-bold text-foreground">6</p>
+              <p className="text-2xl font-bold text-foreground">{loading ? "—" : expiringCount}</p>
               <p className="text-xs text-muted-foreground">Expiring Soon</p>
             </div>
           </div>
-
           <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-red-400/10">
-              <XCircle size={16} className="text-red-400" />
-            </div>
+            <div className="p-2.5 rounded-lg bg-red-400/10"><XCircle size={16} className="text-red-400" /></div>
             <div>
-              <p className="text-2xl font-bold text-foreground">3</p>
+              <p className="text-2xl font-bold text-foreground">{loading ? "—" : expiredCount}</p>
               <p className="text-xs text-muted-foreground">Expired / Overdue</p>
             </div>
           </div>
@@ -242,62 +241,63 @@ export default function CompliancePage() {
           <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border">
             <ShieldCheck size={15} className="text-brand-400" />
             <h2 className="text-sm font-semibold">Permit & Compliance Registry</h2>
+            {!loading && permits.length > 0 && (
+              <span className="ml-auto text-[10px] text-muted-foreground">{permits.length} records</span>
+            )}
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-border bg-background/30">
-                  {[
-                    "Property",
-                    "Type",
-                    "Issued By",
-                    "Issue Date",
-                    "Expiry Date",
-                    "Days Remaining",
-                    "Status",
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      className="text-left px-4 py-2.5 text-muted-foreground font-medium whitespace-nowrap"
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {PERMITS.map((row, i) => (
-                  <tr
-                    key={i}
-                    className="border-b border-border/50 hover:bg-accent/30 transition-colors"
-                  >
-                    <td className="px-4 py-3 font-medium text-foreground whitespace-nowrap">
-                      {row.property}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                      {row.type}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                      {row.issuedBy}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                      {row.issueDate}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                      {row.expiryDate}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <DaysCell days={row.daysRemaining} status={row.status} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={row.status} />
-                    </td>
+
+          {loading ? (
+            <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
+              <Loader2 size={16} className="animate-spin" />
+              <span className="text-xs">Loading permits…</span>
+            </div>
+          ) : permits.length === 0 ? (
+            <div className="py-12 text-center">
+              <ShieldCheck size={28} className="mx-auto mb-2 text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">No permits recorded yet</p>
+              <p className="text-xs text-muted-foreground/60 mt-1">Click Add Permit to start tracking compliance</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border bg-background/30">
+                    {["Property", "Type", "Permit #", "Issued By", "Issue Date", "Expiry Date", "Days", "Status"].map(h => (
+                      <th key={h} className="text-left px-4 py-2.5 text-muted-foreground font-medium whitespace-nowrap">{h}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {permits.map(row => (
+                    <tr key={row.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
+                      <td className="px-4 py-3 font-medium text-foreground whitespace-nowrap">
+                        {row.site_name ?? <span className="text-muted-foreground italic">Unassigned</span>}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                        {row.label ?? PERMIT_TYPE_LABELS[row.type] ?? row.type}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground font-mono">
+                        {row.permit_number ?? <span className="text-border">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                        {row.issued_by ?? <span className="text-border">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{fmtDate(row.issue_date)}</td>
+                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{fmtDate(row.expiry_date)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <DaysCell days={row.days_remaining} status={row.status} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={row.status} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
+
       </div>
     </div>
   );
