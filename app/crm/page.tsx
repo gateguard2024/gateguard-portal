@@ -530,7 +530,7 @@ export default function CRMPage() {
               </div>
               {leads.length > 5 && (
                 <Link
-                  href="/crm?filter=leads"
+                  href="/crm/leads"
                   className="text-xs text-[#6B7EFF] hover:underline font-medium"
                 >
                   View all

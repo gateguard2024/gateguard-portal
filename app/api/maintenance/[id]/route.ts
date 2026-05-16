@@ -6,16 +6,27 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// GET /api/maintenance/[id]
+// GET /api/maintenance/[id] — full work order detail with sub-data
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  const { data, error } = await supabase
-    .from('work_orders')
-    .select('*')
-    .eq('id', params.id)
-    .single()
+  const [woRes, checklistRes, commentsRes, partsRes, subWoRes] = await Promise.all([
+    supabase.from('work_orders').select('*').eq('id', params.id).single(),
+    supabase.from('wo_checklist_items').select('*').eq('work_order_id', params.id).order('sort_order'),
+    supabase.from('wo_comments').select('*').eq('work_order_id', params.id).order('created_at'),
+    supabase.from('wo_parts_used').select('*').eq('work_order_id', params.id).order('created_at'),
+    supabase.from('work_orders').select('*').eq('parent_wo_id', params.id).order('created_at'),
+  ])
 
-  if (error || !data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  return NextResponse.json({ work_order: data })
+  if (woRes.error || !woRes.data) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
+  return NextResponse.json({
+    work_order:    woRes.data,
+    checklist:     checklistRes.data ?? [],
+    comments:      commentsRes.data  ?? [],
+    parts_used:    partsRes.data     ?? [],
+    sub_work_orders: subWoRes.data   ?? [],
+  })
 }
 
 // PATCH /api/maintenance/[id] — update fields
@@ -29,7 +40,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const { data, error } = await supabase
     .from('work_orders')
-    .update(body)
+    .update({ ...body, updated_at: new Date().toISOString() })
     .eq('id', params.id)
     .select()
     .single()
@@ -39,7 +50,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   // If assignee changed, update technician's current_job_id
   if (body.assignee_id !== undefined) {
-    // Clear previous tech's current job if they had this WO
     await supabase
       .from('technicians')
       .update({ current_job_id: null })
@@ -59,7 +69,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
 // DELETE /api/maintenance/[id]
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
-  // Clear any tech references first
   await supabase
     .from('technicians')
     .update({ current_job_id: null })

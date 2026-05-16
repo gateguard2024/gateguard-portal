@@ -117,7 +117,9 @@ $$;
 -- ── sites ──────────────────────────────────────────────────
 
 -- Drop old catch-all, add org-scoped version
-drop policy if exists "service_role_sites" on sites;
+drop policy if exists "service_role_sites"      on sites;
+drop policy if exists "org_scoped_sites"        on sites;
+drop policy if exists "org_scoped_sites_write"  on sites;
 
 -- Service role (used by portal API) always passes through
 create policy "service_role_sites" on sites
@@ -130,7 +132,6 @@ create policy "org_scoped_sites" on sites
   for select
   to authenticated
   using (
-    -- Corporate (no org_id in JWT) or site belongs to user's subtree
     auth_org_id() is null
     or org_in_scope(master_dealer_id)
     or org_in_scope(install_dealer_id)
@@ -150,7 +151,8 @@ create policy "org_scoped_sites_write" on sites
 
 -- ── site_assets ────────────────────────────────────────────
 
-drop policy if exists "service_role_assets" on site_assets;
+drop policy if exists "service_role_assets"     on site_assets;
+drop policy if exists "org_scoped_site_assets"  on site_assets;
 
 create policy "service_role_assets" on site_assets
   for all to service_role using (true);
@@ -172,7 +174,8 @@ create policy "org_scoped_site_assets" on site_assets
 
 -- ── site_asset_terminals ───────────────────────────────────
 
-drop policy if exists "service_role_terminals" on site_asset_terminals;
+drop policy if exists "service_role_terminals"  on site_asset_terminals;
+drop policy if exists "org_scoped_terminals"    on site_asset_terminals;
 
 create policy "service_role_terminals" on site_asset_terminals
   for all to service_role using (true);
@@ -194,7 +197,8 @@ create policy "org_scoped_terminals" on site_asset_terminals
 
 -- ── site_events ────────────────────────────────────────────
 
-drop policy if exists "service_role_events" on site_events;
+drop policy if exists "service_role_events"  on site_events;
+drop policy if exists "org_scoped_events"    on site_events;
 
 create policy "service_role_events" on site_events
   for all to service_role using (true);
@@ -268,4 +272,6 @@ create index if not exists idx_sfal_record  on sensitive_field_access_log(table_
 
 -- RLS: only admins/service role can read the log
 alter table sensitive_field_access_log enable row level security;
+
+drop policy if exists "service_role_sfal" on sensitive_field_access_log;
 create policy "service_role_sfal" on sensitive_field_access_log for all to service_role using (true);

@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
 import { AISearch } from "@/components/ai/AISearch";
 import {
   Plus, Wrench, CheckCircle2, Clock, AlertTriangle, Calendar,
-  User, X, ChevronDown, RefreshCw, Trash2, Edit2,
+  User, X, ChevronDown, RefreshCw, Trash2, Edit2, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -349,6 +350,7 @@ function WorkOrderSlideOver({ open, onClose, onSaved, techs, editing }: NewWOFor
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function MaintenancePage() {
+  const router = useRouter();
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [techs, setTechs]           = useState<Technician[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -535,6 +537,7 @@ export default function MaintenancePage() {
                   return (
                     <tr
                       key={wo.id}
+                      onClick={() => router.push(`/maintenance/${wo.id}`)}
                       className="border-b border-border/50 hover:bg-accent/30 transition-colors cursor-pointer group"
                     >
                       <td className="px-4 py-3 font-mono text-brand-400">{wo.wo_number}</td>
@@ -593,6 +596,9 @@ export default function MaintenancePage() {
                           >
                             <Trash2 size={13} />
                           </button>
+                          <span className="ml-1 text-xs text-brand-400 font-medium flex items-center gap-0.5">
+                            View <ChevronRight size={12} />
+                          </span>
                         </div>
                       </td>
                     </tr>
