@@ -54,16 +54,10 @@ alter table organizations
 alter table organizations
   add column if not exists master_dealer_id uuid references organizations(id) on delete set null;
 
--- Backfill tier_label for new tier values
-update organizations
-set tier_label = case tier
-  when 'full_dealer'        then 'Full Dealership'
-  when 'install_contractor' then 'Installing Contractor'
-  when 'sales_partner'      then 'Sales Partner'
-  else tier_label
-end
-where tier in ('full_dealer', 'install_contractor', 'sales_partner')
-  and (tier_label is null or tier_label = tier::text);
+-- NOTE: No backfill needed — these are new enum values so no existing rows
+-- have them. New orgs will receive tier_label at insert time via the API.
+-- (A backfill referencing new enum values in a WHERE clause would fail with
+--  Postgres error 55P04 "unsafe use of new value" in the same transaction.)
 
 -- Indexes for hierarchy traversal
 create index if not exists idx_orgs_master_agent  on organizations(master_agent_id)  where master_agent_id is not null;

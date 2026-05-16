@@ -11,7 +11,7 @@
  *
  * Request body:
  *   org_name           string   required
- *   org_tier           OrgTier  required  (master_dealer | service_dealer | install_dealer | sales)
+ *   org_tier           OrgTier  required  (master_agent | master_dealer | full_dealer | service_dealer | install_contractor | sales_partner)
  *   parent_org_id      string?  UUID of parent org (master_agent or master_dealer above them)
  *   license_number     string?
  *   service_area_states string[] e.g. ['GA','FL']
@@ -42,15 +42,17 @@ const supabase = createClient(
 export const dynamic = 'force-dynamic'
 
 const VALID_DEALER_TIERS: OrgTier[] = [
-  'master_agent', 'master_dealer', 'sales', 'install_dealer', 'service_dealer',
+  'master_agent', 'master_dealer', 'full_dealer',
+  'service_dealer', 'install_contractor', 'sales_partner',
 ]
 
 const TIER_LABELS: Record<string, string> = {
-  master_agent:   'Master Agent',
-  master_dealer:  'Master Dealer',
-  sales:          'Sales Dealer',
-  install_dealer: 'Install Dealer',
-  service_dealer: 'Service Dealer',
+  master_agent:       'Master Agent',
+  master_dealer:      'Master Dealer',
+  full_dealer:        'Full Dealership',
+  service_dealer:     'Service Dealer',
+  install_contractor: 'Install Contractor',
+  sales_partner:      'Sales Partner',
 }
 
 export async function POST(req: NextRequest) {

@@ -27,7 +27,7 @@ export const dynamic = 'force-dynamic'
 
 const VALID_TIERS: OrgTier[] = [
   'corporate', 'master_agent', 'master_dealer',
-  'sales', 'install_dealer', 'service_dealer', 'client',
+  'full_dealer', 'service_dealer', 'install_contractor', 'sales_partner', 'client',
 ]
 
 const VALID_ROLES: PortalRole[] = [
