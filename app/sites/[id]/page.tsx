@@ -274,7 +274,7 @@ export default function SiteDetailPage() {
     try {
       const [siteRes, reqRes] = await Promise.all([
         fetch(`/api/sites/${id}`),
-        fetch(`/api/request?site_id=${id}`),
+        fetch(`/api/sites/${id}/requests`),
       ])
       const siteJson = await siteRes.json()
       if (!siteRes.ok) { router.push('/sites'); return }
@@ -309,7 +309,7 @@ export default function SiteDetailPage() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
       // Mark request as converted
-      await fetch(`/api/request?site_id=${id}`, {
+      await fetch(`/api/sites/${id}/requests`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ request_id: req.id, status: 'converted', converted_wo_id: json.work_order.id }),
