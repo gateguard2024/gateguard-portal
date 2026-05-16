@@ -55,19 +55,12 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Notify the dealer (via site's primary contact or pm_email — we send to them, not the submitter)
-  // This is a fire-and-forget background notification to the dealer
-  supabaseAdmin
-    .from('sites')
-    .select('primary_contact_email, pm_email')
-    .eq('id', site_id)
-    .single()
-    .then(async ({ data: siteDetail }) => {
-      // In future: send dealer an email that a new request came in
-      // For now just log
+  // Fire-and-forget: log new request (future: email dealer)
+  void (async () => {
+    try {
       console.log(`[request] New request "${title}" for site ${site.name} from ${contact_email ?? 'unknown'}`)
-    })
-    .catch(console.error)
+    } catch (_) { /* non-blocking */ }
+  })()
 
   return NextResponse.json({ success: true, request: data }, { status: 201 })
 }
