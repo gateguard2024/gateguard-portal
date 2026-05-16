@@ -69,3 +69,56 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   return NextResponse.json({ error: 'Not found' }, { status: 404 })
 }
+
+// PATCH /api/crm/leads/[id] — update stage, notes, estSetup, estMrr, etc.
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const rawId = params.id
+  const body  = await req.json()
+
+  // show_ prefix = from show_leads table
+  if (rawId.startsWith('show_')) {
+    const uuid = rawId.replace('show_', '')
+    const updateData: Record<string, unknown> = {}
+    if (body.stage    !== undefined) updateData.status = body.stage
+    if (body.notes    !== undefined) updateData.notes  = body.notes
+    if (body.assignedDealer !== undefined) updateData.assigned_dealer = body.assignedDealer
+
+    const { data, error } = await supabase
+      .from('show_leads')
+      .update(updateData)
+      .eq('id', uuid)
+      .select()
+      .single()
+
+    if (error || !data) return NextResponse.json({ error: error?.message ?? 'Not found' }, { status: 404 })
+    return NextResponse.json({ success: true, id: rawId, ...updateData })
+  }
+
+  // Regular CRM lead from leads table
+  const { data, error } = await supabase
+    .from('leads')
+    .update(body)
+    .eq('id', rawId)
+    .select()
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!data)  return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  return NextResponse.json({ lead: data })
+}
+
+// DELETE /api/crm/leads/[id]
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  const rawId = params.id
+
+  if (rawId.startsWith('show_')) {
+    const uuid = rawId.replace('show_', '')
+    const { error } = await supabase.from('show_leads').delete().eq('id', uuid)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true })
+  }
+
+  const { error } = await supabase.from('leads').delete().eq('id', rawId)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
+}

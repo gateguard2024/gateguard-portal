@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
-
 export const dynamic = 'force-dynamic'
 
 const STAGE_ORDER = [
@@ -28,6 +28,9 @@ const STAGE_PROB: Record<string, number> = {
 
 export async function GET(req: NextRequest) {
   try {
+    const user  = await getCurrentUser()
+    const scope = await resolveOrgScope(user)
+
     const { searchParams } = new URL(req.url)
     const stage  = searchParams.get('stage')
     const search = searchParams.get('q')
@@ -39,12 +42,21 @@ export async function GET(req: NextRequest) {
       .not('stage', 'in', '("dead")')
       .order('created_at', { ascending: false })
 
-    if (stage) query = query.eq('stage', stage)
-    if (type)  query = query.eq('opp_type', type)
+    // ── Org isolation ──────────────────────────────────────────────
+    query = applyOrgScope(query, scope, 'org_id')
+
+    if (stage)  query = query.eq('stage', stage)
+    if (type)   query = query.eq('opp_type', type)
     if (search) query = query.ilike('name', `%${search}%`)
 
     const { data, error } = await query
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // Apply financial gating — non-financial roles see amount as null
+    const records = (data ?? []).map((opp: any) => ({
+      ...opp,
+      amount: user.canViewFinancials ? opp.amount : null,
+    }))
 
     // Group by stage for kanban
     const grouped = STAGE_ORDER.reduce((acc, s) => {
@@ -53,24 +65,24 @@ export async function GET(req: NextRequest) {
     }, {} as Record<string, any>)
 
     let pipelineTotal = 0
-    ;(data || []).forEach((opp: any) => {
+    records.forEach((opp: any) => {
       if (grouped[opp.stage]) {
         grouped[opp.stage].records.push(opp)
         grouped[opp.stage].total += Number(opp.amount || 0)
-        if (opp.stage !== 'won' && opp.stage !== 'lost') {
+        if (!['won', 'lost', 'dead'].includes(opp.stage)) {
           pipelineTotal += Number(opp.amount || 0)
         }
       }
     })
 
     return NextResponse.json({
-      records: data || [],
+      records,
       grouped,
-      pipelineTotal,
+      pipelineTotal: user.canViewFinancials ? pipelineTotal : null,
       counts: {
-        total: data?.length || 0,
-        open: data?.filter((o: any) => !['won','lost','dead'].includes(o.stage)).length || 0,
-        won:  data?.filter((o: any) => o.stage === 'won').length || 0,
+        total: records.length,
+        open:  records.filter((o: any) => !['won','lost','dead'].includes(o.stage)).length,
+        won:   records.filter((o: any) => o.stage === 'won').length,
       }
     })
   } catch (err: any) {
@@ -80,18 +92,22 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
+    const user  = await getCurrentUser()
+    const body  = await req.json()
     const stage = body.stage || 'meet_present'
-    const user = await getCurrentUser()
+
+    // Auto-stamp org_id from the authenticated user
+    const org_id = user.isCorporate ? (body.org_id ?? null) : (user.org_id ?? null)
 
     const { data, error } = await supabase
       .from('opportunities')
       .insert({
         ...body,
         stage,
-        probability: body.probability ?? STAGE_PROB[stage],
-        owner_name: user.name,
+        probability:    body.probability ?? STAGE_PROB[stage],
+        owner_name:     user.name,
         owner_initials: user.initials,
+        org_id,
       })
       .select()
       .single()

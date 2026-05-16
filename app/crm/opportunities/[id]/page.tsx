@@ -263,6 +263,15 @@ export default function OpportunityDetailPage() {
   // Stage progression
   const [stageSaving, setStageSaving] = useState(false);
 
+  // Follow
+  const [following, setFollowing] = useState(false);
+  const [followToast, setFollowToast] = useState(false);
+  const handleFollow = () => {
+    setFollowing(f => !f);
+    setFollowToast(true);
+    setTimeout(() => setFollowToast(false), 2000);
+  };
+
   // Contact form
   const [showAddContact, setShowAddContact] = useState(false);
   const [contactForm, setContactForm] = useState({ name: "", title: "", phone: "", email: "", role: "" });
@@ -459,8 +468,19 @@ export default function OpportunityDetailPage() {
         subtitle="Opportunity Detail"
         actions={
           <div className="flex items-center gap-2">
-            <button className="px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-accent transition-colors">
-              Follow
+            {followToast && (
+              <span className="text-xs text-emerald-600 font-medium animate-in fade-in">
+                {following ? "Following!" : "Unfollowed"}
+              </span>
+            )}
+            <button
+              onClick={handleFollow}
+              className={cn(
+                "px-3 py-1.5 text-sm border rounded-lg hover:bg-accent transition-colors",
+                following ? "border-[#6B7EFF] text-[#6B7EFF] bg-[#6B7EFF]/5" : "border-border"
+              )}
+            >
+              {following ? "✓ Following" : "Follow"}
             </button>
             <button
               onClick={() => setShowEdit(true)}
