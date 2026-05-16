@@ -50,8 +50,9 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Operations",
     icon: LayoutDashboard,
     items: [
-      { label: "Dashboard",    href: "/",            icon: LayoutDashboard, description: "Your command center — KPIs, alerts, activity" },
-      { label: "CRM",          href: "/crm",         icon: MessageSquare,   description: "Leads, opportunities, pipeline" },
+      { label: "Dashboard",          href: "/",    icon: LayoutDashboard, description: "Your command center — KPIs, alerts, activity" },
+      { label: "Operating System",   href: "/eos", icon: Layers,          description: "EOS — V/TO, Rocks, Scorecard, L10 meetings" },
+      { label: "CRM",                href: "/crm", icon: MessageSquare,   description: "Leads, opportunities, pipeline" },
       { label: "Customers",    href: "/customers",   icon: Users,           description: "All customer accounts" },
       { label: "Quotes",       href: "/quotes",      icon: FileText,        description: "Proposals and approvals" },
       { label: "Billing",      href: "/billing",     icon: CreditCard,      description: "Invoices and payments" },
@@ -106,7 +107,6 @@ const NAV_SECTIONS: NavSection[] = [
     icon: Sparkles,
     color: "#6B7EFF",
     items: [
-      { label: "Operating System (EOS)", href: "/eos",      icon: Layers,        description: "V/TO, Rocks, Scorecard, L10 meetings" },
       { label: "ARIA — Lead Intel",      href: "/aria",     icon: Crosshair,     description: "AI-powered outreach and lead research", badge: "AI" },
       { label: "DirecTV / ATLAS",        href: "/directv",  icon: Satellite,     description: "DirecTV channel dashboard and orders" },
       { label: "New Order",              href: "/orders/new", icon: Zap,          description: "Submit a DirecTV order" },
