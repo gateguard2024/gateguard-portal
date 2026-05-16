@@ -7,7 +7,7 @@ import {
   Building2, MapPin, Phone, Mail, Wrench, ChevronLeft,
   Plus, Shield, Activity, ClipboardList, Package,
   CheckCircle2, AlertTriangle, XCircle, Wifi, WifiOff,
-  Key, FileText, Edit3, Trash2, RefreshCw,
+  Key, FileText, Edit3, Trash2, RefreshCw, Inbox, Copy, ExternalLink,
 } from 'lucide-react'
 
 /* ─── types ──────────────────────────────────────────── */
@@ -235,7 +235,23 @@ function formatDateTime(iso: string | null) {
 }
 
 /* ─── Main page ──────────────────────────────────────── */
-type Tab = 'overview' | 'assets' | 'events' | 'work_orders'
+type Tab = 'overview' | 'assets' | 'events' | 'work_orders' | 'requests'
+
+interface WORequest {
+  id: string
+  site_id: string
+  title: string
+  description?: string
+  area?: string
+  priority_requested: string
+  contact_name?: string
+  contact_email?: string
+  contact_phone?: string
+  status: string
+  converted_wo_id?: string
+  notes?: string
+  created_at: string
+}
 
 export default function SiteDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -245,22 +261,72 @@ export default function SiteDetailPage() {
   const [assets, setAssets]         = useState<Asset[]>([])
   const [events, setEvents]         = useState<SiteEvent[]>([])
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
+  const [requests, setRequests]     = useState<WORequest[]>([])
   const [loading, setLoading]       = useState(true)
   const [tab, setTab]               = useState<Tab>('overview')
   const [showAddAsset, setShowAddAsset] = useState(false)
   const [statusUpdating, setStatusUpdating] = useState(false)
+  const [copySuccess, setCopySuccess] = useState(false)
+  const [convertingId, setConvertingId] = useState<string | null>(null)
 
   const fetchData = async () => {
     setLoading(true)
     try {
-      const res  = await fetch(`/api/sites/${id}`)
-      const json = await res.json()
-      if (!res.ok) { router.push('/sites'); return }
-      setSite(json.site)
-      setAssets(json.assets)
-      setEvents(json.events)
-      setWorkOrders(json.work_orders)
+      const [siteRes, reqRes] = await Promise.all([
+        fetch(`/api/sites/${id}`),
+        fetch(`/api/request?site_id=${id}`),
+      ])
+      const siteJson = await siteRes.json()
+      if (!siteRes.ok) { router.push('/sites'); return }
+      setSite(siteJson.site)
+      setAssets(siteJson.assets)
+      setEvents(siteJson.events)
+      setWorkOrders(siteJson.work_orders)
+      if (reqRes.ok) {
+        const reqJson = await reqRes.json()
+        setRequests(reqJson.requests ?? [])
+      }
     } finally { setLoading(false) }
+  }
+
+  const handleConvertRequest = async (req: WORequest) => {
+    setConvertingId(req.id)
+    try {
+      // Create work order from request
+      const res = await fetch('/api/maintenance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title:         req.title,
+          customer_name: site?.name ?? '',
+          job_type:      'Repair',
+          priority:      req.priority_requested,
+          status:        'open',
+          notes:         [req.description, req.area ? `Area: ${req.area}` : '', req.contact_name ? `Contact: ${req.contact_name} ${req.contact_email ?? ''} ${req.contact_phone ?? ''}` : ''].filter(Boolean).join('\n'),
+          site_id:       id,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      // Mark request as converted
+      await fetch(`/api/request?site_id=${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ request_id: req.id, status: 'converted', converted_wo_id: json.work_order.id }),
+      }).catch(() => {})
+      setRequests(r => r.map(x => x.id === req.id ? { ...x, status: 'converted', converted_wo_id: json.work_order.id } : x))
+      setWorkOrders(w => [json.work_order, ...w])
+    } finally {
+      setConvertingId(null)
+    }
+  }
+
+  const copyRequestLink = () => {
+    const url = `${window.location.origin}/request/${id}`
+    navigator.clipboard.writeText(url).then(() => {
+      setCopySuccess(true)
+      setTimeout(() => setCopySuccess(false), 2000)
+    })
   }
 
   useEffect(() => { fetchData() }, [id])
@@ -291,11 +357,14 @@ export default function SiteDetailPage() {
   const activeAssets   = assets.filter(a => a.status === 'active').length
   const offlineAssets  = assets.filter(a => a.status === 'offline').length
 
-  const TABS: { id: Tab; label: string; icon: any; count?: number }[] = [
+  const newRequests = requests.filter(r => r.status === 'new').length
+
+  const TABS: { id: Tab; label: string; icon: any; count?: number; badge?: number }[] = [
     { id: 'overview',    label: 'Overview',     icon: Building2 },
     { id: 'assets',      label: 'Equipment',    icon: Package,    count: assets.length },
     { id: 'events',      label: 'Events',       icon: Activity,   count: events.length },
     { id: 'work_orders', label: 'Work Orders',  icon: ClipboardList, count: workOrders.length },
+    { id: 'requests',    label: 'Requests',     icon: Inbox,      count: requests.length, badge: newRequests },
   ]
 
   return (
@@ -402,6 +471,11 @@ export default function SiteDetailPage() {
             {t.count !== undefined && t.count > 0 && (
               <span className={`text-xs px-1.5 py-0.5 rounded-full ${tab === t.id ? 'bg-brand-100 text-brand-400' : 'bg-slate-100 text-slate-500'}`}>
                 {t.count}
+              </span>
+            )}
+            {t.badge !== undefined && t.badge > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500 text-white font-bold leading-none">
+                {t.badge}
               </span>
             )}
           </button>
@@ -627,6 +701,112 @@ export default function SiteDetailPage() {
               </tbody>
             </table>
           )}
+        </div>
+      )}
+
+      {/* ── Tab: Requests ────────────────────────────────────────────── */}
+      {tab === 'requests' && (
+        <div className="space-y-4">
+          {/* Header with share link */}
+          <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800 mb-0.5">Property Request Portal</h3>
+              <p className="text-xs text-slate-500">Share this link with your property manager so they can submit maintenance requests directly.</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <a
+                href={`/request/${id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600 transition-colors"
+              >
+                <ExternalLink size={12} /> Preview
+              </a>
+              <button
+                onClick={copyRequestLink}
+                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${copySuccess ? 'bg-emerald-500 text-white' : 'bg-brand-400 text-white hover:bg-brand-500'}`}
+              >
+                <Copy size={12} />
+                {copySuccess ? 'Copied!' : 'Copy Link'}
+              </button>
+            </div>
+          </div>
+
+          {/* Requests table */}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            {requests.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                <Inbox size={36} className="mb-3 opacity-30" />
+                <p className="font-medium text-sm">No requests yet</p>
+                <p className="text-xs mt-1">Share the request portal link with your property manager to get started</p>
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50">
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Request</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Area</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Priority</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Contact</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Status</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Submitted</th>
+                    <th className="px-4 py-3" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {requests.map(req => {
+                    const priBg: Record<string, string> = { urgent: 'bg-red-100 text-red-700', high: 'bg-orange-100 text-orange-700', normal: 'bg-blue-100 text-blue-700', low: 'bg-slate-100 text-slate-500' }
+                    const stBg:  Record<string, string> = { new: 'bg-yellow-100 text-yellow-700', acknowledged: 'bg-blue-100 text-blue-700', converted: 'bg-emerald-100 text-emerald-700', closed: 'bg-slate-100 text-slate-500' }
+                    const age = Math.floor((Date.now() - new Date(req.created_at).getTime()) / 86400000)
+                    return (
+                      <tr key={req.id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-slate-900">{req.title}</div>
+                          {req.description && <div className="text-xs text-slate-400 truncate max-w-[220px] mt-0.5">{req.description}</div>}
+                        </td>
+                        <td className="px-4 py-3 text-slate-500 text-xs">{req.area ?? '—'}</td>
+                        <td className="px-4 py-3">
+                          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full capitalize ${priBg[req.priority_requested] ?? priBg.normal}`}>
+                            {req.priority_requested}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-500">
+                          {req.contact_name && <div className="font-medium text-slate-700">{req.contact_name}</div>}
+                          {req.contact_email && <div>{req.contact_email}</div>}
+                          {req.contact_phone && <div>{req.contact_phone}</div>}
+                          {!req.contact_name && !req.contact_email && !req.contact_phone && '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full capitalize ${stBg[req.status] ?? stBg.new}`}>
+                            {req.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-400">
+                          {age === 0 ? 'Today' : age === 1 ? 'Yesterday' : `${age}d ago`}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {req.status === 'new' && (
+                            <button
+                              onClick={() => handleConvertRequest(req)}
+                              disabled={convertingId === req.id}
+                              className="text-xs font-medium text-brand-400 hover:text-brand-500 disabled:opacity-50 whitespace-nowrap"
+                            >
+                              {convertingId === req.id ? 'Creating…' : '+ Create WO'}
+                            </button>
+                          )}
+                          {req.status === 'converted' && req.converted_wo_id && (
+                            <a href={`/maintenance/${req.converted_wo_id}`} className="text-xs font-medium text-emerald-600 hover:underline">
+                              View WO →
+                            </a>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       )}
 

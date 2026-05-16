@@ -29,6 +29,9 @@ function isBypassPath(pathname: string): boolean {
     pathname.startsWith('/api/show-lead') ||
     // CRM leads API — fetches show_leads for portal CRM (list + detail)
     pathname.startsWith('/api/crm/') ||
+    // Property request portal — public form for property managers (no Clerk)
+    pathname.startsWith('/request/') ||
+    pathname.startsWith('/api/request') ||
     // Auth flows
     pathname.startsWith('/sign-in') ||
     pathname.startsWith('/sign-up') ||

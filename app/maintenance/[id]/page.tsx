@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type WOStatus   = 'open' | 'in_progress' | 'scheduled' | 'completed' | 'cancelled'
+type WOStatus   = 'open' | 'in_progress' | 'scheduled' | 'in_route' | 'on_site' | 'completed' | 'cancelled'
 type WOPriority = 'urgent' | 'high' | 'medium' | 'low'
 
 interface WorkOrder {
@@ -89,16 +89,20 @@ const PRIORITY_CFG: Record<WOPriority, { bg: string; text: string; label: string
 
 const STATUS_CFG: Record<WOStatus, { label: string; bg: string; text: string; dot: string }> = {
   open:        { label: 'Open',        bg: 'bg-blue-500/10',    text: 'text-blue-400',    dot: 'bg-blue-400'    },
-  in_progress: { label: 'In Progress', bg: 'bg-amber-500/10',   text: 'text-amber-400',   dot: 'bg-amber-400'   },
   scheduled:   { label: 'Scheduled',   bg: 'bg-violet-500/10',  text: 'text-violet-400',  dot: 'bg-violet-400'  },
+  in_route:    { label: 'En Route',    bg: 'bg-amber-500/10',   text: 'text-amber-400',   dot: 'bg-amber-400'   },
+  on_site:     { label: 'On Site',     bg: 'bg-orange-500/10',  text: 'text-orange-400',  dot: 'bg-orange-400'  },
+  in_progress: { label: 'In Progress', bg: 'bg-amber-500/10',   text: 'text-amber-400',   dot: 'bg-amber-400'   },
   completed:   { label: 'Completed',   bg: 'bg-emerald-500/10', text: 'text-emerald-400', dot: 'bg-emerald-400' },
   cancelled:   { label: 'Cancelled',   bg: 'bg-slate-500/10',   text: 'text-slate-400',   dot: 'bg-slate-400'   },
 }
 
 const STATUSES: { value: WOStatus; label: string }[] = [
   { value: 'open',        label: 'Open'        },
-  { value: 'in_progress', label: 'In Progress' },
   { value: 'scheduled',   label: 'Scheduled'   },
+  { value: 'in_route',    label: 'En Route'    },
+  { value: 'on_site',     label: 'On Site'     },
+  { value: 'in_progress', label: 'In Progress' },
   { value: 'completed',   label: 'Completed'   },
   { value: 'cancelled',   label: 'Cancelled'   },
 ]
@@ -913,7 +917,19 @@ export default function WorkOrderDetailPage() {
               <div className="bg-card border border-border rounded-xl p-4 space-y-2">
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Quick Actions</h3>
 
-                {wo.status !== 'in_progress' && wo.status !== 'completed' && (
+                {wo.status === 'scheduled' && (
+                  <button onClick={() => handleStatusChange('in_route')}
+                    className="w-full py-2 px-3 rounded-lg bg-amber-500/10 text-amber-400 text-sm font-medium hover:bg-amber-500/20 transition-colors text-left flex items-center gap-2">
+                    🚗 Mark En Route
+                  </button>
+                )}
+                {wo.status === 'in_route' && (
+                  <button onClick={() => handleStatusChange('on_site')}
+                    className="w-full py-2 px-3 rounded-lg bg-orange-500/10 text-orange-400 text-sm font-medium hover:bg-orange-500/20 transition-colors text-left flex items-center gap-2">
+                    🔧 Mark On Site
+                  </button>
+                )}
+                {!['in_route', 'on_site', 'in_progress', 'completed'].includes(wo.status) && (
                   <button onClick={() => handleStatusChange('in_progress')}
                     className="w-full py-2 px-3 rounded-lg bg-amber-500/10 text-amber-400 text-sm font-medium hover:bg-amber-500/20 transition-colors text-left flex items-center gap-2">
                     <Wrench size={13} /> Mark In Progress

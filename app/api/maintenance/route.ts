@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
+import { notifyWOEvent } from '@/lib/email'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -79,5 +80,31 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Fire "created" notification if site has a contact email
+  if (site_id && data) {
+    supabase
+      .from('sites')
+      .select('primary_contact_email, pm_email, name')
+      .eq('id', site_id)
+      .single()
+      .then(({ data: site }) => {
+        const recipientEmail = site?.pm_email ?? site?.primary_contact_email ?? null
+        if (recipientEmail) {
+          notifyWOEvent({
+            supabase,
+            work_order_id:   data.id,
+            wo_number:       data.wo_number,
+            title:           data.title,
+            customer_name:   data.customer_name,
+            event:           'created',
+            recipient_email: recipientEmail,
+            assignee_name:   data.assignee_name ?? undefined,
+          }).catch(console.error)
+        }
+      })
+      .catch(console.error)
+  }
+
   return NextResponse.json({ work_order: data }, { status: 201 })
 }

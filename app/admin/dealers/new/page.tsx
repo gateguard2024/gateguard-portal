@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   ChevronLeft, ChevronRight, Building2, Users, Shield,
-  CheckCircle2, MapPin, Phone, Mail, Globe, Briefcase,
+  CheckCircle2, MapPin, Phone, Mail, Globe, Layers,
   Star, Wrench, ShoppingBag, ClipboardList, Sparkles,
   AlertCircle, Copy, ExternalLink,
 } from 'lucide-react'
@@ -74,7 +74,7 @@ const TIERS: {
     id: 'master_dealer',
     label: 'Master Dealer',
     sublabel: 'Account owner for properties',
-    icon: Briefcase,
+    icon: Layers,
     color: 'text-brand-400',
     bg: 'bg-brand-50',
     border: 'border-brand-300',
