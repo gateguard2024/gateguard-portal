@@ -200,6 +200,36 @@ export function Sidebar() {
   const displayEmail = user?.primaryEmailAddress?.emailAddress ?? "rfeldman@gateguard.co";
   const initials = displayName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) || "RF";
 
+  // ─── 7-tier visibility ────────────────────────────────────────────────────
+  const orgTier = (user?.publicMetadata?.org_tier as string | undefined) ?? "corporate";
+  const isCorporate         = orgTier === "corporate";
+  const isMasterAgent       = orgTier === "master_agent";
+  const isMasterDealer      = orgTier === "master_dealer";
+  const isFullDealer        = orgTier === "full_dealer";
+  const isServiceDealer     = orgTier === "service_dealer";
+  const isInstallContractor = orgTier === "install_contractor";
+  const isSalesPartner      = orgTier === "sales_partner";
+  // isAdmin: corporate admin/supervisor — controls Admin items
+  const clerkRole = (user?.publicMetadata?.role as string | undefined) ?? "admin";
+  const isAdminRole = ["admin", "supervisor"].includes(clerkRole);
+
+  // Per-section/item visibility helpers
+  const showAdmin       = isCorporate;
+  const showOperations  = isCorporate || isMasterDealer || isFullDealer || isSalesPartner || isMasterAgent;
+  const showFieldFull   = isCorporate || isMasterDealer || isFullDealer;
+  const showWOs         = isCorporate || isMasterDealer || isFullDealer || isServiceDealer || isInstallContractor;
+  const showSites       = isCorporate || isMasterDealer || isFullDealer || isServiceDealer;
+  const showDispatch    = isCorporate || isMasterDealer || isFullDealer;
+  const showCRM         = isCorporate || isMasterDealer || isFullDealer || isSalesPartner;
+  const showQuotes      = isCorporate || isMasterDealer || isFullDealer || isSalesPartner;
+  const showCommissions = isCorporate || isMasterAgent || isMasterDealer || isFullDealer || isSalesPartner || isServiceDealer;
+  const showNetwork     = isCorporate || isMasterAgent || isMasterDealer || isFullDealer;
+  const showFinancials  = isCorporate || isMasterAgent || isMasterDealer || isFullDealer || isAdminRole;
+  const showCompliance  = isCorporate || isMasterDealer || isFullDealer || isServiceDealer;
+  const showSecurity    = isCorporate || isMasterDealer || isFullDealer;
+  const showIntelligence = isCorporate || isMasterDealer || isFullDealer || isMasterAgent;
+  const showMarketing   = isCorporate || isMasterDealer || isFullDealer;
+
   // Auto-expand section when route changes
   useEffect(() => {
     const section = getSectionForPath(pathname);
@@ -352,6 +382,13 @@ export function Sidebar() {
       {/* ── Main nav (accordion) ──────────────────────────────────────────── */}
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
         {NAV_SECTIONS.map(section => {
+          // ── Section-level tier gate ──────────────────────────────────────
+          if (section.key === "security"    && !showSecurity)    return null;
+          if (section.key === "dealer"      && !showNetwork)     return null;
+          if (section.key === "intelligence"&& !showIntelligence)return null;
+          if (section.key === "marketing"   && !showMarketing)   return null;
+          if (section.key === "settings"    && !showAdmin && !isCorporate && !isMasterDealer && !isFullDealer) return null;
+
           const SectionIcon = section.icon;
           const isExpanded = expandedSections.has(section.key);
           const isSectionActive = getSectionForPath(pathname) === section.key;
@@ -415,6 +452,32 @@ export function Sidebar() {
               {isExpanded && (
                 <div className="mt-0.5 ml-3 pl-3 border-l border-white/10 space-y-0.5 pb-1">
                   {section.items.map(item => {
+                    // ── Item-level tier gate ────────────────────────────────
+                    // Operations section
+                    if (item.href === "/crm"       && !showCRM)         return null;
+                    if (item.href === "/customers" && !showOperations)  return null;
+                    if (item.href === "/quotes"    && !showQuotes)      return null;
+                    if (item.href === "/billing"   && !showFinancials)  return null;
+                    if (item.href === "/renewals"  && !showFinancials)  return null;
+                    if (item.href === "/revenue"   && !showFinancials)  return null;
+                    if (item.href === "/contracts" && !showFinancials)  return null;
+                    // Field & Tech section
+                    if (item.href === "/sites"       && !showSites)       return null;
+                    if (item.href === "/maintenance" && !showWOs)         return null;
+                    if (item.href === "/dispatch"    && !showDispatch)    return null;
+                    if (item.href === "/inventory"   && !showFieldFull)   return null;
+                    if (item.href === "/survey"      && !showFieldFull)   return null;
+                    if (item.href === "/reports"     && !showFinancials)  return null;
+                    // Dealer Network section
+                    if (item.href === "/admin/dealers" && !showAdmin)     return null;
+                    if (item.href === "/reps"           && !showCommissions) return null;
+                    if (item.href === "/compliance"    && !showCompliance) return null;
+                    if (item.href === "/scorecard"     && !showNetwork)   return null;
+                    if (item.href === "/training"      && !showNetwork)   return null;
+                    // Settings section
+                    if (item.href === "/admin"       && !showAdmin)       return null;
+                    if (item.href === "/admin/users" && !showAdmin)       return null;
+
                     const Icon = item.icon;
                     const isActive = !item.external && (
                       item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)

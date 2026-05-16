@@ -3,22 +3,26 @@
  *
  * Resolves which organization IDs a portal user is allowed to query.
  *
- * The GateGuard 6-tier hierarchy (stored via parent_id on organizations):
+ * The GateGuard 7-tier hierarchy (stored via parent_id on organizations):
  *
  *   corporate
  *     └── master_agent
  *           └── master_dealer
- *                 ├── sales
- *                 ├── install_dealer
- *                 └── service_dealer
- *                       └── client
+ *                 ├── full_dealer
+ *                 │     ├── service_dealer
+ *                 │     ├── install_contractor
+ *                 │     └── sales_partner
+ *                 └── client
  *
  * Visibility rules:
- *   corporate      → all data (no org filter)
- *   master_agent   → their subtree: all master_dealers + all dealers under them
- *   master_dealer  → their subtree: themselves + all dealers under them
- *   dealer (any)   → self only
- *   client         → self only
+ *   corporate          → all data (no org filter)
+ *   master_agent       → their subtree (commission oversight, not operational data)
+ *   master_dealer      → entire subtree: themselves + all sub-orgs
+ *   full_dealer        → self + any sub-orgs (service dealers, install contractors, sales partners)
+ *   service_dealer     → self only
+ *   install_contractor → self only (work_orders filtered to assignee_org_id, not org_id)
+ *   sales_partner      → self only
+ *   client             → self only
  *
  * Usage in an API route:
  *   const user  = await getCurrentUser()
@@ -75,18 +79,31 @@ async function getDescendantIds(org_id: string): Promise<string[]> {
 }
 
 export async function resolveOrgScope(user: PortalUser): Promise<OrgScope> {
-  // Corporate + admins without an org_id = see everything
+  // Corporate = see everything
   if (user.isCorporate || !user.org_id) {
     return { all: true, ids: [], own_id: user.org_id }
   }
 
-  // Master agents and master dealers: see their entire subtree
-  if (user.isMasterAgent || user.isMasterDealer) {
+  // Master agent: sees their signed dealers' subtree (for commission oversight)
+  // but NOT operational data — that's enforced at the page/API level
+  if (user.isMasterAgent) {
     const ids = await getDescendantIds(user.org_id)
     return { all: false, ids, own_id: user.org_id }
   }
 
-  // Individual dealers (sales / install / service) + clients: self only
+  // Master dealer: sees entire network subtree
+  if (user.isMasterDealer) {
+    const ids = await getDescendantIds(user.org_id)
+    return { all: false, ids, own_id: user.org_id }
+  }
+
+  // Full dealer: sees self + any sub-orgs (service dealers, install contractors, sales partners under them)
+  if (user.isFullDealer) {
+    const ids = await getDescendantIds(user.org_id)
+    return { all: false, ids, own_id: user.org_id }
+  }
+
+  // Service dealer, install contractor, sales partner, client: self only
   return { all: false, ids: [user.org_id], own_id: user.org_id }
 }
 
@@ -96,7 +113,12 @@ export async function resolveOrgScope(user: PortalUser): Promise<OrgScope> {
  *
  * @param query   — a Supabase query builder (before .select() is finalized)
  * @param scope   — result of resolveOrgScope()
- * @param column  — the column to filter. For sites use 'site' to apply 3-FK OR logic.
+ * @param column  — the column to filter. Options:
+ *   'org_id'           — standard org_id column (default)
+ *   'site'             — apply 3-FK OR logic (master_dealer_id, install_dealer_id, service_dealer_id)
+ *   'assignee_org_id'  — for work_orders when the user is an install_contractor; they only see
+ *                        WOs where work_orders.assignee_org_id is in their scope, not org_id.
+ *                        Callers should pass 'assignee_org_id' when user.isInstallContractor is true.
  */
 export function applyOrgScope<T>(
   query: T,
