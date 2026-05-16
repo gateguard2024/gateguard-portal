@@ -156,6 +156,7 @@ function EditSlideOver({ open, wo, onClose, onSaved }: EditSlideOverProps) {
     scheduled_date: wo.scheduled_date ?? '',
     notes:          wo.notes          ?? '',
   })
+  const [sendNotifications, setSendNotifications] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState('')
 
@@ -170,9 +171,10 @@ function EditSlideOver({ open, wo, onClose, onSaved }: EditSlideOverProps) {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           ...form,
-          estimated_hours: form.estimated_hours ? parseFloat(form.estimated_hours) : null,
-          due_date:        form.due_date        || null,
-          scheduled_date:  form.scheduled_date  || null,
+          estimated_hours:   form.estimated_hours ? parseFloat(form.estimated_hours) : null,
+          due_date:          form.due_date        || null,
+          scheduled_date:    form.scheduled_date  || null,
+          send_notifications: sendNotifications,
         }),
       })
       const json = await res.json()
@@ -274,6 +276,21 @@ function EditSlideOver({ open, wo, onClose, onSaved }: EditSlideOverProps) {
               <AlertTriangle size={13} /> {error}
             </div>
           )}
+        </div>
+
+        {/* Email notification toggle */}
+        <div className="border-t border-border px-4 py-3 bg-background/50">
+          <label className="flex items-center gap-2.5 cursor-pointer select-none group">
+            <input
+              type="checkbox"
+              checked={sendNotifications}
+              onChange={e => setSendNotifications(e.target.checked)}
+              className="w-4 h-4 rounded border-border accent-brand-500 cursor-pointer"
+            />
+            <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
+              Send email notification to property manager on status change
+            </span>
+          </label>
         </div>
 
         <div className="border-t border-border p-4 flex gap-3">

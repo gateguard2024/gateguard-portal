@@ -87,15 +87,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   // ── Email notification ────────────────────────────────────────────
-  // Only fire when status actually changed and the new status has an event
-  const statusChanged  = body.status && current && body.status !== current.status
-  const emailEvent     = statusChanged ? STATUS_EVENT[body.status] : null
-  const site           = current?.sites as { primary_contact_email?: string; pm_email?: string; name?: string } | null
+  // Only fire when status actually changed, the new status has an event,
+  // and the caller has not explicitly opted out (send_notifications defaults to true)
+  const sendNotifications = body.send_notifications !== false   // default: true
+  const statusChanged     = body.status && current && body.status !== current.status
+  const emailEvent        = statusChanged ? STATUS_EVENT[body.status] : null
+  const site              = current?.sites as { primary_contact_email?: string; pm_email?: string; name?: string } | null
 
   // Prefer PM email, fall back to primary contact email
   const recipientEmail = site?.pm_email ?? site?.primary_contact_email ?? null
 
-  if (emailEvent && recipientEmail) {
+  if (sendNotifications && emailEvent && recipientEmail) {
     // Fire and forget — don't block response
     notifyWOEvent({
       work_order_id:   params.id,
