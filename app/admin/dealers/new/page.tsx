@@ -6,7 +6,7 @@ import Link from 'next/link'
 import {
   ChevronLeft, ChevronRight, Building2, Users, Shield,
   CheckCircle2, MapPin, Phone, Mail, Globe, Layers,
-  Star, Wrench, Store, ClipboardList, Zap,
+  Star, Wrench, TrendingUp, ClipboardList, Zap,
   AlertCircle, Copy, ExternalLink,
 } from 'lucide-react'
 
@@ -104,7 +104,7 @@ const TIERS: {
     id: 'sales',
     label: 'Sales Dealer',
     sublabel: 'Sales and referrals only',
-    icon: Store,
+    icon: TrendingUp,
     color: 'text-sky-600',
     bg: 'bg-sky-50',
     border: 'border-sky-300',
