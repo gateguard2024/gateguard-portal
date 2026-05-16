@@ -7,11 +7,21 @@ import {
   ChevronLeft, ChevronRight, Building2, Users, Shield,
   CheckCircle2, MapPin, Phone, Mail, Globe, Layers,
   Star, Wrench, TrendingUp, ClipboardList, Zap,
-  AlertCircle, Copy, ExternalLink,
+  AlertCircle, Copy, ExternalLink, Hash, Info,
 } from 'lucide-react'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { DollarSign, Hammer, UserCheck } = require('lucide-react') as any
 
 /* ─── Types ──────────────────────────────────────────────── */
-type OrgTier = 'master_agent' | 'master_dealer' | 'service_dealer' | 'install_dealer' | 'sales'
+type OrgTier =
+  | 'full_dealer'
+  | 'service_dealer'
+  | 'install_contractor'
+  | 'sales_partner'
+  | 'master_dealer'
+  | 'master_agent'
+  | 'corporate'
+
 type PortalRole = 'admin' | 'supervisor' | 'dealer' | 'rep'
 
 interface WizardState {
@@ -29,10 +39,16 @@ interface WizardState {
   org_phone: string
   org_email: string
   website: string
-  // Step 3 — Parent org
+  // Step 3 — Relationships
   parent_org_id: string
-  parent_org_name: string  // display only
-  // Step 4 — Primary admin
+  parent_org_name: string   // display only
+  master_agent_id: string
+  master_dealer_id: string
+  // Step 4 — Commission config (for full_dealer / master_dealer)
+  sales_partner_rate: string
+  service_dealer_rate: string
+  commission_notes: string
+  // Step 5 — Primary admin
   admin_first_name: string
   admin_last_name: string
   admin_email: string
@@ -45,11 +61,13 @@ const EMPTY: WizardState = {
   org_name: '', license_number: '', service_area_states: [], tech_count: '',
   address: '', city: '', state: '', zip: '', org_phone: '', org_email: '', website: '',
   parent_org_id: '', parent_org_name: '',
+  master_agent_id: '', master_dealer_id: '',
+  sales_partner_rate: '1.00', service_dealer_rate: '3.00', commission_notes: '',
   admin_first_name: '', admin_last_name: '', admin_email: '',
   admin_role: 'admin', send_invite: true,
 }
 
-/* ─── Tier config ────────────────────────────────────────── */
+/* ─── Tier config (7 tiers) ──────────────────────────────── */
 const TIERS: {
   id: OrgTier
   label: string
@@ -59,26 +77,19 @@ const TIERS: {
   bg: string
   border: string
   who: string
+  flagship?: boolean
+  comingSoon?: boolean
 }[] = [
   {
-    id: 'master_agent',
-    label: 'Master Agent',
-    sublabel: 'Manages multiple Master Dealers',
-    icon: Star,
-    color: 'text-violet-600',
-    bg: 'bg-violet-50',
-    border: 'border-violet-300',
-    who: 'Large dealer groups managing multiple territories. Sees all their master dealers\' data.',
-  },
-  {
-    id: 'master_dealer',
-    label: 'Master Dealer',
-    sublabel: 'Account owner for properties',
-    icon: Layers,
-    color: 'text-brand-400',
-    bg: 'bg-brand-50',
-    border: 'border-brand-300',
-    who: 'The billing entity for properties. May have install and service dealers under them.',
+    id: 'full_dealer',
+    label: 'Full Dealership',
+    sublabel: 'Can self-perform any role',
+    icon: Shield,
+    color: 'text-indigo-600',
+    bg: 'bg-indigo-50',
+    border: 'border-indigo-300',
+    who: 'The flagship tier. Can sell, install, and service. Sets commission templates for their network. May subcontract any role.',
+    flagship: true,
   },
   {
     id: 'service_dealer',
@@ -88,27 +99,57 @@ const TIERS: {
     color: 'text-emerald-600',
     bg: 'bg-emerald-50',
     border: 'border-emerald-300',
-    who: 'Primary ongoing relationship. Handles all work orders and maintenance for assigned properties.',
+    who: 'Primary ongoing relationship with properties. Handles all work orders and maintenance. Earns recurring service commission.',
   },
   {
-    id: 'install_dealer',
-    label: 'Install Dealer',
-    sublabel: 'Installs and commissions',
+    id: 'install_contractor',
+    label: 'Installing Contractor',
+    sublabel: 'Installs only — no recurring',
     icon: ClipboardList,
     color: 'text-amber-600',
     bg: 'bg-amber-50',
     border: 'border-amber-300',
-    who: 'Handles the initial install and commissioning. May not be the ongoing service dealer.',
+    who: 'Handles the initial install and commissioning. Paid from one-time setup fees only. Zero recurring commission.',
   },
   {
-    id: 'sales',
-    label: 'Sales Dealer',
-    sublabel: 'Sales and referrals only',
+    id: 'sales_partner',
+    label: 'Sales Partner',
+    sublabel: 'Sells only, lifetime commission',
     icon: TrendingUp,
     color: 'text-sky-600',
     bg: 'bg-sky-50',
     border: 'border-sky-300',
-    who: 'Brings in new business. Earns commissions. Does not handle service or installs.',
+    who: 'Brings in new properties. Earns lifetime recurring sales commission on every unit they close. No service or installs.',
+  },
+  {
+    id: 'master_dealer',
+    label: 'Master Dealer',
+    sublabel: 'Dealer group account owner',
+    icon: Layers,
+    color: 'text-brand-400',
+    bg: 'bg-brand-50',
+    border: 'border-brand-300',
+    who: 'The billing entity for a portfolio of properties. Sets commission templates. May have full dealers, service, and install contractors under them.',
+  },
+  {
+    id: 'master_agent',
+    label: 'Master Agent',
+    sublabel: 'Recruits & oversees dealers',
+    icon: Star,
+    color: 'text-violet-600',
+    bg: 'bg-violet-50',
+    border: 'border-violet-300',
+    who: 'Recruits and onboards dealers. Earns $0.50/unit/month on every property in their network. Operational access drops once dealer is live.',
+  },
+  {
+    id: 'corporate',
+    label: 'GateGuard Direct',
+    sublabel: 'House account',
+    icon: Building2,
+    color: 'text-slate-600',
+    bg: 'bg-slate-50',
+    border: 'border-slate-300',
+    who: 'Properties managed directly by GateGuard. No dealer split — full margin retained. Used for flagship / reference properties.',
   },
 ]
 
@@ -130,9 +171,10 @@ const ROLE_OPTIONS: { id: PortalRole; label: string; desc: string }[] = [
 const STEPS = [
   { n: 1, label: 'Dealer Type'   },
   { n: 2, label: 'Org Info'      },
-  { n: 3, label: 'Parent Org'    },
-  { n: 4, label: 'Admin User'    },
-  { n: 5, label: 'Review'        },
+  { n: 3, label: 'Relationships' },
+  { n: 4, label: 'Commission'    },
+  { n: 5, label: 'Admin User'    },
+  { n: 6, label: 'Review'        },
 ]
 
 function StepBar({ current }: { current: number }) {
@@ -190,8 +232,19 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
 }
 
 /* ─── Main wizard ────────────────────────────────────────── */
+/* ─── Commission pool validation ─────────────────────────── */
+function commissionPoolError(form: WizardState): string | null {
+  const sales   = parseFloat(form.sales_partner_rate)   || 0
+  const service = parseFloat(form.service_dealer_rate)  || 0
+  if (sales < 0 || service < 0) return 'Rates cannot be negative'
+  if (sales + service > 4.00)   return `Total $${(sales + service).toFixed(2)} exceeds the $4.00 configurable pool`
+  return null
+}
+
+/* ─── Which tiers show commission step ───────────────────── */
+const COMMISSION_TIERS = new Set(['full_dealer', 'master_dealer'])
+
 export default function NewDealerPage() {
-  const router = useRouter()
   const [step, setStep]         = useState(1)
   const [form, setForm]         = useState<WizardState>(EMPTY)
   const [submitting, setSubmitting] = useState(false)
@@ -210,12 +263,35 @@ export default function NewDealerPage() {
     }))
   }
 
+  /* ── Skip commission step for tiers that don't need it ── */
+  const advance = () => {
+    if (step === 3 && !COMMISSION_TIERS.has(form.org_tier as string)) {
+      setStep(5) // skip commission step
+    } else if (step === 5 && !COMMISSION_TIERS.has(form.org_tier as string)) {
+      // came from step 3 skip — go to review (6)
+      setStep(6)
+    } else {
+      setStep(s => s + 1)
+    }
+  }
+
+  const retreat = () => {
+    if (step === 5 && !COMMISSION_TIERS.has(form.org_tier as string)) {
+      setStep(3) // back to relationships, skipping commission
+    } else if (step === 6 && !COMMISSION_TIERS.has(form.org_tier as string)) {
+      setStep(5)
+    } else {
+      setStep(s => Math.max(1, s - 1))
+    }
+  }
+
   /* ── Validation per step ── */
   const canAdvance = (): boolean => {
     if (step === 1) return !!form.org_tier
     if (step === 2) return !!form.org_name.trim()
-    if (step === 3) return true  // parent org is optional for master agents
-    if (step === 4) return !!(form.admin_first_name.trim() && form.admin_last_name.trim() && form.admin_email.includes('@'))
+    if (step === 3) return true  // relationships are optional
+    if (step === 4) return commissionPoolError(form) === null
+    if (step === 5) return !!(form.admin_first_name.trim() && form.admin_last_name.trim() && form.admin_email.includes('@'))
     return true
   }
 
@@ -230,6 +306,8 @@ export default function NewDealerPage() {
           org_name:            form.org_name.trim(),
           org_tier:            form.org_tier,
           parent_org_id:       form.parent_org_id || null,
+          master_agent_id:     form.master_agent_id || null,
+          master_dealer_id:    form.master_dealer_id || null,
           license_number:      form.license_number || null,
           service_area_states: form.service_area_states,
           tech_count:          form.tech_count ? parseInt(form.tech_count) : null,
@@ -245,12 +323,20 @@ export default function NewDealerPage() {
           admin_email:         form.admin_email.trim(),
           admin_role:          form.admin_role,
           send_invite:         form.send_invite,
+          // commission config (only used for full_dealer / master_dealer)
+          sales_partner_rate:  COMMISSION_TIERS.has(form.org_tier as string)
+                                 ? parseFloat(form.sales_partner_rate) || 1.00
+                                 : null,
+          service_dealer_rate: COMMISSION_TIERS.has(form.org_tier as string)
+                                 ? parseFloat(form.service_dealer_rate) || 3.00
+                                 : null,
+          commission_notes:    form.commission_notes || null,
         }),
       })
       const json = await res.json()
       if (!res.ok && res.status !== 207) throw new Error(json.error ?? 'Onboarding failed')
       setResult(json)
-      setStep(6)  // success screen
+      setStep(7)  // success screen
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -261,7 +347,7 @@ export default function NewDealerPage() {
   const selectedTier = TIERS.find(t => t.id === form.org_tier)
 
   /* ── Success screen ── */
-  if (step === 6 && result) {
+  if (step === 7 && result) {
     return (
       <div className="max-w-2xl mx-auto p-8">
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 text-center">
@@ -382,7 +468,7 @@ export default function NewDealerPage() {
                   form.org_tier === tier.id
                     ? `${tier.border} ${tier.bg}`
                     : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-                }`}
+                } ${tier.flagship ? 'ring-1 ring-indigo-200' : ''}`}
               >
                 <div className="flex items-start gap-3">
                   <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
@@ -391,10 +477,15 @@ export default function NewDealerPage() {
                     <tier.icon size={18} className={form.org_tier === tier.id ? tier.color : 'text-slate-400'} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className={`font-semibold text-sm ${form.org_tier === tier.id ? tier.color : 'text-slate-800'}`}>
                         {tier.label}
                       </span>
+                      {tier.flagship && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-600">
+                          FLAGSHIP
+                        </span>
+                      )}
                       <span className="text-xs text-slate-400">{tier.sublabel}</span>
                     </div>
                     <p className="text-xs text-slate-500 mt-1">{tier.who}</p>
@@ -510,45 +601,79 @@ export default function NewDealerPage() {
         </div>
       )}
 
-      {/* ── Step 3: Parent org ───────────────────────────────────────── */}
+      {/* ── Step 3: Relationships ────────────────────────────────────── */}
       {step === 3 && (
         <div>
-          <h2 className="text-lg font-semibold text-slate-900 mb-1">Parent Organization</h2>
-          <p className="text-sm text-slate-500 mb-2">
-            {form.org_tier === 'master_agent'
-              ? 'Master agents sit directly under GateGuard Corporate. No parent org needed.'
-              : form.org_tier === 'master_dealer'
-              ? 'Which Master Agent does this Master Dealer sit under?'
-              : 'Which Master Dealer owns this dealer relationship?'}
+          <h2 className="text-lg font-semibold text-slate-900 mb-1">Org Relationships</h2>
+          <p className="text-sm text-slate-500 mb-5">
+            Set the Master Agent who recruited this org and the Master Dealer group they belong to.
+            All fields are optional — you can assign these after onboarding from the org detail page.
           </p>
 
           {form.org_tier === 'master_agent' ? (
-            <div className="bg-violet-50 border border-violet-200 rounded-xl p-5 flex items-center gap-3">
+            <div className="bg-violet-50 border border-violet-200 rounded-xl p-5 flex items-center gap-3 mb-4">
               <Building2 size={20} className="text-violet-500 shrink-0" />
               <div>
                 <p className="font-semibold text-violet-800 text-sm">GateGuard Corporate</p>
-                <p className="text-xs text-violet-600">Master Agents report directly to GateGuard. No additional parent needed.</p>
+                <p className="text-xs text-violet-600">Master Agents report directly to GateGuard. No parent org or master dealer needed.</p>
               </div>
             </div>
           ) : (
             <div className="space-y-4">
+              {/* Master Agent */}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                <p className="text-xs text-slate-500 mb-3">Enter the Supabase org ID of the parent organization, or leave blank to assign later from the org record.</p>
-                <Field label="Parent Org ID" hint="UUID from the organizations table">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Master Agent (recruiter)</p>
+                <p className="text-xs text-slate-400 mb-3">
+                  The Master Agent who signed or recruited this dealer. They earn $0.50/unit/month on this dealer's portfolio.
+                </p>
+                <Field label="Master Agent Org ID" hint="UUID from the organizations table — leave blank if none">
                   <Input
-                    value={form.parent_org_id}
-                    onChange={e => set('parent_org_id', e.target.value)}
-                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                    className="font-mono"
+                    value={form.master_agent_id}
+                    onChange={e => set('master_agent_id', e.target.value)}
+                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (optional)"
                   />
                 </Field>
               </div>
 
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800 flex items-start gap-2">
-                <AlertCircle size={15} className="mt-0.5 shrink-0 text-amber-500" />
+              {/* Master Dealer */}
+              {form.org_tier !== 'master_dealer' && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Master Dealer (group owner)</p>
+                  <p className="text-xs text-slate-400 mb-3">
+                    The Master Dealer this org operates under. They earn $0.50/unit/month and set the default commission template.
+                  </p>
+                  <Field label="Master Dealer Org ID" hint="UUID from the organizations table — leave blank to assign later">
+                    <Input
+                      value={form.master_dealer_id}
+                      onChange={e => set('master_dealer_id', e.target.value)}
+                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (optional)"
+                    />
+                  </Field>
+                </div>
+              )}
+
+              {/* Parent Org (for sub-types) */}
+              {(form.org_tier === 'service_dealer' || form.org_tier === 'install_contractor' || form.org_tier === 'sales_partner') && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Full Dealership (direct parent)</p>
+                  <p className="text-xs text-slate-400 mb-3">
+                    The Full Dealership this org reports to, if any. Optional — not all sub-types have a direct parent dealer.
+                  </p>
+                  <Field label="Parent Full Dealer Org ID" hint="UUID from the organizations table">
+                    <Input
+                      value={form.parent_org_id}
+                      onChange={e => set('parent_org_id', e.target.value)}
+                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (optional)"
+                    />
+                  </Field>
+                </div>
+              )}
+
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800 flex items-start gap-2">
+                <Info size={15} className="mt-0.5 shrink-0 text-blue-500" />
                 <div>
-                  <p className="font-semibold">Parent org picker coming soon</p>
-                  <p className="text-xs mt-0.5">The searchable org picker is on the roadmap. For now, paste the parent org's UUID from the Dealers list page. You can also set this after onboarding from the org detail page.</p>
+                  <p className="font-semibold">Searchable org picker coming soon</p>
+                  <p className="text-xs mt-0.5">Paste org UUIDs for now. You can find them on the Dealers list page. All relationships can also be set after onboarding from the org detail page.</p>
                 </div>
               </div>
             </div>
@@ -556,8 +681,144 @@ export default function NewDealerPage() {
         </div>
       )}
 
-      {/* ── Step 4: Primary admin user ──────────────────────────────── */}
+      {/* ── Step 4: Commission Config ───────────────────────────────── */}
       {step === 4 && (
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900 mb-1">Commission Configuration</h2>
+          <p className="text-sm text-slate-500 mb-5">
+            Set the default commission rates for this {selectedTier?.label}. Rates apply per unit per month across all properties in their network.
+          </p>
+
+          {/* Revenue breakdown visual */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-5">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">$10.00 / unit / month breakdown</p>
+            <div className="space-y-2.5">
+              {/* Property pays */}
+              <div className="flex items-center gap-3">
+                <div className="w-28 text-xs text-slate-500 shrink-0">Property pays</div>
+                <div className="flex-1 h-6 bg-slate-200 rounded-md flex items-center px-2">
+                  <span className="text-xs font-semibold text-slate-600">$10.00 / unit</span>
+                </div>
+              </div>
+              {/* GateGuard keep */}
+              <div className="flex items-center gap-3">
+                <div className="w-28 text-xs text-slate-500 shrink-0">GateGuard keeps</div>
+                <div className="flex-1 h-6 bg-brand-50 border border-brand-200 rounded-md flex items-center px-2">
+                  <span className="text-xs font-semibold text-brand-400">$5.00 gross margin</span>
+                </div>
+              </div>
+              {/* Dealer pool */}
+              <div className="flex items-center gap-3">
+                <div className="w-28 text-xs text-slate-500 shrink-0">Dealer pool</div>
+                <div className="flex-1 grid grid-cols-4 gap-1">
+                  <div className="h-6 bg-violet-100 rounded flex items-center justify-center text-[10px] font-semibold text-violet-700">$0.50 MA</div>
+                  <div className="h-6 bg-brand-50 border border-brand-200 rounded flex items-center justify-center text-[10px] font-semibold text-brand-400">$0.50 MD</div>
+                  <div className="h-6 bg-sky-100 rounded flex items-center justify-center text-[10px] font-semibold text-sky-700">
+                    ${parseFloat(form.sales_partner_rate || '1') .toFixed(2)} SP
+                  </div>
+                  <div className="h-6 bg-emerald-100 rounded flex items-center justify-center text-[10px] font-semibold text-emerald-700">
+                    ${parseFloat(form.service_dealer_rate || '3').toFixed(2)} SD
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p className="text-xs text-slate-400 mt-3">MA = Master Agent · MD = Master Dealer · SP = Sales Partner · SD = Service Dealer</p>
+          </div>
+
+          {/* Locked rates */}
+          <div className="grid grid-cols-2 gap-3 mb-5">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-semibold text-slate-600">Master Agent Rate</span>
+                <span className="text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded font-semibold">LOCKED</span>
+              </div>
+              <div className="text-2xl font-bold text-violet-600">$0.50</div>
+              <div className="text-xs text-slate-400 mt-0.5">per unit / month</div>
+            </div>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-semibold text-slate-600">Master Dealer Rate</span>
+                <span className="text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded font-semibold">LOCKED</span>
+              </div>
+              <div className="text-2xl font-bold text-brand-400">$0.50</div>
+              <div className="text-xs text-slate-400 mt-0.5">per unit / month</div>
+            </div>
+          </div>
+
+          {/* Configurable rates */}
+          <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-5">
+            <div>
+              <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Configurable Pool — $4.00 total</p>
+              <p className="text-xs text-slate-400">Sales Partner + Service Dealer rates must sum to $4.00 or less. {selectedTier?.id === 'full_dealer' ? 'If self-performing, the unassigned balance stays with the Full Dealership.' : ''}</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Sales Partner Rate ($/unit/mo)" required>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="4"
+                    value={form.sales_partner_rate}
+                    onChange={e => set('sales_partner_rate', e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                  />
+                </div>
+              </Field>
+              <Field label="Service Dealer Rate ($/unit/mo)" required>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="4"
+                    value={form.service_dealer_rate}
+                    onChange={e => set('service_dealer_rate', e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                  />
+                </div>
+              </Field>
+            </div>
+
+            {/* Real-time pool total */}
+            {(() => {
+              const poolErr = commissionPoolError(form)
+              const total   = (parseFloat(form.sales_partner_rate) || 0) + (parseFloat(form.service_dealer_rate) || 0)
+              const remaining = 4.00 - total
+              return (
+                <div className={`rounded-lg px-4 py-3 flex items-center justify-between text-sm ${
+                  poolErr ? 'bg-red-50 border border-red-200' : 'bg-emerald-50 border border-emerald-200'
+                }`}>
+                  <span className={poolErr ? 'text-red-700' : 'text-emerald-700'}>
+                    {poolErr ? poolErr : `Pool used: $${total.toFixed(2)} of $4.00`}
+                  </span>
+                  {!poolErr && remaining > 0 && (
+                    <span className="text-emerald-600 font-semibold text-xs">
+                      ${remaining.toFixed(2)} stays with {selectedTier?.label ?? 'dealership'}
+                    </span>
+                  )}
+                </div>
+              )
+            })()}
+
+            <Field label="Notes (optional)" hint="E.g. 'Negotiated rate — Atlanta market launch'">
+              <textarea
+                value={form.commission_notes}
+                onChange={e => set('commission_notes', e.target.value)}
+                rows={2}
+                placeholder="Any notes about this commission arrangement…"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none"
+              />
+            </Field>
+          </div>
+        </div>
+      )}
+
+      {/* ── Step 5: Primary admin user ──────────────────────────────── */}
+      {step === 5 && (
         <div>
           <h2 className="text-lg font-semibold text-slate-900 mb-1">Primary Admin User</h2>
           <p className="text-sm text-slate-500 mb-6">
@@ -648,8 +909,8 @@ export default function NewDealerPage() {
         </div>
       )}
 
-      {/* ── Step 5: Review ───────────────────────────────────────────── */}
-      {step === 5 && (
+      {/* ── Step 6: Review ───────────────────────────────────────────── */}
+      {step === 6 && (
         <div>
           <h2 className="text-lg font-semibold text-slate-900 mb-1">Review & Launch</h2>
           <p className="text-sm text-slate-500 mb-6">Confirm everything below, then hit Launch to create the dealer account.</p>
@@ -674,16 +935,37 @@ export default function NewDealerPage() {
               {form.city && form.state && <p className="text-xs text-slate-500">{form.city}, {form.state}</p>}
             </ReviewCard>
 
-            {/* Parent */}
-            <ReviewCard icon={ChevronRight} color="text-slate-500" bg="bg-slate-100" title="Parent Organization">
+            {/* Relationships */}
+            <ReviewCard icon={Layers} color="text-slate-500" bg="bg-slate-100" title="Relationships">
               {form.org_tier === 'master_agent' ? (
-                <p className="font-semibold text-slate-900">GateGuard Corporate</p>
-              ) : form.parent_org_id ? (
-                <p className="font-mono text-xs text-slate-500">{form.parent_org_id}</p>
+                <p className="font-semibold text-slate-900">GateGuard Corporate (direct)</p>
               ) : (
-                <p className="text-slate-400 italic text-sm">Not set — assign after launch</p>
+                <div className="space-y-1">
+                  {form.master_agent_id
+                    ? <p className="text-xs text-slate-500 font-mono">MA: {form.master_agent_id.slice(0,8)}…</p>
+                    : <p className="text-xs text-slate-400 italic">Master Agent: not set</p>}
+                  {form.master_dealer_id
+                    ? <p className="text-xs text-slate-500 font-mono">MD: {form.master_dealer_id.slice(0,8)}…</p>
+                    : <p className="text-xs text-slate-400 italic">Master Dealer: not set</p>}
+                  {form.parent_org_id
+                    ? <p className="text-xs text-slate-500 font-mono">Parent: {form.parent_org_id.slice(0,8)}…</p>
+                    : null}
+                </div>
               )}
             </ReviewCard>
+
+            {/* Commission config */}
+            {COMMISSION_TIERS.has(form.org_tier as string) && (
+              <ReviewCard icon={DollarSign} color="text-emerald-600" bg="bg-emerald-50" title="Commission Config">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                  <p className="text-xs text-slate-500">Master Agent: <span className="font-semibold text-slate-700">$0.50</span> (locked)</p>
+                  <p className="text-xs text-slate-500">Master Dealer: <span className="font-semibold text-slate-700">$0.50</span> (locked)</p>
+                  <p className="text-xs text-slate-500">Sales Partner: <span className="font-semibold text-slate-700">${parseFloat(form.sales_partner_rate || '1').toFixed(2)}</span></p>
+                  <p className="text-xs text-slate-500">Service Dealer: <span className="font-semibold text-slate-700">${parseFloat(form.service_dealer_rate || '3').toFixed(2)}</span></p>
+                </div>
+                {form.commission_notes && <p className="text-xs text-slate-400 mt-1">{form.commission_notes}</p>}
+              </ReviewCard>
+            )}
 
             {/* Admin */}
             <ReviewCard icon={Users} color="text-brand-400" bg="bg-brand-50" title="Primary Admin">
@@ -701,8 +983,11 @@ export default function NewDealerPage() {
             <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wider mb-2">What happens when you click Launch</p>
             <ol className="space-y-1.5 text-xs text-emerald-800">
               <li className="flex items-start gap-2"><span className="font-bold shrink-0">1.</span> Creates <span className="font-semibold">{form.org_name}</span> as a {selectedTier?.label} org in the GateGuard database</li>
-              <li className="flex items-start gap-2"><span className="font-bold shrink-0">2.</span> {form.send_invite ? `Sends a portal sign-up invite to ${form.admin_email}` : `Skips the invite — you'll set up access manually`}</li>
-              <li className="flex items-start gap-2"><span className="font-bold shrink-0">3.</span> Wires their portal access so they only see {form.org_name}'s data from the moment they log in</li>
+              {COMMISSION_TIERS.has(form.org_tier as string) && (
+                <li className="flex items-start gap-2"><span className="font-bold shrink-0">2.</span> Sets commission config (Sales Partner ${parseFloat(form.sales_partner_rate || '1').toFixed(2)} · Service Dealer ${parseFloat(form.service_dealer_rate || '3').toFixed(2)} / unit / month)</li>
+              )}
+              <li className="flex items-start gap-2"><span className="font-bold shrink-0">{COMMISSION_TIERS.has(form.org_tier as string) ? '3' : '2'}.</span> {form.send_invite ? `Sends a portal sign-up invite to ${form.admin_email}` : `Skips the invite — you'll set up access manually`}</li>
+              <li className="flex items-start gap-2"><span className="font-bold shrink-0">{COMMISSION_TIERS.has(form.org_tier as string) ? '4' : '3'}.</span> Wires their portal access so they only see {form.org_name}'s data from the moment they log in</li>
             </ol>
           </div>
         </div>
@@ -711,16 +996,16 @@ export default function NewDealerPage() {
       {/* ── Nav buttons ──────────────────────────────────────────────── */}
       <div className="flex justify-between mt-8 pt-6 border-t border-slate-200">
         <button
-          onClick={() => setStep(s => Math.max(1, s - 1))}
+          onClick={retreat}
           disabled={step === 1}
           className="flex items-center gap-2 px-4 py-2.5 border border-slate-300 rounded-lg text-sm font-medium hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed"
         >
           <ChevronLeft size={16} /> Back
         </button>
 
-        {step < 5 ? (
+        {step < 6 ? (
           <button
-            onClick={() => setStep(s => s + 1)}
+            onClick={advance}
             disabled={!canAdvance()}
             className="flex items-center gap-2 px-5 py-2.5 bg-brand-400 text-white rounded-lg text-sm font-medium hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed"
           >

@@ -5,8 +5,10 @@ import Link from 'next/link'
 import {
   Users, Plus, Search, Building2, Star, Wrench,
   TrendingUp, ClipboardList, Layers, ChevronRight,
-  MapPin, Mail, Phone, CheckCircle2, Clock, Copy,
+  CheckCircle2, Clock, Copy, Shield, Hash,
 } from 'lucide-react'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { DollarSign, Hammer, UserCheck } = require('lucide-react') as any
 
 /* ─── Types ──────────────────────────────────────────────── */
 interface DealerOrg {
@@ -15,20 +17,31 @@ interface DealerOrg {
   tier: string
   tier_label: string | null
   parent_id: string | null
+  master_agent_id: string | null
+  master_dealer_id: string | null
   license_number: string | null
   service_area_states: string[]
   tech_count: number
   onboarded_at: string | null
   created_at: string
+  is_active: boolean
+  onboarding_complete: boolean
+  // joined commission config
+  sales_partner_rate?: number | null
+  service_dealer_rate?: number | null
 }
 
-/* ─── Tier config ────────────────────────────────────────── */
+/* ─── Tier config (7 tiers) ──────────────────────────────── */
 const TIER_CONFIG: Record<string, { label: string; icon: any; color: string; bg: string; dot: string }> = {
-  master_agent:   { label: 'Master Agent',   icon: Star,         color: 'text-violet-700', bg: 'bg-violet-100', dot: 'bg-violet-500'  },
-  master_dealer:  { label: 'Master Dealer',  icon: Layers,    color: 'text-brand-400',  bg: 'bg-brand-50',   dot: 'bg-brand-400'   },
-  service_dealer: { label: 'Service Dealer', icon: Wrench,       color: 'text-emerald-700',bg: 'bg-emerald-100',dot: 'bg-emerald-500' },
-  install_dealer: { label: 'Install Dealer', icon: ClipboardList,color: 'text-amber-700',  bg: 'bg-amber-100',  dot: 'bg-amber-500'   },
-  sales:          { label: 'Sales Dealer',   icon: TrendingUp,  color: 'text-sky-700',    bg: 'bg-sky-100',    dot: 'bg-sky-500'     },
+  master_agent:       { label: 'Master Agent',       icon: Star,          color: 'text-violet-700',  bg: 'bg-violet-100',  dot: 'bg-violet-500'  },
+  master_dealer:      { label: 'Master Dealer',      icon: Layers,        color: 'text-brand-400',   bg: 'bg-brand-50',    dot: 'bg-brand-400'   },
+  full_dealer:        { label: 'Full Dealership',    icon: Shield,        color: 'text-indigo-700',  bg: 'bg-indigo-100',  dot: 'bg-indigo-500'  },
+  service_dealer:     { label: 'Service Dealer',     icon: Wrench,        color: 'text-emerald-700', bg: 'bg-emerald-100', dot: 'bg-emerald-500' },
+  install_contractor: { label: 'Install Contractor', icon: ClipboardList, color: 'text-amber-700',   bg: 'bg-amber-100',   dot: 'bg-amber-500'   },
+  sales_partner:      { label: 'Sales Partner',      icon: TrendingUp,    color: 'text-sky-700',     bg: 'bg-sky-100',     dot: 'bg-sky-500'     },
+  // legacy tiers kept for back-compat
+  install_dealer:     { label: 'Install Dealer',     icon: ClipboardList, color: 'text-amber-700',   bg: 'bg-amber-100',   dot: 'bg-amber-500'   },
+  sales:              { label: 'Sales Dealer',       icon: TrendingUp,    color: 'text-sky-700',     bg: 'bg-sky-100',     dot: 'bg-sky-500'     },
 }
 
 /* ─── Stat pill ──────────────────────────────────────────── */
@@ -90,11 +103,12 @@ export default function DealersPage() {
   useEffect(() => { fetchOrgs() }, [q, filterTier])
 
   const counts = {
-    master_agent:   orgs.filter(o => o.tier === 'master_agent').length,
-    master_dealer:  orgs.filter(o => o.tier === 'master_dealer').length,
-    service_dealer: orgs.filter(o => o.tier === 'service_dealer').length,
-    install_dealer: orgs.filter(o => o.tier === 'install_dealer').length,
-    sales:          orgs.filter(o => o.tier === 'sales').length,
+    master_agent:       orgs.filter(o => o.tier === 'master_agent').length,
+    master_dealer:      orgs.filter(o => o.tier === 'master_dealer').length,
+    full_dealer:        orgs.filter(o => o.tier === 'full_dealer').length,
+    service_dealer:     orgs.filter(o => o.tier === 'service_dealer').length,
+    install_contractor: orgs.filter(o => o.tier === 'install_contractor').length,
+    sales_partner:      orgs.filter(o => o.tier === 'sales_partner' || o.tier === 'sales').length,
   }
 
   const formatDate = (iso: string | null) => {
@@ -130,12 +144,13 @@ export default function DealersPage() {
       </div>
 
       {/* Tier filter bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
-        <StatCard label="Master Agents"   value={counts.master_agent}   icon={Star}         color="bg-violet-100 text-violet-600" active={filterTier === 'master_agent'}   onClick={() => setFilter(f => f === 'master_agent'   ? null : 'master_agent')}   />
-        <StatCard label="Master Dealers"  value={counts.master_dealer}  icon={Layers}    color="bg-brand-50 text-brand-400"    active={filterTier === 'master_dealer'}  onClick={() => setFilter(f => f === 'master_dealer'  ? null : 'master_dealer')}  />
-        <StatCard label="Service Dealers" value={counts.service_dealer} icon={Wrench}       color="bg-emerald-100 text-emerald-600" active={filterTier === 'service_dealer'} onClick={() => setFilter(f => f === 'service_dealer' ? null : 'service_dealer')} />
-        <StatCard label="Install Dealers" value={counts.install_dealer} icon={ClipboardList}color="bg-amber-100 text-amber-600"   active={filterTier === 'install_dealer'} onClick={() => setFilter(f => f === 'install_dealer' ? null : 'install_dealer')} />
-        <StatCard label="Sales Dealers"   value={counts.sales}          icon={TrendingUp}  color="bg-sky-100 text-sky-600"        active={filterTier === 'sales'}          onClick={() => setFilter(f => f === 'sales'          ? null : 'sales')}          />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+        <StatCard label="Master Agents"       value={counts.master_agent}       icon={Star}         color="bg-violet-100 text-violet-600"   active={filterTier === 'master_agent'}       onClick={() => setFilter(f => f === 'master_agent'       ? null : 'master_agent')}       />
+        <StatCard label="Master Dealers"      value={counts.master_dealer}      icon={Layers}       color="bg-brand-50 text-brand-400"      active={filterTier === 'master_dealer'}      onClick={() => setFilter(f => f === 'master_dealer'      ? null : 'master_dealer')}      />
+        <StatCard label="Full Dealerships"    value={counts.full_dealer}        icon={Shield}       color="bg-indigo-100 text-indigo-600"   active={filterTier === 'full_dealer'}        onClick={() => setFilter(f => f === 'full_dealer'        ? null : 'full_dealer')}        />
+        <StatCard label="Service Dealers"     value={counts.service_dealer}     icon={Wrench}       color="bg-emerald-100 text-emerald-600" active={filterTier === 'service_dealer'}     onClick={() => setFilter(f => f === 'service_dealer'     ? null : 'service_dealer')}     />
+        <StatCard label="Install Contractors" value={counts.install_contractor} icon={ClipboardList}color="bg-amber-100 text-amber-600"     active={filterTier === 'install_contractor'} onClick={() => setFilter(f => f === 'install_contractor' ? null : 'install_contractor')} />
+        <StatCard label="Sales Partners"      value={counts.sales_partner}      icon={TrendingUp}   color="bg-sky-100 text-sky-600"         active={filterTier === 'sales_partner'}      onClick={() => setFilter(f => f === 'sales_partner'      ? null : 'sales_partner')}      />
       </div>
 
       {/* Search */}
@@ -175,6 +190,7 @@ export default function DealersPage() {
               <tr className="border-b border-slate-200 bg-slate-50">
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">Organization</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">Tier</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">Commission Config</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">Service Area</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">Techs</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">Org ID</th>
@@ -206,6 +222,50 @@ export default function DealersPage() {
                   {/* Tier */}
                   <td className="px-4 py-3.5">
                     <TierPill tier={org.tier} tierLabel={org.tier_label} />
+                    {!org.is_active && (
+                      <span className="block text-xs text-slate-400 mt-0.5">Inactive</span>
+                    )}
+                    {!org.onboarding_complete && org.onboarded_at === null && (
+                      <span className="block text-xs text-amber-500 mt-0.5">Onboarding</span>
+                    )}
+                  </td>
+
+                  {/* Commission config */}
+                  <td className="px-4 py-3.5">
+                    {(org.tier === 'master_dealer' || org.tier === 'full_dealer') ? (
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1 text-xs text-slate-600">
+                          <DollarSign size={10} className="text-slate-400" />
+                          <span className="font-mono">${(org.sales_partner_rate ?? 1.00).toFixed(2)}</span>
+                          <span className="text-slate-400">sales</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-xs text-slate-600">
+                          <DollarSign size={10} className="text-slate-400" />
+                          <span className="font-mono">${(org.service_dealer_rate ?? 3.00).toFixed(2)}</span>
+                          <span className="text-slate-400">service</span>
+                        </div>
+                      </div>
+                    ) : org.tier === 'master_agent' ? (
+                      <div className="flex items-center gap-1 text-xs text-violet-600">
+                        <DollarSign size={10} />
+                        <span className="font-mono">$0.50</span>
+                        <span className="text-slate-400">fixed</span>
+                      </div>
+                    ) : org.tier === 'sales_partner' || org.tier === 'sales' ? (
+                      <div className="flex items-center gap-1 text-xs text-sky-600">
+                        <DollarSign size={10} />
+                        <span className="font-mono">${(org.sales_partner_rate ?? 1.00).toFixed(2)}</span>
+                        <span className="text-slate-400">/unit</span>
+                      </div>
+                    ) : org.tier === 'service_dealer' ? (
+                      <div className="flex items-center gap-1 text-xs text-emerald-600">
+                        <DollarSign size={10} />
+                        <span className="font-mono">${(org.service_dealer_rate ?? 3.00).toFixed(2)}</span>
+                        <span className="text-slate-400">/unit</span>
+                      </div>
+                    ) : (
+                      <span className="text-slate-300 text-xs">—</span>
+                    )}
                   </td>
 
                   {/* Service area */}

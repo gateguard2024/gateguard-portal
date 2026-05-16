@@ -84,6 +84,20 @@ export default function MigratePage() {
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
 
+      {/* Coming Soon banner */}
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 flex items-start gap-3">
+        <AlertCircle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-semibold text-amber-800">Coming Soon — Live Onboarding Integration</p>
+          <p className="text-xs text-amber-700 mt-0.5">
+            The SARA Bridge data migration wizard is fully functional as a demo. Live integration with the SARA Plus API and automated AT&T dealer onboarding is in development and will be available in a future release.
+          </p>
+        </div>
+        <span className="ml-auto shrink-0 text-[10px] font-semibold px-2 py-1 rounded-full bg-amber-200 text-amber-700 whitespace-nowrap">
+          Coming Soon
+        </span>
+      </div>
+
       {/* Header */}
       <div className="flex items-start gap-4">
         <div

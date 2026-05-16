@@ -1,15 +1,20 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { TopBar } from "@/components/layout/TopBar";
 import { AISearch } from "@/components/ai/AISearch";
 import {
   Users,
   TrendingUp,
-  DollarSign,
   Clock,
   Plus,
   ChevronRight,
+  Info,
+  Layers,
+  Star,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { DollarSign } = require("lucide-react") as any;
 
 const REPS = [
   {
@@ -142,6 +147,15 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+/* ─── Commission model data ──────────────────────────────── */
+const COMMISSION_MODEL = [
+  { tier: 'Master Agent',       rate: '$0.50', color: 'text-violet-600', bg: 'bg-violet-50', border: 'border-violet-200', note: 'Fixed, off top. Active during onboarding; historical thereafter.' },
+  { tier: 'Master Dealer',      rate: '$0.50', color: 'text-brand-400',  bg: 'bg-brand-50',  border: 'border-brand-200',  note: 'Fixed, off top. Portfolio-level account owner.' },
+  { tier: 'Sales Partner',      rate: '$1.00', color: 'text-sky-600',    bg: 'bg-sky-50',    border: 'border-sky-200',    note: 'Configurable. Default $1.00/unit. Lifetime on deals they close.' },
+  { tier: 'Service Dealer',     rate: '$3.00', color: 'text-emerald-600',bg: 'bg-emerald-50',border: 'border-emerald-200',note: 'Configurable. Default $3.00/unit. Ongoing service relationship.' },
+  { tier: 'Install Contractor', rate: '$0.00', color: 'text-amber-600',  bg: 'bg-amber-50',  border: 'border-amber-200',  note: 'No recurring. Paid from one-time setup fees only.' },
+]
+
 export default function RepsPage() {
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -157,6 +171,38 @@ export default function RepsPage() {
       />
 
       <div className="flex-1 p-6 space-y-6 max-w-screen-xl mx-auto w-full">
+        {/* Live data notice */}
+        <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-start gap-2">
+          <Info size={15} className="text-blue-500 shrink-0 mt-0.5" />
+          <p className="text-xs text-blue-700">
+            <span className="font-semibold">Note:</span> Rep network and commission data below is placeholder. Live data wiring (from the <code className="font-mono bg-blue-100 px-1 py-0.5 rounded text-[10px]">commission_config</code> and <code className="font-mono bg-blue-100 px-1 py-0.5 rounded text-[10px]">organizations</code> tables) is on the roadmap — run migration 017 and wire the reps table to see live rates.
+          </p>
+        </div>
+
+        {/* Commission model breakdown */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border">
+            <DollarSign size={15} className="text-brand-400" />
+            <h2 className="text-sm font-semibold">Dealer Commission Model — $5.00 Dealer Pool / Unit / Month</h2>
+          </div>
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-5 gap-3">
+            {COMMISSION_MODEL.map(m => (
+              <div key={m.tier} className={`rounded-lg border ${m.border} ${m.bg} p-3`}>
+                <div className={`text-lg font-bold ${m.color}`}>{m.rate}</div>
+                <div className="text-xs font-semibold text-slate-700 mt-0.5">{m.tier}</div>
+                <div className="text-[10px] text-slate-500 mt-1 leading-snug">{m.note}</div>
+              </div>
+            ))}
+          </div>
+          <div className="px-5 py-3 border-t border-border bg-background/30">
+            <p className="text-[10px] text-muted-foreground">
+              Property pays $10/unit/month · GateGuard keeps $5.00 gross margin · Dealer pool: $5.00 distributed per config above.
+              Add-ons (Video Monitoring, Callbox, LPR, Kiosk): 50/50 GateGuard/Dealer split.
+              Door Surcharge: ($200 × units) ÷ 12/month → 100% GateGuard.
+            </p>
+          </div>
+        </div>
+
         {/* AI Search */}
         <AISearch placeholder='Try "show top reps by pipeline" or "pending payouts this month"' />
 
