@@ -7,7 +7,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import {
   ChevronRight, Check, Phone, Mail,
   ClipboardList, StickyNote, Plus, X, Pencil,
-  ExternalLink, Wrench, FileText, Sparkles,
+  ExternalLink, Wrench, FileText, Zap,
   ChevronLeft, Trash2, RefreshCw, AlertCircle,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -929,7 +929,7 @@ export default function OpportunityDetailPage() {
           {/* AI Sales Assistant */}
           <div className="bg-[#6B7EFF]/5 rounded-xl border border-[#6B7EFF]/40 p-4">
             <div className="flex items-center gap-2 mb-2">
-              <Sparkles size={14} className="text-[#6B7EFF]" />
+              <Zap size={14} className="text-[#6B7EFF]" />
               <h3 className="text-sm font-semibold text-[#6B7EFF]">AI Sales Assistant</h3>
             </div>
             <p className="text-xs text-foreground leading-relaxed">{aiTip.tip}</p>

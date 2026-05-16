@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   Users, Plus, Search, Building2, Star, Wrench,
-  ShoppingBag, ClipboardList, Briefcase, ChevronRight,
+  TrendingUp, ClipboardList, Layers, ChevronRight,
   MapPin, Mail, Phone, CheckCircle2, Clock, Copy,
 } from 'lucide-react'
 
@@ -25,10 +25,10 @@ interface DealerOrg {
 /* ─── Tier config ────────────────────────────────────────── */
 const TIER_CONFIG: Record<string, { label: string; icon: any; color: string; bg: string; dot: string }> = {
   master_agent:   { label: 'Master Agent',   icon: Star,         color: 'text-violet-700', bg: 'bg-violet-100', dot: 'bg-violet-500'  },
-  master_dealer:  { label: 'Master Dealer',  icon: Briefcase,    color: 'text-brand-400',  bg: 'bg-brand-50',   dot: 'bg-brand-400'   },
+  master_dealer:  { label: 'Master Dealer',  icon: Layers,    color: 'text-brand-400',  bg: 'bg-brand-50',   dot: 'bg-brand-400'   },
   service_dealer: { label: 'Service Dealer', icon: Wrench,       color: 'text-emerald-700',bg: 'bg-emerald-100',dot: 'bg-emerald-500' },
   install_dealer: { label: 'Install Dealer', icon: ClipboardList,color: 'text-amber-700',  bg: 'bg-amber-100',  dot: 'bg-amber-500'   },
-  sales:          { label: 'Sales Dealer',   icon: ShoppingBag,  color: 'text-sky-700',    bg: 'bg-sky-100',    dot: 'bg-sky-500'     },
+  sales:          { label: 'Sales Dealer',   icon: TrendingUp,  color: 'text-sky-700',    bg: 'bg-sky-100',    dot: 'bg-sky-500'     },
 }
 
 /* ─── Stat pill ──────────────────────────────────────────── */
@@ -132,10 +132,10 @@ export default function DealersPage() {
       {/* Tier filter bar */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
         <StatCard label="Master Agents"   value={counts.master_agent}   icon={Star}         color="bg-violet-100 text-violet-600" active={filterTier === 'master_agent'}   onClick={() => setFilter(f => f === 'master_agent'   ? null : 'master_agent')}   />
-        <StatCard label="Master Dealers"  value={counts.master_dealer}  icon={Briefcase}    color="bg-brand-50 text-brand-400"    active={filterTier === 'master_dealer'}  onClick={() => setFilter(f => f === 'master_dealer'  ? null : 'master_dealer')}  />
+        <StatCard label="Master Dealers"  value={counts.master_dealer}  icon={Layers}    color="bg-brand-50 text-brand-400"    active={filterTier === 'master_dealer'}  onClick={() => setFilter(f => f === 'master_dealer'  ? null : 'master_dealer')}  />
         <StatCard label="Service Dealers" value={counts.service_dealer} icon={Wrench}       color="bg-emerald-100 text-emerald-600" active={filterTier === 'service_dealer'} onClick={() => setFilter(f => f === 'service_dealer' ? null : 'service_dealer')} />
         <StatCard label="Install Dealers" value={counts.install_dealer} icon={ClipboardList}color="bg-amber-100 text-amber-600"   active={filterTier === 'install_dealer'} onClick={() => setFilter(f => f === 'install_dealer' ? null : 'install_dealer')} />
-        <StatCard label="Sales Dealers"   value={counts.sales}          icon={ShoppingBag}  color="bg-sky-100 text-sky-600"        active={filterTier === 'sales'}          onClick={() => setFilter(f => f === 'sales'          ? null : 'sales')}          />
+        <StatCard label="Sales Dealers"   value={counts.sales}          icon={TrendingUp}  color="bg-sky-100 text-sky-600"        active={filterTier === 'sales'}          onClick={() => setFilter(f => f === 'sales'          ? null : 'sales')}          />
       </div>
 
       {/* Search */}

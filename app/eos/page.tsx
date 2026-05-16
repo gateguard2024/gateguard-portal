@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import {
   CheckCircle2, Circle, Clock, TrendingUp,
   TrendingDown, Minus, Plus, X, ChevronRight, Users,
-  Calendar, Target, Send, Sparkles, ChevronDown,
+  Calendar, Target, Send, Zap, ChevronDown,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { Timer, Flag } = require("lucide-react") as any;
@@ -1003,7 +1003,7 @@ function CoachPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
         <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-gradient-to-r from-[#6B7EFF]/5 to-white shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-full bg-[#6B7EFF] flex items-center justify-center">
-              <Sparkles size={14} className="text-white" />
+              <Zap size={14} className="text-white" />
             </div>
             <div>
               <p className="text-sm font-bold text-foreground">EOS Coach</p>
@@ -1060,7 +1060,7 @@ function CoachPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
             <div key={i} className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}>
               {msg.role === "assistant" && (
                 <div className="w-6 h-6 rounded-full bg-[#6B7EFF] flex items-center justify-center shrink-0 mt-0.5 mr-2">
-                  <Sparkles size={10} className="text-white" />
+                  <Zap size={10} className="text-white" />
                 </div>
               )}
               <div
@@ -1086,7 +1086,7 @@ function CoachPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
           {loading && messages[messages.length - 1]?.role !== "assistant" && (
             <div className="flex justify-start">
               <div className="w-6 h-6 rounded-full bg-[#6B7EFF] flex items-center justify-center mr-2 mt-0.5 shrink-0">
-                <Sparkles size={10} className="text-white" />
+                <Zap size={10} className="text-white" />
               </div>
               <div className="bg-slate-50 border border-border rounded-2xl rounded-tl-sm px-4 py-3">
                 <div className="flex items-center gap-1.5">
@@ -1190,7 +1190,7 @@ export default function EOSPage() {
               onClick={() => setCoachOpen(true)}
               className="flex items-center gap-1.5 text-sm font-semibold bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5B6EEF] transition-colors shadow-sm shadow-[#6B7EFF]/30"
             >
-              <Sparkles size={13} />
+              <Zap size={13} />
               AI Coach
             </button>
           </div>
@@ -1223,7 +1223,7 @@ export default function EOSPage() {
               onClick={() => setCoachOpen(true)}
               className="flex items-center gap-2 text-xs text-[#6B7EFF] bg-[#6B7EFF]/5 border border-[#6B7EFF]/20 px-3 py-2 rounded-lg hover:bg-[#6B7EFF]/10 transition-colors"
             >
-              <Sparkles size={12} />
+              <Zap size={12} />
               <span>Not sure what goes here? Let AI Coach help you build your V/TO →</span>
             </button>
           )}
@@ -1244,7 +1244,7 @@ export default function EOSPage() {
           onClick={() => setCoachOpen(true)}
           className="fixed bottom-6 right-6 flex items-center gap-2 bg-[#6B7EFF] text-white px-4 py-3 rounded-2xl shadow-lg shadow-[#6B7EFF]/30 hover:bg-[#5B6EEF] transition-all hover:scale-105 z-40 font-semibold text-sm"
         >
-          <Sparkles size={16} />
+          <Zap size={16} />
           EOS Coach
         </button>
       )}

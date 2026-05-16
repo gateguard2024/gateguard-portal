@@ -11,7 +11,7 @@ import {
   Megaphone, Map, BookOpen, Tv, Zap,
   Layers, Server, UserCheck, ShieldCheck, Star,
   GraduationCap, Tv as Satellite, Crosshair,
-  User, RefreshCw, Sparkles, Wrench as TechIcon,
+  User, RefreshCw, Wrench as TechIcon,
   ClipboardCheck, Building2,
 } from "lucide-react";
 // Icons not in type declarations for lucide-react 0.383.0 but available at runtime
@@ -66,7 +66,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Field & Tech",
     icon: TechIcon,
     items: [
-      { label: "Tech Tool",      href: "/tech",        icon: Sparkles,       description: "AI diagnostic tool for field techs", badge: "AI" },
+      { label: "Tech Tool",      href: "/tech",        icon: Zap,       description: "AI diagnostic tool for field techs", badge: "AI" },
       { label: "Knowledge Base", href: "/kb",          icon: BookOpen,       description: "Troubleshooting articles and manuals" },
       { label: "Products",       href: "/products",    icon: Package,        description: "Equipment catalog and manuals" },
       { label: "Properties",      href: "/sites",       icon: Building2,      description: "Installed sites, equipment, and asset map" },
@@ -106,7 +106,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     key: "intelligence",
     label: "Intelligence",
-    icon: Sparkles,
+    icon: Zap,
     color: "#6B7EFF",
     items: [
       { label: "ARIA — Lead Intel",      href: "/aria",     icon: Crosshair,     description: "AI-powered outreach and lead research", badge: "AI" },

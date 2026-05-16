@@ -1,5 +1,5 @@
 "use client";
-import { Sparkles, Search } from "lucide-react";
+import { Zap, Search } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +18,7 @@ export function AISearch({ placeholder = 'Try searching "show all offline camera
       focused && "ai-search-glow border-brand-500/40",
       className
     )}>
-      <Sparkles
+      <Zap
         size={15}
         className={cn(
           "shrink-0 transition-colors",
