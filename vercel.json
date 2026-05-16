@@ -6,6 +6,10 @@
     {
       "path": "/api/sync/residents",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/pm-schedules",
+      "schedule": "0 6 * * *"
     }
   ]
 }

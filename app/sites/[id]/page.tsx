@@ -10,7 +10,7 @@ import {
   Key, FileText, Trash2, RefreshCw, Copy, ExternalLink,
 } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Inbox, Edit3, Edit2 } = require('lucide-react') as any
+const { Inbox, Edit3, Edit2, RotateCcw } = require('lucide-react') as any
 
 /* ─── types ──────────────────────────────────────────── */
 interface Site {
@@ -78,6 +78,17 @@ interface WorkOrder {
   priority: string
   scheduled_date: string | null
   assignee_name: string | null
+  created_at: string
+}
+
+interface PMSchedule {
+  id: string
+  title: string
+  description: string | null
+  interval_days: number
+  next_due_at: string
+  last_generated_at: string | null
+  is_active: boolean
   created_at: string
 }
 
@@ -237,7 +248,7 @@ function formatDateTime(iso: string | null) {
 }
 
 /* ─── Main page ──────────────────────────────────────── */
-type Tab = 'overview' | 'assets' | 'events' | 'work_orders' | 'requests'
+type Tab = 'overview' | 'assets' | 'events' | 'work_orders' | 'requests' | 'pm_schedules'
 
 interface WORequest {
   id: string
@@ -264,6 +275,7 @@ export default function SiteDetailPage() {
   const [events, setEvents]         = useState<SiteEvent[]>([])
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
   const [requests, setRequests]     = useState<WORequest[]>([])
+  const [pmSchedules, setPMSchedules] = useState<PMSchedule[]>([])
   const [loading, setLoading]       = useState(true)
   const [tab, setTab]               = useState<Tab>('overview')
   const [showAddAsset, setShowAddAsset] = useState(false)
@@ -271,12 +283,23 @@ export default function SiteDetailPage() {
   const [copySuccess, setCopySuccess] = useState(false)
   const [convertingId, setConvertingId] = useState<string | null>(null)
 
+  // PM Schedule form state
+  const [showPMForm, setShowPMForm] = useState(false)
+  const [pmForm, setPMForm] = useState({
+    title: '', description: '', interval_days: '90', next_due_at: '',
+  })
+  const [pmSaving, setPMSaving] = useState(false)
+  const [pmError, setPMError]   = useState<string | null>(null)
+  const [togglingPM, setTogglingPM] = useState<string | null>(null)
+  const [deletingPM, setDeletingPM] = useState<string | null>(null)
+
   const fetchData = async () => {
     setLoading(true)
     try {
-      const [siteRes, reqRes] = await Promise.all([
+      const [siteRes, reqRes, pmRes] = await Promise.all([
         fetch(`/api/sites/${id}`),
         fetch(`/api/sites/${id}/requests`),
+        fetch(`/api/pm-schedules?site_id=${id}`),
       ])
       const siteJson = await siteRes.json()
       if (!siteRes.ok) { router.push('/sites'); return }
@@ -288,7 +311,61 @@ export default function SiteDetailPage() {
         const reqJson = await reqRes.json()
         setRequests(reqJson.requests ?? [])
       }
+      if (pmRes.ok) {
+        const pmJson = await pmRes.json()
+        setPMSchedules(pmJson.pm_schedules ?? [])
+      }
     } finally { setLoading(false) }
+  }
+
+  const handleAddPMSchedule = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!pmForm.title.trim())    { setPMError('Title is required');       return }
+    if (!pmForm.next_due_at)     { setPMError('First due date is required'); return }
+    setPMSaving(true); setPMError(null)
+    try {
+      const res = await fetch('/api/pm-schedules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          site_id:       id,
+          title:         pmForm.title.trim(),
+          description:   pmForm.description.trim() || null,
+          interval_days: Number(pmForm.interval_days),
+          next_due_at:   new Date(pmForm.next_due_at).toISOString(),
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Failed to save')
+      setPMSchedules(prev => [...prev, json.pm_schedule])
+      setShowPMForm(false)
+      setPMForm({ title: '', description: '', interval_days: '90', next_due_at: '' })
+    } catch (err: any) { setPMError(err.message) }
+    finally { setPMSaving(false) }
+  }
+
+  const handleTogglePM = async (schedule: PMSchedule) => {
+    setTogglingPM(schedule.id)
+    try {
+      const res = await fetch(`/api/pm-schedules/${schedule.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: !schedule.is_active }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      setPMSchedules(prev => prev.map(s => s.id === schedule.id ? json.pm_schedule : s))
+    } finally { setTogglingPM(null) }
+  }
+
+  const handleDeletePM = async (scheduleId: string) => {
+    if (!confirm('Delete this PM schedule?')) return
+    setDeletingPM(scheduleId)
+    try {
+      const res = await fetch(`/api/pm-schedules/${scheduleId}`, { method: 'DELETE' })
+      if (!res.ok) { const j = await res.json(); throw new Error(j.error) }
+      setPMSchedules(prev => prev.filter(s => s.id !== scheduleId))
+    } finally { setDeletingPM(null) }
   }
 
   const handleConvertRequest = async (req: WORequest) => {
@@ -362,11 +439,12 @@ export default function SiteDetailPage() {
   const newRequests = requests.filter(r => r.status === 'new').length
 
   const TABS: { id: Tab; label: string; icon: any; count?: number; badge?: number }[] = [
-    { id: 'overview',    label: 'Overview',     icon: Building2 },
-    { id: 'assets',      label: 'Equipment',    icon: Package,    count: assets.length },
-    { id: 'events',      label: 'Events',       icon: Activity,   count: events.length },
-    { id: 'work_orders', label: 'Work Orders',  icon: ClipboardList, count: workOrders.length },
-    { id: 'requests',    label: 'Requests',     icon: Inbox,      count: requests.length, badge: newRequests },
+    { id: 'overview',     label: 'Overview',     icon: Building2 },
+    { id: 'assets',       label: 'Equipment',    icon: Package,       count: assets.length },
+    { id: 'events',       label: 'Events',       icon: Activity,      count: events.length },
+    { id: 'work_orders',  label: 'Work Orders',  icon: ClipboardList, count: workOrders.length },
+    { id: 'requests',     label: 'Requests',     icon: Inbox,         count: requests.length, badge: newRequests },
+    { id: 'pm_schedules', label: 'PM Schedules', icon: RefreshCw,     count: pmSchedules.length },
   ]
 
   return (
@@ -809,6 +887,190 @@ export default function SiteDetailPage() {
               </table>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── Tab: PM Schedules ────────────────────────────────────────── */}
+      {tab === 'pm_schedules' && (
+        <div className="space-y-4">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800">Preventive Maintenance Schedules</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Recurring PM tasks — work orders are auto-created when due</p>
+            </div>
+            <button
+              onClick={() => { setShowPMForm(true); setPMError(null) }}
+              className="flex items-center gap-1.5 px-4 py-2 bg-brand-400 text-white rounded-lg text-sm font-medium hover:bg-brand-500"
+            >
+              <Plus size={15} /> Add PM Schedule
+            </button>
+          </div>
+
+          {/* Add form */}
+          {showPMForm && (
+            <div className="bg-white rounded-xl border border-slate-200 p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-sm font-semibold text-slate-800">New PM Schedule</h4>
+                <button onClick={() => setShowPMForm(false)} className="text-slate-400 hover:text-slate-600">
+                  <X size={16} />
+                </button>
+              </div>
+              <form onSubmit={handleAddPMSchedule} className="space-y-3">
+                {pmError && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-2.5 text-sm">{pmError}</div>
+                )}
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Title *</label>
+                  <input
+                    value={pmForm.title}
+                    onChange={e => setPMForm(p => ({ ...p, title: e.target.value }))}
+                    placeholder="e.g. Gate lubrication"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Description</label>
+                  <textarea
+                    value={pmForm.description}
+                    onChange={e => setPMForm(p => ({ ...p, description: e.target.value }))}
+                    placeholder="Optional checklist or instructions"
+                    rows={2}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Interval</label>
+                    <select
+                      value={pmForm.interval_days}
+                      onChange={e => setPMForm(p => ({ ...p, interval_days: e.target.value }))}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                    >
+                      <option value="30">Every 30 days</option>
+                      <option value="60">Every 60 days</option>
+                      <option value="90">Every 90 days</option>
+                      <option value="180">Every 180 days</option>
+                      <option value="365">Every 365 days</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">First Due Date *</label>
+                    <input
+                      type="date"
+                      value={pmForm.next_due_at}
+                      onChange={e => setPMForm(p => ({ ...p, next_due_at: e.target.value }))}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowPMForm(false)}
+                    className="px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={pmSaving}
+                    className="px-5 py-2 text-sm bg-brand-400 text-white rounded-lg hover:bg-brand-500 disabled:opacity-50"
+                  >
+                    {pmSaving ? 'Saving…' : 'Add Schedule'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Schedules list */}
+          {pmSchedules.length === 0 && !showPMForm ? (
+            <div className="bg-white rounded-xl border border-slate-200 flex flex-col items-center justify-center py-16 text-slate-400">
+              <RefreshCw size={40} className="mb-3 opacity-30" />
+              <p className="font-medium text-sm">No PM schedules yet</p>
+              <p className="text-xs mt-1">Add recurring maintenance tasks — work orders are created automatically</p>
+              <button
+                onClick={() => setShowPMForm(true)}
+                className="mt-4 flex items-center gap-2 px-4 py-2 bg-brand-400 text-white rounded-lg text-sm font-medium hover:bg-brand-500"
+              >
+                <Plus size={15} /> Add PM Schedule
+              </button>
+            </div>
+          ) : pmSchedules.length > 0 ? (
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50">
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Task</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Interval</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Next Due</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Last Run</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Active</th>
+                    <th className="px-4 py-3" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {pmSchedules.map(s => {
+                    const due     = new Date(s.next_due_at)
+                    const now     = new Date()
+                    const daysOut = Math.floor((due.getTime() - now.getTime()) / 86400000)
+                    const dueCls  = daysOut < 0
+                      ? 'text-red-600 font-semibold'
+                      : daysOut <= 7
+                        ? 'text-amber-600 font-semibold'
+                        : 'text-emerald-600'
+                    const dueLabel = daysOut < 0
+                      ? `${Math.abs(daysOut)}d overdue`
+                      : daysOut === 0
+                        ? 'Today'
+                        : daysOut === 1
+                          ? 'Tomorrow'
+                          : formatDate(s.next_due_at)
+                    return (
+                      <tr key={s.id} className={`hover:bg-slate-50 ${!s.is_active ? 'opacity-50' : ''}`}>
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-slate-900">{s.title}</div>
+                          {s.description && <div className="text-xs text-slate-400 truncate max-w-[220px] mt-0.5">{s.description}</div>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">
+                            <RotateCcw size={11} />
+                            Every {s.interval_days}d
+                          </span>
+                        </td>
+                        <td className={`px-4 py-3 text-sm ${dueCls}`}>
+                          {dueLabel}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-400">
+                          {s.last_generated_at ? formatDate(s.last_generated_at) : '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => handleTogglePM(s)}
+                            disabled={togglingPM === s.id}
+                            title={s.is_active ? 'Deactivate' : 'Activate'}
+                            className={`w-10 h-5 rounded-full relative transition-colors focus:outline-none disabled:opacity-50 ${s.is_active ? 'bg-brand-400' : 'bg-slate-300'}`}
+                          >
+                            <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${s.is_active ? 'translate-x-5' : 'translate-x-0'}`} />
+                          </button>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() => handleDeletePM(s.id)}
+                            disabled={deletingPM === s.id}
+                            className="text-slate-300 hover:text-red-500 transition-colors disabled:opacity-50"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
         </div>
       )}
 

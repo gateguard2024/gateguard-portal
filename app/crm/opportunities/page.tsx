@@ -8,6 +8,22 @@ import {
   Plus, Search, X, MoreHorizontal, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCorners,
+  useDroppable,
+} from "@dnd-kit/core";
+import type { DragStartEvent, DragEndEvent } from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type Stage =
@@ -125,6 +141,72 @@ const BLANK_FORM: NewOppForm = {
   description: "",
 };
 
+// Build a flat map of oppId → stage for quick lookup during drag
+function buildStageMap(grouped: Record<Stage, Opportunity[]>): Record<string, Stage> {
+  const map: Record<string, Stage> = {};
+  for (const stage of KANBAN_STAGES) {
+    for (const opp of grouped[stage] ?? []) {
+      map[opp.id] = stage;
+    }
+  }
+  return map;
+}
+
+// ── Droppable Column Wrapper ───────────────────────────────────────────────
+function DroppableColumn({
+  stage,
+  isOver,
+  children,
+}: {
+  stage: Stage;
+  isOver: boolean;
+  children: React.ReactNode;
+}) {
+  const { setNodeRef } = useDroppable({ id: stage });
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "flex-1 space-y-2 overflow-y-auto rounded-xl transition-all duration-150 min-h-[80px] p-1",
+        isOver && "ring-2 ring-[#6B7EFF]/40 bg-[#6B7EFF]/5"
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ── Sortable Opp Card ─────────────────────────────────────────────────────
+function SortableOppCard({
+  opp,
+  isDragging: forceDragging,
+}: {
+  opp: Opportunity;
+  isDragging?: boolean;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: opp.id, data: { opp } });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging || forceDragging ? 0.4 : 1,
+    zIndex: isDragging ? 50 : undefined,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <OppCard opp={opp} dragHandleProps={{ ...attributes, ...listeners }} />
+    </div>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────
 export default function OpportunitiesPage() {
   const searchParams = useSearchParams();
@@ -143,7 +225,20 @@ export default function OpportunitiesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // Drag state
+  const [activeOpp, setActiveOpp] = useState<Opportunity | null>(null);
+  const [overStage, setOverStage] = useState<Stage | null>(null);
+
   const columnRefs = useRef<Record<Stage, HTMLDivElement | null>>({} as Record<Stage, HTMLDivElement | null>);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        // Require a 6px move before activating drag — lets clicks through
+        distance: 6,
+      },
+    })
+  );
 
   const fetchData = async () => {
     setLoading(true);
@@ -198,6 +293,91 @@ export default function OpportunitiesPage() {
       setSubmitError(e instanceof Error ? e.message : "Failed to create");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // ── Drag handlers ────────────────────────────────────────────────────────
+  const handleDragStart = (event: DragStartEvent) => {
+    if (!data) return;
+    const stageMap = buildStageMap(data.grouped);
+    const oppId = event.active.id as string;
+    const stage = stageMap[oppId];
+    if (!stage) return;
+    const opp = (data.grouped[stage] ?? []).find((o) => o.id === oppId) ?? null;
+    setActiveOpp(opp);
+  };
+
+  const handleDragOver = (event: { over: { id: string } | null }) => {
+    if (!event.over || !data) {
+      setOverStage(null);
+      return;
+    }
+    const overId = event.over.id as string;
+    // If over a stage column droppable
+    if ((KANBAN_STAGES as string[]).includes(overId)) {
+      setOverStage(overId as Stage);
+      return;
+    }
+    // If over another card, look up that card's stage
+    const stageMap = buildStageMap(data.grouped);
+    const targetStage = stageMap[overId];
+    setOverStage(targetStage ?? null);
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    setActiveOpp(null);
+    setOverStage(null);
+
+    const { active, over } = event;
+    if (!over || !data) return;
+
+    const oppId = active.id as string;
+    const overId = over.id as string;
+
+    // Determine current stage
+    const stageMap = buildStageMap(data.grouped);
+    const currentStage = stageMap[oppId];
+    if (!currentStage) return;
+
+    // Determine target stage
+    let targetStage: Stage;
+    if ((KANBAN_STAGES as string[]).includes(overId)) {
+      targetStage = overId as Stage;
+    } else {
+      targetStage = stageMap[overId] ?? currentStage;
+    }
+
+    if (targetStage === currentStage) return;
+
+    // Optimistic update
+    const opp = (data.grouped[currentStage] ?? []).find((o) => o.id === oppId);
+    if (!opp) return;
+    const updatedOpp = { ...opp, stage: targetStage };
+
+    setData((prev) => {
+      if (!prev) return prev;
+      const newGrouped = { ...prev.grouped };
+      newGrouped[currentStage] = (newGrouped[currentStage] ?? []).filter(
+        (o) => o.id !== oppId
+      );
+      newGrouped[targetStage] = [updatedOpp, ...(newGrouped[targetStage] ?? [])];
+      const newRecords = prev.records.map((r) =>
+        r.id === oppId ? updatedOpp : r
+      );
+      return { ...prev, grouped: newGrouped, records: newRecords };
+    });
+
+    // Persist to API
+    try {
+      const res = await fetch(`/api/crm/opportunities/${oppId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stage: targetStage }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch {
+      // Revert on failure
+      await fetchData();
     }
   };
 
@@ -307,53 +487,77 @@ export default function OpportunitiesPage() {
             ))}
           </div>
         ) : (
-          <div className="flex gap-4 pb-4" style={{ minHeight: "calc(100vh - 220px)" }}>
-            {KANBAN_STAGES.map((stage) => {
-              const cfg = STAGE_CONFIG[stage];
-              const opps = filteredGrouped[stage] ?? [];
-              const colTotal = opps.reduce((s, r) => s + (r.amount ?? 0), 0);
-              return (
-                <div
-                  key={stage}
-                  ref={(el) => { columnRefs.current[stage] = el; }}
-                  className="min-w-[240px] max-w-[260px] flex flex-col"
-                >
-                  {/* Column Header */}
-                  <div className="flex items-center gap-2 mb-3 px-1">
-                    <span className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0", cfg.dot)} />
-                    <span className="text-sm font-semibold text-foreground flex-1 truncate">
-                      {cfg.label}
-                    </span>
-                    <span className="text-xs font-mono bg-white border border-border px-1.5 py-0.5 rounded-full text-muted-foreground">
-                      {opps.length}
-                    </span>
-                  </div>
-                  <div className="text-xs text-muted-foreground font-mono px-1 mb-2">
-                    {fmt$(colTotal)}
-                  </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+          >
+            <div className="flex gap-4 pb-4" style={{ minHeight: "calc(100vh - 220px)" }}>
+              {KANBAN_STAGES.map((stage) => {
+                const cfg = STAGE_CONFIG[stage];
+                const opps = filteredGrouped[stage] ?? [];
+                const colTotal = opps.reduce((s, r) => s + (r.amount ?? 0), 0);
+                const isColumnOver = overStage === stage;
+                return (
+                  <div
+                    key={stage}
+                    ref={(el) => { columnRefs.current[stage] = el; }}
+                    className="min-w-[240px] max-w-[260px] flex flex-col"
+                  >
+                    {/* Column Header */}
+                    <div className="flex items-center gap-2 mb-3 px-1">
+                      <span className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0", cfg.dot)} />
+                      <span className="text-sm font-semibold text-foreground flex-1 truncate">
+                        {cfg.label}
+                      </span>
+                      <span className="text-xs font-mono bg-white border border-border px-1.5 py-0.5 rounded-full text-muted-foreground">
+                        {opps.length}
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground font-mono px-1 mb-2">
+                      {fmt$(colTotal)}
+                    </div>
 
-                  {/* Cards */}
-                  <div className="flex-1 space-y-2 overflow-y-auto">
-                    {opps.map((opp) => (
-                      <OppCard key={opp.id} opp={opp} />
-                    ))}
-
-                    {/* Add button */}
-                    <button
-                      onClick={() => {
-                        setForm({ ...BLANK_FORM, stage });
-                        setShowPanel(true);
-                      }}
-                      className="w-full py-2 text-xs text-muted-foreground border border-dashed border-border rounded-xl hover:border-[#6B7EFF] hover:text-[#6B7EFF] transition-colors flex items-center justify-center gap-1"
+                    {/* Cards — droppable zone */}
+                    <SortableContext
+                      items={opps.map((o) => o.id)}
+                      strategy={verticalListSortingStrategy}
+                      id={stage}
                     >
-                      <Plus size={12} />
-                      Add
-                    </button>
+                      <DroppableColumn stage={stage} isOver={isColumnOver}>
+                        {opps.map((opp) => (
+                          <SortableOppCard key={opp.id} opp={opp} />
+                        ))}
+
+                        {/* Add button */}
+                        <button
+                          onClick={() => {
+                            setForm({ ...BLANK_FORM, stage });
+                            setShowPanel(true);
+                          }}
+                          className="w-full py-2 text-xs text-muted-foreground border border-dashed border-border rounded-xl hover:border-[#6B7EFF] hover:text-[#6B7EFF] transition-colors flex items-center justify-center gap-1"
+                        >
+                          <Plus size={12} />
+                          Add
+                        </button>
+                      </DroppableColumn>
+                    </SortableContext>
                   </div>
+                );
+              })}
+            </div>
+
+            {/* Drag overlay — ghost card that follows the cursor */}
+            <DragOverlay dropAnimation={null}>
+              {activeOpp ? (
+                <div className="rotate-1 scale-105 shadow-2xl">
+                  <OppCard opp={activeOpp} isOverlay />
                 </div>
-              );
-            })}
-          </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
         )}
       </div>
 
@@ -509,7 +713,15 @@ export default function OpportunitiesPage() {
 }
 
 // ── Opp Card ──────────────────────────────────────────────────────────────
-function OppCard({ opp }: { opp: Opportunity }) {
+function OppCard({
+  opp,
+  dragHandleProps,
+  isOverlay,
+}: {
+  opp: Opportunity;
+  dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
+  isOverlay?: boolean;
+}) {
   function fmt$(n: number | undefined | null): string {
     if (n == null) return "$0";
     if (n >= 1_000_000) return `$${(n / 1e6).toFixed(1)}M`;
@@ -518,10 +730,32 @@ function OppCard({ opp }: { opp: Opportunity }) {
   }
 
   return (
-    <Link href={`/crm/opportunities/${opp.id}`} className="block">
-      <div className="bg-white rounded-xl border border-border p-3 hover:shadow-md hover:border-[#6B7EFF]/30 transition-all cursor-pointer group">
+    <div
+      className={cn(
+        "bg-white rounded-xl border border-border p-3 hover:shadow-md hover:border-[#6B7EFF]/30 transition-all group relative",
+        isOverlay && "shadow-2xl border-[#6B7EFF]/40 ring-2 ring-[#6B7EFF]/20"
+      )}
+    >
+      {/* Drag handle — touch/grab target, doesn't interfere with link */}
+      <div
+        {...dragHandleProps}
+        className="absolute top-2.5 right-8 p-1 rounded text-muted-foreground opacity-0 group-hover:opacity-50 hover:!opacity-100 cursor-grab active:cursor-grabbing transition-all touch-none"
+        onClick={(e) => e.preventDefault()}
+        aria-label="Drag to reorder"
+      >
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+          <circle cx="4" cy="3" r="1.2" />
+          <circle cx="8" cy="3" r="1.2" />
+          <circle cx="4" cy="6" r="1.2" />
+          <circle cx="8" cy="6" r="1.2" />
+          <circle cx="4" cy="9" r="1.2" />
+          <circle cx="8" cy="9" r="1.2" />
+        </svg>
+      </div>
+
+      <Link href={`/crm/opportunities/${opp.id}`} className="block">
         <div className="flex items-start justify-between gap-1 mb-1">
-          <p className="text-sm font-semibold text-foreground truncate leading-tight">
+          <p className="text-sm font-semibold text-foreground truncate leading-tight pr-8">
             {opp.name}
           </p>
           <button
@@ -554,8 +788,8 @@ function OppCard({ opp }: { opp: Opportunity }) {
             </div>
           )}
         </div>
-      </div>
-    </Link>
+      </Link>
+    </div>
   );
 }
 
@@ -573,3 +807,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 const inputCls =
   "w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-white";
+
+// Suppress unused import warning — ChevronRight is kept for future use
+void ChevronRight;

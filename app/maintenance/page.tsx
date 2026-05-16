@@ -7,6 +7,7 @@ import { AISearch } from "@/components/ai/AISearch";
 import {
   Plus, Wrench, CheckCircle2, Clock, AlertTriangle, Calendar,
   User, X, ChevronDown, RefreshCw, Trash2, ChevronRight,
+  ChevronLeft, List,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { Edit2 } = require('lucide-react') as any;
@@ -349,6 +350,46 @@ function WorkOrderSlideOver({ open, onClose, onSaved, techs, editing }: NewWOFor
   );
 }
 
+// ── Calendar helpers ──────────────────────────────────────────────────────────
+
+function getMondayOfWeek(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getDay(); // 0=Sun
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function addDays(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function toDateString(date: Date): string {
+  // YYYY-MM-DD in local time
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+const calStatusChip: Record<WOStatus, { bg: string; text: string }> = {
+  open:        { bg: "bg-blue-100",    text: "text-blue-800"    },
+  in_progress: { bg: "bg-amber-100",   text: "text-amber-800"   },
+  scheduled:   { bg: "bg-violet-100",  text: "text-violet-800"  },
+  completed:   { bg: "bg-emerald-100", text: "text-emerald-800" },
+  cancelled:   { bg: "bg-slate-100",   text: "text-slate-500"   },
+};
+
+const priorityDot: Record<WOPriority, string> = {
+  urgent: "bg-red-500",
+  high:   "bg-orange-400",
+  medium: "bg-blue-400",
+  low:    "bg-slate-400",
+};
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function MaintenancePage() {
@@ -360,6 +401,8 @@ export default function MaintenancePage() {
   const [editing, setEditing]       = useState<WorkOrder | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [deleting, setDeleting]     = useState<string | null>(null);
+  const [viewMode, setViewMode]     = useState<"list" | "calendar">("list");
+  const [weekStart, setWeekStart]   = useState<Date>(() => getMondayOfWeek(new Date()));
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -444,6 +487,31 @@ export default function MaintenancePage() {
             placeholder='Try "show overdue work orders" or "schedule annual maintenance for Angel Oak"'
             className="flex-1"
           />
+          {/* View toggle */}
+          <div className="flex items-center rounded-xl border border-border overflow-hidden shrink-0">
+            <button
+              onClick={() => setViewMode("list")}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors",
+                viewMode === "list"
+                  ? "bg-brand-500 text-white"
+                  : "bg-card text-muted-foreground hover:bg-accent"
+              )}
+            >
+              <List size={13} /> List
+            </button>
+            <button
+              onClick={() => setViewMode("calendar")}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors",
+                viewMode === "calendar"
+                  ? "bg-brand-500 text-white"
+                  : "bg-card text-muted-foreground hover:bg-accent"
+              )}
+            >
+              <Calendar size={13} /> Calendar
+            </button>
+          </div>
           <button
             onClick={fetchData}
             className="p-2.5 rounded-xl border border-border hover:bg-accent transition-colors"
@@ -491,125 +559,285 @@ export default function MaintenancePage() {
           })}
         </div>
 
-        {/* Work Orders table */}
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
-            <div className="flex items-center gap-2">
-              <Wrench size={15} className="text-brand-400" />
-              <h2 className="text-sm font-semibold">Work Orders</h2>
-              {filterStatus !== "all" && (
-                <button
-                  onClick={() => setFilterStatus("all")}
-                  className="flex items-center gap-1 ml-1 text-[11px] text-brand-400 hover:text-brand-500"
-                >
-                  <span className="capitalize">{filterStatus.replace("_", " ")}</span>
-                  <X size={10} />
-                </button>
-              )}
+        {/* Work Orders — list or calendar */}
+        {viewMode === "list" ? (
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Wrench size={15} className="text-brand-400" />
+                <h2 className="text-sm font-semibold">Work Orders</h2>
+                {filterStatus !== "all" && (
+                  <button
+                    onClick={() => setFilterStatus("all")}
+                    className="flex items-center gap-1 ml-1 text-[11px] text-brand-400 hover:text-brand-500"
+                  >
+                    <span className="capitalize">{filterStatus.replace("_", " ")}</span>
+                    <X size={10} />
+                  </button>
+                )}
+              </div>
+              <span className="text-xs text-muted-foreground">{filtered.length} work orders</span>
             </div>
-            <span className="text-xs text-muted-foreground">{filtered.length} work orders</span>
-          </div>
 
-          {loading ? (
-            <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
-              <RefreshCw size={16} className="animate-spin mr-2" /> Loading work orders…
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-              <Wrench size={32} className="mb-3 opacity-20" />
-              <p className="text-sm font-medium">No work orders found</p>
-              <p className="text-xs mt-1">Click "New Work Order" to create one</p>
-            </div>
-          ) : (
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-border bg-background/30">
-                  {["WO #", "Title", "Customer", "Assignee", "Priority", "Status", "Due", "Actions"].map(h => (
-                    <th key={h} className="text-left px-4 py-2.5 text-muted-foreground font-medium">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((wo) => {
-                  const pc = priorityConfig[wo.priority] ?? priorityConfig.medium;
-                  const sc = statusConfig[wo.status]     ?? statusConfig.open;
-                  const StatusIcon = sc.icon;
-                  const isOverdue  = wo.status !== "completed" && wo.due_date && new Date(wo.due_date) < new Date();
+            {loading ? (
+              <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
+                <RefreshCw size={16} className="animate-spin mr-2" /> Loading work orders…
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                <Wrench size={32} className="mb-3 opacity-20" />
+                <p className="text-sm font-medium">No work orders found</p>
+                <p className="text-xs mt-1">Click "New Work Order" to create one</p>
+              </div>
+            ) : (
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border bg-background/30">
+                    {["WO #", "Title", "Customer", "Assignee", "Priority", "Status", "Due", "Actions"].map(h => (
+                      <th key={h} className="text-left px-4 py-2.5 text-muted-foreground font-medium">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((wo) => {
+                    const pc = priorityConfig[wo.priority] ?? priorityConfig.medium;
+                    const sc = statusConfig[wo.status]     ?? statusConfig.open;
+                    const StatusIcon = sc.icon;
+                    const isOverdue  = wo.status !== "completed" && wo.due_date && new Date(wo.due_date) < new Date();
 
-                  return (
-                    <tr
-                      key={wo.id}
-                      onClick={() => router.push(`/maintenance/${wo.id}`)}
-                      className="border-b border-border/50 hover:bg-accent/30 transition-colors cursor-pointer group"
-                    >
-                      <td className="px-4 py-3 font-mono text-brand-400">{wo.wo_number}</td>
-                      <td className="px-4 py-3 font-medium text-foreground max-w-[200px] truncate">{wo.title}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{wo.customer_name}</td>
-                      <td className="px-4 py-3">
-                        {wo.assignee_name ? (
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-5 h-5 rounded-full bg-brand-900 flex items-center justify-center text-[10px] text-brand-300 font-semibold">
-                              {wo.assignee_name.split(" ").map(n => n[0]).join("")}
+                    return (
+                      <tr
+                        key={wo.id}
+                        onClick={() => router.push(`/maintenance/${wo.id}`)}
+                        className="border-b border-border/50 hover:bg-accent/30 transition-colors cursor-pointer group"
+                      >
+                        <td className="px-4 py-3 font-mono text-brand-400">{wo.wo_number}</td>
+                        <td className="px-4 py-3 font-medium text-foreground max-w-[200px] truncate">{wo.title}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{wo.customer_name}</td>
+                        <td className="px-4 py-3">
+                          {wo.assignee_name ? (
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-5 h-5 rounded-full bg-brand-900 flex items-center justify-center text-[10px] text-brand-300 font-semibold">
+                                {wo.assignee_name.split(" ").map(n => n[0]).join("")}
+                              </div>
+                              <span className="text-muted-foreground">{wo.assignee_name}</span>
                             </div>
-                            <span className="text-muted-foreground">{wo.assignee_name}</span>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground/50 italic">Unassigned</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${pc.bg} ${pc.text}`}>
-                          {pc.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="relative">
-                          <select
-                            value={wo.status}
-                            onChange={e => handleStatusChange(wo, e.target.value as WOStatus)}
-                            onClick={e => e.stopPropagation()}
-                            className={cn(
-                              "appearance-none pl-6 pr-2 py-0.5 rounded-full text-[11px] font-medium cursor-pointer border-0 outline-none",
-                              sc.bg, sc.text
-                            )}
-                          >
-                            {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                          </select>
-                          <StatusIcon size={10} className={cn("absolute left-1.5 top-1/2 -translate-y-1/2 pointer-events-none", sc.text)} />
-                        </div>
-                      </td>
-                      <td className={cn("px-4 py-3", isOverdue ? "text-red-400 font-medium" : "text-muted-foreground")}>
-                        {wo.due_date ? new Date(wo.due_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={e => { e.stopPropagation(); setEditing(wo); setSlideOpen(true); }}
-                            className="p-1.5 rounded-lg hover:bg-brand-500/10 text-brand-400 transition-colors"
-                            title="Edit"
-                          >
-                            <Edit2 size={13} />
-                          </button>
-                          <button
-                            onClick={e => { e.stopPropagation(); handleDelete(wo.id); }}
-                            disabled={deleting === wo.id}
-                            className="p-1.5 rounded-lg hover:bg-red-500/10 text-red-400 transition-colors disabled:opacity-50"
-                            title="Delete"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                          <span className="ml-1 text-xs text-brand-400 font-medium flex items-center gap-0.5">
-                            View <ChevronRight size={12} />
+                          ) : (
+                            <span className="text-muted-foreground/50 italic">Unassigned</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${pc.bg} ${pc.text}`}>
+                            {pc.label}
                           </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="relative">
+                            <select
+                              value={wo.status}
+                              onChange={e => handleStatusChange(wo, e.target.value as WOStatus)}
+                              onClick={e => e.stopPropagation()}
+                              className={cn(
+                                "appearance-none pl-6 pr-2 py-0.5 rounded-full text-[11px] font-medium cursor-pointer border-0 outline-none",
+                                sc.bg, sc.text
+                              )}
+                            >
+                              {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                            </select>
+                            <StatusIcon size={10} className={cn("absolute left-1.5 top-1/2 -translate-y-1/2 pointer-events-none", sc.text)} />
+                          </div>
+                        </td>
+                        <td className={cn("px-4 py-3", isOverdue ? "text-red-400 font-medium" : "text-muted-foreground")}>
+                          {wo.due_date ? new Date(wo.due_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={e => { e.stopPropagation(); setEditing(wo); setSlideOpen(true); }}
+                              className="p-1.5 rounded-lg hover:bg-brand-500/10 text-brand-400 transition-colors"
+                              title="Edit"
+                            >
+                              <Edit2 size={13} />
+                            </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); handleDelete(wo.id); }}
+                              disabled={deleting === wo.id}
+                              className="p-1.5 rounded-lg hover:bg-red-500/10 text-red-400 transition-colors disabled:opacity-50"
+                              title="Delete"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                            <span className="ml-1 text-xs text-brand-400 font-medium flex items-center gap-0.5">
+                              View <ChevronRight size={12} />
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        ) : (
+          /* ── Calendar View ─────────────────────────────────────────────────── */
+          (() => {
+            const todayStr   = toDateString(new Date());
+            const weekDays   = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+            const DAY_NAMES  = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+            // Map date string → WOs scheduled on that day
+            const byDate: Record<string, WorkOrder[]> = {};
+            const unscheduled: WorkOrder[] = [];
+            workOrders.forEach(wo => {
+              if (wo.scheduled_date) {
+                const key = wo.scheduled_date.slice(0, 10);
+                byDate[key] = byDate[key] ? [...byDate[key], wo] : [wo];
+              } else {
+                unscheduled.push(wo);
+              }
+            });
+
+            // Range label for the header
+            const rangeLabel = (() => {
+              const from = weekDays[0].toLocaleDateString("en-US", { month: "short", day: "numeric" });
+              const to   = weekDays[6].toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+              return `${from} – ${to}`;
+            })();
+
+            return (
+              <div className="bg-card border border-border rounded-xl overflow-hidden">
+                {/* Calendar toolbar */}
+                <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
+                  <div className="flex items-center gap-2">
+                    <Calendar size={15} className="text-brand-400" />
+                    <h2 className="text-sm font-semibold">Week of {rangeLabel}</h2>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setWeekStart(d => addDays(d, -7))}
+                      className="p-1.5 rounded-lg border border-border hover:bg-accent transition-colors"
+                      title="Previous week"
+                    >
+                      <ChevronLeft size={14} className="text-muted-foreground" />
+                    </button>
+                    <button
+                      onClick={() => setWeekStart(getMondayOfWeek(new Date()))}
+                      className="px-3 py-1 rounded-lg border border-border text-xs text-muted-foreground hover:bg-accent transition-colors"
+                    >
+                      This Week
+                    </button>
+                    <button
+                      onClick={() => setWeekStart(d => addDays(d, 7))}
+                      className="p-1.5 rounded-lg border border-border hover:bg-accent transition-colors"
+                      title="Next week"
+                    >
+                      <ChevronRight size={14} className="text-muted-foreground" />
+                    </button>
+                  </div>
+                </div>
+
+                {loading ? (
+                  <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
+                    <RefreshCw size={16} className="animate-spin mr-2" /> Loading work orders…
+                  </div>
+                ) : (
+                  <>
+                    {/* Day columns */}
+                    <div className="grid grid-cols-7 divide-x divide-border">
+                      {weekDays.map((day, i) => {
+                        const dateStr  = toDateString(day);
+                        const isToday  = dateStr === todayStr;
+                        const dayWOs   = byDate[dateStr] ?? [];
+
+                        return (
+                          <div key={dateStr} className="flex flex-col min-h-[180px]">
+                            {/* Day header */}
+                            <div className={cn(
+                              "px-2 py-2 text-center border-b border-border",
+                              isToday ? "bg-brand-500/10" : "bg-background/30"
+                            )}>
+                              <p className={cn(
+                                "text-[10px] font-semibold uppercase tracking-wider",
+                                isToday ? "text-brand-400" : "text-muted-foreground"
+                              )}>
+                                {DAY_NAMES[i]}
+                              </p>
+                              <p className={cn(
+                                "text-base font-bold leading-tight",
+                                isToday ? "text-brand-500" : "text-foreground"
+                              )}>
+                                {day.getDate()}
+                              </p>
+                            </div>
+
+                            {/* WO chips */}
+                            <div className="flex-1 p-1.5 space-y-1 overflow-y-auto">
+                              {dayWOs.length === 0 ? (
+                                <p className="text-center text-muted-foreground/30 text-xs mt-4">—</p>
+                              ) : (
+                                dayWOs.map(wo => {
+                                  const chip = calStatusChip[wo.status] ?? calStatusChip.open;
+                                  const dot  = priorityDot[wo.priority] ?? priorityDot.medium;
+                                  return (
+                                    <button
+                                      key={wo.id}
+                                      onClick={() => router.push(`/maintenance/${wo.id}`)}
+                                      className={cn(
+                                        "w-full text-left px-2 py-1 rounded-md text-[11px] leading-snug truncate transition-opacity hover:opacity-80",
+                                        chip.bg, chip.text
+                                      )}
+                                      title={`${wo.wo_number} — ${wo.title} (${wo.customer_name})`}
+                                    >
+                                      <span className="inline-flex items-center gap-1 w-full min-w-0">
+                                        <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", dot)} />
+                                        <span className="truncate font-medium">{wo.wo_number}</span>
+                                        <span className="truncate text-[10px] opacity-80 hidden sm:inline">— {wo.title}</span>
+                                      </span>
+                                      <span className="block truncate text-[10px] opacity-70 mt-0.5">{wo.customer_name}</span>
+                                    </button>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Unscheduled strip */}
+                    {unscheduled.length > 0 && (
+                      <div className="border-t border-border px-5 py-3">
+                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                          Unscheduled ({unscheduled.length})
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {unscheduled.map(wo => {
+                            const chip = calStatusChip[wo.status] ?? calStatusChip.open;
+                            const dot  = priorityDot[wo.priority] ?? priorityDot.medium;
+                            return (
+                              <button
+                                key={wo.id}
+                                onClick={() => router.push(`/maintenance/${wo.id}`)}
+                                className={cn(
+                                  "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-opacity hover:opacity-80",
+                                  chip.bg, chip.text
+                                )}
+                              >
+                                <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", dot)} />
+                                {wo.wo_number} — {wo.title}
+                              </button>
+                            );
+                          })}
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })()
+        )}
       </div>
     </div>
   );
