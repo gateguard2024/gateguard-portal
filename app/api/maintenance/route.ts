@@ -92,7 +92,6 @@ export async function POST(req: NextRequest) {
         const recipientEmail = site?.pm_email ?? site?.primary_contact_email ?? null
         if (recipientEmail) {
           notifyWOEvent({
-            supabase,
             work_order_id:   data.id,
             wo_number:       data.wo_number,
             title:           data.title,

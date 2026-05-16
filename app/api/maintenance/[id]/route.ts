@@ -98,7 +98,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (emailEvent && recipientEmail) {
     // Fire and forget — don't block response
     notifyWOEvent({
-      supabase,
       work_order_id:   params.id,
       wo_number:       data.wo_number,
       title:           data.title,

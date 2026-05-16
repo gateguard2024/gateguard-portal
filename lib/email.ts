@@ -194,28 +194,37 @@ export async function sendWOEmail(to: string, payload: WOEmailPayload): Promise<
 
 // ── Convenience: send WO notification + log it ────────────────────────────────
 
+import { createClient } from '@supabase/supabase-js'
+
 export async function notifyWOEvent(opts: {
-  supabase:       ReturnType<typeof import('@supabase/supabase-js').createClient>
-  work_order_id:  string
-  wo_number:      string
-  title:          string
-  customer_name:  string
-  event:          WOEvent
+  work_order_id:   string
+  wo_number:       string
+  title:           string
+  customer_name:   string
+  event:           WOEvent
   recipient_email: string
   assignee_name?:  string
   scheduled_date?: string
   tech_eta?:       string
   notes?:          string
 }): Promise<void> {
-  const { supabase, work_order_id, recipient_email, event, ...rest } = opts
+  const { work_order_id, recipient_email, event, ...rest } = opts
 
   const sent = await sendWOEmail(recipient_email, { event, ...rest })
 
   if (sent) {
-    await supabase.from('wo_notification_log').insert({
-      work_order_id,
-      event_type:     event,
-      recipient_email,
-    }).catch(() => {}) // non-blocking
+    try {
+      const db = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      )
+      await db.from('wo_notification_log').insert({
+        work_order_id,
+        event_type:     event,
+        recipient_email,
+      })
+    } catch (_) {
+      // non-blocking — log failure silently
+    }
   }
 }
