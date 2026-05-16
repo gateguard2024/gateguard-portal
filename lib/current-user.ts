@@ -56,6 +56,7 @@ export async function getCurrentUser(): Promise<PortalUser> {
     if (!user) return SYSTEM_USER
 
     const meta      = user.publicMetadata ?? {}
+    const id        = user.id
     const name      = [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Unknown'
     const initials  = name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
     const email     = user.emailAddresses[0]?.emailAddress ?? ''
