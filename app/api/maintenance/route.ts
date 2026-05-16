@@ -81,17 +81,18 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Fire "created" notification if site has a contact email
+  // Fire "created" notification if site has a contact email (fire-and-forget)
   if (site_id && data) {
-    supabase
-      .from('sites')
-      .select('primary_contact_email, pm_email, name')
-      .eq('id', site_id)
-      .single()
-      .then(({ data: site }) => {
+    void (async () => {
+      try {
+        const { data: site } = await supabase
+          .from('sites')
+          .select('primary_contact_email, pm_email, name')
+          .eq('id', site_id)
+          .single()
         const recipientEmail = site?.pm_email ?? site?.primary_contact_email ?? null
         if (recipientEmail) {
-          notifyWOEvent({
+          await notifyWOEvent({
             work_order_id:   data.id,
             wo_number:       data.wo_number,
             title:           data.title,
@@ -99,10 +100,10 @@ export async function POST(req: NextRequest) {
             event:           'created',
             recipient_email: recipientEmail,
             assignee_name:   data.assignee_name ?? undefined,
-          }).catch(console.error)
+          })
         }
-      })
-      .catch(console.error)
+      } catch (_) { /* non-blocking */ }
+    })()
   }
 
   return NextResponse.json({ work_order: data }, { status: 201 })
