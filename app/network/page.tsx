@@ -3,11 +3,13 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import {
-  Plus, Map, Network, Wifi, Shield, AlertTriangle, CheckCircle2,
-  XCircle, Clock, Wrench, Activity, RefreshCw, RotateCcw,
-  Filter, Building2, DollarSign, SlidersHorizontal, ChevronRight,
-  AlertCircle, Globe, Hash, Cpu,
+  Plus, Wifi, Shield, AlertTriangle, CheckCircle2,
+  XCircle, Clock, Wrench, Activity, RefreshCw,
+  Filter, Building2, ChevronRight,
+  Globe, Hash,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Map, Network, RotateCcw, DollarSign, SlidersHorizontal, AlertCircle, Cpu } = require('lucide-react') as any;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

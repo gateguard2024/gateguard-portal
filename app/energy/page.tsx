@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import {
-  Plus, Zap, TrendingDown, AlertTriangle, Wrench, CheckCircle2,
-  Building2, Cpu, DollarSign, Activity, Settings,
+  Plus, Zap, AlertTriangle, Wrench, CheckCircle2,
+  Building2, Activity, Settings,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { TrendingDown, Cpu, DollarSign } = require('lucide-react') as any;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

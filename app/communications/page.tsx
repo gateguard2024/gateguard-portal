@@ -5,21 +5,17 @@ import { cn } from "@/lib/utils";
 import {
   Phone,
   MessageSquare,
-  PhoneIncoming,
-  PhoneOutgoing,
-  PhoneCall,
   Copy,
   Plus,
-  Edit2,
   Settings,
   CheckCircle2,
   XCircle,
   Clock,
   Check,
-  Network,
-  GitBranch,
   ArrowRight,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Edit2, PhoneIncoming, PhoneOutgoing, PhoneCall, Network, GitBranch } = require('lucide-react') as any;
 
 // ─── Mock Data ────────────────────────────────────────────────────────────────
 

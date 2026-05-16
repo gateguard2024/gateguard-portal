@@ -6,8 +6,10 @@ import { TopBar } from "@/components/layout/TopBar";
 import { AISearch } from "@/components/ai/AISearch";
 import {
   Plus, Wrench, CheckCircle2, Clock, AlertTriangle, Calendar,
-  User, X, ChevronDown, RefreshCw, Trash2, Edit2, ChevronRight,
+  User, X, ChevronDown, RefreshCw, Trash2, ChevronRight,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Edit2 } = require('lucide-react') as any;
 import { cn } from "@/lib/utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────

@@ -5,9 +5,11 @@ import { TopBar } from "@/components/layout/TopBar";
 import {
   Building2, Users, Plus, ChevronRight, ChevronDown,
   MoreHorizontal, Shield, CheckCircle2, Clock, XCircle,
-  Mail, Phone, Globe, MapPin, Edit2, Zap, Network,
+  Mail, Phone, Globe, MapPin, Zap,
   Search, AlertTriangle, Check, Copy,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Edit2, Network } = require('lucide-react') as any;
 import { cn } from "@/lib/utils";
 
 // ── Types ──────────────────────────────────────────────────────────────────

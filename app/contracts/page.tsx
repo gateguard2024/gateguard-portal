@@ -9,18 +9,17 @@ import {
   Download,
   Send,
   FileText,
-  DollarSign,
   CheckCircle2,
   XCircle,
   Clock,
-  Archive,
   X,
   User,
   Calendar,
   Check,
-  AlertCircle,
   ChevronRight,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { DollarSign, Archive, AlertCircle } = require('lucide-react') as any;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

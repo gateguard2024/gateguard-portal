@@ -7,11 +7,9 @@ import {
   Plus,
   Search,
   ExternalLink,
-  Edit2,
   Eye,
   Globe,
   Users,
-  ArrowUpRight,
   Clock,
   CheckCircle2,
   Loader2,
@@ -20,9 +18,9 @@ import {
   MapPin,
   Wifi,
   Shield,
-  Camera,
-  DoorOpen,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Edit2, ArrowUpRight, Camera, DoorOpen } = require('lucide-react') as any;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

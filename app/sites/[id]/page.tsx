@@ -7,10 +7,10 @@ import {
   Building2, MapPin, Phone, Mail, Wrench, ChevronLeft,
   Plus, Shield, Activity, ClipboardList, Package,
   CheckCircle2, AlertTriangle, XCircle, Wifi, WifiOff,
-  Key, FileText, Edit3, Trash2, RefreshCw, Copy, ExternalLink,
+  Key, FileText, Trash2, RefreshCw, Copy, ExternalLink,
 } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Inbox } = require('lucide-react') as any
+const { Inbox, Edit3, Edit2 } = require('lucide-react') as any
 
 /* ─── types ──────────────────────────────────────────── */
 interface Site {

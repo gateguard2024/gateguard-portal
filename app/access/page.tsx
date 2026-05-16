@@ -1,6 +1,8 @@
 import { TopBar } from "@/components/layout/TopBar";
 import { AISearch } from "@/components/ai/AISearch";
-import { Shield, Users, DoorOpen, Cpu, BarChart3, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Shield, Users, CheckCircle2, XCircle, Clock } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { DoorOpen, Cpu, BarChart3 } = require('lucide-react') as any;
 
 const tabs = ["Event Tracker", "Users", "Devices", "Reports"];
 

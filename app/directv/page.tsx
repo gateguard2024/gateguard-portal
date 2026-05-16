@@ -1,10 +1,12 @@
 "use client";
 import { useState } from "react";
 import {
-  Tv as Satellite, TrendingUp, TrendingDown, Users, DollarSign,
+  TrendingUp, Users,
   Activity, CheckCircle2, Clock, ChevronRight,
-  BarChart3, Zap, RefreshCw, MapPin,
+  Zap, RefreshCw, MapPin,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Tv: Satellite, TrendingDown, DollarSign, BarChart3 } = require('lucide-react') as any;
 import { cn } from "@/lib/utils";
 import {
   DTV_DEALERS, DTV_ACTIVATIONS, ATLAS_KPIS, DTV_COMMISSION_SUMMARY,

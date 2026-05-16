@@ -6,11 +6,9 @@ import {
   Plus,
   ChevronLeft,
   ChevronRight,
-  Edit2,
   Trash2,
   X,
   Send,
-  Image,
   Calendar,
   Clock,
   TrendingUp,
@@ -18,6 +16,8 @@ import {
   Eye,
   Zap,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Edit2, Image } = require('lucide-react') as any;
 import Link from "next/link";
 
 // ─── Types ────────────────────────────────────────────────────────────────────

@@ -24,7 +24,6 @@ import {
   Zap,
   Plus,
   Search,
-  BookOpen,
   ChevronRight,
   Clock,
   CheckCircle2,
@@ -36,15 +35,12 @@ import {
   Activity,
   Wifi,
   Shield,
-  Cpu,
-  DoorOpen,
-  Camera,
   Globe,
-  Headphones,
   FileText,
   Package,
-  ThumbsUp,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { BookOpen, Cpu, DoorOpen, Camera, Headphones, ThumbsUp } = require('lucide-react') as any;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

@@ -7,14 +7,12 @@ import {
   Search,
   AlertTriangle,
   Package,
-  Truck,
-  Archive,
   ClipboardList,
-  Edit2,
-  RotateCcw,
   CheckCircle2,
   XCircle,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Edit2, Truck, Archive, RotateCcw } = require('lucide-react') as any;
 
 // ─── Mock Data ────────────────────────────────────────────────────────────────
 

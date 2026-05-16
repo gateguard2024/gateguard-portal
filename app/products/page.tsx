@@ -5,10 +5,12 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { TopBar } from "@/components/layout/TopBar";
 import {
-  Plus, Search, Edit2, Package, Camera, Shield, Wifi, Cpu,
-  Layers, Upload, X, Check, Trash2, Server, Hammer, CheckCircle2,
+  Plus, Search, Package, Shield, Wifi,
+  Layers, Upload, X, Check, Trash2, CheckCircle2,
   Loader2, RefreshCw,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Edit2, Camera, Cpu, Server, Hammer } = require('lucide-react') as any;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

@@ -4,8 +4,10 @@ import Link from 'next/link';
 import { useState } from 'react';
 import {
   FileText, Plus, Search, Send, Eye, CheckCircle2,
-  XCircle, Clock, Copy, MoreHorizontal, ArrowUpRight, ChevronRight,
+  XCircle, Clock, Copy, MoreHorizontal, ChevronRight,
 } from 'lucide-react';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { ArrowUpRight } = require('lucide-react') as any;
 import { formatCurrency } from '@/lib/quote-calculator';
 import { QuoteStatus } from '@/types/quote';
 

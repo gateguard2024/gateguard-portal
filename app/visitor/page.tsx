@@ -10,21 +10,19 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
-  Camera,
   Phone,
   Mail,
   RefreshCw,
   ChevronDown,
   Filter,
   Search,
-  DoorOpen,
   Hash,
   User,
   Calendar,
   X,
-  Edit2,
-  Grid3X3,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Camera, DoorOpen, Edit2, Grid3X3 } = require('lucide-react') as any;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

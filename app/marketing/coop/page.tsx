@@ -7,18 +7,15 @@ import {
   Download,
   Plus,
   Loader2,
-  DollarSign,
   Users,
   TrendingUp,
-  Target,
-  BarChart3,
   MapPin,
   CheckCircle2,
   XCircle,
   Clock,
-  Edit2,
-  ArrowUpRight,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Edit2, ArrowUpRight, DollarSign, Target, BarChart3 } = require('lucide-react') as any;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

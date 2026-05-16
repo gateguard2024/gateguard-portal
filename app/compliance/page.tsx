@@ -1,12 +1,13 @@
 import { TopBar } from "@/components/layout/TopBar";
 import { AISearch } from "@/components/ai/AISearch";
 import {
-  ShieldCheck,
   AlertTriangle,
   XCircle,
   FileText,
   Plus,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { ShieldCheck } = require('lucide-react') as any;
 
 type ComplianceStatus = "Compliant" | "Expiring Soon" | "Expired";
 

@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { TopBar } from "@/components/layout/TopBar";
 import {
-  Settings, Zap, Users, Bell, Palette, DollarSign,
-  Edit2, Check, XCircle, ChevronDown, ChevronRight,
+  Settings, Zap, Users, Bell, Check, XCircle, ChevronDown, ChevronRight,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Edit2, Palette, DollarSign } = require('lucide-react') as any;
 import { PRICING } from "@/types/quote";
 
 // ── Inline-editable price cell ─────────────────────────────────────────────

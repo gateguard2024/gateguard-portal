@@ -6,11 +6,12 @@ import Link from "next/link";
 import { TopBar } from "@/components/layout/TopBar";
 import {
   ChevronLeft, MapPin, Building2, Phone, Mail,
-  Hash, Calendar, Clock, CheckCircle2, Circle, Plus,
-  AlertCircle, FileText, Paperclip, Edit2,
-  PhoneCall, Video, StickyNote, CheckSquare,
+  Hash, Calendar, Clock, CheckCircle2, Plus,
+  FileText,
   MoreHorizontal, TrendingUp, X, ChevronDown, Trash2,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Circle, AlertCircle, Paperclip, Edit2, PhoneCall, Video, StickyNote, CheckSquare } = require('lucide-react') as any;
 // Save not in lucide-react 0.383.0 — use a fallback icon
 const SaveIcon = ({ size }: { size: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

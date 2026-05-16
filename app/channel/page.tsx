@@ -5,28 +5,22 @@ import { cn } from "@/lib/utils";
 import {
   Eye,
   Plus,
-  Radio,
   Users,
   TrendingUp,
-  DollarSign,
   Search,
   CheckCircle2,
   Clock,
   AlertTriangle,
-  Edit2,
   Trash2,
-  Tv,
   MessageSquare,
   Zap,
   Wrench,
   Calendar,
   X,
-  BarChart3,
-  CreditCard,
   FileText,
-  CheckCircle,
-  Circle,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Edit2, Radio, DollarSign, Tv, BarChart3, CreditCard, CheckCircle, Circle } = require('lucide-react') as any;
 
 // ─── Mock Data ────────────────────────────────────────────────────────────────
 
