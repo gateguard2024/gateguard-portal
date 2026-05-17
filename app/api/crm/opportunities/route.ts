@@ -96,8 +96,13 @@ export async function POST(req: NextRequest) {
     const body  = await req.json()
     const stage = body.stage || 'meet_present'
 
-    // Auto-stamp org_id from the authenticated user
-    const org_id = user.isCorporate ? (body.org_id ?? null) : (user.org_id ?? null)
+    // Determine org_id:
+    // - Corporate, master_agent, master_dealer, full_dealer can pass a body.org_id
+    //   to assign the opportunity to a specific org within their network.
+    // - All others always get their own org_id stamped automatically.
+    const canChooseOrg =
+      user.isCorporate || user.isMasterAgent || user.isMasterDealer || user.isFullDealer
+    const org_id = canChooseOrg ? (body.org_id ?? user.org_id ?? null) : (user.org_id ?? null)
 
     const { data, error } = await supabase
       .from('opportunities')

@@ -1,15 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { TopBar } from "@/components/layout/TopBar";
 import {
   RefreshCw, Calendar, ArrowRight, Plus,
   TrendingUp, Users, CheckCircle2, Zap,
-  Phone, Mail, ClipboardList, X,
+  Phone, Mail, ClipboardList, X, ChevronDown,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { UserPlus, CalendarClock } = require("lucide-react") as any;
+const { CalendarClock, StickyNote, UserPlus, UserCheck, Building2, Star } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -153,27 +153,51 @@ export default function CRMPage() {
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [assignDealer, setAssignDealer] = useState<Record<string, string>>({});
   const [assigningInProgress, setAssigningInProgress] = useState<string | null>(null);
+  const [canAssignLeads, setCanAssignLeads] = useState(false);
+  const [showNewMenu, setShowNewMenu] = useState(false);
+  const newMenuRef = useRef<HTMLDivElement>(null);
+  const [showLogActivity, setShowLogActivity] = useState(false);
+  const [logForm, setLogForm] = useState({ type: "call" as "call"|"email"|"meeting"|"task"|"note", subject: "", due_at: "", notes: "" });
+  const [logSaving, setLogSaving] = useState(false);
   const [showNewOpp, setShowNewOpp] = useState(false);
   const [newOppForm, setNewOppForm] = useState({
-    name: "", account_name: "", amount: "", close_date: "", stage: "meet_present", description: ""
+    name: "", account_name: "", amount: "", close_date: "", stage: "meet_present", description: "", org_id: ""
   });
   const [savingOpp, setSavingOpp] = useState(false);
+  const [assignableOrgs, setAssignableOrgs] = useState<{ id: string; name: string; org_tier: string; tier_label: string }[]>([]);
+  const [assignableOrgsSelfOnly, setAssignableOrgsSelfOnly] = useState(true);
 
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const [oppsRes, leadsRes, actsRes] = await Promise.all([
+      const [oppsRes, leadsRes, actsRes, orgsRes] = await Promise.all([
         fetch("/api/crm/opportunities"),
         fetch("/api/crm/leads"),
         fetch("/api/crm/activities"),
+        fetch("/api/crm/assignable-orgs"),
       ]);
       if (oppsRes.ok) setOppsData(await oppsRes.json());
       if (leadsRes.ok) setLeads(await leadsRes.json());
       if (actsRes.ok) setActivities(await actsRes.json());
+      if (orgsRes.ok) {
+        const orgsJson = await orgsRes.json();
+        setCanAssignLeads(!orgsJson.selfOnly);
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  // Close "+ New" menu on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (newMenuRef.current && !newMenuRef.current.contains(e.target as Node)) {
+        setShowNewMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   useEffect(() => {
     fetchAll();
@@ -200,6 +224,42 @@ export default function CRMPage() {
     }
   };
 
+  const handleLogActivity = async () => {
+    if (!logForm.subject.trim()) return;
+    setLogSaving(true);
+    try {
+      await fetch("/api/crm/activities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...logForm, created_by_name: "Russel Feldman" }),
+      });
+      setShowLogActivity(false);
+      setLogForm({ type: "call", subject: "", due_at: "", notes: "" });
+      fetchAll();
+    } finally {
+      setLogSaving(false);
+    }
+  };
+
+  const openNewOppForm = async () => {
+    setShowNewOpp(true);
+    // Fetch orgs this user can assign to
+    try {
+      const res = await fetch("/api/crm/assignable-orgs");
+      if (res.ok) {
+        const json = await res.json();
+        setAssignableOrgs(json.orgs ?? []);
+        setAssignableOrgsSelfOnly(json.selfOnly ?? true);
+        // Pre-select their own org (first in list)
+        if (json.orgs?.length > 0 && !newOppForm.org_id) {
+          setNewOppForm((f) => ({ ...f, org_id: json.orgs[0].id }));
+        }
+      }
+    } catch {
+      // silently ignore — org_id will be auto-stamped server-side
+    }
+  };
+
   const handleCreateOpp = async () => {
     if (!newOppForm.name.trim()) return;
     setSavingOpp(true);
@@ -210,11 +270,12 @@ export default function CRMPage() {
         body: JSON.stringify({
           ...newOppForm,
           amount: newOppForm.amount ? parseFloat(newOppForm.amount) : null,
+          org_id: newOppForm.org_id || undefined,
         }),
       });
       await fetchAll();
       setShowNewOpp(false);
-      setNewOppForm({ name: "", account_name: "", amount: "", close_date: "", stage: "meet_present", description: "" });
+      setNewOppForm({ name: "", account_name: "", amount: "", close_date: "", stage: "meet_present", description: "", org_id: "" });
     } finally {
       setSavingOpp(false);
     }
@@ -249,60 +310,111 @@ export default function CRMPage() {
         subtitle="Pipeline · Leads · Opportunities"
         actions={
           <div className="flex items-center gap-2">
-            <Link
-              href="/admin/users"
-              className="px-3 py-1.5 text-sm font-medium border border-border rounded-lg text-foreground hover:bg-accent transition-colors"
-            >
-              <UserPlus size={14} className="inline mr-1.5 -mt-0.5" />
-              Invite to Portal
-            </Link>
-            <button
-              onClick={() => setShowNewOpp(true)}
-              className="px-3 py-1.5 text-sm font-medium bg-[#6B7EFF] text-white rounded-lg hover:bg-[#5a6de8] transition-colors"
-            >
-              <Plus size={14} className="inline mr-1.5 -mt-0.5" />
-              New Opportunity
-            </button>
+            {/* + New dropdown */}
+            <div className="relative" ref={newMenuRef}>
+              <button
+                onClick={() => setShowNewMenu((v) => !v)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-[#6B7EFF] text-white rounded-lg hover:bg-[#5a6de8] transition-colors"
+              >
+                <Plus size={14} />
+                New
+                <ChevronDown size={12} className={cn("transition-transform", showNewMenu && "rotate-180")} />
+              </button>
+              {showNewMenu && (
+                <div className="absolute right-0 top-full mt-1.5 w-52 bg-white border border-border rounded-xl shadow-lg z-50 py-1 overflow-hidden">
+                  <button
+                    onClick={() => { setShowNewMenu(false); openNewOppForm(); }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-slate-50 transition-colors"
+                  >
+                    <Zap size={15} className="text-[#6B7EFF]" />
+                    <div className="text-left">
+                      <p className="font-medium">Opportunity</p>
+                      <p className="text-[11px] text-muted-foreground">Add to your pipeline</p>
+                    </div>
+                  </button>
+                  <Link
+                    href="/customers?new=1"
+                    onClick={() => setShowNewMenu(false)}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-slate-50 transition-colors"
+                  >
+                    <Building2 size={15} className="text-emerald-500" />
+                    <div className="text-left">
+                      <p className="font-medium">Customer</p>
+                      <p className="text-[11px] text-muted-foreground">Add a property account</p>
+                    </div>
+                  </Link>
+                  <Link
+                    href="/admin/dealers/new"
+                    onClick={() => setShowNewMenu(false)}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-slate-50 transition-colors"
+                  >
+                    <UserCheck size={15} className="text-sky-500" />
+                    <div className="text-left">
+                      <p className="font-medium">Dealer</p>
+                      <p className="text-[11px] text-muted-foreground">Onboard a new dealer</p>
+                    </div>
+                  </Link>
+                  <Link
+                    href="/reps?new=1"
+                    onClick={() => setShowNewMenu(false)}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-slate-50 transition-colors"
+                  >
+                    <Star size={15} className="text-amber-500" />
+                    <div className="text-left">
+                      <p className="font-medium">Sales Rep</p>
+                      <p className="text-[11px] text-muted-foreground">Add to your rep network</p>
+                    </div>
+                  </Link>
+                </div>
+              )}
+            </div>
           </div>
         }
       />
 
       <div className="px-6 py-6 space-y-6">
-        {/* ROW 1 — KPI Cards */}
+        {/* ROW 1 — KPI Cards (all clickable / drillable) */}
         <div className="grid grid-cols-4 gap-4">
-          <KpiCard
-            icon={<TrendingUp size={18} className="text-[#6B7EFF]" />}
-            label="Total Pipeline"
-            value={loading ? "—" : fmt$(pipelineTotal)}
-            sub="Active opportunities"
-            iconBg="bg-[#6B7EFF]/10"
-          />
-          <KpiCard
-            icon={<Zap size={18} className="text-amber-500" />}
-            label="Open Opportunities"
-            value={loading ? "—" : String(counts.open)}
-            sub="Across all active stages"
-            iconBg="bg-amber-50"
-          />
-          <KpiCard
-            icon={<CheckCircle2 size={18} className="text-emerald-500" />}
-            label="Closed Won (Month)"
-            value={loading ? "—" : `${wonThisMonth.length} · ${fmt$(wonThisMonthAmount)}`}
-            sub="Revenue closed this month"
-            iconBg="bg-emerald-50"
-          />
-          <KpiCard
-            icon={
-              <span className="relative flex h-4 w-4">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500" />
-              </span>
-            }
-            label="Show Leads"
-            value={loading ? "—" : String(leads.length)}
-            sub="Inbound from trade shows"
-            iconBg="bg-emerald-50"
-          />
+          <Link href="/crm/opportunities">
+            <KpiCard
+              icon={<TrendingUp size={18} className="text-[#6B7EFF]" />}
+              label="Total Pipeline"
+              value={loading ? "—" : fmt$(pipelineTotal)}
+              sub="Click to view all opportunities"
+              iconBg="bg-[#6B7EFF]/10"
+              clickable
+            />
+          </Link>
+          <Link href="/crm/opportunities">
+            <KpiCard
+              icon={<Zap size={18} className="text-amber-500" />}
+              label="Open Opportunities"
+              value={loading ? "—" : String(counts.open)}
+              sub="Across all active stages"
+              iconBg="bg-amber-50"
+              clickable
+            />
+          </Link>
+          <Link href="/crm/opportunities?stage=won">
+            <KpiCard
+              icon={<CheckCircle2 size={18} className="text-emerald-500" />}
+              label="Closed Won (Month)"
+              value={loading ? "—" : `${wonThisMonth.length} · ${fmt$(wonThisMonthAmount)}`}
+              sub="Click to filter closed won"
+              iconBg="bg-emerald-50"
+              clickable
+            />
+          </Link>
+          <Link href="/crm/leads">
+            <KpiCard
+              icon={<Users size={18} className="text-blue-500" />}
+              label="Inbound Leads"
+              value={loading ? "—" : String(leads.length)}
+              sub="Events · Shows · Referrals · Web"
+              iconBg="bg-blue-50"
+              clickable
+            />
+          </Link>
         </div>
 
         {/* ROW 2 — Pipeline + Activity */}
@@ -313,7 +425,7 @@ export default function CRMPage() {
               <h2 className="font-semibold text-foreground">My Pipeline</h2>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setShowNewOpp(true)}
+                  onClick={openNewOppForm}
                   className="px-3 py-1.5 text-xs bg-[#6B7EFF] text-white rounded-lg hover:bg-[#5a6de8] transition-colors font-medium"
                 >
                   + New
@@ -374,9 +486,17 @@ export default function CRMPage() {
 
           {/* Today's Activity */}
           <div className="col-span-2 bg-white rounded-xl border border-border p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <Calendar size={15} className="text-muted-foreground" />
-              <h2 className="font-semibold text-foreground">Today's Activity</h2>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Calendar size={15} className="text-muted-foreground" />
+                <h2 className="font-semibold text-foreground">Today's Activity</h2>
+              </div>
+              <button
+                onClick={() => setShowLogActivity(true)}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium bg-[#6B7EFF]/10 text-[#6B7EFF] rounded-lg hover:bg-[#6B7EFF]/20 transition-colors"
+              >
+                <Plus size={12} /> Log
+              </button>
             </div>
 
             {loading ? (
@@ -386,11 +506,15 @@ export default function CRMPage() {
                 ))}
               </div>
             ) : upcomingActivities.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <p className="text-2xl mb-2">🎯</p>
-                <p className="text-sm text-muted-foreground">
-                  You're clear — go close some deals
-                </p>
+              <div className="flex flex-col items-center justify-center py-6 text-center gap-2">
+                <p className="text-2xl">🎯</p>
+                <p className="text-sm text-muted-foreground">Nothing scheduled — go close some deals</p>
+                <button
+                  onClick={() => setShowLogActivity(true)}
+                  className="mt-1 text-xs text-[#6B7EFF] hover:underline font-medium"
+                >
+                  + Log a call, meeting, or task
+                </button>
               </div>
             ) : (
               <div className="space-y-2">
@@ -515,7 +639,7 @@ export default function CRMPage() {
             )}
           </div>
 
-          {/* Show Leads */}
+          {/* My Leads */}
           <div className="col-span-2 bg-white rounded-xl border border-border p-5">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
@@ -523,20 +647,34 @@ export default function CRMPage() {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
                 </span>
-                <h2 className="font-semibold text-foreground">Atlanta Show Leads</h2>
+                <h2 className="font-semibold text-foreground">My Leads</h2>
+                {leads.filter(l => !l.assigned_dealer).length > 0 && (
+                  <span className="text-xs font-mono bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded-full">
+                    {leads.filter(l => !l.assigned_dealer).length} unassigned
+                  </span>
+                )}
                 <span className="text-xs font-mono bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full">
-                  {leads.length}
+                  {leads.length} total
                 </span>
               </div>
-              {leads.length > 5 && (
-                <Link
-                  href="/crm/leads"
-                  className="text-xs text-[#6B7EFF] hover:underline font-medium"
-                >
-                  View all
-                </Link>
-              )}
+              <Link
+                href="/crm/leads"
+                className="text-xs text-[#6B7EFF] hover:underline font-medium"
+              >
+                View all →
+              </Link>
             </div>
+
+            {/* Source filter chips */}
+            {!loading && leads.length > 0 && (
+              <div className="flex gap-1.5 flex-wrap mb-3">
+                {Array.from(new Set(leads.map(l => l.source).filter(Boolean))).slice(0,4).map(src => (
+                  <span key={src} className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full font-medium">
+                    {src}
+                  </span>
+                ))}
+              </div>
+            )}
 
             {loading ? (
               <div className="space-y-3">
@@ -545,15 +683,18 @@ export default function CRMPage() {
                 ))}
               </div>
             ) : leads.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">
-                No show leads yet
-              </p>
+              <div className="flex flex-col items-center justify-center py-8 text-center gap-1">
+                <Users size={24} className="text-slate-200 mb-1" />
+                <p className="text-sm text-muted-foreground">No leads yet</p>
+                <p className="text-xs text-muted-foreground">Leads from shows, web, referrals will appear here</p>
+              </div>
             ) : (
               <div className="space-y-2">
                 {leads.slice(0, 5).map((lead) => (
-                  <div
+                  <Link
                     key={lead.id}
-                    className="p-3 rounded-lg border border-border hover:bg-slate-50 transition-colors"
+                    href={`/crm/leads/${lead.id}`}
+                    className="block p-3 rounded-lg border border-border hover:bg-slate-50 hover:border-[#6B7EFF]/30 transition-colors"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
@@ -563,28 +704,36 @@ export default function CRMPage() {
                         <p className="text-xs text-muted-foreground truncate">
                           {lead.property_name}
                         </p>
-                        <p className="text-xs text-[#6B7EFF] truncate">
-                          {lead.email}
-                        </p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {lead.source && (
+                            <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full">{lead.source}</span>
+                          )}
+                          <p className="text-xs text-[#6B7EFF] truncate">{lead.email}</p>
+                        </div>
                       </div>
                       {lead.assigned_dealer ? (
                         <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">
-                          Assigned
+                          {lead.assigned_dealer}
                         </span>
-                      ) : (
+                      ) : canAssignLeads ? (
                         <button
-                          onClick={() =>
-                            setAssigningId(assigningId === lead.id ? null : lead.id)
-                          }
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setAssigningId(assigningId === lead.id ? null : lead.id);
+                          }}
                           className="text-xs border border-[#6B7EFF] text-[#6B7EFF] px-2 py-0.5 rounded-full hover:bg-[#6B7EFF]/10 transition-colors flex-shrink-0"
                         >
                           + Assign
                         </button>
+                      ) : (
+                        <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">
+                          New
+                        </span>
                       )}
                     </div>
 
-                    {assigningId === lead.id && (
-                      <div className="mt-2 flex gap-2">
+                    {assigningId === lead.id && canAssignLeads && (
+                      <div className="mt-2 flex gap-2" onClick={e => e.preventDefault()}>
                         <input
                           type="text"
                           placeholder="Dealer name…"
@@ -606,13 +755,97 @@ export default function CRMPage() {
                         </button>
                       </div>
                     )}
-                  </div>
+                  </Link>
                 ))}
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* Log Activity modal */}
+      {showLogActivity && (
+        <>
+          <div className="fixed inset-0 bg-black/20 z-40" onClick={() => setShowLogActivity(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+                <h2 className="font-semibold text-foreground">Log Activity</h2>
+                <button onClick={() => setShowLogActivity(false)} className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground"><X size={16} /></button>
+              </div>
+              <div className="px-5 py-5 space-y-4">
+                {/* Type picker */}
+                <div className="grid grid-cols-5 gap-2">
+                  {([
+                    { type: "call",    icon: <Phone size={14} />,         label: "Call" },
+                    { type: "email",   icon: <Mail size={14} />,          label: "Email" },
+                    { type: "meeting", icon: <CalendarClock size={14} />, label: "Meeting" },
+                    { type: "task",    icon: <ClipboardList size={14} />, label: "Task" },
+                    { type: "note",    icon: <StickyNote size={14} />,    label: "Note" },
+                  ] as const).map(({ type, icon, label }) => (
+                    <button
+                      key={type}
+                      onClick={() => setLogForm(f => ({ ...f, type }))}
+                      className={cn(
+                        "flex flex-col items-center gap-1 py-2.5 rounded-xl border text-xs font-medium transition-all",
+                        logForm.type === type
+                          ? "border-[#6B7EFF] bg-[#6B7EFF]/10 text-[#6B7EFF]"
+                          : "border-border text-muted-foreground hover:border-slate-300 hover:bg-slate-50"
+                      )}
+                    >
+                      {icon}
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Subject <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    placeholder={logForm.type === "call" ? "Called re: Parkview follow-up…" : logForm.type === "meeting" ? "Site walk at Riverside Apts…" : "Subject…"}
+                    value={logForm.subject}
+                    onChange={e => setLogForm(f => ({ ...f, subject: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
+                  />
+                </div>
+                {logForm.type !== "note" && (
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">
+                      {logForm.type === "task" ? "Due Date" : "Date & Time"}
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={logForm.due_at}
+                      onChange={e => setLogForm(f => ({ ...f, due_at: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Notes</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Optional notes…"
+                    value={logForm.notes}
+                    onChange={e => setLogForm(f => ({ ...f, notes: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 resize-none"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-border">
+                <button onClick={() => setShowLogActivity(false)} className="px-4 py-2 text-sm font-medium text-muted-foreground border border-border rounded-lg hover:bg-accent transition-colors">Cancel</button>
+                <button
+                  onClick={handleLogActivity}
+                  disabled={logSaving || !logForm.subject.trim()}
+                  className="px-4 py-2 text-sm font-medium bg-[#6B7EFF] text-white rounded-lg hover:bg-[#5a6de8] disabled:opacity-50 transition-colors"
+                >
+                  {logSaving ? "Saving…" : "Log Activity"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* New Opportunity slide-over */}
       {showNewOpp && (
@@ -704,6 +937,29 @@ export default function CRMPage() {
                 </select>
               </div>
 
+              {/* Assign to — only shown when user can assign beyond themselves */}
+              {!assignableOrgsSelfOnly && assignableOrgs.length > 1 && (
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">
+                    Assign to <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={newOppForm.org_id}
+                    onChange={(e) => setNewOppForm((f) => ({ ...f, org_id: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white"
+                  >
+                    {assignableOrgs.map((org) => (
+                      <option key={org.id} value={org.id}>
+                        {org.name} — {org.tier_label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Scoped to your network only
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1">
                   Description
@@ -747,24 +1003,22 @@ function KpiCard({
   value,
   sub,
   iconBg,
+  clickable,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   sub: string;
   iconBg: string;
+  clickable?: boolean;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-border p-5">
+    <div className={cn("bg-white rounded-xl border border-border p-5 transition-all", clickable && "hover:border-[#6B7EFF]/40 hover:shadow-sm cursor-pointer group")}>
       <div className="flex items-start justify-between mb-3">
-        <div
-          className={cn(
-            "w-9 h-9 rounded-lg flex items-center justify-center",
-            iconBg
-          )}
-        >
+        <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center", iconBg)}>
           {icon}
         </div>
+        {clickable && <ArrowRight size={13} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />}
       </div>
       <p className="text-2xl font-bold text-foreground leading-tight">{value}</p>
       <p className="text-sm font-medium text-foreground mt-0.5">{label}</p>

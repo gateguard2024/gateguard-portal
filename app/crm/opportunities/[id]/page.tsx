@@ -6,12 +6,12 @@ import { useParams, useRouter } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
 import {
   ChevronRight, Check, Phone, Mail,
-  ClipboardList, StickyNote, Plus, X, Pencil,
+  ClipboardList, Plus, X,
   ExternalLink, Wrench, FileText, Zap,
-  ChevronLeft, Trash2, RefreshCw, AlertCircle,
+  ChevronLeft, Trash2, RefreshCw,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { CalendarClock } = require("lucide-react") as any;
+const { CalendarClock, StickyNote, Pencil, AlertCircle } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
 
 // ── Types ──────────────────────────────────────────────────────────────────

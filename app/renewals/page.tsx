@@ -64,7 +64,6 @@ function dbRenewalToUi(db: DbRenewal): Renewal {
   };
 }
 
-const ALL_REPS = ["All Reps", "Russel", "Marcus", "Jordan"];
 const ALL_STATUSES: (ActionStatus | "All")[] = ["All", "Action Needed", "On Track"];
 
 const BUCKETS: {
@@ -197,15 +196,12 @@ export default function RenewalsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const MOCK_RENEWALS = renewals;
+  // Build rep list dynamically from live renewals
+  const ALL_REPS = ["All Reps", ...Array.from(new Set(renewals.map(r => r.repName).filter(n => n && n !== '—')))];
 
-  const YTD_CURRENT = 142000;
-  const YTD_TARGET = 380000;
-  const ytdPct = Math.round((YTD_CURRENT / YTD_TARGET) * 100);
-
-  const count30 = MOCK_RENEWALS.filter(r => r.bucket === '30').length;
-  const count60 = MOCK_RENEWALS.filter(r => r.bucket === '60').length;
-  const count90 = MOCK_RENEWALS.filter(r => r.bucket === '90').length;
+  const count30 = renewals.filter(r => r.bucket === '30').length;
+  const count60 = renewals.filter(r => r.bucket === '60').length;
+  const count90 = renewals.filter(r => r.bucket === '90').length;
 
   const stats = [
     {
@@ -236,9 +232,9 @@ export default function RenewalsPage() {
       border: "border-yellow-100",
     },
     {
-      label: "Renewed YTD",
-      value: "—",
-      sub: "$0",
+      label: "Total Upcoming",
+      value: String(count30 + count60 + count90),
+      sub: "Next 90 days",
       icon: TrendingUp,
       color: "text-emerald-600",
       bg: "bg-emerald-50",
@@ -246,7 +242,7 @@ export default function RenewalsPage() {
     },
   ];
 
-  const filteredRenewals = MOCK_RENEWALS.filter((r) => {
+  const filteredRenewals = renewals.filter((r) => {
     const matchesRep = repFilter === "All Reps" || r.repName === repFilter;
     const matchesStatus = statusFilter === "All" || r.status === statusFilter;
     return matchesRep && matchesStatus;
@@ -428,61 +424,40 @@ export default function RenewalsPage() {
         })}
       </div>
 
-      {/* Renewed YTD Progress */}
-      <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2.5">
+      {/* Renewed YTD Progress — shown when contracts exist */}
+      {renewals.length > 0 && (
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
+          <div className="flex items-center gap-2.5 mb-4">
             <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
               <TrendingUp size={16} className="text-emerald-600" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-slate-800">Renewed YTD</h2>
-              <p className="text-xs text-slate-400">Annual renewal revenue target</p>
+              <h2 className="text-sm font-semibold text-slate-800">Upcoming Renewals by Rep</h2>
+              <p className="text-xs text-slate-400">Filtered to next 90 days</p>
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-lg font-bold text-emerald-600">$142K</p>
-            <p className="text-xs text-slate-400">of $380K target</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {ALL_REPS.filter(r => r !== "All Reps").map(rep => {
+              const repRenewals = renewals.filter(r => r.repName === rep);
+              return repRenewals.length > 0 ? (
+                <div key={rep} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-600 font-medium">{rep}</span>
+                    <span className="text-slate-800 font-semibold">{repRenewals.length} upcoming</span>
+                  </div>
+                  <div className="flex gap-1">
+                    <span className="text-[10px] text-red-500 font-medium">{repRenewals.filter(r=>r.bucket==='30').length} urgent</span>
+                    <span className="text-[10px] text-slate-300">·</span>
+                    <span className="text-[10px] text-amber-500 font-medium">{repRenewals.filter(r=>r.bucket==='60').length} watch</span>
+                    <span className="text-[10px] text-slate-300">·</span>
+                    <span className="text-[10px] text-emerald-500 font-medium">{repRenewals.filter(r=>r.bucket==='90').length} on radar</span>
+                  </div>
+                </div>
+              ) : null;
+            })}
           </div>
         </div>
-
-        {/* Progress Bar */}
-        <div className="space-y-2">
-          <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full transition-all duration-700"
-              style={{ width: `${ytdPct}%` }}
-            />
-          </div>
-          <div className="flex items-center justify-between text-xs text-slate-400">
-            <span>{ytdPct}% of annual target reached</span>
-            <span>$238K remaining</span>
-          </div>
-        </div>
-
-        {/* Mini breakdown */}
-        <div className="mt-4 grid grid-cols-3 gap-4 pt-4 border-t border-slate-50">
-          {[
-            { rep: "Russel (RF)", amount: "$72K", pct: 51 },
-            { rep: "Marcus", amount: "$44K", pct: 31 },
-            { rep: "Jordan", amount: "$26K", pct: 18 },
-          ].map((row) => (
-            <div key={row.rep} className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-600 font-medium">{row.rep}</span>
-                <span className="text-slate-800 font-semibold">{row.amount}</span>
-              </div>
-              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-[#2563EB] rounded-full"
-                  style={{ width: `${row.pct}%` }}
-                />
-              </div>
-              <p className="text-[10px] text-slate-400">{row.pct}% of team YTD</p>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
