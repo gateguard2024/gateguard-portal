@@ -1,7 +1,9 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { Bell, Search, HelpCircle, ChevronDown, X, Settings, LogOut, User } from "lucide-react";
+import { Bell, Search, ChevronDown, X, Settings, User } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { HelpCircle, LogOut } = require("lucide-react") as any;
 
 interface TopBarProps {
   title: string;
