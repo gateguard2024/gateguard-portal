@@ -181,9 +181,7 @@ export default function CustomersPage() {
         <div className="grid grid-cols-3 gap-4">
           {filtered.map((acct) => {
             const tc = tierConfig[acct.tier];
-            const viewHref = acct.tier === "client" || acct.tier === "partner"
-              ? `/sites`
-              : `/admin/dealers`;
+            const viewHref = `/customers/${acct.id}`;
             return (
               <div
                 key={acct.id}
