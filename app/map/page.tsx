@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { TopBar } from "@/components/layout/TopBar";
 import {
   Building2, Camera, Shield, Calendar, Settings,
-  CheckCircle2, AlertTriangle, XCircle, Map,
+  CheckCircle2, AlertTriangle, XCircle, Map, Loader2,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -12,6 +12,7 @@ type HealthStatus = "healthy" | "attention" | "at-risk";
 type FilterType = "ALL" | "HEALTHY" | "NEEDS ATTENTION" | "AT RISK";
 
 interface Property {
+  id: string;
   name: string;
   city: string;
   state: string;
@@ -23,20 +24,32 @@ interface Property {
   left: string;
 }
 
-const properties: Property[] = [
-  { name: "Angel Oak Properties",      city: "Atlanta",    state: "GA", health: "healthy",   cameras: 88,  doors: 35, lastService: "Apr 28, 2026", top: "35%", left: "45%" },
-  { name: "Pegasus Properties",        city: "Augusta",    state: "GA", health: "healthy",   cameras: 22,  doors: 18, lastService: "Apr 20, 2026", top: "38%", left: "65%" },
-  { name: "Stonegate Townhomes",       city: "Savannah",   state: "GA", health: "attention", cameras: 14,  doors: 12, lastService: "Mar 15, 2026", top: "55%", left: "72%" },
-  { name: "3888 Peachtree",            city: "Atlanta",    state: "GA", health: "healthy",   cameras: 19,  doors: 8,  lastService: "Apr 25, 2026", top: "32%", left: "44%" },
-  { name: "Elevate Eagles Landing",    city: "Canton",     state: "GA", health: "healthy",   cameras: 14,  doors: 12, lastService: "Apr 10, 2026", top: "22%", left: "42%" },
-  { name: "Elevate Greene",            city: "Gainesville",state: "GA", health: "healthy",   cameras: 30,  doors: 35, lastService: "Apr 12, 2026", top: "25%", left: "50%" },
-  { name: "Midwood Gardens",           city: "Decatur",    state: "GA", health: "at-risk",   cameras: 14,  doors: 10, lastService: "Feb 28, 2026", top: "36%", left: "47%" },
-  { name: "Mitul Patel",               city: "Atlanta",    state: "GA", health: "healthy",   cameras: 9,   doors: 4,  lastService: "Apr 22, 2026", top: "34%", left: "46%" },
-  { name: "Flint River",               city: "Griffin",    state: "GA", health: "at-risk",   cameras: 0,   doors: 0,  lastService: "Never",        top: "48%", left: "43%" },
-  { name: "Monitoring View",           city: "Norcross",   state: "GA", health: "attention", cameras: 0,   doors: 0,  lastService: "Mar 24, 2026", top: "28%", left: "48%" },
-  { name: "Columbia Residential",      city: "Columbia",   state: "SC", health: "healthy",   cameras: 96,  doors: 72, lastService: "Apr 30, 2026", top: "30%", left: "75%" },
-  { name: "Southeast Security Group",  city: "Atlanta",    state: "GA", health: "healthy",   cameras: 412, doors: 180,lastService: "May 1, 2026",  top: "33%", left: "45%" },
-];
+// Deterministic position assignment for map pins based on city/state
+function getPinPosition(city: string, state: string, index: number): { top: string; left: string } {
+  // Spread pins across the mock map area with some variance by index
+  const basePositions: Record<string, { top: number; left: number }> = {
+    "Atlanta,GA":    { top: 35, left: 44 },
+    "Augusta,GA":    { top: 38, left: 65 },
+    "Savannah,GA":   { top: 55, left: 72 },
+    "Canton,GA":     { top: 22, left: 42 },
+    "Gainesville,GA":{ top: 25, left: 50 },
+    "Decatur,GA":    { top: 37, left: 47 },
+    "Griffin,GA":    { top: 48, left: 43 },
+    "Norcross,GA":   { top: 28, left: 48 },
+    "Alpharetta,GA": { top: 27, left: 44 },
+    "Macon,GA":      { top: 52, left: 50 },
+    "Columbus,GA":   { top: 54, left: 36 },
+    "Columbia,SC":   { top: 30, left: 75 },
+    "Charlotte,NC":  { top: 20, left: 68 },
+  }
+  const key = `${city},${state}`
+  const base = basePositions[key] ?? { top: 35 + (index * 7) % 40, left: 35 + (index * 11) % 40 }
+  // Slight jitter per index so same-city properties don't overlap exactly
+  return {
+    top:  `${Math.min(85, Math.max(15, base.top  + (index % 3) * 2 - 2))}%`,
+    left: `${Math.min(90, Math.max(10, base.left + (index % 3) * 2 - 1))}%`,
+  }
+}
 
 const healthColors: Record<HealthStatus, { dot: string; ring: string; text: string; bg: string }> = {
   healthy:   { dot: "bg-emerald-400", ring: "ring-emerald-400/40", text: "text-emerald-400", bg: "bg-emerald-400/10" },
@@ -54,14 +67,59 @@ const filterToHealth: Record<FilterType, HealthStatus | null> = {
 export default function MapPage() {
   const [activeFilter, setActiveFilter] = useState<FilterType>("ALL");
   const [activePin, setActivePin] = useState<string | null>(null);
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const filters: FilterType[] = ["ALL", "HEALTHY", "NEEDS ATTENTION", "AT RISK"];
+
+  useEffect(() => {
+    fetch('/api/map')
+      .then(r => r.json())
+      .then(data => {
+        const mapped: Property[] = (data.sites ?? []).map((s: any, idx: number) => {
+          const pos = getPinPosition(s.city, s.state, idx)
+          return {
+            id:          s.id,
+            name:        s.name,
+            city:        s.city,
+            state:       s.state,
+            health:      s.health as HealthStatus,
+            cameras:     0,
+            doors:       0,
+            lastService: '—',
+            top:         pos.top,
+            left:        pos.left,
+          }
+        })
+        setProperties(mapped)
+      })
+      .catch(err => console.error('[map] fetch error:', err))
+      .finally(() => setLoading(false))
+  }, [])
 
   const filtered = activeFilter === "ALL"
     ? properties
     : properties.filter((p) => p.health === filterToHealth[activeFilter]);
 
   const activeProperty = activePin ? properties.find((p) => p.name === activePin) : null;
+
+  const healthCounts = {
+    total:     properties.length,
+    healthy:   properties.filter(p => p.health === 'healthy').length,
+    attention: properties.filter(p => p.health === 'attention').length,
+    atRisk:    properties.filter(p => p.health === 'at-risk').length,
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col min-h-full">
+        <TopBar title="Territory Map" subtitle="Property locations, health status, and coverage by territory" />
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 size={28} className="animate-spin text-brand-400" />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col min-h-full">
@@ -74,10 +132,10 @@ export default function MapPage() {
         {/* Stats Row */}
         <div className="grid grid-cols-4 gap-3">
           {[
-            { label: "Total Properties", value: "31", icon: Building2, color: "text-brand-400",   bg: "bg-brand-400/10"   },
-            { label: "Healthy",          value: "24", icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-400/10" },
-            { label: "Needs Attention",  value: "5",  icon: AlertTriangle, color: "text-amber-400",  bg: "bg-amber-400/10"  },
-            { label: "At Risk",          value: "2",  icon: XCircle,    color: "text-red-400",    bg: "bg-red-400/10"     },
+            { label: "Total Properties", value: String(healthCounts.total),     icon: Building2,    color: "text-brand-400",   bg: "bg-brand-400/10"   },
+            { label: "Healthy",          value: String(healthCounts.healthy),   icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-400/10" },
+            { label: "Needs Attention",  value: String(healthCounts.attention), icon: AlertTriangle,color: "text-amber-400",   bg: "bg-amber-400/10"   },
+            { label: "At Risk",          value: String(healthCounts.atRisk),    icon: XCircle,      color: "text-red-400",     bg: "bg-red-400/10"     },
           ].map((s) => {
             const Icon = s.icon;
             return (

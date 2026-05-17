@@ -1,111 +1,41 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { TopBar } from "@/components/layout/TopBar";
 import { AISearch } from "@/components/ai/AISearch";
-import { Award, Clock, PhoneCall, Star, Info } from "lucide-react";
+import { Award, Clock, Star, Info, Loader2 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { PhoneCall } = require('lucide-react') as any;
 
 interface DealerData {
-  name: string;
-  location: string;
-  certified: boolean;
-  score: number;
-  responseTime: string;
-  responseTimeRaw: number; // hours, lower is better (max 8)
-  fcr: number;
-  nps: number;
-  renewalRate: number;
-  uptime: number;
+  id:              string;
+  name:            string;
+  location:        string;
+  tier:            string;
+  tier_label:      string | null;
+  certified:       boolean;
+  score:           number | null;
+  responseTimeRaw: number | null;   // hours, lower is better
+  completionRate:  number | null;   // % of WOs completed
+  site_count:      number;
+  total_wos:       number;
 }
 
-const DEALERS: DealerData[] = [
-  {
-    name: "GateGuard Direct",
-    location: "Atlanta, GA",
-    certified: true,
-    score: 94,
-    responseTime: "0.8 hr",
-    responseTimeRaw: 0.8,
-    fcr: 96,
-    nps: 88,
-    renewalRate: 98,
-    uptime: 99.2,
-  },
-  {
-    name: "Southeast Security Group",
-    location: "Atlanta, GA",
-    certified: true,
-    score: 89,
-    responseTime: "1.2 hr",
-    responseTimeRaw: 1.2,
-    fcr: 91,
-    nps: 81,
-    renewalRate: 96,
-    uptime: 98.1,
-  },
-  {
-    name: "Columbia Residential Tech",
-    location: "Columbia, SC",
-    certified: true,
-    score: 84,
-    responseTime: "1.9 hr",
-    responseTimeRaw: 1.9,
-    fcr: 88,
-    nps: 74,
-    renewalRate: 94,
-    uptime: 97.4,
-  },
-  {
-    name: "Peach State Access",
-    location: "Macon, GA",
-    certified: false,
-    score: 71,
-    responseTime: "3.1 hr",
-    responseTimeRaw: 3.1,
-    fcr: 82,
-    nps: 61,
-    renewalRate: 88,
-    uptime: 94.2,
-  },
-  {
-    name: "Coastal Access Solutions",
-    location: "Savannah, GA",
-    certified: false,
-    score: 67,
-    responseTime: "4.2 hr",
-    responseTimeRaw: 4.2,
-    fcr: 78,
-    nps: 58,
-    renewalRate: 85,
-    uptime: 93.8,
-  },
-  {
-    name: "Metro Install Group",
-    location: "Charlotte, NC",
-    certified: false,
-    score: 52,
-    responseTime: "6.8 hr",
-    responseTimeRaw: 6.8,
-    fcr: 71,
-    nps: 44,
-    renewalRate: 79,
-    uptime: 91.0,
-  },
-];
-
-function scoreColor(score: number): string {
+function scoreColor(score: number | null): string {
+  if (score === null) return "text-muted-foreground";
   if (score >= 80) return "text-emerald-400";
   if (score >= 60) return "text-amber-400";
   return "text-red-400";
 }
 
-function scoreBg(score: number): string {
+function scoreBg(score: number | null): string {
+  if (score === null) return "bg-muted";
   if (score >= 80) return "bg-emerald-400";
   if (score >= 60) return "bg-amber-400";
   return "bg-red-400";
 }
 
 function metricBarColor(value: number, isResponseTime = false): string {
-  // For response time: lower is better
   if (isResponseTime) {
     if (value <= 2) return "bg-emerald-400";
     if (value <= 4) return "bg-amber-400";
@@ -137,9 +67,17 @@ function ProgressBar({
 }
 
 function DealerCard({ dealer }: { dealer: DealerData }) {
-  // Response time bar: invert — 0 hr = 100%, 8 hr = 0%
-  const rtPct = Math.max(0, 100 - (dealer.responseTimeRaw / 8) * 100);
-  const rtBarColor = metricBarColor(dealer.responseTimeRaw, true);
+  const rtPct     = dealer.responseTimeRaw !== null
+    ? Math.max(0, 100 - (dealer.responseTimeRaw / 8) * 100)
+    : 0;
+  const rtBarColor = dealer.responseTimeRaw !== null
+    ? metricBarColor(dealer.responseTimeRaw, true)
+    : "bg-muted";
+  const rtLabel    = dealer.responseTimeRaw !== null
+    ? `${dealer.responseTimeRaw} hrs`
+    : "No data";
+
+  const score = dealer.score ?? 0;
 
   return (
     <div className="bg-card border border-border rounded-xl p-5 flex flex-col gap-4">
@@ -147,7 +85,10 @@ function DealerCard({ dealer }: { dealer: DealerData }) {
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-sm font-semibold text-foreground">{dealer.name}</p>
-          <p className="text-xs text-muted-foreground">{dealer.location}</p>
+          <p className="text-xs text-muted-foreground">
+            {dealer.tier_label ?? dealer.tier}
+            {dealer.location ? ` · ${dealer.location}` : ''}
+          </p>
         </div>
         <div className="flex flex-col items-end gap-1.5">
           {dealer.certified && (
@@ -158,83 +99,125 @@ function DealerCard({ dealer }: { dealer: DealerData }) {
           )}
           <div className="text-right">
             <p className={`text-2xl font-bold leading-tight ${scoreColor(dealer.score)}`}>
-              {dealer.score}
+              {dealer.score !== null ? dealer.score : '—'}
             </p>
-            <p className="text-[10px] text-muted-foreground">/ 100 · Q2 2026</p>
+            <p className="text-[10px] text-muted-foreground">/ 100</p>
           </div>
         </div>
       </div>
 
       {/* Metrics */}
       <div className="space-y-2.5">
+        {dealer.responseTimeRaw !== null && (
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] text-muted-foreground">Avg Response Time</span>
+              <span className="text-[11px] font-medium text-foreground">{rtLabel}</span>
+            </div>
+            <ProgressBar value={rtPct} max={100} color={rtBarColor} />
+          </div>
+        )}
+
+        {dealer.completionRate !== null && (
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] text-muted-foreground">WO Completion Rate</span>
+              <span className="text-[11px] font-medium text-foreground">{dealer.completionRate}%</span>
+            </div>
+            <ProgressBar
+              value={dealer.completionRate}
+              color={metricBarColor(dealer.completionRate)}
+            />
+          </div>
+        )}
+
         <div>
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] text-muted-foreground">Response Time</span>
-            <span className="text-[11px] font-medium text-foreground">{dealer.responseTime}</span>
+            <span className="text-[11px] text-muted-foreground">Properties</span>
+            <span className="text-[11px] font-medium text-foreground">{dealer.site_count}</span>
           </div>
-          <ProgressBar value={rtPct} max={100} color={rtBarColor} />
         </div>
 
         <div>
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] text-muted-foreground">First-Call Resolution</span>
-            <span className="text-[11px] font-medium text-foreground">{dealer.fcr}%</span>
+            <span className="text-[11px] text-muted-foreground">Total Work Orders</span>
+            <span className="text-[11px] font-medium text-foreground">{dealer.total_wos}</span>
           </div>
-          <ProgressBar
-            value={dealer.fcr}
-            color={metricBarColor(dealer.fcr)}
-          />
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] text-muted-foreground">NPS Score</span>
-            <span className="text-[11px] font-medium text-foreground">{dealer.nps}</span>
-          </div>
-          <ProgressBar
-            value={dealer.nps}
-            color={metricBarColor(dealer.nps)}
-          />
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] text-muted-foreground">Renewal Rate</span>
-            <span className="text-[11px] font-medium text-foreground">{dealer.renewalRate}%</span>
-          </div>
-          <ProgressBar
-            value={dealer.renewalRate}
-            color={metricBarColor(dealer.renewalRate)}
-          />
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] text-muted-foreground">Camera Uptime</span>
-            <span className="text-[11px] font-medium text-foreground">{dealer.uptime}%</span>
-          </div>
-          <ProgressBar
-            value={dealer.uptime}
-            color={metricBarColor(dealer.uptime)}
-          />
         </div>
       </div>
 
       {/* Score bar */}
-      <div className="pt-1 border-t border-border">
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[11px] text-muted-foreground font-medium">Overall Score</span>
-          <span className={`text-[11px] font-bold ${scoreColor(dealer.score)}`}>
-            {dealer.score}/100
-          </span>
+      {dealer.score !== null && (
+        <div className="pt-1 border-t border-border">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[11px] text-muted-foreground font-medium">Overall Score</span>
+            <span className={`text-[11px] font-bold ${scoreColor(dealer.score)}`}>
+              {dealer.score}/100
+            </span>
+          </div>
+          <ProgressBar value={score} color={scoreBg(dealer.score)} />
         </div>
-        <ProgressBar value={dealer.score} color={scoreBg(dealer.score)} />
-      </div>
+      )}
+
+      {dealer.score === null && (
+        <div className="pt-1 border-t border-border">
+          <p className="text-[11px] text-muted-foreground">No work order data yet — score pending</p>
+        </div>
+      )}
     </div>
   );
 }
 
 export default function ScorecardPage() {
+  const [dealers, setDealers] = useState<DealerData[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/scorecard')
+      .then(r => r.json())
+      .then(data => {
+        const mapped: DealerData[] = (data.scorecards ?? []).map((s: any) => ({
+          id:              s.id,
+          name:            s.name,
+          location:        s.location ?? '',
+          tier:            s.tier ?? '',
+          tier_label:      s.tier_label ?? null,
+          certified:       s.certified ?? false,
+          score:           s.score ?? null,
+          responseTimeRaw: s.avg_response_hrs ?? null,
+          completionRate:  s.completion_rate ?? null,
+          site_count:      s.site_count ?? 0,
+          total_wos:       s.total_wos ?? 0,
+        }))
+        setDealers(mapped)
+      })
+      .catch(err => console.error('[scorecard] fetch error:', err))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const certifiedCount = dealers.filter(d => d.certified).length
+  const avgResponse    = dealers.filter(d => d.responseTimeRaw !== null).length > 0
+    ? (dealers.filter(d => d.responseTimeRaw !== null)
+        .reduce((a, d) => a + (d.responseTimeRaw ?? 0), 0) /
+       dealers.filter(d => d.responseTimeRaw !== null).length).toFixed(1)
+    : null
+  const avgCompletion  = dealers.filter(d => d.completionRate !== null).length > 0
+    ? Math.round(dealers.filter(d => d.completionRate !== null)
+        .reduce((a, d) => a + (d.completionRate ?? 0), 0) /
+       dealers.filter(d => d.completionRate !== null).length)
+    : null
+
+  if (loading) {
+    return (
+      <div className="flex flex-col min-h-screen bg-background">
+        <TopBar title="Dealer Scorecard" subtitle="Performance ratings across the GateGuard dealer network" />
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 size={28} className="animate-spin text-brand-400" />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <TopBar
@@ -253,8 +236,8 @@ export default function ScorecardPage() {
               <Star size={16} className="text-brand-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">72</p>
-              <p className="text-xs text-muted-foreground">Network Avg NPS</p>
+              <p className="text-2xl font-bold text-foreground">{avgCompletion !== null ? `${avgCompletion}%` : '—'}</p>
+              <p className="text-xs text-muted-foreground">Avg Completion Rate</p>
             </div>
           </div>
 
@@ -263,7 +246,7 @@ export default function ScorecardPage() {
               <Clock size={16} className="text-brand-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">2.4 hrs</p>
+              <p className="text-2xl font-bold text-foreground">{avgResponse !== null ? `${avgResponse} hrs` : '—'}</p>
               <p className="text-xs text-muted-foreground">Avg Response Time</p>
             </div>
           </div>
@@ -273,8 +256,8 @@ export default function ScorecardPage() {
               <PhoneCall size={16} className="text-emerald-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">87%</p>
-              <p className="text-xs text-muted-foreground">First-Call Resolution</p>
+              <p className="text-2xl font-bold text-foreground">{dealers.length}</p>
+              <p className="text-xs text-muted-foreground">Total Dealer Orgs</p>
             </div>
           </div>
 
@@ -283,28 +266,33 @@ export default function ScorecardPage() {
               <Award size={16} className="text-brand-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">3 of 8</p>
+              <p className="text-2xl font-bold text-foreground">{certifiedCount} of {dealers.length}</p>
               <p className="text-xs text-muted-foreground">Certified Dealers</p>
             </div>
           </div>
         </div>
 
         {/* Dealer Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {DEALERS.map((dealer) => (
-            <DealerCard key={dealer.name} dealer={dealer} />
-          ))}
-        </div>
+        {dealers.length === 0 ? (
+          <div className="py-16 text-center text-muted-foreground text-sm">
+            No dealer organizations found. Add orgs via the admin panel to populate this scorecard.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {dealers.map((dealer) => (
+              <DealerCard key={dealer.id} dealer={dealer} />
+            ))}
+          </div>
+        )}
 
         {/* Footer Note */}
         <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl bg-brand-400/5 border border-brand-400/15">
           <Info size={14} className="text-brand-400 shrink-0 mt-0.5" />
           <p className="text-xs text-muted-foreground">
             Dealers scoring{" "}
-            <span className="font-semibold text-foreground">80+</span> for 2
-            consecutive quarters earn{" "}
+            <span className="font-semibold text-foreground">80+</span> earn{" "}
             <span className="font-semibold text-brand-400">GateGuard Certified</span>{" "}
-            status and receive priority lead routing.
+            status and receive priority lead routing. Score is computed from WO completion rate and average response time.
           </p>
         </div>
       </div>
