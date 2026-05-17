@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import {
   Download,
@@ -15,7 +15,7 @@ import {
   Filter,
 } from "lucide-react";
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type ActionStatus = "Action Needed" | "On Track";
 type RenewalBucket = "30" | "60" | "90";
@@ -32,134 +32,38 @@ interface Renewal {
   bucket: RenewalBucket;
 }
 
-const MOCK_RENEWALS: Renewal[] = [
-  // 30-day
-  {
-    id: "r01",
-    property: "Stonegate Townhomes",
-    mrr: "$2,400/mo",
-    contractEnd: "May 12",
-    repInitials: "MW",
-    repName: "Marcus",
-    status: "Action Needed",
-    bucket: "30",
-  },
-  {
-    id: "r02",
-    property: "Lakewood HOA",
-    mrr: "$1,800/mo",
-    contractEnd: "May 18",
-    repInitials: "JH",
-    repName: "Jordan",
-    status: "Action Needed",
-    bucket: "30",
-  },
-  {
-    id: "r03",
-    property: "Peachtree Commons",
-    mrr: "$3,200/mo",
-    contractEnd: "May 24",
-    repInitials: "RF",
-    repName: "Russel",
-    status: "On Track",
-    note: "Proposal sent",
-    bucket: "30",
-  },
-  {
-    id: "r04",
-    property: "Summit Ridge",
-    mrr: "$900/mo",
-    contractEnd: "May 28",
-    repInitials: "JH",
-    repName: "Jordan",
-    status: "Action Needed",
-    bucket: "30",
-  },
-  // 60-day
-  {
-    id: "r05",
-    property: "Riverside Apts",
-    mrr: "$4,200/mo",
-    contractEnd: "Jun 8",
-    repInitials: "RF",
-    repName: "Russel",
-    status: "On Track",
-    bucket: "60",
-  },
-  {
-    id: "r06",
-    property: "Ashford Glen",
-    mrr: "$1,200/mo",
-    contractEnd: "Jun 15",
-    repInitials: "MW",
-    repName: "Marcus",
-    status: "On Track",
-    bucket: "60",
-  },
-  {
-    id: "r07",
-    property: "Broadstone Park",
-    mrr: "$2,800/mo",
-    contractEnd: "Jun 22",
-    repInitials: "RF",
-    repName: "Russel",
-    status: "Action Needed",
-    bucket: "60",
-  },
-  {
-    id: "r08",
-    property: "Oakwood Terrace",
-    mrr: "$1,600/mo",
-    contractEnd: "Jun 29",
-    repInitials: "JH",
-    repName: "Jordan",
-    status: "On Track",
-    bucket: "60",
-  },
-  // 90-day
-  {
-    id: "r09",
-    property: "Camden Crossing",
-    mrr: "$3,600/mo",
-    contractEnd: "Jul 5",
-    repInitials: "RF",
-    repName: "Russel",
-    status: "On Track",
-    bucket: "90",
-  },
-  {
-    id: "r10",
-    property: "Westbridge Commons",
-    mrr: "$2,100/mo",
-    contractEnd: "Jul 12",
-    repInitials: "MW",
-    repName: "Marcus",
-    status: "On Track",
-    bucket: "90",
-  },
-  {
-    id: "r11",
-    property: "Northgate Plaza",
-    mrr: "$1,800/mo",
-    contractEnd: "Jul 20",
-    repInitials: "JH",
-    repName: "Jordan",
-    status: "On Track",
-    bucket: "90",
-  },
-  {
-    id: "r12",
-    property: "Harbor View Apts",
-    mrr: "$2,400/mo",
-    contractEnd: "Jul 28",
-    repInitials: "RF",
-    repName: "Russel",
-    status: "On Track",
-    bucket: "90",
-  },
-];
+interface DbRenewal {
+  id: string;
+  title: string;
+  mrr: number;
+  end_date?: string | null;
+  assigned_rep?: string | null;
+  renewal_status: string;
+  bucket: string;
+  client_name?: string | null;
+  site_name?: string | null;
+}
 
-const ALL_REPS = ["All Reps", "Russel", "Marcus", "Jordan"];
+function dbRenewalToUi(db: DbRenewal): Renewal {
+  const repRaw = db.assigned_rep ?? '';
+  const repInitials = repRaw.length <= 3 ? repRaw.toUpperCase() : repRaw.split(' ').map((p: string) => p[0]).join('').slice(0, 2).toUpperCase();
+  const repName = repRaw || '—';
+  const actionStatus: ActionStatus = db.renewal_status === 'action_needed' ? 'Action Needed' : 'On Track';
+  const bucket: RenewalBucket = db.bucket === '30' ? '30' : db.bucket === '60' ? '60' : '90';
+  const endDate = db.end_date ? new Date(db.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+
+  return {
+    id: db.id,
+    property: db.client_name ?? db.site_name ?? db.title,
+    mrr: `$${(db.mrr ?? 0).toLocaleString()}/mo`,
+    contractEnd: endDate,
+    repInitials,
+    repName,
+    status: actionStatus,
+    bucket,
+  };
+}
+
 const ALL_STATUSES: (ActionStatus | "All")[] = ["All", "Action Needed", "On Track"];
 
 const BUCKETS: {
@@ -277,15 +181,32 @@ export default function RenewalsPage() {
   const [statusFilter, setStatusFilter] = useState<ActionStatus | "All">("All");
   const [repDropdownOpen, setRepDropdownOpen] = useState(false);
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
+  const [renewals, setRenewals] = useState<Renewal[]>([]);
+  const [, setLoading] = useState(true);
 
-  const YTD_CURRENT = 142000;
-  const YTD_TARGET = 380000;
-  const ytdPct = Math.round((YTD_CURRENT / YTD_TARGET) * 100);
+  useEffect(() => {
+    fetch('/api/renewals')
+      .then(r => r.json())
+      .then(json => {
+        if (json.renewals && json.renewals.length > 0) {
+          setRenewals(json.renewals.map(dbRenewalToUi));
+        }
+      })
+      .catch(() => { /* keep empty — page still renders with no data */ })
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Build rep list dynamically from live renewals
+  const ALL_REPS = ["All Reps", ...Array.from(new Set(renewals.map(r => r.repName).filter(n => n && n !== '—')))];
+
+  const count30 = renewals.filter(r => r.bucket === '30').length;
+  const count60 = renewals.filter(r => r.bucket === '60').length;
+  const count90 = renewals.filter(r => r.bucket === '90').length;
 
   const stats = [
     {
       label: "Renewing in 30 Days",
-      value: "4",
+      value: String(count30),
       sub: "Urgent",
       icon: AlertCircle,
       color: "text-red-600",
@@ -294,7 +215,7 @@ export default function RenewalsPage() {
     },
     {
       label: "Renewing in 60 Days",
-      value: "7",
+      value: String(count30 + count60),
       sub: "Attention",
       icon: Clock,
       color: "text-amber-600",
@@ -303,7 +224,7 @@ export default function RenewalsPage() {
     },
     {
       label: "Renewing in 90 Days",
-      value: "11",
+      value: String(count30 + count60 + count90),
       sub: "On Radar",
       icon: Calendar,
       color: "text-yellow-600",
@@ -311,9 +232,9 @@ export default function RenewalsPage() {
       border: "border-yellow-100",
     },
     {
-      label: "Renewed YTD",
-      value: "23",
-      sub: "$142K",
+      label: "Total Upcoming",
+      value: String(count30 + count60 + count90),
+      sub: "Next 90 days",
       icon: TrendingUp,
       color: "text-emerald-600",
       bg: "bg-emerald-50",
@@ -321,7 +242,7 @@ export default function RenewalsPage() {
     },
   ];
 
-  const filteredRenewals = MOCK_RENEWALS.filter((r) => {
+  const filteredRenewals = renewals.filter((r) => {
     const matchesRep = repFilter === "All Reps" || r.repName === repFilter;
     const matchesStatus = statusFilter === "All" || r.status === statusFilter;
     return matchesRep && matchesStatus;
@@ -459,7 +380,7 @@ export default function RenewalsPage() {
         )}
 
         <span className="ml-auto text-xs text-slate-400">
-          {filteredRenewals.length} of {MOCK_RENEWALS.length} renewals
+          {filteredRenewals.length} of {renewals.length} renewals
         </span>
       </div>
 
@@ -503,61 +424,40 @@ export default function RenewalsPage() {
         })}
       </div>
 
-      {/* Renewed YTD Progress */}
-      <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2.5">
+      {/* Renewed YTD Progress — shown when contracts exist */}
+      {renewals.length > 0 && (
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
+          <div className="flex items-center gap-2.5 mb-4">
             <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
               <TrendingUp size={16} className="text-emerald-600" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-slate-800">Renewed YTD</h2>
-              <p className="text-xs text-slate-400">Annual renewal revenue target</p>
+              <h2 className="text-sm font-semibold text-slate-800">Upcoming Renewals by Rep</h2>
+              <p className="text-xs text-slate-400">Filtered to next 90 days</p>
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-lg font-bold text-emerald-600">$142K</p>
-            <p className="text-xs text-slate-400">of $380K target</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {ALL_REPS.filter(r => r !== "All Reps").map(rep => {
+              const repRenewals = renewals.filter(r => r.repName === rep);
+              return repRenewals.length > 0 ? (
+                <div key={rep} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-600 font-medium">{rep}</span>
+                    <span className="text-slate-800 font-semibold">{repRenewals.length} upcoming</span>
+                  </div>
+                  <div className="flex gap-1">
+                    <span className="text-[10px] text-red-500 font-medium">{repRenewals.filter(r=>r.bucket==='30').length} urgent</span>
+                    <span className="text-[10px] text-slate-300">·</span>
+                    <span className="text-[10px] text-amber-500 font-medium">{repRenewals.filter(r=>r.bucket==='60').length} watch</span>
+                    <span className="text-[10px] text-slate-300">·</span>
+                    <span className="text-[10px] text-emerald-500 font-medium">{repRenewals.filter(r=>r.bucket==='90').length} on radar</span>
+                  </div>
+                </div>
+              ) : null;
+            })}
           </div>
         </div>
-
-        {/* Progress Bar */}
-        <div className="space-y-2">
-          <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full transition-all duration-700"
-              style={{ width: `${ytdPct}%` }}
-            />
-          </div>
-          <div className="flex items-center justify-between text-xs text-slate-400">
-            <span>{ytdPct}% of annual target reached</span>
-            <span>$238K remaining</span>
-          </div>
-        </div>
-
-        {/* Mini breakdown */}
-        <div className="mt-4 grid grid-cols-3 gap-4 pt-4 border-t border-slate-50">
-          {[
-            { rep: "Russel (RF)", amount: "$72K", pct: 51 },
-            { rep: "Marcus", amount: "$44K", pct: 31 },
-            { rep: "Jordan", amount: "$26K", pct: 18 },
-          ].map((row) => (
-            <div key={row.rep} className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-600 font-medium">{row.rep}</span>
-                <span className="text-slate-800 font-semibold">{row.amount}</span>
-              </div>
-              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-[#2563EB] rounded-full"
-                  style={{ width: `${row.pct}%` }}
-                />
-              </div>
-              <p className="text-[10px] text-slate-400">{row.pct}% of team YTD</p>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
     </div>
   );
 }

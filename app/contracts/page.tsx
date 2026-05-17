@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import {
   Plus,
@@ -13,10 +13,10 @@ import {
   XCircle,
   Clock,
   X,
-  User,
   Calendar,
   Check,
   ChevronRight,
+  Loader2,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { DollarSign, Archive, AlertCircle } = require('lucide-react') as any;
@@ -24,6 +24,54 @@ const { DollarSign, Archive, AlertCircle } = require('lucide-react') as any;
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type ContractStatus = "Active" | "Pending Signature" | "Draft" | "Expired";
+
+interface DbContract {
+  id: string;
+  contract_number: string;
+  title: string;
+  status: string; // db: draft | pending_signature | active | expired | cancelled
+  setup_amount: number;
+  mrr: number;
+  total_value: number;
+  start_date?: string | null;
+  end_date?: string | null;
+  terms_summary?: string | null;
+  assigned_rep?: string | null;
+  client_org?: { id: string; name: string } | null;
+  site?: { id: string; name: string } | null;
+  signatories?: Array<{ id: string; role: string; name: string; email: string; signed: boolean; signed_at?: string | null }>;
+}
+
+function dbStatusToUi(s: string): ContractStatus {
+  if (s === 'active') return 'Active';
+  if (s === 'pending_signature') return 'Pending Signature';
+  if (s === 'expired' || s === 'cancelled') return 'Expired';
+  return 'Draft';
+}
+
+function dbToContract(db: DbContract): Contract {
+  const uiStatus = dbStatusToUi(db.status);
+  return {
+    id: db.id as unknown as number,
+    name: db.title,
+    customer: db.client_org?.name ?? db.site?.name ?? 'Unknown',
+    setup: `$${(db.setup_amount ?? 0).toLocaleString()}`,
+    mrr: `$${(db.mrr ?? 0).toLocaleString()}/mo`,
+    totalValue: `$${(db.total_value ?? 0).toLocaleString()}`,
+    status: uiStatus,
+    created: db.start_date ? db.start_date.slice(0, 10) : '',
+    expires: db.end_date ? db.end_date.slice(0, 10) : '',
+    rep: db.assigned_rep ?? '—',
+    signatories: (db.signatories ?? []).map(s => ({
+      role: s.role,
+      name: s.name,
+      email: s.email ?? '',
+      signed: s.signed,
+      signedDate: s.signed_at ? s.signed_at.slice(0, 10) : undefined,
+    })),
+    termsSummary: db.terms_summary ?? '',
+  };
+}
 
 interface Contract {
   id: number;
@@ -40,188 +88,9 @@ interface Contract {
   termsSummary: string;
 }
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
+// ─── No mock data — pages show empty state when DB is empty ──────────────────
 
-const CONTRACTS: Contract[] = [
-  {
-    id: 1,
-    name: "Stonegate Townhomes — GateGuard Standard",
-    customer: "Stonegate Townhomes",
-    setup: "$24,000",
-    mrr: "$2,400/mo",
-    totalValue: "$110,400",
-    status: "Active",
-    created: "Jan 2024",
-    expires: "Jan 2027",
-    rep: "RF",
-    signatories: [
-      { role: "GateGuard Rep", name: "Russell Feldman", email: "rfeldman@gateguard.co", signed: true, signedDate: "Jan 12, 2024" },
-      { role: "Customer Contact", name: "Maria Santos", email: "msantos@stonegate.com", signed: true, signedDate: "Jan 14, 2024" },
-    ],
-    termsSummary: "Full-property access control deployment across 4 entry points. Includes 24/7 SOC monitoring, hardware maintenance, and annual firmware updates. 36-month term with 3% annual escalator. Early termination fee of 6 months remaining MRR.",
-  },
-  {
-    id: 2,
-    name: "Ashford Glen Security Agreement",
-    customer: "Ashford Glen",
-    setup: "$18,000",
-    mrr: "$1,800/mo",
-    totalValue: "$82,800",
-    status: "Active",
-    created: "Mar 2024",
-    expires: "Mar 2027",
-    rep: "Marcus",
-    signatories: [
-      { role: "GateGuard Rep", name: "Marcus Webb", email: "mwebb@gateguard.co", signed: true, signedDate: "Mar 5, 2024" },
-      { role: "Customer Contact", name: "Tom Ellison", email: "tellison@ashfordglen.com", signed: true, signedDate: "Mar 7, 2024" },
-    ],
-    termsSummary: "Camera-only deployment with license plate recognition at main entrance. Includes cloud storage (30-day retention), mobile app access for property managers, and monthly reporting. 36-month term.",
-  },
-  {
-    id: 3,
-    name: "Riverside Apartments — Phase 1",
-    customer: "Riverside Apts",
-    setup: "$42,000",
-    mrr: "$4,200/mo",
-    totalValue: "$193,200",
-    status: "Active",
-    created: "Nov 2023",
-    expires: "Nov 2026",
-    rep: "RF",
-    signatories: [
-      { role: "GateGuard Rep", name: "Russell Feldman", email: "rfeldman@gateguard.co", signed: true, signedDate: "Nov 1, 2023" },
-      { role: "Customer Contact", name: "Linda Park", email: "lpark@riversideapts.com", signed: true, signedDate: "Nov 3, 2023" },
-    ],
-    termsSummary: "Enterprise-tier deployment covering 3 building entrances, 2 parking structures, and pool/amenity areas. 12 camera installations, 5 access control panels, intercom integration. Includes dedicated account manager and quarterly on-site reviews.",
-  },
-  {
-    id: 4,
-    name: "Peachtree Commons Service Agreement",
-    customer: "Peachtree Commons",
-    setup: "$31,000",
-    mrr: "$3,200/mo",
-    totalValue: "$146,200",
-    status: "Active",
-    created: "Jun 2024",
-    expires: "Jun 2027",
-    rep: "Jordan",
-    signatories: [
-      { role: "GateGuard Rep", name: "Jordan Hill", email: "jhill@gateguard.co", signed: true, signedDate: "Jun 19, 2024" },
-      { role: "Customer Contact", name: "Bob Nguyen", email: "bnguyen@peachtreecommons.com", signed: true, signedDate: "Jun 21, 2024" },
-    ],
-    termsSummary: "Full security stack: access control, video surveillance, visitor management, and package locker integration. 36-month term. SLA: 4-hour on-site response for critical failures, 99.5% uptime guarantee.",
-  },
-  {
-    id: 5,
-    name: "Camden Crossing — New Install",
-    customer: "Camden Crossing",
-    setup: "$38,000",
-    mrr: "$3,600/mo",
-    totalValue: "$167,600",
-    status: "Pending Signature",
-    created: "Apr 2026",
-    expires: "Apr 2029",
-    rep: "RF",
-    signatories: [
-      { role: "GateGuard Rep", name: "Russell Feldman", email: "rfeldman@gateguard.co", signed: true, signedDate: "Apr 22, 2026" },
-      { role: "Customer Contact", name: "Carla Reyes", email: "creyes@camdencrossing.com", signed: false },
-    ],
-    termsSummary: "New property build-out. Scope includes 6 entry points, 18 cameras, smart intercom at lobby and all parking entrances. Installation window: 3 weeks from contract execution. 36-month term.",
-  },
-  {
-    id: 6,
-    name: "Harbor View Phase 2",
-    customer: "Harbor View Apts",
-    setup: "$21,000",
-    mrr: "$2,400/mo",
-    totalValue: "$107,400",
-    status: "Pending Signature",
-    created: "Apr 2026",
-    expires: "Apr 2029",
-    rep: "RF",
-    signatories: [
-      { role: "GateGuard Rep", name: "Russell Feldman", email: "rfeldman@gateguard.co", signed: true, signedDate: "Apr 24, 2026" },
-      { role: "Customer Contact", name: "Derek Stone", email: "dstone@harborview.com", signed: false },
-    ],
-    termsSummary: "Phase 2 expansion of existing GateGuard deployment. Adding east wing coverage: 4 cameras, 2 access panels. Addendum to original Master Services Agreement dated Nov 2022.",
-  },
-  {
-    id: 7,
-    name: "Maple Ridge HOA — Renewal",
-    customer: "Maple Ridge HOA",
-    setup: "$14,000",
-    mrr: "$1,600/mo",
-    totalValue: "$71,600",
-    status: "Draft",
-    created: "",
-    expires: "",
-    rep: "Marcus",
-    signatories: [
-      { role: "GateGuard Rep", name: "Marcus Webb", email: "mwebb@gateguard.co", signed: false },
-      { role: "Customer Contact", name: "Sarah Kim", email: "skim@mapleridgehoa.org", signed: false },
-    ],
-    termsSummary: "Renewal of expiring contract. Terms under review — proposed 5% MRR increase. New scope includes addition of 2 cameras at recently constructed amenity building. Pending HOA board approval.",
-  },
-  {
-    id: 8,
-    name: "Northgate Plaza Commercial",
-    customer: "Northgate Plaza",
-    setup: "$28,000",
-    mrr: "$1,800/mo",
-    totalValue: "$92,800",
-    status: "Pending Signature",
-    created: "Apr 2026",
-    expires: "Apr 2029",
-    rep: "Jordan",
-    signatories: [
-      { role: "GateGuard Rep", name: "Jordan Hill", email: "jhill@gateguard.co", signed: true, signedDate: "Apr 20, 2026" },
-      { role: "Customer Contact", name: "Frank Liu", email: "fliu@northgateplaza.com", signed: false },
-    ],
-    termsSummary: "Commercial retail center. 5-building campus. Scope: perimeter access control, 10-camera CCTV, guard station integration. Includes custom reporting dashboard for property manager. 36-month term.",
-  },
-  {
-    id: 9,
-    name: "Summit Ridge — Expired",
-    customer: "Summit Ridge",
-    setup: "$9,000",
-    mrr: "$900/mo",
-    totalValue: "$41,400",
-    status: "Expired",
-    created: "Apr 2023",
-    expires: "Apr 2026",
-    rep: "Jordan",
-    signatories: [
-      { role: "GateGuard Rep", name: "Jordan Hill", email: "jhill@gateguard.co", signed: true, signedDate: "Apr 10, 2023" },
-      { role: "Customer Contact", name: "Anne Trejo", email: "atrejo@summitridge.com", signed: true, signedDate: "Apr 12, 2023" },
-    ],
-    termsSummary: "Original 36-month agreement expired Apr 2026. Equipment is currently on a month-to-month holdover. Renewal proposal sent — awaiting response from property manager.",
-  },
-  {
-    id: 10,
-    name: "Westbridge Commons",
-    customer: "Westbridge Commons",
-    setup: "$19,000",
-    mrr: "$2,100/mo",
-    totalValue: "$94,600",
-    status: "Draft",
-    created: "",
-    expires: "",
-    rep: "RF",
-    signatories: [
-      { role: "GateGuard Rep", name: "Russell Feldman", email: "rfeldman@gateguard.co", signed: false },
-      { role: "Customer Contact", name: "Greg Petrov", email: "gpetrov@westbridgecommons.com", signed: false },
-    ],
-    termsSummary: "New customer, initial proposal drafted. Scope to be finalized: 3 entry points, 8 cameras, cloud-based access management. Pricing pending final site walk. Legal review in progress.",
-  },
-];
-
-const STAT_CARDS = [
-  { label: "Active", value: 28, icon: CheckCircle2, color: "text-emerald-600", bg: "bg-emerald-100" },
-  { label: "Pending Signature", value: 4, icon: Clock, color: "text-amber-600", bg: "bg-amber-100", accentValue: "text-amber-600" },
-  { label: "Expired", value: 3, icon: XCircle, color: "text-red-500", bg: "bg-red-100", accentValue: "text-red-600" },
-  { label: "Draft", value: 2, icon: Archive, color: "text-slate-500", bg: "bg-slate-100" },
-  { label: "Total Contract Value", value: "$1.24M", icon: DollarSign, color: "text-[#2563EB]", bg: "bg-[#2563EB]/10" },
-];
+// STAT_CARDS are computed from live data in the component
 
 const FILTER_TABS = ["All", "Active", "Pending", "Draft", "Expired"] as const;
 type FilterTab = typeof FILTER_TABS[number];
@@ -415,6 +284,38 @@ export default function ContractsPage() {
   const [filterTab, setFilterTab] = useState<FilterTab>("All");
   const [search, setSearch] = useState("");
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
+  const [CONTRACTS, setCONTRACTS] = useState<Contract[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/contracts')
+      .then(r => r.json())
+      .then(json => {
+        if (json.contracts) {
+          setCONTRACTS(json.contracts.map(dbToContract));
+        }
+      })
+      .catch(() => { /* keep empty — proper empty state shown */ })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const STAT_CARDS = [
+    { label: "Active", value: CONTRACTS.filter(c => c.status === "Active").length, icon: CheckCircle2, color: "text-emerald-600", bg: "bg-emerald-100" },
+    { label: "Pending Signature", value: CONTRACTS.filter(c => c.status === "Pending Signature").length, icon: Clock, color: "text-amber-600", bg: "bg-amber-100", accentValue: "text-amber-600" },
+    { label: "Expired", value: CONTRACTS.filter(c => c.status === "Expired").length, icon: XCircle, color: "text-red-500", bg: "bg-red-100", accentValue: "text-red-600" },
+    { label: "Draft", value: CONTRACTS.filter(c => c.status === "Draft").length, icon: Archive, color: "text-slate-500", bg: "bg-slate-100" },
+    {
+      label: "Total Contract Value",
+      value: loading ? "—" : (() => {
+        const total = CONTRACTS.reduce((s, c) => {
+          const n = parseFloat(c.totalValue.replace(/[$,]/g, ''));
+          return s + (isNaN(n) ? 0 : n);
+        }, 0);
+        return total >= 1_000_000 ? `$${(total/1_000_000).toFixed(2)}M` : `$${(total/1000).toFixed(0)}K`;
+      })(),
+      icon: DollarSign, color: "text-[#2563EB]", bg: "bg-[#2563EB]/10"
+    },
+  ];
 
   const filtered = CONTRACTS.filter((c) => {
     const matchesTab =
@@ -490,7 +391,7 @@ export default function ContractsPage() {
                 )}
               >
                 {tab}
-                {tab !== "All" && (
+                {tab !== "All" && !loading && (
                   <span className={cn(
                     "ml-2 inline-flex items-center justify-center rounded-full text-xs font-bold px-1.5 py-0.5",
                     filterTab === tab ? "bg-[#2563EB]/10 text-[#2563EB]" : "bg-slate-100 text-slate-500"
@@ -507,8 +408,16 @@ export default function ContractsPage() {
             ))}
           </div>
 
+          {/* Loading */}
+          {loading && (
+            <div className="flex items-center justify-center py-12 text-slate-400 gap-2">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-sm">Loading contracts…</span>
+            </div>
+          )}
+
           {/* Table */}
-          <div className="overflow-x-auto">
+          {!loading && <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/60">
@@ -525,8 +434,11 @@ export default function ContractsPage() {
               <tbody className="divide-y divide-slate-100">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-5 py-12 text-center text-sm text-slate-400">
-                      No contracts match your search or filter.
+                    <td colSpan={8} className="px-5 py-16 text-center">
+                      <FileText className="w-8 h-8 text-slate-200 mx-auto mb-3" />
+                      <p className="text-sm font-medium text-slate-400">
+                        {CONTRACTS.length === 0 ? "No contracts yet — click + New Contract to get started" : "No contracts match your search or filter."}
+                      </p>
                     </td>
                   </tr>
                 ) : (
@@ -592,14 +504,16 @@ export default function ContractsPage() {
                 )}
               </tbody>
             </table>
-          </div>
+          </div>}
 
           {/* Table footer */}
-          <div className="px-5 py-3.5 border-t border-slate-100 bg-slate-50/60">
-            <p className="text-xs text-slate-400">
-              Showing {filtered.length} of {CONTRACTS.length} contracts
-            </p>
-          </div>
+          {!loading && (
+            <div className="px-5 py-3.5 border-t border-slate-100 bg-slate-50/60">
+              <p className="text-xs text-slate-400">
+                Showing {filtered.length} of {CONTRACTS.length} contracts
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
