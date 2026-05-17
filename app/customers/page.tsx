@@ -1,6 +1,7 @@
 "use client";
 import { TopBar } from "@/components/layout/TopBar";
 import { AISearch } from "@/components/ai/AISearch";
+import Link from "next/link";
 import {
   Plus, Eye, Settings, Phone, Mail, MapPin, ExternalLink,
   Building2, Users, Shield, Camera, ChevronRight, Network,
@@ -180,13 +181,16 @@ export default function CustomersPage() {
         <div className="grid grid-cols-3 gap-4">
           {filtered.map((acct) => {
             const tc = tierConfig[acct.tier];
+            const viewHref = acct.tier === "client" || acct.tier === "partner"
+              ? `/sites`
+              : `/admin/dealers`;
             return (
               <div
                 key={acct.id}
                 className="bg-card border border-border rounded-xl p-4 hover:border-brand-400/30 transition-all group cursor-pointer"
               >
                 {/* Header */}
-                <div className="flex items-start justify-between mb-3">
+                <Link href={viewHref} className="flex items-start justify-between mb-3 block">
                   <div className="flex-1 min-w-0 pr-2">
                     <div className="flex items-center gap-2 mb-0.5">
                       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${acct.status === "active" ? "status-online" : "status-warning"}`} />
@@ -201,7 +205,7 @@ export default function CustomersPage() {
                       <span className="text-[10px] text-muted-foreground/60 font-mono">{acct.id}</span>
                     </div>
                   </div>
-                </div>
+                </Link>
 
                 {/* Stats */}
                 <div className="grid grid-cols-4 gap-1.5 mb-3">
@@ -263,18 +267,18 @@ export default function CustomersPage() {
 
                 {/* Actions */}
                 <div className="flex items-center gap-1.5 pt-2 border-t border-border/50">
-                  <button className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+                  <Link href={viewHref} className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
                     <Eye size={12} /> View
-                  </button>
-                  <button className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+                  </Link>
+                  <Link href="/cameras" className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
                     <Camera size={12} /> Cameras
-                  </button>
-                  <button className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+                  </Link>
+                  <Link href="/access" className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
                     <Shield size={12} /> Access
-                  </button>
-                  <button className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+                  </Link>
+                  <Link href={viewHref} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
                     <Settings size={12} />
-                  </button>
+                  </Link>
                 </div>
               </div>
             );
