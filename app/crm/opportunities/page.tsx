@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
@@ -209,6 +209,14 @@ function SortableOppCard({
 
 // ── Component ─────────────────────────────────────────────────────────────
 export default function OpportunitiesPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center"><div className="w-6 h-6 border-2 border-[#6B7EFF] border-t-transparent rounded-full animate-spin" /></div>}>
+      <OpportunitiesPageInner />
+    </Suspense>
+  );
+}
+
+function OpportunitiesPageInner() {
   const searchParams = useSearchParams();
   const initialStage = (searchParams.get("stage") as Stage) ?? null;
   const openNew = searchParams.get("new") === "1";
