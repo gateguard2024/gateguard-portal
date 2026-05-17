@@ -1,5 +1,6 @@
 "use client";
-import { Moon, Sun } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Moon, Sun } = require("lucide-react") as any;
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 

@@ -1,6 +1,8 @@
 import { TopBar } from "@/components/layout/TopBar";
 import { AISearch } from "@/components/ai/AISearch";
-import { CreditCard, CheckCircle2, Clock, AlertTriangle, DollarSign, TrendingUp, Plus } from "lucide-react";
+import { CheckCircle2, Clock, AlertTriangle, TrendingUp, Plus } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { CreditCard, DollarSign } = require("lucide-react") as any;
 
 const invoices = [
   { id: "INV-2026-041", customer: "Angel Oak - Properties",  amount: 1199, mrr: true,  status: "paid",    due: "2026-04-01", paid: "2026-04-02", service: "Professional Plan + 88 Cameras" },

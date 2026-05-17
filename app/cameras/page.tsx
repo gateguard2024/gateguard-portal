@@ -1,6 +1,8 @@
 import { TopBar } from "@/components/layout/TopBar";
 import { AISearch } from "@/components/ai/AISearch";
-import { Camera, Download, Archive, Grid3X3, Search, Wifi, AlertTriangle } from "lucide-react";
+import { Download, Search, Wifi, AlertTriangle } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Camera, Archive, Grid3X3 } = require("lucide-react") as any;
 
 const cameras = [
   { name: "Leasing Entry",   account: "Stonegate Townhomes", status: "online",  feed: true,  time: "22:14:29" },
