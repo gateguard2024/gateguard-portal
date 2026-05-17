@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import {
   Download,
@@ -15,7 +15,7 @@ import {
   Filter,
 } from "lucide-react";
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type ActionStatus = "Action Needed" | "On Track";
 type RenewalBucket = "30" | "60" | "90";
@@ -32,132 +32,37 @@ interface Renewal {
   bucket: RenewalBucket;
 }
 
-const MOCK_RENEWALS: Renewal[] = [
-  // 30-day
-  {
-    id: "r01",
-    property: "Stonegate Townhomes",
-    mrr: "$2,400/mo",
-    contractEnd: "May 12",
-    repInitials: "MW",
-    repName: "Marcus",
-    status: "Action Needed",
-    bucket: "30",
-  },
-  {
-    id: "r02",
-    property: "Lakewood HOA",
-    mrr: "$1,800/mo",
-    contractEnd: "May 18",
-    repInitials: "JH",
-    repName: "Jordan",
-    status: "Action Needed",
-    bucket: "30",
-  },
-  {
-    id: "r03",
-    property: "Peachtree Commons",
-    mrr: "$3,200/mo",
-    contractEnd: "May 24",
-    repInitials: "RF",
-    repName: "Russel",
-    status: "On Track",
-    note: "Proposal sent",
-    bucket: "30",
-  },
-  {
-    id: "r04",
-    property: "Summit Ridge",
-    mrr: "$900/mo",
-    contractEnd: "May 28",
-    repInitials: "JH",
-    repName: "Jordan",
-    status: "Action Needed",
-    bucket: "30",
-  },
-  // 60-day
-  {
-    id: "r05",
-    property: "Riverside Apts",
-    mrr: "$4,200/mo",
-    contractEnd: "Jun 8",
-    repInitials: "RF",
-    repName: "Russel",
-    status: "On Track",
-    bucket: "60",
-  },
-  {
-    id: "r06",
-    property: "Ashford Glen",
-    mrr: "$1,200/mo",
-    contractEnd: "Jun 15",
-    repInitials: "MW",
-    repName: "Marcus",
-    status: "On Track",
-    bucket: "60",
-  },
-  {
-    id: "r07",
-    property: "Broadstone Park",
-    mrr: "$2,800/mo",
-    contractEnd: "Jun 22",
-    repInitials: "RF",
-    repName: "Russel",
-    status: "Action Needed",
-    bucket: "60",
-  },
-  {
-    id: "r08",
-    property: "Oakwood Terrace",
-    mrr: "$1,600/mo",
-    contractEnd: "Jun 29",
-    repInitials: "JH",
-    repName: "Jordan",
-    status: "On Track",
-    bucket: "60",
-  },
-  // 90-day
-  {
-    id: "r09",
-    property: "Camden Crossing",
-    mrr: "$3,600/mo",
-    contractEnd: "Jul 5",
-    repInitials: "RF",
-    repName: "Russel",
-    status: "On Track",
-    bucket: "90",
-  },
-  {
-    id: "r10",
-    property: "Westbridge Commons",
-    mrr: "$2,100/mo",
-    contractEnd: "Jul 12",
-    repInitials: "MW",
-    repName: "Marcus",
-    status: "On Track",
-    bucket: "90",
-  },
-  {
-    id: "r11",
-    property: "Northgate Plaza",
-    mrr: "$1,800/mo",
-    contractEnd: "Jul 20",
-    repInitials: "JH",
-    repName: "Jordan",
-    status: "On Track",
-    bucket: "90",
-  },
-  {
-    id: "r12",
-    property: "Harbor View Apts",
-    mrr: "$2,400/mo",
-    contractEnd: "Jul 28",
-    repInitials: "RF",
-    repName: "Russel",
-    status: "On Track",
-    bucket: "90",
-  },
-];
+interface DbRenewal {
+  id: string;
+  title: string;
+  mrr: number;
+  end_date?: string | null;
+  assigned_rep?: string | null;
+  renewal_status: string;
+  bucket: string;
+  client_name?: string | null;
+  site_name?: string | null;
+}
+
+function dbRenewalToUi(db: DbRenewal): Renewal {
+  const repRaw = db.assigned_rep ?? '';
+  const repInitials = repRaw.length <= 3 ? repRaw.toUpperCase() : repRaw.split(' ').map((p: string) => p[0]).join('').slice(0, 2).toUpperCase();
+  const repName = repRaw || '—';
+  const actionStatus: ActionStatus = db.renewal_status === 'action_needed' ? 'Action Needed' : 'On Track';
+  const bucket: RenewalBucket = db.bucket === '30' ? '30' : db.bucket === '60' ? '60' : '90';
+  const endDate = db.end_date ? new Date(db.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+
+  return {
+    id: db.id,
+    property: db.client_name ?? db.site_name ?? db.title,
+    mrr: `$${(db.mrr ?? 0).toLocaleString()}/mo`,
+    contractEnd: endDate,
+    repInitials,
+    repName,
+    status: actionStatus,
+    bucket,
+  };
+}
 
 const ALL_REPS = ["All Reps", "Russel", "Marcus", "Jordan"];
 const ALL_STATUSES: (ActionStatus | "All")[] = ["All", "Action Needed", "On Track"];
@@ -277,15 +182,35 @@ export default function RenewalsPage() {
   const [statusFilter, setStatusFilter] = useState<ActionStatus | "All">("All");
   const [repDropdownOpen, setRepDropdownOpen] = useState(false);
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
+  const [renewals, setRenewals] = useState<Renewal[]>([]);
+  const [, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/renewals')
+      .then(r => r.json())
+      .then(json => {
+        if (json.renewals && json.renewals.length > 0) {
+          setRenewals(json.renewals.map(dbRenewalToUi));
+        }
+      })
+      .catch(() => { /* keep empty — page still renders with no data */ })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const MOCK_RENEWALS = renewals;
 
   const YTD_CURRENT = 142000;
   const YTD_TARGET = 380000;
   const ytdPct = Math.round((YTD_CURRENT / YTD_TARGET) * 100);
 
+  const count30 = MOCK_RENEWALS.filter(r => r.bucket === '30').length;
+  const count60 = MOCK_RENEWALS.filter(r => r.bucket === '60').length;
+  const count90 = MOCK_RENEWALS.filter(r => r.bucket === '90').length;
+
   const stats = [
     {
       label: "Renewing in 30 Days",
-      value: "4",
+      value: String(count30),
       sub: "Urgent",
       icon: AlertCircle,
       color: "text-red-600",
@@ -294,7 +219,7 @@ export default function RenewalsPage() {
     },
     {
       label: "Renewing in 60 Days",
-      value: "7",
+      value: String(count30 + count60),
       sub: "Attention",
       icon: Clock,
       color: "text-amber-600",
@@ -303,7 +228,7 @@ export default function RenewalsPage() {
     },
     {
       label: "Renewing in 90 Days",
-      value: "11",
+      value: String(count30 + count60 + count90),
       sub: "On Radar",
       icon: Calendar,
       color: "text-yellow-600",
@@ -312,8 +237,8 @@ export default function RenewalsPage() {
     },
     {
       label: "Renewed YTD",
-      value: "23",
-      sub: "$142K",
+      value: "—",
+      sub: "$0",
       icon: TrendingUp,
       color: "text-emerald-600",
       bg: "bg-emerald-50",
@@ -459,7 +384,7 @@ export default function RenewalsPage() {
         )}
 
         <span className="ml-auto text-xs text-slate-400">
-          {filteredRenewals.length} of {MOCK_RENEWALS.length} renewals
+          {filteredRenewals.length} of {renewals.length} renewals
         </span>
       </div>
 

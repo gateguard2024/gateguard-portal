@@ -2,14 +2,14 @@
 import { TopBar } from "@/components/layout/TopBar";
 import { AISearch } from "@/components/ai/AISearch";
 import {
-  Plus, Eye, Settings, Phone, Mail, MapPin, ExternalLink,
-  Building2, Users, Shield, Camera, ChevronRight, Network,
+  Plus, Eye, Settings, Phone, Mail, MapPin,
+  Building2, Users, Shield, Camera, ChevronRight, Network, Loader2,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 type Tier = "all" | "mso" | "dealer" | "partner" | "client";
 
-const tierConfig = {
+const tierConfig: Record<string, { label: string; cls: string; icon: string }> = {
   corporate: { label: "Corporate",       cls: "tier-corporate", icon: "🏢" },
   mso:       { label: "MSO",             cls: "tier-mso",       icon: "🌐" },
   dealer:    { label: "Dealer / SO",     cls: "tier-dealer",    icon: "🔧" },
@@ -17,85 +17,23 @@ const tierConfig = {
   client:    { label: "Client",          cls: "tier-client",    icon: "🏘️" },
 };
 
-const accounts = [
-  {
-    id: "MSO-001", tier: "mso" as const,
-    name: "Southeast Security Group",
-    contact: "David Marsh", email: "david@sesecuritygroup.com", phone: "678-555-0100",
-    location: "Atlanta, GA",
-    stats: { dealers: 4, clients: 28, cameras: 412, doors: 180 },
-    status: "active",
-  },
-  {
-    id: "SO-001", tier: "dealer" as const,
-    name: "Gate Guard, LLC",
-    contact: "Russel Feldman", email: "rfeldman@gateguard.co", phone: "844-694-2283",
-    location: "Atlanta, GA",
-    stats: { clients: 9, cameras: 138, doors: 124, mrr: 3940 },
-    status: "active",
-  },
-  {
-    id: "CP-001", tier: "partner" as const,
-    name: "Columbia Residential",
-    contact: "Sarah Kim", email: "sarah@columbiares.com", phone: "404-555-0200",
-    location: "Atlanta Metro, GA",
-    stats: { clients: 6, cameras: 96, doors: 72 },
-    status: "active",
-  },
-  {
-    id: "CP-002", tier: "partner" as const,
-    name: "Elevate Living",
-    contact: "Marcus Webb", email: "marcus@elevateliving.com", phone: "678-555-0300",
-    location: "Charlotte, NC",
-    stats: { clients: 3, cameras: 58, doors: 47 },
-    status: "active",
-  },
-  {
-    id: "CL-001", tier: "client" as const,
-    name: "Angel Oak - Properties",
-    contact: "Sammy Laroche", email: "sammy.laroche@angeloakcapital.com", phone: "912-956-6711",
-    location: "1370 Ave of Americas, NY",
-    stats: { cameras: 88, doors: 35, users: 8, sites: 1749 },
-    status: "active",
-    parent: "Columbia Residential",
-  },
-  {
-    id: "CL-002", tier: "client" as const,
-    name: "Pegasus Properties",
-    contact: "Brian Torres", email: "btorres@pegasusprops.com", phone: "404-555-0400",
-    location: "Atlanta Metro, GA",
-    stats: { cameras: 22, doors: 18, users: 8, sites: 3 },
-    status: "active",
-    parent: "Gate Guard, LLC",
-  },
-  {
-    id: "CL-003", tier: "client" as const,
-    name: "Stonegate Townhomes",
-    contact: "Property Manager", email: "mgr@stonegate.com", phone: "",
-    location: "Stonegate Community, GA",
-    stats: { cameras: 14, doors: 12, users: 2, sites: 1 },
-    status: "active",
-    parent: "Gate Guard, LLC",
-  },
-  {
-    id: "CL-004", tier: "client" as const,
-    name: "3888 Peachtree",
-    contact: "Property Mgmt", email: "mgmt@3888peachtree.com", phone: "",
-    location: "3888 Peachtree Rd NE, Atlanta",
-    stats: { cameras: 19, doors: 8, users: 4, sites: 1 },
-    status: "active",
-    parent: "Gate Guard, LLC",
-  },
-  {
-    id: "CL-005", tier: "client" as const,
-    name: "Flint River",
-    contact: "", email: "", phone: "",
-    location: "Georgia",
-    stats: { cameras: 0, doors: 0, users: 0, sites: 0 },
-    status: "warning",
-    parent: "Gate Guard, LLC",
-  },
-];
+interface Account {
+  id: string;
+  name: string;
+  tier: string;
+  tier_label?: string;
+  is_active: boolean;
+  site_count?: number;
+  created_at?: string;
+  // contact info may not be in the org table — optional fields
+  contact?: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  parent?: string;
+  stats?: Record<string, number | string | undefined>;
+  status?: string;
+}
 
 const filterTabs: { label: string; value: Tier }[] = [
   { label: "All",             value: "all"     },
@@ -107,6 +45,24 @@ const filterTabs: { label: string; value: Tier }[] = [
 
 export default function CustomersPage() {
   const [activeTier, setActiveTier] = useState<Tier>("all");
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/customers')
+      .then(r => r.json())
+      .then(json => {
+        if (json.customers) {
+          setAccounts(json.customers.map((c: Account) => ({
+            ...c,
+            status: c.is_active ? 'active' : 'warning',
+            stats: { sites: c.site_count ?? 0 },
+          })));
+        }
+      })
+      .catch(() => { /* keep empty */ })
+      .finally(() => setLoading(false));
+  }, []);
 
   const filtered = activeTier === "all"
     ? accounts
@@ -116,7 +72,7 @@ export default function CustomersPage() {
     <div className="flex flex-col min-h-full">
       <TopBar
         title="Customers"
-        subtitle={`${accounts.length} accounts across all tiers`}
+        subtitle={loading ? "Loading..." : `${accounts.length} accounts across all tiers`}
         actions={
           <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-400 hover:bg-brand-500 text-navy-DEFAULT text-sm font-semibold transition-colors gg-glow">
             <Plus size={15} /> New Account
@@ -176,10 +132,18 @@ export default function CustomersPage() {
           />
         </div>
 
+        {/* Loading state */}
+        {loading && (
+          <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
+            <Loader2 size={20} className="animate-spin" />
+            <span className="text-sm">Loading accounts…</span>
+          </div>
+        )}
+
         {/* Account cards */}
-        <div className="grid grid-cols-3 gap-4">
+        {!loading && <div className="grid grid-cols-3 gap-4">
           {filtered.map((acct) => {
-            const tc = tierConfig[acct.tier];
+            const tc = tierConfig[acct.tier] ?? tierConfig.client;
             return (
               <div
                 key={acct.id}
@@ -206,10 +170,10 @@ export default function CustomersPage() {
                 {/* Stats */}
                 <div className="grid grid-cols-4 gap-1.5 mb-3">
                   {acct.tier === "mso" && [
-                    { label: "Dealers",  value: acct.stats.dealers  },
-                    { label: "Clients",  value: acct.stats.clients  },
-                    { label: "Cameras",  value: acct.stats.cameras  },
-                    { label: "Doors",    value: acct.stats.doors    },
+                    { label: "Dealers",  value: acct.stats?.dealers  },
+                    { label: "Clients",  value: acct.stats?.clients  },
+                    { label: "Cameras",  value: acct.stats?.cameras  },
+                    { label: "Doors",    value: acct.stats?.doors    },
                   ].map(s => (
                     <div key={s.label} className="text-center p-1.5 rounded-lg bg-background/50 border border-border/50">
                       <p className="text-xs font-bold text-foreground">{s.value ?? "—"}</p>
@@ -217,10 +181,10 @@ export default function CustomersPage() {
                     </div>
                   ))}
                   {acct.tier === "dealer" && [
-                    { label: "Clients",  value: acct.stats.clients  },
-                    { label: "Cameras",  value: acct.stats.cameras  },
-                    { label: "Doors",    value: acct.stats.doors    },
-                    { label: "MRR",      value: acct.stats.mrr ? `$${acct.stats.mrr}` : "—" },
+                    { label: "Clients",  value: acct.stats?.clients  },
+                    { label: "Cameras",  value: acct.stats?.cameras  },
+                    { label: "Doors",    value: acct.stats?.doors    },
+                    { label: "MRR",      value: acct.stats?.mrr ? `$${acct.stats.mrr}` : "—" },
                   ].map(s => (
                     <div key={s.label} className="text-center p-1.5 rounded-lg bg-background/50 border border-border/50">
                       <p className="text-xs font-bold text-foreground">{s.value ?? "—"}</p>
@@ -228,10 +192,10 @@ export default function CustomersPage() {
                     </div>
                   ))}
                   {(acct.tier === "partner" || acct.tier === "client") && [
-                    { label: "Cameras", value: acct.stats.cameras },
-                    { label: "Doors",   value: acct.stats.doors   },
-                    { label: "Users",   value: acct.stats.users   },
-                    { label: "Sites",   value: acct.stats.sites   },
+                    { label: "Cameras", value: acct.stats?.cameras },
+                    { label: "Doors",   value: acct.stats?.doors   },
+                    { label: "Users",   value: acct.stats?.users   },
+                    { label: "Sites",   value: acct.stats?.sites   },
                   ].map(s => (
                     <div key={s.label} className="text-center p-1.5 rounded-lg bg-background/50 border border-border/50">
                       <p className="text-xs font-bold text-foreground">{s.value ?? "—"}</p>
@@ -279,7 +243,7 @@ export default function CustomersPage() {
               </div>
             );
           })}
-        </div>
+        </div>}
       </div>
     </div>
   );

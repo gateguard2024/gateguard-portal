@@ -1,30 +1,51 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import { TopBar } from "@/components/layout/TopBar";
 import { AISearch } from "@/components/ai/AISearch";
-import { CreditCard, CheckCircle2, Clock, AlertTriangle, DollarSign, TrendingUp, Plus } from "lucide-react";
+import { CreditCard, CheckCircle2, Clock, AlertTriangle, Plus, Loader2 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { TrendingUp, DollarSign } = require('lucide-react') as any;
 
-const invoices = [
-  { id: "INV-2026-041", customer: "Angel Oak - Properties",  amount: 1199, mrr: true,  status: "paid",    due: "2026-04-01", paid: "2026-04-02", service: "Professional Plan + 88 Cameras" },
-  { id: "INV-2026-040", customer: "Pegasus Properties",      amount: 749,  mrr: true,  status: "paid",    due: "2026-04-01", paid: "2026-04-03", service: "Professional Plan + 22 Cameras" },
-  { id: "INV-2026-039", customer: "3888 Peachtree",          amount: 499,  mrr: true,  status: "paid",    due: "2026-04-01", paid: "2026-04-01", service: "Professional Plan + 19 Cameras" },
-  { id: "INV-2026-038", customer: "Elevate Greene",          amount: 349,  mrr: true,  status: "paid",    due: "2026-04-01", paid: "2026-04-04", service: "Standard Plan + 30 Cameras"     },
-  { id: "INV-2026-037", customer: "Midwood Gardens",         amount: 299,  mrr: true,  status: "overdue", due: "2026-04-01", paid: "",           service: "Standard Plan + 14 Cameras"     },
-  { id: "INV-2026-036", customer: "Stonegate Townhomes",     amount: 349,  mrr: true,  status: "paid",    due: "2026-04-01", paid: "2026-04-02", service: "Standard Plan + 14 Cameras"     },
-  { id: "INV-2026-035", customer: "Flint River",             amount: 8500, mrr: false, status: "pending", due: "2026-05-01", paid: "",           service: "Equipment Installation"          },
-  { id: "INV-2026-034", customer: "Mitul Patel",             amount: 499,  mrr: true,  status: "paid",    due: "2026-04-01", paid: "2026-04-01", service: "Professional Plan + 9 Cameras"   },
-];
+interface InvoiceRow {
+  id: string;
+  invoice_number: string;
+  title: string;
+  status: string;
+  is_recurring: boolean;
+  amount: number;
+  due_date?: string | null;
+  paid_at?: string | null;
+  client_org?: { id: string; name: string } | null;
+  created_at: string;
+}
 
-const totalMrr = invoices.filter(i => i.mrr && i.status === "paid").reduce((s, i) => s + i.amount, 0);
-const totalPaid = invoices.filter(i => i.status === "paid").reduce((s, i) => s + i.amount, 0);
-const totalOverdue = invoices.filter(i => i.status === "overdue").reduce((s, i) => s + i.amount, 0);
-const totalPending = invoices.filter(i => i.status === "pending").reduce((s, i) => s + i.amount, 0);
-
-const statusConfig: Record<string, { label: string; bg: string; text: string; icon: any }> = {
+const statusConfig: Record<string, { label: string; bg: string; text: string; icon: React.ElementType }> = {
   paid:    { label: "Paid",    bg: "bg-emerald-500/10", text: "text-emerald-400", icon: CheckCircle2  },
   overdue: { label: "Overdue", bg: "bg-red-500/10",     text: "text-red-400",     icon: AlertTriangle },
   pending: { label: "Pending", bg: "bg-amber-500/10",   text: "text-amber-400",   icon: Clock         },
+  draft:   { label: "Draft",   bg: "bg-zinc-500/10",    text: "text-zinc-400",    icon: Clock         },
+  sent:    { label: "Sent",    bg: "bg-blue-500/10",    text: "text-blue-400",    icon: Clock         },
+  void:    { label: "Void",    bg: "bg-slate-500/10",   text: "text-slate-400",   icon: Clock         },
 };
 
 export default function BillingPage() {
+  const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/billing/invoices')
+      .then(r => r.json())
+      .then(json => { if (json.invoices) setInvoices(json.invoices); })
+      .catch(() => { /* keep empty */ })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const totalMrr = invoices.filter(i => i.is_recurring && i.status === "paid").reduce((s, i) => s + i.amount, 0);
+  const totalPaid = invoices.filter(i => i.status === "paid").reduce((s, i) => s + i.amount, 0);
+  const totalOverdue = invoices.filter(i => i.status === "overdue").reduce((s, i) => s + i.amount, 0);
+  const totalPending = invoices.filter(i => ["pending", "sent", "draft"].includes(i.status)).reduce((s, i) => s + i.amount, 0);
+
   return (
     <div className="flex flex-col min-h-full">
       <TopBar title="Billing" subtitle="QuickBooks Integration · Invoices & Subscriptions" />
@@ -68,41 +89,56 @@ export default function BillingPage() {
               Synced with QuickBooks
             </span>
           </div>
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-border bg-background/30">
-                {["Invoice #", "Customer", "Service", "Amount", "Type", "Status", "Due", "Paid"].map(h => (
-                  <th key={h} className="text-left px-4 py-2.5 text-muted-foreground font-medium">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.map((inv) => {
-                const sc = statusConfig[inv.status];
-                const StatusIcon = sc.icon;
-                return (
-                  <tr key={inv.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors cursor-pointer">
-                    <td className="px-4 py-3 font-mono text-brand-400">{inv.id}</td>
-                    <td className="px-4 py-3 font-medium text-foreground">{inv.customer}</td>
-                    <td className="px-4 py-3 text-muted-foreground max-w-[200px] truncate">{inv.service}</td>
-                    <td className="px-4 py-3 font-semibold text-foreground">${inv.amount.toLocaleString()}</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-[11px] px-2 py-0.5 rounded-full ${inv.mrr ? "bg-brand-500/10 text-brand-400" : "bg-slate-500/10 text-slate-400"}`}>
-                        {inv.mrr ? "Recurring" : "One-time"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${sc.bg} ${sc.text}`}>
-                        <StatusIcon size={10} />{sc.label}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">{inv.due}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{inv.paid || "—"}</td>
+
+          {loading && (
+            <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
+              <Loader2 size={18} className="animate-spin" />
+              <span className="text-sm">Loading invoices…</span>
+            </div>
+          )}
+
+          {!loading && (
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border bg-background/30">
+                  {["Invoice #", "Customer", "Description", "Amount", "Type", "Status", "Due", "Paid"].map(h => (
+                    <th key={h} className="text-left px-4 py-2.5 text-muted-foreground font-medium">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {invoices.map((inv) => {
+                  const sc = statusConfig[inv.status] ?? statusConfig.draft;
+                  const StatusIcon = sc.icon;
+                  return (
+                    <tr key={inv.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors cursor-pointer">
+                      <td className="px-4 py-3 font-mono text-brand-400">{inv.invoice_number}</td>
+                      <td className="px-4 py-3 font-medium text-foreground">{inv.client_org?.name ?? "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground max-w-[200px] truncate">{inv.title}</td>
+                      <td className="px-4 py-3 font-semibold text-foreground">${inv.amount.toLocaleString()}</td>
+                      <td className="px-4 py-3">
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full ${inv.is_recurring ? "bg-brand-500/10 text-brand-400" : "bg-slate-500/10 text-slate-400"}`}>
+                          {inv.is_recurring ? "Recurring" : "One-time"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${sc.bg} ${sc.text}`}>
+                          <StatusIcon size={10} />{sc.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{inv.due_date?.slice(0, 10) ?? "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{inv.paid_at?.slice(0, 10) ?? "—"}</td>
+                    </tr>
+                  );
+                })}
+                {invoices.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground text-sm">No invoices found</td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>

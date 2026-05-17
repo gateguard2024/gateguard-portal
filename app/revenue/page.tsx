@@ -1,31 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
-  TrendingUp, DollarSign, ArrowUpRight, TrendingDown, BarChart3,
-  Download, Users, Building2, CheckCircle2, AlertTriangle, Circle,
+  TrendingUp, Download, Users, Building2, CheckCircle2, AlertTriangle,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { DollarSign, ArrowUpRight, TrendingDown, BarChart3 } = require('lucide-react') as any;
 import { cn } from "@/lib/utils";
 
-// ─── Data ───────────────────────────────────────────────────────────────────
+// ─── Types ───────────────────────────────────────────────────────────────────
 
-const mrrData = [
-  { month: "Jan", value: 28 },
-  { month: "Feb", value: 29.5 },
-  { month: "Mar", value: 31 },
-  { month: "Apr", value: 32 },
-  { month: "May", value: 34 },
-  { month: "Jun", value: 33.5 },
-  { month: "Jul", value: 35 },
-  { month: "Aug", value: 36 },
-  { month: "Sep", value: 37 },
-  { month: "Oct", value: 37.5 },
-  { month: "Nov", value: 38 },
-  { month: "Dec", value: 38.4 },
-];
+interface RevenueMetrics {
+  total_mrr: number;
+  total_arr: number;
+  active_properties: number;
+  invoices_this_month: number;
+  invoices_paid_this_month: number;
+}
 
-const TARGET = 36; // $K target line
-const MAX_VAL = 42; // chart ceiling for headroom
+interface MonthBucket {
+  month: string;
+  value: number;
+}
 
 const reps = [
   { name: "Russel Feldman", deals: 12, pipeline: "$186K", won: "$28,400", commission: "$2,840", pct: 35 },
@@ -34,19 +30,72 @@ const reps = [
   { name: "Jordan Hill",    deals: 6,  pipeline: "$89K",  won: "$12,600", commission: "$1,260", pct: 16 },
 ];
 
-const kpis = [
-  { label: "MRR",                value: "$38,400",  sub: "+4.1% vs last month", icon: TrendingUp,   color: "text-blue-600",    bg: "bg-blue-50",    border: "border-blue-100" },
-  { label: "ARR",                value: "$460,800", sub: "Annualized run-rate",  icon: BarChart3,    color: "text-indigo-600",  bg: "bg-indigo-50",  border: "border-indigo-100" },
-  { label: "New ARR MTD",        value: "$12,600",  sub: "3 new properties",     icon: ArrowUpRight, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100" },
-  { label: "Churn MTD",         value: "−$2,100",  sub: "1 cancelled property", icon: TrendingDown, color: "text-red-500",     bg: "bg-red-50",     border: "border-red-100" },
-  { label: "Net Rev Retention", value: "94.5%",    sub: "Target: 95%",          icon: CheckCircle2, color: "text-amber-600",   bg: "bg-amber-50",   border: "border-amber-100" },
-  { label: "Active Properties", value: "31",       sub: "Across all tiers",     icon: Building2,    color: "text-slate-600",   bg: "bg-slate-100",  border: "border-slate-200" },
-];
+const TARGET = 36;
+const MAX_VAL = 42;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function RevenuePage() {
   const [hoveredBar, setHoveredBar] = useState<number | null>(null);
+  const [metrics, setMetrics] = useState<RevenueMetrics | null>(null);
+  const [mrrData, setMrrData] = useState<MonthBucket[]>([]);
+
+  useEffect(() => {
+    fetch('/api/revenue')
+      .then(r => r.json())
+      .then(json => {
+        if (json.metrics) setMetrics(json.metrics);
+        if (json.by_month) setMrrData(json.by_month);
+      })
+      .catch(() => { /* keep placeholder */ });
+  }, []);
+
+  const fmtCurrency = (n: number) =>
+    n >= 1000 ? `$${(n / 1000).toFixed(1)}K` : `$${n.toLocaleString()}`;
+
+  const kpis = [
+    {
+      label: "MRR",
+      value: metrics ? fmtCurrency(metrics.total_mrr) : "$—",
+      sub: "Active contracts",
+      icon: TrendingUp, color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100"
+    },
+    {
+      label: "ARR",
+      value: metrics ? fmtCurrency(metrics.total_arr) : "$—",
+      sub: "Annualized run-rate",
+      icon: BarChart3, color: "text-indigo-600", bg: "bg-indigo-50", border: "border-indigo-100"
+    },
+    {
+      label: "Invoiced MTD",
+      value: metrics ? fmtCurrency(metrics.invoices_this_month) : "$—",
+      sub: "This calendar month",
+      icon: ArrowUpRight, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100"
+    },
+    {
+      label: "Collected MTD",
+      value: metrics ? fmtCurrency(metrics.invoices_paid_this_month) : "$—",
+      sub: "Paid invoices this month",
+      icon: CheckCircle2, color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100"
+    },
+    {
+      label: "Net Rev Retention",
+      value: "—",
+      sub: "Target: 95%",
+      icon: TrendingDown, color: "text-red-500", bg: "bg-red-50", border: "border-red-100"
+    },
+    {
+      label: "Active Properties",
+      value: metrics ? String(metrics.active_properties) : "—",
+      sub: "Across all tiers",
+      icon: Building2, color: "text-slate-600", bg: "bg-slate-100", border: "border-slate-200"
+    },
+  ];
+
+  // Use live data if available, else placeholder for chart shape
+  const chartData: MonthBucket[] = mrrData.length > 0 ? mrrData : [
+    { month: "...", value: 0 },
+  ];
 
   const targetPct = ((TARGET / MAX_VAL) * 100).toFixed(2);
 
@@ -133,7 +182,7 @@ export default function RevenuePage() {
 
               {/* Bars */}
               <div className="flex items-end gap-1.5 h-56 pb-0 border-b border-gray-100">
-                {mrrData.map((d, i) => {
+                {chartData.map((d, i) => {
                   const heightPct = (d.value / MAX_VAL) * 100;
                   const isHovered = hoveredBar === i;
                   const isAboveTarget = d.value >= TARGET;
@@ -166,7 +215,7 @@ export default function RevenuePage() {
 
               {/* Month labels */}
               <div className="flex gap-1.5 mt-2">
-                {mrrData.map((d) => (
+                {chartData.map((d) => (
                   <div key={d.month} className="flex-1 text-center text-[10px] text-slate-400 font-medium">
                     {d.month}
                   </div>
