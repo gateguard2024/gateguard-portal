@@ -4,12 +4,12 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { TopBar } from "@/components/layout/TopBar";
 import {
-  ArrowLeft, Mail, Phone, MapPin, Building2, Users,
+  Mail, Phone, MapPin, Building2, Users,
   CheckCircle2, Clock, AlertTriangle, ExternalLink,
-  Camera, Shield, Wrench, FileText, Star,
+  Shield, Wrench, FileText, Star,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { DollarSign, Edit2, Activity } = require("lucide-react") as any;
+const { ArrowLeft, Camera, DollarSign, Edit2, Activity } = require("lucide-react") as any;
 
 // Shared account data — same source as customers list
 const ACCOUNTS: Record<string, {
