@@ -165,6 +165,9 @@ interface Opportunity {
   monthly_per_unit?: number;
   monthly_total?: number;
   est_mrr?: number;
+  property_city?: string;
+  property_state?: string;
+  source?: string;
   directv_package?: string;
   isp_service?: string;
   mdu_contract_expiry?: string;
@@ -770,10 +773,10 @@ export default function OpportunityDetailPage() {
         site_contact_name:  opp.site_contact_name  ?? "",
         site_contact_email: opp.site_contact_email ?? "",
         site_contact_phone: opp.site_contact_phone ?? "",
-        property_city:      (opp as Record<string, unknown>).property_city  as string ?? "",
-        property_state:     (opp as Record<string, unknown>).property_state as string ?? "",
-        units:              opp.units              ? String(opp.units) : "",
-        source:             (opp as Record<string, unknown>).source  as string ?? "",
+        property_city:      opp.property_city  ?? "",
+        property_state:     opp.property_state ?? "",
+        units:              opp.units ? String(opp.units) : "",
+        source:             opp.source ?? "",
         est_mrr:            opp.est_mrr            ? String(opp.est_mrr) : "",
       });
     }
