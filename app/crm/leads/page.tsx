@@ -385,9 +385,43 @@ function CampaignModal({ onClose }: { onClose: () => void }) {
   )
 }
 
+// ─── Email status badge ───────────────────────────────────────────────────────
+type SendStatus = { status: string; opened_at: string | null; open_count: number; sent_at: string | null; error_message: string | null }
+
+function EmailStatusBadge({ s }: { s: SendStatus }) {
+  if (s.status === 'opened' || (s.open_count > 0 && s.opened_at)) {
+    const when = s.opened_at ? new Date(s.opened_at).toLocaleDateString() : ''
+    return (
+      <span title={`Opened ${when}${s.open_count > 1 ? ` (${s.open_count}×)` : ''}`}
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700 w-fit cursor-default">
+        <Mail size={9} /> Opened {s.open_count > 1 ? `×${s.open_count}` : ''}
+      </span>
+    )
+  }
+  if (s.status === 'delivered' || s.status === 'sent') {
+    const when = s.sent_at ? new Date(s.sent_at).toLocaleDateString() : ''
+    return (
+      <span title={`Emailed ${when}`}
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-100 text-violet-700 w-fit cursor-default">
+        <Mail size={9} /> Emailed
+      </span>
+    )
+  }
+  if (s.status === 'failed' || s.status === 'bounced') {
+    return (
+      <span title={s.error_message ?? 'Send failed'}
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-600 w-fit cursor-default">
+        <AlertCircle size={9} /> Failed
+      </span>
+    )
+  }
+  return null
+}
+
 // ─── Main Page ───────────────────────────────────────────────────────────────
 export default function LeadsPage() {
   const [leads, setLeads]         = useState<Lead[]>([])
+  const [sendMap, setSendMap]     = useState<Record<string, SendStatus>>({})
   const [loading, setLoading]     = useState(true)
   const [q, setQ]                 = useState('')
   const [filterStage, setFilter]  = useState<string | null>(null)
@@ -396,10 +430,11 @@ export default function LeadsPage() {
 
   useEffect(() => {
     setLoading(true)
-    fetch('/api/crm/leads')
-      .then(r => r.json())
-      .then(data => {
-        const mapped = (Array.isArray(data) ? data : []).map((d: any) => ({
+    Promise.all([
+      fetch('/api/crm/leads').then(r => r.json()),
+      fetch('/api/crm/leads/campaign/sends').then(r => r.json()).catch(() => ({})),
+    ]).then(([leadsData, sendsData]) => {
+        const mapped = (Array.isArray(leadsData) ? leadsData : []).map((d: any) => ({
           id:              d.id,
           name:            d.name || d.property_name || d.contact_name || 'Unnamed Lead',
           contact:         d.contact || d.contact_name || '',
@@ -416,6 +451,14 @@ export default function LeadsPage() {
           notes:           d.notes || null,
         }))
         setLeads(mapped)
+        // sendsData is keyed by show_lead_id (without show_ prefix)
+        // API returns the raw UUID, leads have id = show_<uuid>
+        const normalized: Record<string, SendStatus> = {}
+        for (const [k, v] of Object.entries(sendsData || {})) {
+          normalized[`show_${k}`] = v as SendStatus
+          normalized[k] = v as SendStatus  // also store raw
+        }
+        setSendMap(normalized)
       })
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -647,12 +690,7 @@ export default function LeadsPage() {
                           <Clock size={10} />
                           {lead.lastActivity}
                         </div>
-                        {lead.notes?.includes('Campaign email sent') && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-100 text-violet-700 w-fit">
-                            <Mail size={9} />
-                            Emailed
-                          </span>
-                        )}
+                        {sendMap[lead.id] && <EmailStatusBadge s={sendMap[lead.id]} />}
                       </div>
                     </td>
 

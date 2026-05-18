@@ -274,11 +274,22 @@ export async function POST(req: NextRequest) {
         const { data: batchData, error: batchError } = await (resend.batch as any).send(messages)
 
         if (batchError) {
-          // Whole batch failed
+          // Whole batch failed — log each as failed
           results.failed += batch.length
           const errName = (batchError as any).name ?? ''
           const errDetail = errName ? `[${errName}] ${batchError.message}` : batchError.message
-          batch.forEach((lead: any) => results.errors.push(`${lead.email}: ${errDetail}`))
+          batch.forEach((lead: any) => {
+            results.errors.push(`${lead.email}: ${errDetail}`)
+            void supabase.from('campaign_sends').insert({
+              show_lead_id:  lead.id,
+              lead_email:    lead.email,
+              lead_name:     lead.name,
+              campaign_name: 'show_follow_up',
+              status:        'failed',
+              error_message: errDetail,
+              sent_at:       new Date().toISOString(),
+            }).then(() => {})
+          })
         } else {
           // Individual results — batchData is an array of { id } or error per email
           const batchResults: any[] = Array.isArray(batchData) ? batchData : []
@@ -286,23 +297,51 @@ export async function POST(req: NextRequest) {
             const r = batchResults[idx]
             if (r && r.error) {
               results.failed++
-              results.errors.push(`${lead.email}: ${r.error.message ?? r.error}`)
+              const errMsg = r.error.message ?? String(r.error)
+              results.errors.push(`${lead.email}: ${errMsg}`)
+              void supabase.from('campaign_sends').insert({
+                show_lead_id:  lead.id,
+                lead_email:    lead.email,
+                lead_name:     lead.name,
+                campaign_name: 'show_follow_up',
+                status:        'failed',
+                error_message: errMsg,
+                sent_at:       new Date().toISOString(),
+              }).then(() => {})
             } else {
               results.sent++
-              // Non-blocking: stamp the lead with campaign send date
-              void (async () => {
-                try {
-                  await supabase.from('show_leads').update({
-                    notes: `Campaign email sent ${new Date().toLocaleDateString()}`,
-                  }).eq('id', lead.id)
-                } catch (_) { /* non-blocking */ }
-              })()
+              const resendId = r?.id ?? null
+              // Log the send with Resend message ID (needed for open-tracking webhook)
+              void supabase.from('campaign_sends').insert({
+                show_lead_id:      lead.id,
+                lead_email:        lead.email,
+                lead_name:         lead.name,
+                campaign_name:     'show_follow_up',
+                status:            'sent',
+                resend_message_id: resendId,
+                sent_at:           new Date().toISOString(),
+              }).then(() => {})
+              // Also stamp the lead notes field for quick visibility in the list
+              void supabase.from('show_leads').update({
+                notes: `Campaign email sent ${new Date().toLocaleDateString()}`,
+              }).eq('id', lead.id).then(() => {})
             }
           })
         }
       } catch (e: any) {
         results.failed += batch.length
-        batch.forEach((lead: any) => results.errors.push(`${lead.email}: ${e.message}`))
+        batch.forEach((lead: any) => {
+          results.errors.push(`${lead.email}: ${e.message}`)
+          void supabase.from('campaign_sends').insert({
+            show_lead_id:  lead.id,
+            lead_email:    lead.email,
+            lead_name:     lead.name,
+            campaign_name: 'show_follow_up',
+            status:        'failed',
+            error_message: e.message,
+            sent_at:       new Date().toISOString(),
+          }).then(() => {})
+        })
       }
 
       // Small pause between batches if we have more
