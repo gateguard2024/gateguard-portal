@@ -53,6 +53,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'document_type and signer_email are required' }, { status: 400 })
     }
 
+    // Auto-lookup template if no document_url provided
+    let resolvedUrl   = document_url ?? null
+    let resolvedVersion = document_version ?? null
+    if (!resolvedUrl) {
+      const { data: tpl } = await supabase
+        .from('document_templates')
+        .select('public_url, version')
+        .eq('document_type', document_type)
+        .eq('is_active', true)
+        .neq('public_url', 'PLACEHOLDER_UPDATE_AFTER_UPLOAD')
+        .maybeSingle()
+      if (tpl) {
+        resolvedUrl     = tpl.public_url
+        resolvedVersion = resolvedVersion ?? tpl.version
+      }
+    }
+
     // Generate a cryptographically secure token
     const token     = crypto.randomBytes(32).toString('hex')
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days
@@ -62,8 +79,8 @@ export async function POST(req: NextRequest) {
       .insert({
         token,
         document_type,
-        document_version: document_version ?? null,
-        document_url:     document_url ?? null,
+        document_version: resolvedVersion ?? null,
+        document_url:     resolvedUrl ?? null,
         opportunity_id:   opportunity_id ?? null,
         lead_id:          lead_id ?? null,
         signer_name:      signer_name ?? null,

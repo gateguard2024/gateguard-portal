@@ -24,7 +24,7 @@ type Stage =
   | "lost";
 
 type ActivityType = "call" | "email" | "meeting" | "task" | "note";
-type Tab = "details" | "activity";
+type Tab = "details" | "activity" | "documents";
 
 interface Contact {
   id: string;
@@ -392,6 +392,36 @@ export default function OpportunityDetailPage() {
   const [sendDocSending, setSendDocSending] = useState(false);
   const [sendDocError, setSendDocError] = useState<string | null>(null);
   const [sendDocSuccess, setSendDocSuccess] = useState<string | null>(null);
+  // Template repository — active templates keyed by document_type
+  const [docTemplates, setDocTemplates] = useState<Record<string, { version: string; is_active: boolean }>>({});
+
+  // Document signatures lifecycle
+  interface DocSig {
+    id: string;
+    document_type: string;
+    document_version: string | null;
+    document_url: string | null;
+    signer_name: string | null;
+    signer_email: string;
+    signer_title: string | null;
+    signer_company: string | null;
+    signed_name: string | null;
+    signed_at: string | null;
+    countersigned_name: string | null;
+    countersigned_at: string | null;
+    executed_at: string | null;
+    status: string;
+    sent_by_name: string | null;
+    sent_at: string;
+  }
+  const [docSigs, setDocSigs]     = useState<DocSig[]>([]);
+  const [docSigsLoading, setDocSigsLoading] = useState(false);
+  // Countersign form
+  const [countersignId,    setCountersignId]    = useState<string | null>(null);
+  const [countersignName,  setCountersignName]  = useState('Russel Feldman');
+  const [countersignTitle, setCountersignTitle] = useState('CEO');
+  const [countersigning,   setCountersigning]   = useState(false);
+  const [countersignError, setCountersignError] = useState<string | null>(null);
 
   const fetchOpp = async () => {
     setLoading(true);
@@ -427,9 +457,47 @@ export default function OpportunityDetailPage() {
     }
   };
 
+  const fetchDocSigs = async () => {
+    if (!id) return;
+    setDocSigsLoading(true);
+    try {
+      const res = await fetch(`/api/signatures/by-record?opportunity_id=${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDocSigs(data.signatures ?? []);
+      }
+    } catch (_) {}
+    setDocSigsLoading(false);
+  };
+
   useEffect(() => {
     if (id) fetchOpp();
+    if (id) fetchDocSigs();
+    // Fetch active document templates for version display + auto-lookup
+    fetch('/api/document-templates')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data?.templates) return;
+        const map: Record<string, { version: string; is_active: boolean }> = {};
+        for (const t of data.templates) map[t.document_type] = { version: t.version, is_active: t.is_active };
+        setDocTemplates(map);
+      })
+      .catch(() => {/* non-blocking */});
   }, [id]);
+
+  // Auto-fill signer fields from opportunity contact data
+  const openSendDoc = (docValue: string, advStage: string) => {
+    setSendDocType(docValue);
+    setSendDocAdvanceStage(advStage);
+    setSendDocError(null);
+    setSendDocSuccess(null);
+    // Pre-populate from primary contact or site contact
+    const primaryContact = opp?.contacts?.[0];
+    setSendDocSignerName(primaryContact?.name ?? opp?.site_contact_name ?? '');
+    setSendDocSignerEmail(primaryContact?.email ?? opp?.site_contact_email ?? '');
+    setSendDocSignerTitle(primaryContact?.title ?? '');
+    setShowSendDoc(true);
+  };
 
   const handleSendDoc = async () => {
     if (!sendDocSignerEmail.trim() || !sendDocSignerName.trim()) return;
@@ -466,6 +534,32 @@ export default function OpportunityDetailPage() {
       setSendDocError(e instanceof Error ? e.message : 'Send failed');
     } finally {
       setSendDocSending(false);
+    }
+  };
+
+  const handleCountersign = async () => {
+    if (!countersignId || !countersignName.trim()) return;
+    setCountersigning(true);
+    setCountersignError(null);
+    try {
+      const res = await fetch('/api/signatures/countersign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          signature_id:       countersignId,
+          countersigned_name:  countersignName.trim(),
+          countersigned_title: countersignTitle.trim() || 'CEO',
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Countersign failed');
+      setCountersignId(null);
+      await fetchDocSigs();
+      await fetchOpp(); // refresh stage
+    } catch (e: unknown) {
+      setCountersignError(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      setCountersigning(false);
     }
   };
 
@@ -827,20 +921,26 @@ export default function OpportunityDetailPage() {
         <div className="col-span-2 space-y-5">
           {/* Tab Bar */}
           <div className="flex items-center gap-1 border-b border-border">
-            {(["details", "activity"] as Tab[]).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={cn(
-                  "px-4 py-2.5 text-sm font-medium border-b-2 transition-colors capitalize",
-                  activeTab === tab
-                    ? "border-[#6B7EFF] text-[#6B7EFF]"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {tab === "activity" ? "Activity" : "Details"}
-              </button>
-            ))}
+            {(["details", "activity", "documents"] as Tab[]).map((tab) => {
+              const needsSig = tab === "documents" ? docSigs.filter(s => s.status === 'counterparty_signed').length : 0;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => { setActiveTab(tab); if (tab === 'documents') fetchDocSigs(); }}
+                  className={cn(
+                    "px-4 py-2.5 text-sm font-medium border-b-2 transition-colors capitalize flex items-center gap-1.5",
+                    activeTab === tab
+                      ? "border-[#6B7EFF] text-[#6B7EFF]"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {tab === "activity" ? "Activity" : tab === "documents" ? "Documents" : "Details"}
+                  {needsSig > 0 && (
+                    <span className="bg-amber-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{needsSig}</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           {/* ── DETAILS TAB ── */}
@@ -1363,7 +1463,13 @@ export default function OpportunityDetailPage() {
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-foreground">Documents</h3>
                 <button
-                  onClick={() => { setShowSendDoc(s => !s); setSendDocError(null); setSendDocSuccess(null); }}
+                  onClick={() => {
+                    if (showSendDoc) { setShowSendDoc(false); return; }
+                    const docs = OPP_DOCS[opp.opportunity_type!] ?? [];
+                    const first = docs[0];
+                    if (first) openSendDoc(first.value, first.advanceStage);
+                    else { setShowSendDoc(true); }
+                  }}
                   className="flex items-center gap-1.5 text-xs font-medium text-[#6B7EFF] hover:text-[#5a6eee] bg-[#6B7EFF]/10 hover:bg-[#6B7EFF]/15 px-3 py-1.5 rounded-lg transition-colors"
                 >
                   <FileText size={13} />
@@ -1397,6 +1503,15 @@ export default function OpportunityDetailPage() {
                         <option key={d.value} value={d.value}>{d.label}</option>
                       ))}
                     </select>
+                    {/* Template version badge */}
+                    {docTemplates[sendDocType] && (
+                      <p className="mt-1 text-[10px] text-muted-foreground">
+                        {docTemplates[sendDocType].is_active
+                          ? <span className="text-emerald-600">✓ Template {docTemplates[sendDocType].version} ready</span>
+                          : <span className="text-amber-600">⚠ No active template — PDF link will be omitted</span>
+                        }
+                      </p>
+                    )}
                   </div>
 
                   {/* Signer name */}
@@ -1470,11 +1585,7 @@ export default function OpportunityDetailPage() {
                   {(OPP_DOCS[opp.opportunity_type!] ?? []).map(d => (
                     <button
                       key={d.value}
-                      onClick={() => {
-                        setSendDocType(d.value);
-                        setSendDocAdvanceStage(d.advanceStage);
-                        setShowSendDoc(true);
-                      }}
+                      onClick={() => openSendDoc(d.value, d.advanceStage)}
                       className="text-[10px] font-medium text-[#6B7EFF] bg-[#6B7EFF]/10 hover:bg-[#6B7EFF]/20 px-2.5 py-1 rounded-full transition-colors"
                     >
                       {d.label}
@@ -1597,6 +1708,191 @@ export default function OpportunityDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* ── DOCUMENTS TAB — full-width below tabs ───────────────────────── */}
+      {activeTab === "documents" && (
+        <div className="px-6 py-4 space-y-4 max-w-4xl mx-auto">
+          {/* Header row */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Documents</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">All agreements sent, signed, and executed for this record.</p>
+            </div>
+            {opp.opportunity_type && OPP_DOCS[opp.opportunity_type] && (
+              <button
+                onClick={() => {
+                  const docs = OPP_DOCS[opp.opportunity_type!] ?? [];
+                  const first = docs[0];
+                  if (first) openSendDoc(first.value, first.advanceStage);
+                  setActiveTab('details'); // return to details to use the send panel
+                }}
+                className="flex items-center gap-1.5 text-xs font-medium text-[#6B7EFF] bg-[#6B7EFF]/10 hover:bg-[#6B7EFF]/15 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <FileText size={13} />
+                Send New Document
+              </button>
+            )}
+          </div>
+
+          {/* Document list */}
+          {docSigsLoading ? (
+            <div className="text-xs text-muted-foreground py-8 text-center">Loading documents…</div>
+          ) : docSigs.length === 0 ? (
+            <div className="bg-white border border-border rounded-xl p-8 text-center">
+              <FileText size={32} className="text-slate-300 mx-auto mb-3" />
+              <p className="text-sm font-medium text-foreground mb-1">No documents yet</p>
+              <p className="text-xs text-muted-foreground">Send an NDA or agreement to get started.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {docSigs.map(sig => {
+                const isNeedingCountersig  = sig.status === 'counterparty_signed';
+                const isFullyExecuted      = sig.status === 'fully_executed';
+                const isPending            = sig.status === 'pending';
+                const isCountersigning     = countersignId === sig.id;
+                const docLabel = DOC_TYPE_LABELS[sig.document_type] ?? sig.document_type;
+
+                return (
+                  <div key={sig.id} className={cn(
+                    "bg-white border rounded-xl p-4",
+                    isNeedingCountersig ? "border-amber-300 ring-1 ring-amber-200" : "border-border"
+                  )}>
+                    <div className="flex items-start gap-3">
+                      {/* Icon */}
+                      <div className={cn(
+                        "w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0",
+                        isFullyExecuted   ? "bg-emerald-50" :
+                        isNeedingCountersig ? "bg-amber-50" : "bg-slate-50"
+                      )}>
+                        <FileText size={16} className={
+                          isFullyExecuted   ? "text-emerald-600" :
+                          isNeedingCountersig ? "text-amber-600" : "text-slate-400"
+                        } />
+                      </div>
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-semibold text-foreground">{docLabel}</span>
+                          {sig.document_version && (
+                            <span className="text-[10px] text-muted-foreground bg-slate-100 px-1.5 py-0.5 rounded">{sig.document_version}</span>
+                          )}
+                          {/* Status badge */}
+                          {isFullyExecuted && (
+                            <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">✓ Fully Executed</span>
+                          )}
+                          {isNeedingCountersig && (
+                            <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full animate-pulse">⚡ Needs Your Signature</span>
+                          )}
+                          {isPending && (
+                            <span className="text-[10px] font-medium text-slate-500 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-full">Awaiting Counterparty</span>
+                          )}
+                          {sig.status === 'expired' && (
+                            <span className="text-[10px] font-medium text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">Expired</span>
+                          )}
+                        </div>
+                        {/* Parties */}
+                        <div className="mt-2 space-y-1">
+                          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                            <span><span className="text-slate-400">Sent to</span> <span className="text-foreground">{sig.signer_name ?? sig.signer_email}</span>{sig.signer_company ? ` · ${sig.signer_company}` : ''}</span>
+                          </div>
+                          {sig.signed_name && (
+                            <div className="text-xs text-muted-foreground">
+                              <span className="text-slate-400">Signed</span> <span className="text-foreground">{sig.signed_name}</span>
+                              {sig.signed_at && <span className="text-slate-400 ml-1">· {new Date(sig.signed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
+                            </div>
+                          )}
+                          {sig.countersigned_name && (
+                            <div className="text-xs text-muted-foreground">
+                              <span className="text-slate-400">Countersigned</span> <span className="text-foreground">{sig.countersigned_name} · GateGuard</span>
+                              {sig.countersigned_at && <span className="text-slate-400 ml-1">· {new Date(sig.countersigned_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {/* Actions */}
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {sig.document_url && (
+                          <a href={sig.document_url} target="_blank" rel="noopener noreferrer"
+                             className="text-xs text-[#6B7EFF] hover:underline flex items-center gap-1">
+                            <ExternalLink size={11} />View
+                          </a>
+                        )}
+                        {isNeedingCountersig && (
+                          <button
+                            onClick={() => setCountersignId(isCountersigning ? null : sig.id)}
+                            className="text-xs font-semibold text-white bg-amber-500 hover:bg-amber-600 px-3 py-1.5 rounded-lg transition-colors"
+                          >
+                            ✍️ Sign Now
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Countersign inline form */}
+                    {isCountersigning && (
+                      <div className="mt-4 pt-4 border-t border-amber-200 space-y-3">
+                        <p className="text-xs font-semibold text-amber-700">Your countersignature — GateGuard</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs text-muted-foreground mb-1">Your Full Name *</label>
+                            <input
+                              type="text"
+                              value={countersignName}
+                              onChange={e => setCountersignName(e.target.value)}
+                              className={inputCls}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-muted-foreground mb-1">Your Title</label>
+                            <input
+                              type="text"
+                              value={countersignTitle}
+                              onChange={e => setCountersignTitle(e.target.value)}
+                              className={inputCls}
+                            />
+                          </div>
+                        </div>
+                        {/* Signature preview */}
+                        {countersignName.trim() && (
+                          <div className="bg-slate-50 border border-border rounded-lg px-4 py-3">
+                            <p className="text-xs text-slate-400 mb-1">Your signature:</p>
+                            <p style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', fontSize: 22 }} className="text-foreground">{countersignName}</p>
+                            <p className="text-xs text-slate-400 mt-1">{new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} · Electronic Signature · GateGuard</p>
+                          </div>
+                        )}
+                        <label className="flex gap-2 items-start cursor-pointer">
+                          <input type="checkbox" id={`agree-${sig.id}`} className="mt-0.5 accent-[#6B7EFF]" />
+                          <span className="text-xs text-muted-foreground leading-relaxed">
+                            By signing, I confirm GateGuard&apos;s agreement to the terms of the <strong className="text-foreground">{docLabel}</strong>. This constitutes a legally binding electronic signature under the ESIGN Act &amp; UETA.
+                          </span>
+                        </label>
+                        {countersignError && (
+                          <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{countersignError}</p>
+                        )}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleCountersign}
+                            disabled={countersigning || !countersignName.trim()}
+                            className="flex-1 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-4 py-2 rounded-lg disabled:opacity-50 transition-colors"
+                          >
+                            {countersigning ? 'Signing…' : `✍️ Countersign & Fully Execute →`}
+                          </button>
+                          <button
+                            onClick={() => { setCountersignId(null); setCountersignError(null); }}
+                            className="px-3 py-2 text-xs text-muted-foreground border border-border rounded-lg hover:bg-slate-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Edit Slide-Over ────────────────────────────────────────────── */}
       {showEdit && (
