@@ -929,12 +929,20 @@ export default function LeadDetailPage() {
                   value={lead.stage}
                   onChange={async e => {
                     const stage = e.target.value;
-                    setLead(prev => ({ ...prev, stage }));
-                    await fetch(`/api/crm/leads/${id}`, {
+                    const prev  = lead.stage;
+                    setLead(p => ({ ...p, stage }));
+                    const res  = await fetch(`/api/crm/leads/${id}`, {
                       method: "PATCH", headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({ stage }),
                     });
-                    showToast(`Stage updated to ${stageLabel[stage] ?? stage}`);
+                    if (!res.ok) {
+                      // Revert local state so it doesn't lie
+                      setLead(p => ({ ...p, stage: prev }));
+                      const err = await res.json().catch(() => ({}));
+                      showToast(err.error ?? "Stage not saved — run migration 030 on Supabase first.", false);
+                      return;
+                    }
+                    showToast(`Stage → ${stageLabel[stage] ?? stage}`);
                   }}
                   className={cn(
                     "appearance-none text-[11px] font-semibold pl-2.5 pr-6 py-1 rounded-full cursor-pointer border outline-none transition-all hover:ring-2 hover:ring-current/20",

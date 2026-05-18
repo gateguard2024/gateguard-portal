@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
       }
 
       case 'email.opened': {
-        // Increment open count, set first open time if not already set
+        // Increment open count, set first open time if not already set, upgrade status
         const { data: existing } = await supabase
           .from('campaign_sends')
           .select('open_count, opened_at')
@@ -71,7 +71,8 @@ export async function POST(req: NextRequest) {
           await supabase
             .from('campaign_sends')
             .update({
-              opened_at:  existing.opened_at ?? now,  // only set first open
+              status:     'opened',                        // ← must be set so badge priority works
+              opened_at:  existing.opened_at ?? now,       // only set first open
               open_count: (existing.open_count ?? 0) + 1,
             })
             .eq('resend_message_id', messageId)
