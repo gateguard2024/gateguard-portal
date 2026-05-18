@@ -138,19 +138,23 @@ export async function GET(req: NextRequest) {
   try {
     await getCurrentUser()
 
-    const { data, error } = await supabase
+    // Fetch all show leads (no status column — check converted via opportunities)
+    const { data: allLeads, error } = await supabase
       .from('show_leads')
-      .select('id, name, property_name, email, status')
-      .is('status', null)   // only unconverted (null status)
+      .select('id, name, property_name, email, notes')
+      .order('created_at', { ascending: false })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // Also include rows where status != 'converted'
-    const all = await supabase
-      .from('show_leads')
-      .select('id, name, property_name, email, status')
+    // Find which show_lead_ids already have an opportunity (converted)
+    const { data: converted } = await supabase
+      .from('opportunities')
+      .select('show_lead_id')
+      .not('show_lead_id', 'is', null)
 
-    const rows = (all.data || []).filter((r: any) => r.status !== 'converted')
+    const convertedIds = new Set((converted || []).map((o: any) => o.show_lead_id))
+
+    const rows = (allLeads || []).filter((r: any) => !convertedIds.has(r.id))
     const eligible = rows.filter((r: any) => r.email?.includes('@'))
 
     // Build sample email from first eligible lead (or placeholder)
@@ -188,9 +192,12 @@ export async function POST(req: NextRequest) {
     if (testRun) {
       const { data: rows } = await supabase
         .from('show_leads')
-        .select('id, name, property_name, email, status')
+        .select('id, name, property_name, email')
+      const { data: converted } = await supabase
+        .from('opportunities').select('show_lead_id').not('show_lead_id', 'is', null)
+      const convertedIds = new Set((converted || []).map((o: any) => o.show_lead_id))
       const eligible = (rows || []).filter(
-        (r: any) => r.status !== 'converted' && r.email?.includes('@')
+        (r: any) => !convertedIds.has(r.id) && r.email?.includes('@')
       )
       // Use first eligible lead's name/property for personalization, but send to Russel
       const sample  = eligible[0]
@@ -216,15 +223,19 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Fetch all unconverted show leads
+    // Fetch all show leads and exclude ones already converted to an opportunity
     const { data: rows, error } = await supabase
       .from('show_leads')
-      .select('id, name, property_name, email, status')
+      .select('id, name, property_name, email')
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+    const { data: convertedOpps } = await supabase
+      .from('opportunities').select('show_lead_id').not('show_lead_id', 'is', null)
+    const convertedIds = new Set((convertedOpps || []).map((o: any) => o.show_lead_id))
+
     const eligible = (rows || []).filter(
-      (r: any) => r.status !== 'converted' && r.email?.includes('@')
+      (r: any) => !convertedIds.has(r.id) && r.email?.includes('@')
     )
 
     if (eligible.length === 0) {

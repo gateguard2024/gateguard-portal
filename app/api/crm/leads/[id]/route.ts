@@ -36,6 +36,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
+    // show_leads has no status column — check conversion via opportunities table
+    const { data: existingOpp } = await supabase
+      .from('opportunities')
+      .select('id')
+      .eq('show_lead_id', uuid)
+      .maybeSingle()
+    const isConverted = !!existingOpp
+
     const location = data.city && data.state
       ? `${data.city}, ${data.state}`
       : (data.city ?? 'Atlanta') + ', ' + (data.state ?? 'GA')
@@ -53,8 +61,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       units: data.units ?? null,
       location,
       address: location,
-      // Return actual status so the detail page knows if this lead is already converted
-      stage: data.status === 'converted' ? 'converted' : (data.status ?? 'new'),
+      stage: isConverted ? 'converted' : 'new',
       source: data.source ?? 'show',
       rep: 'Russel Feldman',
       repInitials: 'RF',
@@ -80,7 +87,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (rawId.startsWith('show_')) {
     const uuid = rawId.replace('show_', '')
     const updateData: Record<string, unknown> = {}
-    if (body.stage          !== undefined) updateData.status         = body.stage
+    // show_leads has no status column — stage/conversion is tracked via opportunities table
+    // if (body.stage !== undefined) updateData.status = body.stage  // skip — column doesn't exist
     if (body.notes          !== undefined) updateData.notes          = body.notes
     if (body.assignedDealer !== undefined) updateData.assigned_dealer = body.assignedDealer
     if (body.name           !== undefined) updateData.property_name  = body.name

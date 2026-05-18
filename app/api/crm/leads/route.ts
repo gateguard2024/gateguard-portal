@@ -39,7 +39,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: 500 })
     }
 
-    const leads = (data || []).filter((row: any) => row.status !== 'converted').map((row: any) => ({
+    // show_leads has no status column — check conversion via opportunities table
+    const { data: convertedOpps } = await supabase
+      .from('opportunities').select('show_lead_id').not('show_lead_id', 'is', null)
+    const convertedIds = new Set((convertedOpps || []).map((o: any) => o.show_lead_id))
+
+    const leads = (data || []).filter((row: any) => !convertedIds.has(row.id)).map((row: any) => ({
       id:             `show_${row.id}`,
       type:           'lead' as const,
       contact_name:   row.name,
