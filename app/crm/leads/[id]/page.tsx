@@ -755,6 +755,12 @@ export default function LeadDetailPage() {
       });
       const json = await res.json();
       if (res.ok && json.id) {
+        // Mark the lead as converted so it stops appearing in the leads pipeline
+        await fetch(`/api/crm/leads/${lead.id}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ stage: "converted" }),
+        }).catch(() => {/* non-blocking */});
+
         showToast("Converted! Redirecting to opportunity…");
         setTimeout(() => router.push(`/crm/opportunities/${json.id}`), 1200);
       } else {

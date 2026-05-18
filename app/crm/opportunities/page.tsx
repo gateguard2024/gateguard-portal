@@ -75,11 +75,17 @@ interface Opportunity {
   won_at?: string;
 }
 
+interface StageGroup {
+  label: string;
+  records: Opportunity[];
+  total: number;
+}
+
 interface OpportunitiesResponse {
   records: Opportunity[];
-  grouped: Record<Stage, Opportunity[]>;
+  grouped: Record<Stage, StageGroup>;
   pipelineTotal: number;
-  counts: { open: number; won: number; lost: number };
+  counts: { total: number; open: number; won: number };
 }
 
 interface NewOppForm {
@@ -166,10 +172,10 @@ const BLANK_FORM: NewOppForm = {
 };
 
 // Build a flat map of oppId → stage for quick lookup during drag
-function buildStageMap(grouped: Record<Stage, Opportunity[]>): Record<string, Stage> {
+function buildStageMap(grouped: Record<Stage, StageGroup>): Record<string, Stage> {
   const map: Record<string, Stage> = {};
   for (const stage of KANBAN_STAGES) {
-    for (const opp of grouped[stage] ?? []) {
+    for (const opp of grouped[stage]?.records ?? []) {
       map[opp.id] = stage;
     }
   }
@@ -327,7 +333,7 @@ export default function OpportunitiesPage() {
     const oppId = event.active.id as string;
     const stage = stageMap[oppId];
     if (!stage) return;
-    const opp = (data.grouped[stage] ?? []).find((o) => o.id === oppId) ?? null;
+    const opp = (data.grouped[stage]?.records ?? []).find((o: Opportunity) => o.id === oppId) ?? null;
     setActiveOpp(opp);
   };
 
@@ -374,17 +380,21 @@ export default function OpportunitiesPage() {
     if (targetStage === currentStage) return;
 
     // Optimistic update
-    const opp = (data.grouped[currentStage] ?? []).find((o) => o.id === oppId);
+    const opp = (data.grouped[currentStage]?.records ?? []).find((o) => o.id === oppId);
     if (!opp) return;
     const updatedOpp = { ...opp, stage: targetStage };
 
     setData((prev) => {
       if (!prev) return prev;
       const newGrouped = { ...prev.grouped };
-      newGrouped[currentStage] = (newGrouped[currentStage] ?? []).filter(
-        (o) => o.id !== oppId
-      );
-      newGrouped[targetStage] = [updatedOpp, ...(newGrouped[targetStage] ?? [])];
+      newGrouped[currentStage] = {
+        ...newGrouped[currentStage],
+        records: (newGrouped[currentStage]?.records ?? []).filter((o) => o.id !== oppId),
+      };
+      newGrouped[targetStage] = {
+        ...newGrouped[targetStage],
+        records: [updatedOpp, ...(newGrouped[targetStage]?.records ?? [])],
+      };
       const newRecords = prev.records.map((r) =>
         r.id === oppId ? updatedOpp : r
       );
@@ -405,13 +415,13 @@ export default function OpportunitiesPage() {
     }
   };
 
-  const grouped = data?.grouped ?? ({} as Record<Stage, Opportunity[]>);
+  const grouped = data?.grouped ?? ({} as Record<Stage, StageGroup>);
 
   // Filter by search
   const filteredGrouped = Object.fromEntries(
     KANBAN_STAGES.map((stage) => [
       stage,
-      (grouped[stage] ?? []).filter(
+      (grouped[stage]?.records ?? []).filter(
         (o) =>
           !search ||
           o.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -459,7 +469,7 @@ export default function OpportunitiesPage() {
         <div className="bg-white border-b border-border px-6 py-3 flex items-center gap-3 overflow-x-auto flex-shrink-0">
           {KANBAN_STAGES.map((stage) => {
             const cfg = STAGE_CONFIG[stage];
-            const recs = grouped[stage] ?? [];
+            const recs = grouped[stage]?.records ?? [];
             const total = recs.reduce((s, r) => s + (r.amount ?? 0), 0);
             return (
               <button

@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
     let query = supabase
       .from('show_leads')
       .select('*, source, city, state, property_type, contact_title, units, notes')
+      .neq('status', 'converted')   // hide converted leads from the pipeline
       .order('created_at', { ascending: false })
 
     // If there's an org filter needed and the table has assigned_dealer column,
