@@ -151,7 +151,6 @@ function EditLeadModal({ lead, open, onClose, onSaved }: {
   lead: Lead; open: boolean; onClose: () => void; onSaved: (l: Partial<Lead>) => void;
 }) {
   const [form, setForm] = useState({
-    notes:    lead.notes    ?? "",
     stage:    lead.stage    ?? "new",
     estSetup: lead.estSetup ? String(lead.estSetup) : "",
     estMrr:   lead.estMrr   ? String(lead.estMrr)   : "",
@@ -160,7 +159,6 @@ function EditLeadModal({ lead, open, onClose, onSaved }: {
 
   useEffect(() => {
     setForm({
-      notes:    lead.notes    ?? "",
       stage:    lead.stage    ?? "new",
       estSetup: lead.estSetup ? String(lead.estSetup) : "",
       estMrr:   lead.estMrr   ? String(lead.estMrr)   : "",
@@ -174,7 +172,6 @@ function EditLeadModal({ lead, open, onClose, onSaved }: {
     try {
       const payload = {
         stage:    form.stage,
-        notes:    form.notes,
         estSetup: form.estSetup ? parseInt(form.estSetup, 10) : null,
         estMrr:   form.estMrr   ? parseInt(form.estMrr,   10) : null,
       };
@@ -220,11 +217,9 @@ function EditLeadModal({ lead, open, onClose, onSaved }: {
                 placeholder="0" className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 bg-background" />
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Notes</label>
-            <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={4}
-              className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 bg-background resize-none" />
-          </div>
+          <p className="text-[11px] text-muted-foreground bg-slate-50 border border-border rounded-lg px-3 py-2">
+            Notes are logged individually via the Activity feed — use the Note button there.
+          </p>
         </div>
         <div className="border-t border-border p-4 flex gap-3">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-border text-sm text-muted-foreground hover:bg-accent transition-colors">Cancel</button>
@@ -626,21 +621,22 @@ export default function LeadDetailPage() {
       const res  = await fetch("/api/crm/opportunities", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name:              lead.name,
-          account_name:      lead.company || lead.name,
-          site_contact_name: lead.contact,
-          site_contact_email:lead.email,
-          site_contact_phone:lead.phone,
-          property_type:     lead.propertyType,
-          units:             lead.units,
-          location:          lead.location,
-          stage:             "meet_present",
-          opp_type:          oppType,
-          source:            lead.source,
-          est_setup:         lead.estSetup,
-          est_mrr_monthly:   lead.estMrr,
-          notes:             lead.notes,
-          lead_id:           lead.id,
+          name:               lead.name,
+          account_name:       lead.company || lead.name,
+          site_contact_name:  lead.contact,
+          site_contact_email: lead.email,
+          site_contact_phone: lead.phone,
+          units:              lead.units,
+          // split "City, ST" → property_city / property_state
+          property_city:      lead.location?.split(',')?.[0]?.trim() ?? null,
+          property_state:     lead.location?.split(',')?.[1]?.trim() ?? null,
+          stage:              "meet_present",
+          opp_type:           oppType,
+          source:             lead.source,
+          est_setup:          lead.estSetup,
+          est_mrr:            lead.estMrr,
+          description:        lead.notes || null,
+          lead_id:            lead.id,
         }),
       });
       const json = await res.json();
@@ -784,25 +780,6 @@ export default function LeadDetailPage() {
         <div className="grid grid-cols-3 gap-5">
           {/* ── Left col ──────────────────────────────────────────────────── */}
           <div className="col-span-2 space-y-5">
-            {/* Notes */}
-            <div className="bg-card border border-border rounded-xl p-5">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-foreground">Notes</h3>
-                <button onClick={() => setEditOpen(true)}
-                  className="text-[11px] text-brand-400 hover:text-brand-500 font-medium flex items-center gap-1 transition-colors">
-                  <Edit2 size={11} /> Edit
-                </button>
-              </div>
-              {lead.notes ? (
-                <p className="text-sm text-muted-foreground leading-relaxed">{lead.notes}</p>
-              ) : (
-                <button onClick={() => setEditOpen(true)}
-                  className="w-full text-center py-4 text-sm text-muted-foreground border border-dashed border-border rounded-lg hover:border-brand-500/30 hover:text-brand-400 transition-colors">
-                  + Add notes about this lead
-                </button>
-              )}
-            </div>
-
             {/* Activity */}
             <div className="bg-card border border-border rounded-xl p-5">
               <div className="flex items-center justify-between mb-4">
