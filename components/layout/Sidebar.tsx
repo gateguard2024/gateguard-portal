@@ -122,10 +122,11 @@ const NAV_SECTIONS: NavSection[] = [
     icon: Megaphone,
     color: "#B45309",
     items: [
-      { label: "Marketing Hub",    href: "/marketing",         icon: Megaphone, description: "Campaigns and content" },
-      { label: "Social",           href: "/marketing/social",  icon: Globe,     description: "GateGuard and dealer social posts" },
-      { label: "Co-op Pool",       href: "/marketing/coop",    icon: Users,     description: "Shared lead pool" },
-      { label: "Dealer Sites",     href: "/marketing/website", icon: Globe,     description: "Hosted dealer landing pages" },
+      { label: "Marketing Hub",    href: "/marketing",              icon: Megaphone,    description: "Campaigns and content" },
+      { label: "Email Templates",  href: "/marketing/email",        icon: MessageSquare, description: "Templates, campaigns, newsletters" },
+      { label: "Social",           href: "/marketing/social",       icon: Globe,         description: "GateGuard and dealer social posts" },
+      { label: "Co-op Pool",       href: "/marketing/coop",         icon: Users,         description: "Shared lead pool" },
+      { label: "Dealer Sites",     href: "/marketing/website",      icon: Globe,         description: "Hosted dealer landing pages" },
     ],
   },
   {
