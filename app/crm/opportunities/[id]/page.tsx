@@ -93,6 +93,38 @@ const OPP_TYPE_BADGE: Record<OppType, string> = {
   customer:        'bg-purple-100 text-purple-700',
 };
 
+// Document types available for e-sign, keyed by opportunity type
+const OPP_DOCS: Partial<Record<OppType, { value: string; label: string; advanceStage: string }[]>> = {
+  master_agent:    [
+    { value: 'nda',                   label: 'Mutual NDA',           advanceStage: 'NDA Signed' },
+    { value: 'master_agent_agreement',label: 'Master Agent Agreement', advanceStage: 'Agreement Signed' },
+  ],
+  mso:             [
+    { value: 'dealer_agreement',      label: 'MSO Agreement',        advanceStage: 'Agreement Signed' },
+  ],
+  dealer:          [
+    { value: 'dealer_agreement',      label: 'Dealer Agreement',     advanceStage: 'Agreement Signed' },
+  ],
+  install_partner: [
+    { value: 'install_partner_agreement', label: 'Install Partner Agreement', advanceStage: 'Agreement Signed' },
+  ],
+  service_partner: [
+    { value: 'service_agreement',     label: 'Service Agreement',    advanceStage: 'Agreement Signed' },
+  ],
+  sales_partner:   [
+    { value: 'sales_partner_agreement', label: 'Sales Partner Agreement', advanceStage: 'Agreement Signed' },
+  ],
+};
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+  nda:                        'Mutual NDA',
+  master_agent_agreement:     'Master Agent Agreement',
+  dealer_agreement:           'Dealer Agreement',
+  service_agreement:          'Service Agreement',
+  install_partner_agreement:  'Install Partner Agreement',
+  sales_partner_agreement:    'Sales Partner Agreement',
+};
+
 // Stage checklists per opportunity type — drives the sales cycle panel
 const STAGE_CHECKLIST: Partial<Record<OppType, string[]>> = {
   master_agent:    ['NDA sent', 'NDA signed', 'Agreement sent', 'Agreement negotiated', 'Agreement signed', 'Background check complete'],
@@ -350,6 +382,17 @@ export default function OpportunityDetailPage() {
   const [emailSending, setEmailSending] = useState(false);
   const [emailSendError, setEmailSendError] = useState<string | null>(null);
 
+  // Send Document / e-sign
+  const [showSendDoc, setShowSendDoc] = useState(false);
+  const [sendDocType, setSendDocType] = useState<string>('nda');
+  const [sendDocSignerName, setSendDocSignerName] = useState('');
+  const [sendDocSignerEmail, setSendDocSignerEmail] = useState('');
+  const [sendDocSignerTitle, setSendDocSignerTitle] = useState('');
+  const [sendDocAdvanceStage, setSendDocAdvanceStage] = useState('');
+  const [sendDocSending, setSendDocSending] = useState(false);
+  const [sendDocError, setSendDocError] = useState<string | null>(null);
+  const [sendDocSuccess, setSendDocSuccess] = useState<string | null>(null);
+
   const fetchOpp = async () => {
     setLoading(true);
     setError(null);
@@ -387,6 +430,44 @@ export default function OpportunityDetailPage() {
   useEffect(() => {
     if (id) fetchOpp();
   }, [id]);
+
+  const handleSendDoc = async () => {
+    if (!sendDocSignerEmail.trim() || !sendDocSignerName.trim()) return;
+    setSendDocSending(true);
+    setSendDocError(null);
+    setSendDocSuccess(null);
+    try {
+      const res = await fetch('/api/signatures/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          document_type:   sendDocType,
+          opportunity_id:  opp?.id,
+          signer_name:     sendDocSignerName.trim(),
+          signer_email:    sendDocSignerEmail.trim(),
+          signer_title:    sendDocSignerTitle.trim() || undefined,
+          signer_company:  opp?.account_name || undefined,
+          advance_stage:   sendDocAdvanceStage || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Failed to send');
+      setSendDocSuccess(`✓ ${DOC_TYPE_LABELS[sendDocType] ?? sendDocType} sent to ${sendDocSignerEmail.trim()}`);
+      setSendDocSignerEmail('');
+      setSendDocSignerName('');
+      setSendDocSignerTitle('');
+      setSendDocAdvanceStage('');
+      // Auto-close after a moment
+      setTimeout(() => {
+        setShowSendDoc(false);
+        setSendDocSuccess(null);
+      }, 3000);
+    } catch (e: unknown) {
+      setSendDocError(e instanceof Error ? e.message : 'Send failed');
+    } finally {
+      setSendDocSending(false);
+    }
+  };
 
   const advanceStage = async () => {
     if (!opp) return;
@@ -1273,6 +1354,134 @@ export default function OpportunityDetailPage() {
                   </div>
                 );
               })()}
+            </div>
+          )}
+
+          {/* Send Document / E-Sign */}
+          {opp.opportunity_type && OPP_DOCS[opp.opportunity_type] && (
+            <div className="bg-white rounded-xl border border-border p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-foreground">Documents</h3>
+                <button
+                  onClick={() => { setShowSendDoc(s => !s); setSendDocError(null); setSendDocSuccess(null); }}
+                  className="flex items-center gap-1.5 text-xs font-medium text-[#6B7EFF] hover:text-[#5a6eee] bg-[#6B7EFF]/10 hover:bg-[#6B7EFF]/15 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  <FileText size={13} />
+                  Send for Signature
+                </button>
+              </div>
+
+              {sendDocSuccess && (
+                <div className="mb-3 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                  {sendDocSuccess}
+                </div>
+              )}
+
+              {showSendDoc && (
+                <div className="border border-[#6B7EFF]/30 bg-[#6B7EFF]/5 rounded-lg p-4 space-y-3">
+                  <p className="text-xs font-semibold text-[#6B7EFF] mb-2">Send Document for E-Signature</p>
+
+                  {/* Document type */}
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Document</label>
+                    <select
+                      value={sendDocType}
+                      onChange={e => {
+                        setSendDocType(e.target.value);
+                        const doc = (OPP_DOCS[opp.opportunity_type!] ?? []).find(d => d.value === e.target.value);
+                        setSendDocAdvanceStage(doc?.advanceStage ?? '');
+                      }}
+                      className="w-full text-xs border border-border rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
+                    >
+                      {(OPP_DOCS[opp.opportunity_type!] ?? []).map(d => (
+                        <option key={d.value} value={d.value}>{d.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Signer name */}
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Signer Name *</label>
+                    <input
+                      type="text"
+                      value={sendDocSignerName}
+                      onChange={e => setSendDocSignerName(e.target.value)}
+                      placeholder="Full legal name"
+                      className="w-full text-xs border border-border rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
+                    />
+                  </div>
+
+                  {/* Signer email */}
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Signer Email *</label>
+                    <input
+                      type="email"
+                      value={sendDocSignerEmail}
+                      onChange={e => setSendDocSignerEmail(e.target.value)}
+                      placeholder="signer@company.com"
+                      className="w-full text-xs border border-border rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
+                    />
+                  </div>
+
+                  {/* Signer title */}
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Title / Role</label>
+                    <input
+                      type="text"
+                      value={sendDocSignerTitle}
+                      onChange={e => setSendDocSignerTitle(e.target.value)}
+                      placeholder="e.g. CEO, Owner, Director"
+                      className="w-full text-xs border border-border rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
+                    />
+                  </div>
+
+                  {/* Advance stage hint */}
+                  {sendDocAdvanceStage && (
+                    <p className="text-[10px] text-muted-foreground bg-white rounded px-2 py-1 border border-border">
+                      When signed, opportunity stage will advance to <strong>{sendDocAdvanceStage}</strong>
+                    </p>
+                  )}
+
+                  {sendDocError && (
+                    <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{sendDocError}</p>
+                  )}
+
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={handleSendDoc}
+                      disabled={sendDocSending || !sendDocSignerName.trim() || !sendDocSignerEmail.trim()}
+                      className="flex-1 bg-[#6B7EFF] text-white text-xs font-semibold px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#5a6eee] transition-colors"
+                    >
+                      {sendDocSending ? 'Sending…' : 'Send Signing Link →'}
+                    </button>
+                    <button
+                      onClick={() => setShowSendDoc(false)}
+                      className="px-4 py-2 text-xs text-muted-foreground border border-border rounded-lg hover:bg-slate-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Document type quicklinks */}
+              {!showSendDoc && (
+                <div className="flex flex-wrap gap-2">
+                  {(OPP_DOCS[opp.opportunity_type!] ?? []).map(d => (
+                    <button
+                      key={d.value}
+                      onClick={() => {
+                        setSendDocType(d.value);
+                        setSendDocAdvanceStage(d.advanceStage);
+                        setShowSendDoc(true);
+                      }}
+                      className="text-[10px] font-medium text-[#6B7EFF] bg-[#6B7EFF]/10 hover:bg-[#6B7EFF]/20 px-2.5 py-1 rounded-full transition-colors"
+                    >
+                      {d.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

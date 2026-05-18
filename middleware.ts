@@ -32,6 +32,11 @@ function isBypassPath(pathname: string): boolean {
     // Property request portal — public form for property managers (no Clerk)
     pathname.startsWith('/request/') ||
     pathname.startsWith('/api/request') ||
+    // E-sign pages — public signing UI, token IS the auth
+    pathname.startsWith('/sign/') ||
+    // Public signature token endpoints — GET doc info + POST sign (token-based, no Clerk)
+    // Note: /api/signatures/send requires Clerk (called from inside portal)
+    (pathname.startsWith('/api/signatures/') && !pathname.endsWith('/send')) ||
     // Auth flows
     pathname.startsWith('/sign-in') ||
     pathname.startsWith('/sign-up') ||
