@@ -1,8 +1,7 @@
 /**
- * GET  /api/permits          — list permits via permits_with_status view
- * POST /api/permits          — create a permit
+ * GET  /api/permits  — list permits with computed status (org-scoped)
+ * POST /api/permits  — create a permit
  */
-
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
@@ -20,8 +19,8 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url)
-  const status = searchParams.get('status')  // compliant | expiring_soon | expired | no_expiry
   const siteId = searchParams.get('site_id')
+  const status = searchParams.get('status')
 
   let query = supabase
     .from('permits_with_status')
@@ -31,51 +30,42 @@ export async function GET(req: NextRequest) {
   if (!caller.isCorporate && caller.org_id) {
     query = query.eq('org_id', caller.org_id)
   }
-  if (status) query = query.eq('status', status)
   if (siteId) query = query.eq('site_id', siteId)
+  if (status && status !== 'all') query = query.eq('status', status)
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
   return NextResponse.json({ permits: data ?? [] })
 }
 
 export async function POST(req: NextRequest) {
   const caller = await getCurrentUser()
-  const allowed = caller.isCorporate ||
-    caller.org_tier === 'master_dealer' ||
-    caller.org_tier === 'full_dealer'
-
-  if (!allowed) {
-    return NextResponse.json({ error: 'Forbidden — dealer admin only' }, { status: 403 })
+  if (!caller.org_id && !caller.isCorporate) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const body = await req.json()
-  const {
-    type, label, permit_number, issued_by,
-    issue_date, expiry_date, site_id, document_url, notes,
-  } = body
+  const { type, label, permit_number, issued_by, issue_date, expiry_date, site_id, notes } = body
 
-  const validTypes = [
-    'gate_permit', 'fire_marshal', 'hoa_certificate',
-    'city_license', 'electrical_permit', 'low_voltage_license', 'other',
-  ]
-  if (!type || !validTypes.includes(type)) {
-    return NextResponse.json({ error: `Invalid permit type: ${type}` }, { status: 400 })
+  if (!type) {
+    return NextResponse.json({ error: 'type is required' }, { status: 400 })
   }
+
+  const org_id = caller.isCorporate ? (body.org_id ?? null) : caller.org_id
 
   const { data, error } = await supabase
     .from('permits')
     .insert({
-      org_id:        caller.org_id ?? null,
-      site_id:       site_id ?? null,
+      org_id,
+      site_id:       site_id       ?? null,
       type,
-      label:         label ?? null,
+      label:         label         ?? null,
       permit_number: permit_number ?? null,
-      issued_by:     issued_by ?? null,
-      issue_date:    issue_date ?? null,
-      expiry_date:   expiry_date ?? null,
-      document_url:  document_url ?? null,
-      notes:         notes ?? null,
+      issued_by:     issued_by     ?? null,
+      issue_date:    issue_date    || null,
+      expiry_date:   expiry_date   || null,
+      notes:         notes         ?? null,
     })
     .select()
     .single()

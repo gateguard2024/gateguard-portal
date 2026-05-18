@@ -34,11 +34,35 @@ type Stage =
   | "won"
   | "lost";
 
+type OppType =
+  | 'master_agent' | 'mso' | 'dealer'
+  | 'install_partner' | 'service_partner' | 'sales_partner'
+  | 'property' | 'company' | 'customer';
+
+const OPP_TYPE_BADGE: Record<OppType, string> = {
+  master_agent:    'bg-violet-100 text-violet-700',
+  mso:             'bg-sky-100 text-sky-700',
+  dealer:          'bg-emerald-100 text-emerald-700',
+  install_partner: 'bg-orange-100 text-orange-700',
+  service_partner: 'bg-yellow-100 text-yellow-700',
+  sales_partner:   'bg-pink-100 text-pink-700',
+  property:        'bg-teal-100 text-teal-700',
+  company:         'bg-blue-100 text-blue-700',
+  customer:        'bg-purple-100 text-purple-700',
+};
+
+const OPP_TYPE_LABELS: Record<OppType, string> = {
+  master_agent: 'Master Agent', mso: 'MSO', dealer: 'Dealer',
+  install_partner: 'Install Partner', service_partner: 'Service Partner',
+  sales_partner: 'Sales Partner', property: 'Property', company: 'Company', customer: 'Customer',
+};
+
 interface Opportunity {
   id: string;
   name: string;
   account_name: string;
   stage: Stage;
+  opp_type?: OppType;
   amount: number;
   close_date: string;
   owner_name: string;
@@ -611,19 +635,33 @@ export default function OpportunitiesPage() {
                 />
               </Field>
 
-              <Field label="Stage">
-                <select
-                  value={form.stage}
-                  onChange={(e) => setForm({ ...form, stage: e.target.value as Stage })}
-                  className={inputCls}
-                >
-                  {KANBAN_STAGES.map((s) => (
-                    <option key={s} value={s}>
-                      {STAGE_CONFIG[s].label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Opportunity Type">
+                  <select
+                    value={(form as NewOppForm & { opp_type?: string }).opp_type ?? ""}
+                    onChange={(e) => setForm({ ...form, opp_type: e.target.value } as never)}
+                    className={inputCls}
+                  >
+                    <option value="">Select type…</option>
+                    {(Object.keys(OPP_TYPE_LABELS) as OppType[]).map(t => (
+                      <option key={t} value={t}>{OPP_TYPE_LABELS[t]}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Stage">
+                  <select
+                    value={form.stage}
+                    onChange={(e) => setForm({ ...form, stage: e.target.value as Stage })}
+                    className={inputCls}
+                  >
+                    {KANBAN_STAGES.map((s) => (
+                      <option key={s} value={s}>
+                        {STAGE_CONFIG[s].label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
 
               <Field label="Amount ($)">
                 <input
@@ -766,9 +804,17 @@ function OppCard({
           </button>
         </div>
         {opp.account_name && (
-          <p className="text-xs text-muted-foreground truncate mb-2">
+          <p className="text-xs text-muted-foreground truncate mb-1">
             {opp.account_name}
           </p>
+        )}
+        {opp.opp_type && OPP_TYPE_BADGE[opp.opp_type] && (
+          <span className={cn(
+            "inline-block text-[9px] font-semibold px-1.5 py-0.5 rounded-full mb-2",
+            OPP_TYPE_BADGE[opp.opp_type]
+          )}>
+            {OPP_TYPE_LABELS[opp.opp_type]}
+          </span>
         )}
         <p className="text-base font-bold text-[#6B7EFF] mb-2">{fmt$(opp.amount)}</p>
         <div className="flex items-center justify-between">

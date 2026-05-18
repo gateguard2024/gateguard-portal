@@ -15,8 +15,16 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     supabase.from('crm_activities').select('*').eq('opportunity_id', params.id).order('created_at', { ascending: false }).limit(20),
   ])
   if (opp.error) return NextResponse.json({ error: opp.error.message }, { status: 404 })
+  // Normalize DB field names to UI field names
+  const data = opp.data as Record<string, unknown>
   return NextResponse.json({
-    ...opp.data,
+    ...data,
+    // opp_type → opportunity_type (UI field name)
+    opportunity_type: data.opp_type ?? null,
+    // Map dtv_* columns to the names the UI expects
+    directv_package: data.dtv_package ?? null,
+    isp_service: data.isp_service ?? null,
+    mdu_contract_expiry: data.mdu_contract_expiry ?? null,
     stage_history: history.data || [],
     contacts: contacts.data || [],
     activities: activities.data || [],
@@ -25,9 +33,18 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json()
+  // Map UI field names back to DB column names
+  const { opportunity_type, directv_package, ...rest } = body as Record<string, unknown>
+  const dbPayload: Record<string, unknown> = {
+    ...rest,
+    updated_at: new Date().toISOString(),
+  }
+  if (opportunity_type !== undefined) dbPayload.opp_type = opportunity_type
+  if (directv_package !== undefined) dbPayload.dtv_package = directv_package
+
   const { data, error } = await supabase
     .from('opportunities')
-    .update({ ...body, updated_at: new Date().toISOString() })
+    .update(dbPayload)
     .eq('id', params.id)
     .select()
     .single()

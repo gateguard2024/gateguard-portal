@@ -132,7 +132,7 @@ GateGuard is going live. Two parallel Vercel deployments must exist from this po
 - When building features, always ask: "Is this safe to ship to live, or does it go to beta first?"
 - The SOC (`ggsoc.com`) has been live — treat it with the same care as the live portal.
 
-### What's on Live now (as of May 17, 2026)
+### What's on Live now (as of May 18, 2026)
 - `/tech` field tool v10 — used by real techs in the field
 - `/quotes/[id]/approve` — real clients approving real quotes
 - Show lead capture at `/show` (Atlanta show leads, 30+ captured)
@@ -144,8 +144,34 @@ GateGuard is going live. Two parallel Vercel deployments must exist from this po
 - `/sites` + `/sites/[id]` — property list + detail with asset tracking + PM schedules tab
 - `/admin/dealers` + `/admin/dealers/new` — 7-tier dealer onboarding wizard with commission config
 - `/eos` — EOS One mirror (Rocks, Scorecard, Issues, To-Dos, L10)
-- `/reps` — Rep hierarchy + commission model breakdown (all tier rates displayed)
+- `/reps` — Rep hierarchy + commission model breakdown; first_name/last_name split fixed (was single `name` field)
 - `/migrate` — SARA Bridge migration wizard (Coming Soon banner)
+- `/crm` — Full CRM dashboard: `+ New` dropdown (Opportunity/Customer/Dealer/Sales Rep), drillable KPI cards, "My Leads" panel with source chips, Log Activity modal (Call/Email/Meeting/Note/Task), assignable-org scope by tier
+- `/crm/leads` + `/crm/leads/[id]` — Lead list + full lead detail page
+- `/crm/opportunities` — Kanban board with drag-drop (dnd-kit), pipeline summary bar
+- `/crm/opportunities/[id]` — Opportunity detail: stage progress, Log Activity, AI Sales Assistant, contact roles, stage history; emailForm reset bug fixed
+- `/customers` — Org hierarchy viewer: **all 8 tiers** (Corporate→Master Agent→MSO→Dealer→Service/Install/Sales Partner→Client), wired to live Supabase via `/api/customers`
+- `/customers/[id]` — Customer detail: live data from `/api/customers/[id]`, shows sites, child orgs, recent WOs, asset stats; Edit slide-over PATCHes API
+- `/compliance` — Permit tracker wired to live Supabase via `/api/permits` + `/api/permits/[id]`; uses `permits_with_status` Supabase view for auto-computed status + days_remaining
+- `/scorecard` — Dealer scorecard **fully wired**: live weighted score computed from real WO + permit data (last 90 days). Weights: Response Time 25% · FCR 25% · Compliance 20% · On-Time WOs 20% · NPS 10%. GateGuard Certified badge ≥ 80.
+- `/training` — Training & certification progress **persisted to Supabase** via `/api/training/progress`; optimistic UI updates, per-chapter completion tracking, real progress bars + course badges
+- TopBar — Now fully interactive: expandable search with quick-jump shortcuts, notification bell dropdown, profile dropdown with sign out
+- `/api/crm/assignable-orgs` — Returns orgs a user can assign to, scoped by their org tier
+- Transactional email via Resend (`resend` package added) — used by email send in opportunity detail
+
+### Pending / Next Up
+- [ ] Lead → Opportunity conversion flow (qualify button on lead detail)
+- [ ] Master Agent onboarding — invite flow + org setup
+- [ ] `RESEND_API_KEY` env var must be set on Vercel beta + prod for email to work
+- [ ] Migration 021 — `training_progress` + `dealer_scorecards` tables: run on beta Supabase, then prod
+- [ ] Client portal at `portal.gateguard.co/[site-slug]` — property manager dashboard (Brivo + Eagle Eye, no direct login to either). Clerk 'client' role. Supabase RLS by org. See `app/[site-slug]/page.tsx`.
+- [ ] Territory Map (`/map`) — Mapbox token required; currently shows placeholder
+- [ ] EOS page (`/eos`) — persistence to Supabase (currently in-memory only)
+- [ ] PWA manifest for /tech (techs "Add to Home Screen")
+- [ ] Photo evidence on work orders
+- [ ] Site Survey → push to /quotes quote builder
+- [ ] LPR integration (Eagle Eye LPR → Brivo credential or gate relay)
+- [ ] Monthly client report auto-PDF
 
 ### Permission layer (built May 2026, pending commit)
 `lib/current-user.ts` exposes `canViewWOs`, `canViewSites`, `canViewCRM`, `canViewCommissions`, `canViewNetwork`, `canViewDispatch`, `canViewSensitive`, `canViewFinancials` booleans computed from `org_tier` + `role`. `lib/org-scope.ts` `resolveOrgScope()` routes each tier to the correct Supabase filter. `components/layout/Sidebar.tsx` gates nav items by `org_tier` so each tier only sees their relevant sections.
@@ -154,6 +180,8 @@ GateGuard is going live. Two parallel Vercel deployments must exist from this po
 - User Management (`/admin/users`) — needs Clerk integration testing
 - Offline PWA (service worker) — needs field testing
 - PM scheduling engine API + cron (`/api/pm-schedules`, `/api/cron/pm-schedules`) — tables built, migration 017 must run on prod Supabase first
+- Training + Scorecard APIs (`/api/training/progress`, `/api/training/admin-progress`, `/api/scorecard`) — depend on Migration 021 (`training_progress` + `dealer_scorecards` tables)
+- Email send/track (`/api/crm/email/send`, `/api/crm/email/inbound`, `/api/track/open`) — depend on Migration 020 (`crm_activities` email columns)
 
 ### Migration 017 — dealer network (MUST RUN ON PROD BEFORE DEALER ONBOARDING GOES LIVE)
 `supabase/migrations/017_dealer_network.sql` adds:
@@ -162,6 +190,24 @@ GateGuard is going live. Two parallel Vercel deployments must exist from this po
 - `dealer_add_ons` table — per-add-on 50/50 splits
 - Columns on `organizations`: `org_tier`, `parent_org_id`, `is_active`, `onboarded_at`
 Run on beta first, verify, then prod.
+
+### Migration 020 — email tracking (run before email send/track features go live)
+`supabase/migrations/020_email_tracking.sql` adds columns to `crm_activities`:
+`sent_via_resend`, `resend_message_id`, `opened_at`, `open_count`, `to_email`, `from_email`, `email_status`
+Run on beta first, verify `/crm/opportunities/[id]` email send, then prod.
+
+### Migration 021 — training + scorecard (MUST RUN ON BETA BEFORE TRAINING/SCORECARD PAGES GO LIVE)
+`supabase/migrations/021_training_scorecard.sql` adds:
+- `training_progress` table: `user_id text` (Clerk ID), `org_id uuid`, `user_name text`, `user_email text`, `course_id text`, `chapter_id text`, `completed_at timestamptz`. Unique constraint on `(user_id, course_id, chapter_id)` for safe upserts.
+- `dealer_scorecards` table: monthly snapshot cache with period `char(7)` ("YYYY-MM") — for historical trend tracking
+- Both tables: RLS enabled + `service_role_all` policy
+- Depends on: `organizations` table (017) and Clerk user IDs in `user_id`
+Run on beta first, verify `/training` + `/scorecard` pages, then prod.
+
+### Migration 022 — opportunity document tracking
+`supabase/migrations/022_opportunity_type.sql` adds to `opportunities` table:
+`documents_status` (jsonb checklist), `approved_at`, `approved_by` + indexes on `opp_type` and `approved_at`
+Run on beta first, verify opportunity stage checklists, then prod.
 
 ### ⚠️ Known Build Gotchas (Vercel)
 
@@ -173,9 +219,9 @@ const { Edit2, Timer, ArrowUpRight } = require('lucide-react') as any
 ```
 This bypasses TypeScript module resolution entirely. Do NOT revert these to named ES imports without first verifying Vercel's cache has been busted.
 
-**Safe named imports** (exist in all known cached versions): Plus, X, Check, Clock, Calendar, Search, ChevronLeft/Right/Down/Up, Users, Mail, Phone, Wrench, Shield, Building2, MapPin, User, Settings, Home, FileText, Download, Upload, Eye, EyeOff, Loader, Loader2, RefreshCw, Save, Trash2, AlertTriangle, Info, Bell, Menu, Filter, MoreVertical, MoreHorizontal, Package, Globe, Link, Send, MessageSquare, Star, Key, Copy, ExternalLink, Wifi, CheckCircle2, XCircle, Activity, WifiOff, ArrowLeft, ArrowRight, Hash, Zap, Layers, TrendingUp, ClipboardList
+**Safe named imports** (exist in all known cached versions): Plus, X, Check, Clock, Calendar, Search, ChevronLeft/Right/Down/Up, Users, Mail, Phone, Wrench, Shield, Building2, MapPin, User, Settings, Home, FileText, Download, Upload, Eye, EyeOff, Loader, Loader2, RefreshCw, Save, Trash2, AlertTriangle, Info, Bell, Menu, Filter, MoreVertical, MoreHorizontal, Package, Globe, Link, Send, MessageSquare, Star, Key, Copy, ExternalLink, Wifi, CheckCircle2, XCircle, Activity, WifiOff, ArrowRight, Hash, Zap, Layers, TrendingUp, ClipboardList
 
-**Always require()**: Edit2, Edit3, Timer, Tag, Inbox, ArrowUpRight, Camera, DoorOpen, BookOpen, Cpu, BarChart3, DollarSign, Network, Tv, Archive, ShieldCheck, AlertCircle, Paperclip, PhoneCall, PhoneIncoming, PhoneOutgoing, Video, StickyNote, CheckSquare, Grid3X3, Truck, RotateCcw, Image, Target, Palette, Radio, GitBranch, SlidersHorizontal, Map, TrendingDown, CreditCard, Hammer, Server, and anything else not in the safe list.
+**Always require()**: Edit2, Edit3, Timer, Tag, Inbox, ArrowUpRight, ArrowLeft, Camera, DoorOpen, BookOpen, Cpu, BarChart3, DollarSign, Network, Tv, Archive, ShieldCheck, AlertCircle, Paperclip, PhoneCall, PhoneIncoming, PhoneOutgoing, Video, StickyNote, CheckSquare, Grid3X3, Truck, RotateCcw, Image, Target, Palette, Radio, GitBranch, SlidersHorizontal, Map, TrendingDown, CreditCard, Hammer, Server, and anything else not in the safe list.
 
 **Supabase PromiseLike vs Promise**
 `PostgrestFilterBuilder` returns `PromiseLike`, not `Promise`. Never use `.catch()` on it directly. Always use:
@@ -362,6 +408,66 @@ GateGuard Corporate (SO — System Operator)
 - `POST /api/kb/analyze-image` — Claude vision analysis of tech photos
 - `GET  /api/kb/products` — product list for /tech (auth: x-tech-code header)
 - `GET  /api/sync/residents` — LEGACY: Brivo → DB → UniFi sync. **New sync work belongs in gatecard.co, not here.**
+
+---
+
+## SALES & ONBOARDING ARCHITECTURE
+
+### Org Tier Display Names (DB enum → UI label)
+| DB Value | Display Label |
+|---|---|
+| corporate | GateGuard Corporate |
+| master_agent | Master Agent |
+| master_dealer | MSO — Master System Operator |
+| full_dealer | Dealer |
+| service_dealer | Service Partner |
+| install_contractor | Installation Partner |
+| sales_partner | Sales Partner |
+| client | Client |
+
+IMPORTANT: The DB enum value `master_dealer` stays as-is. Only the UI display label changes to "MSO — Master System Operator".
+
+### Opportunity Types
+CRM opportunities have an `opportunity_type` field that maps to the entity being sold to:
+- `master_agent` — Prospective Master Agent
+- `mso` — Prospective MSO (Master System Operator)
+- `dealer` — Prospective Dealer
+- `install_partner` — Prospective Installation Partner
+- `service_partner` — Prospective Service Partner
+- `sales_partner` — Prospective Sales Partner
+- `property` — New Property (multifamily/HOA needing install/service)
+- `company` — New Company (commercial business)
+- `customer` — Existing customer needing new service
+
+### Sales Cycles by Type
+- Master Agent: Lead → Opp → NDA Sent → NDA Signed → Agreement Sent → Negotiation → Signed & Approved
+- MSO: Lead → Opp → Agreement Sent → Negotiation → Signed & Approved
+- Dealer: Lead → Opp → Agreement Sent → Signed & Approved
+- Install/Service Partner: Lead → Vetting → Agreement Sent → Approved
+- Sales Partner: Lead → Opp → Commission Agreement → Signed
+- Property/Company: Lead → Opp → Site Survey → Quote Sent → Quote Approved → Signed → Install Scheduled
+- Customer: Lead → Opp → Quote Sent → Quote Approved
+
+### Onboarding Trigger ("Approve & Send Welcome")
+Fires when opportunity = Won AND all required documents signed. Sends via Resend:
+1. Welcome email with manual PDF link
+2. Clerk portal invite (scoped to correct org tier)
+3. Tier-specific welcome content (commission doc for MA, tech tool code for dealers, etc.)
+
+For Property/Company wins: creates work order + site record + sends PM portal invite.
+
+### Document Strategy
+- NDA-A (Partner): Master Agent, MSO — full mutual NDA
+- NDA-B (Dealer): Dealer, Install Partner, Service Partner — stronger one-way, protects dealer client lists
+- NDA-C (Sales): Sales Partner — lightweight, protects leads/pricing only
+- Agreements: One per tier (MA Agreement, MSO Agreement, Dealer Agreement, Install Partner Agreement, Service Partner Agreement, Sales Partner Agreement)
+Install/Service Partner agreements have strongest non-solicitation clauses (they access client sites).
+
+### Build Sequence
+- Phase 1 (current): MSO display rename + opportunity_type field + type-based stage checklists
+- Phase 2: Document templates in Supabase Storage + Documents section on opportunity detail
+- Phase 3: "Approve & Send Welcome" trigger → org creation + Resend welcome + Clerk invite
+- Phase 4: Property/Company win → auto work order + site record + PM invite
 
 ---
 

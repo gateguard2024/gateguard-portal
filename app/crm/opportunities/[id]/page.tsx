@@ -47,6 +47,13 @@ interface Activity {
   completed_at?: string | null;
   created_by_name?: string;
   opportunity_name?: string;
+  // Email tracking
+  sent_via_resend?: boolean;
+  email_status?: "draft" | "sending" | "sent" | "delivered" | "opened" | "bounced" | "failed" | "received";
+  opened_at?: string | null;
+  open_count?: number;
+  to_email?: string;
+  from_email?: string;
 }
 
 interface StageHistoryItem {
@@ -57,11 +64,54 @@ interface StageHistoryItem {
   changed_by?: string;
 }
 
+type OppType =
+  | 'master_agent' | 'mso' | 'dealer'
+  | 'install_partner' | 'service_partner' | 'sales_partner'
+  | 'property' | 'company' | 'customer';
+
+const OPP_TYPE_LABELS: Record<OppType, string> = {
+  master_agent:    'Master Agent',
+  mso:             'MSO',
+  dealer:          'Dealer',
+  install_partner: 'Install Partner',
+  service_partner: 'Service Partner',
+  sales_partner:   'Sales Partner',
+  property:        'Property',
+  company:         'Company',
+  customer:        'Customer',
+};
+
+const OPP_TYPE_BADGE: Record<OppType, string> = {
+  master_agent:    'bg-violet-100 text-violet-700',
+  mso:             'bg-sky-100 text-sky-700',
+  dealer:          'bg-emerald-100 text-emerald-700',
+  install_partner: 'bg-orange-100 text-orange-700',
+  service_partner: 'bg-yellow-100 text-yellow-700',
+  sales_partner:   'bg-pink-100 text-pink-700',
+  property:        'bg-teal-100 text-teal-700',
+  company:         'bg-blue-100 text-blue-700',
+  customer:        'bg-purple-100 text-purple-700',
+};
+
+// Stage checklists per opportunity type — drives the sales cycle panel
+const STAGE_CHECKLIST: Partial<Record<OppType, string[]>> = {
+  master_agent:    ['NDA sent', 'NDA signed', 'Agreement sent', 'Agreement negotiated', 'Agreement signed', 'Background check complete'],
+  mso:             ['Agreement sent', 'Agreement negotiated', 'Agreement signed', 'Territory confirmed'],
+  dealer:          ['Agreement sent', 'Agreement signed', 'Tech certification scheduled'],
+  install_partner: ['Vetting complete', 'Agreement sent', 'Agreement signed', 'Insurance verified'],
+  service_partner: ['Vetting complete', 'Agreement sent', 'Agreement signed', 'Insurance verified', 'SLA confirmed'],
+  sales_partner:   ['Commission agreement sent', 'Commission agreement signed', 'CRM access granted'],
+  property:        ['Site survey complete', 'Quote sent', 'Quote approved', 'Agreement signed', 'Install scheduled'],
+  company:         ['Site walk complete', 'Quote sent', 'Quote approved', 'Agreement signed', 'Install scheduled'],
+  customer:        ['Quote sent', 'Quote approved', 'Service scheduled'],
+};
+
 interface Opportunity {
   id: string;
   name: string;
   account_name: string;
   stage: Stage;
+  opportunity_type?: OppType;
   amount: number;
   close_date?: string;
   description?: string;
@@ -247,7 +297,12 @@ export default function OpportunityDetailPage() {
     next_step: "",
     probability: "",
     forecast_cat: "",
+    opportunity_type: "" as OppType | "",
   });
+
+  // Sales cycle checklist — keys from documents_status JSONB
+  const [checklistStatus, setChecklistStatus] = useState<Record<string, boolean>>({});
+  const [checklistSaving, setChecklistSaving] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
 
   // Delete confirmation
@@ -290,8 +345,10 @@ export default function OpportunityDetailPage() {
   const [callForm, setCallForm] = useState({ subject: "", outcome: "Connected", duration: "", notes: "" });
   const [taskForm, setTaskForm] = useState({ subject: "", due_date: "", notes: "" });
   const [eventForm, setEventForm] = useState({ subject: "", date: "", time: "", notes: "" });
-  const [emailForm, setEmailForm] = useState({ subject: "", body: "" });
+  const [emailForm, setEmailForm] = useState({ to: "", subject: "", body: "" });
   const [activitySaving, setActivitySaving] = useState(false);
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailSendError, setEmailSendError] = useState<string | null>(null);
 
   const fetchOpp = async () => {
     setLoading(true);
@@ -299,11 +356,31 @@ export default function OpportunityDetailPage() {
     try {
       const res = await fetch(`/api/crm/opportunities/${id}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setOpp(await res.json());
+      const data = await res.json();
+      setOpp(data);
+      // Sync checklist from DB
+      if (data.documents_status && typeof data.documents_status === "object") {
+        setChecklistStatus(data.documents_status as Record<string, boolean>);
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const toggleChecklistItem = async (key: string) => {
+    const next = { ...checklistStatus, [key]: !checklistStatus[key] };
+    setChecklistStatus(next); // optimistic
+    setChecklistSaving(key);
+    try {
+      await fetch(`/api/crm/opportunities/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documents_status: next }),
+      });
+    } finally {
+      setChecklistSaving(null);
     }
   };
 
@@ -348,7 +425,7 @@ export default function OpportunityDetailPage() {
       setCallForm({ subject: "", outcome: "Connected", duration: "", notes: "" });
       setTaskForm({ subject: "", due_date: "", notes: "" });
       setEventForm({ subject: "", date: "", time: "", notes: "" });
-      setEmailForm({ subject: "", body: "" });
+      setEmailForm({ to: "", subject: "", body: "" });
     } finally {
       setActivitySaving(false);
     }
@@ -388,6 +465,39 @@ export default function OpportunityDetailPage() {
     }
   };
 
+  const sendEmail = async () => {
+    if (!emailForm.to.trim() || !emailForm.subject.trim() || !emailForm.body.trim()) return;
+    setEmailSending(true);
+    setEmailSendError(null);
+    try {
+      const res = await fetch("/api/crm/email/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          opportunity_id: id,
+          to_email: emailForm.to.trim(),
+          to_name: opp?.site_contact_name ?? "",
+          subject: emailForm.subject.trim(),
+          body: emailForm.body.trim(),
+          sender_name: opp?.owner_name ?? "Russel Feldman",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Send failed");
+      // Optimistically add to feed
+      setOpp(prev => prev ? {
+        ...prev,
+        activities: [{ ...data, type: "email" }, ...(prev.activities ?? [])],
+      } : prev);
+      setShowEmail(false);
+      setEmailForm({ to: "", subject: "", body: "" });
+    } catch (e: unknown) {
+      setEmailSendError(e instanceof Error ? e.message : "Send failed");
+    } finally {
+      setEmailSending(false);
+    }
+  };
+
   const saveContact = async () => {
     if (!contactForm.name.trim()) return;
     setSavingContact(true);
@@ -418,6 +528,7 @@ export default function OpportunityDetailPage() {
         next_step: opp.next_step ?? "",
         probability: opp.probability != null ? String(opp.probability) : "",
         forecast_cat: opp.forecast_category ?? "",
+        opportunity_type: opp.opportunity_type ?? "",
       });
     }
   }, [showEdit]);
@@ -438,6 +549,7 @@ export default function OpportunityDetailPage() {
           next_step: editForm.next_step || undefined,
           probability: editForm.probability !== "" ? Number(editForm.probability) : undefined,
           forecast_category: editForm.forecast_cat || undefined,
+          opportunity_type: editForm.opportunity_type || undefined,
         }),
       });
       await fetchOpp();
@@ -553,6 +665,14 @@ export default function OpportunityDetailPage() {
           <span className="text-foreground font-medium truncate">{opp.name}</span>
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          {opp.opportunity_type && (
+            <span className={cn(
+              "text-[10px] font-semibold px-2.5 py-0.5 rounded-full",
+              OPP_TYPE_BADGE[opp.opportunity_type]
+            )}>
+              {OPP_TYPE_LABELS[opp.opportunity_type]}
+            </span>
+          )}
           {opp.account_name && (
             <span className="text-sm text-[#6B7EFF] font-medium">{opp.account_name}</span>
           )}
@@ -904,21 +1024,39 @@ export default function OpportunityDetailPage() {
                 </ActivityFormCard>
               )}
 
-              {/* Email form */}
+              {/* Email form — real send via Resend */}
               {showEmail && (
-                <ActivityFormCard title="Email" onClose={() => setShowEmail(false)}>
+                <ActivityFormCard title="Send Email" onClose={() => { setShowEmail(false); setEmailSendError(null); }}>
+                  {emailSendError && (
+                    <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                      {emailSendError}
+                    </div>
+                  )}
+                  <Field label="To (email address)">
+                    <input
+                      type="email"
+                      value={emailForm.to}
+                      onChange={e => setEmailForm({...emailForm, to: e.target.value})}
+                      className={inputCls}
+                      placeholder={opp?.site_contact_email ?? "contact@property.com"}
+                    />
+                  </Field>
                   <Field label="Subject">
                     <input type="text" value={emailForm.subject} onChange={e => setEmailForm({...emailForm, subject: e.target.value})} className={inputCls} placeholder="e.g. GateGuard proposal for Ashford Glen" />
                   </Field>
                   <Field label="Body">
-                    <textarea value={emailForm.body} onChange={e => setEmailForm({...emailForm, body: e.target.value})} rows={5} className={cn(inputCls, "resize-none")} placeholder="Email body…" />
+                    <textarea value={emailForm.body} onChange={e => setEmailForm({...emailForm, body: e.target.value})} rows={6} className={cn(inputCls, "resize-none")} placeholder="Write your email here…" />
                   </Field>
+                  <p className="text-[10px] text-muted-foreground">
+                    Sent from <span className="font-mono">crm@mail.gateguard.co</span> · Open tracking enabled
+                  </p>
                   <button
-                    onClick={() => submitActivity("email", { subject: emailForm.subject, body: emailForm.body })}
-                    disabled={activitySaving || !emailForm.subject.trim()}
-                    className="w-full py-2 text-sm font-medium bg-[#6B7EFF] text-white rounded-lg hover:bg-[#5a6de8] disabled:opacity-50 transition-colors"
+                    onClick={sendEmail}
+                    disabled={emailSending || !emailForm.to.trim() || !emailForm.subject.trim() || !emailForm.body.trim()}
+                    className="w-full py-2 text-sm font-medium bg-[#6B7EFF] text-white rounded-lg hover:bg-[#5a6de8] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
                   >
-                    {activitySaving ? "Saving…" : "Log Email"}
+                    <Mail size={13} />
+                    {emailSending ? "Sending…" : "Send Email"}
                   </button>
                 </ActivityFormCard>
               )}
@@ -933,7 +1071,12 @@ export default function OpportunityDetailPage() {
                   sortedActivities.map((act) => (
                     <div
                       key={act.id}
-                      className="flex items-start gap-3 px-4 py-3 bg-white rounded-xl border border-border"
+                      className={cn(
+                        "flex items-start gap-3 px-4 py-3 bg-white rounded-xl border transition-colors",
+                        act.type === "email" && act.email_status === "received"
+                          ? "border-emerald-200 bg-emerald-50/30"
+                          : "border-border"
+                      )}
                     >
                       <div
                         className={cn(
@@ -944,7 +1087,41 @@ export default function OpportunityDetailPage() {
                         <ActivityIcon type={act.type} size={14} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-foreground">{act.subject}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-semibold text-foreground">{act.subject}</p>
+                          {/* Email status badges */}
+                          {act.type === "email" && act.email_status === "received" && (
+                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                              ↙ INBOUND
+                            </span>
+                          )}
+                          {act.type === "email" && act.sent_via_resend && act.email_status === "sent" && !act.opened_at && (
+                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                              ✓ SENT
+                            </span>
+                          )}
+                          {act.type === "email" && act.opened_at && (
+                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700">
+                              👁 OPENED {act.open_count && act.open_count > 1 ? `×${act.open_count}` : ""}
+                            </span>
+                          )}
+                          {act.type === "email" && act.email_status === "failed" && (
+                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">
+                              ✗ FAILED
+                            </span>
+                          )}
+                        </div>
+                        {act.type === "email" && act.to_email && act.email_status !== "received" && (
+                          <p className="text-[10px] text-muted-foreground">To: {act.to_email}</p>
+                        )}
+                        {act.type === "email" && act.from_email && act.email_status === "received" && (
+                          <p className="text-[10px] text-muted-foreground">From: {act.from_email}</p>
+                        )}
+                        {act.type === "email" && act.opened_at && (
+                          <p className="text-[10px] text-violet-600 font-medium">
+                            Opened {timeAgo(act.opened_at)}
+                          </p>
+                        )}
                         {act.body && (
                           <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{act.body}</p>
                         )}
@@ -1029,6 +1206,75 @@ export default function OpportunityDetailPage() {
               </div>
             )}
           </div>
+
+          {/* Sales Cycle Checklist */}
+          {opp.opportunity_type && STAGE_CHECKLIST[opp.opportunity_type] && (
+            <div className="bg-white rounded-xl border border-border p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-foreground">Sales Cycle</h3>
+                {opp.opportunity_type && (
+                  <span className={cn(
+                    "text-[10px] font-semibold px-2 py-0.5 rounded-full",
+                    OPP_TYPE_BADGE[opp.opportunity_type]
+                  )}>
+                    {OPP_TYPE_LABELS[opp.opportunity_type]}
+                  </span>
+                )}
+              </div>
+              <div className="space-y-2">
+                {(STAGE_CHECKLIST[opp.opportunity_type] ?? []).map((item) => {
+                  const key = item.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+                  const checked = !!checklistStatus[key];
+                  const saving = checklistSaving === key;
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => toggleChecklistItem(key)}
+                      disabled={saving}
+                      className={cn(
+                        "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-colors text-xs",
+                        checked
+                          ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                          : "bg-white border-border text-foreground hover:bg-slate-50"
+                      )}
+                    >
+                      <span className={cn(
+                        "w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors",
+                        checked ? "bg-emerald-500 border-emerald-500" : "border-border bg-white",
+                        saving && "opacity-50"
+                      )}>
+                        {checked && <Check size={10} className="text-white" />}
+                      </span>
+                      <span className={cn("flex-1", checked && "line-through opacity-60")}>{item}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Progress bar */}
+              {(() => {
+                const items = STAGE_CHECKLIST[opp.opportunity_type!] ?? [];
+                const done = items.filter(item => {
+                  const key = item.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+                  return !!checklistStatus[key];
+                }).length;
+                const pct = items.length > 0 ? Math.round((done / items.length) * 100) : 0;
+                return (
+                  <div className="mt-3 pt-3 border-t border-border">
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1.5">
+                      <span>{done} of {items.length} complete</span>
+                      <span className="font-semibold">{pct}%</span>
+                    </div>
+                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
 
           {/* Stage History */}
           <div className="bg-white rounded-xl border border-border p-4">
@@ -1223,6 +1469,18 @@ export default function OpportunityDetailPage() {
                   <option value="">Select stage…</option>
                   {(Object.keys(STAGE_CONFIG) as Stage[]).map(s => (
                     <option key={s} value={s}>{STAGE_CONFIG[s].label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Opportunity Type">
+                <select
+                  value={editForm.opportunity_type}
+                  onChange={e => setEditForm({ ...editForm, opportunity_type: e.target.value as OppType | "" })}
+                  className={inputCls}
+                >
+                  <option value="">Select type…</option>
+                  {(Object.keys(OPP_TYPE_LABELS) as OppType[]).map(t => (
+                    <option key={t} value={t}>{OPP_TYPE_LABELS[t]}</option>
                   ))}
                 </select>
               </Field>

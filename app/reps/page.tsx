@@ -20,7 +20,8 @@ const { DollarSign } = require("lucide-react") as any;
 
 interface Rep {
   id: string;
-  name: string;
+  first_name: string;
+  last_name: string;
   email: string | null;
   phone: string | null;
   tier: "senior_rep" | "rep" | "sub_rep";
@@ -31,6 +32,10 @@ interface Rep {
   is_active: boolean;
 }
 
+function repFullName(rep: Rep) {
+  return `${rep.first_name} ${rep.last_name}`.trim();
+}
+
 interface Commission {
   id: string;
   rep_id: string;
@@ -38,7 +43,7 @@ interface Commission {
   amount_cents: number;
   door_count: number;
   status: "pending" | "approved" | "paid" | "held";
-  sales_reps: { name: string } | null;
+  sales_reps: { first_name: string; last_name: string; tier: string } | null;
 }
 
 // ─── Commission model constants ───────────────────────────────────────────────
@@ -159,10 +164,13 @@ export default function RepsPage() {
     if (!newRepName.trim()) return;
     setSaving(true);
     try {
+      const parts = newRepName.trim().split(/\s+/);
+      const first_name = parts.slice(0, -1).join(" ") || parts[0] || "";
+      const last_name  = parts.length > 1 ? parts[parts.length - 1] : "";
       await fetch("/api/reps", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newRepName.trim(), email: newRepEmail.trim() || null, tier: newRepTier }),
+        body: JSON.stringify({ first_name, last_name, email: newRepEmail.trim() || null, tier: newRepTier }),
       });
       setNewRepName(""); setNewRepEmail(""); setShowAddRep(false);
       void load();
@@ -319,12 +327,12 @@ export default function RepsPage() {
                     <tr key={rep.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
                       <td className="px-4 py-3 font-medium text-foreground whitespace-nowrap">
                         {rep.parent_rep_id && <ChevronRight size={11} className="inline text-muted-foreground mr-1" />}
-                        {rep.name}
+                        {repFullName(rep)}
                       </td>
                       <td className="px-4 py-3"><TierBadge tier={rep.tier} /></td>
                       <td className="px-4 py-3 text-muted-foreground">
                         {rep.parent_rep_id
-                          ? (repById[rep.parent_rep_id]?.name ?? <span className="text-border italic">—</span>)
+                          ? (repById[rep.parent_rep_id] ? repFullName(repById[rep.parent_rep_id]) : <span className="text-border italic">—</span>)
                           : <span className="text-border">—</span>}
                       </td>
                       <td className="px-4 py-3 text-foreground">{rep.active_sites}</td>
@@ -368,7 +376,9 @@ export default function RepsPage() {
               <tbody>
                 {commissions.map(c => (
                   <tr key={c.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
-                    <td className="px-4 py-3 font-medium text-foreground">{c.sales_reps?.name ?? "—"}</td>
+                    <td className="px-4 py-3 font-medium text-foreground">
+                      {c.sales_reps ? `${c.sales_reps.first_name} ${c.sales_reps.last_name}`.trim() : "—"}
+                    </td>
                     <td className="px-4 py-3 text-muted-foreground">{c.pay_period}</td>
                     <td className="px-4 py-3 text-foreground">{c.door_count}</td>
                     <td className="px-4 py-3 font-semibold text-foreground">{fmtMoney(c.amount_cents)}</td>
