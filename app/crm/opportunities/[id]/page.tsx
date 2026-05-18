@@ -423,6 +423,26 @@ export default function OpportunityDetailPage() {
   const [countersigning,   setCountersigning]   = useState(false);
   const [countersignError, setCountersignError] = useState<string | null>(null);
 
+  // Upload Executed Doc state
+  const [showUploadExec,   setShowUploadExec]   = useState(false);
+  const [uploadFile,       setUploadFile]       = useState<File | null>(null);
+  const [uploadForm,       setUploadForm]       = useState({
+    document_type:      'nda',
+    source:             'uploaded',       // 'uploaded' | 'their_nda'
+    signer_name:        '',
+    signer_email:       '',
+    signer_title:       '',
+    signer_company:     '',
+    signed_at:          new Date().toISOString().split('T')[0],
+    countersigned_name: 'Russel Feldman',
+    countersigned_title:'CEO',
+    countersigned_at:   new Date().toISOString().split('T')[0],
+    notes:              '',
+  });
+  const [uploading,        setUploading]        = useState(false);
+  const [uploadError,      setUploadError]      = useState<string | null>(null);
+  const uploadFileRef = useRef<HTMLInputElement>(null);
+
   const fetchOpp = async () => {
     setLoading(true);
     setError(null);
@@ -560,6 +580,41 @@ export default function OpportunityDetailPage() {
       setCountersignError(e instanceof Error ? e.message : 'Failed');
     } finally {
       setCountersigning(false);
+    }
+  };
+
+  const handleUploadExec = async () => {
+    if (!uploadForm.signer_name.trim() || !uploadForm.signer_email.trim()) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const fd = new FormData();
+      if (uploadFile) fd.append('file', uploadFile);
+      fd.append('document_type',      uploadForm.document_type);
+      fd.append('source',             uploadForm.source);
+      fd.append('opportunity_id',     id);
+      fd.append('signer_name',        uploadForm.signer_name.trim());
+      fd.append('signer_email',       uploadForm.signer_email.trim());
+      fd.append('signer_title',       uploadForm.signer_title.trim());
+      fd.append('signer_company',     uploadForm.signer_company.trim());
+      fd.append('signed_at',          uploadForm.signed_at ? new Date(uploadForm.signed_at).toISOString() : new Date().toISOString());
+      fd.append('countersigned_name', uploadForm.countersigned_name.trim());
+      fd.append('countersigned_title',uploadForm.countersigned_title.trim());
+      fd.append('countersigned_at',   uploadForm.countersigned_at ? new Date(uploadForm.countersigned_at).toISOString() : new Date().toISOString());
+      if (uploadForm.notes.trim()) fd.append('notes', uploadForm.notes.trim());
+
+      const res = await fetch('/api/signatures/upload-executed', { method: 'POST', body: fd });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Upload failed');
+
+      setShowUploadExec(false);
+      setUploadFile(null);
+      setUploadForm(f => ({ ...f, signer_name: '', signer_email: '', signer_title: '', signer_company: '', notes: '' }));
+      await fetchDocSigs();
+    } catch (e: unknown) {
+      setUploadError(e instanceof Error ? e.message : 'Upload failed');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -1718,20 +1773,36 @@ export default function OpportunityDetailPage() {
               <h2 className="text-sm font-semibold text-foreground">Documents</h2>
               <p className="text-xs text-muted-foreground mt-0.5">All agreements sent, signed, and executed for this record.</p>
             </div>
-            {opp.opportunity_type && OPP_DOCS[opp.opportunity_type] && (
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  const docs = OPP_DOCS[opp.opportunity_type!] ?? [];
-                  const first = docs[0];
-                  if (first) openSendDoc(first.value, first.advanceStage);
-                  setActiveTab('details'); // return to details to use the send panel
+                  setUploadError(null);
+                  // Pre-fill signer from opportunity contact
+                  const contact = opp?.site_contact_name ?? opp?.account_name ?? '';
+                  const email   = opp?.site_contact_email ?? '';
+                  setUploadForm(f => ({ ...f, signer_name: contact, signer_email: email }));
+                  setShowUploadExec(true);
                 }}
-                className="flex items-center gap-1.5 text-xs font-medium text-[#6B7EFF] bg-[#6B7EFF]/10 hover:bg-[#6B7EFF]/15 px-3 py-1.5 rounded-lg transition-colors"
+                className="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors"
               >
-                <FileText size={13} />
-                Send New Document
+                <Plus size={13} />
+                Upload Executed
               </button>
-            )}
+              {opp.opportunity_type && OPP_DOCS[opp.opportunity_type] && (
+                <button
+                  onClick={() => {
+                    const docs = OPP_DOCS[opp.opportunity_type!] ?? [];
+                    const first = docs[0];
+                    if (first) openSendDoc(first.value, first.advanceStage);
+                    setActiveTab('details');
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-medium text-[#6B7EFF] bg-[#6B7EFF]/10 hover:bg-[#6B7EFF]/15 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  <FileText size={13} />
+                  Send New Document
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Document list */}
@@ -1892,6 +1963,166 @@ export default function OpportunityDetailPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── Upload Executed Document Modal ─────────────────────────────── */}
+      {showUploadExec && (
+        <>
+          <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setShowUploadExec(false)} />
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[560px] max-h-[90vh] bg-white border border-border rounded-2xl shadow-2xl z-50 flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
+              <div>
+                <h2 className="text-sm font-bold text-foreground">Upload Executed Document</h2>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Record a document signed outside the portal — their NDA, DocuSign, wet signature, etc.</p>
+              </div>
+              <button onClick={() => setShowUploadExec(false)} className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground"><X size={14} /></button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+              {/* Source toggle */}
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">What was signed?</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { value: 'uploaded', label: 'Our Document',   desc: 'Signed outside portal (DocuSign, email, wet sig)' },
+                    { value: 'their_nda', label: 'Their Document', desc: "They sent their own NDA or agreement" },
+                  ].map(opt => (
+                    <button key={opt.value} onClick={() => setUploadForm(f => ({ ...f, source: opt.value }))}
+                      className={cn(
+                        "text-left p-3 rounded-xl border transition-all",
+                        uploadForm.source === opt.value
+                          ? "border-[#6B7EFF] bg-[#6B7EFF]/8 ring-1 ring-[#6B7EFF]/30"
+                          : "border-border hover:bg-accent/40"
+                      )}>
+                      <p className={cn("text-xs font-semibold mb-0.5", uploadForm.source === opt.value ? "text-[#6B7EFF]" : "text-foreground")}>{opt.label}</p>
+                      <p className="text-[10px] text-muted-foreground leading-tight">{opt.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Document type */}
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Document Type</label>
+                <select value={uploadForm.document_type}
+                  onChange={e => setUploadForm(f => ({ ...f, document_type: e.target.value }))}
+                  className={inputCls}>
+                  {Object.entries(DOC_TYPE_LABELS).map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                  <option value="other">Other / Custom</option>
+                </select>
+              </div>
+
+              {/* PDF file */}
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Executed PDF <span className="font-normal normal-case">(optional — attach for your records)</span></label>
+                <input ref={uploadFileRef} type="file" accept=".pdf,application/pdf" className="hidden"
+                  onChange={e => setUploadFile(e.target.files?.[0] ?? null)} />
+                <button onClick={() => uploadFileRef.current?.click()}
+                  className={cn(
+                    "w-full border-2 border-dashed rounded-xl p-4 text-sm text-center transition-colors",
+                    uploadFile ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-border hover:border-[#6B7EFF]/40 text-muted-foreground"
+                  )}>
+                  {uploadFile ? (
+                    <span className="flex items-center justify-center gap-2"><Check size={14} /> {uploadFile.name}</span>
+                  ) : (
+                    <span>Click to select PDF</span>
+                  )}
+                </button>
+                {uploadFile && (
+                  <button onClick={() => setUploadFile(null)} className="mt-1 text-[10px] text-red-500 hover:underline">Remove file</button>
+                )}
+              </div>
+
+              <div className="border-t border-border pt-4">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Counterparty (their side)</p>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1">Full Name *</label>
+                      <input type="text" placeholder="Jane Smith" value={uploadForm.signer_name}
+                        onChange={e => setUploadForm(f => ({ ...f, signer_name: e.target.value }))} className={inputCls} />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1">Email *</label>
+                      <input type="email" placeholder="jane@company.com" value={uploadForm.signer_email}
+                        onChange={e => setUploadForm(f => ({ ...f, signer_email: e.target.value }))} className={inputCls} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1">Title</label>
+                      <input type="text" placeholder="CEO" value={uploadForm.signer_title}
+                        onChange={e => setUploadForm(f => ({ ...f, signer_title: e.target.value }))} className={inputCls} />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1">Company</label>
+                      <input type="text" placeholder="ACME Corp" value={uploadForm.signer_company}
+                        onChange={e => setUploadForm(f => ({ ...f, signer_company: e.target.value }))} className={inputCls} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Date Signed</label>
+                    <input type="date" value={uploadForm.signed_at}
+                      onChange={e => setUploadForm(f => ({ ...f, signed_at: e.target.value }))} className={inputCls} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-border pt-4">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">GateGuard (our side)</p>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1">Your Name</label>
+                      <input type="text" value={uploadForm.countersigned_name}
+                        onChange={e => setUploadForm(f => ({ ...f, countersigned_name: e.target.value }))} className={inputCls} />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1">Your Title</label>
+                      <input type="text" value={uploadForm.countersigned_title}
+                        onChange={e => setUploadForm(f => ({ ...f, countersigned_title: e.target.value }))} className={inputCls} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Date Signed by GateGuard</label>
+                    <input type="date" value={uploadForm.countersigned_at}
+                      onChange={e => setUploadForm(f => ({ ...f, countersigned_at: e.target.value }))} className={inputCls} />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Internal Notes (optional)</label>
+                <textarea rows={2} placeholder="e.g. Partner insisted on their own NDA, reviewed by Russel 5/18/26"
+                  value={uploadForm.notes} onChange={e => setUploadForm(f => ({ ...f, notes: e.target.value }))}
+                  className={cn(inputCls, "resize-none")} />
+              </div>
+
+              {uploadError && (
+                <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{uploadError}</p>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-border px-5 py-4 flex gap-3 flex-shrink-0">
+              <button onClick={() => setShowUploadExec(false)}
+                className="flex-1 py-2.5 rounded-xl border border-border text-sm text-muted-foreground hover:bg-accent transition-colors">
+                Cancel
+              </button>
+              <button
+                onClick={handleUploadExec}
+                disabled={uploading || !uploadForm.signer_name.trim() || !uploadForm.signer_email.trim()}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                <Check size={14} />
+                {uploading ? 'Saving…' : 'Save as Fully Executed'}
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
       {/* ── Edit Slide-Over ────────────────────────────────────────────── */}
