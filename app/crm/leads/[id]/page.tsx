@@ -636,7 +636,7 @@ export default function LeadDetailPage() {
           est_setup:          lead.estSetup,
           est_mrr:            lead.estMrr,
           description:        lead.notes || null,
-          lead_id:            lead.id,
+          lead_id:            lead.id.replace(/^show_/, ''),
         }),
       });
       const json = await res.json();
