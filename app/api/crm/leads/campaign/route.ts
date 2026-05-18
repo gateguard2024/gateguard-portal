@@ -181,7 +181,40 @@ export async function POST(req: NextRequest) {
     await getCurrentUser()
 
     const body = await req.json().catch(() => ({}))
-    const dryRun = body.dry_run === true
+    const dryRun  = body.dry_run  === true
+    const testRun = body.test_run === true   // sends only to rfeldman@gateguard.co
+
+    // ── TEST MODE: send one email to Russel using first eligible lead as sample ──
+    if (testRun) {
+      const { data: rows } = await supabase
+        .from('show_leads')
+        .select('id, name, property_name, email, status')
+      const eligible = (rows || []).filter(
+        (r: any) => r.status !== 'converted' && r.email?.includes('@')
+      )
+      // Use first eligible lead's name/property for personalization, but send to Russel
+      const sample  = eligible[0]
+      const name    = sample?.name         ?? 'Alex Johnson'
+      const prop    = sample?.property_name ?? 'Maple Ridge Apartments'
+      const { subject, html, text } = buildEmail(name, prop)
+      const { error: sendError } = await resend.emails.send({
+        from:    'Russel Feldman <rfeldman@gateguard.co>',
+        to:      ['rfeldman@gateguard.co'],
+        subject: `[TEST] ${subject}`,
+        html,
+        text,
+        replyTo: 'rfeldman@gateguard.co',
+      })
+      if (sendError) {
+        return NextResponse.json({ error: sendError.message }, { status: 500 })
+      }
+      return NextResponse.json({
+        test: true,
+        sent_to: 'rfeldman@gateguard.co',
+        personalized_as: { name, property: prop },
+        subject: `[TEST] ${subject}`,
+      })
+    }
 
     // Fetch all unconverted show leads
     const { data: rows, error } = await supabase

@@ -62,11 +62,12 @@ function StagePill({ stage }: { stage: string }) {
 
 // ─── Campaign Modal ──────────────────────────────────────────────────────────
 function CampaignModal({ onClose }: { onClose: () => void }) {
-  const [step, setStep]       = useState<'loading' | 'preview' | 'sending' | 'done' | 'error'>('loading')
-  const [preview, setPreview] = useState<CampaignPreview | null>(null)
-  const [result, setResult]   = useState<{ sent: number; failed: number; skipped: number } | null>(null)
-  const [errMsg, setErrMsg]   = useState('')
+  const [step, setStep]         = useState<'loading' | 'preview' | 'sending' | 'done' | 'error' | 'test_sending' | 'test_done'>('loading')
+  const [preview, setPreview]   = useState<CampaignPreview | null>(null)
+  const [result, setResult]     = useState<{ sent: number; failed: number; skipped: number } | null>(null)
+  const [errMsg, setErrMsg]     = useState('')
   const [showHtml, setShowHtml] = useState(false)
+  const [testMsg, setTestMsg]   = useState('')
 
   useEffect(() => {
     fetch('/api/crm/leads/campaign')
@@ -78,6 +79,24 @@ function CampaignModal({ onClose }: { onClose: () => void }) {
       })
       .catch(e => { setErrMsg(e.message); setStep('error') })
   }, [])
+
+  async function handleTestEmail() {
+    setStep('test_sending')
+    try {
+      const res  = await fetch('/api/crm/leads/campaign', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ test_run: true }),
+      })
+      const data = await res.json()
+      if (data.error) { setErrMsg(data.error); setStep('error'); return }
+      setTestMsg(`Test sent to ${data.sent_to} — personalized as "${data.personalized_as?.name}" at "${data.personalized_as?.property}"`)
+      setStep('test_done')
+    } catch (e: any) {
+      setErrMsg(e.message)
+      setStep('error')
+    }
+  }
 
   async function handleSend() {
     if (!preview) return
@@ -202,6 +221,38 @@ function CampaignModal({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
+          {/* Test sending */}
+          {step === 'test_sending' && (
+            <div className="flex flex-col items-center justify-center py-16 gap-4">
+              <Loader2 size={36} className="animate-spin text-amber-500" />
+              <div className="text-center">
+                <p className="font-semibold text-foreground">Sending test email…</p>
+                <p className="text-sm text-muted-foreground mt-1">Sending a sample to rfeldman@gateguard.co</p>
+              </div>
+            </div>
+          )}
+
+          {/* Test done */}
+          {step === 'test_done' && (
+            <div className="space-y-4">
+              <div className="flex flex-col items-center py-6 gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-amber-100 flex items-center justify-center">
+                  <CheckCircle2 size={28} className="text-amber-600" />
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-bold text-foreground">Test email sent!</p>
+                  <p className="text-sm text-muted-foreground mt-1">Check your inbox at rfeldman@gateguard.co</p>
+                </div>
+              </div>
+              <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 text-xs text-amber-800">
+                {testMsg}
+              </div>
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-xs text-blue-700">
+                Once you've confirmed the email and reply-to look correct, come back here and send the campaign to all {preview?.eligible} leads.
+              </div>
+            </div>
+          )}
+
           {/* Sending */}
           {step === 'sending' && (
             <div className="flex flex-col items-center justify-center py-16 gap-4">
@@ -249,27 +300,54 @@ function CampaignModal({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Footer */}
-        <div className="border-t border-border px-6 py-4 flex items-center justify-end gap-3">
-          {(step === 'error' || step === 'done') && (
-            <button onClick={onClose} className="px-4 py-2 text-sm font-medium bg-brand-400 text-white rounded-lg hover:bg-brand-500 transition-colors">
-              Close
-            </button>
-          )}
-          {step === 'preview' && (
-            <>
-              <button onClick={onClose} className="px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-accent transition-colors text-muted-foreground">
-                Cancel
+        <div className="border-t border-border px-6 py-4 flex items-center justify-between gap-3">
+          <div>
+            {(step === 'test_done') && (
+              <button onClick={() => setStep('preview')} className="px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-accent transition-colors text-muted-foreground">
+                ← Back to preview
               </button>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            {(step === 'error' || step === 'done') && (
+              <button onClick={onClose} className="px-4 py-2 text-sm font-medium bg-brand-400 text-white rounded-lg hover:bg-brand-500 transition-colors">
+                Close
+              </button>
+            )}
+            {step === 'preview' && (
+              <>
+                <button onClick={onClose} className="px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-accent transition-colors text-muted-foreground">
+                  Cancel
+                </button>
+                <button
+                  onClick={handleTestEmail}
+                  disabled={!preview || preview.eligible === 0}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-semibold border border-amber-300 text-amber-700 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Mail size={13} />
+                  Send test to me
+                </button>
+                <button
+                  onClick={handleSend}
+                  disabled={!preview || preview.eligible === 0}
+                  className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-brand-400 text-white rounded-lg hover:bg-brand-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Send size={13} />
+                  Send to {preview?.eligible} leads
+                </button>
+              </>
+            )}
+            {step === 'test_done' && (
               <button
                 onClick={handleSend}
                 disabled={!preview || preview.eligible === 0}
                 className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-brand-400 text-white rounded-lg hover:bg-brand-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Send size={13} />
-                Send to {preview?.eligible} leads
+                Looks good — send to {preview?.eligible} leads
               </button>
-            </>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>
