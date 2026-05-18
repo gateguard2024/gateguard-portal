@@ -8,8 +8,7 @@ const supabase = createClient(
 
 // GET /api/crm/leads/[id]/activities
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  const rawId = params.id
-  // lead_id stores the full ID (show_xxx or uuid)
+  const rawId = params.id.replace(/^show_/, '')
   const { data, error } = await supabase
     .from('crm_activities')
     .select('id, type, subject, body, due_at, completed_at, created_by_name, created_at, outcome, direction')
@@ -23,7 +22,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
 // POST /api/crm/leads/[id]/activities — log a call, email, note, task, or meeting
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const rawId = params.id
+  const rawId = params.id.replace(/^show_/, '')
   const body  = await req.json()
   const { type, subject, body: actBody, due_at, outcome, direction, duration_min } = body
 

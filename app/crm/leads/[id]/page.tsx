@@ -291,6 +291,11 @@ function ActivityFeed({
           completed_at:   null,
           due_at:         json.activity.due_at,
         });
+        setShowInput(false);
+        setSubject(""); setBody(""); setDueAt(""); setOutcome("");
+      } else {
+        alert(json.error ?? "Failed to save activity — please try again.");
+        return;
       }
       setShowInput(false);
       setSubject("");

@@ -102,9 +102,20 @@ export async function POST(req: NextRequest) {
     // - All others always get their own org_id stamped automatically.
     const canChooseOrg =
       user.isCorporate || user.isMasterAgent || user.isMasterDealer || user.isFullDealer
-    const dealer_org_id = canChooseOrg
+    let dealer_org_id = canChooseOrg
       ? (body.dealer_org_id ?? body.org_id ?? user.org_id ?? null)
       : (user.org_id ?? null)
+
+    // Corporate users have no org_id in Clerk metadata — fall back to the corporate org row
+    if (!dealer_org_id) {
+      const { data: corpOrg } = await supabase
+        .from('organizations')
+        .select('id')
+        .eq('org_tier', 'corporate')
+        .limit(1)
+        .single()
+      dealer_org_id = corpOrg?.id ?? null
+    }
 
     // Strip any client-supplied fields that don't exist on the table
     const { org_id: _orgId, contact_name: _cn, ...safeBody } = body
