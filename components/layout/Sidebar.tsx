@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 // Icons not in type declarations for lucide-react 0.383.0 but available at runtime
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowRightLeft, UserCog, LogOut } = require("lucide-react") as any;
+const { ArrowRightLeft, UserCog, LogOut, CheckSquare } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useUser, useClerk, useSession } from "@clerk/nextjs";
@@ -50,8 +50,9 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Operations",
     icon: LayoutDashboard,
     items: [
-      { label: "Dashboard",          href: "/",    icon: LayoutDashboard, description: "Your command center — KPIs, alerts, activity" },
-      { label: "Operating System",   href: "/eos", icon: Layers,          description: "EOS — V/TO, Rocks, Scorecard, L10 meetings" },
+      { label: "Dashboard",          href: "/",       icon: LayoutDashboard, description: "Your command center — KPIs, alerts, activity" },
+      { label: "To-Dos",             href: "/todos",  icon: CheckSquare,    description: "Personal tasks and team assignments" },
+      { label: "Operating System",   href: "/eos",    icon: Layers,          description: "EOS — V/TO, Rocks, Scorecard, L10 meetings" },
       { label: "CRM",                href: "/crm", icon: MessageSquare,   description: "Leads, opportunities, pipeline" },
       { label: "Customers",    href: "/customers",   icon: Users,           description: "All customer accounts" },
       { label: "Quotes",       href: "/quotes",      icon: FileText,        description: "Proposals and approvals" },
