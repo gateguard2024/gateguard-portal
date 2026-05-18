@@ -45,7 +45,7 @@ interface Commission {
 
 const COMMISSION_MODEL = [
   { tier: "Master Agent",       rate: "$0.50", color: "text-violet-600", bg: "bg-violet-50",  border: "border-violet-200",  note: "Fixed, off top. Active during onboarding; historical thereafter." },
-  { tier: "Master Dealer",      rate: "$0.50", color: "text-brand-400",  bg: "bg-brand-50",   border: "border-brand-200",   note: "Fixed, off top. Portfolio-level account owner." },
+  { tier: "MSO",                 rate: "$0.50", color: "text-brand-400",  bg: "bg-brand-50",   border: "border-brand-200",   note: "Fixed, off top. Portfolio-level account owner." },
   { tier: "Sales Partner",      rate: "$1.00", color: "text-sky-600",    bg: "bg-sky-50",     border: "border-sky-200",     note: "Configurable. Default $1.00/unit. Lifetime on deals they close." },
   { tier: "Service Dealer",     rate: "$3.00", color: "text-emerald-600",bg: "bg-emerald-50", border: "border-emerald-200", note: "Configurable. Default $3.00/unit. Ongoing service relationship." },
   { tier: "Install Contractor", rate: "$0.00", color: "text-amber-600",  bg: "bg-amber-50",   border: "border-amber-200",   note: "No recurring. Paid from one-time setup fees only." },

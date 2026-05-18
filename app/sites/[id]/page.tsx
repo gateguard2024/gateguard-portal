@@ -508,7 +508,7 @@ export default function SiteDetailPage() {
       {/* This is the "who owns, installs, services" 3-column panel */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         <DealerCard
-          role="Master Dealer"
+          role="MSO"
           label="Account Owner"
           id={site.master_dealer_id}
           color="text-violet-600"

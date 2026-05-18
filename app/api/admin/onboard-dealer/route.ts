@@ -48,7 +48,7 @@ const VALID_DEALER_TIERS: OrgTier[] = [
 
 const TIER_LABELS: Record<string, string> = {
   master_agent:       'Master Agent',
-  master_dealer:      'Master Dealer',
+  master_dealer:      'MSO',
   full_dealer:        'Full Dealership',
   service_dealer:     'Service Dealer',
   install_contractor: 'Install Contractor',

@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic'
 const TIER_LABELS: Record<string, string> = {
   corporate:         'Corporate',
   master_agent:      'Master Agent',
-  master_dealer:     'Master Dealer',
+  master_dealer:     'MSO',
   full_dealer:       'Full Dealer',
   service_dealer:    'Service Dealer',
   install_contractor:'Install Contractor',

@@ -123,7 +123,7 @@ const TIERS: {
   },
   {
     id: 'master_dealer',
-    label: 'Master Dealer',
+    label: 'MSO — Master System Operator',
     sublabel: 'Dealer group account owner',
     icon: Layers,
     color: 'text-brand-400',
@@ -606,7 +606,7 @@ export default function NewDealerPage() {
         <div>
           <h2 className="text-lg font-semibold text-slate-900 mb-1">Org Relationships</h2>
           <p className="text-sm text-slate-500 mb-5">
-            Set the Master Agent who recruited this org and the Master Dealer group they belong to.
+            Set the Master Agent who recruited this org and the MSO they belong to.
             All fields are optional — you can assign these after onboarding from the org detail page.
           </p>
 
@@ -638,11 +638,11 @@ export default function NewDealerPage() {
               {/* Master Dealer */}
               {form.org_tier !== 'master_dealer' && (
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Master Dealer (group owner)</p>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">MSO (group owner)</p>
                   <p className="text-xs text-slate-400 mb-3">
-                    The Master Dealer this org operates under. They earn $0.50/unit/month and set the default commission template.
+                    The MSO this org operates under. They earn $0.50/unit/month and set the default commission template.
                   </p>
-                  <Field label="Master Dealer Org ID" hint="UUID from the organizations table — leave blank to assign later">
+                  <Field label="MSO Org ID" hint="UUID from the organizations table — leave blank to assign later">
                     <Input
                       value={form.master_dealer_id}
                       onChange={e => set('master_dealer_id', e.target.value)}
@@ -722,7 +722,7 @@ export default function NewDealerPage() {
                 </div>
               </div>
             </div>
-            <p className="text-xs text-slate-400 mt-3">MA = Master Agent · MD = Master Dealer · SP = Sales Partner · SD = Service Dealer</p>
+            <p className="text-xs text-slate-400 mt-3">MA = Master Agent · MSO = Master System Operator · SP = Sales Partner · SD = Service Dealer</p>
           </div>
 
           {/* Locked rates */}
@@ -737,7 +737,7 @@ export default function NewDealerPage() {
             </div>
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-semibold text-slate-600">Master Dealer Rate</span>
+                <span className="text-xs font-semibold text-slate-600">MSO Rate</span>
                 <span className="text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded font-semibold">LOCKED</span>
               </div>
               <div className="text-2xl font-bold text-brand-400">$0.50</div>
@@ -946,7 +946,7 @@ export default function NewDealerPage() {
                     : <p className="text-xs text-slate-400 italic">Master Agent: not set</p>}
                   {form.master_dealer_id
                     ? <p className="text-xs text-slate-500 font-mono">MD: {form.master_dealer_id.slice(0,8)}…</p>
-                    : <p className="text-xs text-slate-400 italic">Master Dealer: not set</p>}
+                    : <p className="text-xs text-slate-400 italic">MSO: not set</p>}
                   {form.parent_org_id
                     ? <p className="text-xs text-slate-500 font-mono">Parent: {form.parent_org_id.slice(0,8)}…</p>
                     : null}
@@ -959,7 +959,7 @@ export default function NewDealerPage() {
               <ReviewCard icon={DollarSign} color="text-emerald-600" bg="bg-emerald-50" title="Commission Config">
                 <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
                   <p className="text-xs text-slate-500">Master Agent: <span className="font-semibold text-slate-700">$0.50</span> (locked)</p>
-                  <p className="text-xs text-slate-500">Master Dealer: <span className="font-semibold text-slate-700">$0.50</span> (locked)</p>
+                  <p className="text-xs text-slate-500">MSO: <span className="font-semibold text-slate-700">$0.50</span> (locked)</p>
                   <p className="text-xs text-slate-500">Sales Partner: <span className="font-semibold text-slate-700">${parseFloat(form.sales_partner_rate || '1').toFixed(2)}</span></p>
                   <p className="text-xs text-slate-500">Service Dealer: <span className="font-semibold text-slate-700">${parseFloat(form.service_dealer_rate || '3').toFixed(2)}</span></p>
                 </div>

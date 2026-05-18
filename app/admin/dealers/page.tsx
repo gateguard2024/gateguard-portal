@@ -34,7 +34,7 @@ interface DealerOrg {
 /* ─── Tier config (7 tiers) ──────────────────────────────── */
 const TIER_CONFIG: Record<string, { label: string; icon: any; color: string; bg: string; dot: string }> = {
   master_agent:       { label: 'Master Agent',       icon: Star,          color: 'text-violet-700',  bg: 'bg-violet-100',  dot: 'bg-violet-500'  },
-  master_dealer:      { label: 'Master Dealer',      icon: Layers,        color: 'text-brand-400',   bg: 'bg-brand-50',    dot: 'bg-brand-400'   },
+  master_dealer:      { label: 'MSO',                 icon: Layers,        color: 'text-brand-400',   bg: 'bg-brand-50',    dot: 'bg-brand-400'   },
   full_dealer:        { label: 'Full Dealership',    icon: Shield,        color: 'text-indigo-700',  bg: 'bg-indigo-100',  dot: 'bg-indigo-500'  },
   service_dealer:     { label: 'Service Dealer',     icon: Wrench,        color: 'text-emerald-700', bg: 'bg-emerald-100', dot: 'bg-emerald-500' },
   install_contractor: { label: 'Install Contractor', icon: ClipboardList, color: 'text-amber-700',   bg: 'bg-amber-100',   dot: 'bg-amber-500'   },
@@ -146,7 +146,7 @@ export default function DealersPage() {
       {/* Tier filter bar */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         <StatCard label="Master Agents"       value={counts.master_agent}       icon={Star}         color="bg-violet-100 text-violet-600"   active={filterTier === 'master_agent'}       onClick={() => setFilter(f => f === 'master_agent'       ? null : 'master_agent')}       />
-        <StatCard label="Master Dealers"      value={counts.master_dealer}      icon={Layers}       color="bg-brand-50 text-brand-400"      active={filterTier === 'master_dealer'}      onClick={() => setFilter(f => f === 'master_dealer'      ? null : 'master_dealer')}      />
+        <StatCard label="MSOs"                 value={counts.master_dealer}      icon={Layers}       color="bg-brand-50 text-brand-400"      active={filterTier === 'master_dealer'}      onClick={() => setFilter(f => f === 'master_dealer'      ? null : 'master_dealer')}      />
         <StatCard label="Full Dealerships"    value={counts.full_dealer}        icon={Shield}       color="bg-indigo-100 text-indigo-600"   active={filterTier === 'full_dealer'}        onClick={() => setFilter(f => f === 'full_dealer'        ? null : 'full_dealer')}        />
         <StatCard label="Service Dealers"     value={counts.service_dealer}     icon={Wrench}       color="bg-emerald-100 text-emerald-600" active={filterTier === 'service_dealer'}     onClick={() => setFilter(f => f === 'service_dealer'     ? null : 'service_dealer')}     />
         <StatCard label="Install Contractors" value={counts.install_contractor} icon={ClipboardList}color="bg-amber-100 text-amber-600"     active={filterTier === 'install_contractor'} onClick={() => setFilter(f => f === 'install_contractor' ? null : 'install_contractor')} />
