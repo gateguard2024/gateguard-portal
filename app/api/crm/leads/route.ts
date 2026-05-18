@@ -20,7 +20,6 @@ export async function GET(req: NextRequest) {
     let query = supabase
       .from('show_leads')
       .select('*, source, city, state, property_type, contact_title, units, notes')
-      .or('status.is.null,status.neq.converted')  // hide converted, keep null/new
       .order('created_at', { ascending: false })
 
     // If there's an org filter needed and the table has assigned_dealer column,
@@ -40,7 +39,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: 500 })
     }
 
-    const leads = (data || []).map((row: any) => ({
+    const leads = (data || []).filter((row: any) => row.status !== 'converted').map((row: any) => ({
       id:             `show_${row.id}`,
       type:           'lead' as const,
       contact_name:   row.name,
