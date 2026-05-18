@@ -65,7 +65,7 @@ function StagePill({ stage }: { stage: string }) {
 function CampaignModal({ onClose }: { onClose: () => void }) {
   const [step, setStep]         = useState<'loading' | 'preview' | 'sending' | 'done' | 'error' | 'test_sending' | 'test_done'>('loading')
   const [preview, setPreview]   = useState<CampaignPreview | null>(null)
-  const [result, setResult]     = useState<{ sent: number; failed: number; skipped: number } | null>(null)
+  const [result, setResult]     = useState<{ sent: number; failed: number; skipped: number; errors?: string[] } | null>(null)
   const [errMsg, setErrMsg]     = useState('')
   const [showHtml, setShowHtml] = useState(false)
   const [testMsg, setTestMsg]   = useState('')
@@ -296,6 +296,36 @@ function CampaignModal({ onClose }: { onClose: () => void }) {
               <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-xs text-blue-700">
                 Replies will come directly to rfeldman@gateguard.co. Check your inbox — follow up with anyone who responds within 24 hours for best conversion.
               </div>
+
+              {result.failed > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-semibold text-red-700 uppercase tracking-wide flex items-center gap-1.5">
+                      <AlertCircle size={12} />
+                      {result.failed} failed — see details
+                    </div>
+                    <a
+                      href="https://resend.com/logs"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] text-red-600 underline font-medium hover:text-red-800"
+                    >
+                      View in Resend Logs →
+                    </a>
+                  </div>
+                  {result.errors && result.errors.length > 0 ? (
+                    <div className="max-h-40 overflow-y-auto space-y-1">
+                      {result.errors.map((e, i) => (
+                        <div key={i} className="text-[11px] text-red-600 font-mono bg-red-100/60 rounded px-2 py-1 break-all">{e}</div>
+                      ))}
+                    </div>
+                  ) : null}
+                  <div className="text-[11px] text-red-500 pt-1">
+                    Likely causes: invalid/mistyped email from show signup, non-existent address, or spam block.
+                    Check <a href="https://resend.com/logs" target="_blank" rel="noreferrer" className="underline font-medium">resend.com/logs</a> for the exact reason per address.
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

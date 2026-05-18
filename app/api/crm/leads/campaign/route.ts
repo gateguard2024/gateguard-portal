@@ -252,29 +252,44 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Send emails in batches of 10 (Resend rate limit)
-    const BATCH = 10
+    // Use resend.batch.send() — one API call for up to 100 emails, avoids rate-limit errors
+    // that happen when firing individual sends concurrently (5 req/sec limit)
+    const BATCH = 50  // Resend batch supports up to 100; 50 keeps us safe
     for (let i = 0; i < eligible.length; i += BATCH) {
       const batch = eligible.slice(i, i + BATCH)
 
-      await Promise.all(
-        batch.map(async (lead: any) => {
-          const { subject, html, text } = buildEmail(lead.name, lead.property_name)
-          try {
-            const { error: sendError } = await resend.emails.send({
-              from:    'Russel Feldman <rfeldman@gateguard.co>',
-              to:      [lead.email],
-              subject,
-              html,
-              text,
-              replyTo: 'rfeldman@gateguard.co',
-            })
-            if (sendError) {
+      const messages = batch.map((lead: any) => {
+        const { subject, html, text } = buildEmail(lead.name, lead.property_name)
+        return {
+          from:    'Russel Feldman <rfeldman@gateguard.co>',
+          to:      [lead.email],
+          subject,
+          html,
+          text,
+          replyTo: 'rfeldman@gateguard.co',
+        }
+      })
+
+      try {
+        const { data: batchData, error: batchError } = await (resend.batch as any).send(messages)
+
+        if (batchError) {
+          // Whole batch failed
+          results.failed += batch.length
+          const errName = (batchError as any).name ?? ''
+          const errDetail = errName ? `[${errName}] ${batchError.message}` : batchError.message
+          batch.forEach((lead: any) => results.errors.push(`${lead.email}: ${errDetail}`))
+        } else {
+          // Individual results — batchData is an array of { id } or error per email
+          const batchResults: any[] = Array.isArray(batchData) ? batchData : []
+          batch.forEach((lead: any, idx: number) => {
+            const r = batchResults[idx]
+            if (r && r.error) {
               results.failed++
-              results.errors.push(`${lead.email}: ${sendError.message}`)
+              results.errors.push(`${lead.email}: ${r.error.message ?? r.error}`)
             } else {
               results.sent++
-              // Log the outreach on the lead
+              // Non-blocking: stamp the lead with campaign send date
               void (async () => {
                 try {
                   await supabase.from('show_leads').update({
@@ -283,16 +298,16 @@ export async function POST(req: NextRequest) {
                 } catch (_) { /* non-blocking */ }
               })()
             }
-          } catch (e: any) {
-            results.failed++
-            results.errors.push(`${lead.email}: ${e.message}`)
-          }
-        })
-      )
+          })
+        }
+      } catch (e: any) {
+        results.failed += batch.length
+        batch.forEach((lead: any) => results.errors.push(`${lead.email}: ${e.message}`))
+      }
 
-      // Small delay between batches
+      // Small pause between batches if we have more
       if (i + BATCH < eligible.length) {
-        await new Promise(r => setTimeout(r, 300))
+        await new Promise(r => setTimeout(r, 500))
       }
     }
 
