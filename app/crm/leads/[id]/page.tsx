@@ -676,6 +676,8 @@ export default function LeadDetailPage() {
   const [loading,    setLoading]    = useState(true);
   const [editOpen,           setEditOpen]           = useState(false);
   const [convertOpen,        setConvertOpen]        = useState(false);
+  const [repEditing,         setRepEditing]         = useState(false);
+  const [repValue,           setRepValue]           = useState("");
   const [converting,         setConverting]         = useState(false);
   const [marking,            setMarking]            = useState(false);
   const [toast,              setToast]              = useState<{ msg: string; ok: boolean } | null>(null);
@@ -891,24 +893,28 @@ export default function LeadDetailPage() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 mb-1 flex-wrap">
               <h2 className="text-xl font-bold text-foreground">{lead.name}</h2>
-              <select
-                value={lead.stage}
-                onChange={async e => {
-                  const stage = e.target.value;
-                  setLead(prev => ({ ...prev, stage }));
-                  await fetch(`/api/crm/leads/${id}`, {
-                    method: "PATCH", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ stage }),
-                  });
-                  showToast(`Stage updated to ${stageLabel[stage] ?? stage}`);
-                }}
-                className={cn(
-                  "appearance-none text-[11px] font-semibold px-2.5 py-1 rounded-full cursor-pointer border-0 outline-none",
-                  stagePill[lead.stage] ?? "bg-slate-100 text-slate-600"
-                )}
-              >
-                {STAGES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </select>
+              {/* Stage selector — visible chevron makes it obvious this is clickable */}
+              <div className="relative inline-flex items-center">
+                <select
+                  value={lead.stage}
+                  onChange={async e => {
+                    const stage = e.target.value;
+                    setLead(prev => ({ ...prev, stage }));
+                    await fetch(`/api/crm/leads/${id}`, {
+                      method: "PATCH", headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ stage }),
+                    });
+                    showToast(`Stage updated to ${stageLabel[stage] ?? stage}`);
+                  }}
+                  className={cn(
+                    "appearance-none text-[11px] font-semibold pl-2.5 pr-6 py-1 rounded-full cursor-pointer border outline-none transition-all hover:ring-2 hover:ring-current/20",
+                    stagePill[lead.stage] ?? "bg-slate-100 text-slate-600 border-slate-200"
+                  )}
+                >
+                  {STAGES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+                <ChevronDown size={10} className="absolute right-1.5 pointer-events-none opacity-50" />
+              </div>
               <span className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-500">
                 {lead.source}
               </span>
@@ -990,14 +996,22 @@ export default function LeadDetailPage() {
 
             {/* Lead details */}
             <div className="bg-card border border-border rounded-xl p-4">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Lead Details</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Lead Details</h3>
+                <button
+                  onClick={() => setEditOpen(true)}
+                  className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-brand-400 transition-colors"
+                  title="Edit lead details"
+                >
+                  <Edit2 size={11} /> Edit
+                </button>
+              </div>
               <div className="space-y-2.5">
                 {[
                   { label: "Property Type", value: lead.propertyType },
                   { label: "Units",         value: lead.units ? `${lead.units} units` : "—" },
                   { label: "Location",      value: lead.location || "—" },
                   { label: "Source",        value: lead.source },
-                  { label: "Assigned Rep",  value: lead.rep },
                   { label: "Est. Setup",    value: lead.estSetup != null ? `$${lead.estSetup.toLocaleString()}` : "TBD" },
                   { label: "Est. MRR",      value: lead.estMrr   != null ? `$${lead.estMrr.toLocaleString()}/mo` : "TBD" },
                 ].map(({ label, value }) => (
@@ -1006,6 +1020,42 @@ export default function LeadDetailPage() {
                     <span className="text-[12px] font-medium text-foreground text-right">{value}</span>
                   </div>
                 ))}
+                {/* Assigned Rep — inline editable */}
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-muted-foreground">Assigned Rep</span>
+                  {repEditing ? (
+                    <input
+                      autoFocus
+                      value={repValue}
+                      onChange={e => setRepValue(e.target.value)}
+                      onBlur={async () => {
+                        setRepEditing(false);
+                        if (repValue.trim() && repValue.trim() !== lead.rep) {
+                          setLead(prev => ({ ...prev, rep: repValue.trim() }));
+                          await fetch(`/api/crm/leads/${id}`, {
+                            method: "PATCH", headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ assignedDealer: repValue.trim() }),
+                          });
+                          showToast("Assigned rep updated.");
+                        }
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                        if (e.key === "Escape") { setRepEditing(false); setRepValue(lead.rep); }
+                      }}
+                      className="text-[12px] font-medium text-foreground text-right border-b border-brand-400 bg-transparent outline-none w-32"
+                    />
+                  ) : (
+                    <button
+                      onClick={() => { setRepEditing(true); setRepValue(lead.rep); }}
+                      className="flex items-center gap-1 text-[12px] font-medium text-foreground hover:text-brand-400 group transition-colors"
+                      title="Click to reassign"
+                    >
+                      {lead.rep}
+                      <Edit2 size={9} className="opacity-0 group-hover:opacity-50 transition-opacity" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1014,6 +1064,7 @@ export default function LeadDetailPage() {
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Quick Actions</h3>
               <div className="space-y-1.5">
                 {[
+                  { label: "Edit Lead",               icon: Edit2,       bg: "bg-slate-50",   color: "text-slate-500",   onClick: () => setEditOpen(true) },
                   { label: "Log a Call",              icon: PhoneCall,  bg: "bg-blue-50",    color: "text-blue-500",    onClick: () => {
                     document.dispatchEvent(new CustomEvent("lead:log", { detail: "call" }));
                   }},

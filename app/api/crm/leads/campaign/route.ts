@@ -311,6 +311,7 @@ export async function POST(req: NextRequest) {
             } else {
               results.sent++
               const resendId = r?.id ?? null
+              const sentAt   = new Date().toISOString()
               // Log the send with Resend message ID (needed for open-tracking webhook)
               void supabase.from('campaign_sends').insert({
                 show_lead_id:      lead.id,
@@ -319,7 +320,16 @@ export async function POST(req: NextRequest) {
                 campaign_name:     'show_follow_up',
                 status:            'sent',
                 resend_message_id: resendId,
-                sent_at:           new Date().toISOString(),
+                sent_at:           sentAt,
+              }).then(() => {})
+              // Log to activity feed so it appears on the lead detail page
+              void supabase.from('crm_activities').insert({
+                lead_id:         lead.id,
+                type:            'email',
+                subject:         'Campaign email sent — Show Follow-Up',
+                body:            `Personalized follow-up email delivered on ${new Date().toLocaleDateString()}. Resend ID: ${resendId ?? 'pending'}`,
+                created_by_name: 'Russel Feldman',
+                created_at:      sentAt,
               }).then(() => {})
               // Also stamp the lead notes field for quick visibility in the list
               void supabase.from('show_leads').update({
