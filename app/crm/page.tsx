@@ -159,11 +159,18 @@ export default function CRMPage() {
   const [showLogActivity, setShowLogActivity] = useState(false);
   const [logForm, setLogForm] = useState({ type: "call" as "call"|"email"|"meeting"|"task"|"note", subject: "", due_at: "", notes: "" });
   const [logSaving, setLogSaving] = useState(false);
-  const [showNewOpp, setShowNewOpp] = useState(false);
+  const [showNewOpp,  setShowNewOpp]  = useState(false);
   const [newOppForm, setNewOppForm] = useState({
     name: "", account_name: "", amount: "", close_date: "", stage: "meet_present", description: "", org_id: ""
   });
   const [savingOpp, setSavingOpp] = useState(false);
+  const [showNewLead, setShowNewLead] = useState(false);
+  const [newLeadForm, setNewLeadForm] = useState({
+    name: "", property_name: "", email: "", phone: "",
+    source: "manual", city: "", state: "", property_type: "Multifamily",
+    contact_title: "", units: "", notes: "",
+  });
+  const [savingLead, setSavingLead] = useState(false);
   const [assignableOrgs, setAssignableOrgs] = useState<{ id: string; name: string; org_tier: string; tier_label: string }[]>([]);
   const [assignableOrgsSelfOnly, setAssignableOrgsSelfOnly] = useState(true);
 
@@ -281,6 +288,28 @@ export default function CRMPage() {
     }
   };
 
+  const handleCreateLead = async () => {
+    if (!newLeadForm.name.trim()) return;
+    setSavingLead(true);
+    try {
+      const res = await fetch("/api/crm/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...newLeadForm,
+          units: newLeadForm.units ? parseInt(newLeadForm.units, 10) : null,
+        }),
+      });
+      if (res.ok) {
+        await fetchAll();
+        setShowNewLead(false);
+        setNewLeadForm({ name: "", property_name: "", email: "", phone: "", source: "manual", city: "", state: "", property_type: "Multifamily", contact_title: "", units: "", notes: "" });
+      }
+    } finally {
+      setSavingLead(false);
+    }
+  };
+
   // Derived data
   const allRecords = oppsData?.records ?? [];
   const grouped = oppsData?.grouped ?? ({} as Record<Stage, { label: string; records: Opportunity[]; total: number }>);
@@ -325,6 +354,17 @@ export default function CRMPage() {
               </button>
               {showNewMenu && (
                 <div className="absolute right-0 top-full mt-1.5 w-52 bg-white border border-border rounded-xl shadow-lg z-50 py-1 overflow-hidden">
+                  <button
+                    onClick={() => { setShowNewMenu(false); setShowNewLead(true); }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-slate-50 transition-colors"
+                  >
+                    <UserPlus size={15} className="text-rose-500" />
+                    <div className="text-left">
+                      <p className="font-medium">Lead</p>
+                      <p className="text-[11px] text-muted-foreground">Add an inbound contact</p>
+                    </div>
+                  </button>
+                  <div className="mx-3 border-t border-border/60" />
                   <button
                     onClick={() => { setShowNewMenu(false); openNewOppForm(); }}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-slate-50 transition-colors"
@@ -845,6 +885,101 @@ export default function CRMPage() {
                   {logSaving ? "Saving…" : "Log Activity"}
                 </button>
               </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* New Lead slide-over */}
+      {showNewLead && (
+        <>
+          <div className="fixed inset-0 bg-black/20 z-40" onClick={() => setShowNewLead(false)} />
+          <div className="fixed inset-y-0 right-0 w-96 bg-white border-l border-border shadow-2xl z-50 flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
+              <div>
+                <h2 className="font-semibold text-foreground">New Lead</h2>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Add an inbound contact to the pipeline</p>
+              </div>
+              <button onClick={() => setShowNewLead(false)} className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Contact Name <span className="text-red-500">*</span></label>
+                <input type="text" placeholder="First Last" value={newLeadForm.name}
+                  onChange={e => setNewLeadForm(f => ({ ...f, name: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Company / Property Name</label>
+                <input type="text" placeholder="Acme Dealers · Parkview Estates" value={newLeadForm.property_name}
+                  onChange={e => setNewLeadForm(f => ({ ...f, property_name: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Email</label>
+                  <input type="email" placeholder="name@company.com" value={newLeadForm.email}
+                    onChange={e => setNewLeadForm(f => ({ ...f, email: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Phone</label>
+                  <input type="tel" placeholder="(555) 000-0000" value={newLeadForm.phone}
+                    onChange={e => setNewLeadForm(f => ({ ...f, phone: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Title / Role</label>
+                <input type="text" placeholder="VP of Operations · Property Manager" value={newLeadForm.contact_title}
+                  onChange={e => setNewLeadForm(f => ({ ...f, contact_title: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">City</label>
+                  <input type="text" placeholder="Atlanta" value={newLeadForm.city}
+                    onChange={e => setNewLeadForm(f => ({ ...f, city: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">State</label>
+                  <input type="text" placeholder="GA" value={newLeadForm.state}
+                    onChange={e => setNewLeadForm(f => ({ ...f, state: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Source</label>
+                <select value={newLeadForm.source} onChange={e => setNewLeadForm(f => ({ ...f, source: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white">
+                  <option value="manual">Manual Entry</option>
+                  <option value="referral">Referral</option>
+                  <option value="web">Web</option>
+                  <option value="show">Trade Show</option>
+                  <option value="linkedin">LinkedIn</option>
+                  <option value="cold_outreach">Cold Outreach</option>
+                  <option value="inbound_call">Inbound Call</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Notes</label>
+                <textarea rows={3} placeholder="How did they hear about us? Any context…" value={newLeadForm.notes}
+                  onChange={e => setNewLeadForm(f => ({ ...f, notes: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 resize-none" />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-border flex-shrink-0">
+              <button onClick={() => setShowNewLead(false)}
+                className="px-4 py-2 text-sm font-medium text-muted-foreground border border-border rounded-lg hover:bg-accent transition-colors">
+                Cancel
+              </button>
+              <button onClick={handleCreateLead} disabled={savingLead || !newLeadForm.name.trim()}
+                className="px-4 py-2 text-sm font-medium bg-rose-500 text-white rounded-lg hover:bg-rose-600 disabled:opacity-50 transition-colors">
+                {savingLead ? "Saving…" : "Create Lead"}
+              </button>
             </div>
           </div>
         </>

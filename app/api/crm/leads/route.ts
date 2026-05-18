@@ -71,6 +71,46 @@ export async function GET(req: NextRequest) {
   }
 }
 
+export async function POST(req: NextRequest) {
+  try {
+    await getCurrentUser()
+    const body = await req.json()
+
+    const {
+      name, email, phone, property_name,
+      source, city, state, property_type,
+      contact_title, units, notes, company,
+    } = body
+
+    if (!name?.trim()) {
+      return NextResponse.json({ error: 'name is required' }, { status: 400 })
+    }
+
+    const { data, error } = await supabase
+      .from('show_leads')
+      .insert({
+        name:          name.trim(),
+        email:         email?.trim() ?? null,
+        phone:         phone?.trim() ?? null,
+        property_name: property_name?.trim() ?? company?.trim() ?? null,
+        source:        source ?? 'manual',
+        city:          city?.trim() ?? null,
+        state:         state?.trim() ?? null,
+        property_type: property_type ?? 'Multifamily',
+        contact_title: contact_title?.trim() ?? null,
+        units:         units ? parseInt(units, 10) : null,
+        notes:         notes?.trim() ?? null,
+      })
+      .select()
+      .single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ id: `show_${data.id}`, ...data }, { status: 201 })
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 })
+  }
+}
+
 function formatAge(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
   const mins = Math.floor(diff / 60000)
