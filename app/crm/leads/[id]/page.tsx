@@ -899,7 +899,7 @@ export default function LeadDetailPage() {
                   }},
                   { label: "Send Email",              icon: Mail,        bg: "bg-violet-50",  color: "text-violet-500",  onClick: () => lead.email && window.open(`mailto:${lead.email}`) },
                   { label: "Create Quote",            icon: FileText,    bg: "bg-orange-50",  color: "text-orange-500",  onClick: handleCreateQuote },
-                  { label: "Convert to Opportunity",  icon: TrendingUp,  bg: "bg-emerald-50", color: "text-emerald-500", onClick: handleConvert,
+                  { label: "Convert to Opportunity",  icon: TrendingUp,  bg: "bg-emerald-50", color: "text-emerald-500", onClick: () => setConvertOpen(true),
                     disabled: converting || lead.stage === "won" || lead.stage === "lost" },
                   { label: "Delete Lead",             icon: Trash2,      bg: "bg-red-50",     color: "text-red-500",     onClick: handleDelete },
                 ].map(({ label, icon: Icon, bg, color, onClick, disabled }) => (
