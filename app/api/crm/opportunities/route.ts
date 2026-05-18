@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
       .order('created_at', { ascending: false })
 
     // ── Org isolation ──────────────────────────────────────────────
-    query = applyOrgScope(query, scope, 'org_id')
+    query = applyOrgScope(query, scope, 'dealer_org_id')
 
     if (stage)  query = query.eq('stage', stage)
     if (type)   query = query.eq('opp_type', type)
@@ -102,17 +102,22 @@ export async function POST(req: NextRequest) {
     // - All others always get their own org_id stamped automatically.
     const canChooseOrg =
       user.isCorporate || user.isMasterAgent || user.isMasterDealer || user.isFullDealer
-    const org_id = canChooseOrg ? (body.org_id ?? user.org_id ?? null) : (user.org_id ?? null)
+    const dealer_org_id = canChooseOrg
+      ? (body.dealer_org_id ?? body.org_id ?? user.org_id ?? null)
+      : (user.org_id ?? null)
+
+    // Strip any client-supplied fields that don't exist on the table
+    const { org_id: _orgId, contact_name: _cn, ...safeBody } = body
 
     const { data, error } = await supabase
       .from('opportunities')
       .insert({
-        ...body,
+        ...safeBody,
         stage,
         probability:    body.probability ?? STAGE_PROB[stage],
         owner_name:     user.name,
         owner_initials: user.initials,
-        org_id,
+        dealer_org_id,
       })
       .select()
       .single()
