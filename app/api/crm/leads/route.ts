@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
       location:      row.city && row.state
         ? `${row.city}, ${row.state}`
         : (row.city ?? 'Atlanta') + ', ' + (row.state ?? 'GA'),
-      stage:        'new' as const,
+      stage:        row.stage ?? 'new',
       rep:          'R. Feldman',
       repInitials:  'RF',
       lastActivity: formatAge(row.created_at),

@@ -691,11 +691,6 @@ export default function CRMPage() {
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
                 </span>
                 <h2 className="font-semibold text-foreground">My Leads</h2>
-                {leads.filter(l => !l.assigned_dealer).length > 0 && (
-                  <span className="text-xs font-mono bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded-full">
-                    {leads.filter(l => !l.assigned_dealer).length} unassigned
-                  </span>
-                )}
                 <span className="text-xs font-mono bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full">
                   {leads.length} total
                 </span>

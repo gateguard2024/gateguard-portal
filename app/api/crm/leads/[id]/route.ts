@@ -61,10 +61,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       units: data.units ?? null,
       location,
       address: location,
-      stage: isConverted ? 'converted' : 'new',
+      stage: isConverted ? 'converted' : (data.stage ?? 'new'),
       source: data.source ?? 'show',
-      rep: 'Russel Feldman',
-      repInitials: 'RF',
+      rep: data.assigned_dealer || 'Russel Feldman',
+      repInitials: (data.assigned_dealer || 'Russel Feldman').split(' ').map((n: string) => n[0]).join('').toUpperCase(),
       lockDaysLeft: null,
       lockExpires: null,
       estSetup: null,
@@ -87,8 +87,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (rawId.startsWith('show_')) {
     const uuid = rawId.replace('show_', '')
     const updateData: Record<string, unknown> = {}
-    // show_leads has no status column — stage/conversion is tracked via opportunities table
-    // if (body.stage !== undefined) updateData.status = body.stage  // skip — column doesn't exist
+    // stage column added in migration 030 — save it directly
+    if (body.stage          !== undefined) updateData.stage          = body.stage
     if (body.notes          !== undefined) updateData.notes          = body.notes
     if (body.assignedDealer !== undefined) updateData.assigned_dealer = body.assignedDealer
     if (body.name           !== undefined) updateData.property_name  = body.name

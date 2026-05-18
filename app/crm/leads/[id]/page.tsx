@@ -694,13 +694,43 @@ export default function LeadDetailPage() {
     Promise.all([
       fetch(`/api/crm/leads/${id}`).then(r => r.json()),
       fetch(`/api/crm/leads/${id}/activities`).then(r => r.json()),
-    ]).then(([leadData, actData]) => {
+      fetch(`/api/crm/leads/campaign/sends`).then(r => r.json()),
+    ]).then(([leadData, actData, sendsMap]) => {
       if (!leadData.error) {
         setLead({ ...EMPTY_LEAD, ...leadData });
       }
-      if (actData.activities) {
-        setActivities(actData.activities);
+
+      const acts: ActivityEntry[] = actData.activities ?? [];
+
+      // Inject campaign send as synthetic activity if not already in the feed
+      const rawUuid = id.replace(/^show_/, '');
+      const send = sendsMap?.[rawUuid];
+      if (send?.sent_at) {
+        const alreadyLogged = acts.some(
+          a => a.type === 'email' && a.subject?.includes('Campaign email')
+        );
+        if (!alreadyLogged) {
+          const statusLabel =
+            send.status === 'opened'    ? `Opened ×${send.open_count ?? 1}` :
+            send.status === 'delivered' ? 'Delivered' :
+            send.status === 'bounced'   ? 'Bounced' :
+            send.status === 'failed'    ? 'Failed to send' : 'Sent';
+          acts.unshift({
+            id:              `campaign_${rawUuid}`,
+            type:            'email',
+            subject:         `Campaign email — Show Follow-Up (${statusLabel})`,
+            body:            send.status === 'failed'
+              ? `Failed: ${send.error_message ?? 'unknown error'}`
+              : send.opened_at
+                ? `First opened ${new Date(send.opened_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
+                : `Sent via Resend on ${new Date(send.sent_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
+            created_by_name: 'Russel Feldman',
+            created_at:      send.sent_at,
+          });
+        }
       }
+
+      setActivities(acts);
     }).catch(console.warn).finally(() => setLoading(false));
   }, [id]);
 
