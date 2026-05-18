@@ -8,7 +8,7 @@ import {
   ChevronRight, Check, Phone, Mail,
   ClipboardList, Plus, X,
   ExternalLink, Wrench, FileText, Zap,
-  ChevronLeft, Trash2, RefreshCw,
+  ChevronLeft, Trash2, RefreshCw, MapPin,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { CalendarClock, StickyNote, Pencil, AlertCircle } = require("lucide-react") as any;
@@ -177,6 +177,7 @@ interface Opportunity {
   stage_history: StageHistoryItem[];
   created_at: string;
   won_at?: string;
+  site_id?: string | null;
 }
 
 // ── Stage Config ──────────────────────────────────────────────────────────
@@ -434,6 +435,51 @@ export default function OpportunityDetailPage() {
   const [countersigning,   setCountersigning]   = useState(false);
   const [countersignError, setCountersignError] = useState<string | null>(null);
 
+  // Create Property from won opportunity
+  const [showCreateProperty, setShowCreateProperty] = useState(false);
+  const [createPropSaving,   setCreatePropSaving]   = useState(false);
+  const [createPropError,    setCreatePropError]     = useState<string | null>(null);
+  const [createPropForm, setCreatePropForm] = useState({
+    name: "", address: "", city: "", state: "", zip: "",
+    property_type: "Multifamily", units: "",
+    pm_name: "", pm_email: "", pm_phone: "",
+    access_notes: "", notes: "",
+  });
+
+  const handleCreateProperty = async () => {
+    if (!createPropForm.name.trim()) { setCreatePropError("Property name is required."); return; }
+    setCreatePropSaving(true); setCreatePropError(null);
+    try {
+      const res  = await fetch("/api/sites", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...createPropForm,
+          units:     createPropForm.units ? parseInt(createPropForm.units, 10) : null,
+          crm_opp_id: id,
+          primary_contact_name:  opp?.site_contact_name  ?? null,
+          primary_contact_email: opp?.site_contact_email ?? null,
+          primary_contact_phone: opp?.site_contact_phone ?? null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to create property");
+      const siteId = json.site?.id;
+      // Link opp → site
+      await fetch(`/api/crm/opportunities/${id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ site_id: siteId }),
+      });
+      setOpp(prev => prev ? { ...prev, site_id: siteId } : prev);
+      setShowCreateProperty(false);
+      // Navigate to new site
+      window.location.href = `/sites/${siteId}`;
+    } catch (e: unknown) {
+      setCreatePropError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setCreatePropSaving(false);
+    }
+  };
+
   // Upload Executed Doc state
   const [showUploadExec,   setShowUploadExec]   = useState(false);
   const [uploadFile,       setUploadFile]       = useState<File | null>(null);
@@ -466,6 +512,17 @@ export default function OpportunityDetailPage() {
       if (data.documents_status && typeof data.documents_status === "object") {
         setChecklistStatus(data.documents_status as Record<string, boolean>);
       }
+      // Pre-fill Create Property form from opp data
+      setCreatePropForm(f => ({
+        ...f,
+        name:  data.account_name ?? f.name,
+        city:  data.property_city  ?? f.city,
+        state: data.property_state ?? f.state,
+        units: data.units ? String(data.units) : f.units,
+        pm_name:  data.site_contact_name  ?? f.pm_name,
+        pm_email: data.site_contact_email ?? f.pm_email,
+        pm_phone: data.site_contact_phone ?? f.pm_phone,
+      }));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
@@ -1768,14 +1825,35 @@ export default function OpportunityDetailPage() {
               </Link>
 
               {opp.stage === "won" ? (
-                <Link
-                  href="/maintenance"
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-accent transition-colors text-sm"
-                >
-                  <ClipboardList size={14} className="text-[#6B7EFF]" />
-                  <span className="text-foreground">Work Order</span>
-                  <ExternalLink size={11} className="text-muted-foreground ml-auto" />
-                </Link>
+                <>
+                  <Link
+                    href="/maintenance"
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-accent transition-colors text-sm"
+                  >
+                    <ClipboardList size={14} className="text-[#6B7EFF]" />
+                    <span className="text-foreground">Work Order</span>
+                    <ExternalLink size={11} className="text-muted-foreground ml-auto" />
+                  </Link>
+                  {opp.site_id ? (
+                    <Link
+                      href={`/sites/${opp.site_id}`}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-accent transition-colors text-sm"
+                    >
+                      <MapPin size={14} className="text-emerald-600" />
+                      <span className="text-foreground">View Property</span>
+                      <ExternalLink size={11} className="text-muted-foreground ml-auto" />
+                    </Link>
+                  ) : (
+                    <button
+                      onClick={() => setShowCreateProperty(true)}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-emerald-50 transition-colors text-sm w-full text-left"
+                    >
+                      <MapPin size={14} className="text-emerald-600" />
+                      <span className="text-emerald-700 font-medium">Create Property</span>
+                      <Plus size={11} className="text-emerald-500 ml-auto" />
+                    </button>
+                  )}
+                </>
               ) : (
                 <div
                   title="Available after Closed Won"
@@ -1990,6 +2068,120 @@ export default function OpportunityDetailPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── Create Property Slide-Over ───────────────────────────────────── */}
+      {showCreateProperty && (
+        <>
+          <div className="fixed inset-0 bg-black/20 z-40" onClick={() => setShowCreateProperty(false)} />
+          <div className="fixed inset-y-0 right-0 w-[440px] bg-white border-l border-slate-200 z-50 flex flex-col shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">Create Property</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Pre-filled from this opportunity. Adjust as needed.</p>
+              </div>
+              <button onClick={() => setShowCreateProperty(false)} className="p-1.5 rounded-lg hover:bg-slate-100">
+                <X size={14} className="text-slate-500" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {[
+                { label: "Property Name *", key: "name", placeholder: "e.g. Stonegate Townhomes" },
+                { label: "Street Address",  key: "address", placeholder: "123 Main St" },
+              ].map(({ label, key, placeholder }) => (
+                <div key={key}>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">{label}</label>
+                  <input
+                    value={(createPropForm as Record<string, string>)[key]}
+                    onChange={e => setCreatePropForm(f => ({ ...f, [key]: e.target.value }))}
+                    placeholder={placeholder}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  />
+                </div>
+              ))}
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { label: "City",  key: "city",  placeholder: "Atlanta" },
+                  { label: "State", key: "state", placeholder: "GA" },
+                  { label: "ZIP",   key: "zip",   placeholder: "30301" },
+                ].map(({ label, key, placeholder }) => (
+                  <div key={key}>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">{label}</label>
+                    <input
+                      value={(createPropForm as Record<string, string>)[key]}
+                      onChange={e => setCreatePropForm(f => ({ ...f, [key]: e.target.value }))}
+                      placeholder={placeholder}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Property Type</label>
+                  <select
+                    value={createPropForm.property_type}
+                    onChange={e => setCreatePropForm(f => ({ ...f, property_type: e.target.value }))}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 appearance-none"
+                  >
+                    {["Multifamily", "HOA", "Mixed-Use", "Commercial", "Single-Family"].map(t => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Units</label>
+                  <input
+                    type="number"
+                    value={createPropForm.units}
+                    onChange={e => setCreatePropForm(f => ({ ...f, units: e.target.value }))}
+                    placeholder="e.g. 120"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  />
+                </div>
+              </div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider pt-1">Property Manager</p>
+              {[
+                { label: "PM Name",  key: "pm_name",  placeholder: "Jane Smith" },
+                { label: "PM Email", key: "pm_email", placeholder: "jane@property.com" },
+                { label: "PM Phone", key: "pm_phone", placeholder: "(555) 000-0000" },
+              ].map(({ label, key, placeholder }) => (
+                <div key={key}>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">{label}</label>
+                  <input
+                    value={(createPropForm as Record<string, string>)[key]}
+                    onChange={e => setCreatePropForm(f => ({ ...f, [key]: e.target.value }))}
+                    placeholder={placeholder}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  />
+                </div>
+              ))}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Access Notes</label>
+                <textarea
+                  value={createPropForm.access_notes}
+                  onChange={e => setCreatePropForm(f => ({ ...f, access_notes: e.target.value }))}
+                  rows={3}
+                  placeholder="Gate codes, parking, key pickup…"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none"
+                />
+              </div>
+              {createPropError && (
+                <div className="flex items-center gap-2 text-red-500 text-xs bg-red-50 rounded-xl px-3 py-2">
+                  <AlertCircle size={13} /> {createPropError}
+                </div>
+              )}
+            </div>
+            <div className="border-t border-slate-100 p-4 flex gap-3">
+              <button type="button" onClick={() => setShowCreateProperty(false)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+                Cancel
+              </button>
+              <button onClick={handleCreateProperty} disabled={createPropSaving}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50">
+                {createPropSaving ? "Creating…" : "Create Property →"}
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
       {/* ── Upload Executed Document Modal ─────────────────────────────── */}

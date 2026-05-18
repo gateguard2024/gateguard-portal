@@ -248,7 +248,18 @@ function formatDateTime(iso: string | null) {
 }
 
 /* ─── Main page ──────────────────────────────────────── */
-type Tab = 'overview' | 'assets' | 'events' | 'work_orders' | 'requests' | 'pm_schedules'
+type Tab = 'overview' | 'assets' | 'events' | 'work_orders' | 'requests' | 'pm_schedules' | 'opportunities'
+
+interface SiteOpportunity {
+  id: string
+  name: string
+  stage: string
+  amount: number | null
+  opp_type: string | null
+  account_name: string
+  created_at: string
+  close_date: string | null
+}
 
 interface WORequest {
   id: string
@@ -275,8 +286,9 @@ export default function SiteDetailPage() {
   const [events, setEvents]         = useState<SiteEvent[]>([])
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
   const [requests, setRequests]     = useState<WORequest[]>([])
-  const [pmSchedules, setPMSchedules] = useState<PMSchedule[]>([])
-  const [loading, setLoading]       = useState(true)
+  const [pmSchedules, setPMSchedules]   = useState<PMSchedule[]>([])
+  const [siteOpps, setSiteOpps]         = useState<SiteOpportunity[]>([])
+  const [loading, setLoading]           = useState(true)
   const [tab, setTab]               = useState<Tab>('overview')
   const [showAddAsset, setShowAddAsset] = useState(false)
   const [statusUpdating, setStatusUpdating] = useState(false)
@@ -314,6 +326,13 @@ export default function SiteDetailPage() {
       if (pmRes.ok) {
         const pmJson = await pmRes.json()
         setPMSchedules(pmJson.pm_schedules ?? [])
+      }
+      // Load opportunities linked to this site
+      const oppRes = await fetch(`/api/crm/opportunities?site_id=${id}`)
+      if (oppRes.ok) {
+        const oppJson = await oppRes.json()
+        // API returns { records: [...], grouped: ..., ... }
+        setSiteOpps(oppJson.records ?? oppJson.opportunities ?? [])
       }
     } finally { setLoading(false) }
   }
@@ -439,12 +458,13 @@ export default function SiteDetailPage() {
   const newRequests = requests.filter(r => r.status === 'new').length
 
   const TABS: { id: Tab; label: string; icon: any; count?: number; badge?: number }[] = [
-    { id: 'overview',     label: 'Overview',     icon: Building2 },
-    { id: 'assets',       label: 'Equipment',    icon: Package,       count: assets.length },
-    { id: 'events',       label: 'Events',       icon: Activity,      count: events.length },
-    { id: 'work_orders',  label: 'Work Orders',  icon: ClipboardList, count: workOrders.length },
-    { id: 'requests',     label: 'Requests',     icon: Inbox,         count: requests.length, badge: newRequests },
-    { id: 'pm_schedules', label: 'PM Schedules', icon: RefreshCw,     count: pmSchedules.length },
+    { id: 'overview',      label: 'Overview',      icon: Building2 },
+    { id: 'assets',        label: 'Equipment',     icon: Package,       count: assets.length },
+    { id: 'events',        label: 'Events',        icon: Activity,      count: events.length },
+    { id: 'work_orders',   label: 'Work Orders',   icon: ClipboardList, count: workOrders.length },
+    { id: 'requests',      label: 'Requests',      icon: Inbox,         count: requests.length, badge: newRequests },
+    { id: 'pm_schedules',  label: 'PM Schedules',  icon: RefreshCw,     count: pmSchedules.length },
+    { id: 'opportunities', label: 'Opportunities', icon: FileText,      count: siteOpps.length },
   ]
 
   return (
@@ -1071,6 +1091,76 @@ export default function SiteDetailPage() {
               </table>
             </div>
           ) : null}
+        </div>
+      )}
+
+      {/* ── Tab: Opportunities ──────────────────────────────────────────── */}
+      {tab === 'opportunities' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800">Linked Opportunities</h3>
+              <p className="text-xs text-slate-400 mt-0.5">All CRM opportunities tied to this property</p>
+            </div>
+            <Link
+              href={`/crm/opportunities`}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-[#6B7EFF] hover:underline"
+            >
+              <ExternalLink size={12} /> View CRM
+            </Link>
+          </div>
+          {siteOpps.length === 0 ? (
+            <div className="text-center py-12 text-sm text-slate-400">
+              <FileText size={24} className="mx-auto mb-2 text-slate-300" />
+              No opportunities linked to this property yet.<br />
+              When a won opportunity creates this property, it appears here.
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-100">
+                  <tr>
+                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Opportunity</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Stage</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Value</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Close Date</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {siteOpps.map(opp => (
+                    <tr key={opp.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-slate-900">{opp.name}</p>
+                        <p className="text-xs text-slate-400">{opp.account_name}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-block text-xs font-medium bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full capitalize">
+                          {opp.opp_type?.replace(/_/g, ' ') ?? 'Property'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 capitalize text-slate-600">{opp.stage?.replace(/_/g, ' ')}</td>
+                      <td className="px-4 py-3 text-slate-700 font-medium">
+                        {opp.amount ? `$${opp.amount.toLocaleString()}` : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-slate-500 text-xs">
+                        {opp.close_date ? new Date(opp.close_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <Link
+                          href={`/crm/opportunities/${opp.id}`}
+                          className="text-xs text-[#6B7EFF] hover:underline flex items-center gap-1 justify-end"
+                        >
+                          <ExternalLink size={11} /> View
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

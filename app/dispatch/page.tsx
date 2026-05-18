@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import {
   RefreshCw, Plus, Zap, Users, Navigation, CheckCircle2,
   MapPin, Clock, Wrench, Camera, DoorOpen, Radio, X, ChevronDown, AlertTriangle,
-  Calendar, ChevronLeft, ChevronRight,
+  Calendar, ChevronLeft, ChevronRight, Phone, FileText, ExternalLink,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { List } = require("lucide-react") as any;
+const { List, Search } = require("lucide-react") as any;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,6 +28,16 @@ interface Job {
   status:          JobStatus;
   woNumber:        string;
   title:           string;
+  notes:           string | null;
+  site_id:         string | null;
+}
+
+interface SiteOption {
+  id:       string;
+  name:     string;
+  address:  string;
+  city:     string;
+  state:    string;
 }
 
 interface Tech {
@@ -78,6 +88,260 @@ const techStatusConfig: Record<TechStatus, { label: string; badge: string; dot: 
 
 const JOB_TYPES: JobType[] = ["Install", "Repair", "PM", "Site Walk"];
 
+// ─── Site Picker ─────────────────────────────────────────────────────────────
+
+function SitePicker({ value, onChange }: { value: { id: string; name: string } | null; onChange: (s: SiteOption | null) => void }) {
+  const [query,   setQuery]   = useState("");
+  const [results, setResults] = useState<SiteOption[]>([]);
+  const [open,    setOpen]    = useState(false);
+  const [loading, setLoading] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  useEffect(() => {
+    if (!query.trim()) { setResults([]); return; }
+    setLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res  = await fetch(`/api/sites?q=${encodeURIComponent(query)}&limit=8`);
+        const json = await res.json();
+        const sites = (json.sites ?? json ?? []) as Array<{ id: string; name: string; address?: string; city?: string; state?: string }>;
+        setResults(sites.map(s => ({
+          id:      s.id,
+          name:    s.name,
+          address: s.address ?? "",
+          city:    s.city    ?? "",
+          state:   s.state   ?? "",
+        })));
+      } catch { setResults([]); }
+      setLoading(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const selectSite = (s: SiteOption) => {
+    onChange(s);
+    setQuery("");
+    setOpen(false);
+  };
+
+  const clear = () => { onChange(null); setQuery(""); };
+
+  return (
+    <div ref={ref} className="relative">
+      {value ? (
+        <div className="flex items-center justify-between border border-emerald-300 bg-emerald-50 rounded-xl px-3 py-2.5">
+          <div>
+            <p className="text-sm font-semibold text-slate-800">{value.name}</p>
+          </div>
+          <button type="button" onClick={clear} className="p-0.5 rounded hover:bg-emerald-100 text-slate-400 hover:text-slate-600">
+            <X size={13} />
+          </button>
+        </div>
+      ) : (
+        <div className="relative">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <input
+            value={query}
+            onChange={e => { setQuery(e.target.value); setOpen(true); }}
+            onFocus={() => setOpen(true)}
+            placeholder="Search properties…"
+            className="w-full border border-slate-200 rounded-xl pl-8 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+          />
+        </div>
+      )}
+      {open && !value && (
+        <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 max-h-56 overflow-y-auto">
+          {loading && <div className="text-xs text-slate-400 px-3 py-2">Searching…</div>}
+          {!loading && query.trim() && results.length === 0 && (
+            <div className="text-xs text-slate-400 px-3 py-2">No properties found. Type a name to search.</div>
+          )}
+          {results.map(s => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => selectSite(s)}
+              className="w-full text-left px-3 py-2.5 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0"
+            >
+              <p className="text-sm font-medium text-slate-800">{s.name}</p>
+              {(s.city || s.address) && (
+                <p className="text-[11px] text-slate-400">{[s.address, s.city, s.state].filter(Boolean).join(", ")}</p>
+              )}
+            </button>
+          ))}
+          {!loading && !query.trim() && (
+            <div className="text-xs text-slate-400 px-3 py-3 text-center">Start typing to search properties</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Job Detail Slide-Over ────────────────────────────────────────────────────
+
+const priorityLabel: Record<Priority, string> = {
+  urgent:    "🔴 Urgent",
+  normal:    "🔵 Normal",
+  scheduled: "⚪ Scheduled",
+};
+
+function JobDetailSlideOver({ job, techs, onClose, onStatusChange }: {
+  job:            Job;
+  techs:          Tech[];
+  onClose:        () => void;
+  onStatusChange: (id: string, status: JobStatus) => void;
+}) {
+  const tech = techs.find(t => t.id === job.assignedTechId);
+  const typeConf = jobTypeConfig[job.jobType] ?? jobTypeConfig.Repair;
+
+  const NEXT_STATUS: Record<JobStatus, JobStatus | null> = {
+    Pending:       "Assigned",
+    Assigned:      "In Progress",
+    "In Progress": "Done",
+    Done:          null,
+  };
+  const next = NEXT_STATUS[job.status];
+
+  const statusColors: Record<JobStatus, string> = {
+    Pending:       "bg-slate-100 text-slate-600",
+    Assigned:      "bg-blue-100 text-blue-700",
+    "In Progress": "bg-amber-100 text-amber-700",
+    Done:          "bg-emerald-100 text-emerald-700",
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} />
+      <div className="fixed inset-y-0 right-0 w-[460px] bg-white border-l border-slate-200 z-50 flex flex-col shadow-2xl">
+        {/* Header */}
+        <div className="flex items-start justify-between px-5 py-4 border-b border-slate-100">
+          <div>
+            <p className="text-[10px] font-mono text-slate-400 mb-0.5">{job.woNumber}</p>
+            <h2 className="text-sm font-bold text-slate-900 leading-tight">{job.title || job.property}</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors mt-0.5">
+            <X size={14} className="text-slate-500" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {/* Status + badges */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={cn("inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full", statusColors[job.status])}>
+              {job.status}
+            </span>
+            <span className={cn("inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full", typeConf.color)}>
+              {jobTypeIcon[job.jobType]}{typeConf.label}
+            </span>
+            <span className="text-[11px] text-slate-500">{priorityLabel[job.priority]}</span>
+          </div>
+
+          {/* Property */}
+          <div className="bg-slate-50 rounded-xl p-4 space-y-1">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Property</p>
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-slate-800">{job.property}</p>
+              {job.site_id && (
+                <a
+                  href={`/sites/${job.site_id}`}
+                  className="inline-flex items-center gap-1 text-[11px] text-[#6B7EFF] hover:underline"
+                >
+                  <ExternalLink size={11} />
+                  View Site
+                </a>
+              )}
+            </div>
+          </div>
+
+          {/* Scheduled */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-slate-50 rounded-xl p-4">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Scheduled</p>
+              <div className="flex items-center gap-1.5 text-sm text-slate-700">
+                <Clock size={12} className="text-slate-400" />
+                {job.eta === "TBD" ? <span className="text-slate-400 italic">TBD</span> : job.eta}
+              </div>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-4">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Job Type</p>
+              <p className="text-sm text-slate-700">{job.jobType}</p>
+            </div>
+          </div>
+
+          {/* Assigned Tech */}
+          {tech ? (
+            <div className="bg-slate-50 rounded-xl p-4">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Assigned Technician</p>
+              <div className="flex items-center gap-3">
+                <div className={cn(
+                  "w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0",
+                  tech.status === "Offline" ? "bg-slate-400" : "bg-[#2563EB]"
+                )}>
+                  {tech.initials}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-800">{tech.name}</p>
+                  <p className="text-[11px] text-slate-400">{tech.role}</p>
+                </div>
+                {tech.phone && (
+                  <a href={`tel:${tech.phone}`} className="p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-colors">
+                    <Phone size={13} className="text-slate-500" />
+                  </a>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-700">
+              No technician assigned yet
+            </div>
+          )}
+
+          {/* Notes */}
+          {job.notes && (
+            <div className="bg-slate-50 rounded-xl p-4">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Notes / Access Info</p>
+              <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{job.notes}</p>
+            </div>
+          )}
+
+          {/* View full WO link */}
+          <a
+            href={`/maintenance/${job.id}`}
+            className="flex items-center gap-2 text-sm text-[#6B7EFF] hover:underline font-medium"
+          >
+            <FileText size={14} />
+            Open Full Work Order
+          </a>
+        </div>
+
+        {/* Footer — status advance */}
+        <div className="border-t border-slate-100 p-4 flex gap-3">
+          <button type="button" onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+            Close
+          </button>
+          {next && (
+            <button
+              onClick={() => { onStatusChange(job.id, next); onClose(); }}
+              className="flex-1 py-2.5 rounded-xl bg-[#2563EB] text-white text-sm font-semibold hover:bg-blue-700 transition-colors"
+            >
+              → Move to {next}
+            </button>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ─── New Job Slide-Over ───────────────────────────────────────────────────────
 
 interface NewJobProps {
@@ -88,14 +352,14 @@ interface NewJobProps {
 }
 
 function NewJobSlideOver({ open, onClose, onSaved, techs }: NewJobProps) {
+  const [selectedSite, setSelectedSite] = useState<SiteOption | null>(null);
   const [form, setForm] = useState({
-    customer_name: "",
-    job_type:      "Repair" as JobType,
-    assignee_id:   "",
-    assignee_name: "",
-    priority:      "medium",
+    job_type:       "Repair" as JobType,
+    assignee_id:    "",
+    assignee_name:  "",
+    priority:       "medium",
     scheduled_date: "",
-    notes:         "",
+    notes:          "",
   });
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState("");
@@ -111,17 +375,21 @@ function NewJobSlideOver({ open, onClose, onSaved, techs }: NewJobProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.customer_name.trim()) { setError("Property / customer name is required."); return; }
+    if (!selectedSite) { setError("Please select a property."); return; }
     setSaving(true); setError("");
     try {
       const res  = await fetch("/api/dispatch", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, assignee_id: form.assignee_id || null }),
+        body: JSON.stringify({
+          ...form,
+          customer_name: selectedSite.name,
+          site_id:       selectedSite.id,
+          assignee_id:   form.assignee_id || null,
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Save failed");
 
-      // Map to Job shape for local state
       const dbWO = json.job;
       const mapPriority = (p: string): Priority => {
         if (p === "urgent" || p === "high") return "urgent";
@@ -139,8 +407,12 @@ function NewJobSlideOver({ open, onClose, onSaved, techs }: NewJobProps) {
         status:         dbWO.assignee_id ? "Assigned" : "Pending",
         woNumber:       dbWO.wo_number,
         title:          dbWO.title,
+        notes:          dbWO.notes ?? null,
+        site_id:        dbWO.site_id ?? selectedSite.id,
       });
       onClose();
+      setSelectedSite(null);
+      setForm({ job_type: "Repair", assignee_id: "", assignee_name: "", priority: "medium", scheduled_date: "", notes: "" });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -161,13 +433,8 @@ function NewJobSlideOver({ open, onClose, onSaved, techs }: NewJobProps) {
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Property / Customer *</label>
-            <input
-              value={form.customer_name}
-              onChange={e => set("customer_name", e.target.value)}
-              placeholder="e.g. Stonegate Townhomes"
-              className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-            />
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Property *</label>
+            <SitePicker value={selectedSite} onChange={setSelectedSite} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -215,9 +482,9 @@ function NewJobSlideOver({ open, onClose, onSaved, techs }: NewJobProps) {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Notes</label>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Notes / Access Info</label>
             <textarea value={form.notes} onChange={e => set("notes", e.target.value)} rows={3}
-              placeholder="Access codes, parking info, special instructions…"
+              placeholder="Access codes, parking info, gate combos, special instructions…"
               className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none" />
           </div>
 
@@ -246,23 +513,30 @@ function NewJobSlideOver({ open, onClose, onSaved, techs }: NewJobProps) {
 
 // ─── Job Card ─────────────────────────────────────────────────────────────────
 
-function JobCard({ job, onStatusChange }: { job: Job; onStatusChange: (id: string, status: string) => void }) {
+function JobCard({ job, onStatusChange, onSelect }: {
+  job:            Job;
+  onStatusChange: (id: string, status: string) => void;
+  onSelect:       (job: Job) => void;
+}) {
   const typeConf = jobTypeConfig[job.jobType] ?? jobTypeConfig.Repair;
   const NEXT_STATUS: Record<JobStatus, JobStatus | null> = {
-    Pending:     "Assigned",
-    Assigned:    "In Progress",
+    Pending:       "Assigned",
+    Assigned:      "In Progress",
     "In Progress": "Done",
-    Done:        null,
+    Done:          null,
   };
   const next = NEXT_STATUS[job.status];
 
   return (
-    <div className={cn(
-      "bg-white rounded-xl border-l-4 shadow-sm p-3.5 space-y-2.5 hover:shadow-md transition-shadow",
-      job.priority === "urgent"    ? "border-l-red-500"
-      : job.priority === "normal" ? "border-l-amber-400"
-      : "border-l-emerald-400"
-    )}>
+    <div
+      className={cn(
+        "bg-white rounded-xl border-l-4 shadow-sm p-3.5 space-y-2.5 hover:shadow-md transition-shadow cursor-pointer",
+        job.priority === "urgent"    ? "border-l-red-500"
+        : job.priority === "normal" ? "border-l-amber-400"
+        : "border-l-emerald-400"
+      )}
+      onClick={() => onSelect(job)}
+    >
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-[10px] font-mono text-slate-400">{job.woNumber}</p>
@@ -292,9 +566,13 @@ function JobCard({ job, onStatusChange }: { job: Job; onStatusChange: (id: strin
         </div>
       </div>
 
+      {job.notes && (
+        <p className="text-[11px] text-slate-400 truncate">{job.notes}</p>
+      )}
+
       {next && (
         <button
-          onClick={() => onStatusChange(job.id, next)}
+          onClick={e => { e.stopPropagation(); onStatusChange(job.id, next); }}
           className="w-full text-[11px] font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg py-1.5 transition-colors"
         >
           → Move to {next}
@@ -600,12 +878,13 @@ function CalendarView({ jobs, techs, weekStart, onPrev, onNext, onToday }: Calen
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DispatchPage() {
-  const [jobs,      setJobs]      = useState<Job[]>([]);
-  const [techs,     setTechs]     = useState<Tech[]>([]);
-  const [loading,   setLoading]   = useState(true);
-  const [newJobOpen, setNewJobOpen] = useState(false);
-  const [viewMode,  setViewMode]  = useState<"board" | "calendar">("board");
-  const [weekStart, setWeekStart] = useState<Date>(() => getMondayOf(new Date()));
+  const [jobs,        setJobs]        = useState<Job[]>([]);
+  const [techs,       setTechs]       = useState<Tech[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [newJobOpen,  setNewJobOpen]  = useState(false);
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [viewMode,    setViewMode]    = useState<"board" | "calendar">("board");
+  const [weekStart,   setWeekStart]   = useState<Date>(() => getMondayOf(new Date()));
 
   const handlePrevWeek  = () => setWeekStart(prev => { const d = new Date(prev); d.setDate(d.getDate() - 7); return d; });
   const handleNextWeek  = () => setWeekStart(prev => { const d = new Date(prev); d.setDate(d.getDate() + 7); return d; });
@@ -616,7 +895,13 @@ export default function DispatchPage() {
     try {
       const res  = await fetch("/api/dispatch");
       const json = await res.json();
-      setJobs(json.jobs  ?? []);
+      // Ensure notes + site_id are always present on Job objects
+      const jobs = (json.jobs ?? []).map((j: Job & { notes?: string | null; site_id?: string | null }) => ({
+        ...j,
+        notes:   j.notes   ?? null,
+        site_id: j.site_id ?? null,
+      }));
+      setJobs(jobs);
       setTechs(json.techs ?? []);
     } catch {
       // fall through
@@ -684,6 +969,17 @@ export default function DispatchPage() {
         onSaved={handleJobSaved}
         techs={techs}
       />
+      {selectedJob && (
+        <JobDetailSlideOver
+          job={selectedJob}
+          techs={techs}
+          onClose={() => setSelectedJob(null)}
+          onStatusChange={(id, status) => {
+            handleJobStatusChange(id, status);
+            setSelectedJob(prev => prev ? { ...prev, status } : null);
+          }}
+        />
+      )}
 
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -800,6 +1096,7 @@ export default function DispatchPage() {
                             key={job.id}
                             job={job}
                             onStatusChange={(id, s) => handleJobStatusChange(id, s as JobStatus)}
+                            onSelect={setSelectedJob}
                           />
                         ))}
                         {colJobs.length === 0 && (

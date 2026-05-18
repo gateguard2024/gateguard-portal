@@ -32,9 +32,10 @@ export async function GET(req: NextRequest) {
     const scope = await resolveOrgScope(user)
 
     const { searchParams } = new URL(req.url)
-    const stage  = searchParams.get('stage')
-    const search = searchParams.get('q')
-    const type   = searchParams.get('type')
+    const stage   = searchParams.get('stage')
+    const search  = searchParams.get('q')
+    const type    = searchParams.get('type')
+    const site_id = searchParams.get('site_id')
 
     let query = supabase
       .from('opportunities')
@@ -45,9 +46,10 @@ export async function GET(req: NextRequest) {
     // ── Org isolation ──────────────────────────────────────────────
     query = applyOrgScope(query, scope, 'dealer_org_id')
 
-    if (stage)  query = query.eq('stage', stage)
-    if (type)   query = query.eq('opp_type', type)
-    if (search) query = query.ilike('name', `%${search}%`)
+    if (stage)   query = query.eq('stage', stage)
+    if (type)    query = query.eq('opp_type', type)
+    if (search)  query = query.ilike('name', `%${search}%`)
+    if (site_id) query = query.eq('site_id', site_id)
 
     const { data, error } = await query
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
