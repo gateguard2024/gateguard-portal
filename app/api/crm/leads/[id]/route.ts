@@ -53,7 +53,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       units: data.units ?? null,
       location,
       address: location,
-      stage: 'new',
+      // Return actual status so the detail page knows if this lead is already converted
+      stage: data.status === 'converted' ? 'converted' : (data.status ?? 'new'),
       source: data.source ?? 'show',
       rep: 'Russel Feldman',
       repInitials: 'RF',

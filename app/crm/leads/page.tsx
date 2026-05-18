@@ -6,6 +6,7 @@ import {
   Search, Plus, Building2, MapPin, Phone, Mail,
   Hash, Clock, TrendingUp, Filter, ChevronRight,
   Users, Star, AlertCircle, CheckCircle2, XCircle,
+  Send, X, Loader2,
 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 
@@ -23,6 +24,17 @@ interface Lead {
   rep: string
   lastActivity: string
   assigned_dealer: string | null
+}
+
+interface CampaignPreview {
+  total: number
+  eligible: number
+  skipped: number
+  preview: {
+    to: string
+    subject: string
+    html: string
+  }
 }
 
 const STAGE_CONFIG: Record<string, { label: string; color: string; dot: string }> = {
@@ -48,12 +60,230 @@ function StagePill({ stage }: { stage: string }) {
   )
 }
 
+// ─── Campaign Modal ──────────────────────────────────────────────────────────
+function CampaignModal({ onClose }: { onClose: () => void }) {
+  const [step, setStep]       = useState<'loading' | 'preview' | 'sending' | 'done' | 'error'>('loading')
+  const [preview, setPreview] = useState<CampaignPreview | null>(null)
+  const [result, setResult]   = useState<{ sent: number; failed: number; skipped: number } | null>(null)
+  const [errMsg, setErrMsg]   = useState('')
+  const [showHtml, setShowHtml] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/crm/leads/campaign')
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) { setErrMsg(data.error); setStep('error'); return }
+        setPreview(data)
+        setStep('preview')
+      })
+      .catch(e => { setErrMsg(e.message); setStep('error') })
+  }, [])
+
+  async function handleSend() {
+    if (!preview) return
+    setStep('sending')
+    try {
+      const res  = await fetch('/api/crm/leads/campaign', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({}),
+      })
+      const data = await res.json()
+      if (data.error) { setErrMsg(data.error); setStep('error'); return }
+      setResult(data)
+      setStep('done')
+    } catch (e: any) {
+      setErrMsg(e.message)
+      setStep('error')
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-card w-[680px] max-h-[90vh] rounded-2xl shadow-2xl border border-border flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center">
+              <Send size={14} className="text-violet-600" />
+            </div>
+            <div>
+              <div className="font-semibold text-foreground text-sm">Show Lead Campaign</div>
+              <div className="text-xs text-muted-foreground">Post-show follow-up email</div>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-lg hover:bg-accent flex items-center justify-center text-muted-foreground transition-colors">
+            <X size={15} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-6">
+
+          {/* Loading */}
+          {step === 'loading' && (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
+              <Loader2 size={28} className="animate-spin text-brand-400" />
+              <p className="text-sm">Loading campaign preview…</p>
+            </div>
+          )}
+
+          {/* Error */}
+          {step === 'error' && (
+            <div className="flex flex-col items-center justify-center py-12 gap-3">
+              <AlertCircle size={36} className="text-red-400" />
+              <p className="font-medium text-red-600">Something went wrong</p>
+              <p className="text-xs text-muted-foreground max-w-xs text-center">{errMsg}</p>
+            </div>
+          )}
+
+          {/* Preview */}
+          {step === 'preview' && preview && (
+            <div className="space-y-5">
+              {/* Stats */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-center">
+                  <div className="text-2xl font-bold text-blue-700">{preview.eligible}</div>
+                  <div className="text-xs text-blue-600 mt-0.5">Leads with email</div>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-center">
+                  <div className="text-2xl font-bold text-slate-600">{preview.total}</div>
+                  <div className="text-xs text-slate-500 mt-0.5">Total leads</div>
+                </div>
+                <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 text-center">
+                  <div className="text-2xl font-bold text-amber-600">{preview.skipped}</div>
+                  <div className="text-xs text-amber-600 mt-0.5">No email (skipped)</div>
+                </div>
+              </div>
+
+              {/* Subject line */}
+              <div className="bg-muted/50 rounded-xl border border-border p-4">
+                <div className="text-xs font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Subject Line</div>
+                <div className="text-sm font-medium text-foreground">{preview.preview.subject}</div>
+                <div className="text-xs text-muted-foreground mt-1">From: Russel Feldman &lt;rfeldman@gateguard.co&gt;</div>
+              </div>
+
+              {/* Email preview toggle */}
+              <div>
+                <button
+                  onClick={() => setShowHtml(v => !v)}
+                  className="text-xs text-brand-400 hover:underline font-medium"
+                >
+                  {showHtml ? '▲ Hide' : '▼ Preview'} email template
+                </button>
+
+                {showHtml && (
+                  <div className="mt-3 border border-border rounded-xl overflow-hidden" style={{ height: 360 }}>
+                    <iframe
+                      srcDoc={preview.preview.html}
+                      className="w-full h-full"
+                      title="Email preview"
+                      sandbox="allow-same-origin"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* What's personalized */}
+              <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4">
+                <div className="text-xs font-semibold text-emerald-700 mb-2 uppercase tracking-wide">Personalized per lead</div>
+                <div className="text-xs text-emerald-800 space-y-1">
+                  <div>• First name extracted from contact name</div>
+                  <div>• Property name used in the NOI example and CTA link</div>
+                  <div>• Reply-to: rfeldman@gateguard.co</div>
+                </div>
+              </div>
+
+              {preview.eligible === 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-700">
+                  No leads have email addresses — nothing to send. Add emails to your leads first.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Sending */}
+          {step === 'sending' && (
+            <div className="flex flex-col items-center justify-center py-16 gap-4">
+              <Loader2 size={36} className="animate-spin text-brand-400" />
+              <div className="text-center">
+                <p className="font-semibold text-foreground">Sending campaign…</p>
+                <p className="text-sm text-muted-foreground mt-1">Delivering {preview?.eligible} personalized emails via Resend</p>
+              </div>
+            </div>
+          )}
+
+          {/* Done */}
+          {step === 'done' && result && (
+            <div className="space-y-5">
+              <div className="flex flex-col items-center py-6 gap-3">
+                <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center">
+                  <CheckCircle2 size={32} className="text-emerald-600" />
+                </div>
+                <div className="text-center">
+                  <p className="text-xl font-bold text-foreground">{result.sent} emails sent</p>
+                  <p className="text-sm text-muted-foreground mt-1">Campaign delivered successfully</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-center">
+                  <div className="text-2xl font-bold text-emerald-700">{result.sent}</div>
+                  <div className="text-xs text-emerald-600 mt-0.5">Delivered</div>
+                </div>
+                <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-center">
+                  <div className="text-2xl font-bold text-red-600">{result.failed}</div>
+                  <div className="text-xs text-red-500 mt-0.5">Failed</div>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-center">
+                  <div className="text-2xl font-bold text-slate-500">{result.skipped}</div>
+                  <div className="text-xs text-slate-400 mt-0.5">Skipped (no email)</div>
+                </div>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-xs text-blue-700">
+                Replies will come directly to rfeldman@gateguard.co. Check your inbox — follow up with anyone who responds within 24 hours for best conversion.
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-border px-6 py-4 flex items-center justify-end gap-3">
+          {(step === 'error' || step === 'done') && (
+            <button onClick={onClose} className="px-4 py-2 text-sm font-medium bg-brand-400 text-white rounded-lg hover:bg-brand-500 transition-colors">
+              Close
+            </button>
+          )}
+          {step === 'preview' && (
+            <>
+              <button onClick={onClose} className="px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-accent transition-colors text-muted-foreground">
+                Cancel
+              </button>
+              <button
+                onClick={handleSend}
+                disabled={!preview || preview.eligible === 0}
+                className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-brand-400 text-white rounded-lg hover:bg-brand-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Send size={13} />
+                Send to {preview?.eligible} leads
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Main Page ───────────────────────────────────────────────────────────────
 export default function LeadsPage() {
   const [leads, setLeads]         = useState<Lead[]>([])
   const [loading, setLoading]     = useState(true)
   const [q, setQ]                 = useState('')
   const [filterStage, setFilter]  = useState<string | null>(null)
   const [showFilters, setShowFilters] = useState(false)
+  const [showCampaign, setShowCampaign] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -94,6 +324,8 @@ export default function LeadsPage() {
     return acc
   }, {} as Record<string, number>)
 
+  const showLeads = leads.filter(l => l.source === 'show')
+
   const statCards = [
     { label: 'Total Leads',  value: leads.length,                       icon: Users,        color: 'bg-slate-100 text-slate-600'   },
     { label: 'New',          value: counts.new || 0,                    icon: Star,         color: 'bg-blue-100 text-blue-600'     },
@@ -105,16 +337,29 @@ export default function LeadsPage() {
 
   return (
     <div className="flex flex-col min-h-full">
+      {showCampaign && <CampaignModal onClose={() => setShowCampaign(false)} />}
+
       <TopBar
         title="Leads"
         subtitle={`${leads.length} total leads`}
         actions={
-          <Link
-            href="/crm"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-accent transition-colors text-muted-foreground"
-          >
-            ← Pipeline
-          </Link>
+          <div className="flex items-center gap-2">
+            {showLeads.length > 0 && (
+              <button
+                onClick={() => setShowCampaign(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors shadow-sm"
+              >
+                <Send size={12} />
+                Send Show Campaign ({showLeads.length})
+              </button>
+            )}
+            <Link
+              href="/crm"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-accent transition-colors text-muted-foreground"
+            >
+              ← Pipeline
+            </Link>
+          </div>
         }
       />
 

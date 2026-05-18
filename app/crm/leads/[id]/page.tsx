@@ -754,12 +754,26 @@ export default function LeadDetailPage() {
         }),
       });
       const json = await res.json();
+
+      // ── Duplicate detected ────────────────────────────────────────────────
+      if (res.status === 409 && json.error === 'duplicate') {
+        setConverting(false);
+        const goThere = confirm(
+          `⚠️ An opportunity already exists for this lead:\n"${json.existing_name}"\n\nClick OK to go to that opportunity, or Cancel to stay here.`
+        );
+        if (goThere) router.push(`/crm/opportunities/${json.existing_id}`);
+        return;
+      }
+
       if (res.ok && json.id) {
         // Mark the lead as converted so it stops appearing in the leads pipeline
         await fetch(`/api/crm/leads/${lead.id}`, {
           method: "PATCH", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ stage: "converted" }),
         }).catch(() => {/* non-blocking */});
+
+        // Update local state so the Convert button disables immediately
+        setLead(prev => ({ ...prev, stage: "converted" }));
 
         showToast("Converted! Redirecting to opportunity…");
         setTimeout(() => router.push(`/crm/opportunities/${json.id}`), 1200);
@@ -842,11 +856,11 @@ export default function LeadDetailPage() {
             </button>
             <button
               onClick={() => setConvertOpen(true)}
-              disabled={converting || lead.stage === "won" || lead.stage === "lost"}
+              disabled={converting || lead.stage === "won" || lead.stage === "lost" || lead.stage === "converted"}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-brand-400 hover:bg-brand-500 text-white transition-colors disabled:opacity-40 gg-glow"
             >
               <TrendingUp size={13} />
-              {converting ? "Converting…" : "Convert to Opportunity"}
+              {converting ? "Converting…" : lead.stage === "converted" ? "Already Converted" : "Convert to Opportunity"}
             </button>
           </div>
         }
@@ -857,6 +871,17 @@ export default function LeadDetailPage() {
           <ChevronLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
           Back to Pipeline
         </Link>
+
+        {/* Converted banner */}
+        {lead.stage === "converted" && (
+          <div className="mb-5 flex items-center gap-3 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm">
+            <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+            <span className="text-emerald-700 font-medium">This lead has been converted to an opportunity.</span>
+            <Link href="/crm/opportunities" className="ml-auto text-xs text-emerald-700 underline underline-offset-2 hover:text-emerald-900 font-semibold whitespace-nowrap">
+              View Opportunities →
+            </Link>
+          </div>
+        )}
 
         {/* Header */}
         <div className="flex items-start gap-4 mb-6">
@@ -994,8 +1019,8 @@ export default function LeadDetailPage() {
                   }},
                   { label: "Send Email",              icon: Mail,        bg: "bg-violet-50",  color: "text-violet-500",  onClick: () => lead.email && window.open(`mailto:${lead.email}`) },
                   { label: "Create Quote",            icon: FileText,    bg: "bg-orange-50",  color: "text-orange-500",  onClick: handleCreateQuote },
-                  { label: "Convert to Opportunity",  icon: TrendingUp,  bg: "bg-emerald-50", color: "text-emerald-500", onClick: () => setConvertOpen(true),
-                    disabled: converting || lead.stage === "won" || lead.stage === "lost" },
+                  { label: lead.stage === "converted" ? "Already Converted" : "Convert to Opportunity",  icon: TrendingUp,  bg: "bg-emerald-50", color: "text-emerald-500", onClick: () => setConvertOpen(true),
+                    disabled: converting || lead.stage === "won" || lead.stage === "lost" || lead.stage === "converted" },
                   { label: "Delete Lead",             icon: Trash2,      bg: "bg-red-50",     color: "text-red-500",     onClick: handleDelete },
                 ].map(({ label, icon: Icon, bg, color, onClick, disabled }) => (
                   <button

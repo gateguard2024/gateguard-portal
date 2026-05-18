@@ -110,6 +110,29 @@ export async function POST(req: NextRequest) {
     // Strip any client-supplied fields that don't exist on the table
     const { org_id: _orgId, contact_name: _cn, show_lead_id, ...safeBody } = body
 
+    // ── Duplicate detection ────────────────────────────────────────────────────
+    // If this is a show lead conversion, check if an opportunity already exists
+    if (show_lead_id) {
+      const { data: existing } = await supabase
+        .from('opportunities')
+        .select('id, name, stage')
+        .eq('show_lead_id', show_lead_id)
+        .maybeSingle()
+
+      if (existing) {
+        return NextResponse.json(
+          {
+            error:      'duplicate',
+            message:    `An opportunity already exists for this lead.`,
+            existing_id: existing.id,
+            existing_name: existing.name,
+            existing_stage: existing.stage,
+          },
+          { status: 409 }
+        )
+      }
+    }
+
     const { data, error } = await supabase
       .from('opportunities')
       .insert({
