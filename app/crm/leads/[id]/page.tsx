@@ -466,6 +466,98 @@ function ActivityFeed({
   );
 }
 
+// ── Convert to Opportunity Modal ───────────────────────────────────────────────
+const OPP_TYPES = [
+  { value: "master_agent",    label: "Master Agent",             desc: "Regional partner managing multiple dealers" },
+  { value: "mso",             label: "MSO — Master System Operator", desc: "Large dealer group, multiple markets" },
+  { value: "dealer",          label: "Dealer",                   desc: "Authorized GateGuard dealer" },
+  { value: "install_partner", label: "Installation Partner",     desc: "Contractor handling installs" },
+  { value: "service_partner", label: "Service Partner",          desc: "Ongoing service & maintenance" },
+  { value: "sales_partner",   label: "Sales Partner",            desc: "Commission-based rep / referral" },
+  { value: "property",        label: "Property",                 desc: "Multifamily property needing install/service" },
+  { value: "company",         label: "Company",                  desc: "Commercial business customer" },
+];
+
+function ConvertModal({ lead, open, converting, onClose, onConvert }: {
+  lead: Lead; open: boolean; converting: boolean;
+  onClose: () => void; onConvert: (type: string) => void;
+}) {
+  const [selected, setSelected] = useState("dealer");
+  useEffect(() => { if (open) setSelected("dealer"); }, [open]);
+  if (!open) return null;
+
+  const sel = OPP_TYPES.find(t => t.value === selected);
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/30 z-40" onClick={onClose} />
+      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] bg-card border border-border rounded-2xl shadow-2xl z-50">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div>
+            <h2 className="text-sm font-bold">Convert to Opportunity</h2>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Select what type of opportunity this lead represents</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-accent"><X size={14} /></button>
+        </div>
+        <div className="p-5">
+          {/* Lead summary */}
+          <div className="flex items-center gap-3 p-3 bg-accent/50 rounded-xl border border-border mb-4">
+            <div className="w-8 h-8 rounded-lg bg-brand-400/15 flex items-center justify-center text-xs font-bold text-brand-400">
+              {lead.contact?.split(" ").map(n => n[0]).join("") ?? "?"}
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-foreground">{lead.name}</p>
+              <p className="text-[11px] text-muted-foreground">{lead.contact}{lead.email ? ` · ${lead.email}` : ""}</p>
+            </div>
+          </div>
+
+          {/* Type grid */}
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Opportunity Type</p>
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            {OPP_TYPES.map(t => (
+              <button
+                key={t.value}
+                onClick={() => setSelected(t.value)}
+                className={cn(
+                  "text-left p-3 rounded-xl border transition-all",
+                  selected === t.value
+                    ? "border-brand-400 bg-brand-400/8 ring-1 ring-brand-400/30"
+                    : "border-border hover:border-border/60 hover:bg-accent/40"
+                )}
+              >
+                <p className={cn("text-xs font-semibold mb-0.5", selected === t.value ? "text-brand-500" : "text-foreground")}>{t.label}</p>
+                <p className="text-[10px] text-muted-foreground leading-tight">{t.desc}</p>
+              </button>
+            ))}
+          </div>
+
+          {sel && (
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-blue-50 border border-blue-200 mb-4">
+              <TrendingUp size={13} className="text-blue-500 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-blue-700 leading-relaxed">
+                This creates a <strong>{sel.label}</strong> opportunity pre-filled with {lead.name}&apos;s contact info and linked back to this lead — so any documents you send stay connected through the full lifecycle.
+              </p>
+            </div>
+          )}
+        </div>
+        <div className="border-t border-border p-4 flex gap-3">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-border text-sm text-muted-foreground hover:bg-accent transition-colors">
+            Cancel
+          </button>
+          <button
+            onClick={() => onConvert(selected)}
+            disabled={converting}
+            className="flex-1 py-2.5 rounded-xl bg-brand-400 hover:bg-brand-500 text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-lg shadow-brand-400/20 flex items-center justify-center gap-2"
+          >
+            <TrendingUp size={13} />
+            {converting ? "Converting…" : "Convert to Opportunity"}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function LeadDetailPage() {
   const params = useParams();
@@ -475,10 +567,11 @@ export default function LeadDetailPage() {
   const [lead,       setLead]       = useState<Lead>(EMPTY_LEAD);
   const [activities, setActivities] = useState<ActivityEntry[]>([]);
   const [loading,    setLoading]    = useState(true);
-  const [editOpen,         setEditOpen]         = useState(false);
-  const [converting,       setConverting]       = useState(false);
-  const [marking,          setMarking]          = useState(false);
-  const [toast,            setToast]            = useState<{ msg: string; ok: boolean } | null>(null);
+  const [editOpen,           setEditOpen]           = useState(false);
+  const [convertOpen,        setConvertOpen]        = useState(false);
+  const [converting,         setConverting]         = useState(false);
+  const [marking,            setMarking]            = useState(false);
+  const [toast,              setToast]              = useState<{ msg: string; ok: boolean } | null>(null);
   const [triggerLogActivity, setTriggerLogActivity] = useState(false);
 
   const showToast = (msg: string, ok = true) => {
@@ -527,25 +620,29 @@ export default function LeadDetailPage() {
     }
   };
 
-  const handleConvert = async () => {
-    if (!confirm("Convert this lead to an Opportunity?")) return;
+  const handleConvert = async (oppType: string) => {
     setConverting(true);
     try {
       const res  = await fetch("/api/crm/opportunities", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name:            lead.name,
-          contact_name:    lead.contact,
-          contact_email:   lead.email,
-          contact_phone:   lead.phone,
-          property_type:   lead.propertyType,
-          units:           lead.units,
-          location:        lead.location,
-          stage:           "meet_present",
-          source:          lead.source,
-          est_setup:       lead.estSetup,
-          est_mrr_monthly: lead.estMrr,
-          notes:           lead.notes,
+          name:              lead.name,
+          account_name:      lead.company || lead.name,
+          site_contact_name: lead.contact,
+          site_contact_email:lead.email,
+          contact_name:      lead.contact,
+          contact_email:     lead.email,
+          contact_phone:     lead.phone,
+          property_type:     lead.propertyType,
+          units:             lead.units,
+          location:          lead.location,
+          stage:             "meet_present",
+          opp_type:          oppType,
+          source:            lead.source,
+          est_setup:         lead.estSetup,
+          est_mrr_monthly:   lead.estMrr,
+          notes:             lead.notes,
+          lead_id:           lead.id,
         }),
       });
       const json = await res.json();
@@ -600,6 +697,17 @@ export default function LeadDetailPage() {
         onSaved={handleLeadSaved}
       />
 
+      <ConvertModal
+        lead={lead}
+        open={convertOpen}
+        converting={converting}
+        onClose={() => setConvertOpen(false)}
+        onConvert={async (type) => {
+          await handleConvert(type);
+          setConvertOpen(false);
+        }}
+      />
+
       <TopBar
         title={lead.name || "Lead Detail"}
         subtitle="Lead detail"
@@ -619,7 +727,7 @@ export default function LeadDetailPage() {
               Mark Lost
             </button>
             <button
-              onClick={handleConvert}
+              onClick={() => setConvertOpen(true)}
               disabled={converting || lead.stage === "won" || lead.stage === "lost"}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-brand-400 hover:bg-brand-500 text-white transition-colors disabled:opacity-40 gg-glow"
             >
