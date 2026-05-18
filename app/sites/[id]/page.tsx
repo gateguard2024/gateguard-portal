@@ -761,13 +761,21 @@ export default function SiteDetailPage() {
       {/* ── Tab: Work Orders ─────────────────────────────────────────── */}
       {tab === 'work_orders' && (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          {/* Header with Create button */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-slate-50">
+            <h3 className="text-sm font-semibold text-slate-700">Work Orders</h3>
+            <Link
+              href={`/maintenance?new=1&site_id=${id}&site_name=${encodeURIComponent(site?.name ?? '')}`}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-400 text-white text-xs font-medium rounded-lg hover:bg-brand-500 transition-colors"
+            >
+              <Plus size={12} /> New Work Order
+            </Link>
+          </div>
           {workOrders.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-slate-400">
               <ClipboardList size={40} className="mb-3 opacity-30" />
               <p className="font-medium">No work orders for this site</p>
-              <Link href="/maintenance" className="mt-4 flex items-center gap-2 px-4 py-2 bg-brand-400 text-white rounded-lg text-sm font-medium hover:bg-brand-500">
-                <Plus size={15} /> Create Work Order
-              </Link>
+              <p className="text-sm mt-1 opacity-70">Click "New Work Order" above to create one</p>
             </div>
           ) : (
             <table className="w-full text-sm">

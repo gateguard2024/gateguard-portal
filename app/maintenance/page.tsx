@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
 import { AISearch } from "@/components/ai/AISearch";
 import {
@@ -77,6 +77,85 @@ const STATUSES: { value: WOStatus; label: string }[] = [
   { value: "cancelled",   label: "Cancelled"   },
 ];
 
+// ── Site Picker ───────────────────────────────────────────────────────────────
+
+interface SiteOption { id: string; name: string; address?: string; city?: string; state?: string }
+
+function SitePicker({
+  value, onChange,
+}: {
+  value: SiteOption | null
+  onChange: (site: SiteOption | null) => void
+}) {
+  const [query, setQuery]       = useState('')
+  const [results, setResults]   = useState<SiteOption[]>([])
+  const [loading, setLoading]   = useState(false)
+  const [open, setOpen]         = useState(false)
+
+  useEffect(() => {
+    if (!query.trim()) { setResults([]); return }
+    setLoading(true)
+    const timer = setTimeout(async () => {
+      try {
+        const res  = await fetch(`/api/sites?q=${encodeURIComponent(query)}&limit=8`)
+        const json = await res.json()
+        setResults(json.sites ?? [])
+        setOpen(true)
+      } finally { setLoading(false) }
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [query])
+
+  if (value) {
+    return (
+      <div className="flex items-center gap-2 border border-brand-500/40 bg-brand-500/5 rounded-xl px-3 py-2.5">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-foreground truncate">{value.name}</p>
+          {value.address && (
+            <p className="text-xs text-muted-foreground truncate">{value.address}{value.city ? `, ${value.city}` : ''}</p>
+          )}
+        </div>
+        <button type="button" onClick={() => onChange(null)} className="p-1 rounded hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors shrink-0">
+          <X size={12} />
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative">
+      <input
+        value={query}
+        onChange={e => setQuery(e.target.value)}
+        onFocus={() => query && setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder="Search properties…"
+        className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 bg-background"
+      />
+      {loading && <RefreshCw size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground animate-spin" />}
+      {open && results.length > 0 && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl shadow-xl overflow-hidden">
+          {results.map(s => (
+            <button
+              key={s.id} type="button"
+              onMouseDown={() => { onChange(s); setQuery(''); setOpen(false) }}
+              className="w-full text-left px-3 py-2.5 hover:bg-accent transition-colors border-b border-border/50 last:border-0"
+            >
+              <p className="text-sm font-medium text-foreground">{s.name}</p>
+              {s.address && <p className="text-xs text-muted-foreground">{s.address}{s.city ? `, ${s.city}` : ''}</p>}
+            </button>
+          ))}
+        </div>
+      )}
+      {open && !loading && results.length === 0 && query.length > 1 && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl shadow-xl px-3 py-2.5">
+          <p className="text-xs text-muted-foreground">No properties found for "{query}"</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── New Work Order Form ───────────────────────────────────────────────────────
 
 interface NewWOFormProps {
@@ -85,9 +164,10 @@ interface NewWOFormProps {
   onSaved: (wo: WorkOrder) => void;
   techs: Technician[];
   editing?: WorkOrder | null;
+  preselectedSite?: SiteOption | null;
 }
 
-function WorkOrderSlideOver({ open, onClose, onSaved, techs, editing }: NewWOFormProps) {
+function WorkOrderSlideOver({ open, onClose, onSaved, techs, editing, preselectedSite }: NewWOFormProps) {
   const [form, setForm] = useState({
     title:          editing?.title           ?? "",
     customer_name:  editing?.customer_name   ?? "",
@@ -100,14 +180,23 @@ function WorkOrderSlideOver({ open, onClose, onSaved, techs, editing }: NewWOFor
     scheduled_date: editing?.scheduled_date  ?? "",
     notes:          editing?.notes           ?? "",
   });
+  const [selectedSite, setSelectedSite] = useState<SiteOption | null>(preselectedSite ?? null);
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState("");
 
-  // Reset form when editing target changes
+  // When a site is picked, auto-fill customer_name
+  const handleSiteSelect = (site: SiteOption | null) => {
+    setSelectedSite(site);
+    if (site) setForm(f => ({ ...f, customer_name: site.name }));
+    else      setForm(f => ({ ...f, customer_name: '' }));
+  };
+
+  // Reset form when editing target or preselected site changes
   useEffect(() => {
+    const initSite = preselectedSite ?? null;
     setForm({
       title:          editing?.title          ?? "",
-      customer_name:  editing?.customer_name  ?? "",
+      customer_name:  editing?.customer_name  ?? initSite?.name ?? "",
       job_type:       (editing?.job_type      ?? "Repair") as JobType,
       priority:       (editing?.priority      ?? "medium") as WOPriority,
       status:         (editing?.status        ?? "open")   as WOStatus,
@@ -117,8 +206,9 @@ function WorkOrderSlideOver({ open, onClose, onSaved, techs, editing }: NewWOFor
       scheduled_date: editing?.scheduled_date ?? "",
       notes:          editing?.notes          ?? "",
     });
+    setSelectedSite(initSite);
     setError("");
-  }, [editing]);
+  }, [editing, preselectedSite]);
 
   if (!open) return null;
 
@@ -131,8 +221,12 @@ function WorkOrderSlideOver({ open, onClose, onSaved, techs, editing }: NewWOFor
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.title.trim() || !form.customer_name.trim()) {
-      setError("Title and customer are required.");
+    if (!form.title.trim()) {
+      setError("Title is required.");
+      return;
+    }
+    if (!selectedSite && !form.customer_name.trim()) {
+      setError("Select a property or enter a customer name.");
       return;
     }
     setSaving(true);
@@ -144,10 +238,11 @@ function WorkOrderSlideOver({ open, onClose, onSaved, techs, editing }: NewWOFor
         method, headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
-          assignee_id:   form.assignee_id   || null,
-          assignee_name: form.assignee_name || null,
-          due_date:      form.due_date      || null,
+          assignee_id:    form.assignee_id    || null,
+          assignee_name:  form.assignee_name  || null,
+          due_date:       form.due_date       || null,
           scheduled_date: form.scheduled_date || null,
+          site_id:        selectedSite?.id    || null,
         }),
       });
       const json = await res.json();
@@ -197,17 +292,21 @@ function WorkOrderSlideOver({ open, onClose, onSaved, techs, editing }: NewWOFor
             />
           </div>
 
-          {/* Customer */}
+          {/* Property / Site picker */}
           <div>
             <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-              Customer / Property *
+              Property *
             </label>
-            <input
-              value={form.customer_name}
-              onChange={e => set("customer_name", e.target.value)}
-              placeholder="e.g. Stonegate Townhomes"
-              className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 bg-background"
-            />
+            <SitePicker value={selectedSite} onChange={handleSiteSelect} />
+            {/* Fallback: manual customer name if no site selected */}
+            {!selectedSite && (
+              <input
+                value={form.customer_name}
+                onChange={e => set("customer_name", e.target.value)}
+                placeholder="Or type customer name manually"
+                className="mt-2 w-full border border-dashed border-border rounded-xl px-3 py-2 text-sm text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/30 bg-background/50"
+              />
+            )}
           </div>
 
           {/* Job Type + Priority */}
@@ -393,16 +492,36 @@ const priorityDot: Record<WOPriority, string> = {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function MaintenancePage() {
-  const router = useRouter();
+  const router       = useRouter();
+  const searchParams = useSearchParams();
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [techs, setTechs]           = useState<Technician[]>([]);
   const [loading, setLoading]       = useState(true);
   const [slideOpen, setSlideOpen]   = useState(false);
   const [editing, setEditing]       = useState<WorkOrder | null>(null);
+  // Pre-selected site from query params (e.g., navigated from site detail page)
+  const [preselectedSite, setPreselectedSite] = useState<SiteOption | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [deleting, setDeleting]     = useState<string | null>(null);
   const [viewMode, setViewMode]     = useState<"list" | "calendar">("list");
   const [weekStart, setWeekStart]   = useState<Date>(() => getMondayOfWeek(new Date()));
+
+  // Auto-open new WO form when arriving from site detail page
+  useEffect(() => {
+    const newParam  = searchParams.get('new')
+    const siteId    = searchParams.get('site_id')
+    const siteName  = searchParams.get('site_name')
+    if (newParam === '1' && siteId && siteName) {
+      setPreselectedSite({ id: siteId, name: decodeURIComponent(siteName) })
+      setSlideOpen(true)
+      // Clean up URL without reload
+      const url = new URL(window.location.href)
+      url.searchParams.delete('new')
+      url.searchParams.delete('site_id')
+      url.searchParams.delete('site_name')
+      window.history.replaceState({}, '', url.toString())
+    }
+  }, [searchParams])
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -474,10 +593,11 @@ export default function MaintenancePage() {
 
       <WorkOrderSlideOver
         open={slideOpen}
-        onClose={() => { setSlideOpen(false); setEditing(null); }}
+        onClose={() => { setSlideOpen(false); setEditing(null); setPreselectedSite(null); }}
         onSaved={handleSaved}
         techs={techs}
         editing={editing}
+        preselectedSite={preselectedSite}
       />
 
       <div className="flex-1 p-6 space-y-5">
