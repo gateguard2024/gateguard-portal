@@ -92,7 +92,6 @@ export default function CustomerDetailPage() {
         primary_contact_phone: data.primary_contact_phone ?? "",
         city: data.city ?? "",
         state: data.state ?? "",
-        zip: (data as Record<string, unknown>).zip as string ?? "",
         notes: data.notes ?? "",
       });
     } catch (e) {
@@ -442,15 +441,6 @@ export default function CustomerDetailPage() {
                     onChange={e => setEditForm(f => ({ ...f, state: e.target.value.toUpperCase() }))}
                   />
                 </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">ZIP Code</label>
-                <input
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
-                  value={(editForm as Record<string, unknown>).zip as string ?? ""}
-                  onChange={e => setEditForm(f => ({ ...f, zip: e.target.value }))}
-                  placeholder="e.g. 30301"
-                />
               </div>
               <hr className="border-border" />
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Primary Contact</p>
