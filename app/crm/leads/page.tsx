@@ -24,6 +24,7 @@ interface Lead {
   rep: string
   lastActivity: string
   assigned_dealer: string | null
+  notes?: string | null
 }
 
 interface CampaignPreview {
@@ -382,6 +383,7 @@ export default function LeadsPage() {
           rep:             d.rep || 'R. Feldman',
           lastActivity:    d.lastActivity || '—',
           assigned_dealer: d.assigned_dealer || null,
+          notes:           d.notes || null,
         }))
         setLeads(mapped)
       })
@@ -402,7 +404,8 @@ export default function LeadsPage() {
     return acc
   }, {} as Record<string, number>)
 
-  const showLeads = leads.filter(l => l.source === 'show')
+  // Show campaign button for any lead that isn't manually entered (show/event leads)
+  const showLeads = leads.filter(l => l.source?.toLowerCase() !== 'manual')
 
   const statCards = [
     { label: 'Total Leads',  value: leads.length,                       icon: Users,        color: 'bg-slate-100 text-slate-600'   },
@@ -609,9 +612,17 @@ export default function LeadsPage() {
 
                     {/* Last Activity */}
                     <td className="px-4 py-3.5">
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Clock size={10} />
-                        {lead.lastActivity}
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Clock size={10} />
+                          {lead.lastActivity}
+                        </div>
+                        {lead.notes?.includes('Campaign email sent') && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-100 text-violet-700 w-fit">
+                            <Mail size={9} />
+                            Emailed
+                          </span>
+                        )}
                       </div>
                     </td>
 

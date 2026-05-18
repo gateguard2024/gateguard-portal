@@ -59,6 +59,7 @@ export async function GET(req: NextRequest) {
       repInitials:  'RF',
       lastActivity: formatAge(row.created_at),
       source:       row.source ?? 'show',
+      notes:        row.notes ?? null,
       // Phone/email: only show to users who can view sensitive fields
       phone: user.canViewSensitive ? row.phone : null,
       email: row.email,  // email is less sensitive — always included
