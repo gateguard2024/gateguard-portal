@@ -151,17 +151,35 @@ function EditLeadModal({ lead, open, onClose, onSaved }: {
   lead: Lead; open: boolean; onClose: () => void; onSaved: (l: Partial<Lead>) => void;
 }) {
   const [form, setForm] = useState({
-    stage:    lead.stage    ?? "new",
-    estSetup: lead.estSetup ? String(lead.estSetup) : "",
-    estMrr:   lead.estMrr   ? String(lead.estMrr)   : "",
+    name:         lead.name        ?? "",
+    contact:      lead.contact     ?? "",
+    title:        lead.title       ?? "",
+    email:        lead.email       ?? "",
+    phone:        lead.phone       ?? "",
+    location:     lead.location    ?? "",
+    units:        lead.units       ? String(lead.units) : "",
+    propertyType: lead.propertyType ?? "Multifamily",
+    source:       lead.source      ?? "manual",
+    stage:        lead.stage       ?? "new",
+    estSetup:     lead.estSetup    ? String(lead.estSetup) : "",
+    estMrr:       lead.estMrr      ? String(lead.estMrr)   : "",
   });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setForm({
-      stage:    lead.stage    ?? "new",
-      estSetup: lead.estSetup ? String(lead.estSetup) : "",
-      estMrr:   lead.estMrr   ? String(lead.estMrr)   : "",
+      name:         lead.name        ?? "",
+      contact:      lead.contact     ?? "",
+      title:        lead.title       ?? "",
+      email:        lead.email       ?? "",
+      phone:        lead.phone       ?? "",
+      location:     lead.location    ?? "",
+      units:        lead.units       ? String(lead.units) : "",
+      propertyType: lead.propertyType ?? "Multifamily",
+      source:       lead.source      ?? "manual",
+      stage:        lead.stage       ?? "new",
+      estSetup:     lead.estSetup    ? String(lead.estSetup) : "",
+      estMrr:       lead.estMrr      ? String(lead.estMrr)   : "",
     });
   }, [lead]);
 
@@ -171,9 +189,18 @@ function EditLeadModal({ lead, open, onClose, onSaved }: {
     setSaving(true);
     try {
       const payload = {
-        stage:    form.stage,
-        estSetup: form.estSetup ? parseInt(form.estSetup, 10) : null,
-        estMrr:   form.estMrr   ? parseInt(form.estMrr,   10) : null,
+        name:         form.name,
+        contact:      form.contact,
+        title:        form.title,
+        email:        form.email,
+        phone:        form.phone,
+        location:     form.location,
+        units:        form.units     ? parseInt(form.units, 10)     : null,
+        propertyType: form.propertyType,
+        source:       form.source,
+        stage:        form.stage,
+        estSetup:     form.estSetup  ? parseInt(form.estSetup, 10)  : null,
+        estMrr:       form.estMrr    ? parseInt(form.estMrr, 10)    : null,
       };
       await fetch(`/api/crm/leads/${lead.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
@@ -186,42 +213,122 @@ function EditLeadModal({ lead, open, onClose, onSaved }: {
     }
   };
 
+  const fieldCls = "w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 bg-background";
+
   return (
     <>
       <div className="fixed inset-0 bg-black/30 z-40" onClick={onClose} />
-      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[480px] bg-card border border-border rounded-2xl shadow-2xl z-50">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[560px] bg-card border border-border rounded-2xl shadow-2xl z-50 flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
           <h2 className="text-sm font-bold">Edit Lead</h2>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-accent"><X size={14} /></button>
         </div>
-        <div className="p-5 space-y-4">
+        <div className="overflow-y-auto p-5 space-y-4 flex-1">
+          {/* Property / Company Name */}
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Property / Company Name</label>
+            <input type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              placeholder="e.g. Ashford Glen Apartments" className={fieldCls} />
+          </div>
+          {/* Contact Name | Title */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Contact Name</label>
+              <input type="text" value={form.contact} onChange={e => setForm(f => ({ ...f, contact: e.target.value }))}
+                placeholder="e.g. Jane Smith" className={fieldCls} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Contact Title</label>
+              <input type="text" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                placeholder="e.g. Property Manager" className={fieldCls} />
+            </div>
+          </div>
+          {/* Email | Phone */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Email</label>
+              <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                placeholder="jane@property.com" className={fieldCls} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Phone</label>
+              <input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                placeholder="(404) 555-1234" className={fieldCls} />
+            </div>
+          </div>
+          {/* Location | Units */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Location (City, State)</label>
+              <input type="text" value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
+                placeholder="Atlanta, GA" className={fieldCls} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Units</label>
+              <input type="number" value={form.units} onChange={e => setForm(f => ({ ...f, units: e.target.value }))}
+                placeholder="0" min={0} className={fieldCls} />
+            </div>
+          </div>
+          {/* Property Type | Source */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Property Type</label>
+              <div className="relative">
+                <select value={form.propertyType} onChange={e => setForm(f => ({ ...f, propertyType: e.target.value }))}
+                  className={`${fieldCls} appearance-none pr-8`}>
+                  <option>Multifamily</option>
+                  <option>HOA</option>
+                  <option>Commercial</option>
+                  <option>Other</option>
+                </select>
+                <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Source</label>
+              <div className="relative">
+                <select value={form.source} onChange={e => setForm(f => ({ ...f, source: e.target.value }))}
+                  className={`${fieldCls} appearance-none pr-8`}>
+                  <option value="manual">Manual</option>
+                  <option value="show">Show</option>
+                  <option value="referral">Referral</option>
+                  <option value="website">Website</option>
+                  <option value="cold_outreach">Cold Outreach</option>
+                  <option value="other">Other</option>
+                </select>
+                <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              </div>
+            </div>
+          </div>
+          {/* Stage */}
           <div>
             <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Stage</label>
             <div className="relative">
               <select value={form.stage} onChange={e => setForm(f => ({ ...f, stage: e.target.value }))}
-                className="w-full appearance-none border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 bg-background pr-8">
+                className={`${fieldCls} appearance-none pr-8`}>
                 {STAGES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
               <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             </div>
           </div>
+          {/* Est. Setup | Est. MRR */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Est. Setup ($)</label>
               <input type="number" value={form.estSetup} onChange={e => setForm(f => ({ ...f, estSetup: e.target.value }))}
-                placeholder="0" className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 bg-background" />
+                placeholder="0" className={fieldCls} />
             </div>
             <div>
               <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Est. MRR ($/mo)</label>
               <input type="number" value={form.estMrr} onChange={e => setForm(f => ({ ...f, estMrr: e.target.value }))}
-                placeholder="0" className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 bg-background" />
+                placeholder="0" className={fieldCls} />
             </div>
           </div>
           <p className="text-[11px] text-muted-foreground bg-slate-50 border border-border rounded-lg px-3 py-2">
             Notes are logged individually via the Activity feed — use the Note button there.
           </p>
         </div>
-        <div className="border-t border-border p-4 flex gap-3">
+        <div className="border-t border-border p-4 flex gap-3 flex-shrink-0">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-border text-sm text-muted-foreground hover:bg-accent transition-colors">Cancel</button>
           <button onClick={handleSave} disabled={saving}
             className="flex-1 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-lg shadow-brand-500/20">
@@ -641,7 +748,9 @@ export default function LeadDetailPage() {
           est_setup:          lead.estSetup,
           est_mrr:            lead.estMrr,
           description:        lead.notes || null,
-          lead_id:            lead.id.replace(/^show_/, ''),
+          // show leads live in show_leads table — use show_lead_id (FK → show_leads)
+          // NOT lead_id which has a FK → leads (different table)
+          show_lead_id:       lead.id.replace(/^show_/, ''),
         }),
       });
       const json = await res.json();

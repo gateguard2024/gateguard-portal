@@ -330,6 +330,14 @@ export default function OpportunityDetailPage() {
     probability: "",
     forecast_cat: "",
     opportunity_type: "" as OppType | "",
+    site_contact_name:  "",
+    site_contact_email: "",
+    site_contact_phone: "",
+    property_city:      "",
+    property_state:     "",
+    units:              "",
+    source:             "",
+    est_mrr:            "",
   });
 
   // Sales cycle checklist — keys from documents_status JSONB
@@ -759,6 +767,14 @@ export default function OpportunityDetailPage() {
         probability: opp.probability != null ? String(opp.probability) : "",
         forecast_cat: opp.forecast_category ?? "",
         opportunity_type: opp.opportunity_type ?? "",
+        site_contact_name:  opp.site_contact_name  ?? "",
+        site_contact_email: opp.site_contact_email ?? "",
+        site_contact_phone: opp.site_contact_phone ?? "",
+        property_city:      (opp as Record<string, unknown>).property_city  as string ?? "",
+        property_state:     (opp as Record<string, unknown>).property_state as string ?? "",
+        units:              opp.units              ? String(opp.units) : "",
+        source:             (opp as Record<string, unknown>).source  as string ?? "",
+        est_mrr:            opp.est_mrr            ? String(opp.est_mrr) : "",
       });
     }
   }, [showEdit]);
@@ -780,6 +796,14 @@ export default function OpportunityDetailPage() {
           probability: editForm.probability !== "" ? Number(editForm.probability) : undefined,
           forecast_category: editForm.forecast_cat || undefined,
           opportunity_type: editForm.opportunity_type || undefined,
+          site_contact_name:  editForm.site_contact_name  || undefined,
+          site_contact_email: editForm.site_contact_email || undefined,
+          site_contact_phone: editForm.site_contact_phone || undefined,
+          property_city:      editForm.property_city      || undefined,
+          property_state:     editForm.property_state     || undefined,
+          units:              editForm.units !== "" ? Number(editForm.units) : undefined,
+          source:             editForm.source             || undefined,
+          est_mrr:            editForm.est_mrr !== "" ? Number(editForm.est_mrr) : undefined,
         }),
       });
       await fetchOpp();
@@ -2147,6 +2171,9 @@ export default function OpportunityDetailPage() {
             </div>
             {/* Fields */}
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              <div className="pb-1">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Opportunity</p>
+              </div>
               <Field label="Opportunity Name">
                 <input
                   type="text"
@@ -2164,6 +2191,40 @@ export default function OpportunityDetailPage() {
                   className={inputCls}
                   placeholder="e.g. Ashford Glen"
                 />
+              </Field>
+              {/* Contact & Property */}
+              <div className="pt-2 pb-1">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Contact & Property</p>
+              </div>
+              <Field label="Site Contact Name">
+                <input type="text" value={editForm.site_contact_name} onChange={e => setEditForm({...editForm, site_contact_name: e.target.value})} className={inputCls} placeholder="e.g. Jane Smith" />
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Contact Email">
+                  <input type="email" value={editForm.site_contact_email} onChange={e => setEditForm({...editForm, site_contact_email: e.target.value})} className={inputCls} placeholder="jane@example.com" />
+                </Field>
+                <Field label="Contact Phone">
+                  <input type="tel" value={editForm.site_contact_phone} onChange={e => setEditForm({...editForm, site_contact_phone: e.target.value})} className={inputCls} placeholder="(404) 555-1234" />
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="City">
+                  <input type="text" value={editForm.property_city} onChange={e => setEditForm({...editForm, property_city: e.target.value})} className={inputCls} placeholder="Atlanta" />
+                </Field>
+                <Field label="State">
+                  <input type="text" value={editForm.property_state} onChange={e => setEditForm({...editForm, property_state: e.target.value})} className={inputCls} placeholder="GA" maxLength={2} />
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Units">
+                  <input type="number" value={editForm.units} onChange={e => setEditForm({...editForm, units: e.target.value})} className={inputCls} placeholder="0" min={0} />
+                </Field>
+                <Field label="Source">
+                  <input type="text" value={editForm.source} onChange={e => setEditForm({...editForm, source: e.target.value})} className={inputCls} placeholder="e.g. referral" />
+                </Field>
+              </div>
+              <Field label="Est. MRR ($/mo)">
+                <input type="number" value={editForm.est_mrr} onChange={e => setEditForm({...editForm, est_mrr: e.target.value})} className={inputCls} placeholder="0" min={0} />
               </Field>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Amount ($)">

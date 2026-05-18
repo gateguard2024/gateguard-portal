@@ -79,9 +79,22 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (rawId.startsWith('show_')) {
     const uuid = rawId.replace('show_', '')
     const updateData: Record<string, unknown> = {}
-    if (body.stage    !== undefined) updateData.status = body.stage
-    if (body.notes    !== undefined) updateData.notes  = body.notes
+    if (body.stage          !== undefined) updateData.status         = body.stage
+    if (body.notes          !== undefined) updateData.notes          = body.notes
     if (body.assignedDealer !== undefined) updateData.assigned_dealer = body.assignedDealer
+    if (body.name           !== undefined) updateData.property_name  = body.name
+    if (body.contact        !== undefined) updateData.name           = body.contact
+    if (body.title          !== undefined) updateData.contact_title  = body.title
+    if (body.email          !== undefined) updateData.email          = body.email
+    if (body.phone          !== undefined) updateData.phone          = body.phone
+    if (body.units          !== undefined) updateData.units          = body.units
+    if (body.propertyType   !== undefined) updateData.property_type  = body.propertyType
+    if (body.source         !== undefined) updateData.source         = body.source
+    if (body.location       !== undefined) {
+      const parts = String(body.location).split(',')
+      updateData.city  = parts[0]?.trim() ?? ''
+      updateData.state = parts[1]?.trim() ?? ''
+    }
 
     const { data, error } = await supabase
       .from('show_leads')

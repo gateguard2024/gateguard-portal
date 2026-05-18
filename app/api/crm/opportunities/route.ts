@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
       : (user.org_id ?? null)
 
     // Strip any client-supplied fields that don't exist on the table
-    const { org_id: _orgId, contact_name: _cn, ...safeBody } = body
+    const { org_id: _orgId, contact_name: _cn, show_lead_id, ...safeBody } = body
 
     const { data, error } = await supabase
       .from('opportunities')
@@ -119,6 +119,7 @@ export async function POST(req: NextRequest) {
         owner_name:     user.name,
         owner_initials: user.initials,
         dealer_org_id,
+        ...(show_lead_id ? { show_lead_id } : {}),
       })
       .select()
       .single()
