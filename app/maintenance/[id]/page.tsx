@@ -6,10 +6,10 @@ import Link from 'next/link'
 import {
   Wrench, Clock, Calendar, CheckCircle2, X, AlertTriangle,
   Plus, Trash2, MessageSquare, Package, User, ChevronDown,
-  RefreshCw, Send, Building2, Hash, MapPin, Check,
+  RefreshCw, Send, Building2, Hash, MapPin, Check, FileText,
 } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowLeft, Edit2, Timer, Tag } = require('lucide-react') as any
+const { ArrowLeft, Edit2, Timer, Tag, ClipboardList } = require('lucide-react') as any
 import { TopBar } from '@/components/layout/TopBar'
 import { cn } from '@/lib/utils'
 
@@ -78,6 +78,38 @@ interface SubWorkOrder {
   priority: WOPriority
   assignee_name?: string
   due_date?: string
+}
+
+type FTStatus = 'draft' | 'submitted' | 'approved' | 'rejected'
+
+interface FieldTicket {
+  id: string
+  work_order_id: string
+  site_id?: string | null
+  technician_name: string
+  title: string
+  findings?: string | null
+  work_performed?: string | null
+  materials_used?: string | null
+  labor_hours?: number | null
+  recommendations?: string | null
+  status: FTStatus
+  submitted_at?: string | null
+  approved_at?: string | null
+  approved_by?: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface TimeEntry {
+  id: string
+  work_order_id: string
+  technician_name: string
+  clock_in: string
+  clock_out?: string | null
+  duration_mins?: number | null
+  notes?: string | null
+  created_at: string
 }
 
 // ── Config ───────────────────────────────────────────────────────────────────
@@ -334,7 +366,24 @@ export default function WorkOrderDetailPage() {
   const [addingPart, setAddingPart] = useState(false)
 
   // Active tab
-  const [tab, setTab] = useState<'details' | 'comments' | 'parts'>('details')
+  const [tab, setTab] = useState<'details' | 'comments' | 'parts' | 'field_tickets' | 'time'>('details')
+
+  // Field Tickets
+  const [fieldTickets, setFieldTickets]   = useState<FieldTicket[]>([])
+  const [showNewFT, setShowNewFT]         = useState(false)
+  const [ftSaving, setFtSaving]           = useState(false)
+  const [ftError, setFtError]             = useState('')
+  const [ftForm, setFtForm] = useState({
+    technician_name: '', title: '', findings: '', work_performed: '',
+    materials_used: '', labor_hours: '', recommendations: '',
+  })
+
+  // Time Tracking
+  const [timeEntries, setTimeEntries]     = useState<TimeEntry[]>([])
+  const [totalMins, setTotalMins]         = useState(0)
+  const [activeTimeEntry, setActiveEntry] = useState<TimeEntry | null>(null)
+  const [timeSaving, setTimeSaving]       = useState(false)
+  const [clockTechName, setClockTechName] = useState('')
 
   const commentInputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -349,6 +398,18 @@ export default function WorkOrderDetailPage() {
       setComments(json.comments         ?? [])
       setPartsUsed(json.parts_used      ?? [])
       setSubWOs(json.sub_work_orders    ?? [])
+
+      // Load field tickets + time entries in parallel (non-blocking)
+      void Promise.all([
+        fetch(`/api/field-tickets?work_order_id=${id}`).then(r => r.json()).then(j => {
+          setFieldTickets(j.records ?? [])
+        }).catch(() => {}),
+        fetch(`/api/maintenance/${id}/time`).then(r => r.json()).then(j => {
+          setTimeEntries(j.entries ?? [])
+          setTotalMins(j.totalMins ?? 0)
+          setActiveEntry(j.activeEntry ?? null)
+        }).catch(() => {}),
+      ])
     } finally {
       setLoading(false)
     }
@@ -456,6 +517,89 @@ export default function WorkOrderDetailPage() {
       method: 'DELETE', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ part_used_id: partId }),
     })
+  }
+
+  // ── Field Tickets ────────────────────────────────────────────────
+
+  const handleSubmitFT = async () => {
+    if (!ftForm.title.trim()) { setFtError('Title is required'); return }
+    setFtSaving(true); setFtError('')
+    try {
+      const res  = await fetch('/api/field-tickets', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          work_order_id:   id,
+          technician_name: ftForm.technician_name.trim(),
+          title:           ftForm.title.trim(),
+          findings:        ftForm.findings.trim()      || null,
+          work_performed:  ftForm.work_performed.trim() || null,
+          materials_used:  ftForm.materials_used.trim() || null,
+          labor_hours:     ftForm.labor_hours           ? parseFloat(ftForm.labor_hours) : null,
+          recommendations: ftForm.recommendations.trim() || null,
+          status:          'submitted',
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Save failed')
+      setFieldTickets(f => [json, ...f])
+      setFtForm({ technician_name: '', title: '', findings: '', work_performed: '', materials_used: '', labor_hours: '', recommendations: '' })
+      setShowNewFT(false)
+    } catch (err: unknown) {
+      setFtError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setFtSaving(false)
+    }
+  }
+
+  const handleApproveFT = async (ft: FieldTicket) => {
+    const res  = await fetch(`/api/field-tickets/${ft.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'approved' }),
+    })
+    const json = await res.json()
+    if (res.ok) setFieldTickets(f => f.map(x => x.id === ft.id ? json : x))
+  }
+
+  const handleDeleteFT = async (ftId: string) => {
+    setFieldTickets(f => f.filter(x => x.id !== ftId))
+    await fetch(`/api/field-tickets/${ftId}`, { method: 'DELETE' })
+  }
+
+  // ── Time Tracking ────────────────────────────────────────────────
+
+  const handleClockIn = async () => {
+    if (!clockTechName.trim()) return
+    setTimeSaving(true)
+    try {
+      const res  = await fetch(`/api/maintenance/${id}/time`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ technician_name: clockTechName.trim() }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Clock-in failed')
+      setActiveEntry(json)
+      setTimeEntries(e => [json, ...e])
+    } finally {
+      setTimeSaving(false)
+    }
+  }
+
+  const handleClockOut = async () => {
+    if (!activeTimeEntry) return
+    setTimeSaving(true)
+    try {
+      const res  = await fetch(`/api/maintenance/${id}/time`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entry_id: activeTimeEntry.id }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Clock-out failed')
+      setActiveEntry(null)
+      setTimeEntries(e => e.map(x => x.id === json.id ? json : x))
+      setTotalMins(m => m + (json.duration_mins ?? 0))
+    } finally {
+      setTimeSaving(false)
+    }
   }
 
   // ── Derived state ────────────────────────────────────────────────
@@ -570,11 +714,13 @@ export default function WorkOrderDetailPage() {
             <div className="col-span-2 space-y-6">
 
               {/* Tabs */}
-              <div className="flex gap-1 border-b border-border pb-0">
+              <div className="flex gap-1 border-b border-border pb-0 flex-wrap">
                 {([
-                  { key: 'details',  label: 'Details',  icon: Wrench   },
-                  { key: 'comments', label: `Comments (${comments.length})`, icon: MessageSquare },
-                  { key: 'parts',    label: `Parts Used (${partsUsed.length})`, icon: Package },
+                  { key: 'details',       label: 'Details',                               icon: Wrench        },
+                  { key: 'field_tickets', label: `Field Tickets (${fieldTickets.length})`, icon: ClipboardList },
+                  { key: 'time',          label: `Time (${totalMins > 0 ? Math.floor(totalMins / 60) + 'h ' + (totalMins % 60) + 'm' : timeEntries.length})`, icon: Clock },
+                  { key: 'comments',      label: `Comments (${comments.length})`,          icon: MessageSquare },
+                  { key: 'parts',         label: `Parts (${partsUsed.length})`,            icon: Package       },
                 ] as const).map(t => {
                   const Icon = t.icon
                   return (
@@ -703,6 +849,344 @@ export default function WorkOrderDetailPage() {
                           )
                         })}
                       </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Field Tickets tab ── */}
+              {tab === 'field_tickets' && (
+                <div className="space-y-4">
+                  {/* New ticket form */}
+                  {showNewFT ? (
+                    <div className="bg-card border border-border rounded-xl overflow-hidden">
+                      <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
+                        <h3 className="text-sm font-semibold flex items-center gap-2">
+                          <ClipboardList size={14} className="text-brand-400" />
+                          New Field Ticket
+                        </h3>
+                        <button onClick={() => { setShowNewFT(false); setFtError('') }} className="p-1.5 rounded-lg hover:bg-accent">
+                          <X size={13} className="text-muted-foreground" />
+                        </button>
+                      </div>
+                      <div className="p-5 space-y-4">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Technician Name *</label>
+                            <input
+                              value={ftForm.technician_name}
+                              onChange={e => setFtForm(f => ({ ...f, technician_name: e.target.value }))}
+                              placeholder="Your name"
+                              className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Ticket Title *</label>
+                            <input
+                              value={ftForm.title}
+                              onChange={e => setFtForm(f => ({ ...f, title: e.target.value }))}
+                              placeholder="e.g. Gate motor replacement"
+                              className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Findings / Observations</label>
+                          <textarea
+                            value={ftForm.findings}
+                            onChange={e => setFtForm(f => ({ ...f, findings: e.target.value }))}
+                            placeholder="What did you find on site?"
+                            rows={3}
+                            className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30 resize-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Work Performed</label>
+                          <textarea
+                            value={ftForm.work_performed}
+                            onChange={e => setFtForm(f => ({ ...f, work_performed: e.target.value }))}
+                            placeholder="Describe what was done…"
+                            rows={3}
+                            className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30 resize-none"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Materials Used</label>
+                            <input
+                              value={ftForm.materials_used}
+                              onChange={e => setFtForm(f => ({ ...f, materials_used: e.target.value }))}
+                              placeholder="e.g. 14/2 wire, connectors"
+                              className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Labor Hours</label>
+                            <input
+                              type="number" step="0.25" min="0"
+                              value={ftForm.labor_hours}
+                              onChange={e => setFtForm(f => ({ ...f, labor_hours: e.target.value }))}
+                              placeholder="e.g. 2.5"
+                              className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Recommendations</label>
+                          <textarea
+                            value={ftForm.recommendations}
+                            onChange={e => setFtForm(f => ({ ...f, recommendations: e.target.value }))}
+                            placeholder="Suggested follow-up actions…"
+                            rows={2}
+                            className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30 resize-none"
+                          />
+                        </div>
+
+                        {ftError && (
+                          <div className="flex items-center gap-2 text-red-500 text-xs bg-red-500/10 rounded-xl px-3 py-2">
+                            <AlertTriangle size={13} /> {ftError}
+                          </div>
+                        )}
+
+                        <div className="flex gap-2 pt-1">
+                          <button onClick={() => { setShowNewFT(false); setFtError('') }}
+                            className="flex-1 py-2.5 rounded-xl border border-border text-sm text-muted-foreground hover:bg-accent transition-colors">
+                            Cancel
+                          </button>
+                          <button onClick={handleSubmitFT} disabled={ftSaving || !ftForm.title.trim()}
+                            className="flex-1 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-lg shadow-brand-500/20">
+                            {ftSaving ? 'Submitting…' : 'Submit Field Ticket'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowNewFT(true)}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl transition-colors shadow-lg shadow-brand-500/20"
+                    >
+                      <Plus size={14} /> New Field Ticket
+                    </button>
+                  )}
+
+                  {/* Existing tickets */}
+                  {fieldTickets.length === 0 && !showNewFT && (
+                    <div className="bg-card border border-border rounded-xl flex flex-col items-center justify-center py-12 text-muted-foreground">
+                      <ClipboardList size={28} className="mb-2 opacity-20" />
+                      <p className="text-sm">No field tickets yet</p>
+                      <p className="text-xs mt-1 opacity-70">Submit one after completing on-site work</p>
+                    </div>
+                  )}
+
+                  {fieldTickets.map(ft => {
+                    const statusCfg: Record<FTStatus, { bg: string; text: string; label: string }> = {
+                      draft:     { bg: 'bg-slate-500/10',   text: 'text-slate-400',   label: 'Draft'     },
+                      submitted: { bg: 'bg-amber-500/10',   text: 'text-amber-400',   label: 'Submitted' },
+                      approved:  { bg: 'bg-emerald-500/10', text: 'text-emerald-400', label: 'Approved'  },
+                      rejected:  { bg: 'bg-red-500/10',     text: 'text-red-400',     label: 'Rejected'  },
+                    }
+                    const sc = statusCfg[ft.status]
+                    return (
+                      <div key={ft.id} className="bg-card border border-border rounded-xl overflow-hidden group">
+                        <div className="flex items-start justify-between px-5 py-4 border-b border-border">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${sc.bg} ${sc.text}`}>
+                                {sc.label}
+                              </span>
+                              <span className="text-xs text-muted-foreground">{fmtDate(ft.created_at)}</span>
+                            </div>
+                            <h4 className="text-sm font-semibold text-foreground">{ft.title}</h4>
+                            <p className="text-xs text-muted-foreground mt-0.5">by {ft.technician_name || 'Unknown tech'}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {ft.status === 'submitted' && (
+                              <button
+                                onClick={() => handleApproveFT(ft)}
+                                className="px-2.5 py-1 text-xs font-medium bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition-colors"
+                              >
+                                Approve
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDeleteFT(ft.id)}
+                              className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-red-500/10 text-red-400 transition-all"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="px-5 py-4 space-y-3">
+                          {ft.findings && (
+                            <div>
+                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Findings</p>
+                              <p className="text-sm text-foreground whitespace-pre-wrap">{ft.findings}</p>
+                            </div>
+                          )}
+                          {ft.work_performed && (
+                            <div>
+                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Work Performed</p>
+                              <p className="text-sm text-foreground whitespace-pre-wrap">{ft.work_performed}</p>
+                            </div>
+                          )}
+                          {(ft.materials_used || ft.labor_hours) && (
+                            <div className="flex gap-6">
+                              {ft.materials_used && (
+                                <div>
+                                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Materials</p>
+                                  <p className="text-sm">{ft.materials_used}</p>
+                                </div>
+                              )}
+                              {ft.labor_hours && (
+                                <div>
+                                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Labor Hours</p>
+                                  <p className="text-sm font-semibold">{ft.labor_hours}h</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {ft.recommendations && (
+                            <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg px-4 py-3">
+                              <p className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider mb-1">Recommendations</p>
+                              <p className="text-sm text-foreground">{ft.recommendations}</p>
+                            </div>
+                          )}
+                          {ft.approved_at && (
+                            <p className="text-xs text-emerald-400">✓ Approved by {ft.approved_by} on {fmtDate(ft.approved_at)}</p>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* ── Time Tracking tab ── */}
+              {tab === 'time' && (
+                <div className="space-y-4">
+                  {/* Clock-in card */}
+                  <div className="bg-card border border-border rounded-xl overflow-hidden">
+                    <div className="px-5 py-4 border-b border-border">
+                      <h3 className="text-sm font-semibold flex items-center gap-2">
+                        <Clock size={14} className="text-brand-400" />
+                        Time Clock
+                        {totalMins > 0 && (
+                          <span className="ml-auto text-xs text-muted-foreground font-normal">
+                            Total: <span className="text-foreground font-semibold">
+                              {Math.floor(totalMins / 60)}h {totalMins % 60}m
+                            </span>
+                          </span>
+                        )}
+                      </h3>
+                    </div>
+
+                    {activeTimeEntry ? (
+                      <div className="px-5 py-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="relative">
+                            <div className="w-3 h-3 rounded-full bg-emerald-400" />
+                            <div className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-60" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-emerald-400">
+                              {activeTimeEntry.technician_name} is clocked in
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Since {new Date(activeTimeEntry.clock_in).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={handleClockOut}
+                          disabled={timeSaving}
+                          className="px-4 py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
+                        >
+                          {timeSaving ? 'Saving…' : '⏹ Clock Out'}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="px-5 py-4 flex items-center gap-3">
+                        <input
+                          value={clockTechName}
+                          onChange={e => setClockTechName(e.target.value)}
+                          placeholder="Technician name"
+                          className="flex-1 text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                        />
+                        <button
+                          onClick={handleClockIn}
+                          disabled={timeSaving || !clockTechName.trim()}
+                          className="px-4 py-2.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 text-sm font-semibold rounded-xl transition-colors disabled:opacity-50 whitespace-nowrap"
+                        >
+                          {timeSaving ? 'Clocking…' : '▶ Clock In'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Time entries table */}
+                  {timeEntries.length > 0 ? (
+                    <div className="bg-card border border-border rounded-xl overflow-hidden">
+                      <div className="px-5 py-3.5 border-b border-border">
+                        <h3 className="text-sm font-semibold text-muted-foreground">Time Entries</h3>
+                      </div>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-border bg-background/30">
+                            <th className="text-left px-5 py-2.5 text-xs text-muted-foreground font-medium">Technician</th>
+                            <th className="text-left px-4 py-2.5 text-xs text-muted-foreground font-medium">Clock In</th>
+                            <th className="text-left px-4 py-2.5 text-xs text-muted-foreground font-medium">Clock Out</th>
+                            <th className="text-right px-5 py-2.5 text-xs text-muted-foreground font-medium">Duration</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {timeEntries.map(e => {
+                            const dur = e.duration_mins
+                              ? `${Math.floor(e.duration_mins / 60)}h ${e.duration_mins % 60}m`
+                              : '—'
+                            const fmtTime = (iso: string) =>
+                              new Date(iso).toLocaleString('en-US', {
+                                month: 'short', day: 'numeric',
+                                hour: 'numeric', minute: '2-digit',
+                              })
+                            return (
+                              <tr key={e.id} className="border-b border-border/50 hover:bg-accent/30">
+                                <td className="px-5 py-3 font-medium text-foreground">{e.technician_name}</td>
+                                <td className="px-4 py-3 text-muted-foreground text-xs">{fmtTime(e.clock_in)}</td>
+                                <td className="px-4 py-3 text-muted-foreground text-xs">
+                                  {e.clock_out
+                                    ? fmtTime(e.clock_out)
+                                    : <span className="flex items-center gap-1 text-emerald-400">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                        Active
+                                      </span>
+                                  }
+                                </td>
+                                <td className="px-5 py-3 text-right font-semibold">{dur}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                        {totalMins > 0 && (
+                          <tfoot>
+                            <tr className="border-t border-border bg-background/30">
+                              <td colSpan={3} className="px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total</td>
+                              <td className="px-5 py-2.5 text-right text-sm font-bold text-foreground">
+                                {Math.floor(totalMins / 60)}h {totalMins % 60}m
+                              </td>
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="bg-card border border-border rounded-xl flex flex-col items-center justify-center py-12 text-muted-foreground">
+                      <Clock size={28} className="mb-2 opacity-20" />
+                      <p className="text-sm">No time entries yet</p>
+                      <p className="text-xs mt-1 opacity-70">Clock in to start tracking labor</p>
                     </div>
                   )}
                 </div>
