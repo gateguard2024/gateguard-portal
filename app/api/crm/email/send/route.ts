@@ -10,7 +10,7 @@ const resend = new Resend(process.env.RESEND_API_KEY!)
 export const dynamic = 'force-dynamic'
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://portal.gateguard.co'
-const FROM_EMAIL = 'GateGuard CRM <crm@mail.gateguard.co>'
+const FROM_EMAIL = 'GateGuard CRM <crm@gateguard.co>'
 
 // Build a 1x1 transparent tracking pixel tag
 function trackingPixel(activityId: string): string {
