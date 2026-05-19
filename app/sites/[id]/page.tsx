@@ -909,7 +909,11 @@ export default function SiteDetailPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {workOrders.map(wo => (
-                  <tr key={wo.id} className="hover:bg-slate-50">
+                  <tr
+                    key={wo.id}
+                    onClick={() => router.push(`/maintenance/${wo.id}`)}
+                    className="hover:bg-slate-50 cursor-pointer"
+                  >
                     <td className="px-4 py-3 font-mono text-xs text-brand-400 font-semibold">{wo.wo_number}</td>
                     <td className="px-4 py-3 font-medium text-slate-900">{wo.title}</td>
                     <td className="px-4 py-3">
