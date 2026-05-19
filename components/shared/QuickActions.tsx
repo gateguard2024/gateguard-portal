@@ -104,7 +104,12 @@ export function QuickActions({
           subject:     emailSubject,
           body:        emailBody,
           // Pass record linkage so the activity is tracked
-          ...(recordType === 'lead'        && { lead_id:        recordId }),
+          // Show leads have "show_" prefix IDs — strip it and use show_lead_id FK
+          ...(recordType === 'lead' && recordId.startsWith('show_')
+            ? { show_lead_id: recordId.replace(/^show_/, '') }
+            : recordType === 'lead'
+            ? { lead_id: recordId }
+            : {}),
           ...(recordType === 'opportunity' && { opportunity_id: recordId }),
         }),
       })

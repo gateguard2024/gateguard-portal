@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   Wrench, Clock, Calendar, CheckCircle2, X, AlertTriangle,
-  Plus, Trash2, MessageSquare, Package, User, ChevronDown,
+  Plus, Trash2, MessageSquare, Package, User, Users, ChevronDown,
   RefreshCw, Send, Building2, Hash, MapPin, Check, FileText, Search,
 } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -390,7 +390,10 @@ export default function WorkOrderDetailPage() {
   const [selectedInvItem, setSelectedInvItem] = useState<InventorySearchResult | null>(null)
 
   // Active tab
-  const [tab, setTab] = useState<'details' | 'comments' | 'parts' | 'field_tickets' | 'time'>('details')
+  const [tab, setTab] = useState<'details' | 'comments' | 'parts' | 'field_tickets' | 'time' | 'crew' | 'schedule'>('details')
+
+  // All techs (for crew picker)
+  const [allTechs, setAllTechs] = useState<{ id: string; name: string; initials: string; role: string }[]>([])
 
   // Field Tickets
   const [fieldTickets, setFieldTickets]   = useState<FieldTicket[]>([])
@@ -443,6 +446,9 @@ export default function WorkOrderDetailPage() {
           setTimeEntries(j.entries ?? [])
           setTotalMins(j.totalMins ?? 0)
           setActiveEntry(j.activeEntry ?? null)
+        }).catch(() => {}),
+        fetch('/api/dispatch/technicians').then(r => r.json()).then(j => {
+          setAllTechs(j.techs ?? [])
         }).catch(() => {}),
       ])
     } finally {
@@ -809,6 +815,8 @@ export default function WorkOrderDetailPage() {
               <div className="flex gap-1 border-b border-border pb-0 flex-wrap">
                 {([
                   { key: 'details',       label: 'Details',                               icon: Wrench        },
+                  { key: 'crew',          label: 'Crew',                                  icon: Users         },
+                  { key: 'schedule',      label: 'Schedule',                              icon: Calendar      },
                   { key: 'field_tickets', label: `Field Tickets (${fieldTickets.length})`, icon: ClipboardList },
                   { key: 'time',          label: `Time (${totalMins > 0 ? Math.floor(totalMins / 60) + 'h ' + (totalMins % 60) + 'm' : timeEntries.length})`, icon: Clock },
                   { key: 'comments',      label: `Comments (${comments.length})`,          icon: MessageSquare },
@@ -1536,6 +1544,16 @@ export default function WorkOrderDetailPage() {
                   </div>
                 </div>
               )}
+
+              {/* ── Crew tab ── */}
+              {tab === 'crew' && wo && (
+                <CrewTab workOrderId={wo.id} techs={allTechs} />
+              )}
+
+              {/* ── Schedule tab ── */}
+              {tab === 'schedule' && wo && (
+                <ScheduleTab workOrderId={wo.id} />
+              )}
             </div>
 
             {/* ── Right sidebar (1/3) ── */}
@@ -1649,6 +1667,334 @@ export default function WorkOrderDetailPage() {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── CrewTab ───────────────────────────────────────────────────────────────────
+
+function CrewTab({ workOrderId, techs }: { workOrderId: string; techs: { id: string; name: string; initials: string; role: string }[] }) {
+  interface CrewMember {
+    id: string
+    role: string
+    technician: { id: string; name: string; initials: string; role: string; phone?: string; email?: string; status?: string }
+  }
+  const [crew, setCrew]       = useState<CrewMember[]>([])
+  const [loading, setLoading] = useState(true)
+  const [adding, setAdding]   = useState(false)
+  const [selectedTechId, setSelectedTechId] = useState('')
+  const [selectedRole, setSelectedRole]     = useState('crew')
+  const [saving, setSaving]   = useState(false)
+  const [error, setError]     = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch(`/api/maintenance/${workOrderId}/crew`)
+      .then(r => r.json())
+      .then(d => { setCrew(d.crew ?? []); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [workOrderId])
+
+  const handleAdd = async () => {
+    if (!selectedTechId) { setError('Select a technician'); return }
+    setSaving(true); setError(null)
+    try {
+      const res = await fetch(`/api/maintenance/${workOrderId}/crew`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ technician_id: selectedTechId, role: selectedRole }),
+      })
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? 'Failed') }
+      const { member } = await res.json()
+      setCrew(prev => [...prev, member])
+      setAdding(false)
+      setSelectedTechId('')
+      setSelectedRole('crew')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleRemove = async (memberId: string) => {
+    const res = await fetch(`/api/maintenance/${workOrderId}/crew?member_id=${memberId}`, { method: 'DELETE' })
+    if (res.ok) setCrew(prev => prev.filter(m => m.id !== memberId))
+  }
+
+  const assignedIds = new Set(crew.map(m => m.technician.id))
+  const available = techs.filter(t => !assignedIds.has(t.id))
+
+  const ROLE_COLORS: Record<string, string> = {
+    lead:       'bg-blue-100 text-blue-700',
+    owner:      'bg-violet-100 text-violet-700',
+    supervisor: 'bg-amber-100 text-amber-700',
+    crew:       'bg-slate-100 text-slate-600',
+  }
+
+  if (loading) return <div className="p-6 text-sm text-muted-foreground">Loading crew…</div>
+
+  return (
+    <div className="p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">Assigned Crew</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">{crew.length} member{crew.length !== 1 ? 's' : ''} on this job</p>
+        </div>
+        <button
+          onClick={() => { setAdding(true); setError(null) }}
+          className="flex items-center gap-1.5 text-xs bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5B6EEF] font-medium"
+        >
+          <Plus size={13} /> Add Crew
+        </button>
+      </div>
+
+      {/* Add crew form */}
+      {adding && (
+        <div className="border border-border rounded-xl p-4 bg-slate-50/50 space-y-3">
+          <p className="text-xs font-semibold text-foreground">Add crew member</p>
+          <select
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background"
+            value={selectedTechId}
+            onChange={e => setSelectedTechId(e.target.value)}
+          >
+            <option value="">— Select technician —</option>
+            {available.map(t => (
+              <option key={t.id} value={t.id}>{t.name} ({t.role})</option>
+            ))}
+          </select>
+          <select
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background"
+            value={selectedRole}
+            onChange={e => setSelectedRole(e.target.value)}
+          >
+            <option value="lead">Lead Tech</option>
+            <option value="crew">Crew</option>
+            <option value="supervisor">Supervisor</option>
+            <option value="owner">Owner / On-Site</option>
+          </select>
+          {error && <p className="text-xs text-red-500">{error}</p>}
+          <div className="flex gap-2">
+            <button onClick={handleAdd} disabled={saving} className="flex-1 text-xs bg-[#6B7EFF] text-white py-2 rounded-lg font-medium hover:bg-[#5B6EEF] disabled:opacity-50">
+              {saving ? 'Adding…' : 'Add to Job'}
+            </button>
+            <button onClick={() => setAdding(false)} className="flex-1 text-xs border border-border text-muted-foreground py-2 rounded-lg hover:bg-accent">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {crew.length === 0 && !adding ? (
+        <div className="border border-dashed border-border rounded-xl p-8 text-center">
+          <Users size={24} className="text-muted-foreground mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground">No crew assigned yet</p>
+          <button onClick={() => setAdding(true)} className="text-xs text-[#6B7EFF] hover:underline mt-1">Add first crew member →</button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {crew.map(member => (
+            <div key={member.id} className="flex items-center gap-3 bg-white border border-border rounded-xl px-4 py-3">
+              <div className="w-8 h-8 rounded-full bg-[#6B7EFF] text-white text-xs font-bold flex items-center justify-center shrink-0">
+                {member.technician.initials}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-foreground">{member.technician.name}</p>
+                <p className="text-xs text-muted-foreground">{member.technician.role}{member.technician.phone ? ` · ${member.technician.phone}` : ''}</p>
+              </div>
+              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full capitalize ${ROLE_COLORS[member.role] ?? ROLE_COLORS.crew}`}>
+                {member.role === 'lead' ? 'Lead' : member.role === 'owner' ? 'Owner' : member.role === 'supervisor' ? 'Supervisor' : 'Crew'}
+              </span>
+              <button onClick={() => handleRemove(member.id)} className="text-muted-foreground hover:text-red-500 transition-colors ml-1">
+                <X size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── ScheduleTab ───────────────────────────────────────────────────────────────
+
+function ScheduleTab({ workOrderId }: { workOrderId: string }) {
+  interface Phase {
+    id: string
+    name: string
+    scheduled_date: string | null
+    end_date: string | null
+    status: string
+    notes: string | null
+    sort_order: number
+  }
+  const [phases, setPhases]   = useState<Phase[]>([])
+  const [loading, setLoading] = useState(true)
+  const [adding, setAdding]   = useState(false)
+  const [saving, setSaving]   = useState(false)
+  const [error, setError]     = useState<string | null>(null)
+  const [form, setForm]       = useState({ name: '', scheduled_date: '', end_date: '', notes: '' })
+
+  useEffect(() => {
+    fetch(`/api/maintenance/${workOrderId}/phases`)
+      .then(r => r.json())
+      .then(d => { setPhases(d.phases ?? []); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [workOrderId])
+
+  const handleAdd = async () => {
+    if (!form.name.trim()) { setError('Phase name is required'); return }
+    setSaving(true); setError(null)
+    try {
+      const res = await fetch(`/api/maintenance/${workOrderId}/phases`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error) }
+      const { phase } = await res.json()
+      setPhases(prev => [...prev, phase])
+      setAdding(false)
+      setForm({ name: '', scheduled_date: '', end_date: '', notes: '' })
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const cycleStatus = async (phase: Phase) => {
+    const next: Record<string, string> = { pending: 'in_progress', in_progress: 'complete', complete: 'pending', skipped: 'pending' }
+    const newStatus = next[phase.status] ?? 'pending'
+    const res = await fetch(`/api/maintenance/${workOrderId}/phases/${phase.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    })
+    if (res.ok) setPhases(prev => prev.map(p => p.id === phase.id ? { ...p, status: newStatus } : p))
+  }
+
+  const handleDelete = async (phaseId: string) => {
+    const res = await fetch(`/api/maintenance/${workOrderId}/phases/${phaseId}`, { method: 'DELETE' })
+    if (res.ok) setPhases(prev => prev.filter(p => p.id !== phaseId))
+  }
+
+  const PHASE_STATUS_CFG: Record<string, { label: string; color: string }> = {
+    pending:     { label: 'Pending',     color: 'bg-slate-100 text-slate-500' },
+    in_progress: { label: 'In Progress', color: 'bg-blue-100 text-blue-700' },
+    complete:    { label: 'Complete',    color: 'bg-emerald-100 text-emerald-700' },
+    skipped:     { label: 'Skipped',     color: 'bg-amber-100 text-amber-600' },
+  }
+
+  const fmtPhaseDate = (d: string | null) => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null
+
+  if (loading) return <div className="p-6 text-sm text-muted-foreground">Loading schedule…</div>
+
+  return (
+    <div className="p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">Job Phases / Schedule</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {phases.length === 0 ? 'Single-day job — add phases for multi-day or staged work' : `${phases.length} phase${phases.length !== 1 ? 's' : ''}`}
+          </p>
+        </div>
+        <button
+          onClick={() => { setAdding(true); setError(null) }}
+          className="flex items-center gap-1.5 text-xs bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5B6EEF] font-medium"
+        >
+          <Plus size={13} /> Add Phase
+        </button>
+      </div>
+
+      {adding && (
+        <div className="border border-border rounded-xl p-4 bg-slate-50/50 space-y-3">
+          <p className="text-xs font-semibold text-foreground">New phase / day</p>
+          <input
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background"
+            placeholder={'Name — e.g. "Day 1 – Rough-in" or "Phase 2 – Commissioning"'}
+            value={form.name}
+            onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide block mb-1">Start Date</label>
+              <input
+                type="date"
+                className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background"
+                value={form.scheduled_date}
+                onChange={e => setForm(f => ({ ...f, scheduled_date: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide block mb-1">End Date (optional)</label>
+              <input
+                type="date"
+                className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background"
+                value={form.end_date}
+                onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))}
+              />
+            </div>
+          </div>
+          <textarea
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background resize-none"
+            rows={2}
+            placeholder="Notes for this phase (optional)"
+            value={form.notes}
+            onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+          />
+          {error && <p className="text-xs text-red-500">{error}</p>}
+          <div className="flex gap-2">
+            <button onClick={handleAdd} disabled={saving} className="flex-1 text-xs bg-[#6B7EFF] text-white py-2 rounded-lg font-medium hover:bg-[#5B6EEF] disabled:opacity-50">
+              {saving ? 'Adding…' : 'Add Phase'}
+            </button>
+            <button onClick={() => setAdding(false)} className="flex-1 text-xs border border-border text-muted-foreground py-2 rounded-lg hover:bg-accent">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {phases.length === 0 && !adding ? (
+        <div className="border border-dashed border-border rounded-xl p-8 text-center">
+          <Calendar size={24} className="text-muted-foreground mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground font-medium">No phases defined</p>
+          <p className="text-xs text-muted-foreground mt-1 mb-3">Add phases to split this job across multiple days or stages</p>
+          <button onClick={() => setAdding(true)} className="text-xs text-[#6B7EFF] hover:underline">Add first phase →</button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {phases.map((phase, idx) => {
+            const cfg = PHASE_STATUS_CFG[phase.status] ?? PHASE_STATUS_CFG.pending
+            return (
+              <div key={phase.id} className="bg-white border border-border rounded-xl px-4 py-3 flex items-start gap-3">
+                <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                  {idx + 1}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground">{phase.name}</p>
+                  {(phase.scheduled_date || phase.end_date) && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {fmtPhaseDate(phase.scheduled_date)}
+                      {phase.end_date && phase.end_date !== phase.scheduled_date ? ` → ${fmtPhaseDate(phase.end_date)}` : ''}
+                    </p>
+                  )}
+                  {phase.notes && <p className="text-xs text-muted-foreground mt-1 italic">{phase.notes}</p>}
+                </div>
+                <button
+                  onClick={() => cycleStatus(phase)}
+                  className={`text-[11px] font-semibold px-2.5 py-1 rounded-full shrink-0 hover:opacity-80 transition-opacity cursor-pointer ${cfg.color}`}
+                  title="Click to advance status"
+                >
+                  {cfg.label}
+                </button>
+                <button onClick={() => handleDelete(phase.id)} className="text-muted-foreground hover:text-red-500 transition-colors mt-0.5 shrink-0">
+                  <X size={14} />
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

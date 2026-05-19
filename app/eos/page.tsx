@@ -9,7 +9,7 @@ import {
   Calendar, Target, Send, Zap, ChevronDown, Loader2,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Timer, Flag } = require("lucide-react") as any;
+const { Timer, Flag, Pencil } = require("lucide-react") as any;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -96,10 +96,15 @@ interface TodoItem {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function SectionCard({ title, children, className }: { title?: string; children: React.ReactNode; className?: string }) {
+function SectionCard({ title, children, className, action }: { title?: string; children: React.ReactNode; className?: string; action?: React.ReactNode }) {
   return (
     <div className={cn("bg-white border border-border rounded-xl p-5", className)}>
-      {title && <h3 className="text-sm font-semibold text-foreground mb-3">{title}</h3>}
+      {title && (
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+          {action}
+        </div>
+      )}
       {children}
     </div>
   );
@@ -190,9 +195,157 @@ function formatDate(dateStr: string | null | undefined): string {
   }
 }
 
+// ─── V/TO types & defaults ────────────────────────────────────────────────────
+
+interface CVItem { n: number; title: string; desc: string }
+interface KVItem { label: string; value: string }
+interface VTOData {
+  core_values:     CVItem[]
+  purpose:         string
+  niche:           string
+  ten_year_target: string
+  target_market:   string
+  three_uniques:   string[]
+  proven_process:  string[]
+  guarantee:       string
+  picture_3yr:     KVItem[]
+  plan_1yr:        KVItem[]
+}
+
+const VTO_DEFAULTS: VTOData = {
+  core_values: [
+    { n: 1, title: "Innovation Without Limits", desc: "We level up constantly. When we think we're the best, it's time to go further." },
+    { n: 2, title: "Dealers First",             desc: "Our dealers' success IS our success. We make them look elite." },
+    { n: 3, title: "Hardware Is The Moat",      desc: "We own the physical relationship. Software follows the gate." },
+    { n: 4, title: "One Platform",              desc: "We unify. No silos, no app fatigue, one system for everything multifamily." },
+    { n: 5, title: "Radical Transparency",      desc: "We tell the truth to owners, dealers, and each other." },
+  ],
+  purpose:         '"To become the central nervous system of multifamily real estate"',
+  niche:           '"The only AI-powered access control platform that installs the hardware AND runs the software — turning every gate into a compounding business asset"',
+  ten_year_target: '$100M ARR — Installed in 50,000+ multifamily properties across the US. The dominant middleware platform between every property owner, resident, vendor, and service provider in multifamily.',
+  target_market:   'Multifamily access control dealers (tier 1), property owners/managers (tier 2)',
+  three_uniques:   [
+    "We install the hardware ourselves — competitors don't",
+    "The only platform where the gate generates ancillary revenue for the property",
+    "AI diagnostic field tool so good our techs fix problems competitors can't even diagnose",
+  ],
+  proven_process:  ["Install", "Activate GateCard", "Enable Vendor Layer", "Turn on Revenue", "Add AI Intelligence"],
+  guarantee:       '"If our tech tool doesn\'t help your tech fix it, we fix it ourselves"',
+  picture_3yr: [
+    { label: "Revenue",         value: "$10M ARR" },
+    { label: "Properties",      value: "5,000 installed" },
+    { label: "Dealer Partners", value: "500 active" },
+    { label: "GateCard",        value: "100% of installs" },
+    { label: "AI Army",         value: "All 8 agents active" },
+  ],
+  plan_1yr: [
+    { label: "Revenue",           value: "$2M ARR" },
+    { label: "Properties",        value: "500 installed" },
+    { label: "Active Dealers",    value: "50" },
+    { label: "Beta Portal",       value: "Live w/ real dealers" },
+    { label: "CRM + Work Orders", value: "Fully operational" },
+    { label: "GateCard",          value: "50+ properties" },
+  ],
+}
+
+function mergeVTO(raw: Record<string, unknown> | null): VTOData {
+  if (!raw) return {
+    ...VTO_DEFAULTS,
+    core_values:    [...VTO_DEFAULTS.core_values],
+    three_uniques:  [...VTO_DEFAULTS.three_uniques],
+    proven_process: [...VTO_DEFAULTS.proven_process],
+    picture_3yr:    [...VTO_DEFAULTS.picture_3yr],
+    plan_1yr:       [...VTO_DEFAULTS.plan_1yr],
+  }
+  return {
+    core_values:     (Array.isArray(raw.core_values)    && (raw.core_values    as unknown[]).length > 0) ? raw.core_values    as CVItem[]  : VTO_DEFAULTS.core_values,
+    purpose:         (raw.purpose         as string) || VTO_DEFAULTS.purpose,
+    niche:           (raw.niche           as string) || VTO_DEFAULTS.niche,
+    ten_year_target: (raw.ten_year_target as string) || VTO_DEFAULTS.ten_year_target,
+    target_market:   (raw.target_market   as string) || VTO_DEFAULTS.target_market,
+    three_uniques:   (Array.isArray(raw.three_uniques)  && (raw.three_uniques  as unknown[]).length > 0) ? raw.three_uniques  as string[]  : VTO_DEFAULTS.three_uniques,
+    proven_process:  (Array.isArray(raw.proven_process) && (raw.proven_process as unknown[]).length > 0) ? raw.proven_process as string[]  : VTO_DEFAULTS.proven_process,
+    guarantee:       (raw.guarantee       as string) || VTO_DEFAULTS.guarantee,
+    picture_3yr:     (Array.isArray(raw.picture_3yr)    && (raw.picture_3yr    as unknown[]).length > 0) ? raw.picture_3yr    as KVItem[]  : VTO_DEFAULTS.picture_3yr,
+    plan_1yr:        (Array.isArray(raw.plan_1yr)       && (raw.plan_1yr       as unknown[]).length > 0) ? raw.plan_1yr       as KVItem[]  : VTO_DEFAULTS.plan_1yr,
+  }
+}
+
 // ─── Tab: V/TO ────────────────────────────────────────────────────────────────
 
-function VTOTab({ rocks, issues }: { rocks: Rock[]; issues: Issue[] }) {
+function VTOTab({ rocks, issues, vtoInit }: { rocks: Rock[]; issues: Issue[]; vtoInit: Record<string, unknown> | null }) {
+  const [vto, setVto]       = useState<VTOData>(() => mergeVTO(vtoInit))
+  const [saving, setSaving] = useState<string | null>(null)
+  const [editing, setEditing] = useState<string | null>(null)
+
+  const patchVTO = async (section: string, updates: Partial<VTOData>) => {
+    setSaving(section)
+    setVto(prev => ({ ...prev, ...updates }))
+    setEditing(null)
+    try {
+      await fetch('/api/eos/vto', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      })
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  const isEditing = (s: string) => editing === s
+  const isSaving  = (s: string) => saving === s
+
+  // Per-section draft state
+  const [cvDraft,      setCvDraft]      = useState<CVItem[]>([])
+  const [purposeDraft, setPurposeDraft] = useState('')
+  const [nicheDraft,   setNicheDraft]   = useState('')
+  const [tyDraft,      setTyDraft]      = useState('')
+  const [tmDraft,      setTmDraft]      = useState('')
+  const [tuDraft,      setTuDraft]      = useState<string[]>([])
+  const [ppDraft,      setPpDraft]      = useState<string[]>([])
+  const [gDraft,       setGDraft]       = useState('')
+  const [p3Draft,      setP3Draft]      = useState<KVItem[]>([])
+  const [p1Draft,      setP1Draft]      = useState<KVItem[]>([])
+
+  const startEdit = (section: string) => {
+    if (section === 'cv')    { setCvDraft(vto.core_values.map(v => ({ ...v }))); }
+    if (section === 'focus') { setPurposeDraft(vto.purpose); setNicheDraft(vto.niche); }
+    if (section === 'ty')    { setTyDraft(vto.ten_year_target); }
+    if (section === 'ms')    { setTmDraft(vto.target_market); setTuDraft([...vto.three_uniques]); setPpDraft([...vto.proven_process]); setGDraft(vto.guarantee); }
+    if (section === 'p3')    { setP3Draft(vto.picture_3yr.map(kv => ({ ...kv }))); }
+    if (section === 'p1')    { setP1Draft(vto.plan_1yr.map(kv => ({ ...kv }))); }
+    setEditing(section)
+  }
+
+  const EditBtn = ({ section }: { section: string }) => (
+    <button
+      onClick={() => startEdit(section)}
+      className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+      title="Edit"
+    >
+      <Pencil size={13} />
+    </button>
+  )
+
+  const SaveCancelBar = ({ section, onSave }: { section: string; onSave: () => void }) => (
+    <div className="flex gap-2 pt-2">
+      <button
+        onClick={onSave}
+        disabled={isSaving(section)}
+        className="text-xs bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg font-medium hover:bg-[#5B6EEF] disabled:opacity-50 transition-colors"
+      >
+        {isSaving(section) ? 'Saving…' : 'Save'}
+      </button>
+      <button
+        onClick={() => setEditing(null)}
+        className="text-xs text-muted-foreground hover:text-foreground px-3 py-1.5 rounded-lg border border-border transition-colors"
+      >
+        Cancel
+      </button>
+    </div>
+  )
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
       {/* LEFT — VISION */}
@@ -202,85 +355,183 @@ function VTOTab({ rocks, issues }: { rocks: Rock[]; issues: Issue[] }) {
           <h2 className="text-sm font-bold text-foreground tracking-wide uppercase">Vision</h2>
         </div>
 
-        <SectionCard title="Core Values">
-          <ol className="space-y-3">
-            {[
-              { n: 1, title: "Innovation Without Limits", desc: "We level up constantly. When we think we're the best, it's time to go further." },
-              { n: 2, title: "Dealers First", desc: "Our dealers' success IS our success. We make them look elite." },
-              { n: 3, title: "Hardware Is The Moat", desc: "We own the physical relationship. Software follows the gate." },
-              { n: 4, title: "One Platform", desc: "We unify. No silos, no app fatigue, one system for everything multifamily." },
-              { n: 5, title: "Radical Transparency", desc: "We tell the truth to owners, dealers, and each other." },
-            ].map(v => (
-              <li key={v.n} className="flex gap-3">
-                <span className="w-5 h-5 rounded-full bg-[#6B7EFF] text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
-                  {v.n}
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{v.title}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{v.desc}</p>
+        {/* Core Values */}
+        <SectionCard title="Core Values" action={!isEditing('cv') ? <EditBtn section="cv" /> : undefined}>
+          {isEditing('cv') ? (
+            <div className="space-y-3">
+              {cvDraft.map((cv, idx) => (
+                <div key={idx} className="flex gap-2 items-start border border-border rounded-lg p-2 bg-slate-50/50">
+                  <span className="w-5 h-5 rounded-full bg-[#6B7EFF] text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-1.5">{idx + 1}</span>
+                  <div className="flex-1 space-y-1">
+                    <input
+                      className="w-full text-sm border border-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background"
+                      value={cv.title}
+                      placeholder="Value name"
+                      onChange={e => setCvDraft(d => d.map((x, i) => i === idx ? { ...x, title: e.target.value } : x))}
+                    />
+                    <textarea
+                      className="w-full text-xs border border-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] resize-none bg-background"
+                      rows={2}
+                      value={cv.desc}
+                      placeholder="Description"
+                      onChange={e => setCvDraft(d => d.map((x, i) => i === idx ? { ...x, desc: e.target.value } : x))}
+                    />
+                  </div>
+                  <button onClick={() => setCvDraft(d => d.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 mt-1.5 shrink-0">
+                    <X size={14} />
+                  </button>
                 </div>
-              </li>
-            ))}
-          </ol>
+              ))}
+              <button
+                onClick={() => setCvDraft(d => [...d, { n: d.length + 1, title: '', desc: '' }])}
+                className="flex items-center gap-1.5 text-xs text-[#6B7EFF] hover:underline"
+              >
+                <Plus size={12} /> Add value
+              </button>
+              <SaveCancelBar section="cv" onSave={() => patchVTO('cv', { core_values: cvDraft.map((cv, i) => ({ ...cv, n: i + 1 })) })} />
+            </div>
+          ) : (
+            <ol className="space-y-3">
+              {vto.core_values.map(v => (
+                <li key={v.n} className="flex gap-3">
+                  <span className="w-5 h-5 rounded-full bg-[#6B7EFF] text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{v.n}</span>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{v.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{v.desc}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
         </SectionCard>
 
-        <SectionCard title="Core Focus">
-          <div className="space-y-3">
-            <div>
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Purpose / Cause / Passion</p>
-              <p className="text-sm text-foreground">"To become the central nervous system of multifamily real estate"</p>
+        {/* Core Focus */}
+        <SectionCard title="Core Focus" action={!isEditing('focus') ? <EditBtn section="focus" /> : undefined}>
+          {isEditing('focus') ? (
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Purpose / Cause / Passion</label>
+                <textarea
+                  className="w-full text-sm border border-border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] resize-none bg-background"
+                  rows={3}
+                  value={purposeDraft}
+                  onChange={e => setPurposeDraft(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Niche</label>
+                <textarea
+                  className="w-full text-sm border border-border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] resize-none bg-background"
+                  rows={3}
+                  value={nicheDraft}
+                  onChange={e => setNicheDraft(e.target.value)}
+                />
+              </div>
+              <SaveCancelBar section="focus" onSave={() => patchVTO('focus', { purpose: purposeDraft, niche: nicheDraft })} />
             </div>
-            <div className="border-t border-border pt-3">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Niche</p>
-              <p className="text-sm text-foreground">"The only AI-powered access control platform that installs the hardware AND runs the software — turning every gate into a compounding business asset"</p>
-            </div>
-          </div>
-        </SectionCard>
-
-        <SectionCard title="10-Year Target">
-          <div className="flex items-start gap-3">
-            <Target size={20} className="text-[#6B7EFF] shrink-0 mt-0.5" />
-            <p className="text-sm text-foreground">$100M ARR — Installed in 50,000+ multifamily properties across the US. The dominant middleware platform between every property owner, resident, vendor, and service provider in multifamily.</p>
-          </div>
-        </SectionCard>
-
-        <SectionCard title="Marketing Strategy">
-          <div className="space-y-3 text-sm">
-            <div>
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Target Market</p>
-              <p className="text-foreground">Multifamily access control dealers <span className="text-muted-foreground">(tier 1)</span>, property owners/managers <span className="text-muted-foreground">(tier 2)</span></p>
-            </div>
-            <div className="border-t border-border pt-3">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Three Uniques</p>
-              <ol className="space-y-1.5">
-                {[
-                  "We install the hardware ourselves — competitors don't",
-                  "The only platform where the gate generates ancillary revenue for the property",
-                  "AI diagnostic field tool so good our techs fix problems competitors can't even diagnose",
-                ].map((u, i) => (
-                  <li key={i} className="flex gap-2">
-                    <span className="text-[#6B7EFF] font-bold shrink-0">{i + 1}.</span>
-                    <span className="text-foreground">{u}</span>
-                  </li>
-                ))}
-              </ol>
-            </div>
-            <div className="border-t border-border pt-3">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Proven Process</p>
-              <div className="flex items-center gap-1 flex-wrap">
-                {["Install", "Activate GateCard", "Enable Vendor Layer", "Turn on Revenue", "Add AI Intelligence"].map((step, i, arr) => (
-                  <span key={step} className="flex items-center gap-1">
-                    <span className="text-xs bg-slate-50 border border-border px-2 py-0.5 rounded font-medium text-foreground">{step}</span>
-                    {i < arr.length - 1 && <ChevronRight size={12} className="text-muted-foreground" />}
-                  </span>
-                ))}
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Purpose / Cause / Passion</p>
+                <p className="text-sm text-foreground">{vto.purpose}</p>
+              </div>
+              <div className="border-t border-border pt-3">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Niche</p>
+                <p className="text-sm text-foreground">{vto.niche}</p>
               </div>
             </div>
-            <div className="border-t border-border pt-3">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Guarantee</p>
-              <p className="text-foreground italic">"If our tech tool doesn't help your tech fix it, we fix it ourselves"</p>
+          )}
+        </SectionCard>
+
+        {/* 10-Year Target */}
+        <SectionCard title="10-Year Target" action={!isEditing('ty') ? <EditBtn section="ty" /> : undefined}>
+          {isEditing('ty') ? (
+            <div className="space-y-3">
+              <textarea
+                className="w-full text-sm border border-border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] resize-none bg-background"
+                rows={4}
+                value={tyDraft}
+                onChange={e => setTyDraft(e.target.value)}
+              />
+              <SaveCancelBar section="ty" onSave={() => patchVTO('ty', { ten_year_target: tyDraft })} />
             </div>
-          </div>
+          ) : (
+            <div className="flex items-start gap-3">
+              <Target size={20} className="text-[#6B7EFF] shrink-0 mt-0.5" />
+              <p className="text-sm text-foreground">{vto.ten_year_target}</p>
+            </div>
+          )}
+        </SectionCard>
+
+        {/* Marketing Strategy */}
+        <SectionCard title="Marketing Strategy" action={!isEditing('ms') ? <EditBtn section="ms" /> : undefined}>
+          {isEditing('ms') ? (
+            <div className="space-y-4 text-sm">
+              <div>
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Target Market</label>
+                <textarea className="w-full border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] resize-none bg-background" rows={2} value={tmDraft} onChange={e => setTmDraft(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Three Uniques</label>
+                {tuDraft.map((u, i) => (
+                  <div key={i} className="flex gap-2 mt-1 items-center">
+                    <span className="text-[#6B7EFF] font-bold shrink-0 w-4">{i + 1}.</span>
+                    <input className="flex-1 border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background" value={u} onChange={e => setTuDraft(d => d.map((x, j) => j === i ? e.target.value : x))} />
+                    <button onClick={() => setTuDraft(d => d.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 shrink-0"><X size={14} /></button>
+                  </div>
+                ))}
+                <button onClick={() => setTuDraft(d => [...d, ''])} className="flex items-center gap-1 text-xs text-[#6B7EFF] hover:underline mt-1.5"><Plus size={12} /> Add unique</button>
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Proven Process <span className="normal-case font-normal">(steps in order)</span></label>
+                {ppDraft.map((step, i) => (
+                  <div key={i} className="flex gap-2 mt-1 items-center">
+                    <input className="flex-1 border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background" value={step} onChange={e => setPpDraft(d => d.map((x, j) => j === i ? e.target.value : x))} />
+                    <button onClick={() => setPpDraft(d => d.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 shrink-0"><X size={14} /></button>
+                  </div>
+                ))}
+                <button onClick={() => setPpDraft(d => [...d, ''])} className="flex items-center gap-1 text-xs text-[#6B7EFF] hover:underline mt-1.5"><Plus size={12} /> Add step</button>
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Guarantee</label>
+                <textarea className="w-full border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] resize-none bg-background" rows={2} value={gDraft} onChange={e => setGDraft(e.target.value)} />
+              </div>
+              <SaveCancelBar section="ms" onSave={() => patchVTO('ms', { target_market: tmDraft, three_uniques: tuDraft, proven_process: ppDraft, guarantee: gDraft })} />
+            </div>
+          ) : (
+            <div className="space-y-3 text-sm">
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Target Market</p>
+                <p className="text-foreground">{vto.target_market}</p>
+              </div>
+              <div className="border-t border-border pt-3">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Three Uniques</p>
+                <ol className="space-y-1.5">
+                  {vto.three_uniques.map((u, i) => (
+                    <li key={i} className="flex gap-2">
+                      <span className="text-[#6B7EFF] font-bold shrink-0">{i + 1}.</span>
+                      <span className="text-foreground">{u}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+              <div className="border-t border-border pt-3">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Proven Process</p>
+                <div className="flex items-center gap-1 flex-wrap">
+                  {vto.proven_process.map((step, i, arr) => (
+                    <span key={i} className="flex items-center gap-1">
+                      <span className="text-xs bg-slate-50 border border-border px-2 py-0.5 rounded font-medium text-foreground">{step}</span>
+                      {i < arr.length - 1 && <ChevronRight size={12} className="text-muted-foreground" />}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div className="border-t border-border pt-3">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Guarantee</p>
+                <p className="text-foreground italic">{vto.guarantee}</p>
+              </div>
+            </div>
+          )}
         </SectionCard>
       </div>
 
@@ -291,41 +542,59 @@ function VTOTab({ rocks, issues }: { rocks: Rock[]; issues: Issue[] }) {
           <h2 className="text-sm font-bold text-foreground tracking-wide uppercase">Traction</h2>
         </div>
 
-        <SectionCard title="3-Year Picture (2029)">
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { label: "Revenue", value: "$10M ARR" },
-              { label: "Properties", value: "5,000 installed" },
-              { label: "Dealer Partners", value: "500 active" },
-              { label: "GateCard", value: "100% of installs" },
-              { label: "AI Army", value: "All 8 agents active" },
-            ].map(item => (
-              <div key={item.label} className="bg-slate-50 rounded-lg p-3">
-                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{item.label}</p>
-                <p className="text-sm font-bold text-foreground mt-0.5">{item.value}</p>
-              </div>
-            ))}
-          </div>
+        {/* 3-Year Picture */}
+        <SectionCard title="3-Year Picture (2029)" action={!isEditing('p3') ? <EditBtn section="p3" /> : undefined}>
+          {isEditing('p3') ? (
+            <div className="space-y-3">
+              {p3Draft.map((kv, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  <input className="flex-1 border border-border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background text-muted-foreground" placeholder="Label" value={kv.label} onChange={e => setP3Draft(d => d.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} />
+                  <input className="flex-1 border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background font-semibold" placeholder="Value" value={kv.value} onChange={e => setP3Draft(d => d.map((x, j) => j === i ? { ...x, value: e.target.value } : x))} />
+                  <button onClick={() => setP3Draft(d => d.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 shrink-0"><X size={14} /></button>
+                </div>
+              ))}
+              <button onClick={() => setP3Draft(d => [...d, { label: '', value: '' }])} className="flex items-center gap-1 text-xs text-[#6B7EFF] hover:underline"><Plus size={12} /> Add metric</button>
+              <SaveCancelBar section="p3" onSave={() => patchVTO('p3', { picture_3yr: p3Draft })} />
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {vto.picture_3yr.map(item => (
+                <div key={item.label} className="bg-slate-50 rounded-lg p-3">
+                  <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{item.label}</p>
+                  <p className="text-sm font-bold text-foreground mt-0.5">{item.value}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </SectionCard>
 
-        <SectionCard title="1-Year Plan (2026)">
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { label: "Revenue", value: "$2M ARR" },
-              { label: "Properties", value: "500 installed" },
-              { label: "Active Dealers", value: "50" },
-              { label: "Beta Portal", value: "Live w/ real dealers" },
-              { label: "CRM + Work Orders", value: "Fully operational" },
-              { label: "GateCard", value: "50+ properties" },
-            ].map(item => (
-              <div key={item.label} className="bg-slate-50 rounded-lg p-3">
-                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{item.label}</p>
-                <p className="text-sm font-bold text-foreground mt-0.5">{item.value}</p>
-              </div>
-            ))}
-          </div>
+        {/* 1-Year Plan */}
+        <SectionCard title="1-Year Plan (2026)" action={!isEditing('p1') ? <EditBtn section="p1" /> : undefined}>
+          {isEditing('p1') ? (
+            <div className="space-y-3">
+              {p1Draft.map((kv, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  <input className="flex-1 border border-border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background text-muted-foreground" placeholder="Label" value={kv.label} onChange={e => setP1Draft(d => d.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} />
+                  <input className="flex-1 border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background font-semibold" placeholder="Value" value={kv.value} onChange={e => setP1Draft(d => d.map((x, j) => j === i ? { ...x, value: e.target.value } : x))} />
+                  <button onClick={() => setP1Draft(d => d.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 shrink-0"><X size={14} /></button>
+                </div>
+              ))}
+              <button onClick={() => setP1Draft(d => [...d, { label: '', value: '' }])} className="flex items-center gap-1 text-xs text-[#6B7EFF] hover:underline"><Plus size={12} /> Add goal</button>
+              <SaveCancelBar section="p1" onSave={() => patchVTO('p1', { plan_1yr: p1Draft })} />
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {vto.plan_1yr.map(item => (
+                <div key={item.label} className="bg-slate-50 rounded-lg p-3">
+                  <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{item.label}</p>
+                  <p className="text-sm font-bold text-foreground mt-0.5">{item.value}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </SectionCard>
 
+        {/* Q2 Rocks — read-only summary, data from live rocks */}
         <SectionCard>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-foreground">Q2 2026 Rocks</h3>
@@ -346,6 +615,7 @@ function VTOTab({ rocks, issues }: { rocks: Rock[]; issues: Issue[] }) {
           )}
         </SectionCard>
 
+        {/* Open Issues — read-only summary */}
         <SectionCard>
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-foreground">Open Issues</h3>
@@ -368,7 +638,7 @@ function VTOTab({ rocks, issues }: { rocks: Rock[]; issues: Issue[] }) {
         </SectionCard>
       </div>
     </div>
-  );
+  )
 }
 
 // ─── Tab: Rocks ───────────────────────────────────────────────────────────────
@@ -1562,6 +1832,7 @@ export default function EOSPage() {
   const [measurables, setMeasurables] = useState<Measurable[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [vto, setVto] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
 
   // ── Load all data on mount ──
@@ -1570,11 +1841,12 @@ export default function EOSPage() {
 
     const loadAll = async () => {
       try {
-        const [rocksRes, scorecardRes, issuesRes, todosRes] = await Promise.all([
+        const [rocksRes, scorecardRes, issuesRes, todosRes, vtoRes] = await Promise.all([
           fetch("/api/eos/rocks"),
           fetch("/api/eos/scorecard"),
           fetch("/api/eos/issues"),
           fetch("/api/eos/todos"),
+          fetch("/api/eos/vto"),
         ]);
 
         const [rocksData, scorecardData, issuesData, todosData] = await Promise.all([
@@ -1583,12 +1855,14 @@ export default function EOSPage() {
           issuesRes.ok ? issuesRes.json() : [],
           todosRes.ok ? todosRes.json() : [],
         ]);
+        const vtoData = vtoRes.ok && vtoRes.status !== 404 ? await vtoRes.json() : null;
 
         if (!cancelled) {
           setRocks(Array.isArray(rocksData) ? rocksData : []);
           setMeasurables(Array.isArray(scorecardData) ? scorecardData : []);
           setIssues(Array.isArray(issuesData) ? issuesData : []);
           setTodos(Array.isArray(todosData) ? todosData : []);
+          setVto(vtoData);
           setLoading(false);
         }
       } catch (err) {
@@ -1668,7 +1942,7 @@ export default function EOSPage() {
           </div>
         ) : (
           <>
-            {activeTab === "V/TO"        && <VTOTab rocks={rocks} issues={issues} />}
+            {activeTab === "V/TO"        && <VTOTab rocks={rocks} issues={issues} vtoInit={vto} />}
             {activeTab === "Rocks"       && <RocksTab rocks={rocks} setRocks={setRocks} />}
             {activeTab === "Scorecard"   && <ScorecardTab measurables={measurables} setMeasurables={setMeasurables} />}
             {activeTab === "Issues"      && <IssuesTab issues={issues} setIssues={setIssues} />}

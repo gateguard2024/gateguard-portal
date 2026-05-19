@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
     const {
       opportunity_id,
       lead_id,
+      show_lead_id,   // for show leads (show_leads table) — separate FK
       to_email,
       to_name,
       subject,
@@ -61,11 +62,20 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. Create the activity record first so we have the ID for the pixel
+    // Validate lead_id as a proper UUID — reject show_ prefixed IDs (those use show_lead_id)
+    const safeLeadId = lead_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(lead_id)
+      ? lead_id
+      : null
+    const safeShowLeadId = show_lead_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(show_lead_id)
+      ? show_lead_id
+      : null
+
     const { data: activity, error: actErr } = await supabase
       .from('crm_activities')
       .insert({
         opportunity_id: opportunity_id ?? null,
-        lead_id:        lead_id ?? null,
+        lead_id:        safeLeadId,
+        show_lead_id:   safeShowLeadId ?? null,
         type:           'email',
         subject,
         body:           emailBody,

@@ -41,13 +41,17 @@ interface SiteOption {
 }
 
 interface Tech {
-  id:           string;
-  name:         string;
-  initials:     string;
-  role:         string;
-  status:       TechStatus;
-  currentJobId: string | null;
-  phone?:       string;
+  id:                    string;
+  name:                  string;
+  initials:              string;
+  role:                  string;
+  status:                TechStatus;
+  currentJobId:          string | null;
+  phone?:                string;
+  email?:                string;
+  employment_type?:      'employee' | 'contractor';
+  can_access_portal?:    boolean;
+  portal_invite_sent_at?: string | null;
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -584,34 +588,64 @@ function JobCard({ job, onStatusChange, onSelect }: {
 
 // ─── Tech Row ─────────────────────────────────────────────────────────────────
 
-function TechRow({ tech, jobs, onStatusChange }: { tech: Tech; jobs: Job[]; onStatusChange: (id: string, status: TechStatus) => void }) {
+function TechRow({ tech, jobs, onStatusChange, onInvite }: {
+  tech:           Tech;
+  jobs:           Job[];
+  onStatusChange: (id: string, status: TechStatus) => void;
+  onInvite:       (tech: Tech) => void;
+}) {
   const conf = techStatusConfig[tech.status];
   const currentJob = jobs.find(j => j.id === tech.currentJobId);
   const TECH_STATUSES: TechStatus[] = ["Available", "On Site", "Driving", "Offline"];
+  const isContractor = tech.employment_type === 'contractor';
+  const hasPortalAccess = tech.can_access_portal;
 
   return (
-    <div className="flex items-center gap-3 py-3 px-4 hover:bg-slate-50 transition-colors">
-      <div className={cn(
-        "w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0",
-        tech.status === "Offline" ? "bg-slate-400" : "bg-[#2563EB]"
-      )}>
-        {tech.initials}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-slate-800 truncate">{tech.name}</p>
-        <p className="text-[11px] text-slate-400">{tech.role}</p>
-        {currentJob && (
-          <p className="text-[10px] text-slate-400 truncate">{currentJob.property}</p>
-        )}
-      </div>
-      <div className="text-right shrink-0">
-        <select
-          value={tech.status}
-          onChange={e => onStatusChange(tech.id, e.target.value as TechStatus)}
-          className={cn("appearance-none text-[11px] font-medium px-2 py-0.5 rounded-full cursor-pointer border-0 outline-none", conf.badge)}
-        >
-          {TECH_STATUSES.map(s => <option key={s}>{s}</option>)}
-        </select>
+    <div className="py-3 px-4 hover:bg-slate-50 transition-colors">
+      <div className="flex items-center gap-3">
+        <div className="relative shrink-0">
+          <div className={cn(
+            "w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white",
+            tech.status === "Offline" ? "bg-slate-400" : "bg-[#2563EB]"
+          )}>
+            {tech.initials}
+          </div>
+          {isContractor && (
+            <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-amber-400 border-2 border-white flex items-center justify-center text-[7px] font-bold text-white" title="Contractor">C</span>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm font-semibold text-slate-800 truncate">{tech.name}</p>
+            {hasPortalAccess && (
+              <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-emerald-400" title="Has portal access" />
+            )}
+          </div>
+          <p className="text-[11px] text-slate-400">{tech.role}{isContractor ? ' · Contractor' : ''}</p>
+          {currentJob && (
+            <p className="text-[10px] text-slate-400 truncate">{currentJob.property}</p>
+          )}
+        </div>
+        <div className="text-right shrink-0 space-y-1">
+          <select
+            value={tech.status}
+            onChange={e => onStatusChange(tech.id, e.target.value as TechStatus)}
+            className={cn("appearance-none text-[11px] font-medium px-2 py-0.5 rounded-full cursor-pointer border-0 outline-none w-full", conf.badge)}
+          >
+            {TECH_STATUSES.map(s => <option key={s}>{s}</option>)}
+          </select>
+          {!hasPortalAccess && tech.email && (
+            <button
+              onClick={() => onInvite(tech)}
+              className="text-[10px] text-[#6B7EFF] hover:underline w-full text-right"
+            >
+              Send portal invite →
+            </button>
+          )}
+          {hasPortalAccess && (
+            <p className="text-[10px] text-emerald-600 w-full text-right">Portal ✓</p>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -885,6 +919,13 @@ export default function DispatchPage() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [viewMode,    setViewMode]    = useState<"board" | "calendar">("board");
   const [weekStart,   setWeekStart]   = useState<Date>(() => getMondayOf(new Date()));
+  const [showAddTech, setShowAddTech]     = useState(false);
+  const [newTechForm, setNewTechForm]     = useState({ name: '', role: 'Tech', phone: '', email: '', employment_type: 'employee' });
+  const [addTechSaving, setAddTechSaving] = useState(false);
+  const [addTechError, setAddTechError]   = useState<string | null>(null);
+  const [invitingTech, setInvitingTech]   = useState<Tech | null>(null);
+  const [inviteSending, setInviteSending] = useState(false);
+  const [inviteMsg, setInviteMsg]         = useState<string | null>(null);
 
   const handlePrevWeek  = () => setWeekStart(prev => { const d = new Date(prev); d.setDate(d.getDate() - 7); return d; });
   const handleNextWeek  = () => setWeekStart(prev => { const d = new Date(prev); d.setDate(d.getDate() + 7); return d; });
@@ -939,6 +980,27 @@ export default function DispatchPage() {
       body: JSON.stringify({ status: dbStatus[status] }),
     });
     setTechs(prev => prev.map(t => t.id === id ? { ...t, status } : t));
+  };
+
+  const handleAddTech = async () => {
+    if (!newTechForm.name.trim()) { setAddTechError('Name is required'); return; }
+    setAddTechSaving(true); setAddTechError(null);
+    try {
+      const res = await fetch('/api/dispatch/technicians', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTechForm),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? 'Failed'); }
+      const { technician } = await res.json();
+      setTechs(prev => [...prev, technician]);
+      setShowAddTech(false);
+      setNewTechForm({ name: '', role: 'Tech', phone: '', email: '' });
+    } catch (err: unknown) {
+      setAddTechError(err instanceof Error ? err.message : 'Failed');
+    } finally {
+      setAddTechSaving(false);
+    }
   };
 
   const handleJobSaved = (job: Job) => {
@@ -1112,19 +1174,86 @@ export default function DispatchPage() {
 
           {/* Tech Roster */}
           <div className="flex-[1] min-w-0 bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-            <div className="px-4 py-3.5 border-b border-slate-100">
-              <h2 className="text-sm font-semibold text-slate-800">Tech Roster</h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {loading ? "…" : `${techs.length} technicians`}
-              </p>
+            <div className="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-800">Tech Roster</h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {loading ? "…" : `${techs.length} technician${techs.length !== 1 ? 's' : ''}`}
+                </p>
+              </div>
+              <button
+                onClick={() => { setShowAddTech(true); setAddTechError(null); }}
+                className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#2563EB] text-white hover:bg-blue-700 transition-colors"
+                title="Add technician"
+              >
+                <Plus size={14} />
+              </button>
             </div>
+
+            {/* Add tech form */}
+            {showAddTech && (
+              <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50">
+                <p className="text-xs font-semibold text-slate-600 mb-2">Add to roster</p>
+                <div className="space-y-2">
+                  <input
+                    className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    placeholder="Full name *"
+                    value={newTechForm.name}
+                    onChange={e => setNewTechForm(f => ({ ...f, name: e.target.value }))}
+                  />
+                  <select
+                    className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                    value={newTechForm.role}
+                    onChange={e => setNewTechForm(f => ({ ...f, role: e.target.value }))}
+                  >
+                    <option value="Owner">Owner</option>
+                    <option value="Operations Manager">Operations Manager</option>
+                    <option value="Lead Tech">Lead Tech</option>
+                    <option value="Tech">Tech</option>
+                    <option value="Apprentice">Apprentice</option>
+                  </select>
+                  <input
+                    className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    placeholder="Phone"
+                    value={newTechForm.phone}
+                    onChange={e => setNewTechForm(f => ({ ...f, phone: e.target.value }))}
+                  />
+                  <input
+                    className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    placeholder="Email"
+                    value={newTechForm.email}
+                    onChange={e => setNewTechForm(f => ({ ...f, email: e.target.value }))}
+                  />
+                  {addTechError && <p className="text-xs text-red-500">{addTechError}</p>}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleAddTech}
+                      disabled={addTechSaving}
+                      className="flex-1 text-xs bg-[#2563EB] text-white py-1.5 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {addTechSaving ? 'Adding…' : 'Add to Roster'}
+                    </button>
+                    <button
+                      onClick={() => { setShowAddTech(false); setNewTechForm({ name: '', role: 'Tech', phone: '', email: '' }); }}
+                      className="flex-1 text-xs border border-slate-200 text-slate-600 py-1.5 rounded-lg hover:bg-slate-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="divide-y divide-slate-50">
               {loading ? (
                 <div className="flex items-center justify-center py-8 text-slate-400 text-sm">
                   <RefreshCw size={14} className="animate-spin mr-1.5" /> Loading…
                 </div>
               ) : techs.length === 0 ? (
-                <div className="text-center text-sm text-slate-400 py-8">No technicians</div>
+                <div className="text-center text-sm text-slate-400 py-8">
+                  <p>No technicians yet</p>
+                  <button onClick={() => setShowAddTech(true)} className="text-xs text-[#2563EB] hover:underline mt-1">Add your first tech →</button>
+                </div>
               ) : (
                 techs.map(tech => (
                   <TechRow

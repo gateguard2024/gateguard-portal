@@ -10,7 +10,7 @@ const supabase = createClient(
 export async function GET() {
   const { data, error } = await supabase
     .from('technicians')
-    .select('id, name, initials, role, status, current_job_id, phone, email')
+    .select('id, name, initials, role, status, current_job_id, phone, email, employment_type, clerk_user_id, can_access_portal, portal_invite_sent_at, portal_invite_email')
     .order('name')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -20,7 +20,7 @@ export async function GET() {
 // POST /api/dispatch/technicians — add a new tech
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { name, role = 'Tech', phone, email } = body
+  const { name, role = 'Tech', phone, email, employment_type = 'employee' } = body
 
   if (!name) return NextResponse.json({ error: 'name is required' }, { status: 400 })
 
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await supabase
     .from('technicians')
-    .insert({ name, initials, role, phone, email, status: 'offline' })
+    .insert({ name, initials, role, phone, email, status: 'offline', employment_type })
     .select()
     .single()
 
