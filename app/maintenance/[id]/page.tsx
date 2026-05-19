@@ -192,6 +192,14 @@ const PRIORITIES: { value: WOPriority; label: string }[] = [
   { value: 'low',    label: '⚪ Low'    },
 ]
 
+// Compact category colors used in Details tab checklist overview
+const CATEGORY_COLORS: Record<string, string> = {
+  task:         'bg-blue-500/10 text-blue-400',
+  safety:       'bg-red-500/10 text-red-400',
+  inspection:   'bg-violet-500/10 text-violet-400',
+  verification: 'bg-emerald-500/10 text-emerald-400',
+}
+
 function fmtDate(iso?: string) {
   if (!iso) return '—'
   return new Date(iso + (iso.length === 10 ? 'T12:00:00' : '')).toLocaleDateString('en-US', {
@@ -438,6 +446,10 @@ export default function WorkOrderDetailPage() {
   const [timeSaving, setTimeSaving]       = useState(false)
   const [clockTechName, setClockTechName] = useState('')
 
+  // Overview summary counts (loaded non-blocking for Details dashboard)
+  const [crewCount, setCrewCount]   = useState<number | null>(null)
+  const [phaseCount, setPhaseCount] = useState<number | null>(null)
+
   const commentInputRef = useRef<HTMLTextAreaElement>(null)
 
   const load = useCallback(async () => {
@@ -463,7 +475,7 @@ export default function WorkOrderDetailPage() {
         } catch (_) { /* non-blocking */ }
       })()
 
-      // Load field tickets + time entries in parallel (non-blocking)
+      // Load field tickets + time entries + crew/phase counts in parallel (non-blocking)
       void Promise.all([
         fetch(`/api/field-tickets?work_order_id=${id}`).then(r => r.json()).then(j => {
           setFieldTickets(j.records ?? [])
@@ -475,6 +487,12 @@ export default function WorkOrderDetailPage() {
         }).catch(() => {}),
         fetch('/api/dispatch/technicians').then(r => r.json()).then(j => {
           setAllTechs(j.technicians ?? [])
+        }).catch(() => {}),
+        fetch(`/api/maintenance/${id}/crew`).then(r => r.json()).then(j => {
+          setCrewCount((j.crew ?? []).length)
+        }).catch(() => {}),
+        fetch(`/api/maintenance/${id}/phases`).then(r => r.json()).then(j => {
+          setPhaseCount((j.phases ?? []).length)
         }).catch(() => {}),
       ])
     } finally {
@@ -867,9 +885,10 @@ export default function WorkOrderDetailPage() {
                 })}
               </div>
 
-              {/* ── Details tab ── */}
+              {/* ── Details tab — Overview dashboard ── */}
               {tab === 'details' && (
                 <div className="space-y-5">
+
                   {/* Description / Notes */}
                   {wo.notes && (
                     <div className="bg-card border border-border rounded-xl p-5">
@@ -878,7 +897,106 @@ export default function WorkOrderDetailPage() {
                     </div>
                   )}
 
-                  {/* Checklist */}
+                  {/* Overview summary grid — click any tile to jump to that tab */}
+                  <div className="grid grid-cols-3 gap-3">
+                    {/* Tasks */}
+                    <button
+                      onClick={() => setTab('field_tickets')}
+                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-brand-500/50 hover:bg-accent/30 transition-all group"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <CheckCircle2 size={15} className="text-brand-400" />
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-brand-400 transition-colors">Tasks →</span>
+                      </div>
+                      {totalCount > 0 ? (
+                        <>
+                          <p className="text-2xl font-bold text-foreground">{doneCount}<span className="text-base font-normal text-muted-foreground">/{totalCount}</span></p>
+                          <div className="mt-2 h-1 bg-muted rounded-full overflow-hidden">
+                            <div className={cn('h-full rounded-full transition-all', progress === 100 ? 'bg-emerald-400' : 'bg-amber-400')} style={{ width: `${progress}%` }} />
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No tasks yet</p>
+                      )}
+                    </button>
+
+                    {/* Crew */}
+                    <button
+                      onClick={() => setTab('crew')}
+                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-brand-500/50 hover:bg-accent/30 transition-all group"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <Users size={15} className="text-violet-400" />
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-brand-400 transition-colors">Crew →</span>
+                      </div>
+                      <p className="text-2xl font-bold text-foreground">
+                        {crewCount === null ? '—' : crewCount}
+                        <span className="text-sm font-normal text-muted-foreground ml-1">assigned</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">{wo.assignee_name ?? 'No lead assigned'}</p>
+                    </button>
+
+                    {/* Schedule */}
+                    <button
+                      onClick={() => setTab('schedule')}
+                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-brand-500/50 hover:bg-accent/30 transition-all group"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <Calendar size={15} className="text-blue-400" />
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-brand-400 transition-colors">Schedule →</span>
+                      </div>
+                      <p className="text-2xl font-bold text-foreground">
+                        {phaseCount === null ? '—' : phaseCount}
+                        <span className="text-sm font-normal text-muted-foreground ml-1">phase{phaseCount !== 1 ? 's' : ''}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">{wo.scheduled_date ? fmtDate(wo.scheduled_date) : 'No date set'}</p>
+                    </button>
+
+                    {/* Time */}
+                    <button
+                      onClick={() => setTab('time')}
+                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-brand-500/50 hover:bg-accent/30 transition-all group"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <Clock size={15} className="text-amber-400" />
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-brand-400 transition-colors">Time →</span>
+                      </div>
+                      <p className="text-2xl font-bold text-foreground">
+                        {totalMins > 0 ? `${Math.floor(totalMins / 60)}h ${totalMins % 60}m` : '0h'}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {activeTimeEntry ? '🟢 Clock running' : `${timeEntries.length} entr${timeEntries.length !== 1 ? 'ies' : 'y'}`}
+                      </p>
+                    </button>
+
+                    {/* Comments */}
+                    <button
+                      onClick={() => setTab('comments')}
+                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-brand-500/50 hover:bg-accent/30 transition-all group"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <MessageSquare size={15} className="text-sky-400" />
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-brand-400 transition-colors">Comments →</span>
+                      </div>
+                      <p className="text-2xl font-bold text-foreground">{comments.length}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{comments.length === 0 ? 'No comments yet' : `Last: ${timeAgo(comments[comments.length - 1].created_at)}`}</p>
+                    </button>
+
+                    {/* Parts */}
+                    <button
+                      onClick={() => setTab('parts')}
+                      className="bg-card border border-border rounded-xl p-4 text-left hover:border-brand-500/50 hover:bg-accent/30 transition-all group"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <Package size={15} className="text-emerald-400" />
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-brand-400 transition-colors">Parts →</span>
+                      </div>
+                      <p className="text-2xl font-bold text-foreground">{partsUsed.length}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{partsTotal > 0 ? `$${partsTotal.toFixed(2)} total` : 'No parts logged'}</p>
+                    </button>
+                  </div>
+
+                  {/* Checklist — same data as Field Tickets Service Tasks, quick interactive view */}
                   <div className="bg-card border border-border rounded-xl overflow-hidden">
                     <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
                       <h3 className="text-sm font-semibold flex items-center gap-2">
@@ -888,45 +1006,60 @@ export default function WorkOrderDetailPage() {
                           <span className="text-xs text-muted-foreground font-normal">({doneCount}/{totalCount})</span>
                         )}
                       </h3>
+                      <button
+                        onClick={() => setTab('field_tickets')}
+                        className="text-xs text-brand-400 hover:text-brand-500 font-medium transition-colors"
+                      >
+                        Manage in Field Tickets →
+                      </button>
                     </div>
 
                     <div className="divide-y divide-border/50">
                       {checklist.length === 0 && (
-                        <p className="px-5 py-6 text-sm text-muted-foreground text-center">No checklist items yet — add one below</p>
+                        <p className="px-5 py-6 text-sm text-muted-foreground text-center">No tasks yet — add them in the Field Tickets tab</p>
                       )}
-                      {checklist.map(item => (
-                        <div key={item.id} className="flex items-center gap-3 px-5 py-3 group hover:bg-accent/30 transition-colors">
-                          <button
-                            onClick={() => handleToggleItem(item)}
-                            className={cn(
-                              'w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors',
-                              item.completed
-                                ? 'bg-emerald-400 border-emerald-400'
-                                : 'border-border hover:border-brand-400'
+                      {checklist.map(item => {
+                        const cat = CATEGORY_COLORS[item.category ?? 'task']
+                        return (
+                          <div key={item.id} className="flex items-center gap-3 px-5 py-3 group hover:bg-accent/30 transition-colors">
+                            <button
+                              onClick={() => handleToggleItem(item)}
+                              className={cn(
+                                'w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors',
+                                item.completed
+                                  ? 'bg-emerald-400 border-emerald-400'
+                                  : 'border-border hover:border-brand-400'
+                              )}
+                            >
+                              {item.completed && <Check size={10} className="text-white" strokeWidth={3} />}
+                            </button>
+                            {item.category && item.category !== 'task' && (
+                              <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 uppercase tracking-wide', cat)}>{item.category}</span>
                             )}
-                          >
-                            {item.completed && <Check size={10} className="text-white" strokeWidth={3} />}
-                          </button>
-                          <span className={cn('flex-1 text-sm', item.completed && 'line-through text-muted-foreground')}>
-                            {item.title}
-                          </span>
-                          <button
-                            onClick={() => handleDeleteItem(item.id)}
-                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/10 text-red-400 transition-all"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      ))}
+                            <span className={cn('flex-1 text-sm', item.completed && 'line-through text-muted-foreground')}>
+                              {item.title}
+                            </span>
+                            {item.outcome && (
+                              <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0',
+                                item.outcome === 'pass' ? 'bg-emerald-500/10 text-emerald-400'
+                                  : item.outcome === 'fail' ? 'bg-red-500/10 text-red-400'
+                                  : 'bg-slate-500/10 text-slate-400'
+                              )}>
+                                {item.outcome === 'pass' ? '✓ PASS' : item.outcome === 'fail' ? '✗ FAIL' : 'N/A'}
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
 
-                    {/* Add item input */}
+                    {/* Quick-add */}
                     <div className="px-5 py-3 border-t border-border flex gap-2">
                       <input
                         value={newItem}
                         onChange={e => setNewItem(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleAddItem()}
-                        placeholder="Add checklist item…"
+                        placeholder="Quick-add a task…"
                         className="flex-1 text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
                       />
                       <button
