@@ -49,7 +49,33 @@ interface ChecklistItem {
   completed: boolean
   completed_at?: string
   completed_by?: string
+  completed_by_name?: string
   sort_order: number
+  // Migration 044 fields
+  outcome?: 'pass' | 'fail' | 'na' | null
+  notes?: string | null
+  category?: 'task' | 'safety' | 'inspection' | 'verification'
+  added_by?: 'management' | 'tech'
+}
+
+interface InstalledEquipment {
+  id: string
+  work_order_id: string
+  name: string
+  make?: string | null
+  model?: string | null
+  sku?: string | null
+  serial_number?: string | null
+  location?: string | null
+  qty: number
+  condition?: 'new' | 'existing' | 'replaced' | null
+  notes?: string | null
+  added_by: 'management' | 'tech'
+  confirmed: boolean
+  confirmed_by?: string | null
+  confirmed_at?: string | null
+  sort_order: number
+  created_at: string
 }
 
 interface WOComment {
@@ -955,214 +981,14 @@ export default function WorkOrderDetailPage() {
               )}
 
               {/* ── Field Tickets tab ── */}
-              {tab === 'field_tickets' && (
-                <div className="space-y-4">
-                  {/* New ticket form */}
-                  {showNewFT ? (
-                    <div className="bg-card border border-border rounded-xl overflow-hidden">
-                      <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
-                        <h3 className="text-sm font-semibold flex items-center gap-2">
-                          <ClipboardList size={14} className="text-brand-400" />
-                          New Field Ticket
-                        </h3>
-                        <button onClick={() => { setShowNewFT(false); setFtError('') }} className="p-1.5 rounded-lg hover:bg-accent">
-                          <X size={13} className="text-muted-foreground" />
-                        </button>
-                      </div>
-                      <div className="p-5 space-y-4">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Technician Name *</label>
-                            <input
-                              value={ftForm.technician_name}
-                              onChange={e => setFtForm(f => ({ ...f, technician_name: e.target.value }))}
-                              placeholder="Your name"
-                              className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Ticket Title *</label>
-                            <input
-                              value={ftForm.title}
-                              onChange={e => setFtForm(f => ({ ...f, title: e.target.value }))}
-                              placeholder="e.g. Gate motor replacement"
-                              className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
-                            />
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Findings / Observations</label>
-                          <textarea
-                            value={ftForm.findings}
-                            onChange={e => setFtForm(f => ({ ...f, findings: e.target.value }))}
-                            placeholder="What did you find on site?"
-                            rows={3}
-                            className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30 resize-none"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Work Performed</label>
-                          <textarea
-                            value={ftForm.work_performed}
-                            onChange={e => setFtForm(f => ({ ...f, work_performed: e.target.value }))}
-                            placeholder="Describe what was done…"
-                            rows={3}
-                            className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30 resize-none"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Materials Used</label>
-                            <input
-                              value={ftForm.materials_used}
-                              onChange={e => setFtForm(f => ({ ...f, materials_used: e.target.value }))}
-                              placeholder="e.g. 14/2 wire, connectors"
-                              className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Labor Hours</label>
-                            <input
-                              type="number" step="0.25" min="0"
-                              value={ftForm.labor_hours}
-                              onChange={e => setFtForm(f => ({ ...f, labor_hours: e.target.value }))}
-                              placeholder="e.g. 2.5"
-                              className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
-                            />
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Recommendations</label>
-                          <textarea
-                            value={ftForm.recommendations}
-                            onChange={e => setFtForm(f => ({ ...f, recommendations: e.target.value }))}
-                            placeholder="Suggested follow-up actions…"
-                            rows={2}
-                            className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30 resize-none"
-                          />
-                        </div>
-
-                        {ftError && (
-                          <div className="flex items-center gap-2 text-red-500 text-xs bg-red-500/10 rounded-xl px-3 py-2">
-                            <AlertTriangle size={13} /> {ftError}
-                          </div>
-                        )}
-
-                        <div className="flex gap-2 pt-1">
-                          <button onClick={() => { setShowNewFT(false); setFtError('') }}
-                            className="flex-1 py-2.5 rounded-xl border border-border text-sm text-muted-foreground hover:bg-accent transition-colors">
-                            Cancel
-                          </button>
-                          <button onClick={handleSubmitFT} disabled={ftSaving || !ftForm.title.trim()}
-                            className="flex-1 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-lg shadow-brand-500/20">
-                            {ftSaving ? 'Submitting…' : 'Submit Field Ticket'}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setShowNewFT(true)}
-                      className="flex items-center gap-2 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl transition-colors shadow-lg shadow-brand-500/20"
-                    >
-                      <Plus size={14} /> New Field Ticket
-                    </button>
-                  )}
-
-                  {/* Existing tickets */}
-                  {fieldTickets.length === 0 && !showNewFT && (
-                    <div className="bg-card border border-border rounded-xl flex flex-col items-center justify-center py-12 text-muted-foreground">
-                      <ClipboardList size={28} className="mb-2 opacity-20" />
-                      <p className="text-sm">No field tickets yet</p>
-                      <p className="text-xs mt-1 opacity-70">Submit one after completing on-site work</p>
-                    </div>
-                  )}
-
-                  {fieldTickets.map(ft => {
-                    const statusCfg: Record<FTStatus, { bg: string; text: string; label: string }> = {
-                      draft:     { bg: 'bg-slate-500/10',   text: 'text-slate-400',   label: 'Draft'     },
-                      submitted: { bg: 'bg-amber-500/10',   text: 'text-amber-400',   label: 'Submitted' },
-                      approved:  { bg: 'bg-emerald-500/10', text: 'text-emerald-400', label: 'Approved'  },
-                      rejected:  { bg: 'bg-red-500/10',     text: 'text-red-400',     label: 'Rejected'  },
-                    }
-                    const sc = statusCfg[ft.status]
-                    return (
-                      <div key={ft.id} className="bg-card border border-border rounded-xl overflow-hidden group">
-                        <div className="flex items-start justify-between px-5 py-4 border-b border-border">
-                          <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${sc.bg} ${sc.text}`}>
-                                {sc.label}
-                              </span>
-                              <span className="text-xs text-muted-foreground">{fmtDate(ft.created_at)}</span>
-                            </div>
-                            <h4 className="text-sm font-semibold text-foreground">{ft.title}</h4>
-                            <p className="text-xs text-muted-foreground mt-0.5">by {ft.technician_name || 'Unknown tech'}</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {ft.status === 'submitted' && (
-                              <button
-                                onClick={() => handleApproveFT(ft)}
-                                className="px-2.5 py-1 text-xs font-medium bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition-colors"
-                              >
-                                Approve
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleDeleteFT(ft.id)}
-                              className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-red-500/10 text-red-400 transition-all"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        </div>
-                        <div className="px-5 py-4 space-y-3">
-                          {ft.findings && (
-                            <div>
-                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Findings</p>
-                              <p className="text-sm text-foreground whitespace-pre-wrap">{ft.findings}</p>
-                            </div>
-                          )}
-                          {ft.work_performed && (
-                            <div>
-                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Work Performed</p>
-                              <p className="text-sm text-foreground whitespace-pre-wrap">{ft.work_performed}</p>
-                            </div>
-                          )}
-                          {(ft.materials_used || ft.labor_hours) && (
-                            <div className="flex gap-6">
-                              {ft.materials_used && (
-                                <div>
-                                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Materials</p>
-                                  <p className="text-sm">{ft.materials_used}</p>
-                                </div>
-                              )}
-                              {ft.labor_hours && (
-                                <div>
-                                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Labor Hours</p>
-                                  <p className="text-sm font-semibold">{ft.labor_hours}h</p>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          {ft.recommendations && (
-                            <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg px-4 py-3">
-                              <p className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider mb-1">Recommendations</p>
-                              <p className="text-sm text-foreground">{ft.recommendations}</p>
-                            </div>
-                          )}
-                          {ft.approved_at && (
-                            <p className="text-xs text-emerald-400">✓ Approved by {ft.approved_by} on {fmtDate(ft.approved_at)}</p>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
+              {tab === 'field_tickets' && wo && (
+                <FieldTicketsTab
+                  workOrderId={wo.id}
+                  initialChecklist={checklist}
+                  fieldTickets={fieldTickets}
+                  onApproveFT={handleApproveFT}
+                  onDeleteFT={handleDeleteFT}
+                />
               )}
 
               {/* ── Time Tracking tab ── */}
@@ -1993,6 +1819,606 @@ function ScheduleTab({ workOrderId }: { workOrderId: string }) {
               </div>
             )
           })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── FieldTicketsTab ───────────────────────────────────────────────────────────
+// Two-section structured field packet: Service Tasks + Equipment Manifest.
+// Management pre-builds before dispatch; tech checks off and confirms on-site.
+
+interface FTTabProps {
+  workOrderId: string
+  initialChecklist: ChecklistItem[]
+  fieldTickets: FieldTicket[]
+  onApproveFT: (ft: FieldTicket) => void
+  onDeleteFT: (id: string) => void
+}
+
+const CATEGORY_CFG: Record<string, { label: string; bg: string; text: string }> = {
+  task:         { label: 'Task',         bg: 'bg-blue-500/10',    text: 'text-blue-400'    },
+  safety:       { label: 'Safety',       bg: 'bg-red-500/10',     text: 'text-red-400'     },
+  inspection:   { label: 'Inspect',      bg: 'bg-violet-500/10',  text: 'text-violet-400'  },
+  verification: { label: 'Verify',       bg: 'bg-emerald-500/10', text: 'text-emerald-400' },
+}
+
+function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApproveFT, onDeleteFT }: FTTabProps) {
+  // ── Service Tasks state ─────────────────────────────────────────────────────
+  const [tasks, setTasks]           = useState<ChecklistItem[]>(initialChecklist)
+  const [showAddTask, setShowAddTask] = useState(false)
+  const [taskForm, setTaskForm]     = useState({ title: '', category: 'task', added_by: 'management', notes: '' })
+  const [savingTask, setSavingTask] = useState(false)
+  const [expandedTask, setExpandedTask] = useState<string | null>(null)
+
+  // ── Equipment Manifest state ────────────────────────────────────────────────
+  const [equipment, setEquipment]     = useState<InstalledEquipment[]>([])
+  const [equipLoading, setEquipLoading] = useState(true)
+  const [showAddEquip, setShowAddEquip] = useState(false)
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const [equipForm, setEquipForm]     = useState({
+    name: '', make: '', model: '', sku: '', qty: '1',
+    condition: 'new', notes: '', added_by: 'management',
+  })
+  const [confirmForm, setConfirmForm] = useState({ serial_number: '', location: '', confirmed_by: '' })
+  const [savingEquip, setSavingEquip] = useState(false)
+
+  // ── Old field ticket collapse state ────────────────────────────────────────
+  const [showLegacy, setShowLegacy] = useState(false)
+
+  useEffect(() => {
+    fetch(`/api/maintenance/${workOrderId}/equipment`)
+      .then(r => r.json())
+      .then(d => { setEquipment(d.equipment ?? []) })
+      .catch(() => {})
+      .finally(() => setEquipLoading(false))
+  }, [workOrderId])
+
+  // ── Task handlers ───────────────────────────────────────────────────────────
+  const handleAddTask = async () => {
+    if (!taskForm.title.trim()) return
+    setSavingTask(true)
+    try {
+      const res  = await fetch(`/api/maintenance/${workOrderId}/checklist`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title:    taskForm.title.trim(),
+          category: taskForm.category,
+          added_by: taskForm.added_by,
+          notes:    taskForm.notes.trim() || null,
+          sort_order: tasks.length,
+        }),
+      })
+      const json = await res.json()
+      if (res.ok) {
+        setTasks(t => [...t, json.item])
+        setTaskForm({ title: '', category: 'task', added_by: 'management', notes: '' })
+        setShowAddTask(false)
+      }
+    } finally { setSavingTask(false) }
+  }
+
+  const handleToggleTask = async (task: ChecklistItem) => {
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: !t.completed } : t))
+    const res  = await fetch(`/api/maintenance/${workOrderId}/checklist`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: task.id, completed: !task.completed }),
+    })
+    const json = await res.json()
+    if (res.ok) setTasks(prev => prev.map(t => t.id === task.id ? json.item : t))
+    else setTasks(prev => prev.map(t => t.id === task.id ? task : t))
+  }
+
+  const handleSetOutcome = async (task: ChecklistItem, outcome: 'pass' | 'fail' | 'na') => {
+    const next = task.outcome === outcome ? null : outcome
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, outcome: next } : t))
+    await fetch(`/api/maintenance/${workOrderId}/checklist`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: task.id, outcome: next }),
+    })
+  }
+
+  const handleDeleteTask = async (taskId: string) => {
+    setTasks(prev => prev.filter(t => t.id !== taskId))
+    await fetch(`/api/maintenance/${workOrderId}/checklist`, {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: taskId }),
+    })
+  }
+
+  // ── Equipment handlers ──────────────────────────────────────────────────────
+  const handleAddEquip = async () => {
+    if (!equipForm.name.trim()) return
+    setSavingEquip(true)
+    try {
+      const res  = await fetch(`/api/maintenance/${workOrderId}/equipment`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name:      equipForm.name.trim(),
+          make:      equipForm.make.trim()  || null,
+          model:     equipForm.model.trim() || null,
+          sku:       equipForm.sku.trim()   || null,
+          qty:       parseInt(equipForm.qty) || 1,
+          condition: equipForm.condition,
+          notes:     equipForm.notes.trim() || null,
+          added_by:  equipForm.added_by,
+        }),
+      })
+      const json = await res.json()
+      if (res.ok) {
+        setEquipment(e => [...e, json.item])
+        setEquipForm({ name: '', make: '', model: '', sku: '', qty: '1', condition: 'new', notes: '', added_by: 'management' })
+        setShowAddEquip(false)
+      }
+    } finally { setSavingEquip(false) }
+  }
+
+  const handleConfirmEquip = async (item: InstalledEquipment) => {
+    setSavingEquip(true)
+    try {
+      const res  = await fetch(`/api/maintenance/${workOrderId}/equipment/${item.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          confirmed:     true,
+          serial_number: confirmForm.serial_number.trim() || null,
+          location:      confirmForm.location.trim()      || null,
+          confirmed_by:  confirmForm.confirmed_by.trim()  || null,
+        }),
+      })
+      const json = await res.json()
+      if (res.ok) {
+        setEquipment(prev => prev.map(e => e.id === item.id ? json.item : e))
+        setConfirmingId(null)
+        setConfirmForm({ serial_number: '', location: '', confirmed_by: '' })
+      }
+    } finally { setSavingEquip(false) }
+  }
+
+  const handleDeleteEquip = async (itemId: string) => {
+    setEquipment(prev => prev.filter(e => e.id !== itemId))
+    await fetch(`/api/maintenance/${workOrderId}/equipment/${itemId}`, { method: 'DELETE' })
+  }
+
+  // ── Derived ─────────────────────────────────────────────────────────────────
+  const tasksDone  = tasks.filter(t => t.completed).length
+  const equipDone  = equipment.filter(e => e.confirmed).length
+  const inp        = 'w-full text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30'
+
+  return (
+    <div className="space-y-5">
+
+      {/* ── Section 1: Service Tasks ── */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
+          <h3 className="text-sm font-semibold flex items-center gap-2">
+            <CheckCircle2 size={14} className="text-brand-400" />
+            Service Tasks
+            {tasks.length > 0 && (
+              <span className="text-xs text-muted-foreground font-normal">({tasksDone}/{tasks.length} done)</span>
+            )}
+          </h3>
+          <button
+            onClick={() => setShowAddTask(true)}
+            className="flex items-center gap-1 text-xs bg-brand-500 text-white px-2.5 py-1.5 rounded-lg hover:bg-brand-600 font-medium"
+          >
+            <Plus size={12} /> Add Task
+          </button>
+        </div>
+
+        {tasks.length === 0 && !showAddTask && (
+          <div className="px-5 py-8 text-center text-muted-foreground">
+            <ClipboardList size={24} className="mx-auto mb-2 opacity-20" />
+            <p className="text-sm">No tasks built yet</p>
+            <p className="text-xs mt-1 opacity-70">Management adds tasks before dispatch — tech checks them off on site</p>
+          </div>
+        )}
+
+        <div className="divide-y divide-border/40">
+          {tasks.map(task => {
+            const catCfg = CATEGORY_CFG[task.category ?? 'task'] ?? CATEGORY_CFG.task
+            const isExpanded = expandedTask === task.id
+            return (
+              <div key={task.id} className="group">
+                <div className="flex items-center gap-3 px-5 py-3 hover:bg-accent/20 transition-colors">
+                  {/* Checkbox */}
+                  <button
+                    onClick={() => handleToggleTask(task)}
+                    className={cn(
+                      'w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors',
+                      task.completed
+                        ? 'bg-emerald-400 border-emerald-400'
+                        : 'border-border hover:border-brand-400'
+                    )}
+                  >
+                    {task.completed && <Check size={10} className="text-white" strokeWidth={3} />}
+                  </button>
+
+                  {/* Category badge */}
+                  <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded-md shrink-0', catCfg.bg, catCfg.text)}>
+                    {catCfg.label}
+                  </span>
+
+                  {/* Title */}
+                  <span
+                    className={cn('flex-1 text-sm cursor-pointer', task.completed && 'line-through text-muted-foreground')}
+                    onClick={() => setExpandedTask(isExpanded ? null : task.id)}
+                  >
+                    {task.title}
+                  </span>
+
+                  {/* Added-by badge */}
+                  {task.added_by === 'tech' && (
+                    <span className="text-[10px] text-muted-foreground border border-border rounded px-1.5 py-0.5 shrink-0">
+                      Added on-site
+                    </span>
+                  )}
+
+                  {/* Outcome buttons — only show after completing */}
+                  {task.completed && (
+                    <div className="flex gap-1 shrink-0">
+                      {(['pass', 'fail', 'na'] as const).map(o => (
+                        <button
+                          key={o}
+                          onClick={() => handleSetOutcome(task, o)}
+                          className={cn(
+                            'text-[10px] font-bold px-1.5 py-0.5 rounded transition-colors',
+                            task.outcome === o
+                              ? o === 'pass' ? 'bg-emerald-400 text-white'
+                                : o === 'fail' ? 'bg-red-400 text-white'
+                                : 'bg-slate-400 text-white'
+                              : 'border border-border text-muted-foreground hover:border-foreground'
+                          )}
+                        >
+                          {o === 'pass' ? '✓ PASS' : o === 'fail' ? '✗ FAIL' : 'N/A'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Delete */}
+                  <button
+                    onClick={() => handleDeleteTask(task.id)}
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/10 text-red-400 transition-all"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+
+                {/* Expanded notes area */}
+                {isExpanded && (
+                  <div className="px-5 pb-3 pt-0 bg-accent/10">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Notes</p>
+                    <p className="text-xs text-foreground">{task.notes || <span className="italic text-muted-foreground">No notes</span>}</p>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Add task form */}
+        {showAddTask && (
+          <div className="px-5 py-4 border-t border-border space-y-3 bg-background/50">
+            <input
+              value={taskForm.title}
+              onChange={e => setTaskForm(f => ({ ...f, title: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleAddTask()}
+              placeholder="Task description *"
+              className={inp}
+              autoFocus
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Category</p>
+                <div className="flex gap-1.5 flex-wrap">
+                  {(['task', 'safety', 'inspection', 'verification'] as const).map(c => (
+                    <button
+                      key={c}
+                      onClick={() => setTaskForm(f => ({ ...f, category: c }))}
+                      className={cn(
+                        'text-[10px] font-semibold px-2 py-1 rounded-md border transition-colors capitalize',
+                        taskForm.category === c
+                          ? `${CATEGORY_CFG[c].bg} ${CATEGORY_CFG[c].text} border-transparent`
+                          : 'border-border text-muted-foreground hover:border-foreground'
+                      )}
+                    >
+                      {CATEGORY_CFG[c].label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Added by</p>
+                <div className="flex gap-1.5">
+                  {(['management', 'tech'] as const).map(a => (
+                    <button
+                      key={a}
+                      onClick={() => setTaskForm(f => ({ ...f, added_by: a }))}
+                      className={cn(
+                        'text-[10px] font-semibold px-2 py-1 rounded-md border capitalize transition-colors',
+                        taskForm.added_by === a
+                          ? 'bg-brand-500 text-white border-transparent'
+                          : 'border-border text-muted-foreground hover:border-foreground'
+                      )}
+                    >
+                      {a}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <input
+              value={taskForm.notes}
+              onChange={e => setTaskForm(f => ({ ...f, notes: e.target.value }))}
+              placeholder="Notes (optional)"
+              className={inp}
+            />
+            <div className="flex gap-2">
+              <button onClick={() => { setShowAddTask(false); setTaskForm({ title: '', category: 'task', added_by: 'management', notes: '' }) }}
+                className="flex-1 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:bg-accent transition-colors">
+                Cancel
+              </button>
+              <button onClick={handleAddTask} disabled={savingTask || !taskForm.title.trim()}
+                className="flex-1 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium disabled:opacity-40 transition-colors">
+                {savingTask ? 'Adding…' : 'Add Task'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Progress bar */}
+        {tasks.length > 0 && (
+          <div className="px-5 py-2.5 border-t border-border/50 bg-background/30">
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                <div
+                  className={cn('h-full rounded-full transition-all duration-500', tasksDone === tasks.length ? 'bg-emerald-400' : 'bg-amber-400')}
+                  style={{ width: `${tasks.length > 0 ? Math.round((tasksDone / tasks.length) * 100) : 0}%` }}
+                />
+              </div>
+              <span className="text-xs text-muted-foreground shrink-0">{tasksDone}/{tasks.length}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Section 2: Equipment Manifest ── */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
+          <h3 className="text-sm font-semibold flex items-center gap-2">
+            <Package size={14} className="text-brand-400" />
+            Equipment Manifest
+            {equipment.length > 0 && (
+              <span className="text-xs text-muted-foreground font-normal">({equipDone}/{equipment.length} confirmed)</span>
+            )}
+          </h3>
+          <button
+            onClick={() => setShowAddEquip(true)}
+            className="flex items-center gap-1 text-xs bg-brand-500 text-white px-2.5 py-1.5 rounded-lg hover:bg-brand-600 font-medium"
+          >
+            <Plus size={12} /> Add Equipment
+          </button>
+        </div>
+
+        {equipLoading ? (
+          <p className="px-5 py-6 text-sm text-muted-foreground text-center">Loading…</p>
+        ) : equipment.length === 0 && !showAddEquip ? (
+          <div className="px-5 py-8 text-center text-muted-foreground">
+            <Package size={24} className="mx-auto mb-2 opacity-20" />
+            <p className="text-sm">No equipment listed yet</p>
+            <p className="text-xs mt-1 opacity-70">Management adds expected equipment — tech confirms serial numbers on-site</p>
+          </div>
+        ) : null}
+
+        <div className="divide-y divide-border/40">
+          {equipment.map(item => (
+            <div key={item.id} className="group">
+              <div className="flex items-start gap-3 px-5 py-3.5 hover:bg-accent/20 transition-colors">
+                {/* Confirmed indicator */}
+                <div className={cn(
+                  'w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5',
+                  item.confirmed ? 'bg-emerald-400' : 'bg-amber-500/20 border-2 border-amber-400/50'
+                )}>
+                  {item.confirmed
+                    ? <Check size={10} className="text-white" strokeWidth={3} />
+                    : <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  }
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-foreground">{item.name}</span>
+                    {item.make && <span className="text-xs text-muted-foreground">{item.make}</span>}
+                    {item.model && <span className="text-xs text-muted-foreground">· {item.model}</span>}
+                    {item.qty > 1 && (
+                      <span className="text-[10px] font-semibold bg-slate-500/10 text-slate-400 px-1.5 py-0.5 rounded">×{item.qty}</span>
+                    )}
+                    {item.condition && (
+                      <span className={cn(
+                        'text-[10px] font-semibold px-1.5 py-0.5 rounded capitalize',
+                        item.condition === 'new'      ? 'bg-emerald-500/10 text-emerald-400'
+                          : item.condition === 'replaced' ? 'bg-amber-500/10 text-amber-400'
+                          : 'bg-slate-500/10 text-slate-400'
+                      )}>
+                        {item.condition}
+                      </span>
+                    )}
+                  </div>
+
+                  {item.confirmed ? (
+                    <div className="flex items-center gap-3 mt-1 flex-wrap">
+                      {item.serial_number && (
+                        <span className="text-xs text-muted-foreground font-mono">SN: {item.serial_number}</span>
+                      )}
+                      {item.location && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <MapPin size={10} /> {item.location}
+                        </span>
+                      )}
+                      {item.confirmed_by && (
+                        <span className="text-xs text-emerald-400">✓ {item.confirmed_by}</span>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-amber-400 mt-1">Pending confirmation by tech</p>
+                  )}
+
+                  {item.sku && <p className="text-[10px] text-muted-foreground mt-0.5 font-mono">SKU: {item.sku}</p>}
+                  {item.notes && <p className="text-xs text-muted-foreground mt-0.5 italic">{item.notes}</p>}
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {!item.confirmed && (
+                    <button
+                      onClick={() => { setConfirmingId(item.id); setConfirmForm({ serial_number: item.serial_number ?? '', location: item.location ?? '', confirmed_by: '' }) }}
+                      className="text-xs font-medium bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 px-2.5 py-1 rounded-lg transition-colors"
+                    >
+                      Confirm Install
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleDeleteEquip(item.id)}
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/10 text-red-400 transition-all"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Inline confirm form */}
+              {confirmingId === item.id && (
+                <div className="px-5 py-3 bg-emerald-500/5 border-t border-emerald-500/20 space-y-2">
+                  <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Confirm Installation</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <input
+                      value={confirmForm.serial_number}
+                      onChange={e => setConfirmForm(f => ({ ...f, serial_number: e.target.value }))}
+                      placeholder="Serial number"
+                      className={inp}
+                    />
+                    <input
+                      value={confirmForm.location}
+                      onChange={e => setConfirmForm(f => ({ ...f, location: e.target.value }))}
+                      placeholder="Location (e.g. Main Gate)"
+                      className={inp}
+                    />
+                    <input
+                      value={confirmForm.confirmed_by}
+                      onChange={e => setConfirmForm(f => ({ ...f, confirmed_by: e.target.value }))}
+                      placeholder="Tech name"
+                      className={inp}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setConfirmingId(null)} className="flex-1 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:bg-accent">Cancel</button>
+                    <button onClick={() => handleConfirmEquip(item)} disabled={savingEquip}
+                      className="flex-1 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold disabled:opacity-50">
+                      {savingEquip ? 'Saving…' : '✓ Mark Installed'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Add equipment form */}
+        {showAddEquip && (
+          <div className="px-5 py-4 border-t border-border space-y-3 bg-background/50">
+            <div className="grid grid-cols-2 gap-2">
+              <input value={equipForm.name} onChange={e => setEquipForm(f => ({ ...f, name: e.target.value }))} placeholder="Equipment name *" className={inp} autoFocus />
+              <input value={equipForm.make} onChange={e => setEquipForm(f => ({ ...f, make: e.target.value }))} placeholder="Make / Brand" className={inp} />
+              <input value={equipForm.model} onChange={e => setEquipForm(f => ({ ...f, model: e.target.value }))} placeholder="Model" className={inp} />
+              <input value={equipForm.sku} onChange={e => setEquipForm(f => ({ ...f, sku: e.target.value }))} placeholder="SKU (optional)" className={inp} />
+              <input type="number" min="1" value={equipForm.qty} onChange={e => setEquipForm(f => ({ ...f, qty: e.target.value }))} placeholder="Qty" className={inp} />
+              <div className="relative">
+                <select value={equipForm.condition} onChange={e => setEquipForm(f => ({ ...f, condition: e.target.value }))}
+                  className={cn(inp, 'appearance-none pr-7')}>
+                  <option value="new">New Install</option>
+                  <option value="existing">Existing (keep)</option>
+                  <option value="replaced">Replacement</option>
+                </select>
+                <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              </div>
+            </div>
+            <input value={equipForm.notes} onChange={e => setEquipForm(f => ({ ...f, notes: e.target.value }))} placeholder="Notes (optional)" className={inp} />
+            <div>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Added by</p>
+              <div className="flex gap-1.5">
+                {(['management', 'tech'] as const).map(a => (
+                  <button key={a} onClick={() => setEquipForm(f => ({ ...f, added_by: a }))}
+                    className={cn('text-[10px] font-semibold px-2.5 py-1 rounded-md border capitalize transition-colors',
+                      equipForm.added_by === a ? 'bg-brand-500 text-white border-transparent' : 'border-border text-muted-foreground hover:border-foreground'
+                    )}>
+                    {a}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setShowAddEquip(false)} className="flex-1 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:bg-accent">Cancel</button>
+              <button onClick={handleAddEquip} disabled={savingEquip || !equipForm.name.trim()}
+                className="flex-1 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium disabled:opacity-40">
+                {savingEquip ? 'Adding…' : 'Add to Manifest'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Section 3: Field Reports (legacy — collapsed by default) ── */}
+      {fieldTickets.length > 0 && (
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <button
+            onClick={() => setShowLegacy(!showLegacy)}
+            className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-accent/30 transition-colors"
+          >
+            <h3 className="text-sm font-semibold flex items-center gap-2">
+              <FileText size={14} className="text-muted-foreground" />
+              Field Reports
+              <span className="text-xs text-muted-foreground font-normal">({fieldTickets.length})</span>
+            </h3>
+            <ChevronDown size={14} className={cn('text-muted-foreground transition-transform', showLegacy && 'rotate-180')} />
+          </button>
+
+          {showLegacy && (
+            <div className="divide-y divide-border/50 border-t border-border">
+              {fieldTickets.map(ft => {
+                const statusCfg: Record<FTStatus, { bg: string; text: string; label: string }> = {
+                  draft:     { bg: 'bg-slate-500/10',   text: 'text-slate-400',   label: 'Draft'     },
+                  submitted: { bg: 'bg-amber-500/10',   text: 'text-amber-400',   label: 'Submitted' },
+                  approved:  { bg: 'bg-emerald-500/10', text: 'text-emerald-400', label: 'Approved'  },
+                  rejected:  { bg: 'bg-red-500/10',     text: 'text-red-400',     label: 'Rejected'  },
+                }
+                const sc = statusCfg[ft.status]
+                return (
+                  <div key={ft.id} className="px-5 py-4 space-y-2 group">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${sc.bg} ${sc.text}`}>{sc.label}</span>
+                        <span className="text-sm font-semibold text-foreground">{ft.title}</span>
+                        <span className="text-xs text-muted-foreground">· {ft.technician_name || 'Unknown'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {ft.status === 'submitted' && (
+                          <button onClick={() => onApproveFT(ft)} className="px-2.5 py-1 text-xs font-medium bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded-lg">
+                            Approve
+                          </button>
+                        )}
+                        <button onClick={() => onDeleteFT(ft.id)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/10 text-red-400 transition-all">
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                    {ft.findings && <p className="text-xs text-foreground whitespace-pre-wrap">{ft.findings}</p>}
+                    {ft.work_performed && <p className="text-xs text-muted-foreground whitespace-pre-wrap">{ft.work_performed}</p>}
+                    {ft.labor_hours && <p className="text-xs font-semibold text-foreground">Labor: {ft.labor_hours}h</p>}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

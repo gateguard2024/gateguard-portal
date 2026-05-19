@@ -9,7 +9,7 @@ const supabase = createClient(
 // POST /api/maintenance/[id]/checklist — add a checklist item
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json()
-  const { title, sort_order } = body
+  const { title, sort_order, category, added_by, notes } = body
 
   if (!title?.trim()) {
     return NextResponse.json({ error: 'Title required' }, { status: 400 })
@@ -17,7 +17,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const { data, error } = await supabase
     .from('wo_checklist_items')
-    .insert({ work_order_id: params.id, title: title.trim(), sort_order: sort_order ?? 0 })
+    .insert({
+      work_order_id: params.id,
+      title:     title.trim(),
+      sort_order: sort_order ?? 0,
+      category:  category  || 'task',
+      added_by:  added_by  || 'management',
+      notes:     notes?.trim() || null,
+    })
     .select()
     .single()
 
@@ -25,10 +32,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   return NextResponse.json({ item: data })
 }
 
-// PATCH /api/maintenance/[id]/checklist — toggle or update an item
+// PATCH /api/maintenance/[id]/checklist — toggle, set outcome, or update an item
 export async function PATCH(req: NextRequest, _ctx: { params: { id: string } }) {
   const body = await req.json()
-  const { item_id, completed, title } = body
+  const { item_id, completed, title, outcome, notes, completed_by_name } = body
 
   if (!item_id) return NextResponse.json({ error: 'item_id required' }, { status: 400 })
 
@@ -37,7 +44,10 @@ export async function PATCH(req: NextRequest, _ctx: { params: { id: string } }) 
     update.completed    = completed
     update.completed_at = completed ? new Date().toISOString() : null
   }
-  if (title !== undefined) update.title = title
+  if (title              !== undefined) update.title              = title
+  if (outcome            !== undefined) update.outcome            = outcome
+  if (notes              !== undefined) update.notes              = notes
+  if (completed_by_name  !== undefined) update.completed_by_name = completed_by_name
 
   const { data, error } = await supabase
     .from('wo_checklist_items')
