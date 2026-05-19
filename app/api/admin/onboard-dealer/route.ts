@@ -98,9 +98,9 @@ export async function POST(req: NextRequest) {
     .from('organizations')
     .insert({
       name:                org_name.trim(),
-      tier:                org_tier,
+      org_tier:            org_tier,
       tier_label:          TIER_LABELS[org_tier] ?? org_tier,
-      parent_id:           parent_org_id ?? null,
+      parent_org_id:       parent_org_id ?? null,
       license_number:      license_number ?? null,
       service_area_states: service_area_states ?? [],
       tech_count:          tech_count ?? 0,
@@ -220,11 +220,11 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from('organizations')
-    .select('id, name, tier, tier_label, parent_id, license_number, service_area_states, tech_count, onboarded_at, created_at')
-    .not('tier', 'eq', 'corporate')
+    .select('id, name, org_tier, tier_label, parent_org_id, license_number, service_area_states, tech_count, onboarded_at, created_at')
+    .not('org_tier', 'eq', 'corporate')
     .order('onboarded_at', { ascending: false, nullsFirst: false })
 
-  if (tier)   query = query.eq('tier', tier)
+  if (tier)   query = query.eq('org_tier', tier)
   if (parent) query = query.eq('parent_id', parent)
   if (q)      query = query.ilike('name', `%${q}%`)
 

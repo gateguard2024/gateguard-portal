@@ -1,9 +1,13 @@
 -- Migration 033: QuickBooks customer import
 -- 35 client organizations imported from Gate Guard, LLC. QuickBooks export (May 18, 2026)
--- All imported as org_tier = 'client', parent = GateGuard Corporate
+-- All imported as org_tier = 'client'
+--
+-- NOTE: Run migration 034 BEFORE this migration.
+-- Migration 034 renames organizations.tier → org_tier and adds
+-- primary_contact_name/email/phone columns that this migration uses.
 
 INSERT INTO organizations (
-  name, tier, slug, primary_email, primary_phone,
+  name, org_tier, slug, primary_contact_email, primary_contact_phone,
   address, city, state, zip, notes, is_active
 ) VALUES
   ('Ageis', 'client', 'ageis-client', NULL, NULL, NULL, NULL, NULL, NULL, 'QB Import May 2026', true),
@@ -40,6 +44,7 @@ INSERT INTO organizations (
   ('Stonegate Townhomes', 'client', 'stonegate-townhomes-client', 'shantel@mapleandoakmanagement.com', '(678) 431-4166', NULL, NULL, NULL, NULL, 'QB Import May 2026', true),
   ('The Aster', 'client', 'the-aster-client', 'dbrooks@radco.us', NULL, '2900 Pharr Ct S Northwest', 'Atlanta', 'GA', '30305', 'QB Import May 2026', true),
   ('The Villages on Riverwalk', 'client', 'the-villages-on-riverwalk-client', 'shantel@mapleandoakmanagement.com', '(678) 431-4166', NULL, NULL, NULL, NULL, 'QB Import May 2026', true),
-  ('TXP Texas - Monitoring', 'client', 'txp-texas-monitoring-client', NULL, NULL, NULL, NULL, NULL, NULL, 'QB Import May 2026', true);
+  ('TXP Texas - Monitoring', 'client', 'txp-texas-monitoring-client', NULL, NULL, NULL, NULL, NULL, NULL, 'QB Import May 2026', true)
+ON CONFLICT (slug) DO NOTHING;
 
 -- Total: 35 organizations inserted

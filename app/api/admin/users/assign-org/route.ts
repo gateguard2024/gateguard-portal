@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
   // Verify the org exists in Supabase
   const { data: org, error: orgErr } = await supabase
     .from('organizations')
-    .select('id, name, tier')
+    .select('id, name, org_tier')
     .eq('id', org_id)
     .single()
 
