@@ -49,7 +49,13 @@ export async function GET() {
     .select('id, name, initials, role, status, current_job_id, phone, email, employment_type, can_access_portal, portal_invite_sent_at, schedule')
     .order('name')
 
-  techQuery = applyOrgScope(techQuery, scope, 'org_id')
+  // Technicians may have org_id = NULL (legacy/unscoped records).
+  // Include both org-scoped techs AND those with no org assigned so the roster
+  // is never empty due to a missing org_id on existing tech records.
+  if (!scope.all && scope.ids.length > 0) {
+    const idList = scope.ids.join(',')
+    techQuery = (techQuery as any).or(`org_id.in.(${idList}),org_id.is.null`) as typeof techQuery
+  }
 
   const [jobsRes, techsRes] = await Promise.all([jobQuery, techQuery])
 
