@@ -46,7 +46,7 @@ export async function GET() {
 
   let techQuery = supabase
     .from('technicians')
-    .select('id, name, initials, role, status, current_job_id, phone, email')
+    .select('id, name, initials, role, status, current_job_id, phone, email, employment_type, can_access_portal, portal_invite_sent_at')
     .order('name')
 
   techQuery = applyOrgScope(techQuery, scope, 'org_id')
@@ -71,15 +71,18 @@ export async function GET() {
   }))
 
   const techs = (techsRes.data ?? []).map(t => ({
-    id:           t.id,
-    name:         t.name,
-    initials:     t.initials,
-    role:         t.role,
-    status:       mapTechStatus(t.status),
-    currentJobId: t.current_job_id,
+    id:                   t.id,
+    name:                 t.name,
+    initials:             t.initials,
+    role:                 t.role,
+    status:               mapTechStatus(t.status),
+    currentJobId:         t.current_job_id,
+    employment_type:      t.employment_type ?? 'employee',
+    can_access_portal:    t.can_access_portal ?? false,
+    portal_invite_sent_at: t.portal_invite_sent_at ?? null,
     // Phone/email only sent if caller can view sensitive data
-    phone:        user.canViewSensitive ? t.phone : null,
-    email:        user.canViewSensitive ? t.email : null,
+    phone:                user.canViewSensitive ? t.phone : null,
+    email:                user.canViewSensitive ? t.email : null,
   }))
 
   return NextResponse.json({ jobs, techs })

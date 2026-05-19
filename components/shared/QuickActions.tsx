@@ -250,13 +250,13 @@ export function QuickActions({
           onClick={closeModal}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-md"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col"
             onClick={e => e.stopPropagation()}
           >
             {/* ── Email Modal ── */}
             {modal === 'email' && (
               <>
-                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 flex-shrink-0">
                   <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                     <Mail size={14} className="text-blue-500" /> Send Email
                   </h2>
@@ -264,7 +264,7 @@ export function QuickActions({
                     <X size={14} className="text-slate-500" />
                   </button>
                 </div>
-                <div className="p-5 space-y-4">
+                <div className="p-5 space-y-4 overflow-y-auto flex-1">
                   <div>
                     <label className={labelCls}>To</label>
                     <input
@@ -303,7 +303,7 @@ export function QuickActions({
                     <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">Email sent successfully.</p>
                   )}
                 </div>
-                <div className="px-5 pb-5">
+                <div className="px-5 pb-5 flex-shrink-0 border-t border-slate-100 pt-4">
                   <button
                     onClick={handleSendEmail}
                     disabled={emailStatus === 'sending' || emailStatus === 'sent'}
@@ -319,7 +319,7 @@ export function QuickActions({
             {/* ── To-Do Modal ── */}
             {modal === 'todo' && (
               <>
-                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 flex-shrink-0">
                   <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                     <CheckSquare size={14} className="text-amber-500" /> Create To-Do
                   </h2>
@@ -327,7 +327,7 @@ export function QuickActions({
                     <X size={14} className="text-slate-500" />
                   </button>
                 </div>
-                <div className="p-5 space-y-4">
+                <div className="p-5 space-y-4 overflow-y-auto flex-1">
                   <div>
                     <label className={labelCls}>Task *</label>
                     <textarea
@@ -357,7 +357,7 @@ export function QuickActions({
                     <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">To-Do created successfully.</p>
                   )}
                 </div>
-                <div className="px-5 pb-5">
+                <div className="px-5 pb-5 flex-shrink-0 border-t border-slate-100 pt-4">
                   <button
                     onClick={handleCreateTodo}
                     disabled={todoStatus === 'saving' || todoStatus === 'saved'}
@@ -373,7 +373,7 @@ export function QuickActions({
             {/* ── Log Activity Modal ── */}
             {modal === 'activity' && (
               <>
-                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 flex-shrink-0">
                   <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                     <Plus size={14} className="text-slate-500" /> Log Activity
                   </h2>
@@ -381,7 +381,7 @@ export function QuickActions({
                     <X size={14} className="text-slate-500" />
                   </button>
                 </div>
-                <div className="p-5 space-y-4">
+                <div className="p-5 space-y-4 overflow-y-auto flex-1">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className={labelCls}>Type</label>
@@ -446,7 +446,7 @@ export function QuickActions({
                     <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">Activity logged.</p>
                   )}
                 </div>
-                <div className="px-5 pb-5">
+                <div className="px-5 pb-5 flex-shrink-0 border-t border-slate-100 pt-4">
                   <button
                     onClick={handleLogActivity}
                     disabled={actStatus === 'saving' || actStatus === 'saved'}

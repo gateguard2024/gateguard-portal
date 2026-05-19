@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useUser } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
 import {
   RefreshCw, Plus, Zap, Users, Navigation, CheckCircle2,
@@ -588,20 +589,22 @@ function JobCard({ job, onStatusChange, onSelect }: {
 
 // ─── Tech Row ─────────────────────────────────────────────────────────────────
 
-function TechRow({ tech, jobs, onStatusChange, onInvite }: {
+function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete }: {
   tech:           Tech;
   jobs:           Job[];
   onStatusChange: (id: string, status: TechStatus) => void;
   onInvite:       (tech: Tech) => void;
+  canDelete:      boolean;
+  onDelete:       (id: string) => void;
 }) {
-  const conf = techStatusConfig[tech.status];
+  const conf = techStatusConfig[tech.status] ?? techStatusConfig['Offline'];
   const currentJob = jobs.find(j => j.id === tech.currentJobId);
   const TECH_STATUSES: TechStatus[] = ["Available", "On Site", "Driving", "Offline"];
   const isContractor = tech.employment_type === 'contractor';
   const hasPortalAccess = tech.can_access_portal;
 
   return (
-    <div className="py-3 px-4 hover:bg-slate-50 transition-colors">
+    <div className="py-3 px-4 hover:bg-slate-50 transition-colors group">
       <div className="flex items-center gap-3">
         <div className="relative shrink-0">
           <div className={cn(
@@ -627,13 +630,26 @@ function TechRow({ tech, jobs, onStatusChange, onInvite }: {
           )}
         </div>
         <div className="text-right shrink-0 space-y-1">
-          <select
-            value={tech.status}
-            onChange={e => onStatusChange(tech.id, e.target.value as TechStatus)}
-            className={cn("appearance-none text-[11px] font-medium px-2 py-0.5 rounded-full cursor-pointer border-0 outline-none w-full", conf.badge)}
-          >
-            {TECH_STATUSES.map(s => <option key={s}>{s}</option>)}
-          </select>
+          <div className="flex items-center gap-1 justify-end">
+            <select
+              value={tech.status}
+              onChange={e => onStatusChange(tech.id, e.target.value as TechStatus)}
+              className={cn("appearance-none text-[11px] font-medium px-2 py-0.5 rounded-full cursor-pointer border-0 outline-none", conf.badge)}
+            >
+              {TECH_STATUSES.map(s => <option key={s}>{s}</option>)}
+            </select>
+            {canDelete && (
+              <button
+                onClick={() => {
+                  if (confirm(`Remove ${tech.name} from the roster?`)) onDelete(tech.id);
+                }}
+                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-400"
+                title="Remove technician"
+              >
+                <X size={11} />
+              </button>
+            )}
+          </div>
           {!hasPortalAccess && tech.email && (
             <button
               onClick={() => onInvite(tech)}
@@ -911,7 +927,19 @@ function CalendarView({ jobs, techs, weekStart, onPrev, onNext, onToday }: Calen
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+// Normalize raw DB status string → TechStatus union
+function mapTechStatus(s: string): TechStatus {
+  if (s === 'available') return 'Available';
+  if (s === 'on_site')   return 'On Site';
+  if (s === 'driving')   return 'Driving';
+  return 'Offline';
+}
+
 export default function DispatchPage() {
+  const { user } = useUser();
+  const role = (user?.publicMetadata?.role as string) ?? '';
+  const canDeleteTech = ['admin', 'supervisor', 'corporate'].includes(role);
+
   const [jobs,        setJobs]        = useState<Job[]>([]);
   const [techs,       setTechs]       = useState<Tech[]>([]);
   const [loading,     setLoading]     = useState(true);
@@ -992,7 +1020,21 @@ export default function DispatchPage() {
         body: JSON.stringify(newTechForm),
       });
       if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? 'Failed'); }
-      const { technician } = await res.json();
+      const { technician: raw } = await res.json();
+      // Normalize raw Supabase row → Tech interface (status is snake_case from DB)
+      const technician: Tech = {
+        id:                   raw.id,
+        name:                 raw.name,
+        initials:             raw.initials,
+        role:                 raw.role,
+        status:               mapTechStatus(raw.status),
+        currentJobId:         raw.current_job_id ?? null,
+        phone:                raw.phone ?? undefined,
+        email:                raw.email ?? undefined,
+        employment_type:      raw.employment_type ?? 'employee',
+        can_access_portal:    raw.can_access_portal ?? false,
+        portal_invite_sent_at: raw.portal_invite_sent_at ?? null,
+      };
       setTechs(prev => [...prev, technician]);
       setShowAddTech(false);
       setNewTechForm({ name: '', role: 'Tech', phone: '', email: '', employment_type: 'employee' });
@@ -1000,6 +1042,20 @@ export default function DispatchPage() {
       setAddTechError(err instanceof Error ? err.message : 'Failed');
     } finally {
       setAddTechSaving(false);
+    }
+  };
+
+  const handleDeleteTech = async (id: string) => {
+    try {
+      const res = await fetch(`/api/dispatch/technicians/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        alert(e.error ?? 'Failed to remove technician');
+        return;
+      }
+      setTechs(prev => prev.filter(t => t.id !== id));
+    } catch {
+      alert('Failed to remove technician');
     }
   };
 
@@ -1332,6 +1388,8 @@ export default function DispatchPage() {
                     jobs={jobs}
                     onStatusChange={handleTechStatusChange}
                     onInvite={tech => { setInvitingTech(tech); setInviteMsg(null); }}
+                    canDelete={canDeleteTech}
+                    onDelete={handleDeleteTech}
                   />
                 ))
               )}
