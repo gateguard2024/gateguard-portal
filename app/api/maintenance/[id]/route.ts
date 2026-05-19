@@ -20,10 +20,12 @@ const STATUS_EVENT: Record<string, WOEvent | null> = {
 
 // GET /api/maintenance/[id] — full detail with sub-data
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+  // Fetch the core work order WITHOUT a sites join — this guarantees the WO
+  // detail page always loads even when site_id is null or site columns are
+  // not yet present in the DB. Site data is fetched separately below.
   const [woRes, checklistRes, commentsRes, partsRes, subWoRes] = await Promise.all([
-    // Join to sites to pull address + access_notes for the tech
     supabase.from('work_orders')
-      .select('*, site:sites(id, name, address, city, state, zip, access_notes, pm_name, pm_email, pm_phone, primary_contact_name, primary_contact_email, primary_contact_phone)')
+      .select('*')
       .eq('id', params.id)
       .single(),
     supabase.from('wo_checklist_items').select('*').eq('work_order_id', params.id).order('sort_order'),
@@ -36,27 +38,49 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  // Flatten site fields onto work_order for easy frontend consumption
   const wo = woRes.data as Record<string, unknown>
-  const site = wo.site as Record<string, unknown> | null
-  const work_order = {
-    ...wo,
-    // Expose site address fields at top level so frontend doesn't need deep access
-    site_address:      site?.address      ?? null,
-    site_city:         site?.city         ?? null,
-    site_state:        site?.state        ?? null,
-    site_zip:          site?.zip          ?? null,
-    site_access_notes: site?.access_notes ?? null,
-    site_pm_name:      site?.pm_name      ?? null,
-    site_pm_email:     site?.pm_email     ?? null,
-    site_pm_phone:     site?.pm_phone     ?? null,
-    site_contact_name:  site?.primary_contact_name  ?? null,
-    site_contact_email: site?.primary_contact_email ?? null,
-    site_contact_phone: site?.primary_contact_phone ?? null,
+
+  // Default site fields — all null if no site is linked or the lookup fails
+  let siteFields: Record<string, unknown> = {
+    site_address: null, site_city: null, site_state: null, site_zip: null,
+    site_access_notes: null, site_pm_name: null, site_pm_email: null,
+    site_pm_phone: null, site_contact_name: null, site_contact_email: null,
+    site_contact_phone: null,
+  }
+
+  // Try to enrich with site data — failure is non-fatal
+  const siteId = wo.site_id as string | null
+  if (siteId) {
+    try {
+      const { data: site } = await supabase
+        .from('sites')
+        .select('address, city, state, zip, access_notes, pm_name, pm_email, pm_phone, primary_contact_name, primary_contact_email, primary_contact_phone')
+        .eq('id', siteId)
+        .single()
+
+      if (site) {
+        const s = site as Record<string, unknown>
+        siteFields = {
+          site_address:       s.address               ?? null,
+          site_city:          s.city                  ?? null,
+          site_state:         s.state                 ?? null,
+          site_zip:           s.zip                   ?? null,
+          site_access_notes:  s.access_notes          ?? null,
+          site_pm_name:       s.pm_name               ?? null,
+          site_pm_email:      s.pm_email              ?? null,
+          site_pm_phone:      s.pm_phone              ?? null,
+          site_contact_name:  s.primary_contact_name  ?? null,
+          site_contact_email: s.primary_contact_email ?? null,
+          site_contact_phone: s.primary_contact_phone ?? null,
+        }
+      }
+    } catch (_) {
+      // Site lookup failed — non-fatal, work order still loads without site data
+    }
   }
 
   return NextResponse.json({
-    work_order,
+    work_order:      { ...wo, ...siteFields },
     checklist:       checklistRes.data ?? [],
     comments:        commentsRes.data  ?? [],
     parts_used:      partsRes.data     ?? [],
@@ -68,10 +92,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json()
 
-  // Fetch current WO so we can detect status changes
+  // Fetch current WO so we can detect status changes (no join — avoids FK errors)
   const { data: current } = await supabase
     .from('work_orders')
-    .select('*, sites(primary_contact_email, pm_email, name)')
+    .select('*')
     .eq('id', params.id)
     .single()
 
@@ -115,10 +139,22 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const sendNotifications = body.send_notifications !== false   // default: true
   const statusChanged     = body.status && current && body.status !== current.status
   const emailEvent        = statusChanged ? STATUS_EVENT[body.status] : null
-  const site              = current?.sites as { primary_contact_email?: string; pm_email?: string; name?: string } | null
-
-  // Prefer PM email, fall back to primary contact email
-  const recipientEmail = site?.pm_email ?? site?.primary_contact_email ?? null
+  // Try to get PM email from the linked site for email notifications
+  let recipientEmail: string | null = null
+  const currentSiteId = (current as Record<string, unknown> | null)?.site_id as string | null
+  if (currentSiteId) {
+    try {
+      const { data: siteRow } = await supabase
+        .from('sites')
+        .select('pm_email, primary_contact_email')
+        .eq('id', currentSiteId)
+        .single()
+      if (siteRow) {
+        const sr = siteRow as { pm_email?: string; primary_contact_email?: string }
+        recipientEmail = sr.pm_email ?? sr.primary_contact_email ?? null
+      }
+    } catch (_) { /* non-fatal */ }
+  }
 
   if (sendNotifications && emailEvent && recipientEmail) {
     // Fire and forget — don't block response
