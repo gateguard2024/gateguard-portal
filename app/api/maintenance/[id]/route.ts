@@ -21,7 +21,11 @@ const STATUS_EVENT: Record<string, WOEvent | null> = {
 // GET /api/maintenance/[id] — full detail with sub-data
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const [woRes, checklistRes, commentsRes, partsRes, subWoRes] = await Promise.all([
-    supabase.from('work_orders').select('*').eq('id', params.id).single(),
+    // Join to sites to pull address + access_notes for the tech
+    supabase.from('work_orders')
+      .select('*, site:sites(id, name, address, city, state, zip, access_notes, pm_name, pm_email, pm_phone, primary_contact_name, primary_contact_email, primary_contact_phone)')
+      .eq('id', params.id)
+      .single(),
     supabase.from('wo_checklist_items').select('*').eq('work_order_id', params.id).order('sort_order'),
     supabase.from('wo_comments').select('*').eq('work_order_id', params.id).order('created_at'),
     supabase.from('wo_parts_used').select('*').eq('work_order_id', params.id).order('created_at'),
@@ -32,8 +36,27 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
+  // Flatten site fields onto work_order for easy frontend consumption
+  const wo = woRes.data as Record<string, unknown>
+  const site = wo.site as Record<string, unknown> | null
+  const work_order = {
+    ...wo,
+    // Expose site address fields at top level so frontend doesn't need deep access
+    site_address:      site?.address      ?? null,
+    site_city:         site?.city         ?? null,
+    site_state:        site?.state        ?? null,
+    site_zip:          site?.zip          ?? null,
+    site_access_notes: site?.access_notes ?? null,
+    site_pm_name:      site?.pm_name      ?? null,
+    site_pm_email:     site?.pm_email     ?? null,
+    site_pm_phone:     site?.pm_phone     ?? null,
+    site_contact_name:  site?.primary_contact_name  ?? null,
+    site_contact_email: site?.primary_contact_email ?? null,
+    site_contact_phone: site?.primary_contact_phone ?? null,
+  }
+
   return NextResponse.json({
-    work_order:      woRes.data,
+    work_order,
     checklist:       checklistRes.data ?? [],
     comments:        commentsRes.data  ?? [],
     parts_used:      partsRes.data     ?? [],

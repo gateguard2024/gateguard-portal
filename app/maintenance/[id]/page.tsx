@@ -9,7 +9,7 @@ import {
   RefreshCw, Send, Building2, Hash, MapPin, Check, FileText, Search,
 } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowLeft, Edit2, Timer, Tag, ClipboardList } = require('lucide-react') as any
+const { ArrowLeft, Edit2, Timer, Tag, ClipboardList, PhoneCall, PhoneOutgoing, Navigation } = require('lucide-react') as any
 import { TopBar } from '@/components/layout/TopBar'
 import { QuickActions } from '@/components/shared/QuickActions'
 import { cn } from '@/lib/utils'
@@ -38,8 +38,36 @@ interface WorkOrder {
   completed_at?: string
   notes?: string
   parent_wo_id?: string
+  site_id?: string | null
+  // Flattened site fields (joined from sites table)
+  site_address?: string | null
+  site_city?: string | null
+  site_state?: string | null
+  site_zip?: string | null
+  site_access_notes?: string | null
+  site_pm_name?: string | null
+  site_pm_email?: string | null
+  site_pm_phone?: string | null
+  site_contact_name?: string | null
+  site_contact_email?: string | null
+  site_contact_phone?: string | null
   created_at: string
   updated_at: string
+}
+
+interface CallLog {
+  id: string
+  work_order_id: string
+  direction: 'inbound' | 'outbound'
+  contact_name?: string | null
+  phone?: string | null
+  duration_mins?: number | null
+  notes?: string | null
+  ai_summary?: string | null
+  outcome?: 'reached' | 'no_answer' | 'left_voicemail' | 'wrong_number' | 'callback_requested' | null
+  made_by?: string | null
+  called_at: string
+  created_at: string
 }
 
 interface ChecklistItem {
@@ -424,7 +452,16 @@ export default function WorkOrderDetailPage() {
   const [selectedInvItem, setSelectedInvItem] = useState<InventorySearchResult | null>(null)
 
   // Active tab
-  const [tab, setTab] = useState<'details' | 'comments' | 'parts' | 'field_tickets' | 'time' | 'crew' | 'schedule'>('details')
+  const [tab, setTab] = useState<'details' | 'comments' | 'parts' | 'field_tickets' | 'time' | 'crew' | 'schedule' | 'calls'>('details')
+
+  // Template email slide-over
+  const [emailSlideOpen, setEmailSlideOpen] = useState(false)
+  const [emailTemplate, setEmailTemplate] = useState<string | null>(null)
+  const [emailSubject, setEmailSubject]   = useState('')
+  const [emailBody, setEmailBody]         = useState('')
+  const [emailTo, setEmailTo]             = useState('')
+  const [emailSending, setEmailSending]   = useState(false)
+  const [emailSent, setEmailSent]         = useState(false)
 
   // All techs (for crew picker)
   const [allTechs, setAllTechs] = useState<{ id: string; name: string; initials: string; role: string }[]>([])
@@ -720,6 +757,85 @@ export default function WorkOrderDetailPage() {
     }
   }
 
+  // ── Template Email ───────────────────────────────────────────────
+
+  const EMAIL_TEMPLATES = [
+    {
+      id:      'missed',
+      label:   '📋 Sorry We Missed You',
+      subject: (wo: WorkOrder) => `We stopped by — ${wo.customer_name}`,
+      body:    (wo: WorkOrder) => `Hi,\n\nWe came by today for your scheduled service call (${wo.wo_number}) but were unable to complete access to the site.\n\nPlease contact us at your earliest convenience to reschedule. We want to make sure your access control system is operating at its best.\n\nThank you,\nGateGuard Service Team`,
+    },
+    {
+      id:      'complete',
+      label:   '✅ Visit Complete — Thank You',
+      subject: (wo: WorkOrder) => `Service Complete — ${wo.customer_name} — ${wo.wo_number}`,
+      body:    (wo: WorkOrder) => `Hi,\n\nIt was a pleasure visiting your property today. Your service call (${wo.wo_number}) has been completed.\n\nIf you have any questions about the work performed or notice any issues, please don't hesitate to reach out. We're here to help.\n\nThank you for choosing GateGuard,\nGateGuard Service Team`,
+    },
+    {
+      id:      'reminder',
+      label:   '📅 Appointment Reminder',
+      subject: (wo: WorkOrder) => `Upcoming Service — ${wo.customer_name} — ${fmtDate(wo.scheduled_date)}`,
+      body:    (wo: WorkOrder) => `Hi,\n\nThis is a friendly reminder that your GateGuard service appointment (${wo.wo_number}) is scheduled for ${fmtDate(wo.scheduled_date)}.\n\nPlease ensure site access is available for our technician. If you need to reschedule, please contact us as soon as possible.\n\nThank you,\nGateGuard Service Team`,
+    },
+    {
+      id:      'followup',
+      label:   '🔧 Follow-Up Required',
+      subject: (wo: WorkOrder) => `Follow-Up Needed — ${wo.customer_name} — ${wo.wo_number}`,
+      body:    (wo: WorkOrder) => `Hi,\n\nFollowing our recent service visit (${wo.wo_number}), we've identified some additional items that require attention.\n\nOur team will be in touch shortly to discuss next steps. If you have any immediate concerns, please don't hesitate to call us directly.\n\nThank you,\nGateGuard Service Team`,
+    },
+    {
+      id:      'parts_eta',
+      label:   '📦 Parts on Order',
+      subject: (wo: WorkOrder) => `Parts Ordered — ${wo.customer_name} — ${wo.wo_number}`,
+      body:    (wo: WorkOrder) => `Hi,\n\nThank you for your patience. Following our service call (${wo.wo_number}), we've ordered the necessary parts to complete your repair.\n\nWe'll contact you as soon as the parts arrive to schedule the completion of your work order.\n\nThank you,\nGateGuard Service Team`,
+    },
+    {
+      id:      'custom',
+      label:   '✏️ Custom Email',
+      subject: () => '',
+      body:    () => '',
+    },
+  ]
+
+  const handleSelectTemplate = (templateId: string) => {
+    if (!wo) return
+    const tmpl = EMAIL_TEMPLATES.find(t => t.id === templateId)
+    if (!tmpl) return
+    setEmailTemplate(templateId)
+    setEmailSubject(tmpl.subject(wo))
+    setEmailBody(tmpl.body(wo))
+    // Pre-fill to address from PM or site contact
+    setEmailTo(wo.site_pm_email ?? wo.site_contact_email ?? '')
+  }
+
+  const handleSendEmail = async () => {
+    if (!emailTo.trim() || !emailSubject.trim() || !emailBody.trim() || !wo) return
+    setEmailSending(true)
+    try {
+      const res = await fetch('/api/crm/email/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to_email:       emailTo.trim(),
+          subject:        emailSubject.trim(),
+          body:           emailBody.trim(),
+          sender_name:    'GateGuard Service Team',
+        }),
+      })
+      if (res.ok) {
+        setEmailSent(true)
+        setTimeout(() => {
+          setEmailSlideOpen(false)
+          setEmailSent(false)
+          setEmailTemplate(null)
+          setEmailSubject('')
+          setEmailBody('')
+          setEmailTo('')
+        }, 1500)
+      }
+    } finally { setEmailSending(false) }
+  }
+
   // ── Derived state ────────────────────────────────────────────────
 
   if (loading) {
@@ -779,6 +895,104 @@ export default function WorkOrderDetailPage() {
       />
 
       <EditSlideOver open={editOpen} wo={wo} onClose={() => setEditOpen(false)} onSaved={w => { setWo(w); setEditOpen(false) }} />
+
+      {/* ── Template Email Slide-Over ── */}
+      {emailSlideOpen && (
+        <>
+          <div className="fixed inset-0 bg-black/20 z-40" onClick={() => setEmailSlideOpen(false)} />
+          <div className="fixed inset-y-0 right-0 w-[520px] bg-card border-l border-border z-50 flex flex-col shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <div>
+                <h2 className="text-sm font-bold">Send Email</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">{wo.wo_number} · {wo.customer_name}</p>
+              </div>
+              <button onClick={() => { setEmailSlideOpen(false); setEmailTemplate(null) }} className="p-1.5 rounded-lg hover:bg-accent">
+                <X size={14} className="text-muted-foreground" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {/* Template picker */}
+              {!emailTemplate ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Choose a Template</p>
+                  {EMAIL_TEMPLATES.map(t => (
+                    <button
+                      key={t.id}
+                      onClick={() => handleSelectTemplate(t.id)}
+                      className="w-full text-left px-4 py-3 rounded-xl border border-border hover:border-brand-500/50 hover:bg-accent/30 transition-all text-sm font-medium text-foreground"
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  <button onClick={() => setEmailTemplate(null)} className="text-xs text-brand-400 hover:text-brand-500 flex items-center gap-1">
+                    <ArrowLeft size={11} /> Back to templates
+                  </button>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">To *</label>
+                    <input
+                      value={emailTo}
+                      onChange={e => setEmailTo(e.target.value)}
+                      placeholder="recipient@example.com"
+                      className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                    />
+                    {(wo.site_pm_email || wo.site_contact_email) && (
+                      <div className="flex gap-2 mt-1.5 flex-wrap">
+                        {wo.site_pm_email && (
+                          <button onClick={() => setEmailTo(wo.site_pm_email!)} className="text-xs text-brand-400 hover:underline">
+                            Use PM: {wo.site_pm_email}
+                          </button>
+                        )}
+                        {wo.site_contact_email && wo.site_contact_email !== wo.site_pm_email && (
+                          <button onClick={() => setEmailTo(wo.site_contact_email!)} className="text-xs text-brand-400 hover:underline">
+                            Use contact: {wo.site_contact_email}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Subject *</label>
+                    <input
+                      value={emailSubject}
+                      onChange={e => setEmailSubject(e.target.value)}
+                      className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Message *</label>
+                    <textarea
+                      value={emailBody}
+                      onChange={e => setEmailBody(e.target.value)}
+                      rows={10}
+                      className="w-full text-sm px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30 resize-none"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            {emailTemplate && (
+              <div className="border-t border-border p-4 flex gap-3">
+                <button onClick={() => setEmailSlideOpen(false)} className="flex-1 py-2.5 rounded-xl border border-border text-sm text-muted-foreground hover:bg-accent">Cancel</button>
+                <button
+                  onClick={handleSendEmail}
+                  disabled={emailSending || !emailTo.trim() || !emailSubject.trim() || emailSent}
+                  className="flex-1 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold disabled:opacity-50 shadow-lg shadow-brand-500/20"
+                >
+                  {emailSent ? '✓ Sent!' : emailSending ? 'Sending…' : 'Send Email'}
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       <div className="flex-1 p-6">
         <div className="max-w-6xl mx-auto">
@@ -862,6 +1076,7 @@ export default function WorkOrderDetailPage() {
                   { key: 'crew',          label: 'Crew',                                  icon: Users         },
                   { key: 'schedule',      label: 'Schedule',                              icon: Calendar      },
                   { key: 'field_tickets', label: `Field Tickets (${fieldTickets.length})`, icon: ClipboardList },
+                  { key: 'calls',         label: 'Calls',                                 icon: PhoneCall     },
                   { key: 'time',          label: `Time (${totalMins > 0 ? Math.floor(totalMins / 60) + 'h ' + (totalMins % 60) + 'm' : timeEntries.length})`, icon: Clock },
                   { key: 'comments',      label: `Comments (${comments.length})`,          icon: MessageSquare },
                   { key: 'parts',         label: `Parts (${partsUsed.length})`,            icon: Package       },
@@ -1513,6 +1728,11 @@ export default function WorkOrderDetailPage() {
               {tab === 'schedule' && wo && (
                 <ScheduleTab workOrderId={wo.id} />
               )}
+
+              {/* ── Calls tab ── */}
+              {tab === 'calls' && wo && (
+                <CallsTab workOrderId={wo.id} workOrder={wo} />
+              )}
             </div>
 
             {/* ── Right sidebar (1/3) ── */}
@@ -1579,6 +1799,132 @@ export default function WorkOrderDetailPage() {
                 </div>
               </div>
 
+              {/* Site Address + Map card */}
+              {(wo.site_address || wo.location) && (() => {
+                const addr = [wo.site_address, wo.site_city, wo.site_state, wo.site_zip].filter(Boolean).join(', ')
+                const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr || wo.location || '')}`
+                return (
+                  <div className="bg-card border border-border rounded-xl overflow-hidden">
+                    <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+                      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                        <Navigation size={11} /> Site Location
+                      </h3>
+                      <a
+                        href={mapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] text-brand-400 hover:text-brand-500 font-semibold flex items-center gap-1"
+                      >
+                        Directions →
+                      </a>
+                    </div>
+                    {/* Google Maps static embed (no API key needed for iframe embed) */}
+                    <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="block">
+                      <div className="w-full h-32 bg-muted relative overflow-hidden">
+                        <iframe
+                          title="site-map"
+                          width="100%"
+                          height="100%"
+                          style={{ border: 0 }}
+                          loading="lazy"
+                          referrerPolicy="no-referrer-when-downgrade"
+                          src={`https://maps.google.com/maps?q=${encodeURIComponent(addr || wo.location || '')}&output=embed&z=15`}
+                        />
+                        {/* Overlay to make entire area clickable as a link */}
+                        <div className="absolute inset-0 cursor-pointer" />
+                      </div>
+                    </a>
+                    <div className="px-4 py-3">
+                      <p className="text-sm font-medium text-foreground leading-snug">{wo.site_address || wo.location}</p>
+                      {(wo.site_city || wo.site_state) && (
+                        <p className="text-xs text-muted-foreground mt-0.5">{[wo.site_city, wo.site_state, wo.site_zip].filter(Boolean).join(', ')}</p>
+                      )}
+                      <div className="flex gap-2 mt-3">
+                        <a
+                          href={mapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-brand-500/10 text-brand-400 hover:bg-brand-500/20 text-xs font-semibold rounded-lg transition-colors"
+                        >
+                          <Navigation size={11} /> Get Directions
+                        </a>
+                        <button
+                          onClick={() => {
+                            if (navigator.clipboard) navigator.clipboard.writeText(addr)
+                          }}
+                          className="px-3 py-2 bg-muted hover:bg-accent text-muted-foreground text-xs rounded-lg transition-colors"
+                          title="Copy address"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
+
+              {/* Site Access Notes card — shown prominently for field tech */}
+              {wo.site_access_notes && (
+                <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-amber-500/20 flex items-center gap-1.5">
+                    <AlertTriangle size={11} className="text-amber-400" />
+                    <h3 className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Access Notes / Gate Codes</h3>
+                  </div>
+                  <div className="px-4 py-3">
+                    <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{wo.site_access_notes}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Site Contacts card */}
+              {(wo.site_pm_name || wo.site_contact_name) && (
+                <div className="bg-card border border-border rounded-xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Site Contacts</h3>
+                  </div>
+                  <div className="p-4 space-y-3">
+                    {wo.site_pm_name && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Property Manager</p>
+                        <p className="text-sm font-medium text-foreground">{wo.site_pm_name}</p>
+                        {wo.site_pm_phone && (
+                          <a href={`tel:${wo.site_pm_phone}`} className="text-xs text-brand-400 hover:underline flex items-center gap-1 mt-0.5">
+                            <PhoneCall size={10} /> {wo.site_pm_phone}
+                          </a>
+                        )}
+                        {wo.site_pm_email && (
+                          <button
+                            onClick={() => { setEmailTo(wo.site_pm_email!); setEmailSlideOpen(true) }}
+                            className="text-xs text-brand-400 hover:underline flex items-center gap-1 mt-0.5"
+                          >
+                            <Send size={10} /> {wo.site_pm_email}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {wo.site_contact_name && wo.site_contact_name !== wo.site_pm_name && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Primary Contact</p>
+                        <p className="text-sm font-medium text-foreground">{wo.site_contact_name}</p>
+                        {wo.site_contact_phone && (
+                          <a href={`tel:${wo.site_contact_phone}`} className="text-xs text-brand-400 hover:underline flex items-center gap-1 mt-0.5">
+                            <PhoneCall size={10} /> {wo.site_contact_phone}
+                          </a>
+                        )}
+                        {wo.site_contact_email && (
+                          <button
+                            onClick={() => { setEmailTo(wo.site_contact_email!); setEmailSlideOpen(true) }}
+                            className="text-xs text-brand-400 hover:underline flex items-center gap-1 mt-0.5"
+                          >
+                            <Send size={10} /> {wo.site_contact_email}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Quick actions */}
               <div className="bg-card border border-border rounded-xl p-4 space-y-2">
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Quick Actions</h3>
@@ -1610,6 +1956,14 @@ export default function WorkOrderDetailPage() {
                 <button onClick={() => { setTab('comments'); commentInputRef.current?.focus() }}
                   className="w-full py-2 px-3 rounded-lg bg-muted text-muted-foreground text-sm font-medium hover:bg-accent transition-colors text-left flex items-center gap-2">
                   <MessageSquare size={13} /> Add Comment
+                </button>
+                <button onClick={() => setEmailSlideOpen(true)}
+                  className="w-full py-2 px-3 rounded-lg bg-muted text-muted-foreground text-sm font-medium hover:bg-accent transition-colors text-left flex items-center gap-2">
+                  <Send size={13} /> Send Email
+                </button>
+                <button onClick={() => setTab('calls')}
+                  className="w-full py-2 px-3 rounded-lg bg-muted text-muted-foreground text-sm font-medium hover:bg-accent transition-colors text-left flex items-center gap-2">
+                  <PhoneCall size={13} /> Log a Call
                 </button>
                 <button onClick={() => setEditOpen(true)}
                   className="w-full py-2 px-3 rounded-lg bg-muted text-muted-foreground text-sm font-medium hover:bg-accent transition-colors text-left flex items-center gap-2">
@@ -2554,6 +2908,341 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// ── CallsTab ──────────────────────────────────────────────────────────────────
+// Log calls, make click-to-call, store call history on the record.
+
+interface CallsTabProps {
+  workOrderId: string
+  workOrder: WorkOrder
+}
+
+function CallsTab({ workOrderId, workOrder }: CallsTabProps) {
+  const [calls, setCalls]         = useState<CallLog[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [showLogForm, setShowLogForm] = useState(false)
+  const [saving, setSaving]       = useState(false)
+  const [deleting, setDeleting]   = useState<string | null>(null)
+
+  const [form, setForm] = useState({
+    direction:    'outbound' as 'inbound' | 'outbound',
+    contact_name: '',
+    phone:        '',
+    duration_mins: '',
+    outcome:      '' as '' | 'reached' | 'no_answer' | 'left_voicemail' | 'wrong_number' | 'callback_requested',
+    notes:        '',
+    made_by:      '',
+    called_at:    new Date().toISOString().slice(0, 16), // datetime-local format
+  })
+
+  // Pre-fill contact from site contacts if available
+  useEffect(() => {
+    if (workOrder.site_pm_name) {
+      setForm(f => ({
+        ...f,
+        contact_name: workOrder.site_pm_name ?? '',
+        phone: workOrder.site_pm_phone ?? '',
+      }))
+    }
+  }, [workOrder])
+
+  useEffect(() => {
+    fetch(`/api/maintenance/${workOrderId}/calls`)
+      .then(r => r.json())
+      .then(j => { setCalls(j.calls ?? []); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [workOrderId])
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/maintenance/${workOrderId}/calls`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...form,
+          duration_mins: form.duration_mins ? parseInt(form.duration_mins) : null,
+          outcome:       form.outcome || null,
+          called_at:     form.called_at ? new Date(form.called_at).toISOString() : new Date().toISOString(),
+        }),
+      })
+      const json = await res.json()
+      if (res.ok) {
+        setCalls(prev => [json.call, ...prev])
+        setShowLogForm(false)
+        setForm({
+          direction:    'outbound',
+          contact_name: workOrder.site_pm_name ?? '',
+          phone:        workOrder.site_pm_phone ?? '',
+          duration_mins: '',
+          outcome:      '',
+          notes:        '',
+          made_by:      '',
+          called_at:    new Date().toISOString().slice(0, 16),
+        })
+      }
+    } finally { setSaving(false) }
+  }
+
+  const handleDelete = async (callId: string) => {
+    setDeleting(callId)
+    try {
+      const res = await fetch(`/api/maintenance/${workOrderId}/calls`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ call_id: callId }),
+      })
+      if (res.ok) setCalls(prev => prev.filter(c => c.id !== callId))
+    } finally { setDeleting(null) }
+  }
+
+  const OUTCOME_CFG: Record<string, { label: string; color: string }> = {
+    reached:            { label: 'Reached',           color: 'bg-emerald-500/10 text-emerald-400' },
+    no_answer:          { label: 'No Answer',          color: 'bg-slate-500/10 text-slate-400'     },
+    left_voicemail:     { label: 'Left Voicemail',     color: 'bg-blue-500/10 text-blue-400'       },
+    wrong_number:       { label: 'Wrong Number',       color: 'bg-red-500/10 text-red-400'         },
+    callback_requested: { label: 'Callback Requested', color: 'bg-amber-500/10 text-amber-400'     },
+  }
+
+  // Quick-dial contacts from the work order's site data
+  const quickContacts = [
+    workOrder.site_pm_name && workOrder.site_pm_phone
+      ? { name: workOrder.site_pm_name, phone: workOrder.site_pm_phone, label: 'PM' }
+      : null,
+    workOrder.site_contact_name && workOrder.site_contact_phone && workOrder.site_contact_phone !== workOrder.site_pm_phone
+      ? { name: workOrder.site_contact_name, phone: workOrder.site_contact_phone, label: 'Contact' }
+      : null,
+  ].filter(Boolean) as { name: string; phone: string; label: string }[]
+
+  const inp = 'w-full text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30'
+  const lbl = 'block text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1'
+
+  if (loading) return <div className="p-6 text-sm text-muted-foreground">Loading calls…</div>
+
+  return (
+    <div className="space-y-4">
+
+      {/* Quick Dial card */}
+      {quickContacts.length > 0 && (
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-border">
+            <h3 className="text-sm font-semibold flex items-center gap-2">
+              <PhoneOutgoing size={14} className="text-emerald-400" />
+              Quick Dial
+            </h3>
+          </div>
+          <div className="p-4 flex flex-wrap gap-3">
+            {quickContacts.map(c => (
+              <div key={c.phone} className="flex items-center gap-3 bg-background border border-border rounded-xl px-4 py-3 flex-1 min-w-0">
+                <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0">
+                  <PhoneCall size={14} className="text-emerald-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-muted-foreground">{c.label}</p>
+                  <p className="text-sm font-semibold text-foreground truncate">{c.name}</p>
+                  <p className="text-xs text-brand-400">{c.phone}</p>
+                </div>
+                <a
+                  href={`tel:${c.phone}`}
+                  onClick={() => {
+                    // Pre-fill log form on click-to-call
+                    setForm(f => ({ ...f, contact_name: c.name, phone: c.phone, direction: 'outbound' }))
+                    setTimeout(() => setShowLogForm(true), 500)
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 text-xs font-semibold rounded-lg transition-colors"
+                >
+                  <PhoneCall size={12} /> Call
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Call log header */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
+          <h3 className="text-sm font-semibold flex items-center gap-2">
+            <PhoneCall size={14} className="text-brand-400" />
+            Call Log
+            {calls.length > 0 && <span className="text-xs font-normal text-muted-foreground">({calls.length})</span>}
+          </h3>
+          <button
+            onClick={() => setShowLogForm(v => !v)}
+            className="flex items-center gap-1.5 text-xs bg-brand-500 text-white px-3 py-1.5 rounded-lg hover:bg-brand-600 font-medium transition-colors"
+          >
+            <Plus size={12} /> Log a Call
+          </button>
+        </div>
+
+        {/* Log a call form */}
+        {showLogForm && (
+          <div className="px-5 py-4 border-b border-border bg-background/40 space-y-4">
+            <p className="text-xs font-semibold text-foreground">Record a Call</p>
+
+            {/* Direction toggle */}
+            <div className="flex gap-2">
+              {(['outbound', 'inbound'] as const).map(d => (
+                <button
+                  key={d}
+                  onClick={() => setForm(f => ({ ...f, direction: d }))}
+                  className={cn(
+                    'flex-1 py-2 text-xs font-semibold rounded-lg border capitalize transition-colors flex items-center justify-center gap-1.5',
+                    form.direction === d
+                      ? 'bg-brand-500 text-white border-brand-500'
+                      : 'border-border text-muted-foreground hover:border-brand-400'
+                  )}
+                >
+                  {d === 'outbound' ? <PhoneOutgoing size={11} /> : <PhoneCall size={11} />}
+                  {d}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={lbl}>Contact Name</label>
+                <input value={form.contact_name} onChange={e => setForm(f => ({ ...f, contact_name: e.target.value }))} placeholder="Who did you call?" className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Phone Number</label>
+                <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="(555) 000-0000" className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Duration (mins)</label>
+                <input type="number" min="0" value={form.duration_mins} onChange={e => setForm(f => ({ ...f, duration_mins: e.target.value }))} placeholder="e.g. 5" className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Made By (Tech Name)</label>
+                <input value={form.made_by} onChange={e => setForm(f => ({ ...f, made_by: e.target.value }))} placeholder="Your name" className={inp} />
+              </div>
+            </div>
+
+            {/* Outcome picker */}
+            <div>
+              <label className={lbl}>Outcome</label>
+              <div className="flex flex-wrap gap-2">
+                {(['reached', 'no_answer', 'left_voicemail', 'callback_requested', 'wrong_number'] as const).map(o => (
+                  <button
+                    key={o}
+                    onClick={() => setForm(f => ({ ...f, outcome: f.outcome === o ? '' : o }))}
+                    className={cn(
+                      'px-2.5 py-1 text-[11px] font-semibold rounded-full border transition-colors',
+                      form.outcome === o
+                        ? OUTCOME_CFG[o].color + ' border-transparent'
+                        : 'border-border text-muted-foreground hover:border-brand-400'
+                    )}
+                  >
+                    {OUTCOME_CFG[o].label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className={lbl}>Notes</label>
+              <textarea
+                value={form.notes}
+                onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                rows={3}
+                placeholder="What was discussed? Any follow-up needed?"
+                className="w-full text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30 resize-none"
+              />
+            </div>
+
+            <div>
+              <label className={lbl}>Date & Time</label>
+              <input type="datetime-local" value={form.called_at} onChange={e => setForm(f => ({ ...f, called_at: e.target.value }))} className={inp} />
+            </div>
+
+            <div className="flex gap-2">
+              <button onClick={() => setShowLogForm(false)} className="flex-1 py-2 border border-border rounded-lg text-sm text-muted-foreground hover:bg-accent transition-colors">Cancel</button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold rounded-lg disabled:opacity-50 transition-colors"
+              >
+                {saving ? 'Saving…' : 'Save Call'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Call history */}
+        {calls.length === 0 && !showLogForm ? (
+          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+            <PhoneCall size={28} className="mb-2 opacity-20" />
+            <p className="text-sm">No calls logged yet</p>
+            <p className="text-xs mt-1 opacity-70">Click "Log a Call" to record a call on this work order</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border/50">
+            {calls.map(call => {
+              const outcomeInfo = call.outcome ? OUTCOME_CFG[call.outcome] : null
+              const fmtCallTime = (iso: string) =>
+                new Date(iso).toLocaleString('en-US', {
+                  month: 'short', day: 'numeric',
+                  hour: 'numeric', minute: '2-digit',
+                })
+              return (
+                <div key={call.id} className="px-5 py-4 group hover:bg-accent/20 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <div className={cn(
+                      'w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5',
+                      call.direction === 'outbound' ? 'bg-brand-500/10' : 'bg-emerald-500/10'
+                    )}>
+                      {call.direction === 'outbound'
+                        ? <PhoneOutgoing size={14} className="text-brand-400" />
+                        : <PhoneCall size={14} className="text-emerald-400" />
+                      }
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-foreground">{call.contact_name || 'Unknown contact'}</span>
+                        {call.phone && (
+                          <a href={`tel:${call.phone}`} className="text-xs text-brand-400 hover:underline">{call.phone}</a>
+                        )}
+                        {outcomeInfo && (
+                          <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', outcomeInfo.color)}>
+                            {outcomeInfo.label}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
+                        <span>{fmtCallTime(call.called_at)}</span>
+                        {call.duration_mins && <span>· {call.duration_mins}min</span>}
+                        {call.made_by && <span>· by {call.made_by}</span>}
+                        <span className={cn('capitalize', call.direction === 'outbound' ? 'text-brand-400' : 'text-emerald-400')}>
+                          · {call.direction}
+                        </span>
+                      </div>
+                      {call.notes && (
+                        <p className="text-sm text-foreground mt-2 leading-relaxed whitespace-pre-wrap">{call.notes}</p>
+                      )}
+                      {call.ai_summary && (
+                        <div className="mt-2 px-3 py-2 bg-violet-500/5 border border-violet-500/20 rounded-lg">
+                          <p className="text-[10px] font-semibold text-violet-400 uppercase tracking-wider mb-1">AI Summary</p>
+                          <p className="text-xs text-foreground">{call.ai_summary}</p>
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleDelete(call.id)}
+                      disabled={deleting === call.id}
+                      className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-red-500/10 text-red-400 transition-all shrink-0"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
