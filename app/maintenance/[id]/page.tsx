@@ -448,7 +448,7 @@ export default function WorkOrderDetailPage() {
           setActiveEntry(j.activeEntry ?? null)
         }).catch(() => {}),
         fetch('/api/dispatch/technicians').then(r => r.json()).then(j => {
-          setAllTechs(j.techs ?? [])
+          setAllTechs(j.technicians ?? [])
         }).catch(() => {}),
       ])
     } finally {

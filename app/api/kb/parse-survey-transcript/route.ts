@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic                      from '@anthropic-ai/sdk'
+import { currentUser }                  from '@clerk/nextjs/server'
 
 export const maxDuration = 30
 export const dynamic     = 'force-dynamic'
@@ -20,8 +21,19 @@ function isTechAuthed(req: NextRequest): boolean {
   return !!(validCode && code && code === validCode)
 }
 
+async function isPortalAuthed(): Promise<boolean> {
+  try {
+    const user = await currentUser()
+    return !!user
+  } catch {
+    return false
+  }
+}
+
 export async function POST(req: NextRequest) {
-  if (!isTechAuthed(req)) {
+  const techOk   = isTechAuthed(req)
+  const portalOk = techOk ? false : await isPortalAuthed()
+  if (!techOk && !portalOk) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

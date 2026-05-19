@@ -33,7 +33,11 @@ export async function GET(
 ) {
   const { data, error } = await supabase
     .from('quote_line_items')
-    .select('id, sort_order, category, description, qty, unit_price, is_recurring, created_at')
+    .select(`
+      id, sort_order, category, description, qty, unit_price, is_recurring, created_at,
+      section_name, product_id, item_type, unit, is_optional, is_included,
+      package_tier, image_url, model_number, notes, sku
+    `)
     .eq('quote_id', params.id)
     .order('sort_order', { ascending: true })
 
@@ -76,13 +80,24 @@ export async function POST(
   const { data: item, error } = await supabase
     .from('quote_line_items')
     .insert({
-      quote_id:    params.id,
+      quote_id:     params.id,
       sort_order,
-      category:    body.category    ?? 'General',
-      description: body.description ?? '',
-      qty:         body.qty         ?? 1,
-      unit_price:  body.unit_price  ?? 0,
+      category:     body.category     ?? 'General',
+      description:  body.description  ?? '',
+      qty:          body.qty          ?? 1,
+      unit_price:   body.unit_price   ?? 0,
+      unit:         body.unit         ?? 'each',
       is_recurring: body.is_recurring ?? false,
+      section_name: body.section_name ?? 'Equipment',
+      product_id:   body.product_id   ?? null,
+      item_type:    body.item_type    ?? 'equipment',
+      is_optional:  body.is_optional  ?? false,
+      is_included:  body.is_included  ?? true,
+      package_tier: body.package_tier ?? null,
+      image_url:    body.image_url    ?? null,
+      model_number: body.model_number ?? null,
+      notes:        body.notes        ?? null,
+      sku:          body.sku          ?? null,
     })
     .select()
     .single()

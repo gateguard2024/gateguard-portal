@@ -530,6 +530,8 @@ function TechTool() {
   const [editingDevice,   setEditingDevice]   = useState<SurveyDevice | null>(null)
   const [surveyProposal,  setSurveyProposal]  = useState<SurveyProposal | null>(null)
   const [surveyLoading,   setSurveyLoading]   = useState(false)
+  const [savedSurveyId,   setSavedSurveyId]   = useState<string | null>(null)
+  const [savingToPortal,  setSavingToPortal]  = useState(false)
   const [activeCourse,    setActiveCourse]    = useState<string | null>(null)
   // Fields for survey_add form
   const [sdName,      setSdName]      = useState('')
@@ -1399,6 +1401,7 @@ function TechTool() {
       if (!surveyDevices.length) return
       setSurveyLoading(true)
       setSurveyProposal(null)
+      setSavedSurveyId(null)
       try {
         const res = await fetch('/api/kb/survey-proposal', {
           method: 'POST',
@@ -1409,6 +1412,27 @@ function TechTool() {
         if (data.proposal) setSurveyProposal(data.proposal)
       } catch { /* silent */ } finally {
         setSurveyLoading(false)
+      }
+    }
+
+    async function saveToPortal() {
+      if (!surveyDevices.length) return
+      setSavingToPortal(true)
+      try {
+        const res = await fetch('/api/surveys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-tech-code': techCode },
+          body: JSON.stringify({
+            property_name:    surveyPropName || 'Field Survey',
+            surveyor_type:    'sales',
+            survey_date:      new Date().toISOString().slice(0, 10),
+            devices:          surveyDevices,
+          }),
+        })
+        const data = await res.json()
+        if (data.survey?.id) setSavedSurveyId(data.survey.id)
+      } catch { /* silent */ } finally {
+        setSavingToPortal(false)
       }
     }
 
@@ -1711,6 +1735,22 @@ function TechTool() {
           >
             🎤 PASTE VOICE NOTES
           </button>
+          {surveyDevices.length > 0 && (
+            savedSurveyId ? (
+              <div style={{ padding: '10px 12px', borderRadius: 10, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', textAlign: 'center' }}>
+                <div style={{ fontFamily: MONO, fontSize: 9, color: '#22C55E', letterSpacing: '0.1em', marginBottom: 3 }}>✓ SAVED TO PORTAL</div>
+                <div style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted }}>Open Site Surveys in the portal to view and create a quote</div>
+              </div>
+            ) : (
+              <button
+                onClick={saveToPortal}
+                disabled={savingToPortal}
+                style={{ width: '100%', padding: '11px', borderRadius: 10, border: `1px solid rgba(107,126,255,0.4)`, background: savingToPortal ? C.bgInput : 'rgba(107,126,255,0.12)', fontFamily: MONO, fontSize: 10, color: savingToPortal ? C.textMuted : C.blue, letterSpacing: '0.1em', cursor: savingToPortal ? 'default' : 'pointer', fontWeight: 700 }}
+              >
+                {savingToPortal ? '⌛ SAVING…' : '☁ SAVE TO PORTAL'}
+              </button>
+            )
+          )}
         </div>
       </div>
     )

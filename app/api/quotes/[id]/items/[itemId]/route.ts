@@ -24,6 +24,56 @@ async function recalcTotals(quoteId: string) {
     .eq('id', quoteId)
 }
 
+// PATCH /api/quotes/[id]/items/[itemId] — update line item fields
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { id: string; itemId: string } }
+) {
+  const user  = await getCurrentUser()
+  const scope = await resolveOrgScope(user)
+  const body  = await req.json()
+
+  const { data: quote } = await supabase
+    .from('quotes')
+    .select('id, org_id')
+    .eq('id', params.id)
+    .single()
+
+  if (!quote) return NextResponse.json({ error: 'Quote not found' }, { status: 404 })
+  if (!scope.all && !scope.ids.includes(quote.org_id)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const allowedFields = [
+    'sort_order', 'category', 'description', 'qty', 'unit_price', 'unit',
+    'is_recurring', 'section_name', 'product_id', 'item_type',
+    'is_optional', 'is_included', 'package_tier',
+    'image_url', 'model_number', 'notes', 'sku',
+  ]
+
+  const updates: Record<string, unknown> = {}
+  for (const key of allowedFields) {
+    if (key in body) updates[key] = body[key]
+  }
+
+  const { data: item, error } = await supabase
+    .from('quote_line_items')
+    .update(updates)
+    .eq('id', params.itemId)
+    .eq('quote_id', params.id)
+    .select()
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Recalc totals if pricing fields changed
+  if ('qty' in body || 'unit_price' in body || 'is_recurring' in body) {
+    await recalcTotals(params.id)
+  }
+
+  return NextResponse.json({ item })
+}
+
 // DELETE /api/quotes/[id]/items/[itemId]
 export async function DELETE(
   _req: NextRequest,

@@ -132,9 +132,13 @@ GateGuard is going live. Two parallel Vercel deployments must exist from this po
 - When building features, always ask: "Is this safe to ship to live, or does it go to beta first?"
 - The SOC (`ggsoc.com`) has been live — treat it with the same care as the live portal.
 
-### What's on Live now (as of May 18, 2026)
-- `/tech` field tool v10 — used by real techs in the field
-- `/quotes/[id]/approve` — real clients approving real quotes
+### What's on Live now (as of May 19, 2026)
+- `/tech` field tool v10 — used by real techs in the field; survey screen now has **☁ SAVE TO PORTAL** button that POSTs to `/api/surveys` with `x-tech-code` auth
+- `/survey` — flagship site survey page: survey list + detail view, voice/Plaud capture, AI SOW + BOM generation via Claude Haiku, Create Quote from survey flow
+- `/quotes` — quote list (all statuses)
+- `/quotes/new` — **mode picker**: Line Item Builder (product catalog search, sections, optional items, package tiers, real API save → `/api/quotes`) + Survey Wizard (real API save)
+- `/quotes/[id]` — **full Quotient-style editor**: section grouping, optional item toggles, package filter bar, rich pricing sidebar with discount/tax/deposit, PATCH line items
+- `/quotes/[id]/approve` — **fully wired to real data** via `/api/quotes/[id]/public` (no-auth public endpoint): package tier selector, optional item checkboxes, approve/decline posts to Supabase
 - Show lead capture at `/show` (Atlanta show leads, 30+ captured)
 - Full CMMS (work order detail, checklist, comments, parts, request portal, email notifications)
 - CRM full wiring — leads list/detail, opportunities detail, kanban with drag-drop
@@ -169,9 +173,10 @@ GateGuard is going live. Two parallel Vercel deployments must exist from this po
 - [ ] EOS page (`/eos`) — persistence to Supabase (currently in-memory only)
 - [ ] PWA manifest for /tech (techs "Add to Home Screen")
 - [ ] Photo evidence on work orders
-- [ ] Site Survey → push to /quotes quote builder
 - [ ] LPR integration (Eagle Eye LPR → Brivo credential or gate relay)
 - [ ] Monthly client report auto-PDF
+- [ ] `/quotes/[id]/proposal` — customer-facing proposal view (styled read-only version of quote)
+- [ ] Site Survey photo capture per device (framework in place, needs UI hookup)
 
 ### Permission layer (built May 2026, pending commit)
 `lib/current-user.ts` exposes `canViewWOs`, `canViewSites`, `canViewCRM`, `canViewCommissions`, `canViewNetwork`, `canViewDispatch`, `canViewSensitive`, `canViewFinancials` booleans computed from `org_tier` + `role`. `lib/org-scope.ts` `resolveOrgScope()` routes each tier to the correct Supabase filter. `components/layout/Sidebar.tsx` gates nav items by `org_tier` so each tier only sees their relevant sections.
@@ -208,6 +213,25 @@ Run on beta first, verify `/training` + `/scorecard` pages, then prod.
 `supabase/migrations/022_opportunity_type.sql` adds to `opportunities` table:
 `documents_status` (jsonb checklist), `approved_at`, `approved_by` + indexes on `opp_type` and `approved_at`
 Run on beta first, verify opportunity stage checklists, then prod.
+
+### Migration 041 — surveys table
+`supabase/migrations/041_surveys.sql` creates the `surveys` table:
+- `id uuid PK`, `org_id uuid`, `survey_number text` (auto-generated), `property_name text`, `property_address text`
+- `site_id uuid`, `opportunity_id uuid`, `surveyor_name text`, `surveyor_type text` (sales|tech|pm)
+- `survey_date date`, `voice_transcript text`, `notes_raw text`, `devices jsonb[]`, `photos text[]`
+- `status text` (draft|complete|quoted), `ai_summary text`, `quote_id uuid`
+- `created_at`, `updated_at` timestamps; RLS enabled + service_role_all policy
+Run on beta Supabase first, verify `/survey` page + `/api/surveys`, then prod.
+
+### Migration 042 — quotes enrichment
+`supabase/migrations/042_quotes_enrich.sql` adds to `quotes` table:
+`quote_mode text` (line_item|wizard|package_mode), `client_name text`, `client_email text`, `client_phone text`,
+`property_address text`, `cover_message text`, `terms_text text`, `tax_rate numeric`, `discount_percent numeric`,
+`deposit_percent numeric`, `package_mode boolean`, `selected_package text`, `created_by_name text`, `expiry_date date`
+Adds to `quote_line_items`: `section_name text`, `item_type text` (product|labor|material|fee), `is_optional boolean`,
+`is_included boolean`, `package_tier text` (basic|standard|premium), `image_url text`, `model_number text`,
+`notes text`, `sku text`
+Run on beta first, verify `/quotes/new` + `/quotes/[id]` + `/quotes/[id]/approve`, then prod.
 
 ### ⚠️ Known Build Gotchas (Vercel)
 
@@ -517,7 +541,7 @@ Note: `/reps`, `/compliance`, `/scorecard`, `/map`, `/reports` are placeholder U
 ### /tech tool
 | File | Purpose |
 |------|---------|
-| `app/tech/page.tsx` | All /tech screens. Screens: pin, home, choice, symptom, diag, wiring, cable, install, survey, survey_add. Demo modes: ?demo=install / ?demo=fault |
+| `app/tech/page.tsx` | All /tech screens. Screens: pin, home, choice, symptom, diag, wiring, cable, install, survey, survey_add. Survey screen has ☁ SAVE TO PORTAL button → POSTs to `/api/surveys` with x-tech-code. Demo modes: ?demo=install / ?demo=fault |
 | `lib/wiring-library.ts` | Static verified device terminals (27 devices) + wiring maps (19 maps). Add hand-verified pairings here. AI-generated entries live in Supabase device_suggestions instead. |
 | `components/tech/WiringDiagram.tsx` | SVG wiring diagram renderer + WiringGuide screen. Merges static library + Supabase device_suggestions at runtime. Terminal group separators show connector block ID badges (J2, J6, etc.). |
 | `components/tech/CableGuide.tsx` | 3-tab cable testing guide: CAT / 2-wire series / 2-wire parallel |
@@ -533,11 +557,27 @@ Note: `/reps`, `/compliance`, `/scorecard`, `/map`, `/reports` are placeholder U
 | `app/api/plaud/transcribe/route.ts` | Native Plaud API integration. Accepts multipart audio file (m4a/mp3/wav/etc) → uploads to Supabase Storage → submits to Plaud transcription API → polls until complete → returns transcript text. Auth: x-tech-code. Env: PLAUD_CLIENT_ID, PLAUD_SECRET_KEY. |
 | `app/api/kb/resolve/route.ts` | Resolution capture + learning loop. Updates troubleshoot_sessions.resolved + embeds kb_article from symptom+history+fix note. Auth: x-tech-code. |
 
+### Survey + Quotes
+| File | Purpose |
+|------|---------|
+| `app/survey/page.tsx` | Flagship survey page: survey list + detail, voice/Plaud capture, AI SOW + BOM, Create Quote flow |
+| `app/api/surveys/route.ts` | GET (list surveys, org-scoped) + POST (create survey — accepts Clerk auth OR x-tech-code header) |
+| `app/api/surveys/[id]/route.ts` | GET/PATCH/DELETE single survey |
+| `app/api/surveys/[id]/generate/route.ts` | POST → Claude Haiku → AI SOW + BOM proposal from survey devices. Auth: Clerk. |
+| `app/api/surveys/[id]/create-quote/route.ts` | POST → creates quote + line items from survey proposal. Auth: Clerk. |
+| `app/quotes/new/page.tsx` | Mode picker: Line Item Builder (product catalog, sections, optional/package items, real API) + Survey Wizard (real API) |
+| `app/quotes/[id]/page.tsx` | Full Quotient-style editor: section grouping, optional toggles, package filter bar, pricing sidebar |
+| `app/quotes/[id]/approve/page.tsx` | Client-facing approval — no auth, no sidebar; fetches from public API; package tier selector, optional item checkboxes |
+| `app/api/quotes/route.ts` | GET (list, org-scoped) + POST (create quote) |
+| `app/api/quotes/[id]/route.ts` | GET/PATCH/DELETE quote |
+| `app/api/quotes/[id]/items/route.ts` | GET (list items) + POST (add item) + DELETE (bulk delete) |
+| `app/api/quotes/[id]/items/[itemId]/route.ts` | PATCH (update item incl. is_optional/is_included/package_tier) + DELETE |
+| `app/api/quotes/[id]/public/route.ts` | No-auth public endpoint. GET: quote + items + org_name. POST: approve/decline with item selections. |
+
 ### Portal pages
 | File | Purpose |
 |------|---------|
 | `components/layout/Sidebar.tsx` | Navigation. Add new routes here. |
-| `app/quotes/[id]/approve/page.tsx` | Client-facing quote approval — no auth, no sidebar, full-screen |
 | `app/reps/page.tsx` | Rep hierarchy + commission tracker (placeholder data) |
 | `app/compliance/page.tsx` | Permit tracker (placeholder data) |
 | `app/map/page.tsx` | Territory map (placeholder, needs Mapbox) |

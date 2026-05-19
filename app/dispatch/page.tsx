@@ -41,6 +41,10 @@ interface SiteOption {
   state:    string;
 }
 
+type TechSchedule =
+  | { type: 'recurring'; days: number[]; start_hour: number; end_hour: number }
+  | { type: 'dates'; dates: string[] }
+
 interface Tech {
   id:                    string;
   name:                  string;
@@ -53,6 +57,7 @@ interface Tech {
   employment_type?:      'employee' | 'contractor';
   can_access_portal?:    boolean;
   portal_invite_sent_at?: string | null;
+  schedule?:             TechSchedule | null;
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -589,19 +594,251 @@ function JobCard({ job, onStatusChange, onSelect }: {
 
 // ─── Tech Row ─────────────────────────────────────────────────────────────────
 
-function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete }: {
-  tech:           Tech;
-  jobs:           Job[];
-  onStatusChange: (id: string, status: TechStatus) => void;
-  onInvite:       (tech: Tech) => void;
-  canDelete:      boolean;
-  onDelete:       (id: string) => void;
+// ─── Schedule helpers ─────────────────────────────────────────────────────────
+
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** Compute Available/Offline from schedule — never overrides On Site / Driving */
+function computeScheduleStatus(tech: Tech, now: Date): TechStatus {
+  if (tech.status === 'On Site' || tech.status === 'Driving') return tech.status;
+  if (!tech.schedule) return tech.status;
+
+  if (tech.schedule.type === 'recurring') {
+    const day  = now.getDay();
+    const hour = now.getHours() + now.getMinutes() / 60;
+    const working = tech.schedule.days.includes(day)
+      && hour >= tech.schedule.start_hour
+      && hour <  tech.schedule.end_hour;
+    return working ? 'Available' : 'Offline';
+  }
+
+  if (tech.schedule.type === 'dates') {
+    const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    return tech.schedule.dates.includes(today) ? 'Available' : 'Offline';
+  }
+
+  return tech.status;
+}
+
+function fmt12(h: number) {
+  const ampm = h < 12 ? 'am' : 'pm';
+  const h12  = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${h12}${ampm}`;
+}
+
+// ─── Schedule Editor Modal ────────────────────────────────────────────────────
+
+function ScheduleEditorModal({ tech, onClose, onSave }: {
+  tech:    Tech;
+  onClose: () => void;
+  onSave:  (schedule: TechSchedule | null) => void;
+}) {
+  const isContractor = tech.employment_type === 'contractor';
+
+  // Recurring state (employee default)
+  const initRecurring = tech.schedule?.type === 'recurring'
+    ? tech.schedule
+    : { type: 'recurring' as const, days: [1,2,3,4,5], start_hour: 8, end_hour: 17 };
+  const [selDays, setSelDays] = useState<number[]>(initRecurring.days);
+  const [startH,  setStartH]  = useState(initRecurring.start_hour);
+  const [endH,    setEndH]    = useState(initRecurring.end_hour);
+
+  // Dates state (contractor default)
+  const initDates = tech.schedule?.type === 'dates' ? tech.schedule.dates : [];
+  const [dates,    setDates]    = useState<string[]>(initDates);
+  const [dateInput,setDateInput] = useState('');
+
+  const [saving, setSaving] = useState(false);
+
+  function toggleDay(d: number) {
+    setSelDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort((a,b)=>a-b));
+  }
+
+  function addDate() {
+    if (dateInput && !dates.includes(dateInput)) {
+      setDates(prev => [...prev, dateInput].sort());
+    }
+    setDateInput('');
+  }
+
+  function removeDate(d: string) { setDates(prev => prev.filter(x => x !== d)); }
+
+  async function handleSave() {
+    setSaving(true);
+    let schedule: TechSchedule | null;
+    if (isContractor) {
+      schedule = dates.length > 0 ? { type: 'dates', dates } : null;
+    } else {
+      schedule = { type: 'recurring', days: selDays, start_hour: startH, end_hour: endH };
+    }
+    try {
+      await fetch(`/api/dispatch/technicians/${tech.id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ schedule }),
+      });
+      onSave(schedule);
+    } finally {
+      setSaving(false);
+      onClose();
+    }
+  }
+
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
+          <div>
+            <h2 className="text-sm font-bold text-slate-800">{tech.name}</h2>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              {isContractor ? 'Committed availability days' : 'Weekly work schedule'}
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100">
+            <X size={14} className="text-slate-500" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-5 space-y-4 overflow-y-auto flex-1">
+          {!isContractor ? (
+            /* ── Employee: recurring weekly ── */
+            <>
+              <div>
+                <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Working Days</p>
+                <div className="flex gap-1.5 flex-wrap">
+                  {DAY_LABELS.map((label, i) => (
+                    <button
+                      key={i}
+                      onClick={() => toggleDay(i)}
+                      className={cn(
+                        'w-9 h-9 rounded-lg text-[11px] font-semibold transition-colors',
+                        selDays.includes(i)
+                          ? 'bg-[#2563EB] text-white'
+                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Start</p>
+                  <select
+                    value={startH}
+                    onChange={e => setStartH(Number(e.target.value))}
+                    className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white"
+                  >
+                    {hours.map(h => <option key={h} value={h}>{fmt12(h)}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">End</p>
+                  <select
+                    value={endH}
+                    onChange={e => setEndH(Number(e.target.value))}
+                    className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white"
+                  >
+                    {hours.filter(h => h > startH).map(h => <option key={h} value={h}>{fmt12(h)}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-400 bg-slate-50 rounded-lg px-3 py-2">
+                Status auto-sets to <span className="font-semibold text-emerald-600">Available</span> {selDays.map(d => DAY_LABELS[d]).join(', ')} {fmt12(startH)}–{fmt12(endH)}, <span className="font-semibold text-slate-500">Offline</span> otherwise
+              </div>
+            </>
+          ) : (
+            /* ── Contractor: committed dates ── */
+            <>
+              <div>
+                <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Add Committed Dates</p>
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    value={dateInput}
+                    onChange={e => setDateInput(e.target.value)}
+                    className="flex-1 text-sm border border-slate-200 rounded-lg px-2.5 py-1.5"
+                  />
+                  <button
+                    onClick={addDate}
+                    disabled={!dateInput}
+                    className="px-3 py-1.5 text-sm bg-[#2563EB] text-white rounded-lg hover:bg-blue-700 disabled:opacity-40"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+              {dates.length > 0 ? (
+                <div className="space-y-1">
+                  {dates.map(d => (
+                    <div key={d} className="flex items-center justify-between px-3 py-2 bg-slate-50 rounded-lg">
+                      <span className="text-sm text-slate-700">{new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })}</span>
+                      <button onClick={() => removeDate(d)} className="p-0.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-400">
+                        <X size={11} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-400 italic">No dates committed yet — status stays Offline</p>
+              )}
+              <div className="text-[11px] text-slate-400 bg-slate-50 rounded-lg px-3 py-2">
+                Status auto-sets to <span className="font-semibold text-emerald-600">Available</span> on committed dates, <span className="font-semibold text-slate-500">Offline</span> on all other days
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 pb-5 flex-shrink-0 border-t border-slate-100 pt-4 flex gap-2">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 bg-[#2563EB] text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : 'Save Schedule'}
+          </button>
+          <button
+            onClick={onClose}
+            className="flex-1 border border-slate-200 text-slate-600 rounded-lg py-2 text-sm hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete, onEditSchedule }: {
+  tech:            Tech;
+  jobs:            Job[];
+  onStatusChange:  (id: string, status: TechStatus) => void;
+  onInvite:        (tech: Tech) => void;
+  canDelete:       boolean;
+  onDelete:        (id: string) => void;
+  onEditSchedule:  (tech: Tech) => void;
 }) {
   const conf = techStatusConfig[tech.status] ?? techStatusConfig['Offline'];
   const currentJob = jobs.find(j => j.id === tech.currentJobId);
   const TECH_STATUSES: TechStatus[] = ["Available", "On Site", "Driving", "Offline"];
   const isContractor = tech.employment_type === 'contractor';
   const hasPortalAccess = tech.can_access_portal;
+
+  // Schedule summary chip
+  let scheduleLabel = '';
+  if (tech.schedule?.type === 'recurring') {
+    const s = tech.schedule;
+    scheduleLabel = s.days.map((d: number) => DAY_LABELS[d]).join('/') + ' ' + fmt12(s.start_hour) + '–' + fmt12(s.end_hour);
+  } else if (tech.schedule?.type === 'dates') {
+    const n = tech.schedule.dates.length;
+    scheduleLabel = `${n} day${n !== 1 ? 's' : ''} committed`;
+  }
 
   return (
     <div className="py-3 px-4 hover:bg-slate-50 transition-colors group">
@@ -625,6 +862,9 @@ function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete }: 
             )}
           </div>
           <p className="text-[11px] text-slate-400">{tech.role}{isContractor ? ' · Contractor' : ''}</p>
+          {scheduleLabel && (
+            <p className="text-[10px] text-slate-400 truncate">{scheduleLabel}</p>
+          )}
           {currentJob && (
             <p className="text-[10px] text-slate-400 truncate">{currentJob.property}</p>
           )}
@@ -638,6 +878,13 @@ function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete }: 
             >
               {TECH_STATUSES.map(s => <option key={s}>{s}</option>)}
             </select>
+            <button
+              onClick={() => onEditSchedule(tech)}
+              className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-blue-50 text-slate-300 hover:text-blue-400"
+              title={tech.schedule ? 'Edit schedule' : 'Set schedule'}
+            >
+              <Calendar size={11} />
+            </button>
             {canDelete && (
               <button
                 onClick={() => {
@@ -954,6 +1201,7 @@ export default function DispatchPage() {
   const [invitingTech, setInvitingTech]   = useState<Tech | null>(null);
   const [inviteSending, setInviteSending] = useState(false);
   const [inviteMsg, setInviteMsg]         = useState<string | null>(null);
+  const [scheduleTech, setScheduleTech]   = useState<Tech | null>(null);
 
   const handlePrevWeek  = () => setWeekStart(prev => { const d = new Date(prev); d.setDate(d.getDate() - 7); return d; });
   const handleNextWeek  = () => setWeekStart(prev => { const d = new Date(prev); d.setDate(d.getDate() + 7); return d; });
@@ -971,7 +1219,13 @@ export default function DispatchPage() {
         site_id: j.site_id ?? null,
       }));
       setJobs(jobs);
-      setTechs(json.techs ?? []);
+      // Auto-compute Available/Offline from schedule on page load
+      const now = new Date();
+      const techs = (json.techs ?? []).map((t: Tech) => ({
+        ...t,
+        status: computeScheduleStatus(t, now),
+      }));
+      setTechs(techs);
     } catch {
       // fall through
     } finally {
@@ -1057,6 +1311,15 @@ export default function DispatchPage() {
     } catch {
       alert('Failed to remove technician');
     }
+  };
+
+  const handleScheduleSaved = (techId: string, schedule: TechSchedule | null) => {
+    const now = new Date();
+    setTechs(prev => prev.map(t => {
+      if (t.id !== techId) return t;
+      const updated = { ...t, schedule };
+      return { ...updated, status: computeScheduleStatus(updated, now) };
+    }));
   };
 
   const handleSendInvite = async () => {
@@ -1159,6 +1422,18 @@ export default function DispatchPage() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Schedule Editor Modal */}
+      {scheduleTech && (
+        <ScheduleEditorModal
+          tech={scheduleTech}
+          onClose={() => setScheduleTech(null)}
+          onSave={schedule => {
+            handleScheduleSaved(scheduleTech.id, schedule);
+            setScheduleTech(null);
+          }}
+        />
       )}
 
       {/* Header */}
@@ -1390,6 +1665,7 @@ export default function DispatchPage() {
                     onInvite={tech => { setInvitingTech(tech); setInviteMsg(null); }}
                     canDelete={canDeleteTech}
                     onDelete={handleDeleteTech}
+                    onEditSchedule={t => setScheduleTech(t)}
                   />
                 ))
               )}

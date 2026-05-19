@@ -46,7 +46,7 @@ export async function GET() {
 
   let techQuery = supabase
     .from('technicians')
-    .select('id, name, initials, role, status, current_job_id, phone, email, employment_type, can_access_portal, portal_invite_sent_at')
+    .select('id, name, initials, role, status, current_job_id, phone, email, employment_type, can_access_portal, portal_invite_sent_at, schedule')
     .order('name')
 
   techQuery = applyOrgScope(techQuery, scope, 'org_id')
@@ -80,6 +80,7 @@ export async function GET() {
     employment_type:      t.employment_type ?? 'employee',
     can_access_portal:    t.can_access_portal ?? false,
     portal_invite_sent_at: t.portal_invite_sent_at ?? null,
+    schedule:             t.schedule ?? null,
     // Phone/email only sent if caller can view sensitive data
     phone:                user.canViewSensitive ? t.phone : null,
     email:                user.canViewSensitive ? t.email : null,

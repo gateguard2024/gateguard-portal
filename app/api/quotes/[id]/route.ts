@@ -26,8 +26,13 @@ export async function GET(
       valid_until, accepted_at, sent_at, declined_at,
       notes, pdf_url, share_token, work_order_id,
       created_at, updated_at,
+      quote_mode, client_name, client_email, client_phone, property_address,
+      cover_message, terms_text, tax_rate, discount_percent, deposit_percent,
+      survey_id, package_mode, selected_package, created_by_name, expiry_date,
       quote_line_items (
-        id, sort_order, category, description, qty, unit_price, is_recurring, created_at
+        id, sort_order, category, description, qty, unit_price, unit, is_recurring,
+        section_name, product_id, item_type, is_optional, is_included,
+        package_tier, image_url, model_number, notes, sku, created_at
       )
     `)
     .eq('id', params.id)
@@ -94,6 +99,11 @@ export async function PATCH(
     'title', 'status', 'client_org_id', 'site_id', 'property_name', 'units',
     'total_one_time', 'total_mrr', 'dealer_mrr',
     'valid_until', 'notes', 'pdf_url', 'work_order_id',
+    // migration 042 enrichment fields
+    'quote_mode', 'client_name', 'client_email', 'client_phone', 'property_address',
+    'cover_image_url', 'cover_message', 'terms_text', 'tax_rate', 'discount_percent',
+    'deposit_percent', 'survey_id', 'package_mode', 'selected_package',
+    'created_by_name', 'expiry_date',
   ]
 
   const updates: Record<string, unknown> = {}

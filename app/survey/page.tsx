@@ -1,515 +1,1325 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import { cn } from "@/lib/utils";
+import { useState, useEffect, useRef, useCallback } from "react"
+import { cn } from "@/lib/utils"
 import {
-  Plus,
-  Search,
-  Filter,
-  Camera,
-  Shield,
-  DoorOpen,
-  Cpu,
-  Wifi,
-  Pencil,
-  X,
-  SlidersHorizontal,
-  ChevronRight,
-  MapPin,
-  User,
-  CheckCircle2,
-  Clock,
-  FileText,
-  Download,
-  ArrowRight,
-} from "lucide-react";
+  Plus, X, Check, Clock, FileText, Download, ArrowRight,
+  ChevronRight, MapPin, User, Loader2, RefreshCw,
+  Trash2, AlertTriangle, CheckCircle2, Search, Upload,
+  ClipboardList, Zap, Layers,
+} from "lucide-react"
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Mic, MicOff, Sparkles, Edit2, Save } = require("lucide-react") as any
 
-type SurveyType = "Gate Install" | "Camera System" | "Full Site" | "Access Control";
-type SurveyStatus = "Draft" | "In Progress" | "Completed" | "Linked to Quote";
+// ─── Types ─────────────────────────────────────────────────────────────────────
+
+interface SurveyDevice {
+  id:        string
+  name:      string
+  brand:     string
+  model:     string
+  location:  string
+  condition: "Good" | "Fair" | "Poor" | ""
+  action:    "Keep" | "Service" | "Replace" | "New Install" | ""
+  notes:     string
+}
+
+interface BomItem {
+  description: string
+  sku:         string | null
+  qty:         number
+  unit:        string
+  unit_price:  number
+  priority:    "urgent" | "recommended" | "optional"
+  category:    string
+  notes:       string | null
+}
+
+interface Recommendation {
+  title:    string
+  detail:   string
+  priority: "urgent" | "recommended" | "optional"
+}
+
+interface InstallNote {
+  note: string
+}
+
+interface UrgentItem {
+  item:   string
+  reason: string
+}
 
 interface Survey {
-  id: string;
-  property: string;
-  type: SurveyType;
-  status: SurveyStatus;
-  tech: string;
-  date: string;
-  deviceCount: number;
+  id:               string
+  survey_number:    string
+  property_name:    string
+  property_address: string | null
+  surveyor_name:    string | null
+  surveyor_type:    string
+  survey_date:      string
+  status:           "draft" | "reviewed" | "quote_created" | "archived"
+  devices:          SurveyDevice[]
+  voice_transcript: string | null
+  notes_raw:        string | null
+  ai_summary:       string | null
+  ai_sow:           string | null
+  ai_bom:           BomItem[]
+  ai_recommendations: Recommendation[]
+  ai_urgent_items:  UrgentItem[]
+  ai_install_notes: InstallNote[]
+  ai_timeline:      string | null
+  quote_id:         string | null
+  created_at:       string
 }
 
-type DeviceTool = "Select" | "Camera" | "Gate" | "Door" | "Panel" | "Network" | "Label" | "Eraser";
+// ─── Helpers ───────────────────────────────────────────────────────────────────
 
-interface PlacedDevice {
-  id: string;
-  type: "Camera" | "Gate" | "Panel" | "Network";
-  model: string;
-  position: string;
-  status: "Placed" | "Confirmed";
-  top: number;
-  left: number;
+function statusBadge(status: Survey["status"]) {
+  const map: Record<Survey["status"], { cls: string; label: string }> = {
+    draft:         { cls: "bg-gray-100 text-gray-600",        label: "Draft"         },
+    reviewed:      { cls: "bg-blue-100 text-blue-700",        label: "Reviewed"      },
+    quote_created: { cls: "bg-emerald-100 text-emerald-700",  label: "Quote Created" },
+    archived:      { cls: "bg-slate-100 text-slate-500",      label: "Archived"      },
+  }
+  return map[status] ?? map.draft
 }
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-
-const SURVEYS: Survey[] = [
-  { id: "s1", property: "Camden Crossing Apts",  type: "Full Site",      status: "In Progress",     tech: "Danny Cruz",   date: "Apr 28", deviceCount: 14 },
-  { id: "s2", property: "Maple Ridge HOA",        type: "Gate Install",   status: "Completed",       tech: "Marcus Webb",  date: "Apr 26", deviceCount: 6  },
-  { id: "s3", property: "Harbor View Phase 2",    type: "Camera System",  status: "Linked to Quote", tech: "RF",           date: "Apr 24", deviceCount: 12 },
-  { id: "s4", property: "Northgate Plaza",        type: "Access Control", status: "Completed",       tech: "Danny Cruz",   date: "Apr 22", deviceCount: 8  },
-  { id: "s5", property: "Sunrise Gardens",        type: "Full Site",      status: "Draft",           tech: "Unassigned",   date: "Apr 20", deviceCount: 0  },
-  { id: "s6", property: "Willow Creek HOA",       type: "Gate Install",   status: "Linked to Quote", tech: "Marcus Webb",  date: "Apr 18", deviceCount: 5  },
-  { id: "s7", property: "Summit Ridge Apts",      type: "Camera System",  status: "Completed",       tech: "RF",           date: "Apr 15", deviceCount: 10 },
-  { id: "s8", property: "Cedar Park HOA",         type: "Full Site",      status: "In Progress",     tech: "Danny Cruz",   date: "Apr 12", deviceCount: 7  },
-];
-
-const PLACED_DEVICES: PlacedDevice[] = [
-  { id: "CAM-01", type: "Camera",  model: "EagleEye 4MP Dome",        position: "Entrance / Lobby",    status: "Confirmed", top: 28,  left: 42  },
-  { id: "CAM-02", type: "Camera",  model: "EagleEye 4MP Dome",        position: "Parking Lot North",   status: "Confirmed", top: 62,  left: 18  },
-  { id: "CAM-03", type: "Camera",  model: "EagleEye 4MP Dome",        position: "Building A - Entry",  status: "Placed",    top: 38,  left: 70  },
-  { id: "CAM-04", type: "Camera",  model: "EagleEye 4MP Dome",        position: "Building B - Entry",  status: "Placed",    top: 55,  left: 72  },
-  { id: "CAM-05", type: "Camera",  model: "EagleEye 4MP Dome",        position: "Rear Perimeter",      status: "Placed",    top: 72,  left: 55  },
-  { id: "CAM-06", type: "Camera",  model: "EagleEye 4MP Dome",        position: "Pool / Amenity Area", status: "Placed",    top: 48,  left: 30  },
-  { id: "GATE-01", type: "Gate",   model: "BX-10 Slide Gate Ctrl",    position: "Main Entrance Gate",  status: "Confirmed", top: 18,  left: 48  },
-  { id: "GATE-02", type: "Gate",   model: "BX-10 Slide Gate Ctrl",    position: "Rear Exit Gate",      status: "Placed",    top: 78,  left: 48  },
-  { id: "NVR-01",  type: "Panel",  model: "GG-NVR-8 Network Panel",   position: "Building A - MDF",    status: "Confirmed", top: 42,  left: 58  },
-  { id: "NET-01",  type: "Network", model: "Ubiquiti AP Pro",         position: "Building A - Roof",   status: "Placed",    top: 30,  left: 62  },
-  { id: "NET-02",  type: "Network", model: "Ubiquiti AP Pro",         position: "Building B - Roof",   status: "Placed",    top: 50,  left: 65  },
-];
-
-const TOOLS: { id: DeviceTool; label: string; Icon: React.ElementType }[] = [
-  { id: "Select",  label: "Select",  Icon: SlidersHorizontal },
-  { id: "Camera",  label: "Camera",  Icon: Camera           },
-  { id: "Gate",    label: "Gate",    Icon: Shield           },
-  { id: "Door",    label: "Door",    Icon: DoorOpen         },
-  { id: "Panel",   label: "Panel",   Icon: Cpu              },
-  { id: "Network", label: "Network", Icon: Wifi             },
-  { id: "Label",   label: "Label",   Icon: Pencil           },
-  { id: "Eraser",  label: "Eraser",  Icon: X                },
-];
-
-const STATUS_FILTERS = ["All", "Draft", "In Progress", "Completed", "Linked to Quote"] as const;
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function surveyTypeBadge(type: SurveyType) {
-  const map: Record<SurveyType, string> = {
-    "Gate Install":    "bg-purple-50  text-purple-700  border border-purple-200",
-    "Camera System":  "bg-sky-50     text-sky-700     border border-sky-200",
-    "Full Site":      "bg-orange-50  text-orange-700  border border-orange-200",
-    "Access Control": "bg-teal-50    text-teal-700    border border-teal-200",
-  };
-  return map[type];
+function priorityColor(p: string) {
+  if (p === "urgent")      return "text-red-600   bg-red-50   border-red-200"
+  if (p === "recommended") return "text-blue-600  bg-blue-50  border-blue-200"
+  return                          "text-gray-500  bg-gray-50  border-gray-200"
 }
 
-function statusBadge(status: SurveyStatus) {
-  const map: Record<SurveyStatus, string> = {
-    "Draft":           "bg-gray-100   text-gray-600",
-    "In Progress":     "bg-amber-100  text-amber-700",
-    "Completed":       "bg-emerald-100 text-emerald-700",
-    "Linked to Quote": "bg-blue-100   text-blue-700",
-  };
-  return map[status];
+function conditionColor(c: string) {
+  if (c === "Good")  return "bg-emerald-100 text-emerald-700"
+  if (c === "Fair")  return "bg-amber-100   text-amber-700"
+  if (c === "Poor")  return "bg-red-100     text-red-700"
+  return                    "bg-gray-100    text-gray-500"
 }
 
-function statusIcon(status: SurveyStatus) {
-  if (status === "Draft")           return <Clock size={11} />;
-  if (status === "In Progress")     return <Clock size={11} />;
-  if (status === "Completed")       return <CheckCircle2 size={11} />;
-  if (status === "Linked to Quote") return <FileText size={11} />;
+function actionColor(a: string) {
+  if (a === "Keep")        return "bg-emerald-100 text-emerald-700"
+  if (a === "Service")     return "bg-blue-100    text-blue-700"
+  if (a === "Replace")     return "bg-amber-100   text-amber-700"
+  if (a === "New Install") return "bg-purple-100  text-purple-700"
+  return                          "bg-gray-100    text-gray-500"
 }
 
-function deviceIcon(type: PlacedDevice["type"], size = 18) {
-  if (type === "Camera")  return <Camera  size={size} className="text-blue-600"   />;
-  if (type === "Gate")    return <Shield  size={size} className="text-emerald-600" />;
-  if (type === "Panel")   return <Cpu     size={size} className="text-slate-500"   />;
-  if (type === "Network") return <Wifi    size={size} className="text-indigo-500"  />;
+const newDevice = (): SurveyDevice => ({
+  id:        crypto.randomUUID(),
+  name:      "",
+  brand:     "",
+  model:     "",
+  location:  "",
+  condition: "",
+  action:    "",
+  notes:     "",
+})
+
+// ─── New Survey Modal ──────────────────────────────────────────────────────────
+
+interface NewSurveyModalProps {
+  onClose:  () => void
+  onCreate: (s: Survey) => void
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+function NewSurveyModal({ onClose, onCreate }: NewSurveyModalProps) {
+  const [form, setForm] = useState({
+    property_name:    "",
+    property_address: "",
+    surveyor_type:    "sales" as "sales" | "tech" | "admin",
+    survey_date:      new Date().toISOString().slice(0, 10),
+  })
+  const [saving, setSaving] = useState(false)
+  const [err, setErr]       = useState("")
 
-export default function SurveyPage() {
-  const [activeTool, setActiveTool]     = useState<DeviceTool>("Camera");
-  const [activeStatus, setActiveStatus] = useState<typeof STATUS_FILTERS[number]>("All");
-  const [selectedSurvey, setSelectedSurvey] = useState<Survey>(SURVEYS[0]);
-  const [zoom, setZoom] = useState(100);
-  const [searchQuery, setSearchQuery] = useState("");
-
-  const filtered = SURVEYS.filter((s) => {
-    const matchStatus = activeStatus === "All" || s.status === activeStatus;
-    const matchSearch = s.property.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchStatus && matchSearch;
-  });
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!form.property_name.trim()) { setErr("Property name is required"); return }
+    setSaving(true)
+    try {
+      const res  = await fetch("/api/surveys", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(form),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? "Failed to create survey")
+      onCreate(json.survey)
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Error")
+      setSaving(false)
+    }
+  }
 
   return (
-    <div className="flex flex-col min-h-full bg-gray-50">
-
-      {/* ── Page Header ──────────────────────────────────────────────────────── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">Site Surveys</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Design systems and generate quotes from property sketches</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-            <FileText size={14} /> Templates
-          </button>
-          <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm">
-            <Plus size={14} /> New Survey
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
+          <h2 className="text-base font-semibold text-gray-900">New Site Survey</h2>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 transition-colors">
+            <X size={16} className="text-gray-500" />
           </button>
         </div>
-      </div>
-
-      {/* ── Stats Row ────────────────────────────────────────────────────────── */}
-      <div className="px-6 py-3 bg-white border-b border-gray-200 flex items-center gap-6">
-        {[
-          { label: "Total Surveys",     value: "34",  sub: "",                        valueClass: "text-gray-900" },
-          { label: "Open / In Progress", value: "8",  sub: "active",                  valueClass: "text-amber-600" },
-          { label: "Linked to Quotes",  value: "26",  sub: "quotes generated",        valueClass: "text-blue-600"  },
-          { label: "Devices Placed",    value: "312", sub: "across all surveys",      valueClass: "text-gray-900" },
-        ].map(({ label, value, sub, valueClass }) => (
-          <div key={label} className="flex items-baseline gap-2">
-            <span className={cn("text-2xl font-semibold tabular-nums", valueClass)}>{value}</span>
-            <div>
-              <p className="text-xs font-medium text-gray-700 leading-none">{label}</p>
-              {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
+        <form onSubmit={submit} className="px-6 py-4 space-y-4">
+          {err && (
+            <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
+              <AlertTriangle size={12} /> {err}
             </div>
-            <div className="h-6 w-px bg-gray-200 ml-2" />
+          )}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Property Name *</label>
+            <input
+              autoFocus
+              value={form.property_name}
+              onChange={e => setForm(f => ({ ...f, property_name: e.target.value }))}
+              placeholder="Camden Crossing Apartments"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            />
           </div>
-        ))}
-      </div>
-
-      {/* ── Two-Panel Layout ─────────────────────────────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden" style={{ height: "calc(100vh - 160px)" }}>
-
-        {/* Left Panel — Survey List */}
-        <div className="w-[35%] min-w-[300px] bg-white border-r border-gray-200 flex flex-col overflow-hidden">
-
-          {/* Search + Filter */}
-          <div className="p-3 border-b border-gray-100 space-y-2">
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Property Address</label>
+            <input
+              value={form.property_address}
+              onChange={e => setForm(f => ({ ...f, property_address: e.target.value }))}
+              placeholder="123 Main St, Atlanta, GA 30301"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Surveyor Type</label>
+              <select
+                value={form.surveyor_type}
+                onChange={e => setForm(f => ({ ...f, surveyor_type: e.target.value as "sales" | "tech" | "admin" }))}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+              >
+                <option value="sales">Sales</option>
+                <option value="tech">Tech</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Survey Date</label>
               <input
-                type="text"
-                placeholder="Search surveys..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-gray-50"
+                type="date"
+                value={form.survey_date}
+                onChange={e => setForm(f => ({ ...f, survey_date: e.target.value }))}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
               />
             </div>
-            <div className="flex flex-wrap gap-1">
-              {STATUS_FILTERS.map((f) => (
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onClose} className="flex-1 px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving} className="flex-1 px-4 py-2 rounded-lg bg-[#6B7EFF] text-white text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm flex items-center justify-center gap-2">
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+              Create Survey
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ─── Device Card ───────────────────────────────────────────────────────────────
+
+interface DeviceCardProps {
+  device:   SurveyDevice
+  onChange: (d: SurveyDevice) => void
+  onDelete: () => void
+}
+
+function DeviceCard({ device, onChange, onDelete }: DeviceCardProps) {
+  const [expanded, setExpanded] = useState(!device.name)
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-50/70 border-b border-gray-100">
+        <button
+          onClick={() => setExpanded(e => !e)}
+          className="flex-1 flex items-center gap-2 text-left min-w-0"
+        >
+          <ChevronRight size={13} className={cn("text-gray-400 transition-transform shrink-0", expanded && "rotate-90")} />
+          <span className="text-sm font-medium text-gray-900 truncate">
+            {device.name || <span className="text-gray-400 font-normal">Unnamed device</span>}
+          </span>
+          {device.location && (
+            <span className="flex items-center gap-1 text-[11px] text-gray-500 shrink-0">
+              <MapPin size={10} /> {device.location}
+            </span>
+          )}
+          <div className="flex items-center gap-1.5 ml-auto shrink-0">
+            {device.condition && (
+              <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full", conditionColor(device.condition))}>
+                {device.condition}
+              </span>
+            )}
+            {device.action && (
+              <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full", actionColor(device.action))}>
+                {device.action}
+              </span>
+            )}
+          </div>
+        </button>
+        <button onClick={onDelete} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors shrink-0">
+          <Trash2 size={13} />
+        </button>
+      </div>
+
+      {/* Fields */}
+      {expanded && (
+        <div className="p-3 grid grid-cols-2 gap-2.5">
+          <div>
+            <label className="block text-[11px] text-gray-500 mb-1">Device / Name *</label>
+            <input
+              value={device.name}
+              onChange={e => onChange({ ...device, name: e.target.value })}
+              placeholder="Gate Operator"
+              className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] text-gray-500 mb-1">Brand</label>
+            <input
+              value={device.brand}
+              onChange={e => onChange({ ...device, brand: e.target.value })}
+              placeholder="DoorKing"
+              className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] text-gray-500 mb-1">Model</label>
+            <input
+              value={device.model}
+              onChange={e => onChange({ ...device, model: e.target.value })}
+              placeholder="9050"
+              className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] text-gray-500 mb-1">Location</label>
+            <input
+              value={device.location}
+              onChange={e => onChange({ ...device, location: e.target.value })}
+              placeholder="Main Entrance"
+              className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] text-gray-500 mb-1">Condition</label>
+            <select
+              value={device.condition}
+              onChange={e => onChange({ ...device, condition: e.target.value as SurveyDevice["condition"] })}
+              className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+            >
+              <option value="">Select...</option>
+              <option value="Good">Good</option>
+              <option value="Fair">Fair</option>
+              <option value="Poor">Poor</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[11px] text-gray-500 mb-1">Action</label>
+            <select
+              value={device.action}
+              onChange={e => onChange({ ...device, action: e.target.value as SurveyDevice["action"] })}
+              className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+            >
+              <option value="">Select...</option>
+              <option value="Keep">Keep</option>
+              <option value="Service">Service</option>
+              <option value="Replace">Replace</option>
+              <option value="New Install">New Install</option>
+            </select>
+          </div>
+          <div className="col-span-2">
+            <label className="block text-[11px] text-gray-500 mb-1">Notes</label>
+            <textarea
+              value={device.notes}
+              onChange={e => onChange({ ...device, notes: e.target.value })}
+              placeholder="Any observations..."
+              rows={2}
+              className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400 resize-none"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── BOM Table ─────────────────────────────────────────────────────────────────
+
+interface BomTableProps {
+  items:     BomItem[]
+  onChange:  (items: BomItem[]) => void
+}
+
+function BomTable({ items, onChange }: BomTableProps) {
+  function update(idx: number, patch: Partial<BomItem>) {
+    onChange(items.map((it, i) => i === idx ? { ...it, ...patch } : it))
+  }
+
+  const total = items.reduce((s, it) => s + it.qty * it.unit_price, 0)
+
+  if (!items.length) return null
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+        <ClipboardList size={14} className="text-[#6B7EFF]" />
+        <h3 className="text-sm font-semibold text-gray-900">Bill of Materials</h3>
+        <span className="text-[11px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium ml-1">{items.length} items</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-100">
+              <th className="text-left px-3 py-2 text-gray-500 font-medium w-[30%]">Description</th>
+              <th className="text-left px-3 py-2 text-gray-500 font-medium w-[10%]">SKU</th>
+              <th className="text-center px-3 py-2 text-gray-500 font-medium w-[8%]">Qty</th>
+              <th className="text-left px-3 py-2 text-gray-500 font-medium w-[8%]">Unit</th>
+              <th className="text-right px-3 py-2 text-gray-500 font-medium w-[12%]">Unit Price</th>
+              <th className="text-right px-3 py-2 text-gray-500 font-medium w-[12%]">Subtotal</th>
+              <th className="text-left px-3 py-2 text-gray-500 font-medium w-[12%]">Priority</th>
+              <th className="px-2 py-2 w-[8%]" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {items.map((item, idx) => (
+              <tr key={idx} className="hover:bg-gray-50/40 transition-colors group">
+                <td className="px-3 py-2">
+                  <input
+                    value={item.description}
+                    onChange={e => update(idx, { description: e.target.value })}
+                    className="w-full bg-transparent border-b border-transparent focus:border-blue-400 focus:outline-none py-0.5 font-medium text-gray-800"
+                  />
+                </td>
+                <td className="px-3 py-2 text-gray-500 font-mono">
+                  <input
+                    value={item.sku ?? ""}
+                    onChange={e => update(idx, { sku: e.target.value || null })}
+                    placeholder="—"
+                    className="w-full bg-transparent border-b border-transparent focus:border-blue-400 focus:outline-none py-0.5"
+                  />
+                </td>
+                <td className="px-3 py-2 text-center">
+                  <input
+                    type="number"
+                    min={1}
+                    value={item.qty}
+                    onChange={e => update(idx, { qty: parseInt(e.target.value) || 1 })}
+                    className="w-12 text-center bg-transparent border-b border-transparent focus:border-blue-400 focus:outline-none py-0.5 text-gray-700"
+                  />
+                </td>
+                <td className="px-3 py-2 text-gray-600">
+                  <input
+                    value={item.unit}
+                    onChange={e => update(idx, { unit: e.target.value })}
+                    className="w-12 bg-transparent border-b border-transparent focus:border-blue-400 focus:outline-none py-0.5"
+                  />
+                </td>
+                <td className="px-3 py-2 text-right text-gray-700">
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={item.unit_price}
+                    onChange={e => update(idx, { unit_price: parseFloat(e.target.value) || 0 })}
+                    className="w-20 text-right bg-transparent border-b border-transparent focus:border-blue-400 focus:outline-none py-0.5"
+                  />
+                </td>
+                <td className="px-3 py-2 text-right font-semibold text-gray-800 tabular-nums">
+                  ${(item.qty * item.unit_price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+                <td className="px-3 py-2">
+                  <select
+                    value={item.priority}
+                    onChange={e => update(idx, { priority: e.target.value as BomItem["priority"] })}
+                    className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full border focus:outline-none", priorityColor(item.priority))}
+                  >
+                    <option value="urgent">Urgent</option>
+                    <option value="recommended">Recommended</option>
+                    <option value="optional">Optional</option>
+                  </select>
+                </td>
+                <td className="px-2 py-2">
+                  <button
+                    onClick={() => onChange(items.filter((_, i) => i !== idx))}
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-all"
+                  >
+                    <X size={12} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="bg-gray-50 border-t border-gray-200">
+              <td colSpan={5} className="px-3 py-2.5 text-right text-xs font-semibold text-gray-700">Total</td>
+              <td className="px-3 py-2.5 text-right font-bold text-gray-900 tabular-nums text-sm">
+                ${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </td>
+              <td colSpan={2} />
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50/50 flex justify-end">
+        <button
+          onClick={() => onChange([...items, {
+            description: "New Item", sku: null, qty: 1, unit: "each",
+            unit_price: 0, priority: "recommended", category: "equipment", notes: null,
+          }])}
+          className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium"
+        >
+          <Plus size={12} /> Add row
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Main Page ─────────────────────────────────────────────────────────────────
+
+export default function SurveyPage() {
+  const [surveys,        setSurveys]       = useState<Survey[]>([])
+  const [loading,        setLoading]       = useState(true)
+  const [selectedId,     setSelectedId]    = useState<string | null>(null)
+  const [survey,         setSurvey]        = useState<Survey | null>(null)
+  const [surveyLoading,  setSurveyLoading] = useState(false)
+  const [showNew,        setShowNew]       = useState(false)
+  const [activeTab,      setActiveTab]     = useState<"capture" | "ai">("capture")
+  const [searchQ,        setSearchQ]       = useState("")
+  const [statusFilter,   setStatusFilter]  = useState<"all" | Survey["status"]>("all")
+
+  // Saving state
+  const [savingNotes,    setSavingNotes]   = useState(false)
+  const [generating,     setGenerating]    = useState(false)
+  const [creatingQuote,  setCreatingQuote] = useState(false)
+  const [savingBom,      setSavingBom]     = useState(false)
+  const [parseLoading,   setParseLoading]  = useState(false)
+  const [genError,       setGenError]      = useState("")
+  const [quoteSuccess,   setQuoteSuccess]  = useState<string | null>(null)
+
+  // Voice
+  const [recording,      setRecording]     = useState(false)
+  const [transcript,     setTranscript]    = useState("")
+  const recognitionRef = useRef<unknown>(null)
+
+  // ── Load list ──────────────────────────────────────────────────────────────
+
+  const loadSurveys = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res  = await fetch("/api/surveys?limit=100")
+      const json = await res.json()
+      setSurveys(json.surveys ?? [])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { loadSurveys() }, [loadSurveys])
+
+  // ── Load detail ───────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!selectedId) { setSurvey(null); return }
+    setSurveyLoading(true)
+    fetch(`/api/surveys/${selectedId}`)
+      .then(r => r.json())
+      .then(j => {
+        setSurvey(j.survey ?? null)
+        setTranscript(j.survey?.voice_transcript ?? "")
+        if (j.survey?.ai_sow) setActiveTab("ai")
+      })
+      .finally(() => setSurveyLoading(false))
+  }, [selectedId])
+
+  // ── Voice recording ───────────────────────────────────────────────────────
+
+  function toggleRecording() {
+    if (recording) {
+      if (recognitionRef.current) {
+        (recognitionRef.current as { stop: () => void }).stop()
+      }
+      setRecording(false)
+      return
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SR) {
+      alert("Voice input not supported in this browser. Please use Chrome.")
+      return
+    }
+
+    const recognition = new SR()
+    recognition.continuous     = true
+    recognition.interimResults = true
+    recognition.lang           = "en-US"
+
+    let finalTranscript = transcript
+
+    recognition.onresult = (e: { results: SpeechRecognitionResultList }) => {
+      let interim = ""
+      for (let i = e.results.length - 1; i >= 0; i--) {
+        if (e.results[i].isFinal) {
+          finalTranscript += (finalTranscript ? " " : "") + e.results[i][0].transcript
+          break
+        } else {
+          interim = e.results[i][0].transcript
+        }
+      }
+      setTranscript(finalTranscript + (interim ? " " + interim : ""))
+    }
+
+    recognition.onend = () => {
+      setRecording(false)
+      setTranscript(finalTranscript)
+    }
+
+    recognitionRef.current = recognition
+    recognition.start()
+    setRecording(true)
+  }
+
+  // ── Plaud file upload ─────────────────────────────────────────────────────
+
+  const plaudInputRef = useRef<HTMLInputElement>(null)
+
+  async function handlePlaudUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !survey) return
+    setParseLoading(true)
+    try {
+      const form = new FormData()
+      form.append("audio", file)
+      const res  = await fetch("/api/plaud/transcribe", { method: "POST", body: form,
+        headers: { "x-tech-code": "" } })
+      const json = await res.json()
+      if (json.transcript) {
+        const t = json.transcript as string
+        setTranscript(t)
+        await patchSurvey({ voice_transcript: t })
+      }
+    } catch {
+      alert("Transcription failed. Please paste transcript manually.")
+    } finally {
+      setParseLoading(false)
+      if (plaudInputRef.current) plaudInputRef.current.value = ""
+    }
+  }
+
+  // ── Parse transcript → devices ────────────────────────────────────────────
+
+  async function parseTranscript() {
+    if (!survey || !transcript.trim()) return
+    setParseLoading(true)
+    try {
+      const res  = await fetch("/api/kb/parse-survey-transcript", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ transcript }),
+      })
+      const json = await res.json()
+      if (json.devices && Array.isArray(json.devices)) {
+        const parsed: SurveyDevice[] = json.devices.map((d: Record<string, string>) => ({
+          id:        crypto.randomUUID(),
+          name:      d.name      ?? "",
+          brand:     d.brand     ?? "",
+          model:     d.model     ?? "",
+          location:  d.location  ?? "",
+          condition: (d.condition as SurveyDevice["condition"]) ?? "",
+          action:    (d.action   as SurveyDevice["action"])    ?? "",
+          notes:     d.notes     ?? "",
+        }))
+        const merged = [...(survey.devices ?? []), ...parsed]
+        setSurvey(s => s ? { ...s, devices: merged } : s)
+        await patchSurvey({ devices: merged, voice_transcript: transcript })
+      }
+    } catch {
+      alert("Failed to parse transcript.")
+    } finally {
+      setParseLoading(false)
+    }
+  }
+
+  // ── Save helpers ──────────────────────────────────────────────────────────
+
+  async function patchSurvey(body: Partial<Survey>) {
+    if (!survey) return
+    const res  = await fetch(`/api/surveys/${survey.id}`, {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify(body),
+    })
+    const json = await res.json()
+    if (json.survey) {
+      setSurvey(json.survey)
+      setSurveys(ss => ss.map(s => s.id === json.survey.id ? json.survey : s))
+    }
+  }
+
+  async function saveNotes() {
+    if (!survey) return
+    setSavingNotes(true)
+    try {
+      await patchSurvey({ notes_raw: survey.notes_raw, voice_transcript: transcript, devices: survey.devices })
+    } finally {
+      setSavingNotes(false)
+    }
+  }
+
+  function updateDevice(id: string, d: SurveyDevice) {
+    if (!survey) return
+    setSurvey(s => s ? { ...s, devices: s.devices.map(x => x.id === id ? d : x) } : s)
+  }
+
+  function deleteDevice(id: string) {
+    if (!survey) return
+    setSurvey(s => s ? { ...s, devices: s.devices.filter(x => x.id !== id) } : s)
+  }
+
+  function addDevice() {
+    if (!survey) return
+    setSurvey(s => s ? { ...s, devices: [...s.devices, newDevice()] } : s)
+  }
+
+  // ── Generate AI output ────────────────────────────────────────────────────
+
+  async function generate() {
+    if (!survey) return
+    // Save current state first
+    await patchSurvey({ devices: survey.devices, notes_raw: survey.notes_raw, voice_transcript: transcript })
+    setGenerating(true)
+    setGenError("")
+    try {
+      const res  = await fetch(`/api/surveys/${survey.id}/generate`, { method: "POST" })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? "Generation failed")
+      setSurvey(json.survey)
+      setSurveys(ss => ss.map(s => s.id === json.survey.id ? json.survey : s))
+      setActiveTab("ai")
+    } catch (e: unknown) {
+      setGenError(e instanceof Error ? e.message : "Generation failed")
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  // ── Save edited BOM ───────────────────────────────────────────────────────
+
+  async function saveBom() {
+    if (!survey) return
+    setSavingBom(true)
+    try {
+      await patchSurvey({
+        ai_bom:            survey.ai_bom,
+        ai_sow:            survey.ai_sow,
+        ai_summary:        survey.ai_summary,
+        ai_recommendations: survey.ai_recommendations,
+        ai_timeline:       survey.ai_timeline,
+      })
+    } finally {
+      setSavingBom(false)
+    }
+  }
+
+  // ── Create quote ──────────────────────────────────────────────────────────
+
+  async function createQuote() {
+    if (!survey) return
+    setCreatingQuote(true)
+    setQuoteSuccess(null)
+    try {
+      const res  = await fetch(`/api/surveys/${survey.id}/create-quote`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({}),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? "Failed")
+      setQuoteSuccess(json.quote_number ?? json.quote_id)
+      await loadSurveys()
+      setSurvey(s => s ? { ...s, status: "quote_created", quote_id: json.quote_id } : s)
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Failed to create quote")
+    } finally {
+      setCreatingQuote(false)
+    }
+  }
+
+  // ── Filtered list ─────────────────────────────────────────────────────────
+
+  const filtered = surveys.filter(s => {
+    const matchStatus = statusFilter === "all" || s.status === statusFilter
+    const matchQ      = s.property_name.toLowerCase().includes(searchQ.toLowerCase()) ||
+                        (s.survey_number ?? "").toLowerCase().includes(searchQ.toLowerCase())
+    return matchStatus && matchQ
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  return (
+    <div className="flex flex-col h-full bg-[#F8FAFC]">
+
+      {/* Page Header */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shrink-0">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">Site Surveys</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Voice-driven field surveys → AI-generated SOW, BOM & quotes</p>
+        </div>
+        <button
+          onClick={() => setShowNew(true)}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#6B7EFF] text-white text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
+        >
+          <Plus size={14} /> New Survey
+        </button>
+      </div>
+
+      {/* Two-column layout */}
+      <div className="flex flex-1 overflow-hidden">
+
+        {/* ── Left: Survey List ── */}
+        <div className="w-80 shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
+          {/* Search + filter */}
+          <div className="p-3 border-b border-gray-100 space-y-2">
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={searchQ}
+                onChange={e => setSearchQ(e.target.value)}
+                placeholder="Search surveys..."
+                className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400 bg-gray-50"
+              />
+            </div>
+            <div className="flex gap-1 flex-wrap">
+              {(["all", "draft", "reviewed", "quote_created", "archived"] as const).map(s => (
                 <button
-                  key={f}
-                  onClick={() => setActiveStatus(f)}
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
                   className={cn(
-                    "px-2.5 py-1 rounded-full text-xs font-medium transition-colors",
-                    activeStatus === f
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    "px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors capitalize",
+                    statusFilter === s ? "bg-[#6B7EFF] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                   )}
                 >
-                  {f}
+                  {s === "all" ? "All" : s === "quote_created" ? "Quote Created" : s.charAt(0).toUpperCase() + s.slice(1)}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Survey Cards */}
-          <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
-            {filtered.map((survey) => (
-              <button
-                key={survey.id}
-                onClick={() => setSelectedSurvey(survey)}
-                className={cn(
-                  "w-full text-left px-3 py-3 hover:bg-blue-50/50 transition-colors group",
-                  selectedSurvey.id === survey.id && "bg-blue-50 border-r-2 border-r-blue-600"
-                )}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{survey.property}</p>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium", surveyTypeBadge(survey.type))}>
-                        {survey.type}
-                      </span>
-                      <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium", statusBadge(survey.status))}>
-                        {statusIcon(survey.status)}
-                        {survey.status}
-                      </span>
+          {/* List */}
+          <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
+            {loading ? (
+              <div className="flex items-center justify-center py-12 text-gray-400">
+                <Loader2 size={20} className="animate-spin" />
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                <ClipboardList size={28} className="text-gray-300 mb-2" />
+                <p className="text-sm text-gray-500 font-medium">No surveys yet</p>
+                <p className="text-xs text-gray-400 mt-1">Click "New Survey" to get started</p>
+              </div>
+            ) : (
+              filtered.map(s => {
+                const badge = statusBadge(s.status)
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => { setSelectedId(s.id); setActiveTab("capture"); setGenError(""); setQuoteSuccess(null) }}
+                    className={cn(
+                      "w-full text-left px-3 py-3 hover:bg-blue-50/40 transition-colors",
+                      selectedId === s.id && "bg-blue-50 border-r-2 border-r-[#6B7EFF]"
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{s.property_name}</p>
+                        <p className="text-[10px] text-gray-400 font-mono mt-0.5">{s.survey_number ?? "—"}</p>
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                          <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full", badge.cls)}>
+                            {badge.label}
+                          </span>
+                          <span className="text-[10px] text-gray-400">{s.survey_date}</span>
+                          {(s.devices?.length ?? 0) > 0 && (
+                            <span className="text-[10px] text-gray-500">
+                              {s.devices.length} device{s.devices.length !== 1 ? "s" : ""}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3 mt-1.5">
-                      <span className="flex items-center gap-1 text-[11px] text-gray-500">
-                        <User size={10} /> {survey.tech}
-                      </span>
-                      <span className="text-[11px] text-gray-400">{survey.date}</span>
-                      <span className="flex items-center gap-1 text-[11px] text-gray-500">
-                        <MapPin size={10} />
-                        {survey.deviceCount === 0 ? "No devices" : `${survey.deviceCount} devices`}
-                      </span>
-                    </div>
-                  </div>
-                  <button className={cn(
-                    "shrink-0 px-2 py-1 rounded text-[11px] font-medium transition-colors",
-                    selectedSurvey.id === survey.id
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-100 text-gray-600 group-hover:bg-blue-100 group-hover:text-blue-700"
-                  )}>
-                    Open
                   </button>
-                </div>
-              </button>
-            ))}
+                )
+              })
+            )}
           </div>
         </div>
 
-        {/* Right Panel — Drawing Canvas */}
+        {/* ── Right: Survey Detail ── */}
         <div className="flex-1 flex flex-col overflow-hidden">
-
-          {/* Canvas Header */}
-          <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center gap-2">
-            <div className="flex-1">
-              <div className="flex items-center gap-1.5 text-sm text-gray-500">
-                <span>Site Surveys</span>
-                <ChevronRight size={13} />
-                <span className="font-medium text-gray-900">{selectedSurvey.property}</span>
-                <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ml-1", statusBadge(selectedSurvey.status))}>
-                  {statusIcon(selectedSurvey.status)}
-                  {selectedSurvey.status}
-                </span>
+          {!selectedId ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
+              <div className="w-16 h-16 rounded-2xl bg-[#6B7EFF]/10 flex items-center justify-center mb-4">
+                <Mic size={28} className="text-[#6B7EFF]" />
               </div>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <User size={12} />{selectedSurvey.tech}
-              <span className="text-gray-300">·</span>
-              {selectedSurvey.date}
-            </div>
-          </div>
-
-          {/* Toolbar */}
-          <div className="bg-white border-b border-gray-200 px-3 py-2 flex items-center gap-1">
-            {/* Tool Buttons */}
-            {TOOLS.map(({ id, label, Icon }) => (
+              <h2 className="text-lg font-semibold text-gray-800">Voice-Driven Site Surveys</h2>
+              <p className="text-sm text-gray-500 mt-2 max-w-sm">
+                Speak what you see. Our AI turns your site walkthrough into a professional SOW, BOM, and draft quote.
+              </p>
               <button
-                key={id}
-                onClick={() => setActiveTool(id)}
-                title={label}
-                className={cn(
-                  "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                  activeTool === id
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "text-gray-600 hover:bg-gray-100"
-                )}
+                onClick={() => setShowNew(true)}
+                className="mt-6 flex items-center gap-2 px-4 py-2 rounded-lg bg-[#6B7EFF] text-white text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
               >
-                <Icon size={13} />
-                {id === activeTool && <span>{label}</span>}
+                <Plus size={14} /> Start New Survey
               </button>
-            ))}
-
-            <div className="flex-1" />
-
-            {/* Zoom */}
-            <div className="flex items-center gap-1 bg-gray-100 rounded-lg px-1 py-1">
-              <button
-                onClick={() => setZoom((z) => Math.max(50, z - 10))}
-                className="w-6 h-6 flex items-center justify-center rounded text-gray-600 hover:bg-white text-sm font-medium transition-colors"
-              >−</button>
-              <span className="text-xs text-gray-600 font-medium w-10 text-center tabular-nums">{zoom}%</span>
-              <button
-                onClick={() => setZoom((z) => Math.min(200, z + 10))}
-                className="w-6 h-6 flex items-center justify-center rounded text-gray-600 hover:bg-white text-sm font-medium transition-colors"
-              >+</button>
             </div>
-
-            <div className="w-px h-5 bg-gray-200 mx-1" />
-
-            <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-              <Download size={12} /> Export PDF
-            </button>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors shadow-sm">
-              <FileText size={12} /> Link to Quote
-            </button>
-          </div>
-
-          {/* Scrollable content area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
-
-            {/* Canvas Area */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <div
-                className="relative bg-gray-100 overflow-hidden cursor-crosshair select-none"
-                style={{
-                  height: "420px",
-                  backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 39px, #e5e7eb 39px, #e5e7eb 40px), repeating-linear-gradient(90deg, transparent, transparent 39px, #e5e7eb 39px, #e5e7eb 40px)",
-                  backgroundSize: "40px 40px",
-                }}
-              >
-                {/* Property outline — main complex footprint */}
-                <div
-                  className="absolute border-2 border-gray-400 rounded-sm bg-gray-50/60"
-                  style={{ top: "8%", left: "8%", right: "8%", bottom: "8%" }}
-                />
-
-                {/* Parking lot */}
-                <div
-                  className="absolute bg-gray-200/70 border border-gray-300 rounded-sm"
-                  style={{ top: "55%", left: "10%", width: "28%", height: "30%" }}
-                >
-                  <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[9px] text-gray-500 font-medium whitespace-nowrap">PARKING</span>
-                </div>
-
-                {/* Building A */}
-                <div
-                  className="absolute bg-white border-2 border-gray-400 rounded-sm flex items-center justify-center"
-                  style={{ top: "20%", left: "20%", width: "30%", height: "30%" }}
-                >
-                  <span className="text-[11px] text-gray-500 font-semibold tracking-wide">BUILDING A</span>
-                </div>
-
-                {/* Building B */}
-                <div
-                  className="absolute bg-white border-2 border-gray-400 rounded-sm flex items-center justify-center"
-                  style={{ top: "20%", left: "58%", width: "25%", height: "30%" }}
-                >
-                  <span className="text-[11px] text-gray-500 font-semibold tracking-wide">BUILDING B</span>
-                </div>
-
-                {/* Entrance gap label */}
-                <div
-                  className="absolute flex flex-col items-center"
-                  style={{ top: "2%", left: "43%", transform: "translateX(-50%)" }}
-                >
-                  <span className="text-[9px] text-gray-500 font-medium bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">ENTRANCE</span>
-                  <div className="w-px h-3 bg-amber-400 mt-0.5" />
-                </div>
-
-                {/* Hint text */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <span className="text-[11px] text-gray-300 font-medium">Click canvas to place {activeTool} device</span>
-                </div>
-
-                {/* Placed Devices */}
-                {PLACED_DEVICES.map((device) => (
-                  <div
-                    key={device.id}
-                    className="absolute group"
-                    style={{ top: `${device.top}%`, left: `${device.left}%`, transform: "translate(-50%, -50%)" }}
-                  >
-                    <div className={cn(
-                      "w-7 h-7 rounded-full flex items-center justify-center shadow-md border-2 transition-transform group-hover:scale-110",
-                      device.type === "Camera"  && "bg-white border-blue-400",
-                      device.type === "Gate"    && "bg-white border-emerald-400",
-                      device.type === "Panel"   && "bg-white border-slate-400",
-                      device.type === "Network" && "bg-white border-indigo-400",
-                    )}>
-                      {deviceIcon(device.type, 13)}
-                    </div>
-                    <div className={cn(
-                      "absolute left-full ml-1 top-1/2 -translate-y-1/2 whitespace-nowrap",
-                      "bg-white border border-gray-200 rounded px-1.5 py-0.5 text-[9px] font-bold shadow-sm text-gray-700",
-                    )}>
-                      {device.id}
-                    </div>
+          ) : surveyLoading ? (
+            <div className="flex-1 flex items-center justify-center">
+              <Loader2 size={24} className="animate-spin text-gray-400" />
+            </div>
+          ) : survey ? (
+            <>
+              {/* Survey Header */}
+              <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-3 shrink-0">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-base font-semibold text-gray-900 truncate">{survey.property_name}</h2>
+                    <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full", statusBadge(survey.status).cls)}>
+                      {statusBadge(survey.status).label}
+                    </span>
+                    <span className="text-xs text-gray-400 font-mono">{survey.survey_number}</span>
                   </div>
+                  <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-500">
+                    {survey.property_address && <span className="flex items-center gap-1"><MapPin size={10} />{survey.property_address}</span>}
+                    <span className="flex items-center gap-1"><User size={10} />{survey.surveyor_name ?? "—"}</span>
+                    <span>{survey.survey_date}</span>
+                  </div>
+                </div>
+                {survey.quote_id ? (
+                  <a
+                    href={`/quotes/${survey.quote_id}`}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 transition-colors"
+                  >
+                    <CheckCircle2 size={12} /> View Quote
+                  </a>
+                ) : survey.ai_bom?.length > 0 ? (
+                  <button
+                    onClick={createQuote}
+                    disabled={creatingQuote}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-60"
+                  >
+                    {creatingQuote ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />}
+                    Create Quote
+                  </button>
+                ) : null}
+              </div>
+
+              {/* Quote success banner */}
+              {quoteSuccess && (
+                <div className="bg-emerald-50 border-b border-emerald-200 px-6 py-2.5 flex items-center gap-2 text-sm text-emerald-700">
+                  <CheckCircle2 size={14} />
+                  <span>Quote <strong>{quoteSuccess}</strong> created. </span>
+                  <a href={`/quotes/${survey.quote_id}`} className="underline font-medium ml-1">Open quote →</a>
+                </div>
+              )}
+
+              {/* Tabs */}
+              <div className="bg-white border-b border-gray-200 px-6 flex items-center gap-0 shrink-0">
+                {([
+                  { id: "capture", label: "Capture",  icon: Mic         },
+                  { id: "ai",      label: "AI Output", icon: Sparkles    },
+                ] as const).map(({ id, label, icon: Icon }) => (
+                  <button
+                    key={id}
+                    onClick={() => setActiveTab(id)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors",
+                      activeTab === id
+                        ? "border-[#6B7EFF] text-[#6B7EFF]"
+                        : "border-transparent text-gray-500 hover:text-gray-700"
+                    )}
+                  >
+                    <Icon size={13} /> {label}
+                    {id === "ai" && survey.ai_sow && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 ml-0.5" />
+                    )}
+                  </button>
                 ))}
               </div>
-            </div>
 
-            {/* Placed Devices Table */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-gray-900">Placed Devices</h3>
-                  <span className="bg-gray-100 text-gray-600 text-xs font-medium px-2 py-0.5 rounded-full">{PLACED_DEVICES.length}</span>
-                </div>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100">
-                      {["Device #", "Type", "Model", "Position", "Status"].map((h) => (
-                        <th key={h} className="text-left px-4 py-2.5 text-gray-500 font-medium">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {PLACED_DEVICES.map((d) => (
-                      <tr key={d.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-4 py-2.5">
-                          <span className="font-mono font-semibold text-gray-800">{d.id}</span>
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <span className="flex items-center gap-1.5 text-gray-700">
-                            {deviceIcon(d.type, 12)}
-                            {d.type}
+              {/* Tab Content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-5">
+
+                {/* ── CAPTURE TAB ── */}
+                {activeTab === "capture" && (
+                  <>
+                    {/* Voice Input */}
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Mic size={15} className="text-[#6B7EFF]" />
+                          <h3 className="text-sm font-semibold text-gray-900">Voice Transcript</h3>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {/* Plaud upload */}
+                          <input
+                            ref={plaudInputRef}
+                            type="file"
+                            accept="audio/*,.m4a,.mp3,.wav,.ogg"
+                            onChange={handlePlaudUpload}
+                            className="hidden"
+                          />
+                          <button
+                            onClick={() => plaudInputRef.current?.click()}
+                            disabled={parseLoading}
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                          >
+                            <Upload size={11} /> Upload Plaud
+                          </button>
+
+                          {/* Live mic */}
+                          <button
+                            onClick={toggleRecording}
+                            className={cn(
+                              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                              recording
+                                ? "bg-red-600 text-white hover:bg-red-700"
+                                : "bg-[#6B7EFF] text-white hover:bg-blue-700"
+                            )}
+                          >
+                            {recording ? (
+                              <><MicOff size={11} /> Stop</>
+                            ) : (
+                              <><Mic size={11} /> Dictate</>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      {recording && (
+                        <div className="flex items-center gap-2 text-xs text-red-600 font-medium mb-2 animate-pulse">
+                          <span className="w-2 h-2 rounded-full bg-red-500" />
+                          Recording... speak clearly about what you see on site
+                        </div>
+                      )}
+
+                      <textarea
+                        value={transcript}
+                        onChange={e => setTranscript(e.target.value)}
+                        placeholder="Speak what you see, or type observations here. Example: 'Main entrance has a DoorKing 9050 gate operator in fair condition, needs new loop detector. Building A has 4 cameras, one is offline...'"
+                        rows={6}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none text-gray-700 leading-relaxed"
+                      />
+
+                      <div className="flex items-center gap-2 mt-3">
+                        <button
+                          onClick={parseTranscript}
+                          disabled={parseLoading || !transcript.trim()}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                        >
+                          {parseLoading ? <Loader2 size={11} className="animate-spin" /> : <Zap size={11} />}
+                          Extract Devices from Transcript
+                        </button>
+                        <span className="text-xs text-gray-400">AI parses your notes into device cards</span>
+                      </div>
+                    </div>
+
+                    {/* Field Notes */}
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Edit2 size={14} className="text-gray-500" />
+                        <h3 className="text-sm font-semibold text-gray-900">Field Notes</h3>
+                      </div>
+                      <textarea
+                        value={survey.notes_raw ?? ""}
+                        onChange={e => setSurvey(s => s ? { ...s, notes_raw: e.target.value } : s)}
+                        placeholder="Additional observations, access issues, special conditions, HOA restrictions..."
+                        rows={4}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none text-gray-700"
+                      />
+                    </div>
+
+                    {/* Device Inventory */}
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Layers size={14} className="text-gray-500" />
+                          <h3 className="text-sm font-semibold text-gray-900">Device Inventory</h3>
+                          <span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium">
+                            {survey.devices?.length ?? 0}
                           </span>
-                        </td>
-                        <td className="px-4 py-2.5 text-gray-600">{d.model}</td>
-                        <td className="px-4 py-2.5 text-gray-600">{d.position}</td>
-                        <td className="px-4 py-2.5">
-                          <span className={cn(
-                            "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium",
-                            d.status === "Confirmed" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"
-                          )}>
-                            {d.status === "Confirmed" ? <CheckCircle2 size={9} /> : <Clock size={9} />}
-                            {d.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                        </div>
+                        <button
+                          onClick={addDevice}
+                          className="flex items-center gap-1.5 text-xs text-[#6B7EFF] hover:text-blue-700 font-medium"
+                        >
+                          <Plus size={12} /> Add Device
+                        </button>
+                      </div>
+                      <div className="space-y-2.5">
+                        {(survey.devices ?? []).map(d => (
+                          <DeviceCard
+                            key={d.id}
+                            device={d}
+                            onChange={upd => updateDevice(d.id, upd)}
+                            onDelete={() => deleteDevice(d.id)}
+                          />
+                        ))}
+                        {(survey.devices?.length ?? 0) === 0 && (
+                          <div className="text-center py-8 text-gray-400 bg-white rounded-xl border border-dashed border-gray-300">
+                            <Layers size={20} className="mx-auto mb-2 text-gray-300" />
+                            <p className="text-sm">No devices yet</p>
+                            <p className="text-xs mt-1">Use voice dictation above or click "Add Device"</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
-            {/* BOM Preview Strip */}
-            <div className="bg-white rounded-xl border border-blue-200 shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b border-blue-100 bg-blue-50/50 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FileText size={14} className="text-blue-600" />
-                  <h3 className="text-sm font-semibold text-gray-900">Auto-generated BOM</h3>
-                  <span className="bg-blue-100 text-blue-700 text-xs font-medium px-2 py-0.5 rounded-full">9 devices</span>
-                </div>
-                <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors shadow-sm">
-                  Add to Quote <ArrowRight size={12} />
-                </button>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100">
-                      {["SKU", "Product", "Qty", "Unit Price", "Subtotal"].map((h) => (
-                        <th key={h} className="text-left px-4 py-2 text-gray-500 font-medium">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {[
-                      { sku: "GG-EE4MD",   product: "EagleEye 4MP Dome",       qty: 6, unit: 249,  total: 1494 },
-                      { sku: "GG-BX10",    product: "BX-10 Slide Gate Controller", qty: 2, unit: 895, total: 1790 },
-                      { sku: "GG-NVR-8",   product: "GG-NVR-8 Network Panel",  qty: 1, unit: 1199, total: 1199 },
-                    ].map((row) => (
-                      <tr key={row.sku} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-4 py-2.5 font-mono text-gray-500">{row.sku}</td>
-                        <td className="px-4 py-2.5 font-medium text-gray-800">{row.product}</td>
-                        <td className="px-4 py-2.5 text-gray-600 tabular-nums">×{row.qty}</td>
-                        <td className="px-4 py-2.5 text-gray-600 tabular-nums">${row.unit.toLocaleString()}</td>
-                        <td className="px-4 py-2.5 font-semibold text-gray-800 tabular-nums">${row.total.toLocaleString()}</td>
-                      </tr>
-                    ))}
-                    <tr className="bg-gray-50 border-t border-gray-200">
-                      <td colSpan={4} className="px-4 py-2.5 text-right text-xs font-semibold text-gray-700">Hardware Total</td>
-                      <td className="px-4 py-2.5 font-bold text-gray-900 tabular-nums">$4,483</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                    {/* Action bar */}
+                    <div className="flex items-center gap-3 sticky bottom-0 bg-[#F8FAFC] py-3 border-t border-gray-200 -mx-6 px-6">
+                      <button
+                        onClick={saveNotes}
+                        disabled={savingNotes}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        {savingNotes ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                        Save
+                      </button>
 
-          </div>
+                      <button
+                        onClick={generate}
+                        disabled={generating || (!transcript.trim() && (!survey.devices || survey.devices.length === 0))}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#6B7EFF] text-white text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
+                      >
+                        {generating ? (
+                          <><Loader2 size={13} className="animate-spin" /> Generating...</>
+                        ) : (
+                          <><Sparkles size={13} /> Generate SOW + BOM</>
+                        )}
+                      </button>
+
+                      {genError && (
+                        <span className="flex items-center gap-1.5 text-xs text-red-600">
+                          <AlertTriangle size={12} /> {genError}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {/* ── AI OUTPUT TAB ── */}
+                {activeTab === "ai" && (
+                  <>
+                    {!survey.ai_summary && !survey.ai_sow && (
+                      <div className="text-center py-12">
+                        <Sparkles size={28} className="mx-auto text-gray-300 mb-3" />
+                        <p className="text-sm text-gray-500 font-medium">No AI output yet</p>
+                        <p className="text-xs text-gray-400 mt-1">Go to the Capture tab and click "Generate SOW + BOM"</p>
+                        <button
+                          onClick={() => setActiveTab("capture")}
+                          className="mt-4 flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#6B7EFF] text-white text-xs font-medium hover:bg-blue-700 transition-colors mx-auto"
+                        >
+                          <ArrowRight size={12} /> Go to Capture
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Summary */}
+                    {survey.ai_summary && (
+                      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Sparkles size={14} className="text-[#6B7EFF]" />
+                          <h3 className="text-sm font-semibold text-gray-900">Executive Summary</h3>
+                          <span className="text-[10px] text-gray-400 font-medium ml-1">AI generated · editable</span>
+                        </div>
+                        <textarea
+                          value={survey.ai_summary}
+                          onChange={e => setSurvey(s => s ? { ...s, ai_summary: e.target.value } : s)}
+                          rows={3}
+                          className="w-full text-sm text-gray-700 leading-relaxed border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"
+                        />
+                      </div>
+                    )}
+
+                    {/* Urgent Items */}
+                    {survey.ai_urgent_items?.length > 0 && (
+                      <div className="bg-red-50 rounded-xl border border-red-200 shadow-sm p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <AlertTriangle size={14} className="text-red-600" />
+                          <h3 className="text-sm font-semibold text-red-800">Urgent Items</h3>
+                        </div>
+                        <ul className="space-y-2">
+                          {survey.ai_urgent_items.map((u, i) => (
+                            <li key={i} className="text-sm">
+                              <span className="font-medium text-red-800">{u.item}</span>
+                              <span className="text-red-600"> — {u.reason}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Scope of Work */}
+                    {survey.ai_sow && (
+                      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <FileText size={14} className="text-gray-500" />
+                          <h3 className="text-sm font-semibold text-gray-900">Scope of Work</h3>
+                          <span className="text-[10px] text-gray-400 font-medium ml-1">editable</span>
+                        </div>
+                        <textarea
+                          value={survey.ai_sow}
+                          onChange={e => setSurvey(s => s ? { ...s, ai_sow: e.target.value } : s)}
+                          rows={14}
+                          className="w-full text-sm text-gray-700 leading-relaxed font-mono border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-y"
+                        />
+                      </div>
+                    )}
+
+                    {/* BOM */}
+                    {(survey.ai_bom?.length ?? 0) > 0 && (
+                      <BomTable
+                        items={survey.ai_bom}
+                        onChange={items => setSurvey(s => s ? { ...s, ai_bom: items } : s)}
+                      />
+                    )}
+
+                    {/* Recommendations */}
+                    {survey.ai_recommendations?.length > 0 && (
+                      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Check size={14} className="text-blue-600" />
+                          <h3 className="text-sm font-semibold text-gray-900">Recommendations</h3>
+                        </div>
+                        <div className="space-y-2.5">
+                          {survey.ai_recommendations.map((r, i) => (
+                            <div key={i} className="flex items-start gap-3 p-3 rounded-lg border border-gray-100 hover:border-gray-200 transition-colors">
+                              <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full border shrink-0 mt-0.5", priorityColor(r.priority))}>
+                                {r.priority}
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-gray-800">{r.title}</p>
+                                <p className="text-xs text-gray-500 mt-0.5">{r.detail}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Install Notes */}
+                    {survey.ai_install_notes?.length > 0 && (
+                      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <ClipboardList size={14} className="text-gray-500" />
+                          <h3 className="text-sm font-semibold text-gray-900">Install Notes for Field Team</h3>
+                        </div>
+                        <ol className="space-y-1.5">
+                          {survey.ai_install_notes.map((n, i) => (
+                            <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                              <span className="text-xs font-bold text-[#6B7EFF] mt-0.5 shrink-0 w-5">{i + 1}.</span>
+                              <span>{n.note}</span>
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
+
+                    {/* Timeline */}
+                    {survey.ai_timeline && (
+                      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Clock size={14} className="text-gray-500" />
+                          <h3 className="text-sm font-semibold text-gray-900">Estimated Timeline</h3>
+                          <span className="text-[10px] text-gray-400 font-medium ml-1">editable</span>
+                        </div>
+                        <textarea
+                          value={survey.ai_timeline}
+                          onChange={e => setSurvey(s => s ? { ...s, ai_timeline: e.target.value } : s)}
+                          rows={3}
+                          className="w-full text-sm text-gray-700 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"
+                        />
+                      </div>
+                    )}
+
+                    {/* AI Output action bar */}
+                    {survey.ai_sow && (
+                      <div className="flex items-center gap-3 sticky bottom-0 bg-[#F8FAFC] py-3 border-t border-gray-200 -mx-6 px-6">
+                        <button
+                          onClick={saveBom}
+                          disabled={savingBom}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                        >
+                          {savingBom ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                          Save Edits
+                        </button>
+
+                        <button
+                          onClick={generate}
+                          disabled={generating}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#6B7EFF] text-[#6B7EFF] text-sm font-medium hover:bg-blue-50 transition-colors"
+                        >
+                          {generating ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                          Regenerate
+                        </button>
+
+                        <div className="flex-1" />
+
+                        {survey.quote_id ? (
+                          <a
+                            href={`/quotes/${survey.quote_id}`}
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors shadow-sm"
+                          >
+                            <CheckCircle2 size={13} /> View Quote
+                          </a>
+                        ) : (
+                          <button
+                            onClick={createQuote}
+                            disabled={creatingQuote || !survey.ai_bom?.length}
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50"
+                          >
+                            {creatingQuote ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} />}
+                            Create Quote from BOM
+                            <ArrowRight size={12} />
+                          </button>
+                        )}
+
+                        <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                          <Download size={13} /> Export PDF
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </>
+          ) : null}
         </div>
       </div>
+
+      {showNew && (
+        <NewSurveyModal
+          onClose={() => setShowNew(false)}
+          onCreate={s => {
+            setSurveys(ss => [s, ...ss])
+            setSelectedId(s.id)
+            setSurvey(s)
+            setTranscript("")
+            setActiveTab("capture")
+            setShowNew(false)
+          }}
+        />
+      )}
     </div>
-  );
+  )
 }
