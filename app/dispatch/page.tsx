@@ -995,11 +995,33 @@ export default function DispatchPage() {
       const { technician } = await res.json();
       setTechs(prev => [...prev, technician]);
       setShowAddTech(false);
-      setNewTechForm({ name: '', role: 'Tech', phone: '', email: '' });
+      setNewTechForm({ name: '', role: 'Tech', phone: '', email: '', employment_type: 'employee' });
     } catch (err: unknown) {
       setAddTechError(err instanceof Error ? err.message : 'Failed');
     } finally {
       setAddTechSaving(false);
+    }
+  };
+
+  const handleSendInvite = async () => {
+    if (!invitingTech) return;
+    setInviteSending(true); setInviteMsg(null);
+    try {
+      const res = await fetch(`/api/dispatch/technicians/${invitingTech.id}/invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Failed');
+      setInviteMsg(`✓ ${json.message}`);
+      // Mark the tech as invited in local state
+      setTechs(prev => prev.map(t => t.id === invitingTech.id ? { ...t, can_access_portal: true } : t));
+      setTimeout(() => setInvitingTech(null), 2000);
+    } catch (err: unknown) {
+      setInviteMsg(`✗ ${err instanceof Error ? err.message : 'Failed to send invite'}`);
+    } finally {
+      setInviteSending(false);
     }
   };
 
@@ -1041,6 +1063,46 @@ export default function DispatchPage() {
             setSelectedJob(prev => prev ? { ...prev, status } : null);
           }}
         />
+      )}
+
+      {/* Portal Invite Modal */}
+      {invitingTech && (
+        <>
+          <div className="fixed inset-0 bg-black/30 z-40" onClick={() => !inviteSending && setInvitingTech(null)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-bold text-slate-900">Send Portal Invite</h2>
+                <button onClick={() => setInvitingTech(null)} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+              </div>
+              <p className="text-sm text-slate-600 mb-1">
+                Sending invite to <span className="font-semibold">{invitingTech.name}</span>
+              </p>
+              <p className="text-xs text-slate-400 mb-4">
+                They will receive a Clerk sign-up email at <span className="font-mono">{invitingTech.email}</span> and can log into the portal to view and update their assigned work orders.
+              </p>
+              {inviteMsg && (
+                <p className={`text-xs mb-3 font-medium ${inviteMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-600'}`}>{inviteMsg}</p>
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSendInvite}
+                  disabled={inviteSending}
+                  className="flex-1 text-sm bg-[#6B7EFF] text-white py-2 rounded-lg font-medium hover:bg-indigo-600 disabled:opacity-50"
+                >
+                  {inviteSending ? 'Sending…' : 'Send Invite'}
+                </button>
+                <button
+                  onClick={() => setInvitingTech(null)}
+                  disabled={inviteSending}
+                  className="flex-1 text-sm border border-slate-200 text-slate-600 py-2 rounded-lg hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Header */}
@@ -1220,10 +1282,18 @@ export default function DispatchPage() {
                   />
                   <input
                     className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="Email"
+                    placeholder="Email (for portal invite)"
                     value={newTechForm.email}
                     onChange={e => setNewTechForm(f => ({ ...f, email: e.target.value }))}
                   />
+                  <select
+                    className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                    value={newTechForm.employment_type}
+                    onChange={e => setNewTechForm(f => ({ ...f, employment_type: e.target.value }))}
+                  >
+                    <option value="employee">Employee</option>
+                    <option value="contractor">Contractor</option>
+                  </select>
                   {addTechError && <p className="text-xs text-red-500">{addTechError}</p>}
                   <div className="flex gap-2">
                     <button
@@ -1234,7 +1304,7 @@ export default function DispatchPage() {
                       {addTechSaving ? 'Adding…' : 'Add to Roster'}
                     </button>
                     <button
-                      onClick={() => { setShowAddTech(false); setNewTechForm({ name: '', role: 'Tech', phone: '', email: '' }); }}
+                      onClick={() => { setShowAddTech(false); setNewTechForm({ name: '', role: 'Tech', phone: '', email: '', employment_type: 'employee' }); }}
                       className="flex-1 text-xs border border-slate-200 text-slate-600 py-1.5 rounded-lg hover:bg-slate-50"
                     >
                       Cancel
@@ -1261,6 +1331,7 @@ export default function DispatchPage() {
                     tech={tech}
                     jobs={jobs}
                     onStatusChange={handleTechStatusChange}
+                    onInvite={tech => { setInvitingTech(tech); setInviteMsg(null); }}
                   />
                 ))
               )}
