@@ -7,10 +7,10 @@ import {
   Mail, Phone, MapPin, Building2, Users,
   CheckCircle2, Clock, AlertTriangle, ExternalLink,
   Shield, Wrench, FileText, Star, Loader2,
-  RefreshCw, X,
+  RefreshCw, X, Plus,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowLeft, Camera, DollarSign, Edit2, Activity, Save } = require("lucide-react") as any;
+const { ArrowLeft, Camera, DollarSign, Edit2, Activity, Save, Send } = require("lucide-react") as any;
 
 type OrgTier =
   | "corporate" | "master_agent" | "master_dealer"
@@ -30,6 +30,19 @@ interface ChildOrg {
 interface WorkOrder {
   id: string; title: string; status: string;
   scheduled_date: string | null; priority: string; site_id: string;
+}
+
+interface OrgQuote {
+  id: string;
+  quote_number: string;
+  status: string;
+  property_name: string | null;
+  units: number | null;
+  total_one_time: number;
+  total_mrr: number;
+  created_at: string;
+  sent_at: string | null;
+  accepted_at: string | null;
 }
 
 interface OrgDetail {
@@ -76,6 +89,8 @@ export default function CustomerDetailPage() {
   const [editForm, setEditForm] = useState<Partial<OrgDetail>>({});
   const [saving, setSaving]     = useState(false);
   const [saveErr, setSaveErr]   = useState<string | null>(null);
+  const [quotes, setQuotes]     = useState<OrgQuote[]>([]);
+  const [quotesLoaded, setQuotesLoaded] = useState(false);
 
   async function fetchOrg() {
     setLoading(true);
@@ -102,6 +117,20 @@ export default function CustomerDetailPage() {
   }
 
   useEffect(() => { fetchOrg(); }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    async function fetchQuotes() {
+      try {
+        const res = await fetch(`/api/quotes?client_org_id=${id}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setQuotes(data.records ?? []);
+      } catch { /* non-blocking */ }
+      finally { setQuotesLoaded(true); }
+    }
+    fetchQuotes();
+  }, [id]);
 
   async function saveEdit() {
     if (!org) return;
@@ -400,6 +429,89 @@ export default function CustomerDetailPage() {
             </div>
           </div>
         )}
+
+        {/* Quotes */}
+        <div className="bg-card border border-border rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <FileText size={14} className="text-brand-400" /> Quotes ({quotes.length})
+            </h3>
+            <Link
+              href={`/quotes/new?client_org_id=${id}`}
+              className="flex items-center gap-1 text-xs text-brand-400 hover:underline"
+            >
+              <Plus size={12} /> New Quote
+            </Link>
+          </div>
+          {!quotesLoaded ? (
+            <div className="flex items-center gap-2 py-4 text-muted-foreground">
+              <Loader2 size={14} className="animate-spin" />
+              <span className="text-xs">Loading…</span>
+            </div>
+          ) : quotes.length === 0 ? (
+            <div className="text-center py-6 text-sm text-muted-foreground">
+              <FileText size={24} className="mx-auto mb-2 text-muted-foreground/40" />
+              <p>No quotes for this organization.</p>
+              <Link href={`/quotes/new?client_org_id=${id}`} className="text-brand-400 hover:underline text-xs mt-1 inline-block">
+                Create the first quote
+              </Link>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left text-xs text-muted-foreground font-medium uppercase tracking-wide px-3 py-2">Quote #</th>
+                    <th className="text-left text-xs text-muted-foreground font-medium uppercase tracking-wide px-3 py-2">Property</th>
+                    <th className="text-right text-xs text-muted-foreground font-medium uppercase tracking-wide px-3 py-2">Setup</th>
+                    <th className="text-right text-xs text-muted-foreground font-medium uppercase tracking-wide px-3 py-2">MRR</th>
+                    <th className="text-left text-xs text-muted-foreground font-medium uppercase tracking-wide px-3 py-2">Status</th>
+                    <th className="text-left text-xs text-muted-foreground font-medium uppercase tracking-wide px-3 py-2">Date</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {quotes.map(q => (
+                    <tr key={q.id} className="hover:bg-background/40 transition-colors group">
+                      <td className="px-3 py-2.5">
+                        <span className="text-xs font-mono text-brand-400">{q.quote_number}</span>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className="text-sm text-foreground">{q.property_name ?? '—'}</span>
+                        {q.units ? <span className="text-xs text-muted-foreground ml-1">({q.units} units)</span> : null}
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <span className="text-sm text-foreground">${q.total_one_time.toLocaleString()}</span>
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <span className="text-sm text-violet-400">${q.total_mrr.toLocaleString()}<span className="text-xs text-muted-foreground">/mo</span></span>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border capitalize
+                          ${q.status === 'accepted' ? 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20'
+                          : q.status === 'sent' || q.status === 'viewed' ? 'text-blue-400 bg-blue-400/10 border-blue-400/20'
+                          : q.status === 'declined' ? 'text-red-400 bg-red-400/10 border-red-400/20'
+                          : 'text-zinc-400 bg-zinc-400/10 border-zinc-400/20'}`}
+                        >
+                          {q.status === 'accepted' ? <CheckCircle2 size={9} /> : q.status === 'sent' ? <Send size={9} /> : null}
+                          {q.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className="text-xs text-muted-foreground">{new Date(q.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <Link href={`/quotes/${q.id}`} className="opacity-0 group-hover:opacity-100 text-xs text-brand-400 hover:underline flex items-center gap-0.5 transition-opacity">
+                          <ExternalLink size={11} /> View
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
 
       </div>
 

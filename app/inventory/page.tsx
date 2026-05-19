@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import {
   Plus,
+  X,
   Search,
   AlertTriangle,
   Package,
@@ -12,224 +13,470 @@ import {
   XCircle,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Edit2, Truck, Archive, RotateCcw } = require('lucide-react') as any;
+const { Edit2, Truck, Archive, RotateCcw, DollarSign } = require('lucide-react') as any;
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
+// ─── Types ─────────────────────────────────────────────────────────────────────
 
-type StockStatus = "OK" | "Low" | "Out of Stock";
-type Category = "Cameras" | "Gate Hardware" | "Access Control" | "Networking" | "Tools & Consumables";
+type StockStatus = "ok" | "low" | "out";
 type Tab = "Warehouse" | "Van Stock" | "Purchase Orders";
 
 interface InventoryItem {
   id: string;
   name: string;
-  category: Category;
-  sku: string;
-  onHand: number;
-  minStock: number;
-  location: string;
+  category: string;
+  sku: string | null;
+  on_hand: number;
+  on_truck: number;
+  min_stock: number;
+  reorder_qty: number;
+  location: string | null;
+  supplier: string | null;
+  unit_cost: number;
+  unit_price: number;
   status: StockStatus;
 }
 
-const MOCK_INVENTORY: InventoryItem[] = [
-  {
-    id: "i01",
-    name: "EagleEye 4MP Dome Camera",
-    category: "Cameras",
-    sku: "EE-4MP-DOME",
-    onHand: 24,
-    minStock: 10,
-    location: "Shelf A3",
-    status: "OK",
-  },
-  {
-    id: "i02",
-    name: "EagleEye 8MP Bullet",
-    category: "Cameras",
-    sku: "EE-8MP-BULL",
-    onHand: 8,
-    minStock: 10,
-    location: "Shelf A4",
-    status: "Low",
-  },
-  {
-    id: "i03",
-    name: "Swing Gate Operator (FAAC)",
-    category: "Gate Hardware",
-    sku: "GH-FAAC-SWG",
-    onHand: 3,
-    minStock: 5,
-    location: "Shelf B1",
-    status: "Low",
-  },
-  {
-    id: "i04",
-    name: "Slide Gate Motor (Linear)",
-    category: "Gate Hardware",
-    sku: "GH-LIN-SLD",
-    onHand: 6,
-    minStock: 4,
-    location: "Shelf B2",
-    status: "OK",
-  },
-  {
-    id: "i05",
-    name: "Brivo ACS300 Controller",
-    category: "Access Control",
-    sku: "AC-ACS300",
-    onHand: 0,
-    minStock: 2,
-    location: "Shelf C1",
-    status: "Out of Stock",
-  },
-  {
-    id: "i06",
-    name: "Cat6 Ethernet Cable 500ft",
-    category: "Networking",
-    sku: "NET-CAT6-500",
-    onHand: 12,
-    minStock: 5,
-    location: "Shelf D2",
-    status: "OK",
-  },
-  {
-    id: "i07",
-    name: "PoE Injector 30W",
-    category: "Networking",
-    sku: "NET-POE-30W",
-    onHand: 18,
-    minStock: 8,
-    location: "Shelf D3",
-    status: "OK",
-  },
-  {
-    id: "i08",
-    name: 'Conduit 1" EMT 10ft',
-    category: "Tools & Consumables",
-    sku: "TC-COND-1EMT",
-    onHand: 45,
-    minStock: 20,
-    location: "Shelf E1",
-    status: "OK",
-  },
-  {
-    id: "i09",
-    name: "Wire Nuts (100pk)",
-    category: "Tools & Consumables",
-    sku: "TC-WNUT-100",
-    onHand: 22,
-    minStock: 10,
-    location: "Shelf E3",
-    status: "OK",
-  },
-  {
-    id: "i10",
-    name: "Keypad Reader (HID)",
-    category: "Access Control",
-    sku: "AC-HID-KPD",
-    onHand: 5,
-    minStock: 3,
-    location: "Shelf C2",
-    status: "OK",
-  },
-  {
-    id: "i11",
-    name: "Network Switch 8-port",
-    category: "Networking",
-    sku: "NET-SW-8P",
-    onHand: 4,
-    minStock: 4,
-    location: "Shelf D1",
-    status: "OK",
-  },
-  {
-    id: "i12",
-    name: "Solar Panel 20W (gate backup)",
-    category: "Gate Hardware",
-    sku: "GH-SOLAR-20",
-    onHand: 9,
-    minStock: 4,
-    location: "Shelf B4",
-    status: "OK",
-  },
-];
+interface PurchaseOrder {
+  id: string;
+  po_number: string | null;
+  supplier: string | null;
+  status: string;
+  total: number;
+  created_at: string;
+  ordered_at: string | null;
+  expected_at: string | null;
+}
 
-const CATEGORIES: (Category | "All")[] = [
+interface ItemFormState {
+  name: string;
+  sku: string;
+  category: string;
+  description: string;
+  unit_cost: string;
+  unit_price: string;
+  on_hand: string;
+  on_truck: string;
+  min_stock: string;
+  reorder_qty: string;
+  location: string;
+  supplier: string;
+  supplier_sku: string;
+}
+
+const EMPTY_FORM: ItemFormState = {
+  name: "", sku: "", category: "Other", description: "",
+  unit_cost: "0", unit_price: "0", on_hand: "0", on_truck: "0",
+  min_stock: "0", reorder_qty: "1", location: "", supplier: "", supplier_sku: "",
+};
+
+const CATEGORIES = [
   "All",
   "Cameras",
   "Gate Hardware",
   "Access Control",
   "Networking",
   "Tools & Consumables",
+  "Other",
 ];
 
 const TABS: Tab[] = ["Warehouse", "Van Stock", "Purchase Orders"];
 
-// ─── Config ───────────────────────────────────────────────────────────────────
+// ─── Config ────────────────────────────────────────────────────────────────────
 
-const categoryColor: Record<Category, string> = {
-  Cameras: "bg-blue-100 text-blue-700",
-  "Gate Hardware": "bg-orange-100 text-orange-700",
-  "Access Control": "bg-violet-100 text-violet-700",
-  Networking: "bg-teal-100 text-teal-700",
+const categoryColor: Record<string, string> = {
+  Cameras:              "bg-blue-100 text-blue-700",
+  "Gate Hardware":      "bg-orange-100 text-orange-700",
+  "Access Control":     "bg-violet-100 text-violet-700",
+  Networking:           "bg-teal-100 text-teal-700",
   "Tools & Consumables": "bg-slate-100 text-slate-600",
+  Other:                "bg-gray-100 text-gray-600",
 };
 
-const statusConfig: Record<StockStatus, { badge: string; icon: React.ReactNode }> = {
-  OK: {
-    badge: "bg-emerald-100 text-emerald-700",
-    icon: <CheckCircle2 size={13} className="text-emerald-600" />,
-  },
-  Low: {
-    badge: "bg-amber-100 text-amber-700",
-    icon: <AlertTriangle size={13} className="text-amber-500" />,
-  },
-  "Out of Stock": {
-    badge: "bg-red-100 text-red-700",
-    icon: <XCircle size={13} className="text-red-500" />,
-  },
+const statusConfig: Record<StockStatus, { badge: string; icon: React.ReactNode; label: string }> = {
+  ok:  { badge: "bg-emerald-100 text-emerald-700", icon: <CheckCircle2 size={13} className="text-emerald-600" />, label: "OK"           },
+  low: { badge: "bg-amber-100 text-amber-700",     icon: <AlertTriangle size={13} className="text-amber-500" />,  label: "Low"          },
+  out: { badge: "bg-red-100 text-red-700",          icon: <XCircle size={13} className="text-red-500" />,          label: "Out of Stock" },
 };
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+const poStatusConfig: Record<string, { badge: string; label: string }> = {
+  draft:     { badge: "bg-slate-100 text-slate-600",    label: "Draft"     },
+  sent:      { badge: "bg-blue-100 text-blue-700",      label: "Sent"      },
+  confirmed: { badge: "bg-violet-100 text-violet-700",  label: "Confirmed" },
+  partial:   { badge: "bg-amber-100 text-amber-700",    label: "Partial"   },
+  received:  { badge: "bg-emerald-100 text-emerald-700", label: "Received" },
+  cancelled: { badge: "bg-red-100 text-red-700",        label: "Cancelled" },
+};
+
+function fmtDate(iso?: string | null) {
+  if (!iso) return "—";
+  return new Date(iso + (iso.length === 10 ? "T12:00:00" : "")).toLocaleDateString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+  });
+}
+
+// ─── Add / Edit Slide-Over ────────────────────────────────────────────────────
+
+interface ItemSlideOverProps {
+  open: boolean;
+  initial?: InventoryItem | null;
+  onClose: () => void;
+  onSaved: (item: InventoryItem) => void;
+}
+
+function ItemSlideOver({ open, initial, onClose, onSaved }: ItemSlideOverProps) {
+  const [form, setForm] = useState<ItemFormState>(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState("");
+
+  useEffect(() => {
+    if (initial) {
+      setForm({
+        name:         initial.name,
+        sku:          initial.sku          ?? "",
+        category:     initial.category,
+        description:  "",
+        unit_cost:    String(initial.unit_cost),
+        unit_price:   String(initial.unit_price),
+        on_hand:      String(initial.on_hand),
+        on_truck:     String(initial.on_truck),
+        min_stock:    String(initial.min_stock),
+        reorder_qty:  String(initial.reorder_qty),
+        location:     initial.location     ?? "",
+        supplier:     initial.supplier     ?? "",
+        supplier_sku: "",
+      });
+    } else {
+      setForm(EMPTY_FORM);
+    }
+    setError("");
+  }, [initial, open]);
+
+  const set = (k: keyof ItemFormState, v: string) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleSubmit = async () => {
+    if (!form.name.trim()) { setError("Name is required"); return; }
+    setSaving(true); setError("");
+    try {
+      const payload = {
+        name:         form.name.trim(),
+        sku:          form.sku.trim()          || null,
+        category:     form.category,
+        description:  form.description.trim()  || null,
+        unit_cost:    parseFloat(form.unit_cost)  || 0,
+        unit_price:   parseFloat(form.unit_price) || 0,
+        on_hand:      parseInt(form.on_hand)      || 0,
+        on_truck:     parseInt(form.on_truck)     || 0,
+        min_stock:    parseInt(form.min_stock)    || 0,
+        reorder_qty:  parseInt(form.reorder_qty)  || 1,
+        location:     form.location.trim()    || null,
+        supplier:     form.supplier.trim()    || null,
+        supplier_sku: form.supplier_sku.trim() || null,
+      };
+
+      const url    = initial ? `/api/inventory/${initial.id}` : "/api/inventory";
+      const method = initial ? "PATCH" : "POST";
+      const res    = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Save failed");
+      onSaved(json);
+      onClose();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) return null;
+
+  const inp = "w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 bg-white";
+  const lbl = "block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5";
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} />
+      <div className="fixed inset-y-0 right-0 w-[480px] bg-white border-l border-slate-200 z-50 flex flex-col shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">{initial ? "Edit Item" : "Add Inventory Item"}</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100">
+            <X size={14} className="text-slate-500" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          <div>
+            <label className={lbl}>Name *</label>
+            <input value={form.name} onChange={e => set("name", e.target.value)} placeholder="e.g. Brivo ACS300 Controller" className={inp} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>SKU</label>
+              <input value={form.sku} onChange={e => set("sku", e.target.value)} placeholder="e.g. AC-ACS300" className={inp} />
+            </div>
+            <div>
+              <label className={lbl}>Category</label>
+              <select value={form.category} onChange={e => set("category", e.target.value)} className={inp}>
+                {CATEGORIES.filter(c => c !== "All").map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>Unit Cost ($)</label>
+              <input type="number" step="0.01" min="0" value={form.unit_cost} onChange={e => set("unit_cost", e.target.value)} className={inp} />
+            </div>
+            <div>
+              <label className={lbl}>Unit Price ($)</label>
+              <input type="number" step="0.01" min="0" value={form.unit_price} onChange={e => set("unit_price", e.target.value)} className={inp} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>On Hand (Warehouse)</label>
+              <input type="number" min="0" value={form.on_hand} onChange={e => set("on_hand", e.target.value)} className={inp} />
+            </div>
+            <div>
+              <label className={lbl}>On Truck (Van)</label>
+              <input type="number" min="0" value={form.on_truck} onChange={e => set("on_truck", e.target.value)} className={inp} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>Min Stock (reorder at)</label>
+              <input type="number" min="0" value={form.min_stock} onChange={e => set("min_stock", e.target.value)} className={inp} />
+            </div>
+            <div>
+              <label className={lbl}>Reorder Qty</label>
+              <input type="number" min="1" value={form.reorder_qty} onChange={e => set("reorder_qty", e.target.value)} className={inp} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>Location / Shelf</label>
+              <input value={form.location} onChange={e => set("location", e.target.value)} placeholder="e.g. Shelf A3" className={inp} />
+            </div>
+            <div>
+              <label className={lbl}>Supplier</label>
+              <input value={form.supplier} onChange={e => set("supplier", e.target.value)} placeholder="e.g. Brivo" className={inp} />
+            </div>
+          </div>
+
+          <div>
+            <label className={lbl}>Supplier SKU</label>
+            <input value={form.supplier_sku} onChange={e => set("supplier_sku", e.target.value)} placeholder="Supplier's part number" className={inp} />
+          </div>
+
+          {error && (
+            <div className="flex items-center gap-2 text-red-600 text-xs bg-red-50 rounded-xl px-3 py-2">
+              <AlertTriangle size={13} /> {error}
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-slate-200 p-4 flex gap-3">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+            Cancel
+          </button>
+          <button onClick={handleSubmit} disabled={saving}
+            className="flex-1 py-2.5 rounded-xl bg-[#2563EB] hover:bg-blue-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-sm">
+            {saving ? "Saving…" : initial ? "Save Changes" : "Add Item"}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── Adjust Stock Modal ───────────────────────────────────────────────────────
+
+interface AdjustModalProps {
+  item: InventoryItem;
+  location: "warehouse" | "truck";
+  onClose: () => void;
+  onAdjusted: (item: InventoryItem) => void;
+}
+
+function AdjustModal({ item, location, onClose, onAdjusted }: AdjustModalProps) {
+  const [type, setType]   = useState<"add" | "remove" | "set">("add");
+  const [qty, setQty]     = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError]  = useState("");
+
+  const current = location === "truck" ? item.on_truck : item.on_hand;
+
+  const handleSubmit = async () => {
+    const numQty = parseInt(qty);
+    if (isNaN(numQty) || numQty < 0) { setError("Enter a valid quantity"); return; }
+    setSaving(true); setError("");
+    try {
+      const res  = await fetch(`/api/inventory/${item.id}/adjust`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, qty: numQty, location }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Adjust failed");
+      onAdjusted(json);
+      onClose();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Adjust failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inp = "w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 bg-white";
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/30 z-40 flex items-center justify-center" onClick={onClose}>
+        <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-80 p-5" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-slate-900">Adjust {location === "truck" ? "Van" : "Warehouse"} Stock</h3>
+            <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-100"><X size={14} className="text-slate-500" /></button>
+          </div>
+          <p className="text-xs text-slate-500 mb-3">{item.name} — Current: <span className="font-bold text-slate-800">{current}</span></p>
+
+          <div className="flex gap-2 mb-3">
+            {(["add", "remove", "set"] as const).map(t => (
+              <button key={t} onClick={() => setType(t)}
+                className={cn("flex-1 py-1.5 text-xs font-medium rounded-lg border transition-colors capitalize",
+                  type === t ? "bg-[#2563EB] text-white border-[#2563EB]" : "border-slate-200 text-slate-600 hover:border-blue-300")}>
+                {t}
+              </button>
+            ))}
+          </div>
+
+          <input type="number" min="0" value={qty} onChange={e => setQty(e.target.value)}
+            placeholder={type === "set" ? "Set exact qty" : "Quantity"}
+            className={inp} />
+
+          {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
+
+          <div className="flex gap-2 mt-4">
+            <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50">Cancel</button>
+            <button onClick={handleSubmit} disabled={saving || !qty}
+              className="flex-1 py-2 rounded-xl bg-[#2563EB] hover:bg-blue-700 text-white text-sm font-semibold disabled:opacity-50">
+              {saving ? "Saving…" : "Apply"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default function InventoryPage() {
-  const [activeTab, setActiveTab] = useState<Tab>("Warehouse");
-  const [activeCategory, setActiveCategory] = useState<Category | "All">("All");
-  const [search, setSearch] = useState("");
+  const [activeTab, setActiveTab]       = useState<Tab>("Warehouse");
+  const [activeCategory, setActiveCategory] = useState("All");
+  const [search, setSearch]             = useState("");
+
+  // Data
+  const [items, setItems]               = useState<InventoryItem[]>([]);
+  const [pos, setPos]                   = useState<PurchaseOrder[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [loadingPos, setLoadingPos]     = useState(false);
+
+  // Slide-overs / modals
+  const [slideOpen, setSlideOpen]       = useState(false);
+  const [editItem, setEditItem]         = useState<InventoryItem | null>(null);
+  const [adjustItem, setAdjustItem]     = useState<InventoryItem | null>(null);
+  const [adjustLocation, setAdjustLocation] = useState<"warehouse" | "truck">("warehouse");
+
+  // Load inventory
+  const loadInventory = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res  = await fetch("/api/inventory");
+      const json = await res.json();
+      setItems(json.records ?? []);
+    } catch (_) {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Load POs
+  const loadPOs = useCallback(async () => {
+    setLoadingPos(true);
+    try {
+      const res  = await fetch("/api/purchase-orders");
+      const json = await res.json();
+      setPos(json.records ?? []);
+    } catch (_) {
+      // ignore
+    } finally {
+      setLoadingPos(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadInventory();
+  }, [loadInventory]);
+
+  useEffect(() => {
+    if (activeTab === "Purchase Orders") {
+      void loadPOs();
+    }
+  }, [activeTab, loadPOs]);
+
+  // Derived stats
+  const lowItems      = items.filter(i => i.status === "low");
+  const outItems      = items.filter(i => i.status === "out");
+  const vanItems      = items.filter(i => i.on_truck > 0);
+  const pendingPOs    = pos.filter(p => ["draft", "sent", "confirmed", "partial"].includes(p.status));
 
   const stats = [
-    { label: "Total SKUs", value: "147", icon: Package, color: "text-blue-600", bg: "bg-blue-50" },
-    {
-      label: "Low Stock",
-      value: "3",
-      icon: AlertTriangle,
-      color: "text-amber-600",
-      bg: "bg-amber-50",
-    },
-    {
-      label: "Van Stock Items",
-      value: "89",
-      icon: Truck,
-      color: "text-violet-600",
-      bg: "bg-violet-50",
-    },
-    {
-      label: "Pending Orders",
-      value: "2",
-      icon: ClipboardList,
-      color: "text-emerald-600",
-      bg: "bg-emerald-50",
-    },
+    { label: "Total SKUs",     value: String(items.length), icon: Package,       color: "text-blue-600",   bg: "bg-blue-50"   },
+    { label: "Low Stock",      value: String(lowItems.length + outItems.length), icon: AlertTriangle, color: "text-amber-600", bg: "bg-amber-50" },
+    { label: "Van Stock Items", value: String(vanItems.length), icon: Truck,     color: "text-violet-600", bg: "bg-violet-50" },
+    { label: "Pending Orders", value: String(pendingPOs.length), icon: ClipboardList, color: "text-emerald-600", bg: "bg-emerald-50" },
   ];
 
-  const filteredItems = MOCK_INVENTORY.filter((item) => {
-    const matchesCategory = activeCategory === "All" || item.category === activeCategory;
-    const matchesSearch =
-      search === "" ||
-      item.name.toLowerCase().includes(search.toLowerCase()) ||
-      item.sku.toLowerCase().includes(search.toLowerCase());
-    return matchesCategory && matchesSearch;
+  // Filter for warehouse tab
+  const warehouseItems = items.filter(item => {
+    const matchesCat  = activeCategory === "All" || item.category === activeCategory;
+    const matchesSearch = !search
+      || item.name.toLowerCase().includes(search.toLowerCase())
+      || (item.sku ?? "").toLowerCase().includes(search.toLowerCase());
+    return matchesCat && matchesSearch;
   });
+
+  // Filter for van tab
+  const truckItems = items.filter(item => {
+    const matchesSearch = !search
+      || item.name.toLowerCase().includes(search.toLowerCase())
+      || (item.sku ?? "").toLowerCase().includes(search.toLowerCase());
+    return item.on_truck > 0 && matchesSearch;
+  });
+
+  const handleItemSaved = (saved: InventoryItem) => {
+    setItems(prev => {
+      const idx = prev.findIndex(i => i.id === saved.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = saved;
+        return next;
+      }
+      return [saved, ...prev];
+    });
+  };
+
+  const alertCount = lowItems.length + outItems.length;
 
   return (
     <div className="min-h-screen bg-[#f0f2f5] p-6 space-y-6">
@@ -238,19 +485,19 @@ export default function InventoryPage() {
         <h1 className="text-2xl font-bold text-slate-900">Inventory</h1>
         <div className="flex items-center gap-3 flex-1 max-w-xl ml-auto">
           <div className="relative flex-1">
-            <Search
-              size={15}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-            />
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             <input
               type="text"
-              placeholder="Search parts, SKUs..."
+              placeholder="Search parts, SKUs…"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={e => setSearch(e.target.value)}
               className="w-full pl-9 pr-4 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 placeholder-slate-400 shadow-sm"
             />
           </div>
-          <button className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#2563EB] rounded-lg hover:bg-blue-700 transition-colors shadow-sm shrink-0">
+          <button
+            onClick={() => { setEditItem(null); setSlideOpen(true); }}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#2563EB] rounded-lg hover:bg-blue-700 transition-colors shadow-sm shrink-0"
+          >
             <Plus size={15} />
             Add Item
           </button>
@@ -258,20 +505,25 @@ export default function InventoryPage() {
       </div>
 
       {/* Alert Banner */}
-      <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-5 py-3.5">
-        <AlertTriangle size={17} className="text-amber-500 shrink-0" />
-        <p className="text-sm text-amber-800 font-medium">
-          3 items below minimum stock level —{" "}
-          <span className="font-semibold">Reorder recommended</span>
-        </p>
-        <button className="ml-auto text-xs font-semibold text-amber-700 hover:text-amber-900 underline underline-offset-2 shrink-0">
-          View all
-        </button>
-      </div>
+      {alertCount > 0 && (
+        <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-5 py-3.5">
+          <AlertTriangle size={17} className="text-amber-500 shrink-0" />
+          <p className="text-sm text-amber-800 font-medium">
+            {alertCount} {alertCount === 1 ? "item" : "items"} below minimum stock level —{" "}
+            <span className="font-semibold">Reorder recommended</span>
+          </p>
+          <button
+            onClick={() => setActiveCategory("All")}
+            className="ml-auto text-xs font-semibold text-amber-700 hover:text-amber-900 underline underline-offset-2 shrink-0"
+          >
+            View all
+          </button>
+        </div>
+      )}
 
       {/* Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((s) => (
+        {stats.map(s => (
           <div key={s.label} className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm text-slate-500 font-medium">{s.label}</span>
@@ -288,7 +540,7 @@ export default function InventoryPage() {
       <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
         {/* Tab Bar */}
         <div className="flex border-b border-slate-100 px-4 pt-1">
-          {TABS.map((tab) => (
+          {TABS.map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -304,11 +556,12 @@ export default function InventoryPage() {
           ))}
         </div>
 
-        {activeTab === "Warehouse" ? (
+        {/* ── Warehouse Tab ── */}
+        {activeTab === "Warehouse" && (
           <>
-            {/* Category Filter Pills */}
+            {/* Category Pills */}
             <div className="flex items-center gap-2 px-5 py-3.5 border-b border-slate-50 overflow-x-auto">
-              {CATEGORIES.map((cat) => (
+              {CATEGORIES.map(cat => (
                 <button
                   key={cat}
                   onClick={() => setActiveCategory(cat)}
@@ -323,143 +576,297 @@ export default function InventoryPage() {
                 </button>
               ))}
               <span className="ml-auto text-xs text-slate-400 shrink-0">
-                {filteredItems.length} items
+                {warehouseItems.length} items
               </span>
             </div>
 
-            {/* Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100">
-                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-5 py-3">
-                      Part Name
-                    </th>
-                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">
-                      Category
-                    </th>
-                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">
-                      SKU
-                    </th>
-                    <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">
-                      On Hand
-                    </th>
-                    <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">
-                      Min
-                    </th>
-                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">
-                      Location
-                    </th>
-                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">
-                      Status
-                    </th>
-                    <th className="px-4 py-3" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {filteredItems.map((item) => {
-                    const sc = statusConfig[item.status];
-                    return (
-                      <tr
-                        key={item.id}
-                        className={cn(
-                          "hover:bg-slate-50/80 transition-colors",
-                          item.status === "Out of Stock" && "bg-red-50/40",
-                          item.status === "Low" && "bg-amber-50/30"
-                        )}
-                      >
+            {loading ? (
+              <div className="py-16 text-center text-slate-400">
+                <Package size={28} className="mx-auto mb-3 opacity-30 animate-pulse" />
+                <p className="text-sm">Loading inventory…</p>
+              </div>
+            ) : warehouseItems.length === 0 ? (
+              <div className="py-16 text-center text-slate-400">
+                <Package size={32} className="mx-auto mb-3 opacity-30" />
+                <p className="text-sm font-medium">
+                  {items.length === 0 ? "No inventory items yet. Add your first item." : "No items match your search."}
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100">
+                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-5 py-3">Part Name</th>
+                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">Category</th>
+                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">SKU</th>
+                      <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">On Hand</th>
+                      <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">Min</th>
+                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">Location</th>
+                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">Status</th>
+                      <th className="px-4 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {warehouseItems.map(item => {
+                      const sc = statusConfig[item.status];
+                      return (
+                        <tr
+                          key={item.id}
+                          className={cn(
+                            "hover:bg-slate-50/80 transition-colors",
+                            item.status === "out" && "bg-red-50/40",
+                            item.status === "low" && "bg-amber-50/30"
+                          )}
+                        >
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                                <Archive size={13} className="text-slate-400" />
+                              </div>
+                              <span className="font-medium text-slate-800">{item.name}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <span className={cn("inline-block text-[11px] font-medium px-2.5 py-0.5 rounded-full", categoryColor[item.category] ?? "bg-gray-100 text-gray-600")}>
+                              {item.category}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5">
+                            {item.sku ? (
+                              <code className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">{item.sku}</code>
+                            ) : <span className="text-slate-300">—</span>}
+                          </td>
+                          <td className="px-4 py-3.5 text-right">
+                            <span className={cn("font-semibold", item.on_hand === 0 ? "text-red-600" : item.status === "low" ? "text-amber-600" : "text-slate-800")}>
+                              {item.on_hand}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 text-right text-slate-400">{item.min_stock}</td>
+                          <td className="px-4 py-3.5 text-slate-500 text-xs">{item.location ?? "—"}</td>
+                          <td className="px-4 py-3.5">
+                            <span className={cn("inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full", sc.badge)}>
+                              {sc.icon}
+                              {sc.label}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <div className="flex items-center gap-1.5 justify-end">
+                              <button
+                                title="Edit"
+                                onClick={() => { setEditItem(item); setSlideOpen(true); }}
+                                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                              >
+                                <Edit2 size={13} />
+                              </button>
+                              <button
+                                title="Adjust Stock"
+                                onClick={() => { setAdjustItem(item); setAdjustLocation("warehouse"); }}
+                                className={cn(
+                                  "p-1.5 rounded-lg transition-colors",
+                                  item.status !== "ok"
+                                    ? "bg-blue-50 text-[#2563EB] hover:bg-blue-100"
+                                    : "hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+                                )}
+                              >
+                                <RotateCcw size={13} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── Van Stock Tab ── */}
+        {activeTab === "Van Stock" && (
+          <>
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-50">
+              <span className="text-xs text-slate-400">{truckItems.length} items on trucks</span>
+            </div>
+
+            {loading ? (
+              <div className="py-16 text-center text-slate-400">
+                <Truck size={28} className="mx-auto mb-3 opacity-30 animate-pulse" />
+                <p className="text-sm">Loading…</p>
+              </div>
+            ) : truckItems.length === 0 ? (
+              <div className="py-16 text-center text-slate-400">
+                <Truck size={32} className="mx-auto mb-3 opacity-30" />
+                <p className="text-sm font-medium">No van stock items yet.</p>
+                <p className="text-xs mt-1 opacity-70">Items with on_truck &gt; 0 will appear here.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100">
+                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-5 py-3">Part Name</th>
+                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">Category</th>
+                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">SKU</th>
+                      <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">On Truck</th>
+                      <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">On Hand</th>
+                      <th className="px-4 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {truckItems.map(item => (
+                      <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="px-5 py-3.5">
                           <div className="flex items-center gap-2.5">
-                            <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-                              <Archive size={13} className="text-slate-400" />
+                            <div className="w-7 h-7 rounded-lg bg-violet-50 flex items-center justify-center shrink-0">
+                              <Truck size={13} className="text-violet-400" />
                             </div>
                             <span className="font-medium text-slate-800">{item.name}</span>
                           </div>
                         </td>
                         <td className="px-4 py-3.5">
-                          <span
-                            className={cn(
-                              "inline-block text-[11px] font-medium px-2.5 py-0.5 rounded-full",
-                              categoryColor[item.category]
-                            )}
-                          >
+                          <span className={cn("inline-block text-[11px] font-medium px-2.5 py-0.5 rounded-full", categoryColor[item.category] ?? "bg-gray-100 text-gray-600")}>
                             {item.category}
                           </span>
                         </td>
                         <td className="px-4 py-3.5">
-                          <code className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">
-                            {item.sku}
-                          </code>
+                          {item.sku ? (
+                            <code className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">{item.sku}</code>
+                          ) : <span className="text-slate-300">—</span>}
                         </td>
                         <td className="px-4 py-3.5 text-right">
-                          <span
-                            className={cn(
-                              "font-semibold",
-                              item.onHand === 0
-                                ? "text-red-600"
-                                : item.onHand < item.minStock
-                                ? "text-amber-600"
-                                : "text-slate-800"
-                            )}
-                          >
-                            {item.onHand}
-                          </span>
+                          <span className="font-semibold text-violet-600">{item.on_truck}</span>
                         </td>
-                        <td className="px-4 py-3.5 text-right text-slate-400">{item.minStock}</td>
-                        <td className="px-4 py-3.5 text-slate-500 text-xs">{item.location}</td>
-                        <td className="px-4 py-3.5">
-                          <span
-                            className={cn(
-                              "inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full",
-                              sc.badge
-                            )}
-                          >
-                            {sc.icon}
-                            {item.status}
-                          </span>
-                        </td>
+                        <td className="px-4 py-3.5 text-right text-slate-500">{item.on_hand}</td>
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-1.5 justify-end">
                             <button
                               title="Edit"
+                              onClick={() => { setEditItem(item); setSlideOpen(true); }}
                               className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
                             >
                               <Edit2 size={13} />
                             </button>
                             <button
-                              title="Reorder"
-                              className={cn(
-                                "p-1.5 rounded-lg transition-colors",
-                                item.status !== "OK"
-                                  ? "bg-blue-50 text-[#2563EB] hover:bg-blue-100"
-                                  : "hover:bg-slate-100 text-slate-400 hover:text-slate-600"
-                              )}
+                              title="Adjust Van Stock"
+                              onClick={() => { setAdjustItem(item); setAdjustLocation("truck"); }}
+                              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
                             >
                               <RotateCcw size={13} />
                             </button>
                           </div>
                         </td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-
-              {filteredItems.length === 0 && (
-                <div className="py-16 text-center text-slate-400">
-                  <Package size={32} className="mx-auto mb-3 opacity-30" />
-                  <p className="text-sm">No items match your search</p>
-                </div>
-              )}
-            </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </>
-        ) : (
-          <div className="py-20 text-center text-slate-400">
-            <Truck size={36} className="mx-auto mb-3 opacity-20" />
-            <p className="text-sm font-medium">{activeTab} view coming soon</p>
-          </div>
+        )}
+
+        {/* ── Purchase Orders Tab ── */}
+        {activeTab === "Purchase Orders" && (
+          <>
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-50">
+              <span className="text-xs text-slate-400">{pos.length} purchase orders</span>
+              <button
+                onClick={async () => {
+                  const res  = await fetch("/api/purchase-orders", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ status: "draft" }),
+                  });
+                  if (res.ok) {
+                    const json = await res.json();
+                    setPos(prev => [json, ...prev]);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-[#2563EB] rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+              >
+                <Plus size={12} /> New PO
+              </button>
+            </div>
+
+            {loadingPos ? (
+              <div className="py-16 text-center text-slate-400">
+                <ClipboardList size={28} className="mx-auto mb-3 opacity-30 animate-pulse" />
+                <p className="text-sm">Loading purchase orders…</p>
+              </div>
+            ) : pos.length === 0 ? (
+              <div className="py-16 text-center text-slate-400">
+                <ClipboardList size={32} className="mx-auto mb-3 opacity-30" />
+                <p className="text-sm font-medium">No purchase orders yet.</p>
+                <p className="text-xs mt-1 opacity-70">Create a new PO to track orders from suppliers.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100">
+                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-5 py-3">PO #</th>
+                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">Supplier</th>
+                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">Status</th>
+                      <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">Total</th>
+                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">Created</th>
+                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">Expected</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {pos.map(po => {
+                      const psc = poStatusConfig[po.status] ?? { badge: "bg-slate-100 text-slate-600", label: po.status };
+                      return (
+                        <tr key={po.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
+                                <DollarSign size={13} className="text-emerald-500" />
+                              </div>
+                              <code className="text-xs text-slate-600 font-mono">
+                                {po.po_number ?? po.id.slice(0, 8).toUpperCase()}
+                              </code>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3.5 text-slate-700">{po.supplier ?? "—"}</td>
+                          <td className="px-4 py-3.5">
+                            <span className={cn("inline-block text-[11px] font-medium px-2.5 py-0.5 rounded-full", psc.badge)}>
+                              {psc.label}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 text-right font-semibold text-slate-800">
+                            {po.total > 0 ? `$${po.total.toFixed(2)}` : "—"}
+                          </td>
+                          <td className="px-4 py-3.5 text-xs text-slate-500">{fmtDate(po.created_at)}</td>
+                          <td className="px-4 py-3.5 text-xs text-slate-500">{fmtDate(po.expected_at)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </div>
+
+      {/* Add / Edit Slide-Over */}
+      <ItemSlideOver
+        open={slideOpen}
+        initial={editItem}
+        onClose={() => { setSlideOpen(false); setEditItem(null); }}
+        onSaved={item => { handleItemSaved(item); setSlideOpen(false); setEditItem(null); }}
+      />
+
+      {/* Adjust Stock Modal */}
+      {adjustItem && (
+        <AdjustModal
+          item={adjustItem}
+          location={adjustLocation}
+          onClose={() => setAdjustItem(null)}
+          onAdjusted={item => { handleItemSaved(item); setAdjustItem(null); }}
+        />
+      )}
     </div>
   );
 }

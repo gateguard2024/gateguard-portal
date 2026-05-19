@@ -1,55 +1,54 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   FileText, Plus, Search, Send, Eye, CheckCircle2,
-  XCircle, Clock, Copy, MoreHorizontal, ChevronRight,
+  XCircle, Clock, Copy, MoreHorizontal, ChevronRight, Loader2,
 } from 'lucide-react';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ArrowUpRight } = require('lucide-react') as any;
 import { formatCurrency } from '@/lib/quote-calculator';
 import { QuoteStatus } from '@/types/quote';
 
-// ── Mock data ────────────────────────────────────────────────────────────────
-const MOCK_QUOTES = [
-  {
-    id: 'q1', quoteNumber: 'GG-2026-0041', status: 'accepted' as QuoteStatus,
-    property: { name: 'East Ponce Village', units: 312, city: 'Atlanta', state: 'GA' },
-    totals: { setupTotal: 6250, monthlyTotal: 3820, dealerMRR: 625 },
-    createdAt: '2026-04-10', sentAt: '2026-04-11', acceptedAt: '2026-04-14',
-  },
-  {
-    id: 'q2', quoteNumber: 'GG-2026-0042', status: 'viewed' as QuoteStatus,
-    property: { name: 'The Villages on Riverwalk', units: 248, city: 'Augusta', state: 'GA' },
-    totals: { setupTotal: 4500, monthlyTotal: 2980, dealerMRR: 497 },
-    createdAt: '2026-04-16', sentAt: '2026-04-17', acceptedAt: undefined,
-  },
-  {
-    id: 'q3', quoteNumber: 'GG-2026-0043', status: 'sent' as QuoteStatus,
-    property: { name: 'Columbia Residential — Kirk Edwards', units: 180, city: 'Columbia', state: 'SC' },
-    totals: { setupTotal: 3750, monthlyTotal: 1900, dealerMRR: 375 },
-    createdAt: '2026-04-19', sentAt: '2026-04-20', acceptedAt: undefined,
-  },
-  {
-    id: 'q4', quoteNumber: 'GG-2026-0044', status: 'draft' as QuoteStatus,
-    property: { name: '92W Paces — Camera Upgrade', units: 0, city: 'Atlanta', state: 'GA' },
-    totals: { setupTotal: 8500, monthlyTotal: 1200, dealerMRR: 0 },
-    createdAt: '2026-04-22', sentAt: undefined, acceptedAt: undefined,
-  },
-  {
-    id: 'q5', quoteNumber: 'GG-2026-0045', status: 'draft' as QuoteStatus,
-    property: { name: 'Stonegate Townhomes', units: 96, city: 'Savannah', state: 'GA' },
-    totals: { setupTotal: 2250, monthlyTotal: 1200, dealerMRR: 200 },
-    createdAt: '2026-04-23', sentAt: undefined, acceptedAt: undefined,
-  },
-  {
-    id: 'q6', quoteNumber: 'GG-2026-0039', status: 'declined' as QuoteStatus,
-    property: { name: 'Peachtree Commons', units: 220, city: 'Atlanta', state: 'GA' },
-    totals: { setupTotal: 5000, monthlyTotal: 2400, dealerMRR: 440 },
-    createdAt: '2026-04-02', sentAt: '2026-04-03', acceptedAt: undefined,
-  },
-];
+// ── API quote shape ───────────────────────────────────────────────────────────
+interface ApiQuote {
+  id: string;
+  quote_number: string;
+  status: QuoteStatus;
+  property_name: string | null;
+  units: number | null;
+  total_one_time: number;
+  total_mrr: number;
+  dealer_mrr: number;
+  created_at: string;
+  sent_at: string | null;
+  accepted_at: string | null;
+  declined_at: string | null;
+}
+
+// Map API shape to UI shape
+function toUiQuote(q: ApiQuote) {
+  return {
+    id:          q.id,
+    quoteNumber: q.quote_number,
+    status:      q.status,
+    property: {
+      name:  q.property_name ?? '(Untitled)',
+      units: q.units ?? 0,
+      city:  '',
+      state: '',
+    },
+    totals: {
+      setupTotal:   q.total_one_time,
+      monthlyTotal: q.total_mrr,
+      dealerMRR:    q.dealer_mrr,
+    },
+    createdAt:  q.created_at.slice(0, 10),
+    sentAt:     q.sent_at?.slice(0, 10),
+    acceptedAt: q.accepted_at?.slice(0, 10),
+  };
+}
 
 const STATUS_CFG: Record<QuoteStatus, { label: string; color: string; Icon: React.ElementType }> = {
   draft:    { label: 'Draft',    color: 'text-zinc-400 bg-zinc-400/10 border-zinc-400/20',         Icon: FileText },
@@ -68,18 +67,39 @@ const PIPELINE: { status: QuoteStatus; label: string }[] = [
 ];
 
 export default function QuotesPage() {
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<QuoteStatus | 'all'>('all');
+  const [search, setSearch]   = useState('');
+  const [filter, setFilter]   = useState<QuoteStatus | 'all'>('all');
+  const [quotes, setQuotes]   = useState<ReturnType<typeof toUiQuote>[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState<string | null>(null);
 
-  const filtered = MOCK_QUOTES.filter(q =>
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch('/api/quotes');
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        setQuotes((data.records ?? []).map(toUiQuote));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to load quotes');
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  const filtered = quotes.filter(q =>
     (filter === 'all' || q.status === filter) &&
     (q.property.name.toLowerCase().includes(search.toLowerCase()) ||
      q.quoteNumber.toLowerCase().includes(search.toLowerCase()))
   );
 
-  const totalMRR      = MOCK_QUOTES.filter(q => q.status === 'accepted').reduce((s, q) => s + q.totals.monthlyTotal, 0);
-  const pipelineMRR   = MOCK_QUOTES.filter(q => ['sent','viewed'].includes(q.status)).reduce((s, q) => s + q.totals.monthlyTotal, 0);
-  const totalDealer   = MOCK_QUOTES.filter(q => q.status === 'accepted').reduce((s, q) => s + q.totals.dealerMRR, 0);
+  const totalMRR    = quotes.filter(q => q.status === 'accepted').reduce((s, q) => s + q.totals.monthlyTotal, 0);
+  const pipelineMRR = quotes.filter(q => ['sent','viewed'].includes(q.status)).reduce((s, q) => s + q.totals.monthlyTotal, 0);
+  const totalDealer = quotes.filter(q => q.status === 'accepted').reduce((s, q) => s + q.totals.dealerMRR, 0);
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
@@ -102,8 +122,8 @@ export default function QuotesPage() {
       {/* KPIs */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: 'Active MRR', value: formatCurrency(totalMRR), sub: `${MOCK_QUOTES.filter(q=>q.status==='accepted').length} contracts`, color: 'text-emerald-400' },
-          { label: 'Pipeline MRR', value: formatCurrency(pipelineMRR), sub: `${MOCK_QUOTES.filter(q=>['sent','viewed'].includes(q.status)).length} proposals out`, color: 'text-brand-400' },
+          { label: 'Active MRR', value: formatCurrency(totalMRR), sub: `${quotes.filter(q=>q.status==='accepted').length} contracts`, color: 'text-emerald-400' },
+          { label: 'Pipeline MRR', value: formatCurrency(pipelineMRR), sub: `${quotes.filter(q=>['sent','viewed'].includes(q.status)).length} proposals out`, color: 'text-brand-400' },
           { label: 'Dealer Override MRR', value: formatCurrency(totalDealer), sub: 'Up to $2.50/unit/mo', color: 'text-violet-400' },
         ].map(kpi => (
           <div key={kpi.label} className="bg-card border border-border rounded-xl p-4">
@@ -121,8 +141,8 @@ export default function QuotesPage() {
           {PIPELINE.map((stage, i) => {
             const cfg = STATUS_CFG[stage.status];
             const Icon = cfg.Icon;
-            const count = MOCK_QUOTES.filter(q => q.status === stage.status).length;
-            const mrr = MOCK_QUOTES.filter(q => q.status === stage.status).reduce((s,q) => s + q.totals.monthlyTotal, 0);
+            const count = quotes.filter(q => q.status === stage.status).length;
+            const mrr = quotes.filter(q => q.status === stage.status).reduce((s,q) => s + q.totals.monthlyTotal, 0);
             const active = filter === stage.status;
             return (
               <div key={stage.status} className="flex items-stretch">
@@ -169,7 +189,18 @@ export default function QuotesPage() {
 
       {/* Table */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
-        <table className="w-full">
+        {loading && (
+          <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span className="text-sm">Loading quotes…</span>
+          </div>
+        )}
+        {error && !loading && (
+          <div className="flex items-center justify-center gap-2 py-16 text-red-400">
+            <span className="text-sm">{error}</span>
+          </div>
+        )}
+        {!loading && !error && filtered.length > 0 && <table className="w-full">
           <thead>
             <tr className="border-b border-border bg-background/50">
               {['Quote #','Property','Status','Setup','Monthly','Dealer MRR','Date',''].map((h,i) => (
@@ -186,7 +217,12 @@ export default function QuotesPage() {
                   <td className="px-4 py-4"><p className="text-sm font-mono text-brand-400">{q.quoteNumber}</p></td>
                   <td className="px-4 py-4">
                     <p className="text-sm font-medium text-foreground">{q.property.name}</p>
-                    <p className="text-xs text-muted-foreground">{q.property.city}, {q.property.state}{q.property.units > 0 && ` · ${q.property.units} units`}</p>
+                    {(q.property.city || q.property.state || q.property.units > 0) && (
+                      <p className="text-xs text-muted-foreground">
+                        {[q.property.city, q.property.state].filter(Boolean).join(', ')}
+                        {q.property.units > 0 && `${q.property.city || q.property.state ? ' · ' : ''}${q.property.units} units`}
+                      </p>
+                    )}
                   </td>
                   <td className="px-4 py-4">
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${cfg.color}`}>
@@ -209,7 +245,7 @@ export default function QuotesPage() {
                   </td>
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Link href={`/quotes/${q.id}/proposal`} className="p-1.5 rounded hover:bg-brand-400/10 text-muted-foreground hover:text-brand-400 transition-colors" title="View Proposal">
+                      <Link href={`/quotes/${q.id}`} className="p-1.5 rounded hover:bg-brand-400/10 text-muted-foreground hover:text-brand-400 transition-colors" title="View Quote">
                         <ArrowUpRight className="w-4 h-4" />
                       </Link>
                       <button className="p-1.5 rounded hover:bg-border text-muted-foreground hover:text-foreground transition-colors" title="Copy link">
@@ -224,8 +260,8 @@ export default function QuotesPage() {
               );
             })}
           </tbody>
-        </table>
-        {filtered.length === 0 && (
+        </table>}
+        {!loading && !error && filtered.length === 0 && (
           <div className="text-center py-16 text-muted-foreground">
             <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
             <p className="font-medium">No quotes found</p>

@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import {
   CheckCircle2, Circle, Clock, TrendingUp,
   TrendingDown, Minus, Plus, X, ChevronRight, Users,
-  Calendar, Target, Send, Zap, ChevronDown,
+  Calendar, Target, Send, Zap, ChevronDown, Loader2,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { Timer, Flag } = require("lucide-react") as any;
@@ -48,84 +48,51 @@ type IssueType = "Company" | "Department" | "People";
 type IssueStatus = "In Progress" | "Resolved" | "This Meeting" | "Parking Lot" | "Open";
 
 interface Rock {
-  id: number;
+  id: string;
   name: string;
   owner: string;
   status: RockStatus;
   progress: number;
-  due: string;
+  due_date: string | null;
+  quarter: string;
+  is_company_rock: boolean;
+}
+
+interface ScorecardEntry {
+  id: string;
+  scorecard_id: string;
+  week_of: string;
+  value: string;
 }
 
 interface Measurable {
-  id: number;
+  id: string;
   name: string;
   owner: string;
   goal: string;
-  thisWeek: string;
-  lastWeek: string;
-  unit?: string;
+  unit: string;
+  sort_order: number;
+  entries: ScorecardEntry[];
 }
 
 interface Issue {
-  id: number;
+  id: string;
   description: string;
   type: IssueType;
   owner: string;
   priority: IssuePriority;
-  created: string;
+  created_at: string;
   status: IssueStatus;
 }
 
 interface TodoItem {
-  id: number;
+  id: string;
   text: string;
   owner: string;
-  due: string;
+  due_date: string | null;
   meeting: string;
   done: boolean;
 }
-
-// ─── Seed Data ────────────────────────────────────────────────────────────────
-
-const initialRocks: Rock[] = [
-  { id: 1, name: "Go live on portal.gateguard.co (beta → production)", owner: "Russel Feldman", status: "On Track", progress: 70, due: "Jun 30" },
-  { id: 2, name: "CRM Phase 2 complete — all buttons wired, no dead UI", owner: "Russel Feldman", status: "On Track", progress: 40, due: "Jun 30" },
-  { id: 3, name: "GateCard v2 launched at 10 active properties", owner: "Russel Feldman", status: "At Risk", progress: 20, due: "Jun 30" },
-  { id: 4, name: "DirecTV channel: First 5 dealer signups through ATLAS", owner: "Russel Feldman", status: "On Track", progress: 50, due: "Jun 30" },
-  { id: 5, name: "PE investor one-sheet + pitch deck finalized", owner: "Russel Feldman", status: "Off Track", progress: 10, due: "Jun 30" },
-  { id: 6, name: "Hire first full-time developer", owner: "Russel Feldman", status: "Off Track", progress: 5, due: "Jun 30" },
-];
-
-const measurables: Measurable[] = [
-  { id: 1, name: "New Opportunities Created", owner: "RF", goal: "3/wk", thisWeek: "2", lastWeek: "4" },
-  { id: 2, name: "Proposals Sent", owner: "RF", goal: "2/wk", thisWeek: "1", lastWeek: "3" },
-  { id: 3, name: "Closed Won Revenue", owner: "RF", goal: "$50K/mo", thisWeek: "—", lastWeek: "—" },
-  { id: 4, name: "Active Dealer Partners", owner: "RF", goal: "50", thisWeek: "12", lastWeek: "12" },
-  { id: 5, name: "Properties Installed (YTD)", owner: "RF", goal: "50", thisWeek: "8", lastWeek: "8" },
-  { id: 6, name: "Tech Tool Sessions", owner: "RF", goal: "20/wk", thisWeek: "—", lastWeek: "—" },
-  { id: 7, name: "Show Leads Assigned", owner: "RF", goal: "5/wk", thisWeek: "3", lastWeek: "2" },
-  { id: 8, name: "Portal Uptime", owner: "RF", goal: "99.9%", thisWeek: "99.9%", lastWeek: "99.9%" },
-];
-
-const initialIssues: Issue[] = [
-  { id: 1, description: "CRM page crashes on load — grouped type mismatch", type: "Company", owner: "RF", priority: "High", created: "May 12", status: "In Progress" },
-  { id: 2, description: "No way to create opportunities from UI until this week", type: "Company", owner: "RF", priority: "High", created: "May 10", status: "Resolved" },
-  { id: 3, description: "EOS One is separate from portal — creates context switching", type: "Company", owner: "RF", priority: "Normal", created: "May 14", status: "This Meeting" },
-  { id: 4, description: "ISP provider page load fails when switching — Clerk refresh needed", type: "Company", owner: "RF", priority: "High", created: "May 13", status: "In Progress" },
-  { id: 5, description: "No PE investor materials exist yet", type: "Company", owner: "RF", priority: "Critical", created: "May 1", status: "This Meeting" },
-  { id: 6, description: "Hire: need first FT developer to ship faster", type: "People", owner: "RF", priority: "Critical", created: "Apr 15", status: "Parking Lot" },
-];
-
-const initialTodos: TodoItem[] = [
-  { id: 1, text: "Fix CRM /crm page crash — grouped type", owner: "RF", due: "May 15", meeting: "L10 5/16", done: true },
-  { id: 2, text: "Push migration 009 to Supabase beta", owner: "RF", due: "May 16", meeting: "L10 5/16", done: false },
-  { id: 3, text: "Add sidebar user popout for session refresh", owner: "RF", due: "May 15", meeting: "L10 5/16", done: true },
-  { id: 4, text: "Build PE investor one-sheet draft", owner: "RF", due: "May 22", meeting: "L10 5/23", done: false },
-  { id: 5, text: "Run migration 009 on beta Supabase", owner: "RF", due: "May 16", meeting: "L10 5/16", done: false },
-  { id: 6, text: "Finalize Q2 Rocks with team", owner: "RF", due: "May 23", meeting: "L10 5/23", done: false },
-];
-
-const meetingRatings = [8, 9, 8, 10, 9, 8];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -204,13 +171,23 @@ function TrendIcon({ current, previous }: { current: string; previous: string })
 }
 
 function GoalStatus({ goal, value }: { goal: string; value: string }) {
-  if (value === "—") return <div className="w-2 h-2 rounded-full bg-slate-300" />;
+  if (value === "—" || value === "") return <div className="w-2 h-2 rounded-full bg-slate-300" />;
   const goalNum = parseFloat(goal.replace(/[^0-9.]/g, ""));
   const valueNum = parseFloat(value.replace(/[^0-9.]/g, ""));
   if (isNaN(goalNum) || isNaN(valueNum)) return <div className="w-2 h-2 rounded-full bg-slate-300" />;
   return (
     <div className={cn("w-2 h-2 rounded-full", valueNum >= goalNum ? "bg-emerald-500" : "bg-red-500")} />
   );
+}
+
+function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return "—";
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  } catch {
+    return dateStr;
+  }
 }
 
 // ─── Tab: V/TO ────────────────────────────────────────────────────────────────
@@ -354,15 +331,19 @@ function VTOTab({ rocks, issues }: { rocks: Rock[]; issues: Issue[] }) {
             <h3 className="text-sm font-semibold text-foreground">Q2 2026 Rocks</h3>
             <span className="text-[10px] text-muted-foreground">Due Jun 30 · <a href="#rocks" className="text-[#6B7EFF] hover:underline">See all →</a></span>
           </div>
-          <div className="space-y-2">
-            {rocks.map(rock => (
-              <div key={rock.id} className="flex items-center gap-3">
-                <RockStatusPill status={rock.status} />
-                <p className="text-xs text-foreground flex-1 truncate">{rock.name}</p>
-                <span className="text-xs text-muted-foreground">{rock.progress}%</span>
-              </div>
-            ))}
-          </div>
+          {rocks.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">No rocks yet — add them in the Rocks tab.</p>
+          ) : (
+            <div className="space-y-2">
+              {rocks.map(rock => (
+                <div key={rock.id} className="flex items-center gap-3">
+                  <RockStatusPill status={rock.status} />
+                  <p className="text-xs text-foreground flex-1 truncate">{rock.name}</p>
+                  <span className="text-xs text-muted-foreground">{rock.progress}%</span>
+                </div>
+              ))}
+            </div>
+          )}
         </SectionCard>
 
         <SectionCard>
@@ -392,16 +373,62 @@ function VTOTab({ rocks, issues }: { rocks: Rock[]; issues: Issue[] }) {
 
 // ─── Tab: Rocks ───────────────────────────────────────────────────────────────
 
-function RocksTab() {
-  const [rocks, setRocks] = useState<Rock[]>(initialRocks);
+function RocksTab({ rocks, setRocks }: { rocks: Rock[]; setRocks: React.Dispatch<React.SetStateAction<Rock[]>> }) {
   const [adding, setAdding] = useState(false);
-  const [newRock, setNewRock] = useState<Partial<Rock>>({ status: "On Track", progress: 0, due: "Jun 30", owner: "Russel Feldman" });
+  const [newRock, setNewRock] = useState<Partial<Rock & { due: string }>>({
+    status: "On Track", progress: 0, due: "Jun 30", owner: "Russel Feldman",
+  });
+  const [saving, setSaving] = useState(false);
 
-  const addRock = () => {
+  const addRock = async () => {
     if (!newRock.name) return;
-    setRocks(prev => [...prev, { ...newRock, id: Date.now() } as Rock]);
-    setAdding(false);
-    setNewRock({ status: "On Track", progress: 0, due: "Jun 30", owner: "Russel Feldman" });
+    setSaving(true);
+    try {
+      const res = await fetch("/api/eos/rocks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newRock.name,
+          owner: newRock.owner,
+          quarter: "Q2-2026",
+          status: newRock.status,
+          progress: newRock.progress ?? 0,
+          due_date: newRock.due ? newRock.due : null,
+          is_company_rock: true,
+        }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setRocks(prev => [...prev, created]);
+        setAdding(false);
+        setNewRock({ status: "On Track", progress: 0, due: "Jun 30", owner: "Russel Feldman" });
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateRock = async (id: string, fields: Partial<Rock>) => {
+    // Optimistic update
+    setRocks(prev => prev.map(r => r.id === id ? { ...r, ...fields } : r));
+    void (async () => {
+      try {
+        await fetch(`/api/eos/rocks/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(fields),
+        });
+      } catch (_) { /* non-blocking */ }
+    })();
+  };
+
+  const deleteRock = async (id: string) => {
+    setRocks(prev => prev.filter(r => r.id !== id));
+    void (async () => {
+      try {
+        await fetch(`/api/eos/rocks/${id}`, { method: "DELETE" });
+      } catch (_) { /* non-blocking */ }
+    })();
   };
 
   return (
@@ -409,7 +436,9 @@ function RocksTab() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-bold text-foreground">Q2 2026 Rocks</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Due June 30, 2026 · {rocks.filter(r => r.status === "On Track" || r.status === "Complete").length}/{rocks.length} on track</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Due June 30, 2026 · {rocks.filter(r => r.status === "On Track" || r.status === "Complete").length}/{rocks.length} on track
+          </p>
         </div>
         <button
           onClick={() => setAdding(true)}
@@ -424,8 +453,8 @@ function RocksTab() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-50 border-b border-border">
-              {["Rock", "Owner", "Status", "Progress", "Due"].map(h => (
-                <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              {["Rock", "Owner", "Status", "Progress", "Due", ""].map((h, i) => (
+                <th key={i} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   {h}
                 </th>
               ))}
@@ -433,12 +462,42 @@ function RocksTab() {
           </thead>
           <tbody>
             {rocks.map(rock => (
-              <tr key={rock.id} className="border-b border-border last:border-0 hover:bg-slate-50/50 transition-colors">
+              <tr key={rock.id} className="border-b border-border last:border-0 hover:bg-slate-50/50 transition-colors group">
                 <td className="px-4 py-3 font-medium text-foreground max-w-xs">{rock.name}</td>
                 <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{rock.owner}</td>
-                <td className="px-4 py-3"><RockStatusPill status={rock.status} /></td>
-                <td className="px-4 py-3 w-40"><ProgressBar value={rock.progress} /></td>
-                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{rock.due}</td>
+                <td className="px-4 py-3">
+                  <select
+                    className="text-xs border border-border rounded px-1.5 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 cursor-pointer"
+                    value={rock.status}
+                    onChange={e => updateRock(rock.id, { status: e.target.value as RockStatus })}
+                  >
+                    {(["On Track", "At Risk", "Off Track", "Complete"] as RockStatus[]).map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </td>
+                <td className="px-4 py-3 w-40">
+                  <div className="flex items-center gap-2">
+                    <ProgressBar value={rock.progress} />
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={rock.progress}
+                      onChange={e => updateRock(rock.id, { progress: Number(e.target.value) })}
+                      className="w-16 accent-[#6B7EFF] cursor-pointer"
+                    />
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDate(rock.due_date)}</td>
+                <td className="px-4 py-3">
+                  <button
+                    onClick={() => deleteRock(rock.id)}
+                    className="p-1 text-muted-foreground hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-all"
+                  >
+                    <X size={14} />
+                  </button>
+                </td>
               </tr>
             ))}
             {adding && (
@@ -485,12 +544,22 @@ function RocksTab() {
                     <input
                       className="w-20 border border-border rounded px-2 py-1 text-sm bg-white focus:outline-none"
                       value={newRock.due || ""}
+                      placeholder="Jun 30"
                       onChange={e => setNewRock(p => ({ ...p, due: e.target.value }))}
                     />
-                    <button onClick={addRock} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><CheckCircle2 size={16} /></button>
-                    <button onClick={() => setAdding(false)} className="p-1 text-muted-foreground hover:bg-slate-100 rounded"><X size={16} /></button>
+                    <button
+                      onClick={addRock}
+                      disabled={saving}
+                      className="p-1 text-emerald-600 hover:bg-emerald-50 rounded disabled:opacity-50"
+                    >
+                      <CheckCircle2 size={16} />
+                    </button>
+                    <button onClick={() => setAdding(false)} className="p-1 text-muted-foreground hover:bg-slate-100 rounded">
+                      <X size={16} />
+                    </button>
                   </div>
                 </td>
+                <td />
               </tr>
             )}
           </tbody>
@@ -516,12 +585,56 @@ function RocksTab() {
 
 // ─── Tab: Scorecard ───────────────────────────────────────────────────────────
 
-function ScorecardTab() {
+function ScorecardTab({ measurables, setMeasurables }: { measurables: Measurable[]; setMeasurables: React.Dispatch<React.SetStateAction<Measurable[]>> }) {
+  // Get current and previous week_of values
+  const getWeekOf = (offsetWeeks = 0): string => {
+    const d = new Date();
+    d.setDate(d.getDate() - d.getDay() + 1 - offsetWeeks * 7); // Monday
+    return d.toISOString().split("T")[0];
+  };
+
+  const thisWeekOf = getWeekOf(0);
+  const lastWeekOf = getWeekOf(1);
+
+  const getEntryValue = (m: Measurable, weekOf: string): string => {
+    const entry = m.entries.find(e => e.week_of === weekOf);
+    return entry?.value ?? "—";
+  };
+
+  const updateEntry = async (metricId: string, weekOf: string, value: string) => {
+    // Optimistic update
+    setMeasurables(prev => prev.map(m => {
+      if (m.id !== metricId) return m;
+      const existingIdx = m.entries.findIndex(e => e.week_of === weekOf);
+      if (existingIdx >= 0) {
+        const updated = [...m.entries];
+        updated[existingIdx] = { ...updated[existingIdx], value };
+        return { ...m, entries: updated };
+      }
+      return {
+        ...m,
+        entries: [{ id: `temp-${Date.now()}`, scorecard_id: metricId, week_of: weekOf, value }, ...m.entries],
+      };
+    }));
+
+    void (async () => {
+      try {
+        await fetch("/api/eos/scorecard/entries", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scorecard_id: metricId, week_of: weekOf, value }),
+        });
+      } catch (_) { /* non-blocking */ }
+    })();
+  };
+
+  const thisWeekLabel = new Date(thisWeekOf + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
   return (
     <div className="space-y-4">
       <div>
         <h2 className="text-base font-bold text-foreground">Weekly Scorecard</h2>
-        <p className="text-xs text-muted-foreground mt-0.5">Week of May 12, 2026 · Updated each L10</p>
+        <p className="text-xs text-muted-foreground mt-0.5">Week of {thisWeekLabel} · Updated each L10</p>
       </div>
 
       <div className="bg-white border border-border rounded-xl overflow-hidden">
@@ -536,26 +649,38 @@ function ScorecardTab() {
             </tr>
           </thead>
           <tbody>
-            {measurables.map(m => (
-              <tr key={m.id} className="border-b border-border last:border-0 hover:bg-slate-50/50 transition-colors">
-                <td className="px-4 py-3 font-medium text-foreground">{m.name}</td>
-                <td className="px-4 py-3 text-muted-foreground">{m.owner}</td>
-                <td className="px-4 py-3 font-mono text-xs text-foreground bg-slate-50/50">{m.goal}</td>
-                <td className="px-4 py-3">
-                  <span className={cn(
-                    "font-semibold",
-                    m.thisWeek === "—" ? "text-muted-foreground" : "text-foreground"
-                  )}>{m.thisWeek}</span>
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">{m.lastWeek}</td>
-                <td className="px-4 py-3">
-                  <TrendIcon current={m.thisWeek} previous={m.lastWeek} />
-                </td>
-                <td className="px-4 py-3">
-                  <GoalStatus goal={m.goal} value={m.thisWeek} />
+            {measurables.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-sm text-muted-foreground italic">
+                  No scorecard metrics yet.
                 </td>
               </tr>
-            ))}
+            ) : measurables.map(m => {
+              const thisWeek = getEntryValue(m, thisWeekOf);
+              const lastWeek = getEntryValue(m, lastWeekOf);
+              return (
+                <tr key={m.id} className="border-b border-border last:border-0 hover:bg-slate-50/50 transition-colors">
+                  <td className="px-4 py-3 font-medium text-foreground">{m.name}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{m.owner}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-foreground bg-slate-50/50">{m.goal}</td>
+                  <td className="px-4 py-3">
+                    <input
+                      className="w-20 border border-border rounded px-2 py-0.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
+                      value={thisWeek === "—" ? "" : thisWeek}
+                      placeholder="—"
+                      onChange={e => updateEntry(m.id, thisWeekOf, e.target.value)}
+                    />
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">{lastWeek}</td>
+                  <td className="px-4 py-3">
+                    <TrendIcon current={thisWeek} previous={lastWeek} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <GoalStatus goal={m.goal} value={thisWeek} />
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -573,11 +698,53 @@ function ScorecardTab() {
 
 // ─── Tab: Issues ──────────────────────────────────────────────────────────────
 
-function IssuesTab() {
-  const [issues, setIssues] = useState<Issue[]>(initialIssues);
+function IssuesTab({ issues, setIssues }: { issues: Issue[]; setIssues: React.Dispatch<React.SetStateAction<Issue[]>> }) {
+  const [adding, setAdding] = useState(false);
+  const [newIssue, setNewIssue] = useState<Partial<Issue>>({
+    type: "Company", priority: "Normal", status: "Open", owner: "RF",
+  });
+  const [saving, setSaving] = useState(false);
 
-  const updateStatus = (id: number, status: IssueStatus) => {
+  const updateStatus = async (id: string, status: IssueStatus) => {
     setIssues(prev => prev.map(i => i.id === id ? { ...i, status } : i));
+    void (async () => {
+      try {
+        await fetch(`/api/eos/issues/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        });
+      } catch (_) { /* non-blocking */ }
+    })();
+  };
+
+  const deleteIssue = async (id: string) => {
+    setIssues(prev => prev.filter(i => i.id !== id));
+    void (async () => {
+      try {
+        await fetch(`/api/eos/issues/${id}`, { method: "DELETE" });
+      } catch (_) { /* non-blocking */ }
+    })();
+  };
+
+  const addIssue = async () => {
+    if (!newIssue.description) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/eos/issues", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newIssue),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setIssues(prev => [created, ...prev]);
+        setAdding(false);
+        setNewIssue({ type: "Company", priority: "Normal", status: "Open", owner: "RF" });
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -587,18 +754,79 @@ function IssuesTab() {
           <h2 className="text-base font-bold text-foreground">Issues List (IDS)</h2>
           <p className="text-xs text-muted-foreground mt-0.5">Identify · Discuss · Solve — the core of L10</p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> {issues.filter(i => i.priority === "Critical").length} critical</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> {issues.filter(i => i.priority === "High").length} high</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400" /> {issues.filter(i => i.priority === "Normal").length} normal</span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> {issues.filter(i => i.priority === "Critical").length} critical</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> {issues.filter(i => i.priority === "High").length} high</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400" /> {issues.filter(i => i.priority === "Normal").length} normal</span>
+          </div>
+          <button
+            onClick={() => setAdding(true)}
+            className="flex items-center gap-1.5 text-sm bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5B6EEF] transition-colors font-medium"
+          >
+            <Plus size={14} />
+            Add Issue
+          </button>
         </div>
       </div>
+
+      {adding && (
+        <div className="bg-blue-50/30 border border-blue-200 rounded-xl p-4 space-y-3">
+          <h4 className="text-sm font-semibold text-foreground">New Issue</h4>
+          <div className="grid grid-cols-1 gap-3">
+            <input
+              className="border border-border rounded px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
+              placeholder="Describe the issue…"
+              value={newIssue.description || ""}
+              onChange={e => setNewIssue(p => ({ ...p, description: e.target.value }))}
+              autoFocus
+            />
+            <div className="flex gap-3">
+              <select
+                className="border border-border rounded px-2 py-1.5 text-xs bg-white focus:outline-none"
+                value={newIssue.type}
+                onChange={e => setNewIssue(p => ({ ...p, type: e.target.value as IssueType }))}
+              >
+                {(["Company", "Department", "People"] as IssueType[]).map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+              <select
+                className="border border-border rounded px-2 py-1.5 text-xs bg-white focus:outline-none"
+                value={newIssue.priority}
+                onChange={e => setNewIssue(p => ({ ...p, priority: e.target.value as IssuePriority }))}
+              >
+                {(["Critical", "High", "Normal"] as IssuePriority[]).map(p => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+              <input
+                className="border border-border rounded px-2 py-1.5 text-sm bg-white focus:outline-none w-24"
+                placeholder="Owner"
+                value={newIssue.owner || ""}
+                onChange={e => setNewIssue(p => ({ ...p, owner: e.target.value }))}
+              />
+              <button
+                onClick={addIssue}
+                disabled={saving || !newIssue.description}
+                className="flex items-center gap-1.5 text-sm bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5B6EEF] transition-colors font-medium disabled:opacity-50"
+              >
+                <CheckCircle2 size={14} />
+                Save
+              </button>
+              <button onClick={() => setAdding(false)} className="p-1.5 text-muted-foreground hover:bg-slate-100 rounded">
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white border border-border rounded-xl overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-50 border-b border-border">
-              {["Issue", "Type", "Owner", "Priority", "Created", "IDS Status", "Action"].map(h => (
+              {["Issue", "Type", "Owner", "Priority", "Created", "IDS Status", "Action", ""].map(h => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   {h}
                 </th>
@@ -606,9 +834,15 @@ function IssuesTab() {
             </tr>
           </thead>
           <tbody>
-            {issues.map(issue => (
+            {issues.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted-foreground italic">
+                  No issues yet — add one above.
+                </td>
+              </tr>
+            ) : issues.map(issue => (
               <tr key={issue.id} className={cn(
-                "border-b border-border last:border-0 hover:bg-slate-50/50 transition-colors",
+                "border-b border-border last:border-0 hover:bg-slate-50/50 transition-colors group",
                 issue.status === "Resolved" && "opacity-60"
               )}>
                 <td className="px-4 py-3 font-medium text-foreground max-w-xs">
@@ -628,7 +862,7 @@ function IssuesTab() {
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{issue.owner}</td>
                 <td className="px-4 py-3"><PriorityPill priority={issue.priority} /></td>
-                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{issue.created}</td>
+                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDate(issue.created_at)}</td>
                 <td className="px-4 py-3"><IssueStatusPill status={issue.status} /></td>
                 <td className="px-4 py-3">
                   <select
@@ -640,6 +874,14 @@ function IssuesTab() {
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
+                </td>
+                <td className="px-4 py-3">
+                  <button
+                    onClick={() => deleteIssue(issue.id)}
+                    className="p-1 text-muted-foreground hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-all"
+                  >
+                    <X size={14} />
+                  </button>
                 </td>
               </tr>
             ))}
@@ -675,11 +917,59 @@ function IssuesTab() {
 
 // ─── Tab: To-Dos ──────────────────────────────────────────────────────────────
 
-function TodosTab() {
-  const [todos, setTodos] = useState<TodoItem[]>(initialTodos);
+function TodosTab({ todos, setTodos }: { todos: TodoItem[]; setTodos: React.Dispatch<React.SetStateAction<TodoItem[]>> }) {
+  const [adding, setAdding] = useState(false);
+  const [newTodo, setNewTodo] = useState<Partial<TodoItem>>({ owner: "RF", meeting: "" });
+  const [saving, setSaving] = useState(false);
 
-  const toggle = (id: number) => {
-    setTodos(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
+  const toggle = async (id: string) => {
+    const todo = todos.find(t => t.id === id);
+    if (!todo) return;
+    const newDone = !todo.done;
+    setTodos(prev => prev.map(t => t.id === id ? { ...t, done: newDone } : t));
+    void (async () => {
+      try {
+        await fetch(`/api/eos/todos/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ done: newDone }),
+        });
+      } catch (_) { /* non-blocking */ }
+    })();
+  };
+
+  const deleteTodo = async (id: string) => {
+    setTodos(prev => prev.filter(t => t.id !== id));
+    void (async () => {
+      try {
+        await fetch(`/api/eos/todos/${id}`, { method: "DELETE" });
+      } catch (_) { /* non-blocking */ }
+    })();
+  };
+
+  const addTodo = async () => {
+    if (!newTodo.text) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/eos/todos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: newTodo.text,
+          owner: newTodo.owner,
+          due_date: newTodo.due_date ?? null,
+          meeting: newTodo.meeting ?? "",
+        }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setTodos(prev => [created, ...prev]);
+        setAdding(false);
+        setNewTodo({ owner: "RF", meeting: "" });
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   const openCount = todos.filter(t => !t.done).length;
@@ -692,13 +982,66 @@ function TodosTab() {
           <h2 className="text-base font-bold text-foreground">To-Do List</h2>
           <p className="text-xs text-muted-foreground mt-0.5">{openCount} open · {doneCount} complete</p>
         </div>
+        <button
+          onClick={() => setAdding(true)}
+          className="flex items-center gap-1.5 text-sm bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5B6EEF] transition-colors font-medium"
+        >
+          <Plus size={14} />
+          Add To-Do
+        </button>
       </div>
+
+      {adding && (
+        <div className="bg-blue-50/30 border border-blue-200 rounded-xl p-4 space-y-3">
+          <h4 className="text-sm font-semibold text-foreground">New To-Do</h4>
+          <div className="grid grid-cols-1 gap-3">
+            <input
+              className="border border-border rounded px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
+              placeholder="What needs to get done?"
+              value={newTodo.text || ""}
+              onChange={e => setNewTodo(p => ({ ...p, text: e.target.value }))}
+              autoFocus
+            />
+            <div className="flex gap-3">
+              <input
+                className="border border-border rounded px-2 py-1.5 text-sm bg-white focus:outline-none w-24"
+                placeholder="Owner"
+                value={newTodo.owner || ""}
+                onChange={e => setNewTodo(p => ({ ...p, owner: e.target.value }))}
+              />
+              <input
+                type="date"
+                className="border border-border rounded px-2 py-1.5 text-sm bg-white focus:outline-none"
+                value={newTodo.due_date || ""}
+                onChange={e => setNewTodo(p => ({ ...p, due_date: e.target.value }))}
+              />
+              <input
+                className="border border-border rounded px-2 py-1.5 text-sm bg-white focus:outline-none flex-1"
+                placeholder="Meeting (e.g. L10 5/23)"
+                value={newTodo.meeting || ""}
+                onChange={e => setNewTodo(p => ({ ...p, meeting: e.target.value }))}
+              />
+              <button
+                onClick={addTodo}
+                disabled={saving || !newTodo.text}
+                className="flex items-center gap-1.5 text-sm bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5B6EEF] transition-colors font-medium disabled:opacity-50"
+              >
+                <CheckCircle2 size={14} />
+                Save
+              </button>
+              <button onClick={() => setAdding(false)} className="p-1.5 text-muted-foreground hover:bg-slate-100 rounded">
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white border border-border rounded-xl overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-50 border-b border-border">
-              {["", "To-Do", "Owner", "Due", "Meeting", "Status"].map((h, i) => (
+              {["", "To-Do", "Owner", "Due", "Meeting", "Status", ""].map((h, i) => (
                 <th key={i} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   {h}
                 </th>
@@ -706,9 +1049,15 @@ function TodosTab() {
             </tr>
           </thead>
           <tbody>
-            {todos.map(todo => (
+            {todos.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-sm text-muted-foreground italic">
+                  No to-dos yet — add one above.
+                </td>
+              </tr>
+            ) : todos.map(todo => (
               <tr key={todo.id} className={cn(
-                "border-b border-border last:border-0 hover:bg-slate-50/50 transition-colors",
+                "border-b border-border last:border-0 hover:bg-slate-50/50 transition-colors group",
                 todo.done && "opacity-60"
               )}>
                 <td className="pl-4 py-3 w-8">
@@ -728,13 +1077,21 @@ function TodosTab() {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{todo.owner}</td>
-                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{todo.due}</td>
+                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDate(todo.due_date)}</td>
                 <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{todo.meeting}</td>
                 <td className="px-4 py-3">
                   {todo.done
-                    ? <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Done ✓</span>
+                    ? <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Done</span>
                     : <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">Open</span>
                   }
+                </td>
+                <td className="px-4 py-3">
+                  <button
+                    onClick={() => deleteTodo(todo.id)}
+                    className="p-1 text-muted-foreground hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-all"
+                  >
+                    <X size={14} />
+                  </button>
                 </td>
               </tr>
             ))}
@@ -753,11 +1110,16 @@ const agendaItems = [
   { label: "Rock Review", duration: 5, description: "On track or off track — no discussion, just status" },
   { label: "Customer / Employee Headlines", duration: 5, description: "Headlines only — customer praise, employee news, nothing major" },
   { label: "To-Do List Review", duration: 5, description: "Done or not done — 7-day actions, 90% completion rate is the goal" },
-  { label: "IDS (Issues)", duration: 60, description: "The most important 60 minutes. Work through issues one at a time using Identify–Discuss–Solve", highlight: true },
-  { label: "Conclude", duration: 5, description: "Recap To-Dos, cascade messages to the team, rate the meeting 1–10" },
+  { label: "IDS (Issues)", duration: 60, description: "The most important 60 minutes. Work through issues one at a time using Identify-Discuss-Solve", highlight: true },
+  { label: "Conclude", duration: 5, description: "Recap To-Dos, cascade messages to the team, rate the meeting 1-10" },
 ];
 
-function L10Tab() {
+const meetingRatings = [8, 9, 8, 10, 9, 8];
+
+function L10Tab({ issues, todos }: { issues: Issue[]; todos: TodoItem[] }) {
+  const openIssues = issues.filter(i => i.status !== "Resolved");
+  const openTodos = todos.filter(t => !t.done);
+
   return (
     <div className="space-y-4">
       {/* Next meeting header */}
@@ -799,48 +1161,98 @@ function L10Tab() {
         </div>
       </div>
 
-      {/* Agenda */}
-      <div>
-        <h3 className="text-sm font-semibold text-foreground mb-3">Meeting Agenda</h3>
-        <div className="space-y-2">
-          {agendaItems.map((item, i) => (
-            <div
-              key={i}
-              className={cn(
-                "bg-white border rounded-xl p-4 flex items-start gap-4",
-                item.highlight
-                  ? "border-[#6B7EFF]/30 bg-[#6B7EFF]/3"
-                  : "border-border"
-              )}
-            >
-              <div className={cn(
-                "w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0",
-                item.highlight ? "bg-[#6B7EFF] text-white" : "bg-slate-100 text-slate-600"
-              )}>
-                <span className="text-sm font-bold leading-none">{item.duration}</span>
-                <span className="text-[9px] leading-none mt-0.5">min</span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className={cn("text-sm font-semibold", item.highlight ? "text-[#6B7EFF]" : "text-foreground")}>
-                    {item.label}
-                  </p>
-                  {item.highlight && (
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#6B7EFF] text-white">
-                      80% of value
-                    </span>
-                  )}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Agenda */}
+        <div className="lg:col-span-2">
+          <h3 className="text-sm font-semibold text-foreground mb-3">Meeting Agenda</h3>
+          <div className="space-y-2">
+            {agendaItems.map((item, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "bg-white border rounded-xl p-4 flex items-start gap-4",
+                  item.highlight
+                    ? "border-[#6B7EFF]/30 bg-[#6B7EFF]/3"
+                    : "border-border"
+                )}
+              >
+                <div className={cn(
+                  "w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0",
+                  item.highlight ? "bg-[#6B7EFF] text-white" : "bg-slate-100 text-slate-600"
+                )}>
+                  <span className="text-sm font-bold leading-none">{item.duration}</span>
+                  <span className="text-[9px] leading-none mt-0.5">min</span>
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className={cn("text-sm font-semibold", item.highlight ? "text-[#6B7EFF]" : "text-foreground")}>
+                      {item.label}
+                    </p>
+                    {item.highlight && (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#6B7EFF] text-white">
+                        80% of value
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5">
+                    <Timer size={12} />
+                    Start
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5">
-                  <Timer size={12} />
-                  Start
-                </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Live issues + todos for meeting prep */}
+        <div className="space-y-4">
+          <div className="bg-white border border-border rounded-xl p-4">
+            <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+              <span>Issues for This Meeting</span>
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200">
+                {openIssues.length}
+              </span>
+            </h4>
+            {openIssues.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">No open issues.</p>
+            ) : (
+              <div className="space-y-2">
+                {openIssues.map(issue => (
+                  <div key={issue.id} className="flex items-start gap-2">
+                    <PriorityPill priority={issue.priority} />
+                    <p className="text-xs text-foreground flex-1">{issue.description}</p>
+                  </div>
+                ))}
               </div>
-            </div>
-          ))}
+            )}
+          </div>
+
+          <div className="bg-white border border-border rounded-xl p-4">
+            <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+              <span>Open To-Dos</span>
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                {openTodos.length}
+              </span>
+            </h4>
+            {openTodos.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">All to-dos complete!</p>
+            ) : (
+              <div className="space-y-2">
+                {openTodos.map(todo => (
+                  <div key={todo.id} className="flex items-start gap-2">
+                    <Circle size={14} className="text-muted-foreground mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs text-foreground">{todo.text}</p>
+                      <p className="text-[10px] text-muted-foreground">{todo.owner} · due {formatDate(todo.due_date)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -883,7 +1295,6 @@ function CoachPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
     if (messages.length) scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  // Auto-start the coach with an intro message when first opened
   useEffect(() => {
     if (open && !initialized) {
       setInitialized(true);
@@ -895,11 +1306,7 @@ function CoachPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const startSession = async () => {
     setLoading(true);
     const initMessages: CoachMessage[] = [
-      {
-        role: "user",
-        content: "Hi, I'd like to start an EOS coaching session.",
-        timestamp: new Date(),
-      },
+      { role: "user", content: "Hi, I'd like to start an EOS coaching session.", timestamp: new Date() },
     ];
     setMessages(initMessages);
     await streamCoachResponse(initMessages);
@@ -923,8 +1330,6 @@ function CoachPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-
-      // Add a placeholder assistant message
       const placeholder: CoachMessage = { role: "assistant", content: "", timestamp: new Date() };
       setMessages(prev => [...prev, placeholder]);
 
@@ -978,11 +1383,7 @@ function CoachPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
     }
   };
 
-  // Extract the display text (strip trailing JSON code blocks)
-  const displayContent = (content: string) => {
-    return content.replace(/```json[\s\S]*?```/g, "").trim();
-  };
-
+  const displayContent = (content: string) => content.replace(/```json[\s\S]*?```/g, "").trim();
   const hasJSON = (content: string) => /```json[\s\S]*?"action":\s*"update_vto"/.test(content);
 
   if (!open) return null;
@@ -991,15 +1392,8 @@ function CoachPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
 
   return (
     <div className="fixed inset-y-0 right-0 z-50 flex">
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/20 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      {/* Panel */}
+      <div className="fixed inset-0 bg-black/20 backdrop-blur-sm" onClick={onClose} />
       <div className="relative ml-auto w-[420px] flex flex-col bg-white shadow-2xl border-l border-border h-full">
-        {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-gradient-to-r from-[#6B7EFF]/5 to-white shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-full bg-[#6B7EFF] flex items-center justify-center">
@@ -1015,7 +1409,6 @@ function CoachPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
           </button>
         </div>
 
-        {/* Section picker */}
         <div className="px-4 py-2.5 border-b border-border shrink-0">
           <div className="relative">
             <button
@@ -1025,7 +1418,7 @@ function CoachPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
               <span className="text-foreground font-medium">
                 {currentSectionInfo
                   ? `${currentSectionInfo.emoji} ${currentSectionInfo.label}`
-                  : "📋 All Sections — Open Coaching"}
+                  : "All Sections — Open Coaching"}
               </span>
               <ChevronDown size={14} className="text-muted-foreground" />
             </button>
@@ -1035,7 +1428,7 @@ function CoachPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
                   onClick={() => { setActiveSection(null); setSectionPickerOpen(false); }}
                   className="w-full text-left px-3 py-2.5 text-sm hover:bg-slate-50 transition-colors border-b border-border text-muted-foreground"
                 >
-                  📋 Open Coaching (no section)
+                  Open Coaching (no section)
                 </button>
                 {EOS_SECTIONS.map(s => (
                   <button
@@ -1054,7 +1447,6 @@ function CoachPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
           </div>
         </div>
 
-        {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
           {messages.filter(m => !(m.role === "user" && m.content === "Hi, I'd like to start an EOS coaching session.")).map((msg, i) => (
             <div key={i} className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}>
@@ -1063,14 +1455,12 @@ function CoachPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
                   <Zap size={10} className="text-white" />
                 </div>
               )}
-              <div
-                className={cn(
-                  "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
-                  msg.role === "user"
-                    ? "bg-[#6B7EFF] text-white rounded-tr-sm"
-                    : "bg-slate-50 border border-border text-foreground rounded-tl-sm"
-                )}
-              >
+              <div className={cn(
+                "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
+                msg.role === "user"
+                  ? "bg-[#6B7EFF] text-white rounded-tr-sm"
+                  : "bg-slate-50 border border-border text-foreground rounded-tl-sm"
+              )}>
                 <div className="whitespace-pre-wrap">{displayContent(msg.content)}</div>
                 {msg.role === "assistant" && hasJSON(msg.content) && (
                   <div className="mt-3 pt-3 border-t border-border/50">
@@ -1104,7 +1494,6 @@ function CoachPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Quick prompts */}
         {messages.length <= 2 && !loading && (
           <div className="px-4 pb-2 shrink-0">
             <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-2">Quick Start</p>
@@ -1130,7 +1519,6 @@ function CoachPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
           </div>
         )}
 
-        {/* Input */}
         <div className="px-4 py-3 border-t border-border shrink-0">
           <div className="flex items-end gap-2">
             <textarea
@@ -1167,9 +1555,51 @@ type Tab = typeof TABS[number];
 
 export default function EOSPage() {
   const [activeTab, setActiveTab] = useState<Tab>("V/TO");
-  const [rocks] = useState<Rock[]>(initialRocks);
-  const [issues] = useState<Issue[]>(initialIssues);
   const [coachOpen, setCoachOpen] = useState(false);
+
+  // ── Live data state ──
+  const [rocks, setRocks] = useState<Rock[]>([]);
+  const [measurables, setMeasurables] = useState<Measurable[]>([]);
+  const [issues, setIssues] = useState<Issue[]>([]);
+  const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // ── Load all data on mount ──
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAll = async () => {
+      try {
+        const [rocksRes, scorecardRes, issuesRes, todosRes] = await Promise.all([
+          fetch("/api/eos/rocks"),
+          fetch("/api/eos/scorecard"),
+          fetch("/api/eos/issues"),
+          fetch("/api/eos/todos"),
+        ]);
+
+        const [rocksData, scorecardData, issuesData, todosData] = await Promise.all([
+          rocksRes.ok ? rocksRes.json() : [],
+          scorecardRes.ok ? scorecardRes.json() : [],
+          issuesRes.ok ? issuesRes.json() : [],
+          todosRes.ok ? todosRes.json() : [],
+        ]);
+
+        if (!cancelled) {
+          setRocks(Array.isArray(rocksData) ? rocksData : []);
+          setMeasurables(Array.isArray(scorecardData) ? scorecardData : []);
+          setIssues(Array.isArray(issuesData) ? issuesData : []);
+          setTodos(Array.isArray(todosData) ? todosData : []);
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error("EOS load error:", err);
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    void loadAll();
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <div className="flex flex-col min-h-screen bg-[#F8FAFC]">
@@ -1217,28 +1647,38 @@ export default function EOSPage() {
             ))}
           </div>
 
-          {/* V/TO Coach hint */}
           {activeTab === "V/TO" && (
             <button
               onClick={() => setCoachOpen(true)}
               className="flex items-center gap-2 text-xs text-[#6B7EFF] bg-[#6B7EFF]/5 border border-[#6B7EFF]/20 px-3 py-2 rounded-lg hover:bg-[#6B7EFF]/10 transition-colors"
             >
               <Zap size={12} />
-              <span>Not sure what goes here? Let AI Coach help you build your V/TO →</span>
+              <span>Not sure what goes here? Let AI Coach help you build your V/TO</span>
             </button>
           )}
         </div>
 
-        {/* Tab content */}
-        {activeTab === "V/TO"       && <VTOTab rocks={rocks} issues={issues} />}
-        {activeTab === "Rocks"      && <RocksTab />}
-        {activeTab === "Scorecard"  && <ScorecardTab />}
-        {activeTab === "Issues"     && <IssuesTab />}
-        {activeTab === "To-Dos"     && <TodosTab />}
-        {activeTab === "L10 Meeting" && <L10Tab />}
+        {/* Loading state */}
+        {loading ? (
+          <div className="flex items-center justify-center py-24">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 size={28} className="text-[#6B7EFF] animate-spin" />
+              <p className="text-sm text-muted-foreground">Loading EOS data...</p>
+            </div>
+          </div>
+        ) : (
+          <>
+            {activeTab === "V/TO"        && <VTOTab rocks={rocks} issues={issues} />}
+            {activeTab === "Rocks"       && <RocksTab rocks={rocks} setRocks={setRocks} />}
+            {activeTab === "Scorecard"   && <ScorecardTab measurables={measurables} setMeasurables={setMeasurables} />}
+            {activeTab === "Issues"      && <IssuesTab issues={issues} setIssues={setIssues} />}
+            {activeTab === "To-Dos"      && <TodosTab todos={todos} setTodos={setTodos} />}
+            {activeTab === "L10 Meeting" && <L10Tab issues={issues} todos={todos} />}
+          </>
+        )}
       </div>
 
-      {/* Floating AI Coach button (always visible) */}
+      {/* Floating AI Coach button */}
       {!coachOpen && (
         <button
           onClick={() => setCoachOpen(true)}
@@ -1249,7 +1689,6 @@ export default function EOSPage() {
         </button>
       )}
 
-      {/* Coach side panel */}
       <CoachPanel open={coachOpen} onClose={() => setCoachOpen(false)} />
     </div>
   );

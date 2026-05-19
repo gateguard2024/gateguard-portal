@@ -7,7 +7,7 @@ import {
   Building2, MapPin, Phone, Mail, Wrench, ChevronLeft,
   Plus, Shield, Activity, ClipboardList, Package,
   CheckCircle2, AlertTriangle, XCircle, Wifi, WifiOff,
-  Key, FileText, Trash2, RefreshCw, Copy, ExternalLink, X,
+  Key, FileText, Trash2, RefreshCw, Copy, ExternalLink, X, Search,
 } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { Inbox, Edit3, Edit2, RotateCcw } = require('lucide-react') as any
@@ -248,7 +248,7 @@ function formatDateTime(iso: string | null) {
 }
 
 /* ─── Main page ──────────────────────────────────────── */
-type Tab = 'overview' | 'assets' | 'events' | 'work_orders' | 'requests' | 'pm_schedules' | 'opportunities'
+type Tab = 'overview' | 'assets' | 'events' | 'work_orders' | 'requests' | 'pm_schedules' | 'opportunities' | 'quotes'
 
 interface SiteOpportunity {
   id: string
@@ -259,6 +259,19 @@ interface SiteOpportunity {
   account_name: string
   created_at: string
   close_date: string | null
+}
+
+interface SiteQuote {
+  id: string
+  quote_number: string
+  status: string
+  property_name: string | null
+  units: number | null
+  total_one_time: number
+  total_mrr: number
+  created_at: string
+  sent_at: string | null
+  accepted_at: string | null
 }
 
 interface WORequest {
@@ -288,12 +301,22 @@ export default function SiteDetailPage() {
   const [requests, setRequests]     = useState<WORequest[]>([])
   const [pmSchedules, setPMSchedules]   = useState<PMSchedule[]>([])
   const [siteOpps, setSiteOpps]         = useState<SiteOpportunity[]>([])
+  const [siteQuotes, setSiteQuotes]     = useState<SiteQuote[]>([])
+  const [quotesLoaded, setQuotesLoaded] = useState(false)
   const [loading, setLoading]           = useState(true)
   const [tab, setTab]               = useState<Tab>('overview')
   const [showAddAsset, setShowAddAsset] = useState(false)
   const [statusUpdating, setStatusUpdating] = useState(false)
   const [copySuccess, setCopySuccess] = useState(false)
   const [convertingId, setConvertingId] = useState<string | null>(null)
+
+  // Linked org names (fetched after site loads)
+  interface OrgLink { id: string; name: string; org_tier?: string }
+  const [linkedOrgs, setLinkedOrgs] = useState<Record<string, OrgLink | null>>({
+    org_id: null, master_dealer_id: null, install_dealer_id: null, service_dealer_id: null,
+  })
+  const [assigningField, setAssigningField] = useState<string | null>(null)
+  const [assignSaving, setAssignSaving] = useState(false)
 
   // PM Schedule form state
   const [showPMForm, setShowPMForm] = useState(false)
@@ -319,6 +342,29 @@ export default function SiteDetailPage() {
       setAssets(siteJson.assets)
       setEvents(siteJson.events)
       setWorkOrders(siteJson.work_orders)
+
+      // Load org names for attribution fields
+      const s = siteJson.site as Site
+      const orgFields: Array<keyof Site> = ['org_id', 'master_dealer_id', 'install_dealer_id', 'service_dealer_id']
+      const orgResults = await Promise.allSettled(
+        orgFields.map(field => {
+          const orgId = s[field]
+          if (!orgId) return Promise.resolve(null)
+          return fetch(`/api/customers/${orgId}`).then(r => r.ok ? r.json() : null)
+        })
+      )
+      const newLinkedOrgs: Record<string, OrgLink | null> = {
+        org_id: null, master_dealer_id: null, install_dealer_id: null, service_dealer_id: null,
+      }
+      orgFields.forEach((field, i) => {
+        const result = orgResults[i]
+        if (result.status === 'fulfilled' && result.value) {
+          const org = result.value.organization ?? result.value
+          const orgId = s[field] as string
+          newLinkedOrgs[field] = { id: orgId, name: org.name, org_tier: org.org_tier }
+        }
+      })
+      setLinkedOrgs(newLinkedOrgs)
       if (reqRes.ok) {
         const reqJson = await reqRes.json()
         setRequests(reqJson.requests ?? [])
@@ -334,6 +380,13 @@ export default function SiteDetailPage() {
         // API returns { records: [...], grouped: ..., ... }
         setSiteOpps(oppJson.records ?? oppJson.opportunities ?? [])
       }
+      // Load quotes linked to this site
+      const quotesRes = await fetch(`/api/quotes?site_id=${id}`)
+      if (quotesRes.ok) {
+        const quotesJson = await quotesRes.json()
+        setSiteQuotes(quotesJson.records ?? [])
+      }
+      setQuotesLoaded(true)
     } finally { setLoading(false) }
   }
 
@@ -441,6 +494,24 @@ export default function SiteDetailPage() {
     setStatusUpdating(false)
   }
 
+  const handleAssign = async (field: string, org: OrgLink | null) => {
+    setAssignSaving(true)
+    try {
+      const res = await fetch(`/api/sites/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: org?.id ?? null }),
+      })
+      if (res.ok) {
+        setSite(s => s ? { ...s, [field]: org?.id ?? null } as Site : s)
+        setLinkedOrgs(prev => ({ ...prev, [field]: org }))
+      }
+    } finally {
+      setAssignSaving(false)
+      setAssigningField(null)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -465,6 +536,7 @@ export default function SiteDetailPage() {
     { id: 'requests',      label: 'Requests',      icon: Inbox,         count: requests.length, badge: newRequests },
     { id: 'pm_schedules',  label: 'PM Schedules',  icon: RefreshCw,     count: pmSchedules.length },
     { id: 'opportunities', label: 'Opportunities', icon: FileText,      count: siteOpps.length },
+    { id: 'quotes',        label: 'Quotes',        icon: FileText,      count: siteQuotes.length },
   ]
 
   return (
@@ -524,35 +596,69 @@ export default function SiteDetailPage() {
         </div>
       </div>
 
-      {/* ── Dealer attribution card ────────────────────────────────── */}
-      {/* This is the "who owns, installs, services" 3-column panel */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <DealerCard
+      {/* ── Assignment cards ── */}
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        <AssignmentCard
+          role="Customer Account"
+          label="Paying Client"
+          fieldKey="org_id"
+          orgLink={linkedOrgs.org_id}
+          onAssign={setAssigningField}
+          color="text-amber-600"
+          bgColor="bg-amber-50"
+          borderColor="border-amber-200"
+        />
+        <AssignmentCard
           role="MSO"
           label="Account Owner"
-          id={site.master_dealer_id}
+          fieldKey="master_dealer_id"
+          orgLink={linkedOrgs.master_dealer_id}
+          onAssign={setAssigningField}
           color="text-violet-600"
           bgColor="bg-violet-50"
           borderColor="border-violet-200"
         />
-        <DealerCard
+        <AssignmentCard
           role="Install Dealer"
           label="Installed By"
-          id={site.install_dealer_id}
+          fieldKey="install_dealer_id"
+          orgLink={linkedOrgs.install_dealer_id}
+          onAssign={setAssigningField}
           color="text-blue-600"
           bgColor="bg-blue-50"
           borderColor="border-blue-200"
         />
-        <DealerCard
+        <AssignmentCard
           role="Service Dealer"
           label="Day-to-Day Contact"
-          id={site.service_dealer_id}
+          fieldKey="service_dealer_id"
+          orgLink={linkedOrgs.service_dealer_id}
+          onAssign={setAssigningField}
           color="text-brand-400"
           bgColor="bg-brand-50"
           borderColor="border-brand-200"
           primary
         />
       </div>
+
+      {/* Org picker modal */}
+      <OrgPickerModal
+        open={assigningField !== null}
+        onClose={() => setAssigningField(null)}
+        onSelect={org => assigningField && handleAssign(assigningField, org)}
+        tierFilter={
+          assigningField === 'org_id'            ? 'client' :
+          assigningField === 'master_dealer_id'  ? 'master_dealer' :
+          assigningField === 'install_dealer_id' ? 'install_contractor' :
+          assigningField === 'service_dealer_id' ? 'service_dealer' : undefined
+        }
+        title={
+          assigningField === 'org_id'            ? 'Assign Customer Account' :
+          assigningField === 'master_dealer_id'  ? 'Assign MSO' :
+          assigningField === 'install_dealer_id' ? 'Assign Install Dealer' :
+          assigningField === 'service_dealer_id' ? 'Assign Service Dealer' : 'Assign Organization'
+        }
+      />
 
       {/* ── Tabs ────────────────────────────────────────────────────── */}
       <div className="flex gap-1 border-b border-slate-200 mb-6">
@@ -1172,6 +1278,91 @@ export default function SiteDetailPage() {
         </div>
       )}
 
+      {tab === 'quotes' && (
+        <div className='space-y-4'>
+          <div className='flex items-center justify-between'>
+            <div>
+              <h3 className='text-sm font-semibold text-slate-800'>Quotes</h3>
+              <p className='text-xs text-slate-400 mt-0.5'>All quotes for this property</p>
+            </div>
+            <Link
+              href={`/quotes/new?site_id=${id}&site_name=${encodeURIComponent(site?.name ?? '')}`}
+              className='inline-flex items-center gap-1.5 text-xs font-medium text-[#6B7EFF] hover:underline'
+            >
+              <Plus size={12} /> New Quote
+            </Link>
+          </div>
+          {!quotesLoaded ? (
+            <div className='flex items-center gap-2 py-4 text-slate-400'>
+              <RefreshCw size={14} className='animate-spin' />
+              <span className='text-sm'>Loading…</span>
+            </div>
+          ) : siteQuotes.length === 0 ? (
+            <div className='text-center py-12 text-sm text-slate-400'>
+              <FileText size={24} className='mx-auto mb-2 text-slate-300' />
+              No quotes for this property yet.
+            </div>
+          ) : (
+            <div className='bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden'>
+              <table className='w-full text-sm'>
+                <thead className='bg-slate-50 border-b border-slate-100'>
+                  <tr>
+                    <th className='text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider'>Quote #</th>
+                    <th className='text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider'>Property</th>
+                    <th className='text-right px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider'>Setup</th>
+                    <th className='text-right px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider'>MRR</th>
+                    <th className='text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider'>Status</th>
+                    <th className='text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider'>Date</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody className='divide-y divide-slate-50'>
+                  {siteQuotes.map(q => (
+                    <tr key={q.id} className='hover:bg-slate-50 transition-colors'>
+                      <td className='px-4 py-3'>
+                        <span className='font-mono text-xs text-[#6B7EFF]'>{q.quote_number}</span>
+                      </td>
+                      <td className='px-4 py-3'>
+                        <span className='text-slate-800'>{q.property_name ?? site?.name ?? '—'}</span>
+                        {q.units ? <span className='text-xs text-slate-400 ml-1'>({q.units} units)</span> : null}
+                      </td>
+                      <td className='px-4 py-3 text-right font-medium text-slate-700'>
+                        ${q.total_one_time.toLocaleString()}
+                      </td>
+                      <td className='px-4 py-3 text-right'>
+                        <span className='text-violet-600 font-medium'>${q.total_mrr.toLocaleString()}</span>
+                        <span className='text-xs text-slate-400'>/mo</span>
+                      </td>
+                      <td className='px-4 py-3'>
+                        <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full capitalize
+                          ${q.status === 'accepted' ? 'bg-emerald-100 text-emerald-700'
+                          : q.status === 'sent' || q.status === 'viewed' ? 'bg-blue-100 text-blue-700'
+                          : q.status === 'declined' ? 'bg-red-100 text-red-700'
+                          : 'bg-slate-100 text-slate-500'}`}
+                        >
+                          {q.status}
+                        </span>
+                      </td>
+                      <td className='px-4 py-3 text-xs text-slate-400'>
+                        {new Date(q.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </td>
+                      <td className='px-4 py-3 text-right'>
+                        <Link
+                          href={`/quotes/${q.id}`}
+                          className='text-xs text-[#6B7EFF] hover:underline flex items-center gap-1 justify-end'
+                        >
+                          <ExternalLink size={11} /> View
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Add asset panel */}
       <AddAssetSlideOver
         siteId={id}
@@ -1186,13 +1377,104 @@ export default function SiteDetailPage() {
   )
 }
 
-/* ─── Dealer attribution card ────────────────────────── */
-function DealerCard({
-  role, label, id, color, bgColor, borderColor, primary,
+/* ─── Org picker modal ───────────────────────────────── */
+interface OrgLink { id: string; name: string; org_tier?: string }
+
+function OrgPickerModal({ open, onClose, onSelect, tierFilter, title }: {
+  open: boolean
+  onClose: () => void
+  onSelect: (org: OrgLink | null) => void
+  tierFilter?: string
+  title: string
+}) {
+  const [q, setQ] = useState('')
+  const [results, setResults] = useState<OrgLink[]>([])
+  const [searching, setSearching] = useState(false)
+
+  useEffect(() => {
+    if (!open) { setQ(''); setResults([]) }
+  }, [open])
+
+  useEffect(() => {
+    if (!q.trim()) { setResults([]); return }
+    const t = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const url = `/api/customers?q=${encodeURIComponent(q)}${tierFilter ? `&tier=${tierFilter}` : ''}`
+        const res = await fetch(url)
+        const json = await res.json()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setResults((json.records ?? []).map((o: any) => ({ id: o.id, name: o.name, org_tier: o.org_tier })))
+      } finally { setSearching(false) }
+    }, 300)
+    return () => clearTimeout(t)
+  }, [q, tierFilter])
+
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[70vh] flex flex-col">
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+          <h3 className="font-semibold text-slate-900">{title}</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+        </div>
+        <div className="px-4 py-3 border-b border-slate-100">
+          <div className="relative">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              autoFocus
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              placeholder="Search by name..."
+              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+            />
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {searching && <div className="flex items-center justify-center py-8 text-slate-400 text-sm">Searching…</div>}
+          {!searching && q && results.length === 0 && (
+            <div className="py-8 text-center text-slate-400 text-sm">No results for &ldquo;{q}&rdquo;</div>
+          )}
+          {!searching && !q && (
+            <div className="py-6 text-center text-slate-400 text-sm">Type to search organizations</div>
+          )}
+          {results.map(org => (
+            <button
+              key={org.id}
+              onClick={() => { onSelect(org); onClose() }}
+              className="w-full flex items-center gap-3 px-5 py-3 hover:bg-slate-50 text-left border-b border-slate-100 last:border-0"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-900 truncate">{org.name}</p>
+                {org.org_tier && <p className="text-xs text-slate-400 capitalize">{org.org_tier.replace(/_/g, ' ')}</p>}
+              </div>
+              <span className="text-xs text-brand-400 font-medium shrink-0">Select →</span>
+            </button>
+          ))}
+        </div>
+        <div className="px-5 py-3 border-t border-slate-100">
+          <button
+            onClick={() => { onSelect(null); onClose() }}
+            className="text-sm text-slate-400 hover:text-red-500"
+          >
+            Remove assignment
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ─── Assignment card ────────────────────────────────── */
+function AssignmentCard({
+  role, label, fieldKey, orgLink, onAssign, color, bgColor, borderColor, primary,
 }: {
   role: string
   label: string
-  id: string | null
+  fieldKey: string
+  orgLink: OrgLink | null
+  onAssign: (field: string) => void
   color: string
   bgColor: string
   borderColor: string
@@ -1207,13 +1489,22 @@ function DealerCard({
         )}
       </div>
       <p className="text-xs text-slate-500 mb-3">{label}</p>
-      {id ? (
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-mono text-slate-400 truncate">{id.slice(0, 8)}…</span>
-          <Link href={`/customers/${id}`} className={`text-xs font-medium ${color} hover:underline`}>View →</Link>
+      {orgLink ? (
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-medium text-slate-800 truncate">{orgLink.name}</span>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link href={`/customers/${orgLink.id}`} className={`text-xs font-medium ${color} hover:underline`}>View</Link>
+            <span className="text-slate-300">·</span>
+            <button onClick={() => onAssign(fieldKey)} className="text-xs text-slate-400 hover:text-slate-600">Transfer</button>
+          </div>
         </div>
       ) : (
-        <p className="text-sm text-slate-400 italic">Not assigned</p>
+        <button
+          onClick={() => onAssign(fieldKey)}
+          className={`text-sm ${color} hover:opacity-80 font-medium flex items-center gap-1`}
+        >
+          <Plus size={13} /> Assign
+        </button>
       )}
     </div>
   )

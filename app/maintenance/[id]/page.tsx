@@ -6,7 +6,7 @@ import Link from 'next/link'
 import {
   Wrench, Clock, Calendar, CheckCircle2, X, AlertTriangle,
   Plus, Trash2, MessageSquare, Package, User, ChevronDown,
-  RefreshCw, Send, Building2, Hash, MapPin, Check, FileText,
+  RefreshCw, Send, Building2, Hash, MapPin, Check, FileText, Search,
 } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ArrowLeft, Edit2, Timer, Tag, ClipboardList } = require('lucide-react') as any
@@ -63,11 +63,28 @@ interface WOComment {
 interface PartUsed {
   id: string
   work_order_id: string
+  inventory_item_id?: string | null
+  // new schema fields (work_order_parts)
+  name?: string
+  sku?: string | null
+  qty?: number
+  action?: string
+  added_by?: string | null
+  // legacy compat
   part_id?: string
-  part_name: string
+  part_name?: string
   part_number?: string
-  quantity: number
-  unit_cost?: number
+  quantity?: number
+  unit_cost?: number | null
+}
+
+interface InventorySearchResult {
+  id: string
+  name: string
+  sku: string | null
+  on_hand: number
+  unit_cost: number
+  category: string
 }
 
 interface SubWorkOrder {
@@ -362,8 +379,14 @@ export default function WorkOrderDetailPage() {
 
   // Part input
   const [showAddPart, setShowAddPart] = useState(false)
-  const [partForm, setPartForm] = useState({ part_name: '', part_number: '', quantity: '1', unit_cost: '' })
+  const [partForm, setPartForm] = useState({ part_name: '', part_number: '', quantity: '1', unit_cost: '', action: 'used' })
   const [addingPart, setAddingPart] = useState(false)
+
+  // Inventory search picker
+  const [invSearch, setInvSearch]         = useState('')
+  const [invResults, setInvResults]       = useState<InventorySearchResult[]>([])
+  const [invSearching, setInvSearching]   = useState(false)
+  const [selectedInvItem, setSelectedInvItem] = useState<InventorySearchResult | null>(null)
 
   // Active tab
   const [tab, setTab] = useState<'details' | 'comments' | 'parts' | 'field_tickets' | 'time'>('details')
@@ -398,6 +421,17 @@ export default function WorkOrderDetailPage() {
       setComments(json.comments         ?? [])
       setPartsUsed(json.parts_used      ?? [])
       setSubWOs(json.sub_work_orders    ?? [])
+
+      // Load parts from new work_order_parts table (non-blocking)
+      void (async () => {
+        try {
+          const partsRes  = await fetch(`/api/maintenance/${id}/parts`)
+          const partsJson = await partsRes.json()
+          if (partsRes.ok && partsJson.parts?.length > 0) {
+            setPartsUsed(partsJson.parts)
+          }
+        } catch (_) { /* non-blocking */ }
+      })()
 
       // Load field tickets + time entries in parallel (non-blocking)
       void Promise.all([
@@ -489,6 +523,29 @@ export default function WorkOrderDetailPage() {
 
   // ── Parts ────────────────────────────────────────────────────────
 
+  const handleInvSearch = async (q: string) => {
+    setInvSearch(q)
+    if (!q.trim()) { setInvResults([]); return }
+    setInvSearching(true)
+    try {
+      const res  = await fetch(`/api/inventory?q=${encodeURIComponent(q)}`)
+      const json = await res.json()
+      setInvResults(json.records ?? [])
+    } catch (_) { /* ignore */ } finally { setInvSearching(false) }
+  }
+
+  const handleSelectInvItem = (item: InventorySearchResult) => {
+    setSelectedInvItem(item)
+    setPartForm(f => ({
+      ...f,
+      part_name:   item.name,
+      part_number: item.sku ?? '',
+      unit_cost:   String(item.unit_cost),
+    }))
+    setInvResults([])
+    setInvSearch('')
+  }
+
   const handleAddPart = async () => {
     if (!partForm.part_name.trim()) return
     setAddingPart(true)
@@ -496,27 +553,37 @@ export default function WorkOrderDetailPage() {
       const res  = await fetch(`/api/maintenance/${id}/parts`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          part_name:   partForm.part_name.trim(),
-          part_number: partForm.part_number || null,
-          quantity:    parseInt(partForm.quantity) || 1,
-          unit_cost:   partForm.unit_cost ? parseFloat(partForm.unit_cost) : null,
+          inventory_item_id: selectedInvItem?.id ?? null,
+          name:      partForm.part_name.trim(),
+          sku:       partForm.part_number || null,
+          qty:       parseInt(partForm.quantity) || 1,
+          unit_cost: partForm.unit_cost ? parseFloat(partForm.unit_cost) : null,
+          action:    partForm.action || 'used',
         }),
       })
       const json = await res.json()
       if (res.ok) {
         setPartsUsed(p => [...p, json.part])
-        setPartForm({ part_name: '', part_number: '', quantity: '1', unit_cost: '' })
+        setPartForm({ part_name: '', part_number: '', quantity: '1', unit_cost: '', action: 'used' })
+        setSelectedInvItem(null)
         setShowAddPart(false)
+      } else {
+        alert(json.error ?? 'Failed to add part')
       }
     } finally { setAddingPart(false) }
   }
 
   const handleDeletePart = async (partId: string) => {
     setPartsUsed(p => p.filter(x => x.id !== partId))
-    await fetch(`/api/maintenance/${id}/parts`, {
-      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ part_used_id: partId }),
-    })
+    // Try new RESTful endpoint first
+    const res = await fetch(`/api/maintenance/${id}/parts/${partId}`, { method: 'DELETE' })
+    if (!res.ok) {
+      // Fallback to legacy body-DELETE
+      await fetch(`/api/maintenance/${id}/parts`, {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ part_used_id: partId }),
+      })
+    }
   }
 
   // ── Field Tickets ────────────────────────────────────────────────
@@ -624,7 +691,21 @@ export default function WorkOrderDetailPage() {
   const totalCount = checklist.length
   const progress   = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0
 
-  const partsTotal = partsUsed.reduce((acc, p) => acc + (p.unit_cost ?? 0) * p.quantity, 0)
+  // Normalize helper — handles both old (wo_parts_used) and new (work_order_parts) schemas
+  const normPart = (p: PartUsed) => ({
+    id:        p.id,
+    name:      p.name       ?? p.part_name   ?? 'Unknown part',
+    sku:       p.sku        ?? p.part_number ?? null,
+    qty:       p.qty        ?? p.quantity    ?? 1,
+    unit_cost: p.unit_cost  ?? null,
+    action:    p.action     ?? 'used',
+    added_by:  p.added_by   ?? null,
+  })
+
+  const partsTotal = partsUsed.reduce((acc, p) => {
+    const n = normPart(p)
+    return acc + (n.unit_cost ?? 0) * n.qty
+  }, 0)
 
   return (
     <div className="flex flex-col min-h-full">
@@ -1276,7 +1357,8 @@ export default function WorkOrderDetailPage() {
                         <thead>
                           <tr className="border-b border-border bg-background/30">
                             <th className="text-left px-5 py-2.5 text-xs text-muted-foreground font-medium">Part</th>
-                            <th className="text-left px-4 py-2.5 text-xs text-muted-foreground font-medium">Part #</th>
+                            <th className="text-left px-4 py-2.5 text-xs text-muted-foreground font-medium">SKU</th>
+                            <th className="text-left px-4 py-2.5 text-xs text-muted-foreground font-medium">Action</th>
                             <th className="text-center px-4 py-2.5 text-xs text-muted-foreground font-medium">Qty</th>
                             <th className="text-right px-4 py-2.5 text-xs text-muted-foreground font-medium">Unit Cost</th>
                             <th className="text-right px-4 py-2.5 text-xs text-muted-foreground font-medium">Total</th>
@@ -1284,27 +1366,101 @@ export default function WorkOrderDetailPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {partsUsed.map(p => (
-                            <tr key={p.id} className="border-b border-border/50 hover:bg-accent/30 group">
-                              <td className="px-5 py-3 font-medium text-foreground">{p.part_name}</td>
-                              <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{p.part_number ?? '—'}</td>
-                              <td className="px-4 py-3 text-center text-muted-foreground">{p.quantity}</td>
-                              <td className="px-4 py-3 text-right text-muted-foreground">{p.unit_cost ? `$${p.unit_cost.toFixed(2)}` : '—'}</td>
-                              <td className="px-4 py-3 text-right font-medium">{p.unit_cost ? `$${(p.unit_cost * p.quantity).toFixed(2)}` : '—'}</td>
-                              <td className="px-4 py-3 text-right">
-                                <button onClick={() => handleDeletePart(p.id)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/10 text-red-400 transition-all">
-                                  <Trash2 size={12} />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
+                          {partsUsed.map(p => {
+                            const np = normPart(p)
+                            const actionColors: Record<string, string> = {
+                              used:      'bg-blue-500/10 text-blue-400',
+                              installed: 'bg-emerald-500/10 text-emerald-400',
+                              returned:  'bg-amber-500/10 text-amber-400',
+                              warranty:  'bg-violet-500/10 text-violet-400',
+                            }
+                            return (
+                              <tr key={p.id} className="border-b border-border/50 hover:bg-accent/30 group">
+                                <td className="px-5 py-3 font-medium text-foreground">{np.name}</td>
+                                <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{np.sku ?? '—'}</td>
+                                <td className="px-4 py-3">
+                                  <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize', actionColors[np.action] ?? 'bg-slate-500/10 text-slate-400')}>
+                                    {np.action}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-center text-muted-foreground">{np.qty}</td>
+                                <td className="px-4 py-3 text-right text-muted-foreground">{np.unit_cost != null ? `$${np.unit_cost.toFixed(2)}` : '—'}</td>
+                                <td className="px-4 py-3 text-right font-medium">{np.unit_cost != null ? `$${(np.unit_cost * np.qty).toFixed(2)}` : '—'}</td>
+                                <td className="px-4 py-3 text-right">
+                                  <button onClick={() => handleDeletePart(p.id)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/10 text-red-400 transition-all">
+                                    <Trash2 size={12} />
+                                  </button>
+                                </td>
+                              </tr>
+                            )
+                          })}
                         </tbody>
+                        {partsTotal > 0 && (
+                          <tfoot>
+                            <tr className="border-t border-border bg-background/30">
+                              <td colSpan={5} className="px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Parts Total</td>
+                              <td className="px-4 py-2.5 text-right text-sm font-bold text-foreground">${partsTotal.toFixed(2)}</td>
+                              <td />
+                            </tr>
+                          </tfoot>
+                        )}
                       </table>
                     )}
 
                     {/* Add part form */}
                     {showAddPart ? (
                       <div className="px-5 py-4 border-t border-border space-y-3">
+                        {/* Inventory search picker */}
+                        <div className="relative">
+                          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                          <input
+                            value={invSearch}
+                            onChange={e => handleInvSearch(e.target.value)}
+                            placeholder="Search inventory (or enter manually below)…"
+                            className="w-full pl-8 pr-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                          />
+                          {selectedInvItem && (
+                            <button
+                              onClick={() => { setSelectedInvItem(null); setPartForm(f => ({ ...f, part_name: '', part_number: '' })) }}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-red-400"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                          {/* Dropdown results */}
+                          {invResults.length > 0 && (
+                            <div className="absolute left-0 right-0 top-full mt-1 bg-card border border-border rounded-xl shadow-lg z-20 overflow-hidden max-h-48 overflow-y-auto">
+                              {invSearching && <p className="px-3 py-2 text-xs text-muted-foreground">Searching…</p>}
+                              {invResults.map(item => (
+                                <button
+                                  key={item.id}
+                                  onClick={() => handleSelectInvItem(item)}
+                                  className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-accent/50 text-left transition-colors"
+                                >
+                                  <div>
+                                    <p className="text-sm font-medium text-foreground">{item.name}</p>
+                                    <p className="text-xs text-muted-foreground">{item.sku ?? ''} · {item.category}</p>
+                                  </div>
+                                  <div className="text-right shrink-0 ml-3">
+                                    <p className="text-xs font-semibold text-foreground">${item.unit_cost.toFixed(2)}</p>
+                                    <p className={cn('text-xs', item.on_hand === 0 ? 'text-red-400' : item.on_hand <= 2 ? 'text-amber-400' : 'text-emerald-400')}>
+                                      {item.on_hand} in stock
+                                    </p>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {selectedInvItem && (
+                          <div className="flex items-center gap-2 px-3 py-2 bg-brand-500/10 rounded-lg text-xs text-brand-400">
+                            <Package size={12} />
+                            <span className="font-medium">{selectedInvItem.name}</span>
+                            <span className="text-muted-foreground">· {selectedInvItem.on_hand} in stock</span>
+                          </div>
+                        )}
+
                         <div className="grid grid-cols-2 gap-3">
                           <input
                             value={partForm.part_name}
@@ -1315,7 +1471,7 @@ export default function WorkOrderDetailPage() {
                           <input
                             value={partForm.part_number}
                             onChange={e => setPartForm(f => ({ ...f, part_number: e.target.value }))}
-                            placeholder="Part # (optional)"
+                            placeholder="SKU / Part # (optional)"
                             className="text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
                           />
                           <input
@@ -1333,8 +1489,27 @@ export default function WorkOrderDetailPage() {
                             className="text-sm px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/30"
                           />
                         </div>
+
+                        {/* Action selector */}
                         <div className="flex gap-2">
-                          <button onClick={() => setShowAddPart(false)} className="flex-1 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:bg-accent transition-colors">Cancel</button>
+                          {(['used', 'installed', 'returned', 'warranty'] as const).map(a => (
+                            <button
+                              key={a}
+                              onClick={() => setPartForm(f => ({ ...f, action: a }))}
+                              className={cn(
+                                'flex-1 py-1.5 text-xs font-medium rounded-lg border capitalize transition-colors',
+                                partForm.action === a
+                                  ? 'bg-brand-500 text-white border-brand-500'
+                                  : 'border-border text-muted-foreground hover:border-brand-400'
+                              )}
+                            >
+                              {a}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button onClick={() => { setShowAddPart(false); setSelectedInvItem(null); setInvResults([]) }} className="flex-1 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:bg-accent transition-colors">Cancel</button>
                           <button onClick={handleAddPart} disabled={addingPart || !partForm.part_name.trim()} className="flex-1 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium disabled:opacity-40 transition-colors">
                             {addingPart ? 'Adding…' : 'Add Part'}
                           </button>

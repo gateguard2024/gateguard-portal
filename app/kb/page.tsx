@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
 
 // ─── Diagnostic engine types (shared with /tech) ──────────────────────────────
@@ -23,6 +23,7 @@ const STEP_COLORS: Record<StepType, { bg: string; border: string; text: string; 
 import {
   Zap,
   Plus,
+  X,
   Search,
   ChevronRight,
   Clock,
@@ -44,16 +45,33 @@ const { BookOpen, Cpu, DoorOpen, Camera, Headphones, ThumbsUp } = require('lucid
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface ArticleProduct {
+  id: string;
+  name: string;
+  sku: string;
+}
+
 interface Article {
   id: string;
   title: string;
   description: string;
-  product: string;
+  content?: string;
+  category: string;
   difficulty: "Basic" | "Intermediate" | "Advanced" | "Installation";
-  helpful: number;
+  helpful_count: number;
+  author?: string;
+  product_id?: string;
+  created_at?: string;
+  updated_at?: string;
+  products?: ArticleProduct | null;
 }
 
-interface Category {
+interface CategoryCount {
+  category: string;
+  count: number;
+}
+
+interface CategoryDef {
   id: string;
   label: string;
   count: number;
@@ -66,124 +84,32 @@ interface RecentSearch {
   ago: string;
 }
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
+// ─── Category constants ───────────────────────────────────────────────────────
 
-const CATEGORIES: Category[] = [
-  { id: "gate",        label: "Gate Systems",            count: 34, Icon: Shield      },
-  { id: "camera",      label: "Camera Systems",          count: 28, Icon: Camera      },
-  { id: "access",      label: "Access Control",          count: 22, Icon: DoorOpen    },
-  { id: "network",     label: "Networking & Connectivity", count: 18, Icon: Wifi      },
-  { id: "power",       label: "Power & Wiring",          count: 16, Icon: Zap         },
-  { id: "app",         label: "Mobile App & Cloud",      count: 14, Icon: Globe       },
-  { id: "install",     label: "Installation Guides",     count: 12, Icon: Package     },
-  { id: "warranty",    label: "Warranty & RMA",          count: 4,  Icon: FileText    },
-];
+const CATEGORY_OPTIONS = [
+  'Gate Systems',
+  'Camera Systems',
+  'Access Control',
+  'Networking & Connectivity',
+  'Power & Wiring',
+  'Mobile App & Cloud',
+  'Installation Guides',
+  'Warranty & RMA',
+  'General',
+]
 
-const ARTICLES_BY_CATEGORY: Record<string, Article[]> = {
-  gate: [
-    {
-      id: "a1",
-      title: "BX-10 Controller: Gate won't open after power cycle",
-      description: "Check capacitor bank and safety loop continuity",
-      product: "BX-10",
-      difficulty: "Intermediate",
-      helpful: 47,
-    },
-    {
-      id: "a2",
-      title: "Diagnosing obstruction sensor faults on slide gates",
-      description: "E3 error code step-by-step resolution with test points",
-      product: "BX-20",
-      difficulty: "Advanced",
-      helpful: 38,
-    },
-    {
-      id: "a3",
-      title: "LiftMaster LA400 installation guide",
-      description: "Full install from mounting to limit switch calibration",
-      product: "LiftMaster",
-      difficulty: "Installation",
-      helpful: 29,
-    },
-    {
-      id: "a4",
-      title: "Gate opens but won't close — safety edge troubleshooting",
-      description: "Identify and test pneumatic vs resistive safety edges",
-      product: "All Gates",
-      difficulty: "Intermediate",
-      helpful: 24,
-    },
-    {
-      id: "a5",
-      title: "Setting gate open/close limits on BX-series controllers",
-      description: "Limit switch adjustment procedure with expected travel times",
-      product: "BX-10/BX-20",
-      difficulty: "Basic",
-      helpful: 31,
-    },
-    {
-      id: "a6",
-      title: "Emergency release and manual override procedures",
-      description: "For lockouts and power failures",
-      product: "All Gates",
-      difficulty: "Basic",
-      helpful: 56,
-    },
-    {
-      id: "a7",
-      title: "Gate intercom pairing with EagleEye camera",
-      description: "Link the entry camera to the gate trigger for auto-recording on open",
-      product: "BX-series + EagleEye",
-      difficulty: "Intermediate",
-      helpful: 19,
-    },
-    {
-      id: "a8",
-      title: "Annual preventive maintenance checklist — gate systems",
-      description: "12-point PM inspection with sign-off fields",
-      product: "All Gates",
-      difficulty: "Basic",
-      helpful: 44,
-    },
-  ],
-  camera: [
-    {
-      id: "c1",
-      title: "EagleEye 4MP Dome — initial setup and NVR pairing",
-      description: "Network discovery, IP assignment, and stream configuration",
-      product: "EagleEye 4MP",
-      difficulty: "Basic",
-      helpful: 62,
-    },
-    {
-      id: "c2",
-      title: "Camera offline after rain — moisture ingress checklist",
-      description: "Diagnose connector sealing, conduit, and IP rating issues",
-      product: "All Cameras",
-      difficulty: "Intermediate",
-      helpful: 41,
-    },
-  ],
-};
-
-const PRODUCTS = [
-  "EagleEye 4MP Dome",
-  "EagleEye 8MP Turret",
-  "BX-10 Gate Controller",
-  "BX-20 Slide Gate",
-  "GG-NVR-8",
-  "Brivo Door Reader",
-  "HID Credential",
-  "LiftMaster Gate Operator",
-];
-
-const RECENT_SEARCHES: RecentSearch[] = [
-  { query: "camera offline after rain",   tech: "Danny Cruz",  ago: "2h ago"   },
-  { query: "gate E3 error",              tech: "Marcus Webb", ago: "4h ago"   },
-  { query: "brivo reader flashing red",  tech: "Danny Cruz",  ago: "Yesterday" },
-  { query: "nvr not recording motion",   tech: "RF",          ago: "Yesterday" },
-  { query: "gate slows down before close", tech: "Danny Cruz", ago: "2d ago"  },
-];
+// Map DB category labels → sidebar icon + id
+const CATEGORY_ICON_MAP: Record<string, { id: string; Icon: React.ElementType }> = {
+  'Gate Systems':             { id: 'gate',     Icon: Shield   },
+  'Camera Systems':           { id: 'camera',   Icon: Camera   },
+  'Access Control':           { id: 'access',   Icon: DoorOpen },
+  'Networking & Connectivity':{ id: 'network',  Icon: Wifi     },
+  'Power & Wiring':           { id: 'power',    Icon: Zap      },
+  'Mobile App & Cloud':       { id: 'app',      Icon: Globe    },
+  'Installation Guides':      { id: 'install',  Icon: Package  },
+  'Warranty & RMA':           { id: 'warranty', Icon: FileText },
+  'General':                  { id: 'general',  Icon: BookOpen },
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -212,16 +138,350 @@ function techColor(name: string) {
   return colors[name] ?? "bg-gray-100 text-gray-700";
 }
 
+function formatDate(iso?: string) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// ─── Static fallbacks ────────────────────────────────────────────────────────
+
+const RECENT_SEARCHES: RecentSearch[] = [
+  { query: "camera offline after rain",   tech: "Danny Cruz",  ago: "2h ago"   },
+  { query: "gate E3 error",              tech: "Marcus Webb", ago: "4h ago"   },
+  { query: "brivo reader flashing red",  tech: "Danny Cruz",  ago: "Yesterday" },
+  { query: "nvr not recording motion",   tech: "RF",          ago: "Yesterday" },
+  { query: "gate slows down before close", tech: "Danny Cruz", ago: "2d ago"  },
+];
+
+// ─── New Article Form ─────────────────────────────────────────────────────────
+
+interface NewArticleFormProps {
+  onClose: () => void;
+  onCreated: (article: Article) => void;
+}
+
+function NewArticleForm({ onClose, onCreated }: NewArticleFormProps) {
+  const [title, setTitle]           = useState('');
+  const [description, setDesc]      = useState('');
+  const [content, setContent]       = useState('');
+  const [category, setCategory]     = useState(CATEGORY_OPTIONS[0]);
+  const [difficulty, setDifficulty] = useState<Article['difficulty']>('Basic');
+  const [author, setAuthor]         = useState('');
+  const [productSearch, setProductSearch] = useState('');
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [selectedProductName, setSelectedProductName] = useState('');
+  const [productResults, setProductResults] = useState<{ id: string; name: string; sku: string }[]>([]);
+  const [saving, setSaving]         = useState(false);
+  const [error, setError]           = useState<string | null>(null);
+
+  // Product search debounce
+  useEffect(() => {
+    if (!productSearch.trim()) { setProductResults([]); return; }
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/kb/products`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const q = productSearch.toLowerCase();
+        const matches = (data.products ?? []).filter(
+          (p: { name: string; sku: string }) =>
+            p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q)
+        );
+        setProductResults(matches.slice(0, 6));
+      } catch { /* ignore */ }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [productSearch]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!title.trim() || !description.trim() || !content.trim()) {
+      setError('Title, description, and content are required.');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/kb/articles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description.trim(),
+          content: content.trim(),
+          category,
+          difficulty,
+          author: author.trim() || undefined,
+          product_id: selectedProductId || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? 'Failed to create article'); return; }
+      onCreated(data.article);
+      onClose();
+    } catch (err) {
+      setError('Network error. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      {/* Slide-over */}
+      <div className="relative ml-auto w-full max-w-lg bg-white shadow-xl flex flex-col h-full">
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-gray-900">New KB Article</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={16} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 text-xs text-red-700">
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Title *</label>
+            <input
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="Descriptive title for the article"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Short Description *</label>
+            <input
+              value={description}
+              onChange={e => setDesc(e.target.value)}
+              placeholder="One-line summary shown in the article list"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
+              <select
+                value={category}
+                onChange={e => setCategory(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white"
+              >
+                {CATEGORY_OPTIONS.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Difficulty</label>
+              <select
+                value={difficulty}
+                onChange={e => setDifficulty(e.target.value as Article['difficulty'])}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white"
+              >
+                {['Basic', 'Intermediate', 'Advanced', 'Installation'].map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Product (optional)</label>
+            <div className="relative">
+              <input
+                value={selectedProductName || productSearch}
+                onChange={e => {
+                  setSelectedProductId('');
+                  setSelectedProductName('');
+                  setProductSearch(e.target.value);
+                }}
+                placeholder="Search products..."
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+              />
+              {productResults.length > 0 && !selectedProductId && (
+                <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-10 overflow-hidden">
+                  {productResults.map(p => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedProductId(p.id);
+                        setSelectedProductName(p.name);
+                        setProductSearch('');
+                        setProductResults([]);
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <span className="text-gray-900">{p.name}</span>
+                      <span className="text-xs text-gray-400">{p.sku}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Author (optional)</label>
+            <input
+              value={author}
+              onChange={e => setAuthor(e.target.value)}
+              placeholder="Your name or team"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Full Content *</label>
+            <textarea
+              value={content}
+              onChange={e => setContent(e.target.value)}
+              rows={8}
+              placeholder="Full article content — troubleshooting steps, install procedures, etc."
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 resize-y font-mono"
+            />
+          </div>
+        </form>
+
+        <div className="px-5 py-4 border-t border-gray-200 flex items-center justify-end gap-2 bg-gray-50">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit as unknown as React.MouseEventHandler}
+            disabled={saving}
+            className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+          >
+            {saving ? (
+              <><span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" /> Saving…</>
+            ) : (
+              <><Plus size={14} /> Create Article</>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Article Detail Drawer ────────────────────────────────────────────────────
+
+interface ArticleDrawerProps {
+  article: Article;
+  onClose: () => void;
+  onHelpful: (id: string) => void;
+}
+
+function ArticleDrawer({ article, onClose, onHelpful }: ArticleDrawerProps) {
+  const [voted, setVoted] = useState(false);
+
+  function handleHelpful() {
+    if (voted) return;
+    setVoted(true);
+    onHelpful(article.id);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative ml-auto w-full max-w-xl bg-white shadow-xl flex flex-col h-full">
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-sm font-semibold text-gray-900 leading-snug">{article.title}</h2>
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              {article.products && (
+                <span className="flex items-center gap-1 text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-medium">
+                  <Hash size={8} /> {article.products.name}
+                </span>
+              )}
+              <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", difficultyBadge(article.difficulty))}>
+                {article.difficulty}
+              </span>
+              <span className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-medium">
+                {article.category}
+              </span>
+              {article.author && (
+                <span className="flex items-center gap-1 text-[10px] text-gray-400">
+                  <User size={8} /> {article.author}
+                </span>
+              )}
+              {article.created_at && (
+                <span className="flex items-center gap-1 text-[10px] text-gray-400">
+                  <Clock size={8} /> {formatDate(article.created_at)}
+                </span>
+              )}
+            </div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 shrink-0 mt-0.5">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-5">
+          <p className="text-sm text-gray-500 mb-4 leading-relaxed">{article.description}</p>
+          <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap leading-relaxed">
+            {article.content ?? (
+              <p className="text-gray-400 italic text-sm">No content available for this article.</p>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-xs text-gray-500">
+            <Star size={12} className="text-amber-400 fill-amber-400" />
+            {article.helpful_count + (voted ? 1 : 0)} found this helpful
+          </span>
+          <button
+            onClick={handleHelpful}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all",
+              voted
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : "border-gray-200 text-gray-600 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
+            )}
+          >
+            <ThumbsUp size={12} />
+            {voted ? "Marked helpful!" : "This helped me"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function KBPage() {
-  const [selectedCategory, setSelectedCategory] = useState("gate");
+  // ── Article library state ────────────────────────────────────────────────
+  const [articles, setArticles]             = useState<Article[]>([]);
+  const [categories, setCategories]         = useState<CategoryDef[]>([]);
+  const [totalArticles, setTotalArticles]   = useState(0);
+  const [loadingArticles, setLoadingArticles] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState<string>(''); // '' = All
+  const [articleSearch, setArticleSearch]   = useState('');
+  const [openArticle, setOpenArticle]       = useState<Article | null>(null);
+  const [showNewForm, setShowNewForm]        = useState(false);
+
+  // ── Diagnostic state ────────────────────────────────────────────────────
   const [symptom, setSymptom]  = useState("");
   const [product, setProduct]  = useState("");
   const [errorCode, setErrorCode] = useState("");
   const [activeChip, setActiveChip] = useState<string | null>(null);
-
-  // ── Diagnostic state ────────────────────────────────────────────────────────
   const [diagActive,   setDiagActive]   = useState(false);
   const [diagLoading,  setDiagLoading]  = useState(false);
   const [diagHistory,  setDiagHistory]  = useState<DiagHistory[]>([]);
@@ -232,6 +492,100 @@ export default function KBPage() {
 
   useEffect(() => { diagBottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [diagHistory, diagCurrent]);
 
+  // ── Fetch articles ───────────────────────────────────────────────────────
+  const fetchArticles = useCallback(async (q: string, cat: string) => {
+    setLoadingArticles(true);
+    try {
+      const params = new URLSearchParams();
+      if (q)   params.set('q', q);
+      if (cat) params.set('category', cat);
+      const res = await fetch(`/api/kb/articles?${params.toString()}`);
+      if (!res.ok) return;
+      const data = await res.json();
+
+      setArticles(data.articles ?? []);
+      setTotalArticles(data.total ?? 0);
+
+      // Build sidebar categories from API counts + static icon map
+      // Always use full (unfiltered) category counts for the sidebar
+      const catCounts: CategoryCount[] = data.categories ?? [];
+      const built: CategoryDef[] = catCounts
+        .map((cc: CategoryCount) => {
+          const meta = CATEGORY_ICON_MAP[cc.category] ?? { id: cc.category.toLowerCase().replace(/\s+/g, '-'), Icon: BookOpen };
+          return { id: cc.category, label: cc.category, count: cc.count, Icon: meta.Icon };
+        })
+        .sort((a: CategoryDef, b: CategoryDef) => b.count - a.count);
+
+      // Fill in any CATEGORY_OPTIONS entries that have 0 articles (so sidebar always shows all categories)
+      const seenLabels = new Set(built.map((c: CategoryDef) => c.label));
+      for (const label of CATEGORY_OPTIONS) {
+        if (!seenLabels.has(label)) {
+          const meta = CATEGORY_ICON_MAP[label] ?? { id: label.toLowerCase().replace(/\s+/g, '-'), Icon: BookOpen };
+          built.push({ id: label, label, count: 0, Icon: meta.Icon });
+        }
+      }
+
+      setCategories(built);
+    } catch { /* silently ignore */ } finally {
+      setLoadingArticles(false);
+    }
+  }, []);
+
+  // Initial load
+  useEffect(() => { fetchArticles('', ''); }, [fetchArticles]);
+
+  // Debounced search — triggers on articleSearch or selectedCategory change
+  useEffect(() => {
+    const t = setTimeout(() => {
+      fetchArticles(articleSearch, selectedCategory);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [articleSearch, selectedCategory, fetchArticles]);
+
+  // ── Helpful handler ──────────────────────────────────────────────────────
+  async function handleHelpful(articleId: string) {
+    try {
+      const res = await fetch(`/api/kb/articles/${articleId}/helpful`, { method: 'POST' });
+      if (!res.ok) return;
+      const data = await res.json();
+      // Update in list
+      setArticles(prev => prev.map(a =>
+        a.id === articleId ? { ...a, helpful_count: data.article.helpful_count } : a
+      ));
+      // Update in open drawer if applicable
+      if (openArticle?.id === articleId) {
+        setOpenArticle(prev => prev ? { ...prev, helpful_count: data.article.helpful_count } : prev);
+      }
+    } catch { /* ignore */ }
+  }
+
+  // ── New article created ───────────────────────────────────────────────────
+  function handleArticleCreated(article: Article) {
+    // Optimistically prepend to list
+    setArticles(prev => [article, ...prev]);
+    setTotalArticles(prev => prev + 1);
+    // Re-fetch to update category counts
+    fetchArticles(articleSearch, selectedCategory);
+  }
+
+  // ── Open article detail (fetches full content) ────────────────────────────
+  async function openArticleDetail(article: Article) {
+    // If we already have content, open immediately
+    if (article.content !== undefined) {
+      setOpenArticle(article);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/kb/articles/${article.id}`);
+      if (!res.ok) { setOpenArticle(article); return; }
+      const data = await res.json();
+      setOpenArticle(data.article);
+    } catch {
+      setOpenArticle(article);
+    }
+  }
+
+  // ── Diagnostic engine ────────────────────────────────────────────────────
   async function runDiagnostic() {
     if (!symptom.trim()) return;
     setDiagActive(true);
@@ -277,13 +631,17 @@ export default function KBPage() {
     "App not connecting",
   ];
 
-  const articles = ARTICLES_BY_CATEGORY[selectedCategory] ?? [];
-  const selectedCat = CATEGORIES.find((c) => c.id === selectedCategory);
-
   const handleChip = (chip: string) => {
     setSymptom(chip);
     setActiveChip(chip);
   };
+
+  // Derive articles shown in the middle panel
+  const displayedArticles = articles;
+  const selectedCatLabel  = selectedCategory || 'All Articles';
+
+  // Stats for the bar: total comes from API; compute distinct products
+  const distinctProducts = new Set(articles.map(a => a.product_id).filter(Boolean)).size;
 
   return (
     <div className="flex flex-col min-h-full bg-gray-50">
@@ -295,7 +653,10 @@ export default function KBPage() {
           <p className="text-sm text-gray-500 mt-0.5">Find answers fast. Guided diagnostics for every product.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+          <button
+            onClick={() => setShowNewForm(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
             <Plus size={14} /> Add Article
           </button>
           <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm">
@@ -307,8 +668,8 @@ export default function KBPage() {
       {/* ── Stats Row ────────────────────────────────────────────────────────── */}
       <div className="px-6 py-3 bg-white border-b border-gray-200 flex items-center gap-6">
         {[
-          { label: "Articles",            value: "148", sub: "in library",           valueClass: "text-gray-900"   },
-          { label: "Products Covered",    value: "24",  sub: "product lines",        valueClass: "text-gray-900"   },
+          { label: "Articles",            value: loadingArticles ? "…" : String(totalArticles), sub: "in library",           valueClass: "text-gray-900"   },
+          { label: "Products Covered",    value: loadingArticles ? "…" : String(distinctProducts || 0), sub: "product lines", valueClass: "text-gray-900"   },
           { label: "Avg Resolution Time", value: "8 min", sub: "with diagnostics",   valueClass: "text-emerald-600" },
           { label: "Open Issues",         value: "3",   sub: "pending resolution",   valueClass: "text-amber-600"  },
         ].map(({ label, value, sub, valueClass }, i) => (
@@ -387,8 +748,8 @@ export default function KBPage() {
                   className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-gray-50 text-gray-700"
                 >
                   <option value="">Select a product...</option>
-                  {PRODUCTS.map((p) => (
-                    <option key={p} value={p}>{p}</option>
+                  {Array.from(new Set(articles.filter(a => a.products).map(a => a.products!.name))).map(name => (
+                    <option key={name} value={name}>{name}</option>
                   ))}
                 </select>
               </div>
@@ -516,10 +877,35 @@ export default function KBPage() {
                 <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Categories</h3>
               </div>
               <div className="divide-y divide-gray-50">
-                {CATEGORIES.map(({ id, label, count, Icon }) => (
+                {/* "All" option */}
+                <button
+                  onClick={() => setSelectedCategory('')}
+                  className={cn(
+                    "w-full flex items-center gap-2.5 px-4 py-2.5 text-left transition-colors group",
+                    selectedCategory === ''
+                      ? "bg-blue-50 border-r-2 border-r-blue-600"
+                      : "hover:bg-gray-50"
+                  )}
+                >
+                  <BookOpen
+                    size={14}
+                    className={cn("shrink-0", selectedCategory === '' ? "text-blue-600" : "text-gray-400 group-hover:text-gray-600")}
+                  />
+                  <span className={cn("flex-1 text-sm truncate", selectedCategory === '' ? "font-semibold text-blue-700" : "text-gray-700")}>
+                    All Articles
+                  </span>
+                  <span className={cn(
+                    "text-[10px] font-medium px-1.5 py-0.5 rounded-full",
+                    selectedCategory === '' ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-500"
+                  )}>
+                    {loadingArticles ? '…' : totalArticles}
+                  </span>
+                </button>
+
+                {categories.map(({ id, label, count, Icon }) => (
                   <button
                     key={id}
-                    onClick={() => setSelectedCategory(id)}
+                    onClick={() => setSelectedCategory(id === selectedCategory ? '' : id)}
                     className={cn(
                       "w-full flex items-center gap-2.5 px-4 py-2.5 text-left transition-colors group",
                       selectedCategory === id
@@ -557,29 +943,42 @@ export default function KBPage() {
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-gray-900">{selectedCat?.label}</h3>
+                  <h3 className="text-sm font-semibold text-gray-900">{selectedCatLabel}</h3>
                   <span className="bg-gray-100 text-gray-600 text-xs font-medium px-2 py-0.5 rounded-full">
-                    {articles.length} articles
+                    {loadingArticles ? '…' : `${displayedArticles.length} articles`}
                   </span>
                 </div>
                 <div className="relative">
                   <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input
                     type="text"
+                    value={articleSearch}
+                    onChange={e => setArticleSearch(e.target.value)}
                     placeholder="Search..."
                     className="pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400 bg-gray-50 w-36"
                   />
                 </div>
               </div>
 
-              {articles.length === 0 ? (
+              {loadingArticles ? (
+                <div className="py-12 flex flex-col items-center justify-center text-gray-400 gap-2">
+                  <div className="w-5 h-5 border-2 border-blue-200 border-t-blue-500 rounded-full animate-spin" />
+                  <p className="text-xs">Loading articles…</p>
+                </div>
+              ) : displayedArticles.length === 0 ? (
                 <div className="py-16 flex flex-col items-center justify-center text-gray-400">
                   <BookOpen size={32} className="mb-3 opacity-30" />
                   <p className="text-sm">No articles in this category yet</p>
+                  <button
+                    onClick={() => setShowNewForm(true)}
+                    className="mt-3 text-xs text-blue-600 hover:underline flex items-center gap-1"
+                  >
+                    <Plus size={12} /> Add the first article
+                  </button>
                 </div>
               ) : (
                 <div className="divide-y divide-gray-50">
-                  {articles.map((article) => (
+                  {displayedArticles.map((article) => (
                     <div key={article.id} className="px-4 py-3.5 hover:bg-gray-50/50 transition-colors group">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
@@ -587,10 +986,16 @@ export default function KBPage() {
                             {article.title}
                           </p>
                           <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{article.description}</p>
-                          <div className="flex items-center gap-2 mt-2">
-                            <span className="flex items-center gap-1 text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-medium">
-                              <Hash size={8} /> {article.product}
-                            </span>
+                          <div className="flex items-center gap-2 mt-2 flex-wrap">
+                            {article.products ? (
+                              <span className="flex items-center gap-1 text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-medium">
+                                <Hash size={8} /> {article.products.name}
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-medium">
+                                <Hash size={8} /> General
+                              </span>
+                            )}
                             <span className={cn(
                               "text-[10px] px-1.5 py-0.5 rounded font-medium",
                               difficultyBadge(article.difficulty)
@@ -599,13 +1004,29 @@ export default function KBPage() {
                             </span>
                             <span className="flex items-center gap-1 text-[10px] text-gray-400 ml-1">
                               <Star size={9} className="text-amber-400 fill-amber-400" />
-                              {article.helpful} helpful
+                              {article.helpful_count} helpful
                             </span>
+                            {article.author && (
+                              <span className="flex items-center gap-1 text-[10px] text-gray-400">
+                                <User size={8} /> {article.author}
+                              </span>
+                            )}
                           </div>
                         </div>
-                        <button className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all">
-                          Read <ArrowRight size={10} />
-                        </button>
+                        <div className="shrink-0 flex flex-col gap-1.5 items-end">
+                          <button
+                            onClick={() => openArticleDetail(article)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all"
+                          >
+                            Read <ArrowRight size={10} />
+                          </button>
+                          <button
+                            onClick={() => handleHelpful(article.id)}
+                            className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-emerald-600 transition-colors"
+                          >
+                            <ThumbsUp size={9} /> {article.helpful_count}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -664,6 +1085,23 @@ export default function KBPage() {
 
         </div>
       </div>
+
+      {/* ── New Article Slide-Over ────────────────────────────────────────────── */}
+      {showNewForm && (
+        <NewArticleForm
+          onClose={() => setShowNewForm(false)}
+          onCreated={handleArticleCreated}
+        />
+      )}
+
+      {/* ── Article Detail Drawer ─────────────────────────────────────────────── */}
+      {openArticle && (
+        <ArticleDrawer
+          article={openArticle}
+          onClose={() => setOpenArticle(null)}
+          onHelpful={handleHelpful}
+        />
+      )}
     </div>
   );
 }
