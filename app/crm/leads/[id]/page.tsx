@@ -19,6 +19,7 @@ const SaveIcon = ({ size }: { size: number }) => (
   </svg>
 );
 import { cn } from "@/lib/utils";
+import { QuickActions } from "@/components/shared/QuickActions";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Lead {
@@ -961,6 +962,23 @@ export default function LeadDetailPage() {
               {lead.address && <span className="flex items-center gap-1"><MapPin size={11} />{lead.address}</span>}
               {lead.units   && <span className="flex items-center gap-1"><Hash size={11} />{lead.units} units · {lead.propertyType}</span>}
               {lead.createdAt && <span className="flex items-center gap-1"><Calendar size={11} />Created {lead.createdAt}</span>}
+            </div>
+            {/* Quick action buttons */}
+            <div className="mt-3">
+              <QuickActions
+                recordType="lead"
+                recordId={lead.id}
+                recordName={lead.name || `${lead.contact}`}
+                contactEmail={lead.email}
+                contactName={lead.contact}
+                onActivityCreated={() => {
+                  // Refresh activities from API
+                  fetch(`/api/crm/leads/${id}/activities`)
+                    .then(r => r.json())
+                    .then(d => d.activities && setActivities(d.activities))
+                    .catch(() => {})
+                }}
+              />
             </div>
           </div>
         </div>

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { Inbox, Edit3, Edit2, RotateCcw } = require('lucide-react') as any
+import { QuickActions } from '@/components/shared/QuickActions'
 
 /* ─── types ──────────────────────────────────────────── */
 interface Site {
@@ -570,6 +571,17 @@ export default function SiteDetailPage() {
               {[site.address, site.city, site.state, site.zip].filter(Boolean).join(', ')}
             </p>
           )}
+          {/* Quick action buttons */}
+          <div className="mt-3">
+            <QuickActions
+              recordType="site"
+              recordId={id}
+              recordName={site.name}
+              contactEmail={site.pm_email ?? site.primary_contact_email ?? undefined}
+              contactName={site.pm_name ?? site.primary_contact_name ?? undefined}
+              onActivityCreated={() => {}}
+            />
+          </div>
         </div>
 
         {/* KPI pills */}

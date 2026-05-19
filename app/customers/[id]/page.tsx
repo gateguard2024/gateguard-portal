@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ArrowLeft, Camera, DollarSign, Edit2, Activity, Save, Send } = require("lucide-react") as any;
+import { QuickActions } from "@/components/shared/QuickActions";
 
 type OrgTier =
   | "corporate" | "master_agent" | "master_dealer"
@@ -91,6 +92,8 @@ export default function CustomerDetailPage() {
   const [saveErr, setSaveErr]   = useState<string | null>(null);
   const [quotes, setQuotes]     = useState<OrgQuote[]>([]);
   const [quotesLoaded, setQuotesLoaded] = useState(false);
+  const [activities, setActivities] = useState<{id:string;type:string;subject:string;body?:string;outcome?:string;created_by_name?:string;created_at:string}[]>([]);
+  const [activitiesLoaded, setActivitiesLoaded] = useState(false);
 
   async function fetchOrg() {
     setLoading(true);
@@ -130,6 +133,17 @@ export default function CustomerDetailPage() {
       finally { setQuotesLoaded(true); }
     }
     fetchQuotes();
+
+    async function fetchActivities() {
+      try {
+        const res = await fetch(`/api/activities?record_type=customer&record_id=${id}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setActivities(data.activities ?? []);
+      } catch { /* non-blocking */ }
+      finally { setActivitiesLoaded(true); }
+    }
+    fetchActivities();
   }, [id]);
 
   async function saveEdit() {
@@ -254,6 +268,23 @@ export default function CustomerDetailPage() {
                 <p className="text-xs text-muted-foreground">{s.label}</p>
               </div>
             ))}
+          </div>
+
+          {/* Quick action buttons */}
+          <div className="mt-4 pt-4 border-t border-border">
+            <QuickActions
+              recordType="customer"
+              recordId={org.id}
+              recordName={org.name}
+              contactEmail={org.primary_contact_email ?? undefined}
+              contactName={org.primary_contact_name ?? undefined}
+              onActivityCreated={() => {
+                fetch(`/api/activities?record_type=customer&record_id=${id}`)
+                  .then(r => r.json())
+                  .then(d => d.activities && setActivities(d.activities))
+                  .catch(() => {})
+              }}
+            />
           </div>
         </div>
 
@@ -509,6 +540,53 @@ export default function CustomerDetailPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </div>
+
+        {/* Activity Feed */}
+        <div className="bg-card border border-border rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Activity size={14} className="text-brand-400" /> Activity ({activities.length})
+            </h3>
+          </div>
+          {!activitiesLoaded ? (
+            <div className="flex items-center gap-2 py-4 text-muted-foreground">
+              <span className="text-xs">Loading…</span>
+            </div>
+          ) : activities.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">
+              No activity yet — use the Email, To-Do, or Log Activity buttons above to get started.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {activities.map(act => {
+                const typeColors: Record<string, string> = {
+                  email:   'bg-violet-50 text-violet-700 border-violet-200',
+                  call:    'bg-blue-50 text-blue-700 border-blue-200',
+                  meeting: 'bg-amber-50 text-amber-700 border-amber-200',
+                  note:    'bg-slate-50 text-slate-600 border-slate-200',
+                  task:    'bg-emerald-50 text-emerald-700 border-emerald-200',
+                }
+                const cls = typeColors[act.type?.toLowerCase()] ?? typeColors.note
+                return (
+                  <div key={act.id} className="flex gap-3">
+                    <span className={`shrink-0 text-[10px] font-semibold px-2 py-1 rounded-lg border capitalize h-fit ${cls}`}>
+                      {act.type}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">{act.subject}</p>
+                      {act.body && <p className="text-xs text-muted-foreground mt-0.5">{act.body}</p>}
+                      <div className="flex items-center gap-2 mt-1 text-[10px] text-muted-foreground">
+                        {act.created_by_name && <span>{act.created_by_name}</span>}
+                        <span>·</span>
+                        <span>{new Date(act.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

@@ -11,6 +11,7 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ArrowLeft, Edit2, Timer, Tag, ClipboardList } = require('lucide-react') as any
 import { TopBar } from '@/components/layout/TopBar'
+import { QuickActions } from '@/components/shared/QuickActions'
 import { cn } from '@/lib/utils'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -768,6 +769,16 @@ export default function WorkOrderDetailPage() {
               <span className={cn('absolute left-2.5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full pointer-events-none', sc.dot)} />
               <ChevronDown size={12} className={cn('absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none', sc.text)} />
             </div>
+          </div>
+
+          {/* Quick action buttons */}
+          <div className="mb-6">
+            <QuickActions
+              recordType="work_order"
+              recordId={wo.id}
+              recordName={`WO ${wo.wo_number}: ${wo.title}`}
+              onActivityCreated={() => {}}
+            />
           </div>
 
           {/* Checklist progress bar (if items exist) */}

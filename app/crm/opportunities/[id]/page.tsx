@@ -435,6 +435,40 @@ export default function OpportunityDetailPage() {
   const [countersigning,   setCountersigning]   = useState(false);
   const [countersignError, setCountersignError] = useState<string | null>(null);
 
+  // Create Quote from opportunity
+  const [quoteCreating, setQuoteCreating] = useState(false);
+
+  const handleCreateQuote = async () => {
+    if (!opp) return;
+    setQuoteCreating(true);
+    try {
+      const res = await fetch('/api/quotes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title:         `Quote — ${opp.account_name}`,
+          property_name: opp.account_name,
+          units:         opp.units ?? null,
+          site_id:       opp.site_id ?? null,
+        }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? 'Failed to create quote'); }
+      const { quote } = await res.json();
+      // Link quote back to the opportunity
+      await fetch(`/api/crm/opportunities/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quote_url: `/quotes/${quote.id}` }),
+      });
+      setOpp(prev => prev ? { ...prev, quote_url: `/quotes/${quote.id}` } : prev);
+      router.push(`/quotes/${quote.id}`);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setQuoteCreating(false);
+    }
+  };
+
   // Create Property from won opportunity
   const [showCreateProperty, setShowCreateProperty] = useState(false);
   const [createPropSaving,   setCreatePropSaving]   = useState(false);
@@ -1798,21 +1832,25 @@ export default function OpportunityDetailPage() {
             <h3 className="text-sm font-semibold text-foreground mb-3">Portal Links</h3>
             <div className="space-y-1.5">
               {opp.quote_url ? (
-                <a
+                <Link
                   href={opp.quote_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-accent transition-colors text-sm"
                 >
                   <FileText size={14} className="text-[#6B7EFF]" />
                   <span className="text-foreground">View Quote</span>
                   <ExternalLink size={11} className="text-muted-foreground ml-auto" />
-                </a>
+                </Link>
               ) : (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm opacity-50 cursor-not-allowed">
-                  <FileText size={14} className="text-muted-foreground" />
-                  <span className="text-muted-foreground">View Quote</span>
-                </div>
+                <button
+                  onClick={handleCreateQuote}
+                  disabled={quoteCreating}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-indigo-50 transition-colors text-sm w-full text-left disabled:opacity-50"
+                >
+                  <FileText size={14} className="text-[#6B7EFF]" />
+                  <span className="text-[#6B7EFF] font-medium">
+                    {quoteCreating ? 'Creating…' : '+ Create Quote'}
+                  </span>
+                </button>
               )}
 
               <Link
