@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
       to_name,
       subject,
       body: emailBody,
+      body_html: emailBodyHtml, // rich HTML — used when body contains signature images etc.
       sender_name = 'Russel Feldman',
       sender_initials = 'RF',
     } = body
@@ -93,8 +94,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: actErr?.message ?? 'Failed to create activity' }, { status: 500 })
     }
 
-    // 2. Send via Resend with tracking pixel embedded in HTML
-    const html = buildHtml(emailBody, activity.id, sender_name)
+    // 2. Build HTML — if the client sent rich HTML (e.g. signature with images), inject
+    //    the tracking pixel into it directly; otherwise escape plain text as before.
+    let html: string
+    if (emailBodyHtml && emailBodyHtml.trim()) {
+      // Inject tracking pixel before closing </body> or at end of content
+      const pixel = trackingPixel(activity.id)
+      html = emailBodyHtml.includes('</body>')
+        ? emailBodyHtml.replace('</body>', `${pixel}</body>`)
+        : emailBodyHtml + pixel
+    } else {
+      html = buildHtml(emailBody, activity.id, sender_name)
+    }
 
     const { data: sent, error: sendErr } = await resend.emails.send({
       from: FROM_EMAIL,

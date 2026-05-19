@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Mail, X, Send, Plus } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { CheckSquare } = require('lucide-react') as any
@@ -36,9 +36,10 @@ export function QuickActions({
   // ── Email state ────────────────────────────────────────────────────────
   const [emailTo,      setEmailTo]      = useState(contactEmail)
   const [emailSubject, setEmailSubject] = useState(`Re: ${recordName}`)
-  const [emailBody,    setEmailBody]    = useState('')
   const [emailStatus,  setEmailStatus]  = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   const [emailError,   setEmailError]   = useState('')
+  // Use a ref for the rich-text body so paste of HTML (signatures with images) is preserved
+  const emailBodyRef = useRef<HTMLDivElement>(null)
 
   // ── To-Do state ────────────────────────────────────────────────────────
   const [todoText,    setTodoText]    = useState('')
@@ -61,9 +62,12 @@ export function QuickActions({
     if (type === 'email') {
       setEmailTo(contactEmail)
       setEmailSubject(`Re: ${recordName}`)
-      setEmailBody('')
       setEmailStatus('idle')
       setEmailError('')
+      // Clear the rich-text body after render via microtask
+      setTimeout(() => {
+        if (emailBodyRef.current) emailBodyRef.current.innerHTML = ''
+      }, 0)
     } else if (type === 'todo') {
       setTodoText('')
       setTodoOwner('')
@@ -87,14 +91,18 @@ export function QuickActions({
   // ── Handlers ───────────────────────────────────────────────────────────
 
   async function handleSendEmail() {
-    if (!emailTo || !emailSubject || !emailBody) {
+    // Read rich HTML from the contenteditable div
+    const bodyHtml = emailBodyRef.current?.innerHTML?.trim() ?? ''
+    const bodyText = emailBodyRef.current?.innerText?.trim() ?? ''
+
+    if (!emailTo || !emailSubject || !bodyText) {
       setEmailError('To, subject, and body are all required.')
       return
     }
     setEmailStatus('sending')
     setEmailError('')
     try {
-      // 1. Send via email endpoint
+      // 1. Send via email endpoint — pass body_html so images/signatures are preserved
       const sendRes = await fetch('/api/crm/email/send', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -102,7 +110,8 @@ export function QuickActions({
           to_email:    emailTo,
           to_name:     contactName || undefined,
           subject:     emailSubject,
-          body:        emailBody,
+          body:        bodyText,      // plain-text fallback (for activity log)
+          body_html:   bodyHtml,      // rich HTML including signature images
           // Pass record linkage so the activity is tracked
           // Show leads have "show_" prefix IDs — strip it and use show_lead_id FK
           ...(recordType === 'lead' && recordId.startsWith('show_')
@@ -124,7 +133,7 @@ export function QuickActions({
             record_id:   recordId,
             type:        'email',
             subject:     emailSubject,
-            body:        emailBody,
+            body:        bodyText,
             direction:   'Outbound',
           }),
         })
@@ -277,12 +286,14 @@ export function QuickActions({
                   </div>
                   <div>
                     <label className={labelCls}>Body</label>
-                    <textarea
-                      rows={6}
-                      value={emailBody}
-                      onChange={e => setEmailBody(e.target.value)}
-                      placeholder="Type your message…"
-                      className={inputCls}
+                    {/* contenteditable preserves pasted HTML — signatures with images work */}
+                    <div
+                      ref={emailBodyRef}
+                      contentEditable
+                      suppressContentEditableWarning
+                      data-placeholder="Type your message or paste your signature…"
+                      className={`${inputCls} min-h-[140px] overflow-auto focus:outline-none focus:ring-2 focus:ring-brand-400`}
+                      style={{ whiteSpace: 'pre-wrap', lineHeight: '1.5' }}
                     />
                   </div>
                   {emailError && (
