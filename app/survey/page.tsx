@@ -602,8 +602,7 @@ export default function SurveyPage() {
     try {
       const form = new FormData()
       form.append("audio", file)
-      const res  = await fetch("/api/plaud/transcribe", { method: "POST", body: form,
-        headers: { "x-tech-code": "" } })
+      const res  = await fetch("/api/plaud/transcribe", { method: "POST", body: form })
       const json = await res.json()
       if (json.transcript) {
         const t = json.transcript as string
@@ -688,10 +687,30 @@ export default function SurveyPage() {
     setSurvey(s => s ? { ...s, devices: s.devices.filter(x => x.id !== id) } : s)
   }
 
-  function addDevice() {
+  function addDevice(preset?: Partial<SurveyDevice>) {
     if (!survey) return
-    setSurvey(s => s ? { ...s, devices: [...s.devices, newDevice()] } : s)
+    const d = { ...newDevice(), ...preset }
+    setSurvey(s => s ? { ...s, devices: [...s.devices, d] } : s)
   }
+
+  // ── Auto-save devices (debounced) ─────────────────────────────────────────
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [autoSaving, setAutoSaving] = useState(false)
+
+  useEffect(() => {
+    if (!survey) return
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
+    autoSaveTimer.current = setTimeout(async () => {
+      setAutoSaving(true)
+      try {
+        await patchSurvey({ devices: survey.devices })
+      } finally {
+        setAutoSaving(false)
+      }
+    }, 1800)
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [survey?.devices])
 
   // ── Generate AI output ────────────────────────────────────────────────────
 
@@ -1058,13 +1077,43 @@ export default function SurveyPage() {
                           <span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium">
                             {survey.devices?.length ?? 0}
                           </span>
+                          {autoSaving && (
+                            <span className="text-[10px] text-gray-400 flex items-center gap-1">
+                              <Loader2 size={9} className="animate-spin" /> saving…
+                            </span>
+                          )}
                         </div>
                         <button
-                          onClick={addDevice}
+                          onClick={() => addDevice()}
                           className="flex items-center gap-1.5 text-xs text-[#6B7EFF] hover:text-blue-700 font-medium"
                         >
                           <Plus size={12} /> Add Device
                         </button>
+                      </div>
+
+                      {/* Quick-add presets */}
+                      <div className="flex flex-wrap gap-1.5 mb-3">
+                        {[
+                          { name: "Gate Operator",    brand: "DoorKing" },
+                          { name: "Access Reader",    brand: "Brivo"    },
+                          { name: "IP Camera",        brand: ""         },
+                          { name: "Intercom",         brand: ""         },
+                          { name: "Loop Detector",    brand: ""         },
+                          { name: "Mag Lock",         brand: ""         },
+                          { name: "Electric Strike",  brand: ""         },
+                          { name: "Keypad",           brand: ""         },
+                          { name: "Video Doorbell",   brand: ""         },
+                          { name: "Photobeam",        brand: ""         },
+                        ].map(p => (
+                          <button
+                            key={p.name}
+                            type="button"
+                            onClick={() => addDevice({ name: p.name, brand: p.brand })}
+                            className="text-[11px] font-medium px-2.5 py-1 rounded-full border border-[#6B7EFF]/30 text-[#6B7EFF] bg-indigo-50 hover:bg-indigo-100 transition-colors"
+                          >
+                            + {p.name}
+                          </button>
+                        ))}
                       </div>
                       <div className="space-y-2.5">
                         {(survey.devices ?? []).map(d => (
@@ -1099,7 +1148,12 @@ export default function SurveyPage() {
                       <button
                         onClick={generate}
                         disabled={generating || (!transcript.trim() && (!survey.devices || survey.devices.length === 0))}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#6B7EFF] text-white text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
+                        className={cn(
+                          "flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-sm font-medium transition-colors shadow-sm disabled:opacity-50",
+                          survey.devices?.length > 0 || transcript.trim()
+                            ? "bg-[#6B7EFF] hover:bg-blue-700 animate-pulse-once"
+                            : "bg-gray-400"
+                        )}
                       >
                         {generating ? (
                           <><Loader2 size={13} className="animate-spin" /> Generating...</>
@@ -1107,6 +1161,16 @@ export default function SurveyPage() {
                           <><Sparkles size={13} /> Generate SOW + BOM</>
                         )}
                       </button>
+
+                      {survey.ai_sow && !generating && (
+                        <span className="text-[11px] text-emerald-600 flex items-center gap-1">
+                          <CheckCircle2 size={11} /> AI output ready
+                          <button
+                            onClick={() => setActiveTab("ai")}
+                            className="underline ml-1 font-medium"
+                          >View →</button>
+                        </span>
+                      )}
 
                       {genError && (
                         <span className="flex items-center gap-1.5 text-xs text-red-600">
@@ -1294,8 +1358,21 @@ export default function SurveyPage() {
                           </button>
                         )}
 
-                        <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                          <Download size={13} /> Export PDF
+                        <button
+                          onClick={() => {
+                            const text = [
+                              survey.property_name,
+                              survey.property_address,
+                              "",
+                              survey.ai_summary ?? "",
+                              "",
+                              survey.ai_sow ?? "",
+                            ].join("\n")
+                            navigator.clipboard.writeText(text).then(() => alert("SOW copied to clipboard!"))
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                        >
+                          <Download size={13} /> Copy SOW
                         </button>
                       </div>
                     )}

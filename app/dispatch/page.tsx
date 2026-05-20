@@ -10,6 +10,16 @@ import {
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { List, Search } = require("lucide-react") as any;
+import {
+  DndContext,
+  DragOverlay,
+  useDraggable,
+  useDroppable,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import type { DragEndEvent } from "@dnd-kit/core";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -521,36 +531,139 @@ function NewJobSlideOver({ open, onClose, onSaved, techs }: NewJobProps) {
   );
 }
 
+// ─── Quick Assign Popover ────────────────────────────────────────────────────
+
+function QuickAssignPopover({ techs, onAssign, onClose }: {
+  techs:    Tech[];
+  onAssign: (techId: string, techName: string) => void;
+  onClose:  () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
+  const available = techs.filter(t => t.status !== "Offline");
+  const offline   = techs.filter(t => t.status === "Offline");
+
+  return (
+    <div ref={ref}
+      className="absolute top-full left-0 mt-1 w-52 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden"
+    >
+      <div className="px-3 py-2 border-b border-slate-100">
+        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Assign Tech</p>
+      </div>
+      <div className="max-h-48 overflow-y-auto">
+        {available.length === 0 && offline.length === 0 && (
+          <p className="text-xs text-slate-400 px-3 py-3 italic">No technicians in roster</p>
+        )}
+        {available.map(t => (
+          <button key={t.id} type="button"
+            onClick={() => { onAssign(t.id, t.name); onClose(); }}
+            className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors flex items-center gap-2"
+          >
+            <div className="w-6 h-6 rounded-full bg-[#2563EB] text-white flex items-center justify-center text-[9px] font-bold shrink-0">
+              {t.initials}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-slate-800 truncate">{t.name}</p>
+              <p className="text-[10px] text-emerald-600">{t.status}</p>
+            </div>
+          </button>
+        ))}
+        {offline.length > 0 && available.length > 0 && (
+          <div className="px-3 py-1 border-t border-slate-100">
+            <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Offline</p>
+          </div>
+        )}
+        {offline.map(t => (
+          <button key={t.id} type="button"
+            onClick={() => { onAssign(t.id, t.name); onClose(); }}
+            className="w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors flex items-center gap-2 opacity-60"
+          >
+            <div className="w-6 h-6 rounded-full bg-slate-400 text-white flex items-center justify-center text-[9px] font-bold shrink-0">
+              {t.initials}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-slate-700 truncate">{t.name}</p>
+              <p className="text-[10px] text-slate-400">Offline</p>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Job Card ─────────────────────────────────────────────────────────────────
 
-function JobCard({ job, onStatusChange, onSelect }: {
+function JobCard({ job, techs, onStatusChange, onSelect, onAssign, isDragging }: {
   job:            Job;
+  techs:          Tech[];
   onStatusChange: (id: string, status: string) => void;
   onSelect:       (job: Job) => void;
+  onAssign:       (jobId: string, techId: string, techName: string) => void;
+  isDragging?:    boolean;
 }) {
+  const [showAssign, setShowAssign] = useState(false);
   const typeConf = jobTypeConfig[job.jobType] ?? jobTypeConfig.Repair;
-  const NEXT_STATUS: Record<JobStatus, JobStatus | null> = {
-    Pending:       "Assigned",
-    Assigned:      "In Progress",
-    "In Progress": "Done",
-    Done:          null,
-  };
-  const next = NEXT_STATUS[job.status];
+  const assignedTechObj = techs.find(t => t.id === job.assignedTechId);
+
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: job.id });
+
+  const style = transform ? {
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+    opacity: isDragging ? 0.4 : 1,
+  } : undefined;
+
+  // Computed days-until label
+  const daysLabel = (() => {
+    if (!job.eta || job.eta === "TBD") return null;
+    const match = job.eta.match(/(\d{4}-\d{2}-\d{2})/);
+    if (!match) return null;
+    const diff = Math.round((new Date(match[1]).getTime() - Date.now()) / 86400000);
+    if (diff < 0)  return { text: `${Math.abs(diff)}d overdue`, cls: "text-red-500" };
+    if (diff === 0) return { text: "Today", cls: "text-emerald-600 font-semibold" };
+    if (diff === 1) return { text: "Tomorrow", cls: "text-amber-600 font-semibold" };
+    return { text: `in ${diff}d`, cls: "text-slate-400" };
+  })();
+
+  const isUrgentUnassigned = job.priority === "urgent" && !job.assignedTechId;
 
   return (
     <div
+      ref={setNodeRef}
+      style={style}
       className={cn(
-        "bg-white rounded-xl border-l-4 shadow-sm p-3.5 space-y-2.5 hover:shadow-md transition-shadow cursor-pointer",
+        "bg-white rounded-xl border-l-4 shadow-sm p-3.5 space-y-2.5 cursor-grab active:cursor-grabbing",
+        "hover:shadow-md transition-all select-none relative",
         job.priority === "urgent"    ? "border-l-red-500"
         : job.priority === "normal" ? "border-l-amber-400"
-        : "border-l-emerald-400"
+        : "border-l-emerald-400",
+        isDragging && "opacity-30 shadow-lg scale-[1.02]"
       )}
-      onClick={() => onSelect(job)}
+      {...attributes}
+      {...listeners}
     >
+      {/* Urgent + unassigned pulse ring */}
+      {isUrgentUnassigned && (
+        <span className="absolute -top-1 -right-1 w-3 h-3">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+          <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
+        </span>
+      )}
+
       <div className="flex items-start justify-between gap-2">
-        <div>
+        <div className="min-w-0">
           <p className="text-[10px] font-mono text-slate-400">{job.woNumber}</p>
-          <p className="text-sm font-semibold text-slate-800 leading-tight">{job.property}</p>
+          <p className="text-sm font-semibold text-slate-800 leading-tight truncate">{job.property}</p>
+          {job.title && job.title !== job.property && (
+            <p className="text-[11px] text-slate-500 truncate">{job.title}</p>
+          )}
         </div>
         <span className={cn("inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0", typeConf.color)}>
           {jobTypeIcon[job.jobType]}
@@ -558,17 +671,49 @@ function JobCard({ job, onStatusChange, onSelect }: {
         </span>
       </div>
 
-      <div className="flex items-center gap-1.5 text-xs text-slate-500">
-        <Users size={11} />
-        <span className={cn(job.assignedTech ? "text-slate-600" : "text-slate-400 italic")}>
-          {job.assignedTech ?? "Unassigned"}
-        </span>
+      {/* Tech row */}
+      <div className="flex items-center gap-2">
+        {assignedTechObj ? (
+          <div className="flex items-center gap-1.5">
+            <div className="w-5 h-5 rounded-full bg-[#2563EB] text-white flex items-center justify-center text-[9px] font-bold shrink-0">
+              {assignedTechObj.initials}
+            </div>
+            <span className="text-xs text-slate-700 font-medium">{assignedTechObj.name}</span>
+          </div>
+        ) : (
+          <div className="relative">
+            <button
+              type="button"
+              onPointerDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); setShowAssign(v => !v); }}
+              className="inline-flex items-center gap-1 text-[11px] text-[#6B7EFF] hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg px-2 py-1 transition-colors font-medium"
+            >
+              <Users size={10} />
+              Assign Tech
+            </button>
+            {showAssign && (
+              <QuickAssignPopover
+                techs={techs}
+                onAssign={(techId, techName) => {
+                  onAssign(job.id, techId, techName);
+                  setShowAssign(false);
+                }}
+                onClose={() => setShowAssign(false)}
+              />
+            )}
+          </div>
+        )}
       </div>
 
+      {/* Date + priority */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-xs text-slate-500">
-          <Clock size={11} />
-          <span>{job.eta}</span>
+        <div className="flex items-center gap-1.5 text-xs text-slate-400">
+          <Clock size={10} />
+          {daysLabel ? (
+            <span className={daysLabel.cls}>{daysLabel.text}</span>
+          ) : (
+            <span className="italic">No date</span>
+          )}
         </div>
         <div className="flex items-center gap-1.5">
           <span className={cn("w-2 h-2 rounded-full", priorityDot[job.priority])} title={job.priority} />
@@ -580,14 +725,61 @@ function JobCard({ job, onStatusChange, onSelect }: {
         <p className="text-[11px] text-slate-400 truncate">{job.notes}</p>
       )}
 
-      {next && (
+      {/* View / advance buttons */}
+      <div className="flex gap-1.5">
         <button
-          onClick={e => { e.stopPropagation(); onStatusChange(job.id, next); }}
-          className="w-full text-[11px] font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg py-1.5 transition-colors"
+          type="button"
+          onPointerDown={e => e.stopPropagation()}
+          onClick={e => { e.stopPropagation(); onSelect(job); }}
+          className="flex-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-lg py-1.5 transition-colors"
         >
-          → Move to {next}
+          Details
         </button>
-      )}
+        {job.status !== "Done" && (
+          <button
+            type="button"
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => {
+              e.stopPropagation();
+              const NEXT: Record<JobStatus, JobStatus | null> = {
+                Pending: "Assigned", Assigned: "In Progress", "In Progress": "Done", Done: null,
+              };
+              const next = NEXT[job.status];
+              if (next) onStatusChange(job.id, next);
+            }}
+            className="flex-1 text-[11px] font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg py-1.5 transition-colors"
+          >
+            → Advance
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Droppable Column ─────────────────────────────────────────────────────────
+
+function DroppableColumn({ status, label, accent, bg, children, count }: {
+  status:   JobStatus;
+  label:    string;
+  accent:   string;
+  bg:       string;
+  children: React.ReactNode;
+  count:    number;
+}) {
+  const { isOver, setNodeRef } = useDroppable({ id: status });
+  return (
+    <div ref={setNodeRef} className={cn("space-y-2 rounded-xl transition-colors", isOver && "ring-2 ring-[#6B7EFF]/40 ring-offset-1")}>
+      <div className={cn(
+        "flex items-center justify-between px-3 py-2 rounded-lg border",
+        bg, accent
+      )}>
+        <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">{label}</span>
+        <span className="text-xs font-bold text-slate-500 bg-white/70 rounded-full px-2 py-0.5 border border-slate-200">{count}</span>
+      </div>
+      <div className="space-y-2 min-h-[60px]">
+        {children}
+      </div>
     </div>
   );
 }
@@ -1202,6 +1394,11 @@ export default function DispatchPage() {
   const [inviteSending, setInviteSending] = useState(false);
   const [inviteMsg, setInviteMsg]         = useState<string | null>(null);
   const [scheduleTech, setScheduleTech]   = useState<Tech | null>(null);
+  const [activeJobId,  setActiveJobId]    = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
 
   const handlePrevWeek  = () => setWeekStart(prev => { const d = new Date(prev); d.setDate(d.getDate() - 7); return d; });
   const handleNextWeek  = () => setWeekStart(prev => { const d = new Date(prev); d.setDate(d.getDate() + 7); return d; });
@@ -1248,6 +1445,30 @@ export default function DispatchPage() {
       body: JSON.stringify({ status: dbStatus[newStatus] }),
     });
     setJobs(prev => prev.map(j => j.id === id ? { ...j, status: newStatus } : j));
+  };
+
+  const handleAssignTech = async (jobId: string, techId: string, techName: string) => {
+    // Optimistic update: assign tech + auto-move to Assigned
+    setJobs(prev => prev.map(j => j.id === jobId
+      ? { ...j, assignedTechId: techId, assignedTech: techName, status: "Assigned" }
+      : j
+    ));
+    await fetch(`/api/maintenance/${jobId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assignee_id: techId, assignee_name: techName, status: "scheduled" }),
+    });
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    setActiveJobId(null);
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const jobId    = String(active.id);
+    const newStatus = over.id as JobStatus;
+    const job       = jobs.find(j => j.id === jobId);
+    if (!job || job.status === newStatus) return;
+    await handleJobStatusChange(jobId, newStatus);
   };
 
   const handleTechStatusChange = async (id: string, status: TechStatus) => {
@@ -1529,39 +1750,66 @@ export default function DispatchPage() {
                 <RefreshCw size={16} className="animate-spin mr-2" /> Loading jobs…
               </div>
             ) : (
-              <div className="grid grid-cols-4 gap-3">
-                {COLUMNS.map((col) => {
-                  const colJobs = jobs.filter(j => j.status === col.status);
-                  return (
-                    <div key={col.status} className="space-y-2">
-                      <div className={cn(
-                        "flex items-center justify-between px-3 py-2 rounded-lg border",
-                        col.bg, col.accent
-                      )}>
-                        <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
-                          {col.label}
-                        </span>
-                        <span className="text-xs font-bold text-slate-500 bg-white/70 rounded-full px-2 py-0.5 border border-slate-200">
-                          {colJobs.length}
-                        </span>
-                      </div>
-                      <div className="space-y-2">
+              <DndContext
+                sensors={sensors}
+                onDragStart={e => setActiveJobId(String(e.active.id))}
+                onDragEnd={handleDragEnd}
+                onDragCancel={() => setActiveJobId(null)}
+              >
+                <div className="grid grid-cols-4 gap-3">
+                  {COLUMNS.map((col) => {
+                    const colJobs = jobs.filter(j => j.status === col.status);
+                    return (
+                      <DroppableColumn
+                        key={col.status}
+                        status={col.status}
+                        label={col.label}
+                        accent={col.accent}
+                        bg={col.bg}
+                        count={colJobs.length}
+                      >
                         {colJobs.map(job => (
                           <JobCard
                             key={job.id}
                             job={job}
+                            techs={techs}
                             onStatusChange={(id, s) => handleJobStatusChange(id, s as JobStatus)}
                             onSelect={setSelectedJob}
+                            onAssign={handleAssignTech}
+                            isDragging={activeJobId === job.id}
                           />
                         ))}
                         {colJobs.length === 0 && (
-                          <div className="text-center text-[11px] text-slate-400 py-4">No jobs</div>
+                          <div className="text-center text-[11px] text-slate-400 py-6 border-2 border-dashed border-slate-200 rounded-xl">
+                            Drop here
+                          </div>
                         )}
+                      </DroppableColumn>
+                    );
+                  })}
+                </div>
+                <DragOverlay>
+                  {activeJobId ? (() => {
+                    const job = jobs.find(j => j.id === activeJobId);
+                    if (!job) return null;
+                    const typeConf = jobTypeConfig[job.jobType] ?? jobTypeConfig.Repair;
+                    return (
+                      <div className={cn(
+                        "bg-white rounded-xl border-l-4 shadow-2xl p-3.5 w-64 opacity-95 rotate-1",
+                        job.priority === "urgent"    ? "border-l-red-500"
+                        : job.priority === "normal" ? "border-l-amber-400"
+                        : "border-l-emerald-400"
+                      )}>
+                        <p className="text-[10px] font-mono text-slate-400">{job.woNumber}</p>
+                        <p className="text-sm font-semibold text-slate-800">{job.property}</p>
+                        <span className={cn("inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full mt-1.5", typeConf.color)}>
+                          {jobTypeIcon[job.jobType]}{typeConf.label}
+                        </span>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })() : null}
+                </DragOverlay>
+              </DndContext>
             )}
           </div>
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { currentUser } from '@clerk/nextjs/server'
 
 const PLAUD_BASE = 'https://platform.plaud.ai/developer/api'
 const POLL_INTERVAL_MS = 2500
@@ -89,9 +90,11 @@ async function pollTranscription(
 
 // ─── Main route ───────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
-  // Auth: same x-tech-code used across /tech API routes
+  // Auth: x-tech-code (field techs) OR Clerk session (portal users)
   const techCode = req.headers.get('x-tech-code') ?? ''
-  if (techCode !== process.env.TECH_ACCESS_CODE) {
+  const techOk   = !!(process.env.TECH_ACCESS_CODE && techCode === process.env.TECH_ACCESS_CODE)
+  const portalOk = techOk ? false : !!(await currentUser().catch(() => null))
+  if (!techOk && !portalOk) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

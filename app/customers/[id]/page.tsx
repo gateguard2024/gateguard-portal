@@ -46,12 +46,40 @@ interface OrgQuote {
   accepted_at: string | null;
 }
 
+interface OrgContact {
+  id: string;
+  org_id: string;
+  name: string;
+  title: string | null;
+  email: string | null;
+  phone: string | null;
+  is_primary: boolean;
+  notes: string | null;
+  created_at: string;
+}
+
+interface OrgAttachment {
+  id: string;
+  org_id: string;
+  name: string;
+  file_url: string;
+  file_size: number | null;
+  mime_type: string | null;
+  category: string;
+  uploaded_by: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+const ATTACHMENT_CATEGORIES = ['general', 'contract', 'invoice', 'permit', 'photo', 'other']
+
 interface OrgDetail {
   id: string; name: string; org_tier: OrgTier;
   is_active: boolean;
   primary_contact_name: string | null;
   primary_contact_email: string | null;
   primary_contact_phone: string | null;
+  address: string | null;
   city: string | null; state: string | null;
   parent_org_id: string | null;
   parent_name: string | null;
@@ -94,6 +122,16 @@ export default function CustomerDetailPage() {
   const [quotesLoaded, setQuotesLoaded] = useState(false);
   const [activities, setActivities] = useState<{id:string;type:string;subject:string;body?:string;outcome?:string;created_by_name?:string;created_at:string}[]>([]);
   const [activitiesLoaded, setActivitiesLoaded] = useState(false);
+  // Contacts
+  const [contacts, setContacts]       = useState<OrgContact[]>([])
+  const [showContactForm, setShowContactForm] = useState(false)
+  const [editingContact, setEditingContact]   = useState<OrgContact | null>(null)
+  const [contactForm, setContactForm] = useState({ name: '', title: '', email: '', phone: '', is_primary: false, notes: '' })
+  const [contactSaving, setContactSaving] = useState(false)
+  // Attachments
+  const [attachments, setAttachments]   = useState<OrgAttachment[]>([])
+  const [uploadingFile, setUploadingFile] = useState(false)
+  const [attachUploadErr, setAttachUploadErr] = useState<string | null>(null)
 
   async function fetchOrg() {
     setLoading(true);
@@ -105,6 +143,7 @@ export default function CustomerDetailPage() {
       setOrg(data);
       setEditForm({
         name: data.name,
+        address: data.address ?? "",
         primary_contact_name: data.primary_contact_name ?? "",
         primary_contact_email: data.primary_contact_email ?? "",
         primary_contact_phone: data.primary_contact_phone ?? "",
@@ -144,7 +183,106 @@ export default function CustomerDetailPage() {
       finally { setActivitiesLoaded(true); }
     }
     fetchActivities();
+
+    async function fetchContacts() {
+      try {
+        const res = await fetch(`/api/customers/${id}/contacts`)
+        if (!res.ok) return
+        const data = await res.json()
+        setContacts(data.contacts ?? [])
+      } catch { /* non-blocking */ }
+    }
+    fetchContacts();
+
+    async function fetchAttachments() {
+      try {
+        const res = await fetch(`/api/customers/${id}/attachments`)
+        if (!res.ok) return
+        const data = await res.json()
+        setAttachments(data.attachments ?? [])
+      } catch { /* non-blocking */ }
+    }
+    fetchAttachments();
   }, [id]);
+
+  // ── Contact helpers ──────────────────────────────────────────────────────────
+  function openAddContact() {
+    setEditingContact(null)
+    setContactForm({ name: '', title: '', email: '', phone: '', is_primary: contacts.length === 0, notes: '' })
+    setShowContactForm(true)
+  }
+  function openEditContact(c: OrgContact) {
+    setEditingContact(c)
+    setContactForm({ name: c.name, title: c.title ?? '', email: c.email ?? '', phone: c.phone ?? '', is_primary: c.is_primary, notes: c.notes ?? '' })
+    setShowContactForm(true)
+  }
+  async function saveContact() {
+    if (!contactForm.name.trim()) return
+    setContactSaving(true)
+    try {
+      const url = editingContact
+        ? `/api/customers/${id}/contacts/${editingContact.id}`
+        : `/api/customers/${id}/contacts`
+      const method = editingContact ? 'PATCH' : 'POST'
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(contactForm) })
+      if (!res.ok) return
+      const data = await res.json()
+      if (editingContact) {
+        setContacts(cs => cs.map(c => c.id === editingContact.id ? data.contact : c))
+      } else {
+        setContacts(cs => [...cs, data.contact])
+      }
+      setShowContactForm(false)
+    } catch { /* swallow */ }
+    finally { setContactSaving(false) }
+  }
+  async function deleteContact(contactId: string) {
+    if (!confirm('Remove this contact?')) return
+    await fetch(`/api/customers/${id}/contacts/${contactId}`, { method: 'DELETE' })
+    setContacts(cs => cs.filter(c => c.id !== contactId))
+  }
+
+  // ── Attachment helpers ────────────────────────────────────────────────────────
+  async function handleAttachmentUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingFile(true)
+    setAttachUploadErr(null)
+    try {
+      // Step 1: get signed upload URL from Supabase (reuse kb upload-url pattern)
+      const urlRes = await fetch('/api/kb/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: `org-attachments/${id}/${Date.now()}_${file.name}`, content_type: file.type }),
+      })
+      if (!urlRes.ok) {
+        // Fallback: store as data URL is not practical — just tell user
+        throw new Error('Could not get upload URL')
+      }
+      const { upload_url, public_url } = await urlRes.json()
+      // Step 2: upload directly to Supabase Storage
+      await fetch(upload_url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
+      // Step 3: register in DB
+      const regRes = await fetch(`/api/customers/${id}/attachments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: file.name, file_url: public_url, file_size: file.size, mime_type: file.type }),
+      })
+      if (!regRes.ok) throw new Error('Upload registered but DB save failed')
+      const { attachment } = await regRes.json()
+      setAttachments(prev => [attachment, ...prev])
+    } catch (err) {
+      setAttachUploadErr(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setUploadingFile(false)
+      e.target.value = ''
+    }
+  }
+  async function deleteAttachment(attachId: string) {
+    if (!confirm('Remove this attachment?')) return
+    await fetch(`/api/customers/${id}/attachments?attachment_id=${attachId}`, { method: 'DELETE' })
+    setAttachments(prev => prev.filter(a => a.id !== attachId))
+  }
 
   async function saveEdit() {
     if (!org) return;
@@ -199,12 +337,13 @@ export default function CustomerDetailPage() {
 
   const tc = TIER_CONFIG[org.org_tier] ?? TIER_CONFIG.client;
   const location = [org.city, org.state].filter(Boolean).join(", ");
+  const fullAddress = [org.address, org.city, org.state].filter(Boolean).join(", ");
 
   return (
     <div className="flex flex-col min-h-screen">
       <TopBar
         title={org.name}
-        subtitle={`${tc.icon} ${tc.label}${location ? ` · ${location}` : ""}`}
+        subtitle={`${tc.icon} ${tc.label}${fullAddress ? ` · ${fullAddress}` : ""}`}
         actions={
           <Link
             href="/customers"
@@ -288,63 +427,129 @@ export default function CustomerDetailPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-5">
-          {/* Contact info */}
-          <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+        {/* ── Contacts panel ──────────────────────────────────────────────────── */}
+        <div className="bg-card border border-border rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Users size={14} className="text-brand-400" /> Primary Contact
+              <Users size={14} className="text-brand-400" /> Contacts ({contacts.length})
             </h3>
-            <div className="space-y-2 text-sm">
-              {org.primary_contact_name ? (
-                <p className="font-medium text-foreground">{org.primary_contact_name}</p>
-              ) : (
-                <p className="text-muted-foreground italic text-xs">No contact set</p>
-              )}
-              {org.primary_contact_email && (
-                <a href={`mailto:${org.primary_contact_email}`} className="flex items-center gap-2 text-muted-foreground hover:text-brand-400 transition-colors truncate">
-                  <Mail size={13} className="shrink-0" /> <span className="truncate">{org.primary_contact_email}</span>
-                </a>
-              )}
-              {org.primary_contact_phone && (
-                <a href={`tel:${org.primary_contact_phone}`} className="flex items-center gap-2 text-muted-foreground hover:text-brand-400 transition-colors">
-                  <Phone size={13} /> {org.primary_contact_phone}
-                </a>
-              )}
-              {location && (
-                <p className="flex items-center gap-2 text-muted-foreground">
-                  <MapPin size={13} /> {location}
-                </p>
-              )}
-            </div>
+            <button
+              onClick={openAddContact}
+              className="flex items-center gap-1 text-xs text-brand-400 hover:underline"
+            >
+              <Plus size={12} /> Add Contact
+            </button>
           </div>
 
-          {/* Quick actions */}
-          <div className="bg-card border border-border rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-              <Activity size={14} className="text-brand-400" /> Quick Actions
-            </h3>
-            <div className="space-y-2">
-              {[
-                { href: "/cameras",     icon: Camera,    label: "View Cameras"    },
-                { href: "/access",      icon: Shield,    label: "Access Control"  },
-                { href: "/maintenance", icon: Wrench,    label: "Work Orders"     },
-                { href: "/quotes",      icon: FileText,  label: "Quotes"          },
-                { href: "/billing",     icon: DollarSign,label: "Billing"         },
-              ].map(a => (
-                <Link key={a.href} href={a.href} className="flex items-center gap-2 w-full text-sm text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg px-3 py-2 transition-colors">
-                  <a.icon size={14} className="text-brand-400" /> {a.label}
-                </Link>
+          {/* Add / Edit contact form */}
+          {showContactForm && (
+            <div className="mb-4 border border-border rounded-xl p-4 bg-background/50 space-y-3">
+              <p className="text-xs font-semibold text-foreground">{editingContact ? 'Edit contact' : 'New contact'}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-medium text-muted-foreground mb-1 uppercase tracking-wide">Name *</label>
+                  <input className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
+                    value={contactForm.name} onChange={e => setContactForm(f => ({ ...f, name: e.target.value }))} placeholder="Full name" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-medium text-muted-foreground mb-1 uppercase tracking-wide">Title</label>
+                  <input className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
+                    value={contactForm.title} onChange={e => setContactForm(f => ({ ...f, title: e.target.value }))} placeholder="Property Manager" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-medium text-muted-foreground mb-1 uppercase tracking-wide">Email</label>
+                  <input type="email" className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
+                    value={contactForm.email} onChange={e => setContactForm(f => ({ ...f, email: e.target.value }))} placeholder="email@example.com" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-medium text-muted-foreground mb-1 uppercase tracking-wide">Phone</label>
+                  <input type="tel" className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
+                    value={contactForm.phone} onChange={e => setContactForm(f => ({ ...f, phone: e.target.value }))} placeholder="(555) 555-5555" />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+                <input type="checkbox" checked={contactForm.is_primary}
+                  onChange={e => setContactForm(f => ({ ...f, is_primary: e.target.checked }))}
+                  className="rounded border-border" />
+                Primary contact
+              </label>
+              <div className="flex gap-2">
+                <button onClick={saveContact} disabled={contactSaving} className="flex-1 text-xs bg-brand-400 text-white py-2 rounded-lg font-medium hover:bg-brand-500 disabled:opacity-50">
+                  {contactSaving ? 'Saving…' : editingContact ? 'Save Changes' : 'Add Contact'}
+                </button>
+                <button onClick={() => setShowContactForm(false)} className="flex-1 text-xs border border-border text-muted-foreground py-2 rounded-lg hover:bg-accent">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {contacts.length === 0 && !showContactForm ? (
+            <div className="text-center py-5 text-sm text-muted-foreground">
+              <Users size={20} className="mx-auto mb-2 text-muted-foreground/40" />
+              <p>No contacts yet.</p>
+              <button onClick={openAddContact} className="text-brand-400 hover:underline text-xs mt-1">Add first contact →</button>
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {contacts.map(c => (
+                <div key={c.id} className="py-3 flex items-start gap-3 group">
+                  <div className="w-8 h-8 rounded-full bg-brand-400/10 border border-brand-400/20 flex items-center justify-center text-xs font-bold text-brand-400 shrink-0 mt-0.5">
+                    {c.name.slice(0,2).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-foreground">{c.name}</p>
+                      {c.is_primary && <span className="text-[10px] bg-brand-400/10 text-brand-400 border border-brand-400/20 px-1.5 py-0.5 rounded-full font-semibold">Primary</span>}
+                      {c.title && <span className="text-xs text-muted-foreground">{c.title}</span>}
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
+                      {c.email && <a href={`mailto:${c.email}`} className="text-xs text-muted-foreground hover:text-brand-400 flex items-center gap-1"><Mail size={11} />{c.email}</a>}
+                      {c.phone && <a href={`tel:${c.phone}`} className="text-xs text-muted-foreground hover:text-brand-400 flex items-center gap-1"><Phone size={11} />{c.phone}</a>}
+                    </div>
+                    {c.notes && <p className="text-xs text-muted-foreground italic mt-1">{c.notes}</p>}
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    <button onClick={() => openEditContact(c)} className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-brand-400">
+                      <Edit2 size={12} />
+                    </button>
+                    <button onClick={() => deleteContact(c.id)} className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-red-500">
+                      <X size={12} />
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
-          </div>
+          )}
+        </div>
 
-          {/* Notes */}
+        {/* ── Info row: Address · Notes ──────────────────────────────────────── */}
+        <div className="grid grid-cols-2 gap-5">
+          <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <MapPin size={14} className="text-brand-400" /> Address
+            </h3>
+            {fullAddress ? (
+              <div className="space-y-1">
+                <p className="text-sm text-foreground">{fullAddress}</p>
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-brand-400 hover:underline flex items-center gap-1"
+                >
+                  <ExternalLink size={11} /> Open in Google Maps
+                </a>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground italic">No address. Click Edit to add.</p>
+            )}
+          </div>
           <div className="bg-card border border-border rounded-xl p-5">
             <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
               <Star size={14} className="text-brand-400" /> Notes
             </h3>
             {org.notes ? (
-              <p className="text-sm text-muted-foreground">{org.notes}</p>
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{org.notes}</p>
             ) : (
               <p className="text-sm text-muted-foreground italic">No notes. Click Edit to add.</p>
             )}
@@ -591,6 +796,76 @@ export default function CustomerDetailPage() {
           )}
         </div>
 
+        {/* ── Attachments ─────────────────────────────────────────────────────── */}
+        <div className="bg-card border border-border rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <FileText size={14} className="text-brand-400" /> Attachments ({attachments.length})
+            </h3>
+            <label className={`flex items-center gap-1 text-xs text-brand-400 hover:underline cursor-pointer ${uploadingFile ? 'opacity-50 pointer-events-none' : ''}`}>
+              <Plus size={12} /> {uploadingFile ? 'Uploading…' : 'Upload File'}
+              <input type="file" className="hidden" onChange={handleAttachmentUpload} disabled={uploadingFile} />
+            </label>
+          </div>
+
+          {attachUploadErr && (
+            <p className="text-xs text-red-500 mb-3 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{attachUploadErr}</p>
+          )}
+
+          {attachments.length === 0 ? (
+            <div className="text-center py-5 text-sm text-muted-foreground">
+              <FileText size={20} className="mx-auto mb-2 text-muted-foreground/40" />
+              <p>No attachments yet.</p>
+              <p className="text-xs mt-1">Upload contracts, permits, photos, invoices.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {attachments.map(att => {
+                const isImage = att.mime_type?.startsWith('image/')
+                const isPDF   = att.mime_type === 'application/pdf'
+                const icon    = isImage ? '🖼️' : isPDF ? '📄' : '📎'
+                const sizeStr = att.file_size ? att.file_size > 1_000_000
+                  ? `${(att.file_size / 1_000_000).toFixed(1)} MB`
+                  : `${Math.round(att.file_size / 1024)} KB`
+                  : null
+                const catColors: Record<string, string> = {
+                  contract: 'bg-violet-50 text-violet-700',
+                  invoice:  'bg-emerald-50 text-emerald-700',
+                  permit:   'bg-amber-50 text-amber-700',
+                  photo:    'bg-sky-50 text-sky-700',
+                  other:    'bg-slate-50 text-slate-600',
+                  general:  'bg-slate-50 text-slate-600',
+                }
+                return (
+                  <div key={att.id} className="py-3 flex items-center gap-3 group">
+                    <span className="text-lg shrink-0">{icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <a href={att.file_url} target="_blank" rel="noopener noreferrer"
+                        className="text-sm font-medium text-foreground hover:text-brand-400 truncate block">
+                        {att.name}
+                      </a>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full capitalize font-medium ${catColors[att.category] ?? catColors.general}`}>{att.category}</span>
+                        {sizeStr && <span className="text-[10px] text-muted-foreground">{sizeStr}</span>}
+                        {att.uploaded_by && <span className="text-[10px] text-muted-foreground">by {att.uploaded_by}</span>}
+                        <span className="text-[10px] text-muted-foreground">{new Date(att.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <a href={att.file_url} target="_blank" rel="noopener noreferrer" className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-brand-400">
+                        <ExternalLink size={12} />
+                      </a>
+                      <button onClick={() => deleteAttachment(att.id)} className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-red-500">
+                        <X size={12} />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
       </div>
 
       {/* Edit slide-over */}
@@ -611,6 +886,15 @@ export default function CustomerDetailPage() {
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
                   value={editForm.name ?? ""}
                   onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Street Address</label>
+                <input
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
+                  placeholder="123 Main St"
+                  value={(editForm as Record<string, unknown>).address as string ?? ""}
+                  onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))}
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">

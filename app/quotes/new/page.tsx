@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Building2, Shield, DollarSign, FileText,
   ChevronRight, ChevronLeft,
@@ -421,6 +421,9 @@ function ItemFormPanel({
 ═══════════════════════════════════════════════════════════════════════════════ */
 export default function NewQuotePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const prefilledClientOrgId  = searchParams.get('client_org_id') ?? undefined;
+  const prefilledOpportunityId = searchParams.get('opportunity_id') ?? undefined;
 
   // ── Mode selection ──────────────────────────────────────────────────────────
   const [appMode, setAppMode] = useState<AppMode>('pick');
@@ -438,6 +441,35 @@ export default function NewQuotePage() {
   const [property, setProperty]   = useState<QuoteProperty>(defaultProperty);
   const [survey, setSurvey]       = useState<SiteSurvey>(defaultSurvey);
   const [wzSaving, setWzSaving]   = useState(false);
+
+  // Auto-populate client info when coming from a customer page (?client_org_id=)
+  const prefilledRef = useRef(false)
+  useEffect(() => {
+    if (!prefilledClientOrgId || prefilledRef.current) return
+    prefilledRef.current = true
+    fetch(`/api/customers/${prefilledClientOrgId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((org: { name?: string; primary_contact_name?: string; primary_contact_email?: string; primary_contact_phone?: string; address?: string; city?: string; state?: string } | null) => {
+        if (!org) return
+        setMeta(m => ({
+          ...m,
+          client_name:      org.name ?? m.client_name,
+          client_email:     org.primary_contact_email ?? m.client_email,
+          client_phone:     org.primary_contact_phone ?? m.client_phone,
+          property_address: [org.address, org.city, org.state].filter(Boolean).join(', ') || m.property_address,
+        }))
+        setProperty(p => ({
+          ...p,
+          contactName:  org.primary_contact_name ?? p.contactName,
+          contactEmail: org.primary_contact_email ?? p.contactEmail,
+          contactPhone: org.primary_contact_phone ?? p.contactPhone,
+          address:      org.address ?? p.address,
+          city:         org.city ?? p.city,
+          state:        org.state ?? p.state,
+        }))
+      })
+      .catch(() => {})
+  }, [prefilledClientOrgId])
 
   const setM = (patch: Partial<QuoteMeta>) => setMeta(m => ({ ...m, ...patch }));
   const setProp = (key: keyof QuoteProperty) => (val: string) =>
@@ -491,6 +523,8 @@ export default function NewQuotePage() {
           deposit_percent:  meta.deposit_percent,
           total_one_time:   liItems.filter(i => !i.is_recurring).reduce((s, i) => s + i.qty * i.unit_price, 0),
           total_mrr:        liMrr,
+          client_org_id:    prefilledClientOrgId  || null,
+          opportunity_id:   prefilledOpportunityId || null,
         }),
       });
       if (!res.ok) throw new Error('Failed to create quote');
@@ -533,6 +567,8 @@ export default function NewQuotePage() {
           total_one_time:   totals.setupTotal,
           total_mrr:        totals.monthlyTotal,
           dealer_mrr:       totals.dealerMRR,
+          client_org_id:    prefilledClientOrgId  || null,
+          opportunity_id:   prefilledOpportunityId || null,
         }),
       });
       if (!res.ok) throw new Error('Failed to create quote');
