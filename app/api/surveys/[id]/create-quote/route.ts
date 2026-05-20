@@ -84,12 +84,15 @@ export async function POST(
       survey_id:        survey.id,
       quote_mode:       'line_item',
       status:           'draft',
+      title:            survey.property_name ?? 'Untitled Survey Quote',
+      property_name:    survey.property_name ?? null,
       client_name,
       client_email:     client_email   || null,
       client_phone:     client_phone   || null,
       property_address: survey.property_address ?? null,
       cover_message:    cover_message  || null,
       terms_text:       terms_text     || null,
+      notes:            survey.ai_sow ?? null,
       tax_rate,
       discount_percent,
       deposit_percent,
@@ -134,13 +137,45 @@ export async function POST(
     notes:        item.notes ?? null,
   }))
 
+  // Try to match BOM items to products catalog
+  const { data: products } = await supabase
+    .from('products')
+    .select('id, name, sku, list_price')
+
+  const productMap = new Map<string, { id: string; list_price: number | null }>()
+  if (products) {
+    for (const p of products) {
+      if (p.sku) productMap.set(p.sku.toLowerCase(), { id: p.id, list_price: p.list_price })
+      productMap.set(p.name.toLowerCase(), { id: p.id, list_price: p.list_price })
+    }
+  }
+
+  // Apply product_id to line items where we find a match
+  const lineItemsWithProducts = lineItems.map(item => {
+    // Try SKU match first
+    if (item.sku) {
+      const hit = productMap.get(item.sku.toLowerCase())
+      if (hit) return { ...item, product_id: hit.id }
+    }
+    // Try name/description fuzzy match (contains)
+    const descLower = item.description.toLowerCase()
+    for (const [key, hit] of productMap.entries()) {
+      if (descLower.includes(key) || key.includes(descLower.split(' ')[0])) {
+        return { ...item, product_id: hit.id }
+      }
+    }
+    return item
+  })
+
   const { error: itemErr } = await supabase
     .from('quote_line_items')
-    .insert(lineItems)
+    .insert(lineItemsWithProducts)
 
   if (itemErr) {
-    // Roll back the quote so we don't leave orphaned records
-    await supabase.from('quotes').delete().eq('id', quote.id)
+    // Roll back the quote so we don't leave orphaned records — non-blocking
+    void (async () => {
+      try { await supabase.from('quotes').delete().eq('id', quote.id) } catch (_) { /* ignore */ }
+    })()
     return NextResponse.json({ error: itemErr.message }, { status: 500 })
   }
 

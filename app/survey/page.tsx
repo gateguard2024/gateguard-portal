@@ -238,7 +238,20 @@ interface DeviceCardProps {
 }
 
 function DeviceCard({ device, onChange, onDelete }: DeviceCardProps) {
-  const [expanded, setExpanded] = useState(!device.name)
+  const [expanded, setExpanded] = useState(true)
+
+  const isWorking    = device.condition === "Good" || device.condition === "Fair"
+  const isNotWorking = device.condition === "Poor" || device.action === "Replace" || device.action === "New Install"
+
+  function toggleWorking(setWorking: boolean) {
+    if (setWorking) {
+      const newAction = (device.action === "Replace" || device.action === "New Install") ? "Keep" : device.action
+      onChange({ ...device, condition: "Good", action: newAction })
+    } else {
+      const newAction = (device.action === "Keep" || device.action === "") ? "Replace" : device.action
+      onChange({ ...device, condition: "Poor", action: newAction })
+    }
+  }
 
   function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -259,7 +272,7 @@ function DeviceCard({ device, onChange, onDelete }: DeviceCardProps) {
       <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-50/70 border-b border-gray-100">
         <button
           onClick={() => setExpanded(e => !e)}
-          className="flex-1 flex items-center gap-2 text-left min-w-0"
+          className="flex items-center gap-2 text-left min-w-0 shrink-1 overflow-hidden"
         >
           <ChevronRight size={13} className={cn("text-gray-400 transition-transform shrink-0", expanded && "rotate-90")} />
           <span className="text-sm font-medium text-gray-900 truncate">
@@ -270,19 +283,37 @@ function DeviceCard({ device, onChange, onDelete }: DeviceCardProps) {
               <MapPin size={10} /> {device.location}
             </span>
           )}
-          <div className="flex items-center gap-1.5 ml-auto shrink-0">
-            {device.condition && (
-              <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full", conditionColor(device.condition))}>
-                {device.condition}
-              </span>
-            )}
-            {device.action && (
-              <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full", actionColor(device.action))}>
-                {device.action}
-              </span>
-            )}
-          </div>
         </button>
+
+        {/* Working / Not Working toggle */}
+        <div className="flex items-center gap-1 ml-auto shrink-0">
+          {isWorking && !isNotWorking ? (
+            <button
+              onClick={() => toggleWorking(false)}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-medium bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 transition-colors"
+              title="Click to mark as Not Working"
+            >
+              <Check size={9} /> Working <span className="text-emerald-500 ml-0.5">$500/mo</span>
+            </button>
+          ) : isNotWorking ? (
+            <button
+              onClick={() => toggleWorking(true)}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-medium bg-red-50 text-red-600 border-red-200 hover:bg-red-100 transition-colors"
+              title="Click to mark as Working"
+            >
+              <X size={9} /> Not Working <span className="text-red-400 ml-0.5">$750/mo</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => toggleWorking(true)}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-medium bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 transition-colors"
+              title="Click to set status"
+            >
+              ? Unknown
+            </button>
+          )}
+        </div>
+
         <button onClick={onDelete} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors shrink-0">
           <Trash2 size={13} />
         </button>
@@ -355,11 +386,11 @@ function DeviceCard({ device, onChange, onDelete }: DeviceCardProps) {
             </select>
           </div>
           <div className="col-span-2">
-            <label className="block text-[11px] text-gray-500 mb-1">Notes</label>
+            <label className="block text-[11px] text-gray-500 mb-1">What needs to be done?</label>
             <textarea
               value={device.notes}
               onChange={e => onChange({ ...device, notes: e.target.value })}
-              placeholder="Any observations..."
+              placeholder="Describe the work required: e.g. replace loop detector, reprogram access codes, align gate sensors, upgrade firmware..."
               rows={2}
               className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400 resize-none"
             />
@@ -661,14 +692,23 @@ export default function SurveyPage() {
       })
       const json = await res.json()
       if (json.devices && Array.isArray(json.devices)) {
+        const condMap: Record<string, SurveyDevice["condition"]> = {
+          good: "Good", fair: "Fair", poor: "Poor",
+          Good: "Good", Fair: "Fair", Poor: "Poor",
+        }
+        const actMap: Record<string, SurveyDevice["action"]> = {
+          keep: "Keep", service: "Service", replace: "Replace",
+          new_install: "New Install", "new install": "New Install",
+          Keep: "Keep", Service: "Service", Replace: "Replace", "New Install": "New Install",
+        }
         const parsed: SurveyDevice[] = json.devices.map((d: Record<string, string>) => ({
           id:        crypto.randomUUID(),
           name:      d.name      ?? "",
           brand:     d.brand     ?? "",
           model:     d.model     ?? "",
           location:  d.location  ?? "",
-          condition: (d.condition as SurveyDevice["condition"]) ?? "",
-          action:    (d.action   as SurveyDevice["action"])    ?? "",
+          condition: condMap[d.condition] ?? "",
+          action:    actMap[d.action]     ?? "",
           notes:     d.notes     ?? "",
         }))
         const merged = [...(survey.devices ?? []), ...parsed]
@@ -693,6 +733,9 @@ export default function SurveyPage() {
     })
     const json = await res.json()
     if (json.survey) {
+      if ('devices' in body) {
+        lastSavedDevicesRef.current = JSON.stringify(json.survey.devices ?? [])
+      }
       setSurvey(json.survey)
       setSurveys(ss => ss.map(s => s.id === json.survey.id ? json.survey : s))
     }
@@ -726,12 +769,17 @@ export default function SurveyPage() {
 
   // ── Auto-save devices (debounced) ─────────────────────────────────────────
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastSavedDevicesRef = useRef<string>("")
   const [autoSaving, setAutoSaving] = useState(false)
 
   useEffect(() => {
     if (!survey) return
+    const current = JSON.stringify(survey.devices ?? [])
+    if (current === lastSavedDevicesRef.current) return
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
     autoSaveTimer.current = setTimeout(async () => {
+      const stillCurrent = JSON.stringify(survey.devices ?? [])
+      if (stillCurrent === lastSavedDevicesRef.current) return
       setAutoSaving(true)
       try {
         await patchSurvey({ devices: survey.devices })

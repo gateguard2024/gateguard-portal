@@ -7,7 +7,7 @@ import {
   ChevronRight, ChevronLeft,
   Plus, Minus, Check,
   Camera, Network, Wifi, Trash2,
-  Loader2, X, Search,
+  Loader2, X, Search, MapPin, AlertTriangle,
 } from 'lucide-react';
 import {
   calculateLineItems, calculateTotals, generateQuoteNumber, formatCurrency,
@@ -18,10 +18,25 @@ import {
 } from '@/types/quote';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Layers, SlidersHorizontal } = require('lucide-react') as any;
+const { Layers, SlidersHorizontal, ClipboardList, ArrowUpRight } = require('lucide-react') as any;
 
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
-type AppMode = 'pick' | 'wizard' | 'line_item';
+type AppMode = 'pick' | 'wizard' | 'line_item' | 'survey_import';
+
+interface SurveyRecord {
+  id: string;
+  survey_number: string | null;
+  property_name: string | null;
+  property_address: string | null;
+  surveyor_name: string | null;
+  survey_date: string | null;
+  status: string | null;
+  devices: unknown[] | null;
+  ai_bom: unknown[] | null;
+  ai_sow: string | null;
+  ai_summary: string | null;
+  quote_id: string | null;
+}
 
 interface QuoteMeta {
   title: string;
@@ -442,6 +457,29 @@ export default function NewQuotePage() {
   const [survey, setSurvey]       = useState<SiteSurvey>(defaultSurvey);
   const [wzSaving, setWzSaving]   = useState(false);
 
+  // ── Survey import state ──────────────────────────────────────────────────────
+  const [surveyList, setSurveyList]               = useState<SurveyRecord[]>([]);
+  const [surveySearch, setSurveySearch]           = useState('');
+  const [surveyLoading, setSurveyLoading]         = useState(false);
+  const [selectedSurveyId, setSelectedSurveyId]   = useState<string | null>(null);
+  const [surveyImporting, setSurveyImporting]     = useState(false);
+  const [surveyImportError, setSurveyImportError] = useState<string | null>(null);
+
+  // Fetch surveys when survey_import mode is activated
+  useEffect(() => {
+    if (appMode !== 'survey_import') return;
+    setSurveyLoading(true);
+    fetch('/api/surveys?limit=100')
+      .then(r => r.ok ? r.json() : { surveys: [] })
+      .then(d => {
+        const all: SurveyRecord[] = d.surveys ?? [];
+        // Filter to surveys that have AI output
+        setSurveyList(all.filter(s => (Array.isArray(s.ai_bom) && s.ai_bom.length > 0) || !!s.ai_sow));
+      })
+      .catch(() => setSurveyList([]))
+      .finally(() => setSurveyLoading(false));
+  }, [appMode]);
+
   // Auto-populate client info when coming from a customer page (?client_org_id=)
   const prefilledRef = useRef(false)
   useEffect(() => {
@@ -599,6 +637,29 @@ export default function NewQuotePage() {
     }
   }
 
+  /* ── Create quote (survey import mode) ────────────────────────────────────── */
+  async function createSurveyImportQuote() {
+    if (!selectedSurveyId) return;
+    setSurveyImporting(true);
+    setSurveyImportError(null);
+    try {
+      const res = await fetch(`/api/surveys/${selectedSurveyId}/create-quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(err.error ?? 'Failed to create quote');
+      }
+      const result = await res.json();
+      router.push(`/quotes/${result.quote_id}`);
+    } catch (e) {
+      setSurveyImportError(e instanceof Error ? e.message : 'Failed to create quote');
+      setSurveyImporting(false);
+    }
+  }
+
   /* ══════════════════════════════════════════════════════════════════════════
      MODE PICKER
   ══════════════════════════════════════════════════════════════════════════ */
@@ -642,9 +703,192 @@ export default function NewQuotePage() {
               <ChevronRight className="w-3.5 h-3.5" />
             </div>
           </button>
+
+          {/* From Site Survey */}
+          <button type="button" onClick={() => setAppMode('survey_import')}
+            className="text-left p-6 bg-card border-2 border-border hover:border-emerald-400/50 rounded-2xl transition-all group sm:col-span-2">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-xl bg-emerald-400/10 flex items-center justify-center shrink-0 group-hover:bg-emerald-400/20 transition-colors">
+                <ClipboardList className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="text-base font-semibold text-foreground">From Site Survey</p>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-400/10 text-emerald-400 border border-emerald-400/20 font-medium">Recommended</span>
+                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Import a completed survey — property info, SOW, and BOM auto-fill your quote. Fastest path to a sent quote.
+                </p>
+                <div className="mt-3 flex items-center gap-1.5 text-emerald-400 text-xs font-medium">
+                  <span>Pick a survey</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </div>
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     FROM SITE SURVEY
+  ══════════════════════════════════════════════════════════════════════════ */
+  if (appMode === 'survey_import') {
+    const filteredSurveys = surveyList.filter(s =>
+      !surveySearch.trim() ||
+      (s.property_name ?? '').toLowerCase().includes(surveySearch.toLowerCase())
+    );
+    const selected = surveyList.find(s => s.id === selectedSurveyId) ?? null;
+
+    return (
+      <div className="p-6 max-w-2xl mx-auto flex flex-col" style={{ minHeight: 'calc(100vh - 80px)' }}>
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-6">
+          <button onClick={() => setAppMode('pick')} className="p-2 rounded-lg hover:bg-card text-muted-foreground hover:text-foreground transition-colors">
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">From Site Survey</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Select a completed survey to auto-fill your quote</p>
+          </div>
         </div>
 
-        <p className="text-xs text-muted-foreground text-center">You can also start from a site survey — go to <span className="text-brand-400">Field → Site Surveys</span> and click Create Quote.</p>
+        {/* Search */}
+        <div className="relative mb-4">
+          <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground pointer-events-none" />
+          <input
+            value={surveySearch}
+            onChange={e => setSurveySearch(e.target.value)}
+            placeholder="Search by property name…"
+            className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
+          />
+        </div>
+
+        {/* Survey list */}
+        <div className="flex-1 overflow-auto space-y-3 mb-4">
+          {surveyLoading ? (
+            // Skeleton
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="rounded-xl border border-gray-200 bg-white shadow-sm p-4 animate-pulse">
+                <div className="h-3 bg-gray-200 rounded w-24 mb-2" />
+                <div className="h-4 bg-gray-200 rounded w-48 mb-2" />
+                <div className="h-3 bg-gray-200 rounded w-64" />
+              </div>
+            ))
+          ) : filteredSurveys.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <ClipboardList className="w-10 h-10 mx-auto mb-3 opacity-20" />
+              <p className="text-sm font-medium text-foreground mb-1">No surveys with AI output found</p>
+              <p className="text-xs text-muted-foreground">Run the AI Proposal generator on a survey first, then return here.</p>
+            </div>
+          ) : (
+            filteredSurveys.map(s => {
+              const isSelected = s.id === selectedSurveyId;
+              const bomCount   = Array.isArray(s.ai_bom) ? s.ai_bom.length : 0;
+              const devCount   = Array.isArray(s.devices) ? s.devices.length : 0;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setSelectedSurveyId(isSelected ? null : s.id)}
+                  className={`w-full text-left rounded-xl border p-4 shadow-sm transition-all ${
+                    isSelected
+                      ? 'border-[#6B7EFF] bg-indigo-50/30 ring-1 ring-[#6B7EFF]/20'
+                      : 'border-gray-200 bg-white hover:border-[#6B7EFF]/40'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      {/* Survey number + date */}
+                      <div className="flex items-center gap-2 mb-1">
+                        {s.survey_number && (
+                          <span className="font-mono text-xs text-gray-400">{s.survey_number}</span>
+                        )}
+                        {s.survey_date && (
+                          <span className="text-xs text-gray-400">{new Date(s.survey_date).toLocaleDateString()}</span>
+                        )}
+                      </div>
+                      {/* Property name */}
+                      <p className="font-semibold text-foreground text-sm truncate">{s.property_name ?? 'Unnamed Property'}</p>
+                      {/* Address */}
+                      {s.property_address && (
+                        <div className="flex items-center gap-1 mt-1">
+                          <MapPin className="w-3 h-3 text-gray-400 shrink-0" />
+                          <span className="text-xs text-gray-500 truncate">{s.property_address}</span>
+                        </div>
+                      )}
+                      {/* Badges row */}
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        {devCount > 0 && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
+                            {devCount} device{devCount !== 1 ? 's' : ''}
+                          </span>
+                        )}
+                        {bomCount > 0 && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
+                            {bomCount} BOM item{bomCount !== 1 ? 's' : ''}
+                          </span>
+                        )}
+                        {s.status && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${
+                            s.status === 'quote_created'
+                              ? 'bg-brand-400/10 text-brand-400 border-brand-400/20'
+                              : s.status === 'complete'
+                              ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                              : 'bg-gray-100 text-gray-500 border-gray-200'
+                          }`}>
+                            {s.status.replace(/_/g, ' ')}
+                          </span>
+                        )}
+                        {s.quote_id && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200">
+                            Quote exists
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {/* Checkmark */}
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${
+                      isSelected ? 'border-[#6B7EFF] bg-[#6B7EFF]' : 'border-gray-300'
+                    }`}>
+                      {isSelected && <Check className="w-3 h-3 text-white" />}
+                    </div>
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+
+        {/* Sticky action bar */}
+        <div className="sticky bottom-0 bg-white border-t border-gray-200 -mx-6 px-6 py-4">
+          {surveyImportError && (
+            <div className="mb-3 flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>{surveyImportError}</span>
+            </div>
+          )}
+          <div className="flex items-center gap-4">
+            {selected && (
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-muted-foreground">Selected</p>
+                <p className="text-sm font-medium text-foreground truncate">{selected.property_name ?? 'Survey'}</p>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={createSurveyImportQuote}
+              disabled={!selectedSurveyId || surveyImporting}
+              className="flex items-center gap-2 bg-[#6B7EFF] hover:bg-blue-700 text-white rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-colors ml-auto"
+            >
+              {surveyImporting
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating…</>
+                : <><ClipboardList className="w-4 h-4" /> Create Quote from Survey</>
+              }
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
