@@ -10,6 +10,7 @@ const supabase = createClient(
 )
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60   // Haiku + 8192 tokens can take 30–50s; default 10s causes truncation
 
 // POST /api/surveys/[id]/generate
 // Calls Claude to generate SOW, BOM, recommendations from survey devices + notes.
@@ -214,13 +215,14 @@ ${survey.voice_transcript ? `VOICE TRANSCRIPT:\n${survey.voice_transcript}` : ''
     } catch (_) { /* columns may not exist — run migration 054 to add them */ }
   })()
 
-  // Re-fetch the updated survey to return full data
-  const { data: updated, error: refetchErr } = await supabase
-    .from('surveys')
-    .select('*')
-    .eq('id', params.id)
-    .single()
-
-  if (refetchErr) return NextResponse.json({ error: refetchErr.message }, { status: 500 })
-  return NextResponse.json({ survey: updated })
+  // Return merged data in-memory — avoids a second round-trip and keeps total
+  // execution time well under maxDuration (Vercel truncates on timeout, not on payload size).
+  return NextResponse.json({
+    survey: {
+      ...survey,
+      ...coreUpdate,
+      ai_urgent_items:  generated.ai_urgent_items  ?? [],
+      ai_install_notes: generated.ai_install_notes ?? [],
+    },
+  })
 }
