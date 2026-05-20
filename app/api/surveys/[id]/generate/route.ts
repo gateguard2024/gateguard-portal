@@ -86,7 +86,13 @@ Respond ONLY with valid JSON in this exact shape:
   "ai_urgent_items": [...],
   "ai_install_notes": [...],
   "ai_timeline": "..."
-}`
+}
+
+CRITICAL JSON RULES — your response must be parseable by JSON.parse():
+1. Use the two-character sequence \\n (backslash + n) for line breaks in string values — NEVER a literal newline character.
+2. Use \\t for tabs — NEVER a literal tab character inside a string value.
+3. No trailing commas after the last item in any array or object.
+4. All string values must use double quotes, properly escaped.`
 
   const userContent = `Property: ${survey.property_name || 'Unknown'}${survey.property_address ? `\nAddress: ${survey.property_address}` : ''}
 Survey Date: ${survey.survey_date ?? 'Today'}
@@ -99,51 +105,85 @@ ${survey.notes_raw ? `SURVEYOR NOTES:\n${survey.notes_raw}` : ''}
 ${survey.voice_transcript ? `VOICE TRANSCRIPT:\n${survey.voice_transcript}` : ''}`
 
   /**
-   * Repair common JSON issues from LLM output:
-   * - Literal newlines / tabs inside string values (must be \n, \t)
-   * - Literal carriage returns
-   * Walks the string character-by-character so it never touches structural JSON chars.
+   * Repair common JSON issues produced by LLMs:
+   *
+   * 1. Literal control characters (0x00–0x1F) inside string values
+   *    — \n → \\n, \r → \\r, \t → \\t, others → \\uXXXX
+   * 2. Trailing commas in arrays and objects  → removed
+   *
+   * Walks char-by-char tracking string/escape state so structural JSON is
+   * never touched.
    */
-  function repairJsonString(raw: string): string {
-    let inString = false
+  function repairLlmJson(raw: string): string {
+    // ── pass 1: escape bare control characters inside strings ──────────────
+    let inStr    = false
     let escaped  = false
-    let out      = ''
+    let p1       = ''
     for (let i = 0; i < raw.length; i++) {
-      const ch = raw[i]
-      if (escaped) { out += ch; escaped = false; continue }
-      if (ch === '\\') { escaped = true; out += ch; continue }
-      if (ch === '"')  { inString = !inString; out += ch; continue }
-      if (inString) {
-        if (ch === '\n') { out += '\\n'; continue }
-        if (ch === '\r') { out += '\\r'; continue }
-        if (ch === '\t') { out += '\\t'; continue }
+      const ch   = raw[i]
+      const code = ch.charCodeAt(0)
+      if (escaped)            { p1 += ch; escaped = false; continue }
+      if (ch === '\\')        { escaped = true;  p1 += ch; continue }
+      if (ch === '"')         { inStr = !inStr;  p1 += ch; continue }
+      if (inStr && code < 0x20) {
+        if      (code === 0x0A) p1 += '\\n'
+        else if (code === 0x0D) p1 += '\\r'
+        else if (code === 0x09) p1 += '\\t'
+        else p1 += `\\u${code.toString(16).padStart(4, '0')}`
+        continue
       }
-      out += ch
+      p1 += ch
     }
-    return out
+
+    // ── pass 2: remove trailing commas before ] or } ───────────────────────
+    // Handles both tightly packed and whitespace-separated forms.
+    const p2 = p1.replace(/,(\s*[}\]])/g, '$1')
+
+    return p2
   }
 
   let generated: Record<string, unknown>
   try {
     const message = await anthropic.messages.create({
       model:      'claude-haiku-4-5-20251001',
-      max_tokens: 8192,   // Haiku max — SOW + full BOM can easily exceed 4096
+      max_tokens: 8192,
       messages:   [{ role: 'user', content: userContent }],
       system:     systemPrompt,
     })
 
-    const text = message.content[0].type === 'text' ? message.content[0].text : ''
-    // Strip markdown code fences if Claude wrapped in ```json
-    const stripped = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
-    // Extract the outermost JSON object (handles any preamble/postamble)
+    const raw = message.content[0].type === 'text' ? message.content[0].text : ''
+
+    // Strip optional markdown fences
+    const stripped = raw
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```\s*$/, '')
+      .trim()
+
+    // Grab the outermost {...} block (guards against preamble / postamble)
     const match = stripped.match(/\{[\s\S]*\}/)
-    if (!match) throw new Error(`No JSON object in Claude response. Raw: ${stripped.slice(0, 300)}`)
-    // Repair literal newlines inside string values, then parse
-    const repaired = repairJsonString(match[0])
-    generated = JSON.parse(repaired)
+    if (!match) {
+      throw new Error(`Claude returned no JSON object. Preview: ${stripped.slice(0, 400)}`)
+    }
+
+    const repaired = repairLlmJson(match[0])
+
+    try {
+      generated = JSON.parse(repaired)
+    } catch (parseErr) {
+      // Last-resort: log first 500 chars around the error position so we can debug
+      const pos = parseErr instanceof SyntaxError
+        ? parseInt((parseErr.message.match(/position (\d+)/) ?? [])[1] ?? '0', 10)
+        : 0
+      const ctx = repaired.slice(Math.max(0, pos - 80), pos + 80)
+      console.error('[generate] JSON still invalid after repair. Context around error:', JSON.stringify(ctx))
+      console.error('[generate] Parse error:', parseErr)
+      throw parseErr
+    }
   } catch (err) {
     console.error('Claude generation error:', err)
-    return NextResponse.json({ error: `AI generation failed: ${err instanceof Error ? err.message : String(err)}` }, { status: 500 })
+    return NextResponse.json({
+      error: `AI generation failed: ${err instanceof Error ? err.message : String(err)}`,
+    }, { status: 500 })
   }
 
   // Save back to survey — split into two updates so a missing column on one
