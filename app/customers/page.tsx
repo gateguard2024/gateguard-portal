@@ -8,6 +8,8 @@ import {
   Loader2, RefreshCw, X,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { SkeletonRow } from "@/components/ui/SkeletonRow";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { DollarSign } = require("lucide-react") as any;
@@ -220,9 +222,7 @@ export default function CustomersPage() {
 
         {/* States */}
         {loading && (
-          <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
-            <Loader2 size={18} className="animate-spin" /> Loading accounts…
-          </div>
+          <SkeletonRow rows={6} cols={4} />
         )}
 
         {!loading && error && (
@@ -235,9 +235,11 @@ export default function CustomersPage() {
         )}
 
         {!loading && !error && records.length === 0 && (
-          <div className="text-center py-16 text-muted-foreground text-sm">
-            No accounts found{search ? ` matching "${search}"` : ""}.
-          </div>
+          <EmptyState
+            icon={<Users size={32} className="text-muted-foreground" />}
+            title="No customers yet"
+            description={search ? `No accounts found matching "${search}"` : "Add your first customer to get started"}
+          />
         )}
 
         {/* Account cards */}

@@ -8,6 +8,7 @@ import {
   Plus, Search, X, MoreHorizontal, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SkeletonRow } from '@/components/ui/SkeletonRow';
 import {
   DndContext,
   DragOverlay,
@@ -512,13 +513,8 @@ export default function OpportunitiesPage() {
       {/* Kanban Board */}
       <div className="flex-1 overflow-x-auto px-6 py-5">
         {loading ? (
-          <div className="flex gap-4">
-            {KANBAN_STAGES.map((s) => (
-              <div
-                key={s}
-                className="min-w-[240px] max-w-[260px] h-64 bg-slate-100 rounded-xl animate-pulse"
-              />
-            ))}
+          <div className="px-6 py-5">
+            <SkeletonRow rows={6} cols={5} />
           </div>
         ) : (
           <DndContext
@@ -564,6 +560,12 @@ export default function OpportunitiesPage() {
                         {opps.map((opp) => (
                           <SortableOppCard key={opp.id} opp={opp} />
                         ))}
+
+                        {opps.length === 0 && (
+                          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground/50">
+                            <p className="text-xs">No opportunities</p>
+                          </div>
+                        )}
 
                         {/* Add button */}
                         <button

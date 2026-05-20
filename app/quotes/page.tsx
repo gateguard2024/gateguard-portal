@@ -10,6 +10,8 @@ import {
 const { ArrowUpRight } = require('lucide-react') as any;
 import { formatCurrency } from '@/lib/quote-calculator';
 import { QuoteStatus } from '@/types/quote';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { SkeletonRow } from '@/components/ui/SkeletonRow';
 
 // ── API quote shape ───────────────────────────────────────────────────────────
 interface ApiQuote {
@@ -189,18 +191,14 @@ export default function QuotesPage() {
 
       {/* Table */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
-        {loading && (
-          <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
-            <Loader2 className="w-5 h-5 animate-spin" />
-            <span className="text-sm">Loading quotes…</span>
-          </div>
-        )}
-        {error && !loading && (
+        {loading ? (
+          <SkeletonRow rows={5} cols={7} />
+        ) : error ? (
           <div className="flex items-center justify-center gap-2 py-16 text-red-400">
             <span className="text-sm">{error}</span>
           </div>
-        )}
-        {!loading && !error && filtered.length > 0 && <table className="w-full">
+        ) : filtered.length > 0 ? (
+          <table className="w-full">
           <thead>
             <tr className="border-b border-border bg-background/50">
               {['Quote #','Property','Status','Setup','Monthly','Dealer MRR','Date',''].map((h,i) => (
@@ -260,13 +258,14 @@ export default function QuotesPage() {
               );
             })}
           </tbody>
-        </table>}
-        {!loading && !error && filtered.length === 0 && (
-          <div className="text-center py-16 text-muted-foreground">
-            <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
-            <p className="font-medium">No quotes found</p>
-            <p className="text-sm mt-1">Try adjusting your search or filter</p>
-          </div>
+        </table>
+        ) : (
+          <EmptyState
+            icon={<FileText size={32} className="text-muted-foreground" />}
+            title="No quotes yet"
+            description="Build your first proposal to start closing deals"
+            action={{ label: 'New Quote', onClick: () => window.location.href = '/quotes/new' }}
+          />
         )}
       </div>
     </div>

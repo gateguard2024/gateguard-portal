@@ -9,6 +9,8 @@ import {
   Send, X, Loader2,
 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { SkeletonRow } from '@/components/ui/SkeletonRow'
 
 interface Lead {
   id: string
@@ -587,20 +589,14 @@ export default function LeadsPage() {
         {/* Table */}
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           {loading ? (
-            <div className="flex items-center justify-center py-16 text-muted-foreground">
-              <div className="animate-spin w-5 h-5 border-2 border-brand-400 border-t-transparent rounded-full mr-3" />
-              Loading leads…
-            </div>
+            <SkeletonRow rows={5} cols={7} />
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-              <AlertCircle size={36} className="mb-3 opacity-20" />
-              <p className="font-medium">{q || filterStage ? 'No leads match your filters' : 'No leads yet'}</p>
-              {(q || filterStage) && (
-                <button onClick={() => { setQ(''); setFilter(null) }} className="mt-2 text-sm text-brand-400 hover:underline">
-                  Clear filters
-                </button>
-              )}
-            </div>
+            <EmptyState
+              icon={<Users size={32} className="text-muted-foreground" />}
+              title={q || filterStage ? 'No leads match your filters' : 'No leads yet'}
+              description={q || filterStage ? 'Try adjusting your search or filters' : 'Capture your first lead to start building pipeline'}
+              action={(q || filterStage) ? { label: 'Clear filters', onClick: () => { setQ(''); setFilter(null); } } : undefined}
+            />
           ) : (
             <table className="w-full text-sm">
               <thead>

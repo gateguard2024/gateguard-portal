@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ShieldCheck } = require("lucide-react") as any;
+import { EmptyState } from "@/components/ui/EmptyState";
+import { SkeletonRow } from "@/components/ui/SkeletonRow";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -247,16 +249,13 @@ export default function CompliancePage() {
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
-              <Loader2 size={16} className="animate-spin" />
-              <span className="text-xs">Loading permits…</span>
-            </div>
+            <SkeletonRow rows={5} cols={8} />
           ) : permits.length === 0 ? (
-            <div className="py-12 text-center">
-              <ShieldCheck size={28} className="mx-auto mb-2 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">No permits recorded yet</p>
-              <p className="text-xs text-muted-foreground/60 mt-1">Click Add Permit to start tracking compliance</p>
-            </div>
+            <EmptyState
+              icon={<ShieldCheck size={32} className="text-muted-foreground" />}
+              title="No permits on file"
+              description="Click Add Permit to start tracking compliance"
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">

@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { Edit2, List } = require('lucide-react') as any;
+import { EmptyState } from '@/components/ui/EmptyState';
+import { SkeletonRow } from '@/components/ui/SkeletonRow';
 import { cn } from "@/lib/utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -589,7 +591,7 @@ export default function MaintenancePage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <TopBar title="Maintenance" subtitle="Work Orders & Asset Management" />
+      <TopBar title="Work Orders" subtitle="Jobs, Scheduling & Service History" />
 
       <WorkOrderSlideOver
         open={slideOpen}
@@ -700,15 +702,14 @@ export default function MaintenancePage() {
             </div>
 
             {loading ? (
-              <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
-                <RefreshCw size={16} className="animate-spin mr-2" /> Loading work orders…
-              </div>
+              <SkeletonRow rows={5} cols={4} />
             ) : filtered.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-                <Wrench size={32} className="mb-3 opacity-20" />
-                <p className="text-sm font-medium">No work orders found</p>
-                <p className="text-xs mt-1">Click "New Work Order" to create one</p>
-              </div>
+              <EmptyState
+                icon={<Wrench size={32} className="text-muted-foreground" />}
+                title="No work orders yet"
+                description="Create your first work order to get started."
+                action={{ label: "New Work Order", onClick: () => setSlideOpen(true) }}
+              />
             ) : (
               <table className="w-full text-xs">
                 <thead>

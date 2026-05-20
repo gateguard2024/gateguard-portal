@@ -256,11 +256,10 @@ interface EditSlideOverProps {
 
 // ── WorkOrderTimeline ─────────────────────────────────────────────────────────
 const TIMELINE_STEPS = [
-  { key: 'created',   label: 'Created'  },
-  { key: 'assigned',  label: 'Assigned' },
-  { key: 'en_route',  label: 'En Route' },
-  { key: 'on_site',   label: 'On Site'  },
-  { key: 'completed', label: 'Completed'},
+  { key: 'open',        label: 'Created',     Icon: FileText    },
+  { key: 'scheduled',   label: 'Scheduled',   Icon: Calendar    },
+  { key: 'in_progress', label: 'In Progress', Icon: Wrench      },
+  { key: 'completed',   label: 'Completed',   Icon: CheckCircle2 },
 ] as const
 
 function statusToStepIndex(status: WOStatus): number {
@@ -268,76 +267,70 @@ function statusToStepIndex(status: WOStatus): number {
     case 'open':        return 0
     case 'scheduled':   return 1
     case 'in_route':    return 2
-    case 'in_progress': return 3
-    case 'on_site':     return 3
-    case 'completed':   return 4
+    case 'in_progress': return 2
+    case 'on_site':     return 2
+    case 'completed':   return 3
     default:            return 0
   }
 }
 
 function WorkOrderTimeline({ status }: { status: WOStatus }) {
-  if (status === 'cancelled') {
-    return (
-      <div className="mb-6 bg-card border border-border rounded-xl px-5 py-4 flex items-center gap-2">
-        <span className="w-2 h-2 rounded-full bg-slate-400 shrink-0" />
-        <span className="text-sm font-semibold text-slate-400">Cancelled</span>
-      </div>
-    )
-  }
-
-  const activeIndex = statusToStepIndex(status)
+  const stepIndex    = status === 'cancelled' ? -1 : statusToStepIndex(status)
+  const currentStatus = status
 
   return (
     <div className="mb-6 bg-card border border-border rounded-xl px-5 py-4">
-      <div className="flex items-center">
+      <div className="flex items-center gap-0">
         {TIMELINE_STEPS.map((step, i) => {
-          const isCompleted = i < activeIndex
-          const isCurrent   = i === activeIndex
-          const isFuture    = i > activeIndex
+          const isActive = currentStatus === step.key || (step.key === 'in_progress' && (currentStatus === 'in_route' || currentStatus === 'on_site'))
+          const isPast   = stepIndex > i
+          const isFuture = stepIndex < i || stepIndex === -1
 
           return (
             <div key={step.key} className="flex items-center flex-1 last:flex-none">
-              {/* Step */}
-              <div className="flex flex-col items-center gap-1.5 shrink-0">
-                <div
-                  className={cn(
-                    'w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors',
-                    isCompleted && 'bg-emerald-500 text-white',
-                    isCurrent   && 'bg-[#6B7EFF] text-white ring-4 ring-[#6B7EFF]/20',
-                    isFuture    && 'bg-white border-2 border-border text-muted-foreground',
-                  )}
-                >
-                  {isCompleted ? (
-                    <Check size={13} strokeWidth={3} />
+              {/* Step node */}
+              <div className="flex flex-col items-center gap-1 shrink-0">
+                <div className={cn(
+                  'w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all',
+                  isPast   && 'bg-emerald-500 border-emerald-500 text-white',
+                  isActive && !isPast && 'bg-[#6B7EFF] border-[#6B7EFF] text-white shadow-md shadow-[#6B7EFF]/30',
+                  isFuture && !isActive && 'bg-white border-slate-200 text-slate-300',
+                )}>
+                  {isPast ? (
+                    <Check size={14} strokeWidth={2.5} />
                   ) : (
-                    <span>{i + 1}</span>
+                    <step.Icon size={13} />
                   )}
                 </div>
-                <span
-                  className={cn(
-                    'text-[10px] font-medium whitespace-nowrap leading-tight',
-                    isCompleted && 'text-emerald-500',
-                    isCurrent   && 'text-[#6B7EFF] font-semibold',
-                    isFuture    && 'text-muted-foreground',
-                  )}
-                >
+                <span className={cn(
+                  'text-[10px] font-medium whitespace-nowrap',
+                  isPast   && 'text-emerald-600',
+                  isActive && !isPast && 'text-[#6B7EFF]',
+                  isFuture && !isActive && 'text-slate-400',
+                )}>
                   {step.label}
                 </span>
               </div>
 
               {/* Connector line (skip after last step) */}
               {i < TIMELINE_STEPS.length - 1 && (
-                <div
-                  className={cn(
-                    'flex-1 h-0.5 mx-1 mb-5 rounded-full transition-colors',
-                    i < activeIndex ? 'bg-emerald-500' : 'bg-border',
-                  )}
-                />
+                <div className={cn(
+                  'flex-1 h-0.5 mx-1 mb-5 rounded-full transition-all',
+                  stepIndex > i ? 'bg-emerald-400' : 'bg-slate-100',
+                )} />
               )}
             </div>
           )
         })}
       </div>
+
+      {/* Cancelled state: red badge below the steps */}
+      {status === 'cancelled' && (
+        <div className="mt-3 flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-red-400 shrink-0" />
+          <span className="text-xs font-semibold text-red-500">This work order has been cancelled</span>
+        </div>
+      )}
     </div>
   )
 }

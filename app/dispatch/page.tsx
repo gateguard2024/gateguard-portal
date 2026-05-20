@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { List, Search } = require("lucide-react") as any;
+import { SkeletonRow } from '@/components/ui/SkeletonRow';
 import {
   DndContext,
   DragOverlay,
@@ -1746,8 +1747,8 @@ export default function DispatchPage() {
           {/* Kanban Board */}
           <div className="flex-[2] min-w-0">
             {loading ? (
-              <div className="flex items-center justify-center py-20 text-slate-400 text-sm">
-                <RefreshCw size={16} className="animate-spin mr-2" /> Loading jobs…
+              <div className="bg-white border border-border rounded-xl overflow-hidden">
+                <SkeletonRow rows={5} cols={4} />
               </div>
             ) : (
               <DndContext
@@ -1780,8 +1781,8 @@ export default function DispatchPage() {
                           />
                         ))}
                         {colJobs.length === 0 && (
-                          <div className="text-center text-[11px] text-slate-400 py-6 border-2 border-dashed border-slate-200 rounded-xl">
-                            Drop here
+                          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground/50 border-2 border-dashed border-slate-200 rounded-xl">
+                            <p className="text-xs">No jobs</p>
                           </div>
                         )}
                       </DroppableColumn>

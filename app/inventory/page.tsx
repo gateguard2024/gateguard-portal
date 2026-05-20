@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { SkeletonRow } from "@/components/ui/SkeletonRow";
 import {
   Plus,
   X,
@@ -581,17 +583,13 @@ export default function InventoryPage() {
             </div>
 
             {loading ? (
-              <div className="py-16 text-center text-slate-400">
-                <Package size={28} className="mx-auto mb-3 opacity-30 animate-pulse" />
-                <p className="text-sm">Loading inventory…</p>
-              </div>
+              <SkeletonRow rows={5} cols={8} />
             ) : warehouseItems.length === 0 ? (
-              <div className="py-16 text-center text-slate-400">
-                <Package size={32} className="mx-auto mb-3 opacity-30" />
-                <p className="text-sm font-medium">
-                  {items.length === 0 ? "No inventory items yet. Add your first item." : "No items match your search."}
-                </p>
-              </div>
+              <EmptyState
+                icon={<Package size={32} className="text-muted-foreground" />}
+                title="No items in stock"
+                description={items.length === 0 ? "Add your first inventory item to get started" : "No items match your search"}
+              />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -691,16 +689,13 @@ export default function InventoryPage() {
             </div>
 
             {loading ? (
-              <div className="py-16 text-center text-slate-400">
-                <Truck size={28} className="mx-auto mb-3 opacity-30 animate-pulse" />
-                <p className="text-sm">Loading…</p>
-              </div>
+              <SkeletonRow rows={4} cols={6} />
             ) : truckItems.length === 0 ? (
-              <div className="py-16 text-center text-slate-400">
-                <Truck size={32} className="mx-auto mb-3 opacity-30" />
-                <p className="text-sm font-medium">No van stock items yet.</p>
-                <p className="text-xs mt-1 opacity-70">Items with on_truck &gt; 0 will appear here.</p>
-              </div>
+              <EmptyState
+                icon={<Truck size={32} className="text-muted-foreground" />}
+                title="No van stock items yet"
+                description="Items with on_truck > 0 will appear here"
+              />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -790,16 +785,13 @@ export default function InventoryPage() {
             </div>
 
             {loadingPos ? (
-              <div className="py-16 text-center text-slate-400">
-                <ClipboardList size={28} className="mx-auto mb-3 opacity-30 animate-pulse" />
-                <p className="text-sm">Loading purchase orders…</p>
-              </div>
+              <SkeletonRow rows={4} cols={6} />
             ) : pos.length === 0 ? (
-              <div className="py-16 text-center text-slate-400">
-                <ClipboardList size={32} className="mx-auto mb-3 opacity-30" />
-                <p className="text-sm font-medium">No purchase orders yet.</p>
-                <p className="text-xs mt-1 opacity-70">Create a new PO to track orders from suppliers.</p>
-              </div>
+              <EmptyState
+                icon={<ClipboardList size={32} className="text-muted-foreground" />}
+                title="No purchase orders yet"
+                description="Create a new PO to track orders from suppliers"
+              />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">

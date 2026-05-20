@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { TopBar } from "@/components/layout/TopBar";
 import { AISearch } from "@/components/ai/AISearch";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { SkeletonRow } from "@/components/ui/SkeletonRow";
 import {
   Users,
   TrendingUp,
@@ -302,16 +304,13 @@ export default function RepsPage() {
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
-              <Loader2 size={16} className="animate-spin" />
-              <span className="text-xs">Loading reps…</span>
-            </div>
+            <SkeletonRow rows={5} cols={7} />
           ) : reps.length === 0 ? (
-            <div className="py-12 text-center">
-              <Star size={28} className="mx-auto mb-2 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">No reps yet</p>
-              <p className="text-xs text-muted-foreground/60 mt-1">Click Add Rep to get started</p>
-            </div>
+            <EmptyState
+              icon={<Users size={32} className="text-muted-foreground" />}
+              title="No reps added yet"
+              description="Click Add Rep to build your sales rep network"
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
@@ -355,15 +354,13 @@ export default function RepsPage() {
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center py-8 text-muted-foreground gap-2">
-              <Loader2 size={14} className="animate-spin" />
-              <span className="text-xs">Loading payouts…</span>
-            </div>
+            <SkeletonRow rows={4} cols={5} />
           ) : commissions.length === 0 ? (
-            <div className="py-8 text-center">
-              <Layers size={24} className="mx-auto mb-2 text-muted-foreground/40" />
-              <p className="text-xs text-muted-foreground">No commission records yet</p>
-            </div>
+            <EmptyState
+              icon={<Layers size={32} className="text-muted-foreground" />}
+              title="No commission records yet"
+              description="Commission payouts will appear here once reps close deals"
+            />
           ) : (
             <table className="w-full text-xs">
               <thead>

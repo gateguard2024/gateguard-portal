@@ -42,6 +42,8 @@ import {
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { BookOpen, Cpu, DoorOpen, Camera, Headphones, ThumbsUp } = require('lucide-react') as any;
+import { EmptyState } from '@/components/ui/EmptyState';
+import { SkeletonRow } from '@/components/ui/SkeletonRow';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -961,21 +963,14 @@ export default function KBPage() {
               </div>
 
               {loadingArticles ? (
-                <div className="py-12 flex flex-col items-center justify-center text-gray-400 gap-2">
-                  <div className="w-5 h-5 border-2 border-blue-200 border-t-blue-500 rounded-full animate-spin" />
-                  <p className="text-xs">Loading articles…</p>
-                </div>
+                <SkeletonRow rows={5} cols={3} />
               ) : displayedArticles.length === 0 ? (
-                <div className="py-16 flex flex-col items-center justify-center text-gray-400">
-                  <BookOpen size={32} className="mb-3 opacity-30" />
-                  <p className="text-sm">No articles in this category yet</p>
-                  <button
-                    onClick={() => setShowNewForm(true)}
-                    className="mt-3 text-xs text-blue-600 hover:underline flex items-center gap-1"
-                  >
-                    <Plus size={12} /> Add the first article
-                  </button>
-                </div>
+                <EmptyState
+                  icon={<BookOpen size={32} className="text-muted-foreground" />}
+                  title="No articles yet"
+                  description="No articles in this category yet."
+                  action={{ label: "Add Article", onClick: () => setShowNewForm(true) }}
+                />
               ) : (
                 <div className="divide-y divide-gray-50">
                   {displayedArticles.map((article) => (

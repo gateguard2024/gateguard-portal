@@ -6,6 +6,8 @@ import {
   Building2, Search, Plus, MapPin, Wrench, CheckCircle2,
   AlertTriangle, XCircle, Clock, ChevronRight, Filter,
 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { SkeletonRow } from '@/components/ui/SkeletonRow'
 
 /* ─── types ─────────────────────────────────────────── */
 interface Site {
@@ -370,22 +372,14 @@ export default function SitesPage() {
       {/* Table */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-16 text-slate-400">
-            <div className="animate-spin w-6 h-6 border-2 border-brand-400 border-t-transparent rounded-full mr-3" />
-            Loading properties…
-          </div>
+          <SkeletonRow rows={5} cols={7} />
         ) : sites.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-            <Building2 size={40} className="mb-3 opacity-30" />
-            <p className="font-medium">No properties yet</p>
-            <p className="text-sm mt-1">Add your first installed property to get started</p>
-            <button
-              onClick={() => setShowNew(true)}
-              className="mt-4 flex items-center gap-2 px-4 py-2 bg-brand-400 text-white rounded-lg text-sm font-medium hover:bg-brand-500"
-            >
-              <Plus size={15} /> Add Property
-            </button>
-          </div>
+          <EmptyState
+            icon={<Building2 size={32} className="text-muted-foreground" />}
+            title="No properties yet"
+            description="Add your first installed property to get started"
+            action={{ label: 'Add Property', onClick: () => setShowNew(true) }}
+          />
         ) : (
           <table className="w-full text-sm">
             <thead>

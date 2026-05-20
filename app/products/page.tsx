@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { Edit2, Camera, Cpu, Server, Hammer } = require('lucide-react') as any;
+import { EmptyState } from '@/components/ui/EmptyState';
+import { SkeletonRow } from '@/components/ui/SkeletonRow';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -841,9 +843,8 @@ export default function ProductsPage() {
 
         {/* Loading skeleton */}
         {loading && (
-          <div className="flex items-center justify-center py-20 gap-3 text-muted-foreground">
-            <Loader2 size={20} className="animate-spin"/>
-            <span className="text-sm">Loading products from database…</span>
+          <div className="bg-white border border-border rounded-xl overflow-hidden">
+            <SkeletonRow rows={6} cols={4} />
           </div>
         )}
 
@@ -922,7 +923,16 @@ export default function ProductsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {filtered.map(p=>(
+                    {filtered.length === 0 ? (
+                      <tr><td colSpan={11}>
+                        <EmptyState
+                          icon={<Package size={32} className="text-muted-foreground" />}
+                          title="No products yet"
+                          description="Add your first product to build your equipment catalog."
+                          action={{ label: "Add Product", onClick: () => setModal("add") }}
+                        />
+                      </td></tr>
+                    ) : filtered.map(p=>(
                       <tr key={p.id} className={cn("hover:bg-slate-50/60 transition-colors",selected.has(p.id)&&"bg-blue-50/40")}>
                         <td className="px-4 py-2.5"><input type="checkbox" checked={selected.has(p.id)} onChange={()=>toggleSelect(p.id)} className="rounded border-border text-blue-600"/></td>
                         <td className="px-3 py-2.5"><ProductImage product={p} size={36}/></td>

@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { CheckSquare, Circle, Clock3, Link2, Flag, Repeat, ExternalLink } = require("lucide-react") as any;
+import { EmptyState } from "@/components/ui/EmptyState";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -816,10 +817,11 @@ export default function TodosPage() {
           </div>
         )}
         {!loading && !error && todos.length === 0 && (
-          <div className="text-center py-16 text-muted-foreground">
-            <CheckSquare size={36} className="mx-auto mb-3 opacity-20" />
-            <p className="text-sm">Nothing here — add your first to-do above.</p>
-          </div>
+          <EmptyState
+            icon={<CheckSquare size={32} className="text-muted-foreground" />}
+            title="All clear — no open To-Dos"
+            description="Add a to-do above to track action items"
+          />
         )}
 
         {!loading && !error && open.length > 0 && (

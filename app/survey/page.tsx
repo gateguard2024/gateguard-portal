@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { cn } from "@/lib/utils"
+import { EmptyState } from "@/components/ui/EmptyState"
+import { SkeletonRow } from "@/components/ui/SkeletonRow"
 import {
   Plus, X, Check, Clock, FileText, Download, ArrowRight,
   ChevronRight, MapPin, User, Loader2, RefreshCw,
@@ -868,15 +870,14 @@ export default function SurveyPage() {
           {/* List */}
           <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
             {loading ? (
-              <div className="flex items-center justify-center py-12 text-gray-400">
-                <Loader2 size={20} className="animate-spin" />
-              </div>
+              <SkeletonRow rows={4} cols={3} />
             ) : filtered.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-                <ClipboardList size={28} className="text-gray-300 mb-2" />
-                <p className="text-sm text-gray-500 font-medium">No surveys yet</p>
-                <p className="text-xs text-gray-400 mt-1">Click "New Survey" to get started</p>
-              </div>
+              <EmptyState
+                icon={<ClipboardList size={32} className="text-muted-foreground" />}
+                title="No surveys yet"
+                description="Click New Survey to start a site walk"
+                action={{ label: 'New Survey', onClick: () => setShowNew(true) }}
+              />
             ) : (
               filtered.map(s => {
                 const badge = statusBadge(s.status)
