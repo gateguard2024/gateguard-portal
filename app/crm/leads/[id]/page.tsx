@@ -20,6 +20,7 @@ const SaveIcon = ({ size }: { size: number }) => (
 );
 import { cn } from "@/lib/utils";
 import { QuickActions } from "@/components/shared/QuickActions";
+import { SlideOver, SlideOverFooter } from "@/components/ui/SlideOver";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Lead {
@@ -574,6 +575,177 @@ function ActivityFeed({
   );
 }
 
+// ── Qualify as Opportunity SlideOver ──────────────────────────────────────────
+const QUALIFY_STAGES = [
+  { value: "meet_present",   label: "Prospect" },
+  { value: "survey_request", label: "Qualified" },
+  { value: "propose",        label: "Proposal" },
+  { value: "negotiate",      label: "Negotiation" },
+  { value: "won",            label: "Closed Won" },
+];
+
+interface QualifyForm {
+  name: string;
+  stage: string;
+  amount: string;
+  close_date: string;
+  notes: string;
+}
+
+function QualifySlideOver({ lead, open, onClose, onCreated }: {
+  lead: Lead;
+  open: boolean;
+  onClose: () => void;
+  onCreated: (oppId: string) => void;
+}) {
+  const [form, setForm] = useState<QualifyForm>({
+    name: lead.name || lead.contact || "",
+    stage: "meet_present",
+    amount: lead.estSetup ? String(lead.estSetup) : "",
+    close_date: "",
+    notes: lead.notes || "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Sync lead name when lead changes
+  useEffect(() => {
+    if (open) {
+      setForm(f => ({
+        ...f,
+        name: lead.name || lead.contact || "",
+        amount: lead.estSetup ? String(lead.estSetup) : f.amount,
+        notes: lead.notes || f.notes,
+      }));
+      setErr(null);
+    }
+  }, [open, lead]);
+
+  const fieldCls = "w-full border border-border rounded-lg px-3 h-9 text-sm focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background";
+
+  const handleSave = async () => {
+    if (!form.name.trim()) { setErr("Opportunity name is required."); return; }
+    setSaving(true);
+    setErr(null);
+    try {
+      const res = await fetch("/api/crm/opportunities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name:               form.name.trim(),
+          account_name:       lead.company || lead.name,
+          stage:              form.stage,
+          amount:             form.amount ? parseFloat(form.amount) : null,
+          close_date:         form.close_date || null,
+          description:        form.notes.trim() || null,
+          site_contact_name:  lead.contact,
+          site_contact_email: lead.email,
+          site_contact_phone: lead.phone,
+          units:              lead.units,
+          property_city:      lead.location?.split(",")?.[0]?.trim() ?? null,
+          property_state:     lead.location?.split(",")?.[1]?.trim() ?? null,
+          source:             lead.source,
+          show_lead_id:       lead.id.replace(/^show_/, ""),
+        }),
+      });
+      const json = await res.json();
+      if (res.status === 409 && json.error === "duplicate") {
+        setErr(`An opportunity already exists for this lead: "${json.existing_name}"`);
+        return;
+      }
+      if (!res.ok) { setErr(json.error ?? `HTTP ${res.status}`); return; }
+      onCreated(json.id);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to create opportunity");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <SlideOver
+      open={open}
+      onClose={onClose}
+      title="Qualify as Opportunity"
+      subtitle={`Converting: ${lead.name || lead.contact}`}
+      size="sm"
+      footer={
+        <SlideOverFooter
+          onCancel={onClose}
+          onSave={handleSave}
+          saveLabel="Create Opportunity"
+          saving={saving}
+          disabled={!form.name.trim()}
+        />
+      }
+    >
+      <div className="space-y-4">
+        {err && (
+          <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{err}</div>
+        )}
+
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">Opportunity Name *</label>
+          <input
+            type="text"
+            value={form.name}
+            onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+            placeholder="e.g. Ashford Glen Phase 2"
+            className={fieldCls}
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">Stage</label>
+          <select
+            value={form.stage}
+            onChange={e => setForm(f => ({ ...f, stage: e.target.value }))}
+            className={fieldCls}
+          >
+            {QUALIFY_STAGES.map(s => (
+              <option key={s.value} value={s.value}>{s.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">Est. Value ($)</label>
+          <input
+            type="number"
+            min="0"
+            step="100"
+            value={form.amount}
+            onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+            placeholder="e.g. 45000"
+            className={fieldCls}
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">Expected Close Date</label>
+          <input
+            type="date"
+            value={form.close_date}
+            onChange={e => setForm(f => ({ ...f, close_date: e.target.value }))}
+            className={fieldCls}
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">Notes</label>
+          <textarea
+            value={form.notes}
+            onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+            rows={3}
+            placeholder="Notes about this opportunity…"
+            className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-background resize-none"
+          />
+        </div>
+      </div>
+    </SlideOver>
+  );
+}
+
 // ── Convert to Opportunity Modal ───────────────────────────────────────────────
 const OPP_TYPES = [
   { value: "master_agent",    label: "Master Agent",             desc: "Regional partner managing multiple dealers" },
@@ -677,6 +849,7 @@ export default function LeadDetailPage() {
   const [loading,    setLoading]    = useState(true);
   const [editOpen,           setEditOpen]           = useState(false);
   const [convertOpen,        setConvertOpen]        = useState(false);
+  const [qualifyOpen,        setQualifyOpen]        = useState(false);
   const [repEditing,         setRepEditing]         = useState(false);
   const [repValue,           setRepValue]           = useState("");
   const [converting,         setConverting]         = useState(false);
@@ -869,6 +1042,17 @@ export default function LeadDetailPage() {
         }}
       />
 
+      <QualifySlideOver
+        lead={lead}
+        open={qualifyOpen}
+        onClose={() => setQualifyOpen(false)}
+        onCreated={(oppId) => {
+          setQualifyOpen(false);
+          showToast("Opportunity created! Redirecting…");
+          setTimeout(() => router.push(`/crm/opportunities/${oppId}`), 1000);
+        }}
+      />
+
       <TopBar
         title={lead.name || "Lead Detail"}
         subtitle="Lead detail"
@@ -886,6 +1070,14 @@ export default function LeadDetailPage() {
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-red-200 hover:bg-red-50 transition-colors text-red-500 disabled:opacity-40"
             >
               Mark Lost
+            </button>
+            <button
+              onClick={() => setQualifyOpen(true)}
+              disabled={lead.stage === "won" || lead.stage === "lost" || lead.stage === "converted"}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#6B7EFF] hover:bg-[#5a6de8] text-white transition-colors disabled:opacity-40"
+            >
+              <TrendingUp size={13} />
+              Qualify as Opportunity
             </button>
             <button
               onClick={() => setConvertOpen(true)}

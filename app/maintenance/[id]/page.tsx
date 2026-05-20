@@ -526,6 +526,10 @@ export default function WorkOrderDetailPage() {
   const [partForm, setPartForm] = useState({ part_name: '', part_number: '', quantity: '1', unit_cost: '', action: 'used' })
   const [addingPart, setAddingPart] = useState(false)
 
+  // Mark as Used state
+  const [markingUsed, setMarkingUsed] = useState<string | null>(null)
+  const [usedToast, setUsedToast]     = useState<{ msg: string; type: 'success' | 'warning' } | null>(null)
+
   // Inventory search picker
   const [invSearch, setInvSearch]         = useState('')
   const [invResults, setInvResults]       = useState<InventorySearchResult[]>([])
@@ -752,6 +756,68 @@ export default function WorkOrderDetailPage() {
         method: 'DELETE', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ part_used_id: partId }),
       })
+    }
+  }
+
+  // ── Mark as Used (inventory deduction) ──────────────────────────
+
+  const showToast = (msg: string, type: 'success' | 'warning') => {
+    setUsedToast({ msg, type })
+    setTimeout(() => setUsedToast(null), 4000)
+  }
+
+  const handleMarkAsUsed = async (part: PartUsed) => {
+    const invId = part.inventory_item_id
+    if (!invId) {
+      showToast('This part has no linked inventory item — add it via inventory first.', 'warning')
+      return
+    }
+    const qty = part.qty ?? part.quantity ?? 1
+    setMarkingUsed(part.id)
+    try {
+      // Fetch current inventory item
+      const getRes  = await fetch(`/api/inventory/${invId}`)
+      const getJson = await getRes.json()
+      if (!getRes.ok) { showToast('Could not find inventory item.', 'warning'); return }
+
+      const newOnHand = Math.max(0, (getJson.on_hand ?? 0) - qty)
+
+      // PATCH on_hand
+      const patchRes  = await fetch(`/api/inventory/${invId}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ on_hand: newOnHand }),
+      })
+      const patchJson = await patchRes.json()
+      if (!patchRes.ok) { showToast(patchJson.error ?? 'Failed to deduct stock.', 'warning'); return }
+
+      // Check if now below min_stock → auto-create PO draft
+      if (patchJson.on_hand < (patchJson.min_stock ?? 0)) {
+        const poRes = await fetch('/api/purchase-orders', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+            supplier: getJson.supplier ?? null,
+            status:   'draft',
+            items: [{
+              inventory_item_id: invId,
+              name:     getJson.name,
+              sku:      getJson.sku ?? null,
+              qty:      getJson.reorder_qty ?? 1,
+              unit_cost: getJson.unit_cost ?? 0,
+            }],
+          }),
+        })
+        if (poRes.ok) {
+          showToast(`Stock deducted for "${getJson.name}" — low stock alert: PO draft created.`, 'warning')
+        } else {
+          showToast(`Stock deducted. Low stock — PO draft creation failed.`, 'warning')
+        }
+      } else {
+        showToast(`Deducted ${qty}x "${getJson.name}" from inventory (${newOnHand} remaining).`, 'success')
+      }
+    } finally {
+      setMarkingUsed(null)
     }
   }
 
@@ -1612,6 +1678,20 @@ export default function WorkOrderDetailPage() {
               {/* ── Parts tab ── */}
               {tab === 'parts' && (
                 <div className="space-y-4">
+                  {/* Toast */}
+                  {usedToast && (
+                    <div className={cn(
+                      'flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium border',
+                      usedToast.type === 'success'
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        : 'bg-amber-50 text-amber-800 border-amber-200'
+                    )}>
+                      {usedToast.type === 'success'
+                        ? <CheckCircle2 size={15} className="shrink-0 text-emerald-600" />
+                        : <AlertTriangle size={15} className="shrink-0 text-amber-500" />}
+                      {usedToast.msg}
+                    </div>
+                  )}
                   <div className="bg-card border border-border rounded-xl overflow-hidden">
                     <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
                       <h3 className="text-sm font-semibold flex items-center gap-2">
@@ -1664,9 +1744,24 @@ export default function WorkOrderDetailPage() {
                                 <td className="px-4 py-3 text-right text-muted-foreground">{np.unit_cost != null ? `$${np.unit_cost.toFixed(2)}` : '—'}</td>
                                 <td className="px-4 py-3 text-right font-medium">{np.unit_cost != null ? `$${(np.unit_cost * np.qty).toFixed(2)}` : '—'}</td>
                                 <td className="px-4 py-3 text-right">
-                                  <button onClick={() => handleDeletePart(p.id)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/10 text-red-400 transition-all">
-                                    <Trash2 size={12} />
-                                  </button>
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    {p.inventory_item_id && (
+                                      <button
+                                        title="Mark as Used — deducts from inventory"
+                                        onClick={() => handleMarkAsUsed(p)}
+                                        disabled={markingUsed === p.id}
+                                        className={cn(
+                                          'opacity-0 group-hover:opacity-100 px-2 py-0.5 rounded text-[10px] font-semibold transition-all',
+                                          'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 disabled:opacity-40'
+                                        )}
+                                      >
+                                        {markingUsed === p.id ? '…' : 'Mark Used'}
+                                      </button>
+                                    )}
+                                    <button onClick={() => handleDeletePart(p.id)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/10 text-red-400 transition-all">
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             )

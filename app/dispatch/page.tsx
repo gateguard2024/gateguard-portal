@@ -26,7 +26,7 @@ import type { DragEndEvent } from "@dnd-kit/core";
 
 type Priority   = "urgent" | "normal" | "scheduled";
 type JobType    = "Install" | "Repair" | "PM" | "Site Walk";
-type JobStatus  = "Pending" | "Assigned" | "In Progress" | "Done";
+type JobStatus  = "Pending" | "Assigned" | "En Route" | "On Site" | "In Progress" | "Done";
 type TechStatus = "Available" | "On Site" | "Driving" | "Offline";
 
 interface Job {
@@ -74,9 +74,11 @@ interface Tech {
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const COLUMNS: { status: JobStatus; label: string; accent: string; bg: string }[] = [
-  { status: "Pending",     label: "Pending",     accent: "border-slate-300", bg: "bg-slate-50"  },
-  { status: "Assigned",    label: "Assigned",    accent: "border-blue-300",  bg: "bg-blue-50"   },
-  { status: "In Progress", label: "In Progress", accent: "border-amber-300", bg: "bg-amber-50"  },
+  { status: "Pending",     label: "Pending",     accent: "border-slate-300",  bg: "bg-slate-50"   },
+  { status: "Assigned",    label: "Assigned",    accent: "border-blue-300",   bg: "bg-blue-50"    },
+  { status: "En Route",    label: "En Route",    accent: "border-sky-300",    bg: "bg-sky-50"     },
+  { status: "On Site",     label: "On Site",     accent: "border-cyan-300",   bg: "bg-cyan-50"    },
+  { status: "In Progress", label: "In Progress", accent: "border-amber-300",  bg: "bg-amber-50"   },
   { status: "Done",        label: "Done",        accent: "border-emerald-300", bg: "bg-emerald-50" },
 ];
 
@@ -225,7 +227,9 @@ function JobDetailSlideOver({ job, techs, onClose, onStatusChange }: {
 
   const NEXT_STATUS: Record<JobStatus, JobStatus | null> = {
     Pending:       "Assigned",
-    Assigned:      "In Progress",
+    Assigned:      "En Route",
+    "En Route":    "On Site",
+    "On Site":     "In Progress",
     "In Progress": "Done",
     Done:          null,
   };
@@ -234,6 +238,8 @@ function JobDetailSlideOver({ job, techs, onClose, onStatusChange }: {
   const statusColors: Record<JobStatus, string> = {
     Pending:       "bg-slate-100 text-slate-600",
     Assigned:      "bg-blue-100 text-blue-700",
+    "En Route":    "bg-sky-100 text-sky-700",
+    "On Site":     "bg-cyan-100 text-cyan-700",
     "In Progress": "bg-amber-100 text-amber-700",
     Done:          "bg-emerald-100 text-emerald-700",
   };
@@ -743,7 +749,7 @@ function JobCard({ job, techs, onStatusChange, onSelect, onAssign, isDragging }:
             onClick={e => {
               e.stopPropagation();
               const NEXT: Record<JobStatus, JobStatus | null> = {
-                Pending: "Assigned", Assigned: "In Progress", "In Progress": "Done", Done: null,
+                Pending: "Assigned", Assigned: "En Route", "En Route": "On Site", "On Site": "In Progress", "In Progress": "Done", Done: null,
               };
               const next = NEXT[job.status];
               if (next) onStatusChange(job.id, next);
@@ -1396,6 +1402,10 @@ export default function DispatchPage() {
   const [inviteMsg, setInviteMsg]         = useState<string | null>(null);
   const [scheduleTech, setScheduleTech]   = useState<Tech | null>(null);
   const [activeJobId,  setActiveJobId]    = useState<string | null>(null);
+  const [showMap,      setShowMap]        = useState(true);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mapRef = useRef<any>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -1433,13 +1443,111 @@ export default function DispatchPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // ── Mapbox map init ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!showMap || !mapContainerRef.current) return;
+
+    // Demo tech locations — TODO: replace with real GPS from tech mobile app
+    const demoLocations: Record<string, [number, number]> = {
+      // keyed by tech name fragment for loose matching
+      default0: [-87.6298, 41.8781],   // Chicago
+      default1: [-104.9903, 39.7392],  // Denver
+      default2: [-118.2437, 34.0522],  // Los Angeles
+      default3: [-73.9857, 40.7484],   // New York
+      default4: [-95.3698, 29.7604],   // Houston
+    };
+
+    const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+    if (!token) return;
+
+    // Load Mapbox GL JS from CDN
+    const loadMapbox = async () => {
+      if (!(window as any).mapboxgl) {
+        // Load CSS
+        const link = document.createElement('link');
+        link.rel  = 'stylesheet';
+        link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css';
+        document.head.appendChild(link);
+
+        // Load JS
+        await new Promise<void>((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js';
+          script.onload = () => resolve();
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+      }
+
+      const mapboxgl = (window as any).mapboxgl;
+      if (mapRef.current || !mapContainerRef.current) return;
+
+      mapboxgl.accessToken = token;
+      const map = new mapboxgl.Map({
+        container: mapContainerRef.current,
+        style:     'mapbox://styles/mapbox/dark-v11',
+        center:    [-98.5795, 39.8283], // center of USA
+        zoom:      3.5,
+      });
+      mapRef.current = map;
+
+      map.on('load', () => {
+        // Add tech markers
+        techs.forEach((tech, idx) => {
+          // TODO: replace with real GPS from tech mobile app
+          const coords = demoLocations[`default${idx % 5}`] ?? [-98.5795, 39.8283];
+          const dotColor = tech.status === 'Available' ? '#10b981'
+            : tech.status === 'On Site'   ? '#3b82f6'
+            : tech.status === 'Driving'   ? '#f59e0b'
+            : '#94a3b8';
+
+          const el = document.createElement('div');
+          el.style.cssText = `
+            width: 32px; height: 32px; border-radius: 50%;
+            background: ${dotColor}; border: 3px solid white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 10px; font-weight: 700; color: white; cursor: pointer;
+          `;
+          el.textContent = tech.initials;
+
+          const currentJob = jobs.find(j => j.id === tech.currentJobId);
+          const popupHtml = `
+            <div style="font-family: system-ui; font-size: 12px; padding: 2px;">
+              <p style="font-weight: 700; color: #0f172a; margin: 0 0 2px;">${tech.name}</p>
+              <p style="color: #64748b; margin: 0 0 2px;">${tech.role}</p>
+              <p style="color: ${dotColor}; font-weight: 600; margin: 0;">${tech.status}${currentJob ? ` · ${currentJob.property}` : ''}</p>
+            </div>
+          `;
+
+          new mapboxgl.Marker({ element: el })
+            .setLngLat(coords)
+            .setPopup(new mapboxgl.Popup({ offset: 20 }).setHTML(popupHtml))
+            .addTo(map);
+        });
+      });
+    };
+
+    void loadMapbox();
+
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showMap, techs.length]);
+
   const handleJobStatusChange = async (id: string, newStatus: JobStatus) => {
     // Map UI status → DB status
     const dbStatus: Record<JobStatus, string> = {
-      Pending:     "open",
-      Assigned:    "scheduled",
+      Pending:       "open",
+      Assigned:      "scheduled",
+      "En Route":    "in_route",
+      "On Site":     "on_site",
       "In Progress": "in_progress",
-      Done:        "completed",
+      Done:          "completed",
     };
     await fetch(`/api/maintenance/${id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
@@ -1692,6 +1800,23 @@ export default function DispatchPage() {
               Calendar
             </button>
           </div>
+          {viewMode === "board" && (
+            <button
+              onClick={() => {
+                setShowMap(v => !v);
+                if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
+              }}
+              className={cn(
+                "inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border transition-colors shadow-sm",
+                showMap
+                  ? "bg-[#6B7EFF] text-white border-[#6B7EFF]"
+                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+              )}
+            >
+              <MapPin size={15} />
+              Map
+            </button>
+          )}
           <button
             onClick={fetchData}
             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
@@ -1744,8 +1869,10 @@ export default function DispatchPage() {
         )
       ) : (
         <div className="flex gap-5 items-start">
+          {/* Kanban Board + Map column */}
+          <div className="flex-[2] min-w-0 flex flex-col gap-5">
           {/* Kanban Board */}
-          <div className="flex-[2] min-w-0">
+          <div className="min-w-0">
             {loading ? (
               <div className="bg-white border border-border rounded-xl overflow-hidden">
                 <SkeletonRow rows={5} cols={4} />
@@ -1757,7 +1884,7 @@ export default function DispatchPage() {
                 onDragEnd={handleDragEnd}
                 onDragCancel={() => setActiveJobId(null)}
               >
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-6 gap-3">
                   {COLUMNS.map((col) => {
                     const colJobs = jobs.filter(j => j.status === col.status);
                     return (
@@ -1812,7 +1939,40 @@ export default function DispatchPage() {
                 </DragOverlay>
               </DndContext>
             )}
-          </div>
+          </div>{/* end kanban inner div */}
+
+          {/* Mapbox Map Panel */}
+          {showMap && (
+            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <MapPin size={14} className="text-[#6B7EFF]" />
+                  <h2 className="text-sm font-semibold text-slate-800">Tech Locations</h2>
+                </div>
+                {!process.env.NEXT_PUBLIC_MAPBOX_TOKEN && (
+                  <span className="text-[10px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 font-medium">
+                    Add NEXT_PUBLIC_MAPBOX_TOKEN to enable
+                  </span>
+                )}
+              </div>
+              <div ref={mapContainerRef} className="h-72 bg-slate-900" />
+              <div className="px-4 py-2 border-t border-slate-100 flex items-center gap-3">
+                {(["Available", "On Site", "Driving", "Offline"] as const).map(s => (
+                  <div key={s} className="flex items-center gap-1.5">
+                    <span className={cn("w-2.5 h-2.5 rounded-full", {
+                      "bg-emerald-500": s === "Available",
+                      "bg-blue-500":    s === "On Site",
+                      "bg-amber-400":   s === "Driving",
+                      "bg-slate-400":   s === "Offline",
+                    })} />
+                    <span className="text-[10px] text-slate-500">{s}</span>
+                  </div>
+                ))}
+                <span className="ml-auto text-[10px] text-slate-400 italic">Demo coords — real GPS coming from tech mobile app</span>
+              </div>
+            </div>
+          )}
+          </div>{/* end flex-[2] flex-col */}
 
           {/* Tech Roster */}
           <div className="flex-[1] min-w-0 bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
@@ -1923,19 +2083,6 @@ export default function DispatchPage() {
         </div>
       )}
 
-      {/* Map View */}
-      <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
-          <MapPin size={15} className="text-[#2563EB]" />
-          <h2 className="text-sm font-semibold text-slate-800">Map View</h2>
-        </div>
-        <div className="h-48 bg-slate-100 flex flex-col items-center justify-center gap-2">
-          <MapPin size={24} className="text-slate-300" />
-          <p className="text-sm text-slate-400 font-medium">
-            Live dispatch map — Mapbox integration coming soon
-          </p>
-        </div>
-      </div>
     </div>
   );
 }

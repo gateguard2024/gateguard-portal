@@ -383,6 +383,9 @@ export default function InventoryPage() {
   const [loading, setLoading]           = useState(true);
   const [loadingPos, setLoadingPos]     = useState(false);
 
+  // Tracks inventory item IDs that have a pending PO draft (created during this session)
+  const [poPendingIds, setPoPendingIds] = useState<Set<string>>(new Set());
+
   // Slide-overs / modals
   const [slideOpen, setSlideOpen]       = useState(false);
   const [editItem, setEditItem]         = useState<InventoryItem | null>(null);
@@ -467,6 +470,33 @@ export default function InventoryPage() {
       }
       return [saved, ...prev];
     });
+    // If the saved item is now below min_stock, auto-create a PO draft
+    if (saved.on_hand < saved.min_stock) {
+      void (async () => {
+        try {
+          const res = await fetch('/api/purchase-orders', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({
+              supplier: saved.supplier ?? null,
+              status:   'draft',
+              items: [{
+                inventory_item_id: saved.id,
+                name:     saved.name,
+                sku:      saved.sku ?? null,
+                qty:      saved.reorder_qty ?? 1,
+                unit_cost: saved.unit_cost ?? 0,
+              }],
+            }),
+          });
+          if (res.ok) {
+            const po = await res.json();
+            setPos(prev => [po, ...prev]);
+            setPoPendingIds(prev => new Set([...prev, saved.id]));
+          }
+        } catch (_) { /* non-blocking */ }
+      })();
+    }
   };
 
   const alertCount = lowItems.length + outItems.length;
@@ -655,9 +685,16 @@ export default function InventoryPage() {
                   render: (_v, row) => {
                     const sc = statusConfig[row.status];
                     return (
-                      <span className={cn("inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full", sc.badge)}>
-                        {sc.icon}{sc.label}
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={cn("inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full", sc.badge)}>
+                          {sc.icon}{sc.label}
+                        </span>
+                        {poPendingIds.has(row.id) && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+                            PO Pending
+                          </span>
+                        )}
+                      </div>
                     );
                   },
                 } as Column<InventoryItem>,

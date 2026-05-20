@@ -457,6 +457,11 @@ GateGuard Corporate (SO — System Operator)
 - Anthropic Claude Haiku (`claude-haiku-4-5-20251001`) for AI diagnostic step generation
 - Brivo API (access control)
 - UniFi Network API (network/VLAN management)
+- Mapbox GL JS — territory map (`/map`), site detail pins, dispatch split-view. Env: `NEXT_PUBLIC_MAPBOX_TOKEN`. Get token: mapbox.com → account → Tokens. Free tier: 50K map loads/month.
+- Resend — transactional email (WO notifications, CRM email send/track, dealer welcome emails). Env: `RESEND_API_KEY`
+- Plaud API — voice recording transcription for /tech site survey. Env: `PLAUD_CLIENT_ID`, `PLAUD_SECRET_KEY`. Register: platform.plaud.ai/developer
+- Eagle Eye Networks API — live camera feeds, motion search, archive (`/cameras`)
+- Twilio — SMS notifications (planned: renewal reminders, WO alerts)
 
 ---
 

@@ -73,6 +73,7 @@ interface Opportunity {
   units?: number;
   description?: string;
   created_at: string;
+  updated_at?: string;
   won_at?: string;
 }
 
@@ -171,6 +172,25 @@ const BLANK_FORM: NewOppForm = {
   units: "",
   description: "",
 };
+
+// ── Aging badge helper ────────────────────────────────────────────────────
+function getAgingDays(updated_at: string | undefined): number | null {
+  if (!updated_at) return null;
+  const diffMs = Date.now() - new Date(updated_at).getTime();
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+}
+
+function AgingBadge({ updated_at }: { updated_at?: string }) {
+  const days = getAgingDays(updated_at);
+  if (days == null || days < 3) return null;
+  const isRed = days > 7;
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${isRed ? "bg-red-100 text-red-600" : "bg-amber-100 text-amber-600"}`}>
+      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isRed ? "bg-red-500" : "bg-amber-400"}`} />
+      {days}d
+    </span>
+  );
+}
 
 // Build a flat map of oppId → stage for quick lookup during drag
 function buildStageMap(grouped: Record<Stage, StageGroup>): Record<string, Stage> {
@@ -830,16 +850,17 @@ function OppCard({
         )}
         <p className="text-base font-bold text-[#6B7EFF] mb-2">{fmt$(opp.amount)}</p>
         <div className="flex items-center justify-between">
-          {opp.close_date ? (
-            <span className="text-[10px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
-              {new Date(opp.close_date).toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-              })}
-            </span>
-          ) : (
-            <span />
-          )}
+          <div className="flex items-center gap-1.5">
+            {opp.close_date ? (
+              <span className="text-[10px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
+                {new Date(opp.close_date).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                })}
+              </span>
+            ) : null}
+            <AgingBadge updated_at={opp.updated_at} />
+          </div>
           {opp.owner_initials && (
             <div className="w-6 h-6 rounded-full bg-[#6B7EFF]/20 border border-[#6B7EFF]/30 flex items-center justify-center text-[10px] font-bold text-[#6B7EFF]">
               {opp.owner_initials}

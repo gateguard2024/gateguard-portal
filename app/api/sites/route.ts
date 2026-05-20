@@ -49,15 +49,35 @@ export async function GET(req: NextRequest) {
   // Enrich with asset counts
   const siteIds = (sites ?? []).map(s => s.id)
   let assetCounts: Record<string, number> = {}
+  let offlineAssetCounts: Record<string, number> = {}
   if (siteIds.length > 0) {
     const { data: counts } = await supabase
       .from('site_assets')
-      .select('site_id')
+      .select('site_id, status')
       .in('site_id', siteIds)
-      .eq('status', 'active')
     if (counts) {
       counts.forEach(row => {
-        assetCounts[row.site_id] = (assetCounts[row.site_id] ?? 0) + 1
+        if (row.status === 'active') {
+          assetCounts[row.site_id] = (assetCounts[row.site_id] ?? 0) + 1
+        }
+        if (row.status === 'offline') {
+          offlineAssetCounts[row.site_id] = (offlineAssetCounts[row.site_id] ?? 0) + 1
+        }
+      })
+    }
+  }
+
+  // Enrich with open work order counts
+  let openWoCounts: Record<string, number> = {}
+  if (siteIds.length > 0) {
+    const { data: woCounts } = await supabase
+      .from('work_orders')
+      .select('site_id')
+      .in('site_id', siteIds)
+      .in('status', ['open', 'scheduled', 'in_progress'])
+    if (woCounts) {
+      woCounts.forEach(row => {
+        openWoCounts[row.site_id] = (openWoCounts[row.site_id] ?? 0) + 1
       })
     }
   }
@@ -79,8 +99,10 @@ export async function GET(req: NextRequest) {
 
   const enriched = (sites ?? []).map(site => ({
     ...stripForList(site as Record<string, unknown>),
-    asset_count:  assetCounts[site.id] ?? 0,
-    latest_event: latestEvents[site.id] ?? null,
+    asset_count:          assetCounts[site.id] ?? 0,
+    offline_asset_count:  offlineAssetCounts[site.id] ?? 0,
+    open_wo_count:        openWoCounts[site.id] ?? 0,
+    latest_event:         latestEvents[site.id] ?? null,
   }))
 
   return NextResponse.json({ sites: enriched, total: enriched.length })

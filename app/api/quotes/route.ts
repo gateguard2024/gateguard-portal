@@ -24,13 +24,15 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from('quotes')
     .select(`
-      id, quote_number, org_id, client_org_id, site_id, opportunity_id,
+      id, quote_number, org_id, client_org_id, site_id,
       title, status, property_name, units,
       total_one_time, total_mrr, dealer_mrr,
       valid_until, accepted_at, sent_at, declined_at,
       notes, pdf_url, share_token, work_order_id,
       created_at, updated_at
     `)
+    // NOTE: opportunity_id, client_name, client_email etc. added by migration 042
+    // — omitted from SELECT until that migration runs on production
     .order('created_at', { ascending: false })
 
   // Org isolation
@@ -39,7 +41,7 @@ export async function GET(req: NextRequest) {
   if (status)         query = query.eq('status', status)
   if (site_id)        query = query.eq('site_id', site_id)
   if (client_org_id)  query = query.eq('client_org_id', client_org_id)
-  if (opportunity_id) query = query.eq('opportunity_id', opportunity_id)
+  // opportunity_id filter omitted until migration 042 runs on production
   if (q) {
     query = query.or(
       `quote_number.ilike.%${q}%,property_name.ilike.%${q}%,title.ilike.%${q}%`
@@ -100,7 +102,7 @@ export async function POST(req: NextRequest) {
       quote_number,
       org_id,
       client_org_id:  client_org_id  ?? null,
-      opportunity_id: opportunity_id ?? null,
+      // opportunity_id omitted until migration 042 runs on production
       site_id:        site_id        ?? null,
       title,
       property_name:  property_name ?? null,

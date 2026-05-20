@@ -773,6 +773,18 @@ export default function SiteDetailPage() {
               <p className="text-sm text-slate-400">No notes</p>
             )}
           </div>
+
+          {/* Map — full width spanning both columns */}
+          {(site.address || site.city) && (
+            <div className="col-span-2 bg-white rounded-xl border border-slate-200 p-5">
+              <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                <MapPin size={16} className="text-slate-400" /> Location
+              </h3>
+              <SiteMapEmbed
+                address={[site.address, site.city, site.state, site.zip].filter(Boolean).join(', ')}
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -1535,6 +1547,94 @@ function InfoRow({ label, value, monospace }: { label: string; value: React.Reac
         {value ?? <span className="text-slate-300">—</span>}
       </dd>
     </div>
+  )
+}
+
+/* ─── Mapbox map embed ───────────────────────────────── */
+function SiteMapEmbed({ address }: { address: string }) {
+  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
+
+  useEffect(() => {
+    if (!token) return
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let map: any = null
+
+    const loadMap = async () => {
+      // Load CSS once
+      if (!document.getElementById('mapbox-gl-css')) {
+        const link = document.createElement('link')
+        link.id   = 'mapbox-gl-css'
+        link.rel  = 'stylesheet'
+        link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css'
+        document.head.appendChild(link)
+      }
+
+      // Load JS once
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (!(window as any).mapboxgl) {
+        await new Promise<void>((resolve, reject) => {
+          const script = document.createElement('script')
+          script.src     = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js'
+          script.onload  = () => resolve()
+          script.onerror = () => reject(new Error('Mapbox load failed'))
+          document.head.appendChild(script)
+        })
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mapboxgl = (window as any).mapboxgl
+      mapboxgl.accessToken = token
+
+      // Geocode the address
+      let coords: [number, number] = [-84.3877, 33.7490] // Atlanta fallback
+      try {
+        const geo = await fetch(
+          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?access_token=${token}&limit=1`
+        )
+        const geoJson = await geo.json()
+        const feature = geoJson.features?.[0]
+        if (feature) coords = feature.center as [number, number]
+      } catch { /* use fallback coords */ }
+
+      const container = document.getElementById('site-map-container')
+      if (!container) return
+
+      map = new mapboxgl.Map({
+        container: 'site-map-container',
+        style:     'mapbox://styles/mapbox/streets-v12',
+        center:    coords,
+        zoom:      15,
+      })
+
+      new mapboxgl.Marker({ color: '#6B7EFF' })
+        .setLngLat(coords)
+        .addTo(map)
+    }
+
+    loadMap()
+
+    return () => {
+      if (map) map.remove()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address])
+
+  if (!token) {
+    return (
+      <div className="h-[280px] rounded-xl border border-border bg-slate-50 flex flex-col items-center justify-center text-slate-400 text-sm gap-1">
+        <MapPin size={24} className="text-slate-300" />
+        <span>Map unavailable — set NEXT_PUBLIC_MAPBOX_TOKEN</span>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      id="site-map-container"
+      style={{ height: '280px' }}
+      className="rounded-xl overflow-hidden border border-border"
+    />
   )
 }
 

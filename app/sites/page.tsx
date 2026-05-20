@@ -25,8 +25,25 @@ interface Site {
   primary_contact_name: string | null
   primary_contact_email: string | null
   asset_count: number
+  offline_asset_count: number
+  open_wo_count: number
   latest_event: { event_type: string; summary: string; created_at: string } | null
   created_at: string
+}
+
+/* ─── Health score helpers ───────────────────────────── */
+type HealthLevel = 'healthy' | 'at_risk' | 'critical'
+
+function getSiteHealth(openWoCount: number, offlineAssetCount: number): HealthLevel {
+  if (openWoCount >= 3 || offlineAssetCount >= 2) return 'critical'
+  if (openWoCount >= 1 || offlineAssetCount >= 1) return 'at_risk'
+  return 'healthy'
+}
+
+const HEALTH_CONFIG: Record<HealthLevel, { label: string; color: string; dot: string }> = {
+  healthy:  { label: 'Healthy',  color: 'bg-green-100 text-green-700',  dot: 'text-green-500'  },
+  at_risk:  { label: 'At Risk',  color: 'bg-amber-100 text-amber-700',  dot: 'text-amber-500'  },
+  critical: { label: 'Critical', color: 'bg-red-100 text-red-700',      dot: 'text-red-500'    },
 }
 
 /* ─── status helpers ─────────────────────────────────── */
@@ -74,7 +91,7 @@ function NewSiteSlideOver({
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Failed to save')
-      onSaved({ ...json.site, asset_count: 0, latest_event: null })
+      onSaved({ ...json.site, asset_count: 0, offline_asset_count: 0, open_wo_count: 0, latest_event: null })
       onClose()
       setForm({ name:'',address:'',city:'',state:'',zip:'',property_type:'Multifamily',units:'',pm_name:'',pm_email:'',pm_phone:'',gate_code:'',access_notes:'' })
     } catch (err: any) {
@@ -349,6 +366,20 @@ export default function SitesPage() {
         return (
           <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${cfg.color}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+            {cfg.label}
+          </span>
+        )
+      },
+    },
+    {
+      key: 'open_wo_count',
+      label: 'Health',
+      render: (_, row) => {
+        const level = getSiteHealth(row.open_wo_count, row.offline_asset_count)
+        const cfg = HEALTH_CONFIG[level]
+        return (
+          <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${cfg.color}`}>
+            <span className={`${cfg.dot}`}>●</span>
             {cfg.label}
           </span>
         )
