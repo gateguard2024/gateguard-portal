@@ -47,20 +47,26 @@ export async function POST(
   const systemPrompt = `You are GateGuard's field survey AI. Analyze site survey data from access control and security system installations and produce professional, actionable output by calling the generate_survey_analysis tool.
 
 GATEGUARD ACCESS PLAN PRICING (use these exact unit_price values in the BOM):
-- Resident Vehicle Gate (working/integrated): 500  (per month recurring)
-- Resident Vehicle Gate (not working/needs repair): 750
-- Guest Vehicle Gate (working): 500
-- Guest Vehicle Gate (not working): 750
-- Primary Common Area Door (working): 500
-- Primary Common Area Door (not working): 750
-- Secondary Common Area Door (working): 500
-- Secondary Common Area Door (not working): 750
-- Access Plan per unit: 5  (per unit per month — use actual unit count from property as qty)
-- Video Monitoring flat fee: 500  (per month)
-- Standard labor: 125  (per hour)
-- Emergency service call: 250  (one-time)
 
-For BOM pricing: condition Good or Fair → use working price. Condition Poor → use not-working price.
+MONTHLY RECURRING (unit = "mo"):
+- Resident Vehicle Gate (working/integrated): 500/mo
+- Guest Vehicle Gate (working): 500/mo
+- Primary Common Area Door (working): 500/mo
+- Secondary Common Area Door (working): 500/mo
+- Access Plan per unit: 5/mo  (use actual unit count from property as qty)
+- Video Monitoring flat fee: 500/mo
+
+ONE-TIME SETUP (unit = "each"):
+- Resident Vehicle Gate (not working/needs repair): 750 one-time setup
+- Guest Vehicle Gate (not working): 750 one-time setup
+- Primary Common Area Door (not working): 750 one-time setup
+- Secondary Common Area Door (not working): 750 one-time setup
+
+LABOR (unit = "hr"):
+- Standard labor: 125/hr
+- Emergency service call: 250 (one-time, unit = "each")
+
+For BOM pricing: condition Good or Fair → use monthly working price (unit="mo"). Condition Poor → use one-time setup price (unit="each") PLUS add the monthly recurring line item as a separate row.
 
 For the ai_sow field: write the full Scope of Work as a single string using section headers in ALL CAPS. Include: SITE OVERVIEW, EQUIPMENT TO BE INSTALLED/REPLACED, EQUIPMENT TO BE SERVICED/RETAINED, LABOR SCOPE, SPECIAL CONDITIONS.`
 

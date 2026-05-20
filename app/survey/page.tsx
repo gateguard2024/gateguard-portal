@@ -325,7 +325,7 @@ function DeviceCard({ device, onChange, onDelete, surveyId, onUploadPhoto }: Dev
               className="flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-medium bg-red-50 text-red-600 border-red-200 hover:bg-red-100 transition-colors"
               title="Click to mark as Working"
             >
-              <X size={9} /> Not Working <span className="text-red-400 ml-0.5">$750/mo</span>
+              <X size={9} /> Not Working <span className="text-red-400 ml-0.5">$750 setup</span>
             </button>
           ) : (
             <button
