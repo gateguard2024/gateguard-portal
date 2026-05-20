@@ -29,10 +29,12 @@ export async function GET(
       quote_mode, client_name, client_email, client_phone, property_address,
       cover_message, terms_text, tax_rate, discount_percent, deposit_percent,
       survey_id, package_mode, selected_package, created_by_name, expiry_date,
+      payment_plan, ramp_up_start_pct, ramp_up_step_pct, ramp_up_full_month,
       quote_line_items (
         id, sort_order, category, description, qty, unit_price, unit, is_recurring,
         section_name, product_id, item_type, is_optional, is_included,
-        package_tier, image_url, model_number, notes, sku, created_at
+        package_tier, image_url, model_number, notes, sku, created_at,
+        line_discount_percent
       )
     `)
     .eq('id', params.id)
@@ -104,6 +106,8 @@ export async function PATCH(
     'cover_image_url', 'cover_message', 'terms_text', 'tax_rate', 'discount_percent',
     'deposit_percent', 'survey_id', 'package_mode', 'selected_package',
     'created_by_name', 'expiry_date',
+    // migration 055 payment plan fields
+    'payment_plan', 'ramp_up_start_pct', 'ramp_up_step_pct', 'ramp_up_full_month',
   ]
 
   const updates: Record<string, unknown> = {}

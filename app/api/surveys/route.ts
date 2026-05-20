@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from('surveys')
-    .select('id, survey_number, property_name, property_address, surveyor_name, surveyor_type, survey_date, status, devices, ai_summary, quote_id, site_id, created_at, updated_at')
+    .select('id, survey_number, property_name, property_address, surveyor_name, surveyor_type, survey_date, status, devices, ai_summary, ai_sow, quote_id, site_id, created_at, updated_at')
     .order('created_at', { ascending: false })
     .limit(limit)
 

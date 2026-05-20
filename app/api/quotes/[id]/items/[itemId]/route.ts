@@ -12,11 +12,14 @@ export const dynamic = 'force-dynamic'
 async function recalcTotals(quoteId: string) {
   const { data: items } = await supabase
     .from('quote_line_items')
-    .select('qty, unit_price, is_recurring')
+    .select('qty, unit_price, is_recurring, line_discount_percent')
     .eq('quote_id', quoteId)
 
-  const oneTime = (items ?? []).filter(i => !i.is_recurring).reduce((s, i) => s + i.qty * i.unit_price, 0)
-  const mrr     = (items ?? []).filter(i =>  i.is_recurring).reduce((s, i) => s + i.qty * i.unit_price, 0)
+  const eff = (i: { qty: number; unit_price: number; line_discount_percent?: number }) =>
+    i.qty * i.unit_price * (1 - (i.line_discount_percent ?? 0) / 100)
+
+  const oneTime = (items ?? []).filter(i => !i.is_recurring).reduce((s, i) => s + eff(i), 0)
+  const mrr     = (items ?? []).filter(i =>  i.is_recurring).reduce((s, i) => s + eff(i), 0)
 
   await supabase
     .from('quotes')
@@ -49,6 +52,7 @@ export async function PATCH(
     'is_recurring', 'section_name', 'product_id', 'item_type',
     'is_optional', 'is_included', 'package_tier',
     'image_url', 'model_number', 'notes', 'sku',
+    'line_discount_percent',
   ]
 
   const updates: Record<string, unknown> = {}
@@ -67,7 +71,7 @@ export async function PATCH(
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // Recalc totals if pricing fields changed
-  if ('qty' in body || 'unit_price' in body || 'is_recurring' in body) {
+  if ('qty' in body || 'unit_price' in body || 'is_recurring' in body || 'line_discount_percent' in body) {
     await recalcTotals(params.id)
   }
 

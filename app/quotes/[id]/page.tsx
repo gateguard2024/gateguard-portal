@@ -10,7 +10,7 @@ import {
   Search, Hash, Layers, X, Download,
 } from 'lucide-react';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Edit2, ArrowUpRight, DollarSign, Package, SlidersHorizontal, Tag, FileDown } = require('lucide-react') as any;
+const { Edit2, ArrowUpRight, DollarSign, Package, SlidersHorizontal, Tag, FileDown, LinkIcon, ClipboardList, Unlink } = require('lucide-react') as any;
 import { cn } from '@/lib/utils';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -18,25 +18,26 @@ import { cn } from '@/lib/utils';
 type QuoteStatus = 'draft' | 'sent' | 'viewed' | 'accepted' | 'declined' | 'expired';
 
 interface LineItem {
-  id:           string;
-  sort_order:   number;
-  category:     string;
-  description:  string;
-  qty:          number;
-  unit_price:   number;
-  unit:         string;
-  is_recurring: boolean;
-  section_name: string;
-  product_id:   string | null;
-  item_type:    string;
-  is_optional:  boolean;
-  is_included:  boolean;
-  package_tier: string | null;
-  image_url:    string | null;
-  model_number: string | null;
-  notes:        string | null;
-  sku:          string | null;
-  created_at:   string;
+  id:                   string;
+  sort_order:           number;
+  category:             string;
+  description:          string;
+  qty:                  number;
+  unit_price:           number;
+  unit:                 string;
+  is_recurring:         boolean;
+  section_name:         string;
+  product_id:           string | null;
+  item_type:            string;
+  is_optional:          boolean;
+  is_included:          boolean;
+  package_tier:         string | null;
+  image_url:            string | null;
+  model_number:         string | null;
+  notes:                string | null;
+  sku:                  string | null;
+  created_at:           string;
+  line_discount_percent: number;
 }
 
 interface QuoteDetail {
@@ -81,6 +82,21 @@ interface QuoteDetail {
   selected_package: string | null;
   created_by_name:  string | null;
   expiry_date:      string | null;
+  // migration 055
+  payment_plan:        string | null;
+  ramp_up_start_pct:   number | null;
+  ramp_up_step_pct:    number | null;
+  ramp_up_full_month:  number | null;
+}
+
+// ── Survey type ────────────────────────────────────────────────────────────────
+
+interface SurveyOption {
+  id:            string;
+  survey_number: string;
+  property_name: string | null;
+  ai_sow:        string | null;
+  ai_summary:    string | null;
 }
 
 // ── Status config ──────────────────────────────────────────────────────────────
@@ -125,6 +141,19 @@ interface ItemFormProps {
   onClose:   () => void;
 }
 
+// ── Ramp-up schedule helpers ────────────────────────────────────────────────
+
+interface RampRow { month: number; pct: number; amount: number }
+
+function buildRampSchedule(mrr: number, startPct: number, stepPct: number, fullMonth: number): RampRow[] {
+  const rows: RampRow[] = []
+  for (let m = 2; m <= fullMonth; m++) {
+    const pct = m === fullMonth ? 100 : Math.min(100, startPct + (m - 2) * stepPct)
+    rows.push({ month: m, pct, amount: mrr * (pct / 100) })
+  }
+  return rows
+}
+
 function ItemForm({ quoteId, item, onSaved, onClose }: ItemFormProps) {
   const isEdit = !!item;
   const [saving, setSaving] = useState(false);
@@ -134,20 +163,21 @@ function ItemForm({ quoteId, item, onSaved, onClose }: ItemFormProps) {
   const [showProducts, setShowProducts]   = useState(false);
 
   const [form, setForm] = useState({
-    description:  item?.description  ?? '',
-    qty:          item?.qty          ?? 1,
-    unit_price:   item?.unit_price   ?? 0,
-    unit:         item?.unit         ?? 'each',
-    section_name: item?.section_name ?? 'Equipment',
-    item_type:    item?.item_type    ?? 'equipment',
-    is_optional:  item?.is_optional  ?? false,
-    is_included:  item?.is_included  ?? true,
-    package_tier: item?.package_tier ?? '',
-    model_number: item?.model_number ?? '',
-    sku:          item?.sku          ?? '',
-    notes:        item?.notes        ?? '',
-    is_recurring: item?.is_recurring ?? false,
-    product_id:   item?.product_id   ?? null as string | null,
+    description:          item?.description          ?? '',
+    qty:                  item?.qty                  ?? 1,
+    unit_price:           item?.unit_price           ?? 0,
+    unit:                 item?.unit                 ?? 'each',
+    section_name:         item?.section_name         ?? 'Equipment',
+    item_type:            item?.item_type            ?? 'equipment',
+    is_optional:          item?.is_optional          ?? false,
+    is_included:          item?.is_included          ?? true,
+    package_tier:         item?.package_tier         ?? '',
+    model_number:         item?.model_number         ?? '',
+    sku:                  item?.sku                  ?? '',
+    notes:                item?.notes                ?? '',
+    is_recurring:         item?.is_recurring         ?? false,
+    product_id:           item?.product_id           ?? null as string | null,
+    line_discount_percent: item?.line_discount_percent ?? 0,
   });
 
   const set = (k: string, v: unknown) => setForm(p => ({ ...p, [k]: v }));
@@ -282,7 +312,7 @@ function ItemForm({ quoteId, item, onSaved, onClose }: ItemFormProps) {
                 min={1}
                 value={form.qty}
                 onChange={e => set('qty', parseFloat(e.target.value) || 1)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
               />
             </div>
             <div>
@@ -290,7 +320,7 @@ function ItemForm({ quoteId, item, onSaved, onClose }: ItemFormProps) {
               <select
                 value={form.unit}
                 onChange={e => set('unit', e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
               >
                 {['each', 'hr', 'ft', 'lot', 'mo', 'day'].map(u => <option key={u}>{u}</option>)}
               </select>
@@ -303,9 +333,28 @@ function ItemForm({ quoteId, item, onSaved, onClose }: ItemFormProps) {
                 step={0.01}
                 value={form.unit_price}
                 onChange={e => set('unit_price', parseFloat(e.target.value) || 0)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
               />
+              {form.line_discount_percent > 0 && (
+                <p className="text-[11px] text-emerald-600 mt-1">
+                  Effective: ${(form.unit_price * (1 - form.line_discount_percent / 100)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+              )}
             </div>
+          </div>
+
+          {/* Line Discount */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Line Discount % <span className="text-gray-400">(0 = none)</span></label>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={0.5}
+              value={form.line_discount_percent}
+              onChange={e => set('line_discount_percent', Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
+              className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -414,8 +463,10 @@ interface ItemRowProps {
 }
 
 function ItemRow({ item, onEdit, onDelete, onToggle, deleting }: ItemRowProps) {
-  const subtotal = item.qty * item.unit_price;
-  const dimmed   = item.is_optional && !item.is_included;
+  const disc        = item.line_discount_percent ?? 0;
+  const effectiveAmt = item.qty * item.unit_price * (1 - disc / 100);
+  const subtotal    = effectiveAmt;
+  const dimmed      = item.is_optional && !item.is_included;
 
   return (
     <tr className={cn('group transition-colors hover:bg-gray-50/60', dimmed && 'opacity-50')}>
@@ -460,7 +511,17 @@ function ItemRow({ item, onEdit, onDelete, onToggle, deleting }: ItemRowProps) {
         </div>
       </td>
       <td className="px-4 py-2.5 text-xs text-gray-500 tabular-nums">{item.qty} {item.unit}</td>
-      <td className="px-4 py-2.5 text-xs text-gray-600 text-right tabular-nums">${fmt(item.unit_price)}</td>
+      <td className="px-4 py-2.5 text-xs text-right tabular-nums">
+        {disc > 0 ? (
+          <div className="flex flex-col items-end gap-0.5">
+            <span className="line-through text-gray-400">${fmt(item.unit_price)}</span>
+            <span className="text-emerald-600 font-medium">${fmt(item.unit_price * (1 - disc / 100))}</span>
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full">-{disc}%</span>
+          </div>
+        ) : (
+          <span className="text-gray-600">${fmt(item.unit_price)}</span>
+        )}
+      </td>
       <td className="px-4 py-2.5 text-sm font-medium text-right tabular-nums text-gray-900">${fmt(subtotal)}{item.is_recurring ? <span className="text-xs font-normal text-gray-400">/mo</span> : ''}</td>
       <td className="px-4 py-2.5 w-16">
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -482,15 +543,28 @@ export default function QuoteDetailPage() {
   const { id }  = useParams<{ id: string }>();
   const router  = useRouter();
 
-  const [quote,         setQuote]        = useState<QuoteDetail | null>(null);
-  const [loading,       setLoading]      = useState(true);
-  const [error,         setError]        = useState<string | null>(null);
-  const [actioning,     setActioning]    = useState<string | null>(null);
-  const [copied,        setCopied]       = useState(false);
-  const [editingItemId, setEditingItemId]= useState<string | null>(null);
-  const [showAddItem,   setShowAddItem]  = useState(false);
-  const [deletingId,    setDeletingId]   = useState<string | null>(null);
-  const [packageFilter, setPackageFilter]= useState<string>('all');
+  const [quote,           setQuote]          = useState<QuoteDetail | null>(null);
+  const [loading,         setLoading]        = useState(true);
+  const [error,           setError]          = useState<string | null>(null);
+  const [actioning,       setActioning]      = useState<string | null>(null);
+  const [copied,          setCopied]         = useState(false);
+  const [editingItemId,   setEditingItemId]  = useState<string | null>(null);
+  const [showAddItem,     setShowAddItem]    = useState(false);
+  const [deletingId,      setDeletingId]     = useState<string | null>(null);
+  const [packageFilter,   setPackageFilter]  = useState<string>('all');
+  const [paymentPlan,     setPaymentPlan]    = useState<string>('standard');
+  const [rampStartPct,    setRampStartPct]   = useState<number>(10);
+  const [rampStepPct,     setRampStepPct]    = useState<number>(7.5);
+  const [rampFullMonth,   setRampFullMonth]  = useState<number>(14);
+  const [rampExpanded,    setRampExpanded]   = useState<boolean>(false);
+  const [savingPlan,      setSavingPlan]     = useState<boolean>(false);
+
+  // Notes & SOW state
+  const [notes,           setNotes]          = useState<string>('');
+  const [savingNotes,     setSavingNotes]    = useState<boolean>(false);
+  const [surveys,         setSurveys]        = useState<SurveyOption[]>([]);
+  const [showSurveyPicker, setShowSurveyPicker] = useState<boolean>(false);
+  const [linkedSurvey,    setLinkedSurvey]   = useState<SurveyOption | null>(null);
 
   const fetchQuote = useCallback(async () => {
     setLoading(true); setError(null);
@@ -499,12 +573,40 @@ export default function QuoteDetailPage() {
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       setQuote(data.quote);
+      // Sync payment plan state from loaded quote
+      setPaymentPlan(data.quote.payment_plan ?? 'standard');
+      setRampStartPct(data.quote.ramp_up_start_pct ?? 10);
+      setRampStepPct(data.quote.ramp_up_step_pct ?? 7.5);
+      setRampFullMonth(data.quote.ramp_up_full_month ?? 14);
+      // Sync notes state
+      setNotes(data.quote.notes ?? '');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load quote');
     } finally { setLoading(false); }
   }, [id]);
 
   useEffect(() => { fetchQuote(); }, [fetchQuote]);
+
+  // Fetch available surveys once on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const res  = await fetch('/api/surveys');
+        const json = await res.json();
+        setSurveys(json.surveys ?? json.records ?? []);
+      } catch { /* non-blocking */ }
+    })();
+  }, []);
+
+  // Sync linked survey when quote or surveys list changes
+  useEffect(() => {
+    if (!quote?.survey_id || surveys.length === 0) {
+      if (!quote?.survey_id) setLinkedSurvey(null);
+      return;
+    }
+    const found = surveys.find(s => s.id === quote.survey_id) ?? null;
+    setLinkedSurvey(found);
+  }, [quote?.survey_id, surveys]);
 
   async function patchStatus(status: QuoteStatus) {
     if (!quote) return;
@@ -562,6 +664,48 @@ export default function QuoteDetailPage() {
     fetchQuote();
   }
 
+  async function saveNotes() {
+    setSavingNotes(true);
+    try {
+      const res = await fetch(`/api/quotes/${id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ notes }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setQuote(q => q ? { ...q, ...data.quote } : q);
+    } catch (e) { alert(e instanceof Error ? e.message : 'Failed to save notes'); }
+    finally { setSavingNotes(false); }
+  }
+
+  async function linkSurvey(survey: SurveyOption) {
+    try {
+      const res = await fetch(`/api/quotes/${id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ survey_id: survey.id }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setQuote(q => q ? { ...q, survey_id: survey.id } : q);
+      setLinkedSurvey(survey);
+      setShowSurveyPicker(false);
+    } catch (e) { alert(e instanceof Error ? e.message : 'Failed to link survey'); }
+  }
+
+  async function unlinkSurvey() {
+    try {
+      const res = await fetch(`/api/quotes/${id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ survey_id: null }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setQuote(q => q ? { ...q, survey_id: null } : q);
+      setLinkedSurvey(null);
+    } catch (e) { alert(e instanceof Error ? e.message : 'Failed to unlink survey'); }
+  }
+
   async function createWorkOrder() {
     if (!quote) return;
     setActioning('work_order');
@@ -609,8 +753,9 @@ export default function QuoteDetailPage() {
   const includedItems = visibleItems.filter(i => !i.is_optional || i.is_included);
   const sections      = groupBySection(visibleItems);
 
-  const subtotal  = includedItems.reduce((s, i) => s + (i.is_recurring ? 0 : i.qty * i.unit_price), 0);
-  const mrrTotal  = includedItems.reduce((s, i) => s + (i.is_recurring ? i.qty * i.unit_price : 0), 0);
+  const effAmt    = (i: LineItem) => i.qty * i.unit_price * (1 - (i.line_discount_percent ?? 0) / 100);
+  const subtotal  = includedItems.reduce((s, i) => s + (i.is_recurring ? 0 : effAmt(i)), 0);
+  const mrrTotal  = includedItems.reduce((s, i) => s + (i.is_recurring ? effAmt(i) : 0), 0);
   const taxRate   = quote?.tax_rate         ?? 0;
   const discPct   = quote?.discount_percent ?? 0;
   const depPct    = quote?.deposit_percent  ?? 30;
@@ -618,6 +763,26 @@ export default function QuoteDetailPage() {
   const taxAmt    = (subtotal - discAmt) * taxRate;
   const grandTotal= subtotal - discAmt + taxAmt;
   const deposit   = grandTotal * (depPct / 100);
+
+  async function savePaymentPlan() {
+    setSavingPlan(true);
+    try {
+      const res = await fetch(`/api/quotes/${id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          payment_plan:       paymentPlan,
+          ramp_up_start_pct:  rampStartPct,
+          ramp_up_step_pct:   rampStepPct,
+          ramp_up_full_month: rampFullMonth,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setQuote(q => q ? { ...q, ...data.quote } : q);
+    } catch (e) { alert(e instanceof Error ? e.message : 'Failed to save payment plan'); }
+    finally { setSavingPlan(false); }
+  }
 
   // ── States ─────────────────────────────────────────────────────────────────
 
@@ -877,14 +1042,6 @@ export default function QuoteDetailPage() {
             )}
           </div>
 
-          {/* Notes */}
-          {quote.notes && (
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-              <h2 className="text-sm font-semibold text-gray-900 mb-2">Notes</h2>
-              <p className="text-sm text-gray-600 whitespace-pre-wrap">{quote.notes}</p>
-            </div>
-          )}
-
           {/* Terms */}
           {quote.terms_text && (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
@@ -939,6 +1096,169 @@ export default function QuoteDetailPage() {
             </div>
           </div>
 
+          {/* Payment Plan */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal size={14} className="text-[#6B7EFF]" />
+              <h2 className="text-sm font-semibold text-gray-900">Payment Plan</h2>
+            </div>
+
+            {/* Radio buttons */}
+            <div className="space-y-2">
+              {[
+                { v: 'standard', l: 'Standard',       sub: 'Full rate from month 1' },
+                { v: 'ramp_up',  l: 'Ramp-Up',        sub: 'Recommended for new properties' },
+              ].map(opt => (
+                <label
+                  key={opt.v}
+                  className={cn(
+                    'flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors',
+                    paymentPlan === opt.v
+                      ? 'border-[#6B7EFF] bg-blue-50/50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="payment_plan"
+                    value={opt.v}
+                    checked={paymentPlan === opt.v}
+                    onChange={() => { setPaymentPlan(opt.v); if (opt.v === 'ramp_up') setRampExpanded(true); }}
+                    className="mt-0.5 accent-[#6B7EFF]"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{opt.l}</p>
+                    <p className="text-xs text-gray-500">{opt.sub}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            {/* Ramp-up schedule */}
+            {paymentPlan === 'ramp_up' && (
+              <div className="space-y-3">
+                {/* Config inputs */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-medium text-gray-600 mb-1">Start % (mo 2)</label>
+                    <input
+                      type="number" min={1} max={100} step={0.5}
+                      value={rampStartPct}
+                      onChange={e => setRampStartPct(parseFloat(e.target.value) || 10)}
+                      className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-gray-600 mb-1">Step %/mo</label>
+                    <input
+                      type="number" min={0.5} max={50} step={0.5}
+                      value={rampStepPct}
+                      onChange={e => setRampStepPct(parseFloat(e.target.value) || 7.5)}
+                      className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-gray-600 mb-1">Full rate mo</label>
+                    <input
+                      type="number" min={3} max={36} step={1}
+                      value={rampFullMonth}
+                      onChange={e => setRampFullMonth(parseInt(e.target.value) || 14)}
+                      className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
+                    />
+                  </div>
+                </div>
+
+                {/* Deposit breakdown */}
+                {mrrTotal > 0 && (() => {
+                  const setupFee     = subtotal;
+                  const mo1          = mrrTotal;
+                  const lastMo       = mrrTotal;
+                  const totalDeposit = setupFee + mo1 + lastMo;
+                  return (
+                    <div className="bg-blue-50 rounded-lg p-3 border border-blue-100 space-y-1 text-xs">
+                      <p className="font-semibold text-gray-800 text-[11px] uppercase tracking-wider mb-2">Deposit (due at signing)</p>
+                      <div className="flex justify-between text-gray-600">
+                        <span>Setup fee (one-time)</span>
+                        <span className="font-medium text-gray-900">${fmt(setupFee)}</span>
+                      </div>
+                      <div className="flex justify-between text-gray-600">
+                        <span>Month 1 (MRR)</span>
+                        <span className="font-medium text-gray-900">${fmt(mo1)}/mo</span>
+                      </div>
+                      <div className="flex justify-between text-gray-600">
+                        <span>Last month (MRR)</span>
+                        <span className="font-medium text-gray-900">${fmt(lastMo)}/mo</span>
+                      </div>
+                      <div className="flex justify-between pt-1.5 border-t border-blue-200 font-bold text-gray-900">
+                        <span>Total deposit</span>
+                        <span>${fmt(totalDeposit)}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Schedule table toggle */}
+                <button
+                  onClick={() => setRampExpanded(v => !v)}
+                  className="flex items-center gap-1.5 text-xs text-[#6B7EFF] font-medium w-full"
+                >
+                  <ChevronDown size={12} className={cn('transition-transform', rampExpanded && 'rotate-180')} />
+                  {rampExpanded ? 'Hide' : 'Show'} ramp-up schedule
+                </button>
+
+                {rampExpanded && mrrTotal > 0 && (() => {
+                  const rows   = buildRampSchedule(mrrTotal, rampStartPct, rampStepPct, rampFullMonth);
+                  const savings = rows.slice(0, -1).reduce((s, r) => s + (mrrTotal - r.amount), 0);
+                  return (
+                    <div className="space-y-2">
+                      <div className="overflow-hidden rounded-lg border border-gray-200">
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-semibold text-gray-600">Mo</th>
+                              <th className="px-3 py-2 text-right font-semibold text-gray-600">Rate</th>
+                              <th className="px-3 py-2 text-right font-semibold text-gray-600">Bill</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            <tr className="bg-blue-50/30">
+                              <td className="px-3 py-1.5 font-medium text-gray-700">1</td>
+                              <td className="px-3 py-1.5 text-right text-gray-600">100%</td>
+                              <td className="px-3 py-1.5 text-right font-medium text-gray-900">${fmt(mrrTotal)}</td>
+                            </tr>
+                            {rows.map(r => (
+                              <tr key={r.month} className={r.pct === 100 ? 'bg-emerald-50/30' : ''}>
+                                <td className="px-3 py-1.5 font-medium text-gray-700">{r.month}{r.pct === 100 ? '+' : ''}</td>
+                                <td className="px-3 py-1.5 text-right text-gray-600">{r.pct.toFixed(1)}%</td>
+                                <td className="px-3 py-1.5 text-right font-medium text-gray-900">${fmt(r.amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {savings > 0 && (
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800">
+                          <span className="font-semibold">Client saves ${fmt(savings)}</span>
+                          <span className="text-emerald-600"> during ramp-up period</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            <button
+              onClick={savePaymentPlan}
+              disabled={savingPlan}
+              className="w-full flex items-center justify-center gap-1.5 px-4 py-2 bg-[#6B7EFF] text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              {savingPlan ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+              Save Payment Plan
+            </button>
+          </div>
+
           {/* Client + Site */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-3">
             <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wider">Details</h2>
@@ -990,6 +1310,102 @@ export default function QuoteDetailPage() {
                 <ExternalLink size={11} /> Preview
               </Link>
             </div>
+          </div>
+
+          {/* Notes & Scope of Work */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <ClipboardList size={14} className="text-[#6B7EFF]" />
+              <h2 className="text-sm font-semibold text-gray-900">Notes &amp; Scope of Work</h2>
+            </div>
+
+            {/* Linked survey row */}
+            {linkedSurvey ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-blue-800 truncate">
+                      {linkedSurvey.survey_number}
+                      {linkedSurvey.property_name ? ` — ${linkedSurvey.property_name}` : ''}
+                    </p>
+                    <p className="text-[10px] text-blue-600 mt-0.5">Survey linked</p>
+                  </div>
+                  <button
+                    onClick={unlinkSurvey}
+                    title="Unlink survey"
+                    className="shrink-0 flex items-center gap-1 text-[10px] text-gray-500 hover:text-red-500 border border-gray-200 hover:border-red-200 rounded px-2 py-1 transition-colors"
+                  >
+                    <Unlink size={10} /> Unlink
+                  </button>
+                </div>
+                {linkedSurvey.ai_summary && (
+                  <p className="text-xs text-gray-500 italic leading-relaxed">
+                    {linkedSurvey.ai_summary}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="relative">
+                <button
+                  onClick={() => setShowSurveyPicker(v => !v)}
+                  className="flex items-center gap-1.5 text-xs border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-lg px-3 py-1.5 transition-colors w-full justify-between"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <LinkIcon size={11} /> Link Survey
+                  </span>
+                  <ChevronDown size={11} className={cn('transition-transform', showSurveyPicker && 'rotate-180')} />
+                </button>
+                {showSurveyPicker && (
+                  <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {surveys.length === 0 ? (
+                      <p className="text-xs text-gray-400 px-3 py-3 text-center">No surveys found</p>
+                    ) : (
+                      surveys.map(s => (
+                        <button
+                          key={s.id}
+                          onClick={() => linkSurvey(s)}
+                          className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0"
+                        >
+                          <p className="text-xs font-medium text-gray-800">{s.survey_number}</p>
+                          {s.property_name && <p className="text-[10px] text-gray-500">{s.property_name}</p>}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Import SOW button — only shown when survey has ai_sow */}
+            {linkedSurvey?.ai_sow && (
+              <button
+                onClick={() => { setNotes(linkedSurvey.ai_sow!); }}
+                className="flex items-center gap-1.5 text-xs border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-lg px-3 py-1.5 transition-colors w-full"
+              >
+                <ClipboardList size={11} /> Import SOW from survey
+              </button>
+            )}
+
+            {/* Notes textarea */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Notes / SOW</label>
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                rows={8}
+                placeholder="Scope of work, internal notes, special conditions..."
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] resize-none"
+              />
+            </div>
+
+            <button
+              onClick={saveNotes}
+              disabled={savingNotes}
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#6B7EFF] hover:bg-[#5a6fd6] text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              {savingNotes ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+              Save Notes
+            </button>
           </div>
         </div>
       </div>

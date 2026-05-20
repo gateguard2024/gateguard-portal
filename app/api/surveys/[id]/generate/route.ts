@@ -61,6 +61,22 @@ You will receive a list of devices found on site plus any freeform notes from th
 
 7. **ai_timeline** — Plain text estimate of project timeline (e.g., "Phase 1 (replacement): 1 day. Phase 2 (new install): 2 days. Total: 3 days").
 
+GATEGUARD ACCESS PLAN PRICING (use these exact prices in BOM):
+- Resident Vehicle Gate (working/integrated): $500.00/mo recurring
+- Resident Vehicle Gate (not working/needs repair): $750.00/mo recurring
+- Guest Vehicle Gate (working): $500.00/mo recurring
+- Guest Vehicle Gate (not working/needs repair): $750.00/mo recurring
+- Primary Common Area Door (working): $500.00/mo recurring
+- Primary Common Area Door (not working/needs repair): $750.00/mo recurring
+- Secondary Common Area Door (working): $500.00/mo recurring
+- Secondary Common Area Door (not working/needs repair): $750.00/mo recurring
+- Access Plan per unit: $5.00/unit/mo recurring (use actual unit count from property)
+- Video Monitoring flat fee: $500.00/mo recurring
+- Standard labor rate: $125.00/hr
+- Emergency service call: $250.00 one-time
+
+For BOM pricing: if device condition is "Good" or "Fair" use the working price; if "Poor" use the not-working price.
+
 Respond ONLY with valid JSON in this exact shape:
 {
   "ai_summary": "...",
@@ -100,23 +116,49 @@ ${survey.voice_transcript ? `VOICE TRANSCRIPT:\n${survey.voice_transcript}` : ''
     return NextResponse.json({ error: 'AI generation failed' }, { status: 500 })
   }
 
-  // Save back to survey
-  const { data: updated, error: saveErr } = await supabase
+  // Save back to survey — split into two updates so a missing column on one
+  // doesn't silently drop the other (e.g. if ai_urgent_items/ai_install_notes
+  // columns weren't present when migration 041 originally ran).
+  const coreUpdate: Record<string, unknown> = {
+    ai_summary:         generated.ai_summary         ?? null,
+    ai_sow:             generated.ai_sow             ?? null,
+    ai_bom:             generated.ai_bom             ?? [],
+    ai_recommendations: generated.ai_recommendations ?? [],
+    ai_timeline:        generated.ai_timeline        ?? null,
+    updated_at:         new Date().toISOString(),
+  }
+
+  const { error: coreErr } = await supabase
     .from('surveys')
-    .update({
-      ai_summary:       generated.ai_summary       ?? null,
-      ai_sow:           generated.ai_sow           ?? null,
-      ai_bom:           generated.ai_bom           ?? [],
-      ai_recommendations: generated.ai_recommendations ?? [],
-      ai_urgent_items:  generated.ai_urgent_items  ?? [],
-      ai_install_notes: generated.ai_install_notes ?? [],
-      ai_timeline:      generated.ai_timeline      ?? null,
-      updated_at:       new Date().toISOString(),
-    })
+    .update(coreUpdate)
     .eq('id', params.id)
-    .select()
+
+  if (coreErr) {
+    console.error('Survey core save error:', coreErr)
+    return NextResponse.json({ error: `Save failed: ${coreErr.message}` }, { status: 500 })
+  }
+
+  // Try to save extended AI columns — non-fatal if columns don't exist yet
+  void (async () => {
+    try {
+      await supabase
+        .from('surveys')
+        .update({
+          ai_urgent_items:  generated.ai_urgent_items  ?? [],
+          ai_install_notes: generated.ai_install_notes ?? [],
+          updated_at:       new Date().toISOString(),
+        })
+        .eq('id', params.id)
+    } catch (_) { /* columns may not exist — run migration 054 to add them */ }
+  })()
+
+  // Re-fetch the updated survey to return full data
+  const { data: updated, error: fetchErr } = await supabase
+    .from('surveys')
+    .select('*')
+    .eq('id', params.id)
     .single()
 
-  if (saveErr) return NextResponse.json({ error: saveErr.message }, { status: 500 })
+  if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 })
   return NextResponse.json({ survey: updated })
 }

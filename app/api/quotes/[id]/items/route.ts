@@ -12,13 +12,16 @@ export const dynamic = 'force-dynamic'
 async function recalcTotals(quoteId: string) {
   const { data: items } = await supabase
     .from('quote_line_items')
-    .select('qty, unit_price, is_recurring')
+    .select('qty, unit_price, is_recurring, line_discount_percent')
     .eq('quote_id', quoteId)
 
   if (!items) return
 
-  const oneTime = items.filter(i => !i.is_recurring).reduce((s, i) => s + (i.qty * i.unit_price), 0)
-  const mrr     = items.filter(i =>  i.is_recurring).reduce((s, i) => s + (i.qty * i.unit_price), 0)
+  const eff = (i: { qty: number; unit_price: number; line_discount_percent?: number }) =>
+    i.qty * i.unit_price * (1 - (i.line_discount_percent ?? 0) / 100)
+
+  const oneTime = items.filter(i => !i.is_recurring).reduce((s, i) => s + eff(i), 0)
+  const mrr     = items.filter(i =>  i.is_recurring).reduce((s, i) => s + eff(i), 0)
 
   await supabase
     .from('quotes')
@@ -36,7 +39,7 @@ export async function GET(
     .select(`
       id, sort_order, category, description, qty, unit_price, is_recurring, created_at,
       section_name, product_id, item_type, unit, is_optional, is_included,
-      package_tier, image_url, model_number, notes, sku
+      package_tier, image_url, model_number, notes, sku, line_discount_percent
     `)
     .eq('quote_id', params.id)
     .order('sort_order', { ascending: true })
@@ -94,10 +97,11 @@ export async function POST(
       is_optional:  body.is_optional  ?? false,
       is_included:  body.is_included  ?? true,
       package_tier: body.package_tier ?? null,
-      image_url:    body.image_url    ?? null,
-      model_number: body.model_number ?? null,
-      notes:        body.notes        ?? null,
-      sku:          body.sku          ?? null,
+      image_url:             body.image_url             ?? null,
+      model_number:          body.model_number          ?? null,
+      notes:                 body.notes                 ?? null,
+      sku:                   body.sku                   ?? null,
+      line_discount_percent: body.line_discount_percent ?? 0,
     })
     .select()
     .single()
