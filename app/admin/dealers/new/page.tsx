@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -8,6 +8,7 @@ import {
   CheckCircle2, MapPin, Phone, Mail, Globe, Layers,
   Star, Wrench, TrendingUp, ClipboardList, Zap,
   AlertCircle, Copy, ExternalLink, Hash, Info,
+  Search, X, Loader2,
 } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { DollarSign, Hammer, UserCheck } = require('lucide-react') as any
@@ -239,6 +240,125 @@ function commissionPoolError(form: WizardState): string | null {
   if (sales < 0 || service < 0) return 'Rates cannot be negative'
   if (sales + service > 4.00)   return `Total $${(sales + service).toFixed(2)} exceeds the $4.00 configurable pool`
   return null
+}
+
+/* ─── Org search picker ──────────────────────────────────── */
+interface OrgOption {
+  id: string
+  name: string
+  org_tier: string
+  tier_label: string | null
+  is_active: boolean
+}
+
+function OrgSearchPicker({
+  value,
+  displayName,
+  onChange,
+  onClear,
+  placeholder,
+  tiers,
+}: {
+  value: string
+  displayName: string
+  onChange: (id: string, name: string) => void
+  onClear: () => void
+  placeholder: string
+  tiers?: string[]
+}) {
+  const [q, setQ] = useState('')
+  const [results, setResults] = useState<OrgOption[]>([])
+  const [searching, setSearching] = useState(false)
+  const [open, setOpen] = useState(false)
+
+  const search = useCallback(async (query: string) => {
+    if (!query.trim()) { setResults([]); return }
+    setSearching(true)
+    try {
+      const params = new URLSearchParams({ q: query, limit: '10' })
+      if (tiers) tiers.forEach(t => params.append('tier', t))
+      const res = await fetch(`/api/admin/orgs?${params}`)
+      const data = await res.json()
+      setResults(data.orgs ?? [])
+    } catch { setResults([]) }
+    finally { setSearching(false) }
+  }, [tiers])
+
+  useEffect(() => {
+    const timer = setTimeout(() => { void search(q) }, 250)
+    return () => clearTimeout(timer)
+  }, [q, search])
+
+  if (value) {
+    return (
+      <div className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-2 bg-white">
+        <span className="flex-1 text-sm text-slate-900 font-medium">{displayName}</span>
+        <span className="text-xs text-slate-400 font-mono">{value.slice(0, 8)}…</span>
+        <button onClick={onClear} className="text-slate-300 hover:text-slate-600 transition-colors">
+          <X size={14} />
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        <input
+          value={q}
+          onChange={e => { setQ(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder={placeholder}
+          className="w-full border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+        />
+      </div>
+      {open && q.trim() && (
+        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg py-1 max-h-48 overflow-y-auto">
+          {searching && (
+            <div className="px-3 py-2 text-xs text-slate-400 flex items-center gap-2">
+              <Loader2 size={12} className="animate-spin" /> Searching…
+            </div>
+          )}
+          {!searching && results.length === 0 && (
+            <div className="px-3 py-2 text-xs text-slate-400">No matches found</div>
+          )}
+          {results.map(org => {
+            const cfg = TIER_CONFIG_WIZARD[org.org_tier]
+            const TierIcon = cfg?.icon ?? Building2
+            return (
+              <button
+                key={org.id}
+                onClick={() => { onChange(org.id, org.name); setQ(''); setOpen(false) }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 transition-colors text-left"
+              >
+                <div className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 ${cfg?.bg ?? 'bg-slate-100'}`}>
+                  <TierIcon size={11} className={cfg?.color ?? 'text-slate-500'} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm text-slate-900 font-medium truncate">{org.name}</div>
+                </div>
+                <span className={`text-[10px] font-semibold shrink-0 px-1.5 py-0.5 rounded-full ${cfg?.bg ?? 'bg-slate-100'} ${cfg?.color ?? 'text-slate-500'}`}>
+                  {cfg?.label ?? org.org_tier}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── Tier config for org search picker (local to wizard) ─── */
+const TIER_CONFIG_WIZARD: Record<string, { label: string; icon: any; color: string; bg: string }> = {
+  master_agent:       { label: 'Master Agent',  icon: Star,          color: 'text-violet-700', bg: 'bg-violet-100' },
+  master_dealer:      { label: 'MSO',            icon: Layers,        color: 'text-brand-400',  bg: 'bg-brand-50'   },
+  full_dealer:        { label: 'Full Dealer',   icon: Shield,        color: 'text-indigo-700', bg: 'bg-indigo-100' },
+  service_dealer:     { label: 'Service',       icon: Wrench,        color: 'text-emerald-700',bg: 'bg-emerald-100'},
+  install_contractor: { label: 'Install',       icon: ClipboardList, color: 'text-amber-700',  bg: 'bg-amber-100'  },
+  sales_partner:      { label: 'Sales Partner', icon: TrendingUp,    color: 'text-sky-700',    bg: 'bg-sky-100'    },
 }
 
 /* ─── Which tiers show commission step ───────────────────── */
@@ -626,13 +746,14 @@ export default function NewDealerPage() {
                 <p className="text-xs text-slate-400 mb-3">
                   The Master Agent who signed or recruited this dealer. They earn $0.50/unit/month on this dealer's portfolio.
                 </p>
-                <Field label="Master Agent Org ID" hint="UUID from the organizations table — leave blank if none">
-                  <Input
-                    value={form.master_agent_id}
-                    onChange={e => set('master_agent_id', e.target.value)}
-                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (optional)"
-                  />
-                </Field>
+                <OrgSearchPicker
+                  value={form.master_agent_id}
+                  displayName={form.master_agent_id ? `Master Agent (${form.master_agent_id.slice(0, 8)}…)` : ''}
+                  onChange={(id) => set('master_agent_id', id)}
+                  onClear={() => set('master_agent_id', '')}
+                  placeholder="Search for Master Agent org…"
+                  tiers={['master_agent']}
+                />
               </div>
 
               {/* Master Dealer */}
@@ -642,13 +763,14 @@ export default function NewDealerPage() {
                   <p className="text-xs text-slate-400 mb-3">
                     The MSO this org operates under. They earn $0.50/unit/month and set the default commission template.
                   </p>
-                  <Field label="MSO Org ID" hint="UUID from the organizations table — leave blank to assign later">
-                    <Input
-                      value={form.master_dealer_id}
-                      onChange={e => set('master_dealer_id', e.target.value)}
-                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (optional)"
-                    />
-                  </Field>
+                  <OrgSearchPicker
+                    value={form.master_dealer_id}
+                    displayName={form.master_dealer_id ? `MSO (${form.master_dealer_id.slice(0, 8)}…)` : ''}
+                    onChange={(id) => set('master_dealer_id', id)}
+                    onClear={() => set('master_dealer_id', '')}
+                    placeholder="Search for MSO org…"
+                    tiers={['master_dealer']}
+                  />
                 </div>
               )}
 
@@ -659,23 +781,16 @@ export default function NewDealerPage() {
                   <p className="text-xs text-slate-400 mb-3">
                     The Full Dealership this org reports to, if any. Optional — not all sub-types have a direct parent dealer.
                   </p>
-                  <Field label="Parent Full Dealer Org ID" hint="UUID from the organizations table">
-                    <Input
-                      value={form.parent_org_id}
-                      onChange={e => set('parent_org_id', e.target.value)}
-                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (optional)"
-                    />
-                  </Field>
+                  <OrgSearchPicker
+                    value={form.parent_org_id}
+                    displayName={form.parent_org_name || (form.parent_org_id ? `Dealer (${form.parent_org_id.slice(0, 8)}…)` : '')}
+                    onChange={(id, name) => { set('parent_org_id', id); set('parent_org_name', name) }}
+                    onClear={() => { set('parent_org_id', ''); set('parent_org_name', '') }}
+                    placeholder="Search for Full Dealer org…"
+                    tiers={['full_dealer']}
+                  />
                 </div>
               )}
-
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800 flex items-start gap-2">
-                <Info size={15} className="mt-0.5 shrink-0 text-blue-500" />
-                <div>
-                  <p className="font-semibold">Searchable org picker coming soon</p>
-                  <p className="text-xs mt-0.5">Paste org UUIDs for now. You can find them on the Dealers list page. All relationships can also be set after onboarding from the org detail page.</p>
-                </div>
-              </div>
             </div>
           )}
         </div>

@@ -90,18 +90,18 @@ The single biggest gap between "looks like a dev built it in Tailwind" and "look
 - [ ] Add proper empty states to all 14 section list pages
 - [ ] Add `@media print` stylesheet to quote approval page
 
-### Sprint 4 — Operational Backbone (Month 2, Week 1–2)
-- [ ] CRM: Pipeline $ by stage on kanban header (weighted value per column)
-- [ ] CRM: Deal aging badge (red after 7 days no activity, amber after 3)
-- [ ] CRM: Lead → Opportunity conversion form (qualify button)
-- [ ] Properties: Health score on site list (formula: offline assets + overdue WOs → green/amber/red)
-- [ ] Properties: Embedded Mapbox pin on site detail
-- [ ] Inventory: Auto-deduct parts when marked Used on WO (join table: work_order_parts)
-- [ ] Inventory: Auto-create PO draft when on_hand < min_stock trigger
-- [ ] Dispatch: Mapbox split view (board left, tech pins right)
-- [ ] Dispatch: "En Route" + "On Site" columns added to job board
+### Sprint 4 — Operational Backbone (Month 2, Week 1–2) ✅ COMPLETE
+- [x] CRM: Pipeline $ by stage on kanban header (weighted value per column)
+- [x] CRM: Deal aging badge (red after 7 days no activity, amber after 3)
+- [x] CRM: Lead → Opportunity conversion form (qualify button + SlideOver)
+- [x] Properties: Health score on site list (formula: offline assets + overdue WOs → 🟢/🟡/🔴 chip per row)
+- [x] Properties: Embedded Mapbox pin on site detail (geocoded from property address)
+- [x] Inventory: Auto-deduct parts when marked Used on WO (join table: work_order_parts)
+- [x] Inventory: Auto-create PO draft when on_hand < min_stock trigger + "PO Pending" badge
+- [x] Dispatch: Mapbox split-view (board left, tech location pins right) + 📍 Map toggle
+- [x] Dispatch: "En Route" + "On Site" columns added to job board
 
-### Sprint 5 — Category-Defining Polish (Month 2, Week 3–4)
+### Sprint 5 — Category-Defining Polish (Month 2, Week 3–4) ✅ COMPLETE
 - [ ] EOS: L10 meeting facilitator with section timer + agenda runner
 - [ ] EOS: Live Scorecard pulled from work_orders + permits + quotes tables
 - [ ] To-Dos: Wire to EOS L10 section (appear in weekly meeting review)
@@ -116,6 +116,15 @@ The single biggest gap between "looks like a dev built it in Tailwind" and "look
 - [ ] Products: Pricing tiers (Standard / Preferred / Premium sell price per product)
 - [ ] Site Survey: Survey health indicator on list (draft / devices added / AI ready / quoted)
 - [ ] Site Survey: Survey share link (same pattern as quote approval page)
+- [x] `/billing` — Full billing engine (see What's Live)
+- [x] `/admin/dealers/[id]` — Dealer detail page (see What's Live)
+- [x] `/reps` — Commission approval workflow (see What's Live)
+- [x] `/reps/[id]` — Rep detail page (see What's Live)
+- [x] `/compliance` — Permit detail SlideOver + document attachments + renewal reminders cron
+- [x] `/map` — Real Mapbox GL JS v3.3.0, live geocoded pins, health-colored markers
+- [x] `/scorecard` — Ranked leaderboard table, trophy badges, sparkline trends
+- [x] `/training` — End-of-course quiz engine, PDF certificate generation, prerequisite gating
+- [x] `/training/admin` — Admin progress dashboard
 
 ### What 10/10 Actually Looks Like Per Section (target state)
 | Section | Current | Target Benchmark | Key Gap |
@@ -258,19 +267,41 @@ GateGuard is going live. Two parallel Vercel deployments must exist from this po
 - `/customers` — Org hierarchy viewer: **all 8 tiers** (Corporate→Master Agent→MSO→Dealer→Service/Install/Sales Partner→Client), wired to live Supabase via `/api/customers`
 - `/customers/[id]` — Customer detail: live data from `/api/customers/[id]`, shows sites, child orgs, recent WOs, asset stats; Edit slide-over PATCHes API
 - `/compliance` — Permit tracker wired to live Supabase via `/api/permits` + `/api/permits/[id]`; uses `permits_with_status` Supabase view for auto-computed status + days_remaining
-- `/scorecard` — Dealer scorecard **fully wired**: live weighted score computed from real WO + permit data (last 90 days). Weights: Response Time 25% · FCR 25% · Compliance 20% · On-Time WOs 20% · NPS 10%. GateGuard Certified badge ≥ 80.
-- `/training` — Training & certification progress **persisted to Supabase** via `/api/training/progress`; optimistic UI updates, per-chapter completion tracking, real progress bars + course badges
+- `/scorecard` — Dealer scorecard **fully wired**: live weighted score computed from real WO + permit data (last 90 days). Weights: Response Time 25% · FCR 25% · Compliance 20% · On-Time WOs 20% · NPS 10%. GateGuard Certified badge ≥ 80. **Sprint 5:** ranked leaderboard table (default view), trophy badges for top 3, sparkline trend lines, dealer self-view scoped for `dealer` role users
+- `/training` — Training & certification progress **persisted to Supabase** via `/api/training/progress`; optimistic UI updates, per-chapter completion tracking, real progress bars + course badges. **Sprint 5:** end-of-course quiz (8 questions, 80% pass threshold, 3 attempts), PDF certificate generation (landscape, GateGuard branded, 1-year expiry), course prerequisite gating (UL 325 requires LVF), My Certificates panel, exam attempts counter
+- `/training/admin` — Admin progress dashboard: enrollment stats, per-user completion DataTable, Reset Attempts + Revoke Cert actions
 - TopBar — Now fully interactive: expandable search with quick-jump shortcuts, notification bell dropdown, profile dropdown with sign out
 - `/api/crm/assignable-orgs` — Returns orgs a user can assign to, scoped by their org tier
 - Transactional email via Resend (`resend` package added) — used by email send in opportunity detail
+- **Sprint 4 additions:**
+- `/dispatch` — En Route + On Site columns added to job board; Mapbox split-view (board left, tech location pins right) with 📍 Map toggle
+- `/sites` list — Health score chip per row (🟢/🟡/🔴) computed from open WOs + offline assets
+- `/sites/[id]` — Embedded Mapbox pin from property address geocoding
+- `/crm/opportunities` — Pipeline $ by stage on kanban header (weighted value per column)
+- `/crm/leads/[id]` — Deal aging badge (red >7 days / amber >3 days no activity), Qualify as Opportunity button + SlideOver
+- `/inventory` — Mark as Used deducts `on_hand`; auto-PO draft + "PO Pending" badge when stock drops below `min_stock`
+- **Sprint 5 additions:**
+- `/billing` — Full billing engine: live invoices from Supabase, Stripe payment links (ACH + cards), commission payout tracking, QuickBooks Online outbound sync. GateGuard billing model: Video Monitoring flat fee + Access Plan $5/unit/month. Invoice numbers: GG-INV-NNNNNN continuing from QB sequence (started at 120045)
+- `/admin/dealers/[id]` — Full dealer detail page: 5 tabs (Overview, Properties, Work Orders, Commission History, Documents), onboarding stepper progress, edit SlideOver
+- `/admin/dealers` list — Rows now navigate to dealer detail; dealer health summary chip added per row
+- `/admin/dealers/new` — Step 3 org search replaced with search-as-you-type autocomplete picker
+- `/reps` — Commission approval workflow: approve/hold/mark paid per row + bulk actions; hierarchy tree view; commission MTD shows earned dollars
+- `/reps/[id]` — Rep detail page: 30/60/90d pipeline breakdown, deal history, commission timeline
+- `/compliance` — Permit detail SlideOver with edit mode, document attachments (Supabase Storage), renewal reminders cron (daily at 9am via Resend `/api/cron/permit-reminders`), per-site filtering
+- `/map` — Real Mapbox GL JS v3.3.0 integration: live sites data, geocoded property pins, health-colored markers (green/amber/red) with popups, sidebar panel synced to live Supabase data
 
 ### Pending / Next Up
-- [ ] Lead → Opportunity conversion flow (qualify button on lead detail)
+- [x] Lead → Opportunity conversion flow (qualify button on lead detail) ✅ Sprint 4
+- [x] Territory Map (`/map`) — now live with Mapbox GL JS v3.3.0 ✅ Sprint 5
 - [ ] Master Agent onboarding — invite flow + org setup
 - [ ] `RESEND_API_KEY` env var must be set on Vercel beta + prod for email to work
+- [ ] `STRIPE_SECRET_KEY` + `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` must be set on Vercel for billing payment links
+- [ ] `QBO_CLIENT_ID`, `QBO_CLIENT_SECRET`, `QBO_REALM_ID`, `QBO_ACCESS_TOKEN` — for QuickBooks Online sync (optional)
 - [ ] Migration 021 — `training_progress` + `dealer_scorecards` tables: run on beta Supabase, then prod
+- [ ] Migration 050 — `invoices` + `invoice_line_items` + `commission_payouts` tables: run on beta first
+- [ ] Migration 051 — billing columns on `sites` table: run on beta first
+- [ ] Migration 052 — `permit_documents` table enrichment: run on beta first
 - [ ] Client portal at `portal.gateguard.co/[site-slug]` — property manager dashboard (Brivo + Eagle Eye, no direct login to either). Clerk 'client' role. Supabase RLS by org. See `app/[site-slug]/page.tsx`.
-- [ ] Territory Map (`/map`) — Mapbox token required; currently shows placeholder
 - [ ] EOS page (`/eos`) — persistence to Supabase (currently in-memory only)
 - [ ] PWA manifest for /tech (techs "Add to Home Screen")
 - [ ] Photo evidence on work orders
@@ -333,6 +364,26 @@ Adds to `quote_line_items`: `section_name text`, `item_type text` (product|labor
 `is_included boolean`, `package_tier text` (basic|standard|premium), `image_url text`, `model_number text`,
 `notes text`, `sku text`
 Run on beta first, verify `/quotes/new` + `/quotes/[id]` + `/quotes/[id]/approve`, then prod.
+
+### Migration 050 — billing (MUST RUN ON BETA BEFORE /billing GOES LIVE)
+`supabase/migrations/050_billing.sql` creates:
+- `invoices` table: `id uuid PK`, `org_id uuid`, `site_id uuid`, `invoice_number text` (GG-INV-NNNNNN, starting at 120045), `status text` (draft|sent|paid|overdue|void), `subtotal numeric`, `tax_rate numeric`, `total numeric`, `due_date date`, `paid_at timestamptz`, `stripe_payment_link text`, `qbo_invoice_id text`, `created_at`, `updated_at`
+- `invoice_line_items` table: `id uuid PK`, `invoice_id uuid FK`, `description text`, `quantity numeric`, `unit_price numeric`, `amount numeric`, `item_type text` (video_monitoring|access_plan|labor|parts|other)
+- `commission_payouts` table: `id uuid PK`, `rep_id uuid FK`, `period char(7)` ("YYYY-MM"), `amount numeric`, `status text` (pending|approved|on_hold|paid), `approved_by uuid`, `approved_at timestamptz`, `paid_at timestamptz`, `notes text`
+- All tables: RLS enabled + `service_role_all` policy
+Run on beta first, verify `/billing` + `/api/billing`, then prod.
+
+### Migration 051 — billing columns on sites
+`supabase/migrations/051_site_billing.sql` adds columns to `sites` table:
+`billing_video_fee numeric` (default 500.00), `billing_unit_rate numeric` (default 5.00), `billing_units integer`,
+`contract_months integer` (default 36), `contract_start_date date`, `contract_end_date date`
+Run on beta first, verify site billing tab in `/sites/[id]`, then prod.
+
+### Migration 052 — permit documents enrichment
+`supabase/migrations/052_permit_documents.sql` adds columns to `permits` table:
+`documents jsonb` (array of {name, url, uploaded_at}), `inspector_name text`, `inspection_date date`,
+`jurisdiction text`, `notes text`, `reminder_sent_at timestamptz`
+Run on beta first, verify permit detail SlideOver + document upload in `/compliance`, then prod.
 
 ### ⚠️ Known Build Gotchas (Vercel)
 
@@ -418,6 +469,22 @@ GateGuard Corporate (SO — System Operator)
 
 ---
 
+## GateGuard Billing Model
+
+Two recurring line item types per property:
+1. **Video Monitoring Fee** — flat rate per property (default $500/mo, covers up to 10 cameras)
+2. **Access Plan** — $5.00 per living unit per month (includes gate service, Brivo, PMS integration, 36-month agreement)
+
+**Invoice numbering:** GG-INV-NNNNNN continuing from QB sequence (started at 120045)
+
+**Payment:** Stripe payment links (ACH + cards). Customers pay via link — no portal login required.
+
+**QuickBooks Online:** Portal sends invoices outbound to QB. Portal never reads from QB. One-way sync only.
+
+**Commission payouts:** Tracked in portal (`commission_payouts` table), admin approves + marks paid manually via `/reps`. No Stripe Connect — payouts are processed outside the platform.
+
+---
+
 ## THIS REPO — portal.gateguard.co
 
 **Who uses it:** GateGuard dealers, sub-dealers, sales reps, and field technicians. Also: client (property manager) read-only portal view. NOT residents. NOT visitors. NOT SOC agents.
@@ -457,11 +524,13 @@ GateGuard Corporate (SO — System Operator)
 - Anthropic Claude Haiku (`claude-haiku-4-5-20251001`) for AI diagnostic step generation
 - Brivo API (access control)
 - UniFi Network API (network/VLAN management)
-- Mapbox GL JS — territory map (`/map`), site detail pins, dispatch split-view. Env: `NEXT_PUBLIC_MAPBOX_TOKEN`. Get token: mapbox.com → account → Tokens. Free tier: 50K map loads/month.
-- Resend — transactional email (WO notifications, CRM email send/track, dealer welcome emails). Env: `RESEND_API_KEY`
+- Mapbox GL JS v3.3.0 — territory map (`/map`), site detail pins, dispatch split-view. Env: `NEXT_PUBLIC_MAPBOX_TOKEN`. Get token: mapbox.com → account → Tokens. Free tier: 50K map loads/month.
+- Resend — transactional email (WO notifications, CRM email send/track, dealer welcome emails, permit renewal reminders). Env: `RESEND_API_KEY`
 - Plaud API — voice recording transcription for /tech site survey. Env: `PLAUD_CLIENT_ID`, `PLAUD_SECRET_KEY`. Register: platform.plaud.ai/developer
 - Eagle Eye Networks API — live camera feeds, motion search, archive (`/cameras`)
 - Twilio — SMS notifications (planned: renewal reminders, WO alerts)
+- Stripe — invoice payment links for customer billing (ACH + cards). Env: `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_APP_URL`
+- QuickBooks Online — outbound invoice sync only (portal → QB, never QB → portal). Env: `QBO_CLIENT_ID`, `QBO_CLIENT_SECRET`, `QBO_REALM_ID`, `QBO_ACCESS_TOKEN`
 
 ---
 
@@ -636,9 +705,16 @@ Note: `/reps`, `/compliance`, `/scorecard`, `/map`, `/reports` are placeholder U
 - `BRIVO_API_KEY`, `BRIVO_CLIENT_ID`, `BRIVO_CLIENT_SECRET`
 - `CRON_SECRET` — Vercel cron requests
 - `TECH_ACCESS_CODE` — PIN for /tech without Clerk
-- `MAPBOX_TOKEN` — (planned) for /map territory view
+- `NEXT_PUBLIC_MAPBOX_TOKEN` — Mapbox GL JS token for /map, site detail pins, dispatch split-view
 - `PLAUD_CLIENT_ID` — Plaud developer API client ID (from platform.plaud.ai/developer)
 - `PLAUD_SECRET_KEY` — Plaud developer API secret key
+- `STRIPE_SECRET_KEY` — Stripe secret key for payment link creation (billing engine)
+- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` — Stripe publishable key
+- `NEXT_PUBLIC_APP_URL` — e.g. https://portal.gateguard.co (used for Stripe redirect after payment)
+- `QBO_CLIENT_ID` — QuickBooks Online OAuth client ID (outbound invoice sync, optional)
+- `QBO_CLIENT_SECRET` — QuickBooks Online OAuth client secret
+- `QBO_REALM_ID` — QuickBooks Online company ID
+- `QBO_ACCESS_TOKEN` — QuickBooks Online OAuth access token
 
 ---
 

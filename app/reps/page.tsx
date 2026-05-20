@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
 import { AISearch } from "@/components/ai/AISearch";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -16,7 +17,7 @@ import {
   Layers,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { DollarSign } = require("lucide-react") as any;
+const { DollarSign, GitBranch } = require("lucide-react") as any;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,7 +44,7 @@ interface Commission {
   rep_id: string;
   pay_period: string;
   amount_cents: number;
-  door_count: number;
+  door_count?: number | null;
   status: "pending" | "approved" | "paid" | "held";
   sales_reps: { first_name: string; last_name: string; tier: string } | null;
 }
@@ -113,9 +114,80 @@ function CommissionStatus({ status }: { status: string }) {
   );
 }
 
+// ─── Hierarchy tree node ──────────────────────────────────────────────────────
+
+function HierarchyNode({
+  rep,
+  allReps,
+  commMTDByRep,
+  depth,
+  onClick,
+}: {
+  rep: Rep
+  allReps: Rep[]
+  commMTDByRep: Record<string, number>
+  depth: number
+  onClick: (id: string) => void
+}) {
+  const children = allReps.filter(r => r.parent_rep_id === rep.id)
+  const mtdCents = commMTDByRep[rep.id] ?? 0
+  const paddingLeft = depth * 24
+
+  return (
+    <div>
+      <button
+        onClick={() => onClick(rep.id)}
+        className="w-full flex items-center justify-between py-2 px-3 rounded-lg hover:bg-accent/50 transition-colors text-left group"
+        style={{ paddingLeft: `${paddingLeft + 12}px` }}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {depth > 0 && (
+            <div
+              className="border-l-2 border-b-2 border-border rounded-bl-sm shrink-0"
+              style={{ width: 14, height: 14, marginLeft: -14, marginBottom: -6 }}
+            />
+          )}
+          <div className="w-7 h-7 rounded-full bg-brand-400/10 flex items-center justify-center text-[10px] font-bold text-brand-400 shrink-0">
+            {rep.first_name[0]}{rep.last_name[0]}
+          </div>
+          <div className="min-w-0">
+            <span className="text-sm font-medium text-foreground group-hover:text-brand-400 transition-colors">
+              {rep.first_name} {rep.last_name}
+            </span>
+            <span className="ml-2 text-[10px] text-muted-foreground">
+              {TIER_LABELS[rep.tier] ?? rep.tier}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-6 shrink-0 text-right">
+          <div>
+            <div className="text-sm font-medium text-foreground">{fmtPipeline(rep.pipeline_value)}</div>
+            <div className="text-[10px] text-muted-foreground">pipeline</div>
+          </div>
+          <div>
+            <div className="text-sm font-semibold text-emerald-600">{fmtMoney(mtdCents)}</div>
+            <div className="text-[10px] text-muted-foreground">MTD</div>
+          </div>
+        </div>
+      </button>
+      {children.map(child => (
+        <HierarchyNode
+          key={child.id}
+          rep={child}
+          allReps={allReps}
+          commMTDByRep={commMTDByRep}
+          depth={depth + 1}
+          onClick={onClick}
+        />
+      ))}
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function RepsPage() {
+  const router = useRouter();
   const [reps,        setReps]        = useState<Rep[]>([]);
   const [commissions, setCommissions] = useState<Commission[]>([]);
   const [loading,     setLoading]     = useState(true);
@@ -124,6 +196,9 @@ export default function RepsPage() {
   const [newRepEmail, setNewRepEmail] = useState("");
   const [newRepTier,  setNewRepTier]  = useState<"senior_rep"|"rep"|"sub_rep">("rep");
   const [saving,      setSaving]      = useState(false);
+  const [hierarchyView, setHierarchyView] = useState(false);
+  const [commActionId, setCommActionId]   = useState<string | null>(null);
+  const [selectedCommIds, setSelectedCommIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -144,6 +219,35 @@ export default function RepsPage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  // Commission action handler (approve / hold / mark paid)
+  const handleCommissionAction = async (commId: string, status: string) => {
+    setCommActionId(commId);
+    try {
+      await fetch(`/api/reps/commissions/${commId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      void load();
+    } catch (e) { console.error(e); }
+    finally { setCommActionId(null); }
+  };
+
+  // Bulk commission action
+  const handleBulkAction = async (status: string) => {
+    for (const cId of Array.from(selectedCommIds)) {
+      try {
+        await fetch(`/api/reps/commissions/${cId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        });
+      } catch { /* continue */ }
+    }
+    setSelectedCommIds(new Set());
+    void load();
+  };
+
   // Build lookup: rep id → name (for parent rep display)
   const repById: Record<string, Rep> = {};
   for (const r of reps) repById[r.id] = r;
@@ -159,6 +263,16 @@ export default function RepsPage() {
       return c.status === "paid" && c.pay_period === period;
     })
     .reduce((s, c) => s + c.amount_cents, 0);
+
+  // Per-rep commission MTD map
+  const now2 = new Date();
+  const currentPeriod = `${now2.getFullYear()}-${String(now2.getMonth() + 1).padStart(2, "0")}`;
+  const commMTDByRep: Record<string, number> = {};
+  for (const c of commissions) {
+    if (c.pay_period === currentPeriod && (c.status === "approved" || c.status === "paid")) {
+      commMTDByRep[c.rep_id] = (commMTDByRep[c.rep_id] ?? 0) + c.amount_cents;
+    }
+  }
 
   // Add rep
   async function handleAddRep(e: React.FormEvent) {
@@ -187,10 +301,13 @@ export default function RepsPage() {
       label: "Name",
       sortable: true,
       render: (_, row) => (
-        <span className="font-medium text-foreground whitespace-nowrap">
-          {row.parent_rep_id && <ChevronRight size={11} className="inline text-muted-foreground mr-1" />}
+        <button
+          onClick={() => router.push(`/reps/${row.id}`)}
+          className="font-medium text-foreground whitespace-nowrap hover:text-brand-400 transition-colors text-left flex items-center gap-1"
+        >
+          {row.parent_rep_id && <ChevronRight size={11} className="text-muted-foreground shrink-0" />}
           {repFullName(row)}
-        </span>
+        </button>
       ),
     },
     {
@@ -227,9 +344,15 @@ export default function RepsPage() {
     {
       key: "commission_rate",
       label: "Commission MTD",
-      render: (_, row) => (
-        <span className="text-muted-foreground">${row.commission_rate.toFixed(2)}/unit</span>
-      ),
+      render: (_, row) => {
+        const mtdCents = commMTDByRep[row.id] ?? 0;
+        return (
+          <div>
+            <div className="font-semibold text-foreground">{fmtMoney(mtdCents)}</div>
+            <div className="text-[10px] text-muted-foreground">${row.commission_rate.toFixed(2)}/unit rate</div>
+          </div>
+        );
+      },
     },
   ];
 
@@ -248,13 +371,13 @@ export default function RepsPage() {
       key: "pay_period",
       label: "Period",
       sortable: true,
-      render: (_, row) => <span className="text-muted-foreground">{row.pay_period}</span>,
+      render: (_, row) => <span className="font-mono text-xs text-foreground">{row.pay_period}</span>,
     },
     {
       key: "door_count",
       label: "Doors",
       align: "right",
-      render: (_, row) => <span className="text-foreground">{row.door_count}</span>,
+      render: (_, row) => <span className="text-foreground">{row.door_count ?? "—"}</span>,
     },
     {
       key: "amount_cents",
@@ -388,31 +511,86 @@ export default function RepsPage() {
             <Users size={15} className="text-brand-400" />
             <h2 className="text-sm font-semibold">Rep Network</h2>
             {reps.length > 0 && (
-              <span className="ml-auto text-[10px] text-muted-foreground">{reps.length} reps</span>
+              <span className="text-[10px] text-muted-foreground">{reps.length} reps</span>
             )}
+            <div className="ml-auto">
+              <button
+                onClick={() => setHierarchyView(v => !v)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  hierarchyView
+                    ? "bg-brand-400/10 text-brand-400 border-brand-400/30"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <GitBranch size={12} />
+                Hierarchy View
+              </button>
+            </div>
           </div>
 
-          <DataTable<Rep>
-            columns={repColumns}
-            data={reps}
-            rowKey="id"
-            loading={loading}
-            skeletonRows={5}
-            emptyState={
-              <EmptyState
-                icon={<Users size={32} className="text-muted-foreground" />}
-                title="No reps added yet"
-                description="Click Add Rep to build your sales rep network"
-              />
-            }
-          />
+          {hierarchyView ? (
+            /* ── Hierarchy Tree ──────────────────────────────── */
+            <div className="p-4 space-y-1">
+              {reps.filter(r => !r.parent_rep_id).length === 0 && !loading ? (
+                <EmptyState
+                  icon={<Users size={32} className="text-muted-foreground" />}
+                  title="No reps added yet"
+                  description="Click Add Rep to build your sales rep network"
+                />
+              ) : (
+                reps.filter(r => !r.parent_rep_id).map(root => (
+                  <HierarchyNode
+                    key={root.id}
+                    rep={root}
+                    allReps={reps}
+                    commMTDByRep={commMTDByRep}
+                    depth={0}
+                    onClick={id => router.push(`/reps/${id}`)}
+                  />
+                ))
+              )}
+            </div>
+          ) : (
+            <DataTable<Rep>
+              columns={repColumns}
+              data={reps}
+              rowKey="id"
+              loading={loading}
+              skeletonRows={5}
+              onRowClick={row => router.push(`/reps/${row.id}`)}
+              emptyState={
+                <EmptyState
+                  icon={<Users size={32} className="text-muted-foreground" />}
+                  title="No reps added yet"
+                  description="Click Add Rep to build your sales rep network"
+                />
+              }
+            />
+          )}
         </div>
 
         {/* Commission Payouts */}
         <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border">
+          <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border flex-wrap gap-y-2">
             <DollarSign size={15} className="text-brand-400" />
             <h2 className="text-sm font-semibold">Commission Payouts</h2>
+            {selectedCommIds.size > 0 && (
+              <div className="ml-auto flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">{selectedCommIds.size} selected</span>
+                <button
+                  onClick={() => { void handleBulkAction("approved"); }}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                >
+                  Approve Selected
+                </button>
+                <button
+                  onClick={() => { void handleBulkAction("paid"); }}
+                  className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200 hover:bg-blue-100 transition-colors"
+                >
+                  Mark Paid Selected
+                </button>
+              </div>
+            )}
           </div>
 
           <DataTable<Commission>
@@ -421,6 +599,49 @@ export default function RepsPage() {
             rowKey="id"
             loading={loading}
             skeletonRows={4}
+            selectable
+            selectedIds={selectedCommIds}
+            onSelectChange={setSelectedCommIds}
+            actions={row => (
+              <div className="flex items-center gap-1.5 justify-end">
+                {row.status === "pending" && (
+                  <>
+                    <button
+                      onClick={() => { void handleCommissionAction(row.id, "approved"); }}
+                      disabled={commActionId === row.id}
+                      className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200 hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => { void handleCommissionAction(row.id, "held"); }}
+                      disabled={commActionId === row.id}
+                      className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 text-xs font-semibold border border-amber-200 hover:bg-amber-100 transition-colors disabled:opacity-50"
+                    >
+                      Hold
+                    </button>
+                  </>
+                )}
+                {row.status === "approved" && (
+                  <button
+                    onClick={() => { void handleCommissionAction(row.id, "paid"); }}
+                    disabled={commActionId === row.id}
+                    className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200 hover:bg-blue-100 transition-colors disabled:opacity-50"
+                  >
+                    Mark Paid
+                  </button>
+                )}
+                {row.status === "held" && (
+                  <button
+                    onClick={() => { void handleCommissionAction(row.id, "approved"); }}
+                    disabled={commActionId === row.id}
+                    className="px-2.5 py-1 rounded-lg bg-slate-50 text-slate-700 text-xs font-semibold border border-slate-200 hover:bg-slate-100 transition-colors disabled:opacity-50"
+                  >
+                    Unhold
+                  </button>
+                )}
+              </div>
+            )}
             emptyState={
               <EmptyState
                 icon={<Layers size={32} className="text-muted-foreground" />}

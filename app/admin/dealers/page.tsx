@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   Users, Plus, Search, Building2, Star, Wrench,
   TrendingUp, ClipboardList, Layers, ChevronRight,
@@ -83,6 +84,7 @@ function StatCard({
 
 /* ─── Main page ──────────────────────────────────────────── */
 export default function DealersPage() {
+  const router = useRouter()
   const [orgs, setOrgs]           = useState<DealerOrg[]>([])
   const [loading, setLoading]     = useState(true)
   const [q, setQ]                 = useState('')
@@ -200,7 +202,11 @@ export default function DealersPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {orgs.map(org => (
-                <tr key={org.id} className="hover:bg-slate-50 group transition-colors">
+                <tr
+                  key={org.id}
+                  className="hover:bg-slate-50 group transition-colors cursor-pointer"
+                  onClick={() => router.push(`/admin/dealers/${org.id}`)}
+                >
                   {/* Name */}
                   <td className="px-4 py-3.5">
                     <div className="flex items-center gap-2">
@@ -294,7 +300,7 @@ export default function DealersPage() {
                   </td>
 
                   {/* Org ID (copy button) */}
-                  <td className="px-4 py-3.5">
+                  <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
                     <button
                       onClick={() => copyId(org.id)}
                       className="flex items-center gap-1.5 text-xs font-mono text-slate-400 hover:text-brand-400 transition-colors"
