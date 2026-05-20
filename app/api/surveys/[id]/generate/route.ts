@@ -215,14 +215,20 @@ ${survey.voice_transcript ? `VOICE TRANSCRIPT:\n${survey.voice_transcript}` : ''
     } catch (_) { /* columns may not exist — run migration 054 to add them */ }
   })()
 
-  // Return merged data in-memory — avoids a second round-trip and keeps total
-  // execution time well under maxDuration (Vercel truncates on timeout, not on payload size).
+  // Return ONLY the AI fields — voice_transcript / notes_raw / devices can be
+  // many KB and were causing JSON truncation on Vercel's response pipe.
+  // The client merges these into its existing survey state.
   return NextResponse.json({
     survey: {
-      ...survey,
-      ...coreUpdate,
-      ai_urgent_items:  generated.ai_urgent_items  ?? [],
-      ai_install_notes: generated.ai_install_notes ?? [],
+      id:                 survey.id,
+      ai_summary:         generated.ai_summary         ?? null,
+      ai_sow:             generated.ai_sow             ?? null,
+      ai_bom:             generated.ai_bom             ?? [],
+      ai_recommendations: generated.ai_recommendations ?? [],
+      ai_timeline:        generated.ai_timeline        ?? null,
+      ai_urgent_items:    generated.ai_urgent_items    ?? [],
+      ai_install_notes:   generated.ai_install_notes   ?? [],
+      updated_at:         coreUpdate.updated_at,
     },
   })
 }

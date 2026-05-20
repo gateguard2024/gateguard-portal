@@ -881,8 +881,10 @@ export default function SurveyPage() {
       const res  = await fetch(`/api/surveys/${survey.id}/generate`, { method: "POST" })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Generation failed")
-      setSurvey(json.survey)
-      setSurveys(ss => ss.map(s => s.id === json.survey.id ? json.survey : s))
+      // Generate route returns only AI fields to keep payload small — merge into
+      // existing survey state so voice_transcript / devices / photos are preserved.
+      setSurvey(prev => prev ? { ...prev, ...json.survey } : json.survey)
+      setSurveys(ss => ss.map(s => s.id === json.survey.id ? { ...s, ...json.survey } : s))
       setActiveTab("ai")
     } catch (e: unknown) {
       setGenError(e instanceof Error ? e.message : "Generation failed")
