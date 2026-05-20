@@ -13,7 +13,7 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ShieldCheck } = require("lucide-react") as any;
 import { EmptyState } from "@/components/ui/EmptyState";
-import { SkeletonRow } from "@/components/ui/SkeletonRow";
+import { DataTable, type Column } from "@/components/ui/DataTable";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -67,6 +67,65 @@ function DaysCell({ days, status }: { days: number | null; status: ComplianceSta
     return <span className="font-semibold text-amber-400">{days} days</span>;
   return <span className="text-foreground">{days} days</span>;
 }
+
+// ─── Table columns ────────────────────────────────────────────────────────────
+
+const PERMIT_COLUMNS: Column<Permit>[] = [
+  {
+    key: "site_name",
+    label: "Property",
+    sortable: true,
+    render: (_, row) => row.site_name
+      ? <span className="font-medium text-foreground whitespace-nowrap">{row.site_name}</span>
+      : <span className="text-muted-foreground italic">Unassigned</span>,
+  },
+  {
+    key: "type",
+    label: "Type",
+    render: (_, row) => (
+      <span className="text-muted-foreground whitespace-nowrap">
+        {row.label ?? PERMIT_TYPE_LABELS[row.type] ?? row.type}
+      </span>
+    ),
+  },
+  {
+    key: "permit_number",
+    label: "Permit #",
+    sortable: true,
+    render: (_, row) => row.permit_number
+      ? <span className="text-muted-foreground font-mono">{row.permit_number}</span>
+      : <span className="text-border">—</span>,
+  },
+  {
+    key: "issued_by",
+    label: "Jurisdiction",
+    render: (_, row) => row.issued_by
+      ? <span className="text-muted-foreground whitespace-nowrap">{row.issued_by}</span>
+      : <span className="text-border">—</span>,
+  },
+  {
+    key: "issue_date",
+    label: "Issued",
+    sortable: true,
+    render: (_, row) => <span className="text-muted-foreground whitespace-nowrap">{fmtDate(row.issue_date)}</span>,
+  },
+  {
+    key: "expiry_date",
+    label: "Expires",
+    sortable: true,
+    render: (_, row) => <span className="text-muted-foreground whitespace-nowrap">{fmtDate(row.expiry_date)}</span>,
+  },
+  {
+    key: "days_remaining",
+    label: "Days",
+    render: (_, row) => <DaysCell days={row.days_remaining} status={row.status} />,
+  },
+  {
+    key: "status",
+    label: "Status",
+    render: (_, row) => <StatusBadge status={row.status} />,
+  },
+];
 
 // ─── Add Permit Form ──────────────────────────────────────────────────────────
 
@@ -248,53 +307,20 @@ export default function CompliancePage() {
             )}
           </div>
 
-          {loading ? (
-            <SkeletonRow rows={5} cols={8} />
-          ) : permits.length === 0 ? (
-            <EmptyState
-              icon={<ShieldCheck size={32} className="text-muted-foreground" />}
-              title="No permits on file"
-              description="Click Add Permit to start tracking compliance"
-            />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-border bg-background/30">
-                    {["Property", "Type", "Permit #", "Issued By", "Issue Date", "Expiry Date", "Days", "Status"].map(h => (
-                      <th key={h} className="text-left px-4 py-2.5 text-muted-foreground font-medium whitespace-nowrap">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {permits.map(row => (
-                    <tr key={row.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
-                      <td className="px-4 py-3 font-medium text-foreground whitespace-nowrap">
-                        {row.site_name ?? <span className="text-muted-foreground italic">Unassigned</span>}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                        {row.label ?? PERMIT_TYPE_LABELS[row.type] ?? row.type}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground font-mono">
-                        {row.permit_number ?? <span className="text-border">—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                        {row.issued_by ?? <span className="text-border">—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{fmtDate(row.issue_date)}</td>
-                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{fmtDate(row.expiry_date)}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <DaysCell days={row.days_remaining} status={row.status} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={row.status} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <DataTable<Permit>
+            columns={PERMIT_COLUMNS}
+            data={permits}
+            rowKey="id"
+            loading={loading}
+            skeletonRows={5}
+            emptyState={
+              <EmptyState
+                icon={<ShieldCheck size={32} className="text-muted-foreground" />}
+                title="No permits on file"
+                description="Click Add Permit to start tracking compliance"
+              />
+            }
+          />
         </div>
 
       </div>

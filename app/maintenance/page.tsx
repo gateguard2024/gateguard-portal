@@ -13,6 +13,7 @@ import {
 const { Edit2, List } = require('lucide-react') as any;
 import { EmptyState } from '@/components/ui/EmptyState';
 import { SkeletonRow } from '@/components/ui/SkeletonRow';
+import { SlideOver, SlideOverFooter } from '@/components/ui/SlideOver';
 import { cn } from "@/lib/utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -212,8 +213,6 @@ function WorkOrderSlideOver({ open, onClose, onSaved, techs, editing, preselecte
     setError("");
   }, [editing, preselectedSite]);
 
-  if (!open) return null;
-
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
   const handleTechChange = (techId: string) => {
@@ -259,28 +258,22 @@ function WorkOrderSlideOver({ open, onClose, onSaved, techs, editing, preselecte
   };
 
   return (
-    <>
-      {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} />
-      {/* Panel */}
-      <div className="fixed inset-y-0 right-0 w-[480px] bg-card border-l border-border z-50 flex flex-col shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <div>
-            <h2 className="text-sm font-bold text-foreground">
-              {editing ? "Edit Work Order" : "New Work Order"}
-            </h2>
-            {editing && (
-              <p className="text-xs text-muted-foreground font-mono mt-0.5">{editing.wo_number}</p>
-            )}
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-accent transition-colors">
-            <X size={14} className="text-muted-foreground" />
-          </button>
-        </div>
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
+    <SlideOver
+      open={open}
+      onClose={onClose}
+      title={editing ? "Edit Work Order" : "New Work Order"}
+      subtitle={editing ? editing.wo_number : undefined}
+      size="md"
+      footer={
+        <SlideOverFooter
+          onCancel={onClose}
+          onSave={handleSubmit as unknown as () => void}
+          saving={saving}
+          saveLabel={editing ? "Save Changes" : "Create Work Order"}
+        />
+      }
+    >
+        <form onSubmit={handleSubmit} className="space-y-4">
           {/* Title */}
           <div>
             <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
@@ -428,26 +421,7 @@ function WorkOrderSlideOver({ open, onClose, onSaved, techs, editing, preselecte
             </div>
           )}
         </form>
-
-        {/* Footer */}
-        <div className="border-t border-border p-4 flex gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl border border-border text-sm text-muted-foreground hover:bg-accent transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit as unknown as React.MouseEventHandler<HTMLButtonElement>}
-            disabled={saving}
-            className="flex-1 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-lg shadow-brand-500/20"
-          >
-            {saving ? "Saving…" : editing ? "Save Changes" : "Create Work Order"}
-          </button>
-        </div>
-      </div>
-    </>
+    </SlideOver>
   );
 }
 

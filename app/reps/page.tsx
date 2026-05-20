@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { TopBar } from "@/components/layout/TopBar";
 import { AISearch } from "@/components/ai/AISearch";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { SkeletonRow } from "@/components/ui/SkeletonRow";
+import { DataTable, type Column } from "@/components/ui/DataTable";
 import {
   Users,
   TrendingUp,
@@ -180,6 +180,95 @@ export default function RepsPage() {
     finally { setSaving(false); }
   }
 
+  // ─── Rep table columns ──────────────────────────────────────────────────────
+  const repColumns: Column<Rep>[] = [
+    {
+      key: "first_name",
+      label: "Name",
+      sortable: true,
+      render: (_, row) => (
+        <span className="font-medium text-foreground whitespace-nowrap">
+          {row.parent_rep_id && <ChevronRight size={11} className="inline text-muted-foreground mr-1" />}
+          {repFullName(row)}
+        </span>
+      ),
+    },
+    {
+      key: "email",
+      label: "Email",
+      render: (_, row) => (
+        <span className="text-muted-foreground">{row.email ?? "—"}</span>
+      ),
+    },
+    {
+      key: "tier",
+      label: "Tier",
+      render: (_, row) => <TierBadge tier={row.tier} />,
+    },
+    {
+      key: "parent_rep_id",
+      label: "Reports To",
+      render: (_, row) => (
+        <span className="text-muted-foreground">
+          {row.parent_rep_id
+            ? (repById[row.parent_rep_id] ? repFullName(repById[row.parent_rep_id]) : "—")
+            : "—"}
+        </span>
+      ),
+    },
+    {
+      key: "pipeline_value",
+      label: "Pipeline",
+      sortable: true,
+      render: (_, row) => (
+        <span className="font-medium text-foreground">{fmtPipeline(row.pipeline_value)}</span>
+      ),
+    },
+    {
+      key: "commission_rate",
+      label: "Commission MTD",
+      render: (_, row) => (
+        <span className="text-muted-foreground">${row.commission_rate.toFixed(2)}/unit</span>
+      ),
+    },
+  ];
+
+  // ─── Commission table columns ───────────────────────────────────────────────
+  const commissionColumns: Column<Commission>[] = [
+    {
+      key: "rep_id",
+      label: "Rep",
+      render: (_, row) => (
+        <span className="font-medium text-foreground">
+          {row.sales_reps ? `${row.sales_reps.first_name} ${row.sales_reps.last_name}`.trim() : "—"}
+        </span>
+      ),
+    },
+    {
+      key: "pay_period",
+      label: "Period",
+      sortable: true,
+      render: (_, row) => <span className="text-muted-foreground">{row.pay_period}</span>,
+    },
+    {
+      key: "door_count",
+      label: "Doors",
+      align: "right",
+      render: (_, row) => <span className="text-foreground">{row.door_count}</span>,
+    },
+    {
+      key: "amount_cents",
+      label: "Amount",
+      sortable: true,
+      render: (_, row) => <span className="font-semibold text-foreground">{fmtMoney(row.amount_cents)}</span>,
+    },
+    {
+      key: "status",
+      label: "Status",
+      render: (_, row) => <CommissionStatus status={row.status} />,
+    },
+  ];
+
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <TopBar
@@ -303,47 +392,20 @@ export default function RepsPage() {
             )}
           </div>
 
-          {loading ? (
-            <SkeletonRow rows={5} cols={7} />
-          ) : reps.length === 0 ? (
-            <EmptyState
-              icon={<Users size={32} className="text-muted-foreground" />}
-              title="No reps added yet"
-              description="Click Add Rep to build your sales rep network"
-            />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-border bg-background/30">
-                    {["Rep Name", "Tier", "Parent Rep", "Active Sites", "Pipeline Value", "Rate/Unit", "Status"].map(h => (
-                      <th key={h} className="text-left px-4 py-2.5 text-muted-foreground font-medium whitespace-nowrap">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {reps.map(rep => (
-                    <tr key={rep.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
-                      <td className="px-4 py-3 font-medium text-foreground whitespace-nowrap">
-                        {rep.parent_rep_id && <ChevronRight size={11} className="inline text-muted-foreground mr-1" />}
-                        {repFullName(rep)}
-                      </td>
-                      <td className="px-4 py-3"><TierBadge tier={rep.tier} /></td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {rep.parent_rep_id
-                          ? (repById[rep.parent_rep_id] ? repFullName(repById[rep.parent_rep_id]) : <span className="text-border italic">—</span>)
-                          : <span className="text-border">—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-foreground">{rep.active_sites}</td>
-                      <td className="px-4 py-3 font-medium text-foreground">{fmtPipeline(rep.pipeline_value)}</td>
-                      <td className="px-4 py-3 text-muted-foreground">${rep.commission_rate.toFixed(2)}</td>
-                      <td className="px-4 py-3"><StatusDot active={rep.is_active} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <DataTable<Rep>
+            columns={repColumns}
+            data={reps}
+            rowKey="id"
+            loading={loading}
+            skeletonRows={5}
+            emptyState={
+              <EmptyState
+                icon={<Users size={32} className="text-muted-foreground" />}
+                title="No reps added yet"
+                description="Click Add Rep to build your sales rep network"
+              />
+            }
+          />
         </div>
 
         {/* Commission Payouts */}
@@ -353,38 +415,20 @@ export default function RepsPage() {
             <h2 className="text-sm font-semibold">Commission Payouts</h2>
           </div>
 
-          {loading ? (
-            <SkeletonRow rows={4} cols={5} />
-          ) : commissions.length === 0 ? (
-            <EmptyState
-              icon={<Layers size={32} className="text-muted-foreground" />}
-              title="No commission records yet"
-              description="Commission payouts will appear here once reps close deals"
-            />
-          ) : (
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-border bg-background/30">
-                  {["Rep", "Period", "Doors", "Amount", "Status"].map(h => (
-                    <th key={h} className="text-left px-4 py-2.5 text-muted-foreground font-medium">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {commissions.map(c => (
-                  <tr key={c.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
-                    <td className="px-4 py-3 font-medium text-foreground">
-                      {c.sales_reps ? `${c.sales_reps.first_name} ${c.sales_reps.last_name}`.trim() : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">{c.pay_period}</td>
-                    <td className="px-4 py-3 text-foreground">{c.door_count}</td>
-                    <td className="px-4 py-3 font-semibold text-foreground">{fmtMoney(c.amount_cents)}</td>
-                    <td className="px-4 py-3"><CommissionStatus status={c.status} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          <DataTable<Commission>
+            columns={commissionColumns}
+            data={commissions}
+            rowKey="id"
+            loading={loading}
+            skeletonRows={4}
+            emptyState={
+              <EmptyState
+                icon={<Layers size={32} className="text-muted-foreground" />}
+                title="No commission records yet"
+                description="Commission payouts will appear here once reps close deals"
+              />
+            }
+          />
         </div>
 
       </div>

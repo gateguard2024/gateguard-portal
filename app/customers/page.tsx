@@ -1,18 +1,16 @@
 "use client";
 import { TopBar } from "@/components/layout/TopBar";
-import { AISearch } from "@/components/ai/AISearch";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
-  Plus, Eye, Settings, Phone, Mail, MapPin,
-  Building2, Users, Shield, Camera, ChevronRight, Network,
+  Plus, Users, ChevronRight, Network,
   Loader2, RefreshCw, X,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
+import { DataTable } from "@/components/ui/DataTable";
+import type { Column } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { SkeletonRow } from "@/components/ui/SkeletonRow";
+import { SlideOver, SlideOverFooter } from "@/components/ui/SlideOver";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { DollarSign } = require("lucide-react") as any;
 
 type OrgTier =
   | "corporate" | "master_agent" | "master_dealer"
@@ -82,6 +80,7 @@ const EMPTY_FORM = {
 };
 
 export default function CustomersPage() {
+  const router = useRouter();
   const [activeTier, setActiveTier]     = useState<FilterTier>("all");
   const [search, setSearch]             = useState("");
   const [records, setRecords]           = useState<OrgRecord[]>([]);
@@ -220,11 +219,7 @@ export default function CustomersPage() {
           </div>
         </div>
 
-        {/* States */}
-        {loading && (
-          <SkeletonRow rows={6} cols={4} />
-        )}
-
+        {/* Error state */}
         {!loading && error && (
           <div className="flex items-center justify-center py-16 gap-3">
             <span className="text-sm text-destructive">{error}</span>
@@ -234,219 +229,190 @@ export default function CustomersPage() {
           </div>
         )}
 
-        {!loading && !error && records.length === 0 && (
-          <EmptyState
-            icon={<Users size={32} className="text-muted-foreground" />}
-            title="No customers yet"
-            description={search ? `No accounts found matching "${search}"` : "Add your first customer to get started"}
+        {/* Accounts table */}
+        {!error && (
+          <DataTable<OrgRecord>
+            rowKey="id"
+            loading={loading}
+            data={records}
+            onRowClick={(row) => router.push(`/customers/${row.id}`)}
+            emptyState={
+              <EmptyState
+                icon={<Users size={32} className="text-muted-foreground" />}
+                title="No customers yet"
+                description={search ? `No accounts found matching "${search}"` : "Add your first customer to get started"}
+              />
+            }
+            columns={[
+              {
+                key: "name",
+                label: "Organization",
+                sortable: true,
+                render: (_v, row) => {
+                  const tc = TIER_CONFIG[row.org_tier] ?? { label: row.org_tier, cls: "tier-client", icon: "🏢" };
+                  return (
+                    <div className="flex items-center gap-2">
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${row.is_active ? "status-online" : "status-warning"}`} />
+                      <div>
+                        <span className="font-semibold text-foreground text-sm">{row.name}</span>
+                        {row.parent_name && (
+                          <div className="text-[10px] text-muted-foreground/60">Under: {row.parent_name}</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                },
+              } as Column<OrgRecord>,
+              {
+                key: "org_tier",
+                label: "Tier",
+                render: (_v, row) => {
+                  const tc = TIER_CONFIG[row.org_tier] ?? { label: row.org_tier, cls: "tier-client", icon: "🏢" };
+                  return (
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${tc.cls}`}>
+                      {tc.icon} {tc.label}
+                    </span>
+                  );
+                },
+              } as Column<OrgRecord>,
+              {
+                key: "primary_contact_email",
+                label: "Email",
+                render: (v) => v
+                  ? <span className="text-xs text-muted-foreground truncate max-w-[180px] block">{String(v)}</span>
+                  : <span className="text-muted-foreground">—</span>,
+              } as Column<OrgRecord>,
+              {
+                key: "primary_contact_phone",
+                label: "Phone",
+                render: (v) => v
+                  ? <span className="text-xs text-muted-foreground">{String(v)}</span>
+                  : <span className="text-muted-foreground">—</span>,
+              } as Column<OrgRecord>,
+              {
+                key: "city",
+                label: "Location",
+                render: (_v, row) => {
+                  const loc = [row.city, row.state].filter(Boolean).join(", ");
+                  return loc
+                    ? <span className="text-xs text-muted-foreground">{loc}</span>
+                    : <span className="text-muted-foreground">—</span>;
+                },
+              } as Column<OrgRecord>,
+              {
+                key: "created_at",
+                label: "Since",
+                sortable: true,
+                render: (v) => {
+                  if (!v) return <span className="text-muted-foreground">—</span>;
+                  const d = new Date(String(v));
+                  return <span className="text-xs text-muted-foreground">{d.toLocaleDateString("en-US", { month: "short", year: "numeric" })}</span>;
+                },
+              } as Column<OrgRecord>,
+            ]}
           />
-        )}
-
-        {/* Account cards */}
-        {!loading && !error && records.length > 0 && (
-          <div className="grid grid-cols-3 gap-4">
-            {records.map((acct) => {
-              const tc = TIER_CONFIG[acct.org_tier] ?? { label: acct.org_tier, cls: "tier-client", icon: "🏢" };
-              const viewHref = `/customers/${acct.id}`;
-              const location = [acct.city, acct.state].filter(Boolean).join(", ");
-              return (
-                <div
-                  key={acct.id}
-                  className="bg-card border border-border rounded-xl p-4 hover:border-brand-400/30 transition-all group cursor-pointer"
-                >
-                  {/* Header */}
-                  <Link href={viewHref} className="flex items-start justify-between mb-3 block">
-                    <div className="flex-1 min-w-0 pr-2">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${acct.is_active ? "status-online" : "status-warning"}`} />
-                        <h3 className="text-sm font-semibold text-foreground group-hover:text-brand-400 transition-colors truncate">
-                          {acct.name}
-                        </h3>
-                      </div>
-                      <div className="flex items-center gap-2 ml-3.5">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${tc.cls}`}>
-                          {tc.icon} {tc.label}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground/60 font-mono truncate max-w-[80px]">{acct.id.slice(0,8)}</span>
-                      </div>
-                    </div>
-                  </Link>
-
-                  {/* Stats */}
-                  <div className="grid grid-cols-3 gap-1.5 mb-3">
-                    <div className="text-center p-1.5 rounded-lg bg-background/50 border border-border/50">
-                      <p className="text-xs font-bold text-foreground">{acct.site_count}</p>
-                      <p className="text-[9px] text-muted-foreground">Sites</p>
-                    </div>
-                    <div className="text-center p-1.5 rounded-lg bg-background/50 border border-border/50">
-                      <p className="text-xs font-bold text-foreground">—</p>
-                      <p className="text-[9px] text-muted-foreground">Cameras</p>
-                    </div>
-                    <div className="text-center p-1.5 rounded-lg bg-background/50 border border-border/50">
-                      <p className="text-xs font-bold text-foreground">—</p>
-                      <p className="text-[9px] text-muted-foreground">Doors</p>
-                    </div>
-                  </div>
-
-                  {/* Contact */}
-                  <div className="text-[11px] text-muted-foreground space-y-0.5 border-t border-border/50 pt-2.5 mb-2.5">
-                    {acct.primary_contact_name && (
-                      <div className="flex items-center gap-1.5 font-medium text-foreground">
-                        <Users size={10} className="text-brand-400" /> {acct.primary_contact_name}
-                      </div>
-                    )}
-                    {acct.primary_contact_email && (
-                      <div className="flex items-center gap-1.5 truncate"><Mail size={9} /> {acct.primary_contact_email}</div>
-                    )}
-                    {acct.primary_contact_phone && (
-                      <div className="flex items-center gap-1.5"><Phone size={9} /> {acct.primary_contact_phone}</div>
-                    )}
-                    {location && (
-                      <div className="flex items-center gap-1.5 truncate">
-                        <MapPin size={9} /> <span className="truncate">{location}</span>
-                      </div>
-                    )}
-                    {acct.parent_name && (
-                      <div className="flex items-center gap-1.5 text-brand-400/70">
-                        <Building2 size={9} /> Under: {acct.parent_name}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-1.5 pt-2 border-t border-border/50">
-                    <Link href={viewHref} className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-                      <Eye size={12} /> View
-                    </Link>
-                    <Link href="/cameras" className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-                      <Camera size={12} /> Cameras
-                    </Link>
-                    <Link href="/access" className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-                      <Shield size={12} /> Access
-                    </Link>
-                    <Link href={viewHref} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-                      <Settings size={12} />
-                    </Link>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         )}
       </div>
 
       {/* New Account Slide-over */}
-      {showNew && (
-        <div className="fixed inset-0 z-50 flex">
-          <div className="flex-1 bg-black/40" onClick={() => setShowNew(false)} />
-          <div className="w-[420px] bg-card border-l border-border flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-              <h2 className="text-base font-semibold text-foreground">New Account</h2>
-              <button onClick={() => setShowNew(false)} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent">
-                <X size={16} />
-              </button>
+      <SlideOver
+        open={showNew}
+        onClose={() => setShowNew(false)}
+        title="New Account"
+        size="md"
+        footer={
+          <SlideOverFooter
+            onCancel={() => setShowNew(false)}
+            onSave={createAccount}
+            saving={saving}
+            disabled={!form.name.trim()}
+            saveLabel="Create Account"
+          />
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Organization Name *</label>
+            <input
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
+              placeholder="Acme Properties LLC"
+              value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Organization Type *</label>
+            <select
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
+              value={form.org_tier}
+              onChange={e => setForm(f => ({ ...f, org_tier: e.target.value as OrgTier }))}
+            >
+              <option value="master_agent">Master Agent</option>
+              <option value="master_dealer">MSO — Master System Operator</option>
+              <option value="full_dealer">Dealer</option>
+              <option value="service_dealer">Service Partner</option>
+              <option value="install_contractor">Installation Partner</option>
+              <option value="sales_partner">Sales Partner</option>
+              <option value="client">Client (Property)</option>
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">City</label>
+              <input
+                className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
+                placeholder="Atlanta"
+                value={form.city}
+                onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
+              />
             </div>
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Organization Name *</label>
-                <input
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
-                  placeholder="Acme Properties LLC"
-                  value={form.name}
-                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Organization Type *</label>
-                <select
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
-                  value={form.org_tier}
-                  onChange={e => setForm(f => ({ ...f, org_tier: e.target.value as OrgTier }))}
-                >
-                  <option value="master_agent">Master Agent</option>
-                  <option value="master_dealer">MSO — Master System Operator</option>
-                  <option value="full_dealer">Dealer</option>
-                  <option value="service_dealer">Service Partner</option>
-                  <option value="install_contractor">Installation Partner</option>
-                  <option value="sales_partner">Sales Partner</option>
-                  <option value="client">Client (Property)</option>
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">City</label>
-                  <input
-                    className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
-                    placeholder="Atlanta"
-                    value={form.city}
-                    onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">State</label>
-                  <input
-                    className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
-                    placeholder="GA"
-                    maxLength={2}
-                    value={form.state}
-                    onChange={e => setForm(f => ({ ...f, state: e.target.value.toUpperCase() }))}
-                  />
-                </div>
-              </div>
-              <hr className="border-border" />
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Primary Contact</p>
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Name</label>
-                <input
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
-                  placeholder="Jane Smith"
-                  value={form.primary_contact_name}
-                  onChange={e => setForm(f => ({ ...f, primary_contact_name: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Email</label>
-                <input
-                  type="email"
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
-                  placeholder="jane@company.com"
-                  value={form.primary_contact_email}
-                  onChange={e => setForm(f => ({ ...f, primary_contact_email: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Phone</label>
-                <input
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
-                  placeholder="404-555-0100"
-                  value={form.primary_contact_phone}
-                  onChange={e => setForm(f => ({ ...f, primary_contact_phone: e.target.value }))}
-                />
-              </div>
-
-              {saveError && (
-                <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">{saveError}</p>
-              )}
-            </div>
-            <div className="px-6 py-4 border-t border-border flex gap-3">
-              <button
-                onClick={() => setShowNew(false)}
-                className="flex-1 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={createAccount}
-                disabled={saving || !form.name.trim()}
-                className="flex-1 py-2.5 rounded-lg bg-brand-400 hover:bg-brand-500 text-navy-DEFAULT text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                {saving ? "Creating…" : "Create Account"}
-              </button>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">State</label>
+              <input
+                className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
+                placeholder="GA"
+                maxLength={2}
+                value={form.state}
+                onChange={e => setForm(f => ({ ...f, state: e.target.value.toUpperCase() }))}
+              />
             </div>
           </div>
+          <hr className="border-border" />
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Primary Contact</p>
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Name</label>
+            <input
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
+              placeholder="Jane Smith"
+              value={form.primary_contact_name}
+              onChange={e => setForm(f => ({ ...f, primary_contact_name: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Email</label>
+            <input
+              type="email"
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
+              placeholder="jane@company.com"
+              value={form.primary_contact_email}
+              onChange={e => setForm(f => ({ ...f, primary_contact_email: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Phone</label>
+            <input
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
+              placeholder="404-555-0100"
+              value={form.primary_contact_phone}
+              onChange={e => setForm(f => ({ ...f, primary_contact_phone: e.target.value }))}
+            />
+          </div>
+
+          {saveError && (
+            <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">{saveError}</p>
+          )}
         </div>
-      )}
+      </SlideOver>
     </div>
   );
 }

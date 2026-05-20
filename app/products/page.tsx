@@ -12,7 +12,8 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { Edit2, Camera, Cpu, Server, Hammer } = require('lucide-react') as any;
 import { EmptyState } from '@/components/ui/EmptyState';
-import { SkeletonRow } from '@/components/ui/SkeletonRow';
+import { DataTable } from '@/components/ui/DataTable';
+import type { Column } from '@/components/ui/DataTable';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -813,8 +814,7 @@ export default function ProductsPage() {
     }
   };
 
-  const toggleSelect = (id: string) => setSelected(prev=>{const s=new Set(prev);s.has(id)?s.delete(id):s.add(id);return s;});
-  const allSel = filtered.length>0&&filtered.every(p=>selected.has(p.id));
+  // toggleSelect and allSel handled by DataTable selectable prop
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -838,13 +838,6 @@ export default function ProductsPage() {
             <span className="font-semibold shrink-0">DB Error:</span>
             <span className="flex-1 text-xs font-mono break-all">{dbError}</span>
             <button onClick={()=>setDbError(null)} className="shrink-0 text-red-400 hover:text-red-600"><X size={14}/></button>
-          </div>
-        )}
-
-        {/* Loading skeleton */}
-        {loading && (
-          <div className="bg-white border border-border rounded-xl overflow-hidden">
-            <SkeletonRow rows={6} cols={4} />
           </div>
         )}
 
@@ -909,71 +902,115 @@ export default function ProductsPage() {
             </div>
 
             {/* Table */}
-            <div className="bg-white border border-border rounded-xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border bg-slate-50">
-                      <th className="w-10 px-4 py-3">
-                        <input type="checkbox" checked={allSel} onChange={()=>setSelected(allSel?new Set():new Set(filtered.map(p=>p.id)))} className="rounded border-border text-blue-600"/>
-                      </th>
-                      {["","SKU","Product Name","Brand","Category","Specs","MSRP","Cost","Sell Price ✏️","Active",""].map(h=>(
-                        <th key={h} className="px-3 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {filtered.length === 0 ? (
-                      <tr><td colSpan={11}>
-                        <EmptyState
-                          icon={<Package size={32} className="text-muted-foreground" />}
-                          title="No products yet"
-                          description="Add your first product to build your equipment catalog."
-                          action={{ label: "Add Product", onClick: () => setModal("add") }}
-                        />
-                      </td></tr>
-                    ) : filtered.map(p=>(
-                      <tr key={p.id} className={cn("hover:bg-slate-50/60 transition-colors",selected.has(p.id)&&"bg-blue-50/40")}>
-                        <td className="px-4 py-2.5"><input type="checkbox" checked={selected.has(p.id)} onChange={()=>toggleSelect(p.id)} className="rounded border-border text-blue-600"/></td>
-                        <td className="px-3 py-2.5"><ProductImage product={p} size={36}/></td>
-                        <td className="px-3 py-2.5"><span className="font-mono text-xs text-muted-foreground">{p.sku}</span></td>
-                        <td className="px-3 py-2.5">
-                          <span className="font-medium text-foreground text-xs leading-tight max-w-[200px] truncate block">{p.name}</span>
-                          <span className="text-[10px] text-muted-foreground">{p.subcategory}</span>
-                        </td>
-                        <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{p.brand}</td>
-                        <td className="px-3 py-2.5"><span className={cn("px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap",CAT_COLORS[p.category]??"bg-slate-100 text-slate-600")}>{p.category}</span></td>
-                        <td className="px-3 py-2.5 text-xs text-muted-foreground max-w-[160px] truncate">{p.specs||"—"}</td>
-                        <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{fmt$(p.msrp)}</td>
-                        <td className="px-3 py-2.5">
-                          {p.dealerCost>0?<span className="text-xs font-medium">{fmt$(p.dealerCost)}</span>
-                            :<span className="px-2 py-0.5 rounded text-[10px] bg-amber-50 text-amber-600 border border-amber-200 font-medium">Fill in</span>}
-                        </td>
-                        <td className="px-3 py-2.5"><SellCell product={p} onChange={handleSellPrice}/></td>
-                        <td className="px-3 py-2.5">
-                          <button onClick={()=>toggleActive(p.id)} className={cn("relative inline-flex h-5 w-9 items-center rounded-full transition-colors",p.active?"bg-blue-600":"bg-slate-200")}>
-                            <span className={cn("inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform",p.active?"translate-x-[18px]":"translate-x-0.5")}/>
-                          </button>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <div className="flex items-center gap-1">
-                            <button onClick={()=>{setEditing(p);setModal("edit");}} className="p-1.5 rounded-lg text-muted-foreground hover:text-blue-600 hover:bg-blue-50 transition-colors"><Edit2 size={13}/></button>
-                            <button onClick={()=>deleteOne(p.id)} className="p-1.5 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"><Trash2 size={13}/></button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {filtered.length===0&&!loading&&(
-                <div className="py-16 text-center">
-                  <Package size={32} className="mx-auto text-slate-300 mb-3"/>
-                  <p className="text-sm font-medium text-muted-foreground">No products match your filters</p>
-                  <button onClick={()=>{setSearch("");setFilterCat("All");setFilterBrand("All");setFilterActive("All");}} className="mt-3 text-xs text-blue-600 hover:underline">Clear filters</button>
+            <DataTable<Product>
+              rowKey="id"
+              loading={false}
+              data={filtered}
+              selectable
+              selectedIds={selected}
+              onSelectChange={setSelected}
+              compact
+              emptyState={
+                <EmptyState
+                  icon={<Package size={32} className="text-muted-foreground" />}
+                  title="No products yet"
+                  description="Add your first product to build your equipment catalog."
+                  action={{ label: "Add Product", onClick: () => setModal("add") }}
+                />
+              }
+              columns={[
+                {
+                  key: "imageUrl",
+                  label: "",
+                  render: (_v, row) => (
+                    row.imageUrl
+                      ? <img src={row.imageUrl} alt={row.name} className="w-8 h-8 rounded object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                      : <div className="w-8 h-8 rounded flex items-center justify-center text-white text-[10px] font-bold shrink-0" style={{ background: BRAND_COLORS[row.brand] ?? '#64748B' }}>
+                          {brandInitials(row.brand)}
+                        </div>
+                  ),
+                } as Column<Product>,
+                {
+                  key: "name",
+                  label: "Product",
+                  sortable: true,
+                  render: (_v, row) => (
+                    <div>
+                      <span className="font-medium text-foreground text-xs leading-tight max-w-[200px] truncate block">{row.name}</span>
+                      <span className="text-[10px] text-muted-foreground">{row.subcategory}</span>
+                    </div>
+                  ),
+                } as Column<Product>,
+                {
+                  key: "sku",
+                  label: "SKU",
+                  render: (v) => <span className="font-mono text-xs text-muted-foreground">{String(v)}</span>,
+                } as Column<Product>,
+                {
+                  key: "brand",
+                  label: "Brand",
+                  sortable: true,
+                  render: (v) => <span className="text-xs text-muted-foreground whitespace-nowrap">{String(v)}</span>,
+                } as Column<Product>,
+                {
+                  key: "category",
+                  label: "Category",
+                  render: (v) => (
+                    <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap", CAT_COLORS[String(v)] ?? "bg-slate-100 text-slate-600")}>
+                      {String(v)}
+                    </span>
+                  ),
+                } as Column<Product>,
+                {
+                  key: "msrp",
+                  label: "MSRP",
+                  align: "right",
+                  render: (v) => <span className="text-xs text-muted-foreground whitespace-nowrap">{fmt$(Number(v))}</span>,
+                } as Column<Product>,
+                {
+                  key: "sellPrice",
+                  label: "Sell Price ✏️",
+                  align: "right",
+                  render: (_v, row) => <SellCell product={row} onChange={handleSellPrice} />,
+                } as Column<Product>,
+                {
+                  key: "fieldService",
+                  label: "Field Service",
+                  align: "center",
+                  render: (v) => v
+                    ? <Check size={14} className="text-emerald-600 mx-auto" />
+                    : <span className="text-muted-foreground">—</span>,
+                } as Column<Product>,
+                {
+                  key: "manualUrl",
+                  label: "Manual",
+                  align: "center",
+                  render: (v) => (
+                    <span className={cn("inline-block w-2.5 h-2.5 rounded-full mx-auto", v ? "bg-emerald-500" : "bg-slate-300")} />
+                  ),
+                } as Column<Product>,
+                {
+                  key: "active",
+                  label: "Active",
+                  align: "center",
+                  render: (_v, row) => (
+                    <button onClick={() => toggleActive(row.id)} className={cn("relative inline-flex h-5 w-9 items-center rounded-full transition-colors", row.active ? "bg-blue-600" : "bg-slate-200")}>
+                      <span className={cn("inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform", row.active ? "translate-x-[18px]" : "translate-x-0.5")} />
+                    </button>
+                  ),
+                } as Column<Product>,
+              ]}
+              actions={(row) => (
+                <div className="flex items-center gap-1">
+                  <button onClick={() => { setEditing(row); setModal("edit"); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-blue-600 hover:bg-blue-50 transition-colors">
+                    <Edit2 size={13} />
+                  </button>
+                  <button onClick={() => deleteOne(row.id)} className="p-1.5 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors">
+                    <Trash2 size={13} />
+                  </button>
                 </div>
               )}
-            </div>
+            />
 
             <p className="text-xs text-muted-foreground text-center">
               All changes save directly to Supabase · Images: right-click any product photo on ADI → Copy Image Address → paste into Edit modal

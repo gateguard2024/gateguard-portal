@@ -3,7 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { SkeletonRow } from "@/components/ui/SkeletonRow";
+import { DataTable } from "@/components/ui/DataTable";
+import { SlideOver, SlideOverFooter } from "@/components/ui/SlideOver";
+import type { Column } from "@/components/ui/DataTable";
 import {
   Plus,
   X,
@@ -193,110 +195,99 @@ function ItemSlideOver({ open, initial, onClose, onSaved }: ItemSlideOverProps) 
     }
   };
 
-  if (!open) return null;
-
   const inp = "w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 bg-white";
   const lbl = "block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5";
 
   return (
-    <>
-      <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} />
-      <div className="fixed inset-y-0 right-0 w-[480px] bg-white border-l border-slate-200 z-50 flex flex-col shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
-          <div>
-            <h2 className="text-sm font-bold text-slate-900">{initial ? "Edit Item" : "Add Inventory Item"}</h2>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100">
-            <X size={14} className="text-slate-500" />
-          </button>
+    <SlideOver
+      open={open}
+      onClose={onClose}
+      title={initial ? "Edit Item" : "Add Inventory Item"}
+      size="md"
+      footer={
+        <SlideOverFooter
+          onCancel={onClose}
+          onSave={handleSubmit}
+          saving={saving}
+          saveLabel={initial ? "Save Changes" : "Add Item"}
+        />
+      }
+    >
+      <div className="space-y-4">
+        <div>
+          <label className={lbl}>Name *</label>
+          <input value={form.name} onChange={e => set("name", e.target.value)} placeholder="e.g. Brivo ACS300 Controller" className={inp} />
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={lbl}>Name *</label>
-            <input value={form.name} onChange={e => set("name", e.target.value)} placeholder="e.g. Brivo ACS300 Controller" className={inp} />
+            <label className={lbl}>SKU</label>
+            <input value={form.sku} onChange={e => set("sku", e.target.value)} placeholder="e.g. AC-ACS300" className={inp} />
           </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={lbl}>SKU</label>
-              <input value={form.sku} onChange={e => set("sku", e.target.value)} placeholder="e.g. AC-ACS300" className={inp} />
-            </div>
-            <div>
-              <label className={lbl}>Category</label>
-              <select value={form.category} onChange={e => set("category", e.target.value)} className={inp}>
-                {CATEGORIES.filter(c => c !== "All").map(c => <option key={c}>{c}</option>)}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={lbl}>Unit Cost ($)</label>
-              <input type="number" step="0.01" min="0" value={form.unit_cost} onChange={e => set("unit_cost", e.target.value)} className={inp} />
-            </div>
-            <div>
-              <label className={lbl}>Unit Price ($)</label>
-              <input type="number" step="0.01" min="0" value={form.unit_price} onChange={e => set("unit_price", e.target.value)} className={inp} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={lbl}>On Hand (Warehouse)</label>
-              <input type="number" min="0" value={form.on_hand} onChange={e => set("on_hand", e.target.value)} className={inp} />
-            </div>
-            <div>
-              <label className={lbl}>On Truck (Van)</label>
-              <input type="number" min="0" value={form.on_truck} onChange={e => set("on_truck", e.target.value)} className={inp} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={lbl}>Min Stock (reorder at)</label>
-              <input type="number" min="0" value={form.min_stock} onChange={e => set("min_stock", e.target.value)} className={inp} />
-            </div>
-            <div>
-              <label className={lbl}>Reorder Qty</label>
-              <input type="number" min="1" value={form.reorder_qty} onChange={e => set("reorder_qty", e.target.value)} className={inp} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={lbl}>Location / Shelf</label>
-              <input value={form.location} onChange={e => set("location", e.target.value)} placeholder="e.g. Shelf A3" className={inp} />
-            </div>
-            <div>
-              <label className={lbl}>Supplier</label>
-              <input value={form.supplier} onChange={e => set("supplier", e.target.value)} placeholder="e.g. Brivo" className={inp} />
-            </div>
-          </div>
-
           <div>
-            <label className={lbl}>Supplier SKU</label>
-            <input value={form.supplier_sku} onChange={e => set("supplier_sku", e.target.value)} placeholder="Supplier's part number" className={inp} />
+            <label className={lbl}>Category</label>
+            <select value={form.category} onChange={e => set("category", e.target.value)} className={inp}>
+              {CATEGORIES.filter(c => c !== "All").map(c => <option key={c}>{c}</option>)}
+            </select>
           </div>
-
-          {error && (
-            <div className="flex items-center gap-2 text-red-600 text-xs bg-red-50 rounded-xl px-3 py-2">
-              <AlertTriangle size={13} /> {error}
-            </div>
-          )}
         </div>
 
-        <div className="border-t border-slate-200 p-4 flex gap-3">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
-            Cancel
-          </button>
-          <button onClick={handleSubmit} disabled={saving}
-            className="flex-1 py-2.5 rounded-xl bg-[#2563EB] hover:bg-blue-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-sm">
-            {saving ? "Saving…" : initial ? "Save Changes" : "Add Item"}
-          </button>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={lbl}>Unit Cost ($)</label>
+            <input type="number" step="0.01" min="0" value={form.unit_cost} onChange={e => set("unit_cost", e.target.value)} className={inp} />
+          </div>
+          <div>
+            <label className={lbl}>Unit Price ($)</label>
+            <input type="number" step="0.01" min="0" value={form.unit_price} onChange={e => set("unit_price", e.target.value)} className={inp} />
+          </div>
         </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={lbl}>On Hand (Warehouse)</label>
+            <input type="number" min="0" value={form.on_hand} onChange={e => set("on_hand", e.target.value)} className={inp} />
+          </div>
+          <div>
+            <label className={lbl}>On Truck (Van)</label>
+            <input type="number" min="0" value={form.on_truck} onChange={e => set("on_truck", e.target.value)} className={inp} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={lbl}>Min Stock (reorder at)</label>
+            <input type="number" min="0" value={form.min_stock} onChange={e => set("min_stock", e.target.value)} className={inp} />
+          </div>
+          <div>
+            <label className={lbl}>Reorder Qty</label>
+            <input type="number" min="1" value={form.reorder_qty} onChange={e => set("reorder_qty", e.target.value)} className={inp} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={lbl}>Location / Shelf</label>
+            <input value={form.location} onChange={e => set("location", e.target.value)} placeholder="e.g. Shelf A3" className={inp} />
+          </div>
+          <div>
+            <label className={lbl}>Supplier</label>
+            <input value={form.supplier} onChange={e => set("supplier", e.target.value)} placeholder="e.g. Brivo" className={inp} />
+          </div>
+        </div>
+
+        <div>
+          <label className={lbl}>Supplier SKU</label>
+          <input value={form.supplier_sku} onChange={e => set("supplier_sku", e.target.value)} placeholder="Supplier's part number" className={inp} />
+        </div>
+
+        {error && (
+          <div className="flex items-center gap-2 text-red-600 text-xs bg-red-50 rounded-xl px-3 py-2">
+            <AlertTriangle size={13} /> {error}
+          </div>
+        )}
       </div>
-    </>
+    </SlideOver>
   );
 }
 
@@ -582,102 +573,119 @@ export default function InventoryPage() {
               </span>
             </div>
 
-            {loading ? (
-              <SkeletonRow rows={5} cols={8} />
-            ) : warehouseItems.length === 0 ? (
-              <EmptyState
-                icon={<Package size={32} className="text-muted-foreground" />}
-                title="No items in stock"
-                description={items.length === 0 ? "Add your first inventory item to get started" : "No items match your search"}
-              />
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100">
-                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-5 py-3">Part Name</th>
-                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">Category</th>
-                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">SKU</th>
-                      <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">On Hand</th>
-                      <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">Min</th>
-                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">Location</th>
-                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">Status</th>
-                      <th className="px-4 py-3" />
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {warehouseItems.map(item => {
-                      const sc = statusConfig[item.status];
-                      return (
-                        <tr
-                          key={item.id}
-                          className={cn(
-                            "hover:bg-slate-50/80 transition-colors",
-                            item.status === "out" && "bg-red-50/40",
-                            item.status === "low" && "bg-amber-50/30"
-                          )}
-                        >
-                          <td className="px-5 py-3.5">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-                                <Archive size={13} className="text-slate-400" />
-                              </div>
-                              <span className="font-medium text-slate-800">{item.name}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3.5">
-                            <span className={cn("inline-block text-[11px] font-medium px-2.5 py-0.5 rounded-full", categoryColor[item.category] ?? "bg-gray-100 text-gray-600")}>
-                              {item.category}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3.5">
-                            {item.sku ? (
-                              <code className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">{item.sku}</code>
-                            ) : <span className="text-slate-300">—</span>}
-                          </td>
-                          <td className="px-4 py-3.5 text-right">
-                            <span className={cn("font-semibold", item.on_hand === 0 ? "text-red-600" : item.status === "low" ? "text-amber-600" : "text-slate-800")}>
-                              {item.on_hand}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3.5 text-right text-slate-400">{item.min_stock}</td>
-                          <td className="px-4 py-3.5 text-slate-500 text-xs">{item.location ?? "—"}</td>
-                          <td className="px-4 py-3.5">
-                            <span className={cn("inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full", sc.badge)}>
-                              {sc.icon}
-                              {sc.label}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3.5">
-                            <div className="flex items-center gap-1.5 justify-end">
-                              <button
-                                title="Edit"
-                                onClick={() => { setEditItem(item); setSlideOpen(true); }}
-                                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
-                              >
-                                <Edit2 size={13} />
-                              </button>
-                              <button
-                                title="Adjust Stock"
-                                onClick={() => { setAdjustItem(item); setAdjustLocation("warehouse"); }}
-                                className={cn(
-                                  "p-1.5 rounded-lg transition-colors",
-                                  item.status !== "ok"
-                                    ? "bg-blue-50 text-[#2563EB] hover:bg-blue-100"
-                                    : "hover:bg-slate-100 text-slate-400 hover:text-slate-600"
-                                )}
-                              >
-                                <RotateCcw size={13} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <DataTable<InventoryItem>
+              rowKey="id"
+              loading={loading}
+              data={warehouseItems}
+              className="rounded-none border-0"
+              emptyState={
+                <EmptyState
+                  icon={<Package size={32} className="text-muted-foreground" />}
+                  title="No items in stock"
+                  description={items.length === 0 ? "Add your first inventory item to get started" : "No items match your search"}
+                />
+              }
+              columns={[
+                {
+                  key: "name",
+                  label: "Item",
+                  sortable: true,
+                  render: (_v, row) => (
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                        <Archive size={13} className="text-slate-400" />
+                      </div>
+                      <span className="font-medium text-slate-800">{row.name}</span>
+                    </div>
+                  ),
+                } as Column<InventoryItem>,
+                {
+                  key: "sku",
+                  label: "SKU",
+                  render: (v) => v
+                    ? <code className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">{String(v)}</code>
+                    : <span className="text-slate-300">—</span>,
+                } as Column<InventoryItem>,
+                {
+                  key: "category",
+                  label: "Category",
+                  render: (v) => (
+                    <span className={cn("inline-block text-[11px] font-medium px-2.5 py-0.5 rounded-full", categoryColor[String(v)] ?? "bg-gray-100 text-gray-600")}>
+                      {String(v)}
+                    </span>
+                  ),
+                } as Column<InventoryItem>,
+                {
+                  key: "on_hand",
+                  label: "On Hand",
+                  align: "right",
+                  sortable: true,
+                  render: (_v, row) => (
+                    <span className={cn("font-semibold", row.on_hand === 0 ? "text-red-600" : row.status === "low" ? "text-amber-600" : "text-slate-800")}>
+                      {row.on_hand}
+                    </span>
+                  ),
+                } as Column<InventoryItem>,
+                {
+                  key: "min_stock",
+                  label: "Min",
+                  align: "right",
+                  render: (v) => <span className="text-slate-400">{String(v)}</span>,
+                } as Column<InventoryItem>,
+                {
+                  key: "unit_cost",
+                  label: "Unit Cost",
+                  align: "right",
+                  render: (v) => <span className="text-slate-600">${Number(v).toFixed(2)}</span>,
+                } as Column<InventoryItem>,
+                {
+                  key: "unit_price",
+                  label: "Sell Price",
+                  align: "right",
+                  render: (v) => <span className="text-slate-600">${Number(v).toFixed(2)}</span>,
+                } as Column<InventoryItem>,
+                {
+                  key: "location",
+                  label: "Location",
+                  render: (v) => <span className="text-slate-500 text-xs">{v ? String(v) : "—"}</span>,
+                } as Column<InventoryItem>,
+                {
+                  key: "status",
+                  label: "Status",
+                  render: (_v, row) => {
+                    const sc = statusConfig[row.status];
+                    return (
+                      <span className={cn("inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full", sc.badge)}>
+                        {sc.icon}{sc.label}
+                      </span>
+                    );
+                  },
+                } as Column<InventoryItem>,
+              ]}
+              actions={(row) => (
+                <div className="flex items-center gap-1.5 justify-end">
+                  <button
+                    title="Edit"
+                    onClick={() => { setEditItem(row); setSlideOpen(true); }}
+                    className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    <Edit2 size={13} />
+                  </button>
+                  <button
+                    title="Adjust Stock"
+                    onClick={() => { setAdjustItem(row); setAdjustLocation("warehouse"); }}
+                    className={cn(
+                      "p-1.5 rounded-lg transition-colors",
+                      row.status !== "ok"
+                        ? "bg-blue-50 text-[#2563EB] hover:bg-blue-100"
+                        : "hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+                    )}
+                  >
+                    <RotateCcw size={13} />
+                  </button>
+                </div>
+              )}
+            />
           </>
         )}
 
@@ -688,76 +696,82 @@ export default function InventoryPage() {
               <span className="text-xs text-slate-400">{truckItems.length} items on trucks</span>
             </div>
 
-            {loading ? (
-              <SkeletonRow rows={4} cols={6} />
-            ) : truckItems.length === 0 ? (
-              <EmptyState
-                icon={<Truck size={32} className="text-muted-foreground" />}
-                title="No van stock items yet"
-                description="Items with on_truck > 0 will appear here"
-              />
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100">
-                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-5 py-3">Part Name</th>
-                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">Category</th>
-                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">SKU</th>
-                      <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">On Truck</th>
-                      <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">On Hand</th>
-                      <th className="px-4 py-3" />
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {truckItems.map(item => (
-                      <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="px-5 py-3.5">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-7 h-7 rounded-lg bg-violet-50 flex items-center justify-center shrink-0">
-                              <Truck size={13} className="text-violet-400" />
-                            </div>
-                            <span className="font-medium text-slate-800">{item.name}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <span className={cn("inline-block text-[11px] font-medium px-2.5 py-0.5 rounded-full", categoryColor[item.category] ?? "bg-gray-100 text-gray-600")}>
-                            {item.category}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          {item.sku ? (
-                            <code className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">{item.sku}</code>
-                          ) : <span className="text-slate-300">—</span>}
-                        </td>
-                        <td className="px-4 py-3.5 text-right">
-                          <span className="font-semibold text-violet-600">{item.on_truck}</span>
-                        </td>
-                        <td className="px-4 py-3.5 text-right text-slate-500">{item.on_hand}</td>
-                        <td className="px-4 py-3.5">
-                          <div className="flex items-center gap-1.5 justify-end">
-                            <button
-                              title="Edit"
-                              onClick={() => { setEditItem(item); setSlideOpen(true); }}
-                              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
-                            >
-                              <Edit2 size={13} />
-                            </button>
-                            <button
-                              title="Adjust Van Stock"
-                              onClick={() => { setAdjustItem(item); setAdjustLocation("truck"); }}
-                              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
-                            >
-                              <RotateCcw size={13} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <DataTable<InventoryItem>
+              rowKey="id"
+              loading={loading}
+              data={truckItems}
+              className="rounded-none border-0"
+              emptyState={
+                <EmptyState
+                  icon={<Truck size={32} className="text-muted-foreground" />}
+                  title="No van stock items yet"
+                  description="Items with on_truck > 0 will appear here"
+                />
+              }
+              columns={[
+                {
+                  key: "name",
+                  label: "Item",
+                  sortable: true,
+                  render: (_v, row) => (
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-lg bg-violet-50 flex items-center justify-center shrink-0">
+                        <Truck size={13} className="text-violet-400" />
+                      </div>
+                      <span className="font-medium text-slate-800">{row.name}</span>
+                    </div>
+                  ),
+                } as Column<InventoryItem>,
+                {
+                  key: "sku",
+                  label: "SKU",
+                  render: (v) => v
+                    ? <code className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">{String(v)}</code>
+                    : <span className="text-slate-300">—</span>,
+                } as Column<InventoryItem>,
+                {
+                  key: "category",
+                  label: "Category",
+                  render: (v) => (
+                    <span className={cn("inline-block text-[11px] font-medium px-2.5 py-0.5 rounded-full", categoryColor[String(v)] ?? "bg-gray-100 text-gray-600")}>
+                      {String(v)}
+                    </span>
+                  ),
+                } as Column<InventoryItem>,
+                {
+                  key: "on_truck",
+                  label: "On Truck",
+                  align: "right",
+                  sortable: true,
+                  render: (v) => <span className="font-semibold text-violet-600">{String(v)}</span>,
+                } as Column<InventoryItem>,
+                {
+                  key: "on_hand",
+                  label: "On Hand",
+                  align: "right",
+                  sortable: true,
+                  render: (v) => <span className="text-slate-500">{String(v)}</span>,
+                } as Column<InventoryItem>,
+              ]}
+              actions={(row) => (
+                <div className="flex items-center gap-1.5 justify-end">
+                  <button
+                    title="Edit"
+                    onClick={() => { setEditItem(row); setSlideOpen(true); }}
+                    className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    <Edit2 size={13} />
+                  </button>
+                  <button
+                    title="Adjust Van Stock"
+                    onClick={() => { setAdjustItem(row); setAdjustLocation("truck"); }}
+                    className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    <RotateCcw size={13} />
+                  </button>
+                </div>
+              )}
+            />
           </>
         )}
 
@@ -784,60 +798,74 @@ export default function InventoryPage() {
               </button>
             </div>
 
-            {loadingPos ? (
-              <SkeletonRow rows={4} cols={6} />
-            ) : pos.length === 0 ? (
-              <EmptyState
-                icon={<ClipboardList size={32} className="text-muted-foreground" />}
-                title="No purchase orders yet"
-                description="Create a new PO to track orders from suppliers"
-              />
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100">
-                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-5 py-3">PO #</th>
-                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">Supplier</th>
-                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">Status</th>
-                      <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">Total</th>
-                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">Created</th>
-                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-4 py-3">Expected</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {pos.map(po => {
-                      const psc = poStatusConfig[po.status] ?? { badge: "bg-slate-100 text-slate-600", label: po.status };
-                      return (
-                        <tr key={po.id} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="px-5 py-3.5">
-                            <div className="flex items-center gap-2">
-                              <div className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
-                                <DollarSign size={13} className="text-emerald-500" />
-                              </div>
-                              <code className="text-xs text-slate-600 font-mono">
-                                {po.po_number ?? po.id.slice(0, 8).toUpperCase()}
-                              </code>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3.5 text-slate-700">{po.supplier ?? "—"}</td>
-                          <td className="px-4 py-3.5">
-                            <span className={cn("inline-block text-[11px] font-medium px-2.5 py-0.5 rounded-full", psc.badge)}>
-                              {psc.label}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3.5 text-right font-semibold text-slate-800">
-                            {po.total > 0 ? `$${po.total.toFixed(2)}` : "—"}
-                          </td>
-                          <td className="px-4 py-3.5 text-xs text-slate-500">{fmtDate(po.created_at)}</td>
-                          <td className="px-4 py-3.5 text-xs text-slate-500">{fmtDate(po.expected_at)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <DataTable<PurchaseOrder>
+              rowKey="id"
+              loading={loadingPos}
+              data={pos}
+              className="rounded-none border-0"
+              emptyState={
+                <EmptyState
+                  icon={<ClipboardList size={32} className="text-muted-foreground" />}
+                  title="No purchase orders yet"
+                  description="Create a new PO to track orders from suppliers"
+                />
+              }
+              columns={[
+                {
+                  key: "po_number",
+                  label: "PO #",
+                  sortable: true,
+                  render: (_v, row) => (
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
+                        <DollarSign size={13} className="text-emerald-500" />
+                      </div>
+                      <code className="text-xs text-slate-600 font-mono">
+                        {row.po_number ?? row.id.slice(0, 8).toUpperCase()}
+                      </code>
+                    </div>
+                  ),
+                } as Column<PurchaseOrder>,
+                {
+                  key: "supplier",
+                  label: "Supplier",
+                  sortable: true,
+                  render: (v) => <span className="text-slate-700">{v ? String(v) : "—"}</span>,
+                } as Column<PurchaseOrder>,
+                {
+                  key: "status",
+                  label: "Status",
+                  render: (v) => {
+                    const psc = poStatusConfig[String(v)] ?? { badge: "bg-slate-100 text-slate-600", label: String(v) };
+                    return (
+                      <span className={cn("inline-block text-[11px] font-medium px-2.5 py-0.5 rounded-full", psc.badge)}>
+                        {psc.label}
+                      </span>
+                    );
+                  },
+                } as Column<PurchaseOrder>,
+                {
+                  key: "total",
+                  label: "Total",
+                  align: "right",
+                  render: (v) => {
+                    const n = Number(v);
+                    return <span className="font-semibold text-slate-800">{n > 0 ? `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}</span>;
+                  },
+                } as Column<PurchaseOrder>,
+                {
+                  key: "ordered_at",
+                  label: "Ordered",
+                  sortable: true,
+                  render: (v) => <span className="text-xs text-slate-500">{fmtDate(v as string | null)}</span>,
+                } as Column<PurchaseOrder>,
+                {
+                  key: "expected_at",
+                  label: "Expected",
+                  render: (v) => <span className="text-xs text-slate-500">{fmtDate(v as string | null)}</span>,
+                } as Column<PurchaseOrder>,
+              ]}
+            />
           </>
         )}
       </div>
