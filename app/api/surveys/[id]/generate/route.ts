@@ -153,12 +153,12 @@ ${survey.voice_transcript ? `VOICE TRANSCRIPT:\n${survey.voice_transcript}` : ''
   })()
 
   // Re-fetch the updated survey to return full data
-  const { data: updated, error: fetchErr } = await supabase
+  const { data: updated, error: refetchErr } = await supabase
     .from('surveys')
     .select('*')
     .eq('id', params.id)
     .single()
 
-  if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 })
+  if (refetchErr) return NextResponse.json({ error: refetchErr.message }, { status: 500 })
   return NextResponse.json({ survey: updated })
 }
