@@ -19,7 +19,9 @@ function isBypassPath(pathname: string): boolean {
     // /tech tool — field techs auth via x-tech-code header, not Clerk
     pathname.startsWith('/tech') ||
     // All /tech API routes — authenticated via x-tech-code only
-    pathname.startsWith('/api/kb/') ||
+    // Exception: parse-survey-transcript is also called from the portal (/survey page)
+    // so it needs Clerk to run. It accepts EITHER x-tech-code OR a Clerk session.
+    (pathname.startsWith('/api/kb/') && !pathname.startsWith('/api/kb/parse-survey-transcript')) ||
     pathname.startsWith('/api/plaud/') ||
     // Client-facing pages — no Clerk session required
     pathname.startsWith('/quotes/') ||
