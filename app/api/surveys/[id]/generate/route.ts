@@ -98,22 +98,52 @@ ${deviceList}
 ${survey.notes_raw ? `SURVEYOR NOTES:\n${survey.notes_raw}` : ''}
 ${survey.voice_transcript ? `VOICE TRANSCRIPT:\n${survey.voice_transcript}` : ''}`
 
+  /**
+   * Repair common JSON issues from LLM output:
+   * - Literal newlines / tabs inside string values (must be \n, \t)
+   * - Literal carriage returns
+   * Walks the string character-by-character so it never touches structural JSON chars.
+   */
+  function repairJsonString(raw: string): string {
+    let inString = false
+    let escaped  = false
+    let out      = ''
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      if (escaped) { out += ch; escaped = false; continue }
+      if (ch === '\\') { escaped = true; out += ch; continue }
+      if (ch === '"')  { inString = !inString; out += ch; continue }
+      if (inString) {
+        if (ch === '\n') { out += '\\n'; continue }
+        if (ch === '\r') { out += '\\r'; continue }
+        if (ch === '\t') { out += '\\t'; continue }
+      }
+      out += ch
+    }
+    return out
+  }
+
   let generated: Record<string, unknown>
   try {
     const message = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 4096,
-      messages: [{ role: 'user', content: userContent }],
-      system: systemPrompt,
+      model:      'claude-haiku-4-5-20251001',
+      max_tokens: 8192,   // Haiku max — SOW + full BOM can easily exceed 4096
+      messages:   [{ role: 'user', content: userContent }],
+      system:     systemPrompt,
     })
 
     const text = message.content[0].type === 'text' ? message.content[0].text : ''
     // Strip markdown code fences if Claude wrapped in ```json
-    const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
-    generated = JSON.parse(cleaned)
+    const stripped = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
+    // Extract the outermost JSON object (handles any preamble/postamble)
+    const match = stripped.match(/\{[\s\S]*\}/)
+    if (!match) throw new Error(`No JSON object in Claude response. Raw: ${stripped.slice(0, 300)}`)
+    // Repair literal newlines inside string values, then parse
+    const repaired = repairJsonString(match[0])
+    generated = JSON.parse(repaired)
   } catch (err) {
     console.error('Claude generation error:', err)
-    return NextResponse.json({ error: 'AI generation failed' }, { status: 500 })
+    return NextResponse.json({ error: `AI generation failed: ${err instanceof Error ? err.message : String(err)}` }, { status: 500 })
   }
 
   // Save back to survey — split into two updates so a missing column on one
