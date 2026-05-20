@@ -298,9 +298,9 @@ GateGuard is going live. Two parallel Vercel deployments must exist from this po
 - [ ] `STRIPE_SECRET_KEY` + `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` must be set on Vercel for billing payment links
 - [ ] `QBO_CLIENT_ID`, `QBO_CLIENT_SECRET`, `QBO_REALM_ID`, `QBO_ACCESS_TOKEN` — for QuickBooks Online sync (optional)
 - [ ] Migration 021 — `training_progress` + `dealer_scorecards` tables: run on beta Supabase, then prod
-- [ ] Migration 050 — `invoices` + `invoice_line_items` + `commission_payouts` tables: run on beta first
-- [ ] Migration 051 — billing columns on `sites` table: run on beta first
-- [ ] Migration 052 — `permit_documents` table enrichment: run on beta first
+- [x] Migration 050 — `invoices` + `invoice_line_items` + `commission_payouts` tables: ✅ deployed on beta (May 2026)
+- [x] Migration 051 — billing columns on `sites` table: ✅ deployed on beta (May 2026)
+- [x] Migration 052 — `permit_documents` table enrichment: ✅ deployed on beta (May 2026)
 - [ ] Client portal at `portal.gateguard.co/[site-slug]` — property manager dashboard (Brivo + Eagle Eye, no direct login to either). Clerk 'client' role. Supabase RLS by org. See `app/[site-slug]/page.tsx`.
 - [ ] EOS page (`/eos`) — persistence to Supabase (currently in-memory only)
 - [ ] PWA manifest for /tech (techs "Add to Home Screen")

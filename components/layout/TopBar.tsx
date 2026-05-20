@@ -1,9 +1,10 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Bell, Search, ChevronDown, X, Settings, User } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { HelpCircle, LogOut } = require("lucide-react") as any;
+const { HelpCircle, LogOut, CalendarDays } = require("lucide-react") as any;
 
 interface TopBarProps {
   title: string;
@@ -12,10 +13,12 @@ interface TopBarProps {
 }
 
 export function TopBar({ title, subtitle, actions }: TopBarProps) {
+  const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [bellOpen, setBellOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [todayCount, setTodayCount] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
   const bellRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -33,6 +36,21 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Fetch today's calendar item count for badge
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/calendar/today-count");
+        if (res.ok) {
+          const data = await res.json() as { count?: number };
+          setTodayCount(data.count ?? 0);
+        }
+      } catch {
+        // Non-critical — badge just won't show
+      }
+    })();
   }, []);
 
   // Quick search destinations
@@ -100,6 +118,20 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
           title="Search"
         >
           <Search size={17} />
+        </button>
+
+        {/* Calendar */}
+        <button
+          onClick={() => router.push("/calendar")}
+          className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors relative"
+          title="Calendar"
+        >
+          <CalendarDays size={17} />
+          {todayCount > 0 && (
+            <span className="absolute top-1 right-1 min-w-[14px] h-[14px] flex items-center justify-center bg-[#6B7EFF] text-white text-[8px] font-bold rounded-full px-0.5 leading-none">
+              {todayCount > 9 ? "9+" : todayCount}
+            </span>
+          )}
         </button>
 
         {/* Bell — notifications */}

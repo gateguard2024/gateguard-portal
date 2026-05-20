@@ -12,6 +12,126 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// ─── Action tools for Claude tool_use ──────────────────────────────────────
+const ACTION_TOOLS: Anthropic.Tool[] = [
+  {
+    name: 'update_todo',
+    description: 'Update a to-do item. Can change due_date, status, priority, or title.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        id: { type: 'string', description: 'The to-do ID' },
+        due_date: { type: 'string', description: 'New due date in YYYY-MM-DD format' },
+        status: { type: 'string', enum: ['open', 'in_progress', 'done'], description: 'New status' },
+        priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'], description: 'New priority' },
+        title: { type: 'string', description: 'New title if renaming' },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'create_todo',
+    description: 'Create a new to-do item.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        title: { type: 'string', description: 'Title of the to-do' },
+        due_date: { type: 'string', description: 'Due date in YYYY-MM-DD format' },
+        priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] },
+        notes: { type: 'string', description: 'Additional notes' },
+      },
+      required: ['title'],
+    },
+  },
+  {
+    name: 'complete_todo',
+    description: 'Mark a to-do as done.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        id: { type: 'string', description: 'The to-do ID' },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'reschedule_work_order',
+    description: 'Change the scheduled date of a work order.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        id: { type: 'string', description: 'The work order ID' },
+        scheduled_date: { type: 'string', description: 'New scheduled date in YYYY-MM-DD format' },
+      },
+      required: ['id', 'scheduled_date'],
+    },
+  },
+  {
+    name: 'update_work_order_status',
+    description: 'Change the status of a work order.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        id: { type: 'string', description: 'The work order ID' },
+        status: { type: 'string', enum: ['open', 'assigned', 'in_progress', 'completed', 'cancelled'] },
+      },
+      required: ['id', 'status'],
+    },
+  },
+]
+
+// ─── Tool executor ──────────────────────────────────────────────────────────
+async function executeTool(
+  toolName: string,
+  toolInput: Record<string, unknown>
+): Promise<{ success: boolean; message?: string; error?: string; id?: string }> {
+  switch (toolName) {
+    case 'update_todo': {
+      const { id, ...updates } = toolInput
+      const { error } = await supabase.from('todos').update(updates).eq('id', id)
+      if (error) return { success: false, error: error.message }
+      return { success: true, message: 'To-do updated successfully' }
+    }
+    case 'create_todo': {
+      const { data, error } = await supabase
+        .from('todos')
+        .insert({ ...toolInput, status: 'open' })
+        .select()
+        .single()
+      if (error) return { success: false, error: error.message }
+      return { success: true, id: (data as { id: string }).id, message: 'To-do created' }
+    }
+    case 'complete_todo': {
+      const { error } = await supabase
+        .from('todos')
+        .update({ status: 'done' })
+        .eq('id', toolInput.id)
+      if (error) return { success: false, error: error.message }
+      return { success: true, message: 'To-do marked complete' }
+    }
+    case 'reschedule_work_order': {
+      const { id, scheduled_date } = toolInput
+      const { error } = await supabase
+        .from('work_orders')
+        .update({ scheduled_date })
+        .eq('id', id)
+      if (error) return { success: false, error: error.message }
+      return { success: true, message: `Work order rescheduled to ${scheduled_date}` }
+    }
+    case 'update_work_order_status': {
+      const { id, status } = toolInput
+      const { error } = await supabase
+        .from('work_orders')
+        .update({ status })
+        .eq('id', id)
+      if (error) return { success: false, error: error.message }
+      return { success: true, message: `Work order status updated to ${status}` }
+    }
+    default:
+      return { success: false, error: 'Unknown tool' }
+  }
+}
+
 // ─── Portal navigation map (for deep links in responses) ───────────────────
 const PORTAL_NAV = `
 PORTAL ROUTES (always use these exact paths for deep links):
@@ -178,7 +298,7 @@ export async function POST(req: NextRequest) {
     dataContext = `\nLIVE DATA — Daily Briefing:\n${JSON.stringify(data)}`
   }
 
-  const systemPrompt = `You are NEXUS, the personal AI assistant built into the GateGuard dealer portal. You are concise, direct, and helpful. You know the portal inside-out and can answer questions, look up data, remind about tasks, and navigate the user to the right page.
+  const systemPrompt = `You are NEXUS, the personal AI assistant built into the GateGuard dealer portal. You are concise, direct, and helpful. You know the portal inside-out and can answer questions, look up data, remind about tasks, navigate the user to the right page, and take actions directly in the portal.
 
 USER: ${userName || user?.name || 'Dealer'} (${user?.role || 'dealer'})
 CURRENT PAGE: ${currentPage || '/'}
@@ -186,6 +306,17 @@ TODAY: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeri
 
 ${PORTAL_NAV}
 ${dataContext}
+
+ACTIONS YOU CAN TAKE:
+- Update a to-do's due date, status, priority, or title
+- Create a new to-do
+- Mark a to-do as complete
+- Reschedule a work order
+- Update a work order status
+
+When the user asks you to change something, DO IT using the available tools. Don't say you can't — act, then confirm what you did.
+After taking an action, confirm in plain language: "Done — I've updated [item] to [new value]."
+If you need to know which specific item (e.g. user says "that to-do" but there are multiple open items), ask for clarification first, then act once you have enough info.
 
 RESPONSE RULES:
 - Be concise. Max 3-4 sentences unless showing data lists.
@@ -199,18 +330,67 @@ RESPONSE RULES:
 - For urgent items (overdue, expiring), lead with those first.`
 
   try {
-    const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 600,
-      system: systemPrompt,
-      messages: messages.map((m: { role: string; content: string }) => ({
+    type MessageParam = Anthropic.MessageParam
+
+    let currentMessages: MessageParam[] = messages.map(
+      (m: { role: string; content: string }) => ({
         role: m.role as 'user' | 'assistant',
         content: m.content,
-      })),
-    })
+      })
+    )
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : ''
-    return NextResponse.json({ response: text, liveData })
+    let finalText = ''
+
+    // Agentic loop — handles tool_use up to 5 iterations
+    for (let iteration = 0; iteration < 5; iteration++) {
+      const response = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1024,
+        system: systemPrompt,
+        tools: ACTION_TOOLS,
+        messages: currentMessages,
+      })
+
+      if (response.stop_reason === 'end_turn') {
+        const textBlock = response.content.find(b => b.type === 'text')
+        finalText = textBlock?.type === 'text' ? textBlock.text : ''
+        break
+      }
+
+      if (response.stop_reason === 'tool_use') {
+        const toolUseBlock = response.content.find(b => b.type === 'tool_use')
+        if (!toolUseBlock || toolUseBlock.type !== 'tool_use') break
+
+        const toolResult = await executeTool(
+          toolUseBlock.name,
+          toolUseBlock.input as Record<string, unknown>
+        )
+
+        // Append assistant's tool_use turn and our tool_result turn
+        currentMessages = [
+          ...currentMessages,
+          { role: 'assistant' as const, content: response.content },
+          {
+            role: 'user' as const,
+            content: [
+              {
+                type: 'tool_result' as const,
+                tool_use_id: toolUseBlock.id,
+                content: JSON.stringify(toolResult),
+              },
+            ],
+          },
+        ]
+        continue
+      }
+
+      // Unexpected stop reason — extract any text and bail
+      const textBlock = response.content.find(b => b.type === 'text')
+      finalText = textBlock?.type === 'text' ? textBlock.text : ''
+      break
+    }
+
+    return NextResponse.json({ response: finalText, liveData })
   } catch (err: unknown) {
     console.error('[assistant/chat]', err)
     return NextResponse.json({ error: 'Assistant unavailable' }, { status: 500 })
