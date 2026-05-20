@@ -45,47 +45,49 @@ export async function POST(req: NextRequest) {
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
-    const message = await client.messages.create({
-      model:      'claude-haiku-4-5-20251001',
-      max_tokens: 1200,
-      system: `You are a field technician assistant for GateGuard, a multifamily access control company.
-A tech has walked a property and narrated what they observed into a voice recorder (Plaud device or similar).
-You will receive a transcript of that recording — it may be rough, abbreviated, or informal.
-
-Extract every device or piece of equipment mentioned and return structured JSON.
-
-For each device, infer:
-- name: common device type name (e.g. "Gate Operator", "Photobeam", "Callbox", "Loop Detector", "Access Reader", "Camera", "Door Strike", "Mag Lock", "Keypad", "Intercom", "Network Switch", etc.)
-- brand: manufacturer if mentioned (e.g. DoorKing, LiftMaster, Brivo, UniFi, Hikvision, etc.) — or empty string
-- model: model number if mentioned — or empty string
-- location: where it is (e.g. "Main Gate", "Side Entry", "Parking Garage", "Lobby", "Unit 101 Door") — extract from context
-- condition: "good" | "fair" | "poor" — infer from tech's description (working fine = good; issues mentioned = fair; broken/failed = poor; default = "good")
-- action: "keep" | "service" | "replace" | "new_install" — infer from tech's description
-  - working fine, no issues → "keep"
-  - intermittent, dirty, needs adjustment, misaligned → "service"
-  - broken, failed, damaged, end of life, needs replacement → "replace"
-  - not yet installed, needs to be added, planned → "new_install"
-- notes: any specific details the tech mentioned about this device (error codes, symptoms, observations)
-
-Also extract a propertyName if the tech mentions the property/site name.
-
-Respond ONLY with valid JSON — no prose, no markdown fences:
-{
-  "propertyName": "string or null",
-  "devices": [
-    {
-      "name": "string",
-      "brand": "string",
-      "model": "string",
-      "location": "string",
-      "condition": "good" | "fair" | "poor",
-      "action": "keep" | "service" | "replace" | "new_install",
-      "notes": "string"
+    const parseTool: Anthropic.Tool = {
+      name: 'extract_devices',
+      description: 'Extract all devices and equipment found in a site walk transcript.',
+      input_schema: {
+        type: 'object' as const,
+        required: ['propertyName', 'devices'],
+        properties: {
+          propertyName: {
+            type: 'string',
+            description: 'Property/site name if mentioned, otherwise empty string.',
+          },
+          devices: {
+            type: 'array',
+            description: 'All devices and equipment found on site.',
+            items: {
+              type: 'object',
+              required: ['name', 'brand', 'model', 'location', 'condition', 'action', 'notes'],
+              properties: {
+                name:      { type: 'string', description: 'Common device type name (e.g. Gate Operator, Camera, Access Reader, Intercom)' },
+                brand:     { type: 'string', description: 'Manufacturer brand if mentioned, otherwise empty string' },
+                model:     { type: 'string', description: 'Model number if mentioned, otherwise empty string' },
+                location:  { type: 'string', description: 'Where the device is located (e.g. Main Gate, Lobby, Unit 101)' },
+                condition: { type: 'string', enum: ['good', 'fair', 'poor'] },
+                action:    { type: 'string', enum: ['keep', 'service', 'replace', 'new_install'] },
+                notes:     { type: 'string', description: 'Specific details the tech mentioned about this device' },
+              },
+            },
+          },
+        },
+      },
     }
-  ]
-}
 
-If you cannot identify any devices, return { "propertyName": null, "devices": [] }.`,
+    const message = await client.messages.create({
+      model:       'claude-haiku-4-5-20251001',
+      max_tokens:  4096,
+      tools:       [parseTool],
+      tool_choice: { type: 'tool', name: 'extract_devices' },
+      system: `You are a field technician assistant for GateGuard, a multifamily access control company.
+A tech has walked a property and narrated what they observed.
+Extract every device or piece of equipment mentioned and call the extract_devices tool.
+
+For condition: working fine = "good"; issues/intermittent = "fair"; broken/failed/damaged = "poor". Default: "good".
+For action: working fine → "keep"; needs adjustment/cleaning → "service"; broken/end-of-life → "replace"; not yet installed → "new_install".`,
 
       messages: [{
         role: 'user',
@@ -93,11 +95,9 @@ If you cannot identify any devices, return { "propertyName": null, "devices": []
       }],
     })
 
-    const raw   = message.content[0].type === 'text' ? message.content[0].text : ''
-    const match = raw.match(/\{[\s\S]*\}/)
-    if (!match) throw new Error(`No JSON in Claude response: ${raw.slice(0, 200)}`)
-
-    const parsed = JSON.parse(match[0])
+    const toolBlock = message.content.find(b => b.type === 'tool_use') as Anthropic.ToolUseBlock | undefined
+    if (!toolBlock) throw new Error('Claude did not call the extract_devices tool.')
+    const parsed = toolBlock.input as { propertyName?: string; devices?: any[] }
 
     // Attach UUIDs to devices
     const devices = (parsed.devices ?? []).map((d: any) => ({
