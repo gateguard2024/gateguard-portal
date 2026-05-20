@@ -73,6 +73,7 @@ interface Survey {
   ai_urgent_items:  UrgentItem[]
   ai_install_notes: InstallNote[]
   ai_timeline:      string | null
+  photos:           string[]
   quote_id:         string | null
   created_at:       string
 }
@@ -232,13 +233,16 @@ function NewSurveyModal({ onClose, onCreate }: NewSurveyModalProps) {
 // ─── Device Card ───────────────────────────────────────────────────────────────
 
 interface DeviceCardProps {
-  device:   SurveyDevice
-  onChange: (d: SurveyDevice) => void
-  onDelete: () => void
+  device:         SurveyDevice
+  onChange:       (d: SurveyDevice) => void
+  onDelete:       () => void
+  surveyId:       string
+  onUploadPhoto?: (file: File, deviceId: string) => Promise<string | null>
 }
 
-function DeviceCard({ device, onChange, onDelete }: DeviceCardProps) {
-  const [expanded, setExpanded] = useState(true)
+function DeviceCard({ device, onChange, onDelete, surveyId, onUploadPhoto }: DeviceCardProps) {
+  const [expanded,      setExpanded]      = useState(true)
+  const [photoUploading, setPhotoUploading] = useState(false)
 
   const isWorking    = device.condition === "Good" || device.condition === "Fair"
   const isNotWorking = device.condition === "Poor" || device.action === "Replace" || device.action === "New Install"
@@ -253,18 +257,38 @@ function DeviceCard({ device, onChange, onDelete }: DeviceCardProps) {
     }
   }
 
-  function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      const dataUrl = reader.result as string
-      onChange({ ...device, photos: [...(device.photos ?? []), dataUrl] })
-    }
-    reader.readAsDataURL(file)
-    // Reset input so the same file can be selected again
     e.target.value = ""
+
+    if (onUploadPhoto) {
+      setPhotoUploading(true)
+      try {
+        const url = await onUploadPhoto(file, device.id)
+        if (url) {
+          onChange({ ...device, photos: [...(device.photos ?? []), url] })
+        }
+      } finally {
+        setPhotoUploading(false)
+      }
+    } else {
+      // Fallback: base64 for offline use
+      const reader = new FileReader()
+      reader.onload = () => {
+        const dataUrl = reader.result as string
+        onChange({ ...device, photos: [...(device.photos ?? []), dataUrl] })
+      }
+      reader.readAsDataURL(file)
+    }
   }
+
+  function removePhoto(idx: number) {
+    onChange({ ...device, photos: (device.photos ?? []).filter((_, i) => i !== idx) })
+  }
+
+  // surveyId is available in scope via prop but not needed for render — kept for future direct uploads
+  void surveyId
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
@@ -396,16 +420,27 @@ function DeviceCard({ device, onChange, onDelete }: DeviceCardProps) {
             />
           </div>
           <div className="col-span-2">
-            <label className="text-xs font-medium text-muted-foreground">Photos</label>
-            <label className="mt-1 flex items-center gap-2 px-3 py-2 border border-dashed border-border rounded-lg cursor-pointer hover:bg-muted/50 text-sm text-muted-foreground">
-              <Camera size={14} />
-              <span>Add photo</span>
-              <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoCapture} />
+            <label className="block text-[11px] text-gray-500 mb-1">Device Photos</label>
+            <label className={cn(
+              "flex items-center gap-2 px-3 py-2 border border-dashed rounded-lg cursor-pointer text-xs transition-colors",
+              photoUploading ? "border-blue-300 bg-blue-50 text-blue-500" : "border-gray-300 hover:bg-gray-50 text-gray-500"
+            )}>
+              {photoUploading ? <Loader2 size={13} className="animate-spin" /> : <Camera size={13} />}
+              <span>{photoUploading ? "Uploading..." : "Add photo"}</span>
+              <input type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={handlePhotoCapture} disabled={photoUploading} />
             </label>
             {device.photos?.length ? (
               <div className="flex gap-2 mt-2 flex-wrap">
                 {device.photos.map((p, i) => (
-                  <img key={i} src={p} className="w-16 h-16 object-cover rounded-lg border border-border" alt={`Photo ${i+1}`} />
+                  <div key={i} className="relative group">
+                    <img src={p} className="w-16 h-16 object-cover rounded-lg border border-gray-200" alt={`Photo ${i+1}`} />
+                    <button
+                      onClick={() => removePhoto(i)}
+                      className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X size={8} />
+                    </button>
+                  </div>
                 ))}
               </div>
             ) : null}
@@ -567,8 +602,10 @@ export default function SurveyPage() {
   const [creatingQuote,  setCreatingQuote] = useState(false)
   const [savingBom,      setSavingBom]     = useState(false)
   const [parseLoading,   setParseLoading]  = useState(false)
+  const [parseError,     setParseError]    = useState("")
   const [genError,       setGenError]      = useState("")
   const [quoteSuccess,   setQuoteSuccess]  = useState<string | null>(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
 
   // Voice
   const [recording,      setRecording]     = useState(false)
@@ -684,42 +721,83 @@ export default function SurveyPage() {
   async function parseTranscript() {
     if (!survey || !transcript.trim()) return
     setParseLoading(true)
+    setParseError("")
     try {
       const res  = await fetch("/api/kb/parse-survey-transcript", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ transcript }),
+        body:    JSON.stringify({ transcript, propertyName: survey.property_name }),
       })
       const json = await res.json()
-      if (json.devices && Array.isArray(json.devices)) {
-        const condMap: Record<string, SurveyDevice["condition"]> = {
-          good: "Good", fair: "Fair", poor: "Poor",
-          Good: "Good", Fair: "Fair", Poor: "Poor",
-        }
-        const actMap: Record<string, SurveyDevice["action"]> = {
-          keep: "Keep", service: "Service", replace: "Replace",
-          new_install: "New Install", "new install": "New Install",
-          Keep: "Keep", Service: "Service", Replace: "Replace", "New Install": "New Install",
-        }
-        const parsed: SurveyDevice[] = json.devices.map((d: Record<string, string>) => ({
-          id:        crypto.randomUUID(),
-          name:      d.name      ?? "",
-          brand:     d.brand     ?? "",
-          model:     d.model     ?? "",
-          location:  d.location  ?? "",
-          condition: condMap[d.condition] ?? "",
-          action:    actMap[d.action]     ?? "",
-          notes:     d.notes     ?? "",
-        }))
-        const merged = [...(survey.devices ?? []), ...parsed]
-        setSurvey(s => s ? { ...s, devices: merged } : s)
-        await patchSurvey({ devices: merged, voice_transcript: transcript })
+      if (!res.ok) throw new Error(json.error ?? `Server error ${res.status}`)
+      if (!json.devices || !Array.isArray(json.devices) || json.devices.length === 0) {
+        setParseError("No devices found in transcript. Try adding more detail — mention device names, brands, and locations.")
+        return
       }
-    } catch {
-      alert("Failed to parse transcript.")
+      const condMap: Record<string, SurveyDevice["condition"]> = {
+        good: "Good", fair: "Fair", poor: "Poor",
+        Good: "Good", Fair: "Fair", Poor: "Poor",
+      }
+      const actMap: Record<string, SurveyDevice["action"]> = {
+        keep: "Keep", service: "Service", replace: "Replace",
+        new_install: "New Install", "new install": "New Install",
+        Keep: "Keep", Service: "Service", Replace: "Replace", "New Install": "New Install",
+      }
+      const parsed: SurveyDevice[] = json.devices.map((d: Record<string, string>) => ({
+        id:        crypto.randomUUID(),
+        name:      d.name      ?? "",
+        brand:     d.brand     ?? "",
+        model:     d.model     ?? "",
+        location:  d.location  ?? "",
+        condition: condMap[d.condition] ?? "",
+        action:    actMap[d.action]     ?? "",
+        notes:     d.notes     ?? "",
+      }))
+      const merged = [...(survey.devices ?? []), ...parsed]
+      setSurvey(s => s ? { ...s, devices: merged } : s)
+      await patchSurvey({ devices: merged, voice_transcript: transcript })
+    } catch (e: unknown) {
+      setParseError(e instanceof Error ? e.message : "Failed to extract devices. Check your connection and try again.")
     } finally {
       setParseLoading(false)
     }
+  }
+
+  // ── Upload survey photo to Supabase Storage ───────────────────────────────
+
+  async function uploadSurveyPhoto(file: File, deviceId?: string): Promise<string | null> {
+    if (!survey) return null
+    setUploadingPhoto(true)
+    try {
+      const form = new FormData()
+      form.append("file", file)
+      if (deviceId) form.append("device_id", deviceId)
+      const res  = await fetch(`/api/surveys/${survey.id}/upload-image`, { method: "POST", body: form })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? "Upload failed")
+      return json.url as string
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Photo upload failed")
+      return null
+    } finally {
+      setUploadingPhoto(false)
+    }
+  }
+
+  async function handleSurveyPhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? [])
+    if (!files.length || !survey) return
+    const urls: string[] = []
+    for (const file of files) {
+      const url = await uploadSurveyPhoto(file)
+      if (url) urls.push(url)
+    }
+    if (urls.length) {
+      const updated: string[] = [...(survey.photos ?? []), ...urls]
+      setSurvey(s => s ? { ...s, photos: updated } : s)
+      await patchSurvey({ photos: updated })
+    }
+    e.target.value = ""
   }
 
   // ── Save helpers ──────────────────────────────────────────────────────────
@@ -1118,7 +1196,7 @@ export default function SurveyPage() {
                         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none text-gray-700 leading-relaxed"
                       />
 
-                      <div className="flex items-center gap-2 mt-3">
+                      <div className="flex items-center gap-2 mt-3 flex-wrap">
                         <button
                           onClick={parseTranscript}
                           disabled={parseLoading || !transcript.trim()}
@@ -1129,6 +1207,12 @@ export default function SurveyPage() {
                         </button>
                         <span className="text-xs text-gray-400">AI parses your notes into device cards</span>
                       </div>
+                      {parseError && (
+                        <div className="flex items-start gap-2 mt-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
+                          <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+                          <span>{parseError}</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Field Notes */}
@@ -1200,6 +1284,8 @@ export default function SurveyPage() {
                             device={d}
                             onChange={upd => updateDevice(d.id, upd)}
                             onDelete={() => deleteDevice(d.id)}
+                            surveyId={survey.id}
+                            onUploadPhoto={uploadSurveyPhoto}
                           />
                         ))}
                         {(survey.devices?.length ?? 0) === 0 && (
@@ -1210,6 +1296,66 @@ export default function SurveyPage() {
                           </div>
                         )}
                       </div>
+                    </div>
+
+                    {/* Survey Photos */}
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Camera size={14} className="text-gray-500" />
+                          <h3 className="text-sm font-semibold text-gray-900">Survey Photos</h3>
+                          {(survey.photos ?? []).length > 0 && (
+                            <span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium">
+                              {(survey.photos ?? []).length}
+                            </span>
+                          )}
+                        </div>
+                        <label className={cn(
+                          "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium cursor-pointer transition-colors",
+                          uploadingPhoto ? "border-blue-300 bg-blue-50 text-blue-500" : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                        )}>
+                          {uploadingPhoto ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
+                          {uploadingPhoto ? "Uploading..." : "Add Photos"}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            className="hidden"
+                            disabled={uploadingPhoto}
+                            onChange={handleSurveyPhotoUpload}
+                          />
+                        </label>
+                      </div>
+                      {(survey.photos ?? []).length > 0 ? (
+                        <div className="flex gap-2 flex-wrap">
+                          {(survey.photos ?? []).map((url, i) => (
+                            <div key={i} className="relative group">
+                              <img
+                                src={url}
+                                className="w-20 h-20 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity"
+                                alt={`Survey photo ${i + 1}`}
+                                onClick={() => window.open(url, '_blank')}
+                              />
+                              <button
+                                onClick={async () => {
+                                  const updated = (survey.photos ?? []).filter((_, j) => j !== i)
+                                  setSurvey(s => s ? { ...s, photos: updated as string[] } : s)
+                                  await patchSurvey({ photos: updated })
+                                }}
+                                className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <X size={8} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-6 text-gray-400 border border-dashed border-gray-200 rounded-lg">
+                          <Camera size={20} className="mx-auto mb-1 text-gray-300" />
+                          <p className="text-xs">No survey photos yet</p>
+                          <p className="text-[11px] mt-0.5">Upload property walkthrough photos here. Attach to devices above.</p>
+                        </div>
+                      )}
                     </div>
 
                     {/* Action bar */}
