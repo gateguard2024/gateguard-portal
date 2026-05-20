@@ -71,7 +71,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Knowledge Base", href: "/kb",          icon: BookOpen,       description: "Troubleshooting articles and manuals" },
       { label: "Products",       href: "/products",    icon: Package,        description: "Equipment catalog and manuals" },
       { label: "Properties",      href: "/sites",       icon: Building2,      description: "Installed sites, equipment, and asset map" },
-      { label: "Maintenance",    href: "/maintenance", icon: Wrench,         description: "Work orders and service history" },
+      { label: "Work Orders",    href: "/maintenance", icon: Wrench,         description: "Work orders and service history" },
       { label: "Dispatch",       href: "/dispatch",    icon: Truck,          description: "Tech scheduling and job board" },
       { label: "Inventory",      href: "/inventory",   icon: Package,        description: "Parts, stock, and POs" },
       { label: "Site Survey",    href: "/survey",      icon: ClipboardCheck, description: "Site walk and proposal builder" },

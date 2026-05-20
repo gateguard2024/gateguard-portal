@@ -254,6 +254,94 @@ interface EditSlideOverProps {
   onSaved: (wo: WorkOrder) => void
 }
 
+// ── WorkOrderTimeline ─────────────────────────────────────────────────────────
+const TIMELINE_STEPS = [
+  { key: 'created',   label: 'Created'  },
+  { key: 'assigned',  label: 'Assigned' },
+  { key: 'en_route',  label: 'En Route' },
+  { key: 'on_site',   label: 'On Site'  },
+  { key: 'completed', label: 'Completed'},
+] as const
+
+function statusToStepIndex(status: WOStatus): number {
+  switch (status) {
+    case 'open':        return 0
+    case 'scheduled':   return 1
+    case 'in_route':    return 2
+    case 'in_progress': return 3
+    case 'on_site':     return 3
+    case 'completed':   return 4
+    default:            return 0
+  }
+}
+
+function WorkOrderTimeline({ status }: { status: WOStatus }) {
+  if (status === 'cancelled') {
+    return (
+      <div className="mb-6 bg-card border border-border rounded-xl px-5 py-4 flex items-center gap-2">
+        <span className="w-2 h-2 rounded-full bg-slate-400 shrink-0" />
+        <span className="text-sm font-semibold text-slate-400">Cancelled</span>
+      </div>
+    )
+  }
+
+  const activeIndex = statusToStepIndex(status)
+
+  return (
+    <div className="mb-6 bg-card border border-border rounded-xl px-5 py-4">
+      <div className="flex items-center">
+        {TIMELINE_STEPS.map((step, i) => {
+          const isCompleted = i < activeIndex
+          const isCurrent   = i === activeIndex
+          const isFuture    = i > activeIndex
+
+          return (
+            <div key={step.key} className="flex items-center flex-1 last:flex-none">
+              {/* Step */}
+              <div className="flex flex-col items-center gap-1.5 shrink-0">
+                <div
+                  className={cn(
+                    'w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors',
+                    isCompleted && 'bg-emerald-500 text-white',
+                    isCurrent   && 'bg-[#6B7EFF] text-white ring-4 ring-[#6B7EFF]/20',
+                    isFuture    && 'bg-white border-2 border-border text-muted-foreground',
+                  )}
+                >
+                  {isCompleted ? (
+                    <Check size={13} strokeWidth={3} />
+                  ) : (
+                    <span>{i + 1}</span>
+                  )}
+                </div>
+                <span
+                  className={cn(
+                    'text-[10px] font-medium whitespace-nowrap leading-tight',
+                    isCompleted && 'text-emerald-500',
+                    isCurrent   && 'text-[#6B7EFF] font-semibold',
+                    isFuture    && 'text-muted-foreground',
+                  )}
+                >
+                  {step.label}
+                </span>
+              </div>
+
+              {/* Connector line (skip after last step) */}
+              {i < TIMELINE_STEPS.length - 1 && (
+                <div
+                  className={cn(
+                    'flex-1 h-0.5 mx-1 mb-5 rounded-full transition-colors',
+                    i < activeIndex ? 'bg-emerald-500' : 'bg-border',
+                  )}
+                />
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function EditSlideOver({ open, wo, onClose, onSaved }: EditSlideOverProps) {
   const [form, setForm] = useState({
     title:          wo.title,
@@ -1044,6 +1132,9 @@ export default function WorkOrderDetailPage() {
               onActivityCreated={() => {}}
             />
           </div>
+
+          {/* Status timeline */}
+          <WorkOrderTimeline status={wo.status} />
 
           {/* Checklist progress bar (if items exist) */}
           {totalCount > 0 && (

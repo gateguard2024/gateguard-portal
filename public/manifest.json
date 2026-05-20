@@ -1,13 +1,12 @@
 {
-  "name": "GateGuard Field Tech",
+  "name": "GateGuard Tech",
   "short_name": "GG Tech",
-  "description": "GateGuard field diagnostic tool — wiring guides, AI troubleshooting, cable testing.",
+  "description": "GateGuard field diagnostic tool for access control installers",
   "start_url": "/tech",
-  "scope": "/tech",
   "display": "standalone",
+  "background_color": "#0B1728",
+  "theme_color": "#0B1728",
   "orientation": "portrait",
-  "background_color": "#F1F5F9",
-  "theme_color": "#0C111D",
   "icons": [
     {
       "src": "/icon-192.png",
@@ -22,6 +21,5 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["utilities", "productivity"],
-  "screenshots": []
+  "categories": ["utilities", "productivity"]
 }

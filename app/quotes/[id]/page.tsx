@@ -10,7 +10,7 @@ import {
   Search, Hash, Layers, X, Download,
 } from 'lucide-react';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Edit2, ArrowUpRight, DollarSign, Package, SlidersHorizontal, Tag } = require('lucide-react') as any;
+const { Edit2, ArrowUpRight, DollarSign, Package, SlidersHorizontal, Tag, FileDown } = require('lucide-react') as any;
 import { cn } from '@/lib/utils';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -730,8 +730,11 @@ export default function QuoteDetailPage() {
             {copied ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
             {copied ? 'Copied!' : 'Copy Link'}
           </button>
-          <button className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 text-sm text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
-            <Download size={13} /> PDF
+          <button
+            onClick={() => window.open(`/quotes/${id}/approve?print=1`, '_blank')}
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-border text-sm rounded-lg hover:bg-muted text-foreground transition-colors"
+          >
+            <FileDown size={13} /> Download PDF
           </button>
         </div>
       </div>

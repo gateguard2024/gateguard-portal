@@ -12,8 +12,9 @@
 
 import { usePathname } from 'next/navigation'
 import { ThemeProvider } from 'next-themes'
-import { Sidebar }        from '@/components/layout/Sidebar'
-import { AddToL10Button } from '@/components/layout/AddToL10Button'
+import { Sidebar }          from '@/components/layout/Sidebar'
+import { AddToL10Button }   from '@/components/layout/AddToL10Button'
+import { NexusAssistant }   from '@/components/layout/NexusAssistant'
 
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -43,6 +44,8 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         </main>
         {/* Ambient EOS L10 button — floats on every portal page */}
         <AddToL10Button />
+        {/* NEXUS Personal AI Assistant — bottom-right on every portal page */}
+        <NexusAssistant />
       </div>
     </ThemeProvider>
   )

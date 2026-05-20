@@ -45,6 +45,107 @@ Always prioritize features that: (a) deliver immediate visible value to already-
 
 ---
 
+## 10/10 LEVEL-UP PLAN — Competitive Audit → Best-in-Class (Read Every Session)
+
+**Established May 2026. This is the standing product roadmap until all 14 sections score 10/10.**
+
+### The Design System Mandate (Do This Before Anything Else)
+The single biggest gap between "looks like a dev built it in Tailwind" and "looks like a funded PropTech design team built this" is shared component language. Five components must be built and used everywhere:
+
+1. **`<DataTable>`** — Every list page. Consistent column widths, hover row highlight, right-click context menu, bulk checkbox, column sort.
+2. **`<SlideOver>`** — Every create/edit form. Consistent header + scrollable body + sticky Save/Cancel footer.
+3. **`<EmptyState>`** — Every list that can return zero rows. Icon + heading + subtext + CTA button.
+4. **`<SkeletonRow>`** — Every data-fetching component. Animated shimmer while loading.
+5. **`<StatusBadge>`** — Uses color AND icon shape (never color alone). Used identically across all sections.
+
+**The "not AI-assembled" test**: Show it to someone who didn't build it. If they say "is this Figma?" — pass. If they say "looks like a Tailwind template" — fail. Shared components close this gap.
+
+### NEXUS Personal Assistant (PA) — LIVE ✅ May 2026
+`components/layout/NexusAssistant.tsx` — floating bottom-right AI PA on all portal pages (not /tech).
+- 52px sparkle bubble, brand blue. Red badge + pulse ring when alerts exist.
+- Expand → 380px chat panel: alert bar, message feed, quick prompt chips, AI chat input.
+- Toggle on/off: switch in panel header persists to localStorage. When off shows a tiny "NEXUS" re-enable pill.
+- Proactive briefing on first open: fetches overdue To-Dos, expiring quotes, open WOs via `/api/assistant/alerts`.
+- AI chat: `/api/assistant/chat` → Claude Haiku. Knows all portal routes, current page, live Supabase data for To-Dos/quotes/WOs/leads queries.
+- Deep links in AI responses render as clickable `[text](href)` anchors.
+- Next level: add scheduled proactive pushes (e.g. "It's Friday — time for L10 meeting prep"), user-specific memory, multi-step task execution.
+
+### Sprint 1 — Investor-Killer Fixes (Week 1) ✅ IN PROGRESS
+- [ ] Wire Dashboard KPIs to live Supabase (accounts, WOs, quotes pipeline, open leads). Kill every hardcoded number.
+- [ ] EOS persistence — wire Rocks/Scorecard/Issues/To-Dos to Supabase (migration 010 already written, must run on beta first)
+- [ ] Rename "Maintenance" → "Work Orders" everywhere (Sidebar, page titles, TopBar subtitles)
+- [ ] Build `<EmptyState>` shared component → add to all 14 list pages
+- [ ] Build `<SkeletonRow>` shared component → add to all data-fetching list components
+
+### Sprint 2 — Demo Anchor Polish (Week 2) ✅ IN PROGRESS
+- [ ] Quote PDF export: print-CSS on approval page + "Download PDF" button on quote editor (window.print())
+- [ ] Tech Tool PWA manifest: manifest.json + meta tags in layout → techs can "Add to Home Screen"
+- [ ] Work Order status timeline component: Created → Assigned → En Route → On Site → Completed (on WO detail page)
+- [ ] Site survey photo capture per device: wire the existing photoRef to Supabase Storage upload + thumbnail display
+
+### Sprint 3 — Design Coherence (Week 3)
+- [ ] Build `<DataTable>` shared component → replace ad-hoc tables on: Customers, Work Orders, Dispatch roster, Inventory, Reps, Compliance, Sites, Products
+- [ ] Build `<SlideOver>` shared component → replace ad-hoc slide-overs on: Customer edit, Site edit, WO new, Inventory item, Dealer onboarding steps
+- [ ] Add skeleton loading to all 14 section list pages
+- [ ] Add proper empty states to all 14 section list pages
+- [ ] Add `@media print` stylesheet to quote approval page
+
+### Sprint 4 — Operational Backbone (Month 2, Week 1–2)
+- [ ] CRM: Pipeline $ by stage on kanban header (weighted value per column)
+- [ ] CRM: Deal aging badge (red after 7 days no activity, amber after 3)
+- [ ] CRM: Lead → Opportunity conversion form (qualify button)
+- [ ] Properties: Health score on site list (formula: offline assets + overdue WOs → green/amber/red)
+- [ ] Properties: Embedded Mapbox pin on site detail
+- [ ] Inventory: Auto-deduct parts when marked Used on WO (join table: work_order_parts)
+- [ ] Inventory: Auto-create PO draft when on_hand < min_stock trigger
+- [ ] Dispatch: Mapbox split view (board left, tech pins right)
+- [ ] Dispatch: "En Route" + "On Site" columns added to job board
+
+### Sprint 5 — Category-Defining Polish (Month 2, Week 3–4)
+- [ ] EOS: L10 meeting facilitator with section timer + agenda runner
+- [ ] EOS: Live Scorecard pulled from work_orders + permits + quotes tables
+- [ ] To-Dos: Wire to EOS L10 section (appear in weekly meeting review)
+- [ ] KB: Structured article content view (numbered steps, callout boxes, markdown renderer)
+- [ ] KB: Related articles section via pgvector similarity (one SQL query)
+- [ ] Work Orders: Customer signature capture on WO completion (canvas widget)
+- [ ] Work Orders: Color-code calendar by technician
+- [ ] Quotes: Quote versioning (V1/V2 panel on quote editor)
+- [ ] Quotes: View tracking ("opened 3 times" on quote list)
+- [ ] Customers: Full chronological timeline (calls + emails + WOs + quotes + events in one feed)
+- [ ] Products: Image thumbnails in product list (image_url already in schema)
+- [ ] Products: Pricing tiers (Standard / Preferred / Premium sell price per product)
+- [ ] Site Survey: Survey health indicator on list (draft / devices added / AI ready / quoted)
+- [ ] Site Survey: Survey share link (same pattern as quote approval page)
+
+### What 10/10 Actually Looks Like Per Section (target state)
+| Section | Current | Target Benchmark | Key Gap |
+|---------|---------|-----------------|---------|
+| Dashboard | 6/10 | AppFolio + ServiceTitan | Live data + sparklines + drill-down |
+| To-Dos | 7/10 | Linear + ClickUp | EOS L10 integration + bulk ops |
+| EOS | 6/10 | Ninety.io + EOS One | Persistence + L10 timer + live Scorecard |
+| CRM | 7/10 | HubSpot + Pipedrive | Pipeline analytics + enrichment + aging |
+| Customers | 7/10 | ServiceTitan + Buildium | Timeline feed + health score + bulk import |
+| Quotes | 8/10 | Quotient + PandaDoc | PDF + e-sign + versioning |
+| Tech Tool | 9/10 | Category-first | PWA + offline + photo capture |
+| KB | 7/10 | Zendesk Guide | Structured content + related articles |
+| Products | 7/10 | ServiceTitan Pricebook | Images in list + pricing tiers |
+| Properties | 7/10 | SmartRent + AppFolio | Health score + photos + map |
+| Work Orders | 7/10 | ServiceTitan + MaintainX | Rename + timeline + signature |
+| Dispatch | 7/10 | ServiceTitan Dispatch | Map view + En Route/On Site columns |
+| Inventory | 6/10 | ServiceTitan + Jobber | WO integration + auto-reorder |
+| Site Survey | 8/10 | Category-first | Photos + health indicator + share link |
+
+### Non-Negotiable Visual Standards (enforce every session)
+- **Never ship a page with hardcoded data** — if the query isn't built yet, show a skeleton + "coming soon" badge, not fake numbers
+- **Never ship a list page with no empty state** — every page that can return 0 rows needs an `<EmptyState>` component
+- **Every form field uses the same height/padding** — h-9 input, consistent focus ring color `#6B7EFF`
+- **Status always uses color + icon** — never color alone (red dot only is not accessible)
+- **Spacing follows 8px grid** — use p-2/p-4/p-6/p-8 (8/16/24/32px). Never p-3, p-5, p-7.
+- **Cards use consistent border** — `border border-border rounded-xl` everywhere
+- **Tables use `<DataTable>` shared component** — no ad-hoc `<table>` tags on any page after Sprint 3
+
+---
+
 ## THE NORTH STAR — GateGuard AI Engine (Read Every Session)
 
 **Russel's directive, May 2026 — permanent, compounding, non-negotiable:**

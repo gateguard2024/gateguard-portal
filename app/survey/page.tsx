@@ -6,7 +6,7 @@ import {
   Plus, X, Check, Clock, FileText, Download, ArrowRight,
   ChevronRight, MapPin, User, Loader2, RefreshCw,
   Trash2, AlertTriangle, CheckCircle2, Search, Upload,
-  ClipboardList, Zap, Layers,
+  ClipboardList, Zap, Layers, Camera,
 } from "lucide-react"
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -23,6 +23,7 @@ interface SurveyDevice {
   condition: "Good" | "Fair" | "Poor" | ""
   action:    "Keep" | "Service" | "Replace" | "New Install" | ""
   notes:     string
+  photos?:   string[]
 }
 
 interface BomItem {
@@ -237,6 +238,19 @@ interface DeviceCardProps {
 function DeviceCard({ device, onChange, onDelete }: DeviceCardProps) {
   const [expanded, setExpanded] = useState(!device.name)
 
+  function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = reader.result as string
+      onChange({ ...device, photos: [...(device.photos ?? []), dataUrl] })
+    }
+    reader.readAsDataURL(file)
+    // Reset input so the same file can be selected again
+    e.target.value = ""
+  }
+
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
       {/* Header */}
@@ -347,6 +361,21 @@ function DeviceCard({ device, onChange, onDelete }: DeviceCardProps) {
               rows={2}
               className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400 resize-none"
             />
+          </div>
+          <div className="col-span-2">
+            <label className="text-xs font-medium text-muted-foreground">Photos</label>
+            <label className="mt-1 flex items-center gap-2 px-3 py-2 border border-dashed border-border rounded-lg cursor-pointer hover:bg-muted/50 text-sm text-muted-foreground">
+              <Camera size={14} />
+              <span>Add photo</span>
+              <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoCapture} />
+            </label>
+            {device.photos?.length ? (
+              <div className="flex gap-2 mt-2 flex-wrap">
+                {device.photos.map((p, i) => (
+                  <img key={i} src={p} className="w-16 h-16 object-cover rounded-lg border border-border" alt={`Photo ${i+1}`} />
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
       )}

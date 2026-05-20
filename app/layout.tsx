@@ -12,6 +12,13 @@ export const metadata: Metadata = {
   title: { default: "GateGuard Nexus", template: "%s — GateGuard Nexus" },
   description: "The operating system for multifamily access and channel dealer networks.",
   icons: { icon: "/favicon.ico" },
+  manifest: '/manifest.json',
+  themeColor: '#0B1728',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'GG Tech',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

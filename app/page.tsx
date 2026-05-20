@@ -1,37 +1,71 @@
 import Link from "next/link";
 import { TopBar } from "@/components/layout/TopBar";
 import { AISearch } from "@/components/ai/AISearch";
+import { createClient } from "@supabase/supabase-js";
 import {
   Camera, Shield, Wifi, AlertTriangle, Users,
   Eye, Settings, TrendingUp, DollarSign,
   ExternalLink, Network, Radio, Layers, ChevronRight,
 } from "lucide-react";
 
-const kpis = [
-  { label: "Active Accounts",  value: "12",      sub: "9 clients · 2 partners · 1 MSO", icon: Users,        color: "text-brand-400",   bg: "bg-brand-400/10"   },
-  { label: "Cameras Online",   value: "115/138", sub: "23 offline — 2 properties",      icon: Camera,       color: "text-emerald-400", bg: "bg-emerald-400/10" },
-  { label: "Doors / Gates",    value: "124",     sub: "All online",                     icon: Shield,       color: "text-blue-400",    bg: "bg-blue-400/10"    },
-  { label: "Bridges / CMVRs",  value: "9/10",    sub: "1 reconnecting",                 icon: Wifi,         color: "text-violet-400",  bg: "bg-violet-400/10"  },
-  { label: "Monthly MRR",      value: "$94.2k",  sub: "+12% vs last month",             icon: DollarSign,   color: "text-emerald-400", bg: "bg-emerald-400/10" },
-  { label: "DTV Activations",  value: "1,284",   sub: "91.4% ARS · 78.2% ABP",         icon: Radio,        color: "text-blue-400",    bg: "bg-blue-400/10"    },
-  { label: "Active Alerts",    value: "3",       sub: "Last 24 hours",                  icon: AlertTriangle,color: "text-red-400",      bg: "bg-red-400/10"     },
-  { label: "Quote Pipeline",   value: "$78.7k",  sub: "5 open quotes",                  icon: TrendingUp,   color: "text-brand-400",   bg: "bg-brand-400/10"   },
+// ─── Supabase admin client (service role, server-only) ───────────────────────
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
+
+// ─── Tier display helpers ─────────────────────────────────────────────────────
+const TIER_LABEL: Record<string, string> = {
+  corporate:          "Corporate",
+  master_agent:       "Master Agent",
+  master_dealer:      "MSO",
+  full_dealer:        "Dealer",
+  service_dealer:     "Service Partner",
+  install_contractor: "Install Partner",
+  sales_partner:      "Sales Partner",
+  client:             "Client",
+};
+
+const TIER_COLOR: Record<string, string> = {
+  corporate:          "bg-brand-400/10 text-brand-400",
+  master_agent:       "bg-violet-400/10 text-violet-400",
+  master_dealer:      "bg-violet-400/10 text-violet-400",
+  full_dealer:        "bg-sky-400/10 text-sky-400",
+  service_dealer:     "bg-emerald-400/10 text-emerald-400",
+  install_contractor: "bg-emerald-400/10 text-emerald-400",
+  sales_partner:      "bg-emerald-400/10 text-emerald-400",
+  client:             "bg-amber-400/10 text-amber-400",
+  // legacy aliases kept for static rows
+  partner:            "bg-emerald-400/10 text-emerald-400",
+  mso:                "bg-violet-400/10 text-violet-400",
+};
+
+// ─── EOS / static data (not yet in Supabase) ─────────────────────────────────
+const q2Rocks = [
+  { name: "Portal go-live (beta → prod)",    status: "On Track"  },
+  { name: "CRM Phase 2 — no dead UI",        status: "On Track"  },
+  { name: "GateCard v2 at 10 properties",    status: "At Risk"   },
+  { name: "DirecTV: first 5 dealer signups", status: "On Track"  },
+  { name: "PE investor materials finalized", status: "Off Track" },
+  { name: "Hire first FT developer",         status: "Off Track" },
 ];
 
-const accounts = [
-  { name: "Angel Oak - Properties",  tier: "client", edition: "Professional", cameras: 88, doors: 35, users: 8,  status: "online",  last: "6 min ago"  },
-  { name: "Pegasus Properties",      tier: "client", edition: "Professional", cameras: 22, doors: 18, users: 8,  status: "online",  last: "1 hr ago"   },
-  { name: "Stonegate Townhomes",     tier: "client", edition: "Standard",     cameras: 14, doors: 12, users: 2,  status: "online",  last: "2 hr ago"   },
-  { name: "3888 Peachtree",          tier: "client", edition: "Professional", cameras: 19, doors: 8,  users: 4,  status: "online",  last: "8 hr ago"   },
-  { name: "Elevate Eagles Landing",  tier: "client", edition: "Professional", cameras: 14, doors: 12, users: 0,  status: "online",  last: "Yesterday"  },
-  { name: "Elevate Greene",          tier: "client", edition: "Standard",     cameras: 30, doors: 35, users: 0,  status: "online",  last: "Yesterday"  },
-  { name: "Midwood Gardens",         tier: "client", edition: "Standard",     cameras: 14, doors: 10, users: 2,  status: "online",  last: "Apr 22"     },
-  { name: "Mitul Patel",             tier: "client", edition: "Professional", cameras: 9,  doors: 4,  users: 4,  status: "online",  last: "Apr 22"     },
-  { name: "Flint River",             tier: "client", edition: "Standard",     cameras: 0,  doors: 0,  users: 0,  status: "warning", last: "Never"      },
-  { name: "Monitoring View",         tier: "client", edition: "Standard",     cameras: 0,  doors: 0,  users: 1,  status: "warning", last: "Mar 24"     },
-  { name: "Columbia Residential",    tier: "partner",edition: "Partner",      cameras: 96, doors: 72, users: 0,  status: "online",  last: "Today"      },
-  { name: "Southeast Security Group",tier: "mso",    edition: "MSO",          cameras: 412,doors: 180,users: 0,  status: "online",  last: "Today"      },
+const scorecardPulse = [
+  { name: "New Opportunities",  value: "2",     goal: "3/wk",  on: false },
+  { name: "Proposals Sent",     value: "1",     goal: "2/wk",  on: false },
+  { name: "Active Dealers",     value: "12",    goal: "50",    on: false },
+  { name: "Installed Props",    value: "8",     goal: "50",    on: false },
+  { name: "Portal Uptime",      value: "99.9%", goal: "99.9%", on: true  },
 ];
+
+const rockStatus: Record<string, { bg: string; text: string; dot: string }> = {
+  "On Track":  { bg: "bg-emerald-50",   text: "text-emerald-700", dot: "bg-emerald-500"  },
+  "At Risk":   { bg: "bg-amber-50",     text: "text-amber-700",   dot: "bg-amber-500"    },
+  "Off Track": { bg: "bg-red-50",       text: "text-red-700",     dot: "bg-red-500"      },
+  "Complete":  { bg: "bg-[#6B7EFF]/10", text: "text-[#6B7EFF]",  dot: "bg-[#6B7EFF]"   },
+};
 
 const notifications = [
   { msg: "Camera offline: Main Gate — Flint River",        time: "14 min ago", type: "error"   },
@@ -40,38 +74,192 @@ const notifications = [
   { msg: "New quote accepted — Pegasus Properties $7,200", time: "5 hr ago",   type: "success" },
 ];
 
-const tierColor: Record<string, string> = {
-  client:  "bg-amber-400/10 text-amber-400",
-  partner: "bg-emerald-400/10 text-emerald-400",
-  mso:     "bg-violet-400/10 text-violet-400",
-};
+// ─── Page ─────────────────────────────────────────────────────────────────────
+export default async function DashboardPage() {
+  const supabase = getSupabase();
 
-// EOS Heartbeat data — Q2 2026 snapshot (will live in Supabase eos_rocks / eos_scorecard)
-const q2Rocks = [
-  { name: "Portal go-live (beta → prod)",           status: "On Track"  },
-  { name: "CRM Phase 2 — no dead UI",               status: "On Track"  },
-  { name: "GateCard v2 at 10 properties",           status: "At Risk"   },
-  { name: "DirecTV: first 5 dealer signups",        status: "On Track"  },
-  { name: "PE investor materials finalized",        status: "Off Track" },
-  { name: "Hire first FT developer",               status: "Off Track" },
-];
+  // ── 1. Active Accounts count ───────────────────────────────────────────────
+  let activeAccountsCount = 0;
+  let activeAccountsSub   = "— connecting";
+  try {
+    // Try with is_active column first (migration 017+)
+    const { count, error } = await supabase
+      .from("organizations")
+      .select("*", { count: "exact", head: true })
+      .neq("org_tier", "corporate")
+      .eq("is_active", true);
 
-const scorecardPulse = [
-  { name: "New Opportunities",  value: "2",    goal: "3/wk",    on: false },
-  { name: "Proposals Sent",     value: "1",    goal: "2/wk",    on: false },
-  { name: "Active Dealers",     value: "12",   goal: "50",      on: false },
-  { name: "Installed Props",    value: "8",    goal: "50",      on: false },
-  { name: "Portal Uptime",      value: "99.9%",goal: "99.9%",   on: true  },
-];
+    if (error) {
+      // Fallback: just count all non-corporate
+      const { count: fallbackCount } = await supabase
+        .from("organizations")
+        .select("*", { count: "exact", head: true })
+        .neq("org_tier", "corporate");
+      activeAccountsCount = fallbackCount ?? 0;
+      activeAccountsSub   = `${activeAccountsCount} total orgs`;
+    } else {
+      activeAccountsCount = count ?? 0;
+      activeAccountsSub   = `${activeAccountsCount} active org${activeAccountsCount !== 1 ? "s" : ""}`;
+    }
+  } catch (_) {
+    activeAccountsSub = "— connecting";
+  }
 
-const rockStatus: Record<string, { bg: string; text: string; dot: string }> = {
-  "On Track":  { bg: "bg-emerald-50",  text: "text-emerald-700", dot: "bg-emerald-500"  },
-  "At Risk":   { bg: "bg-amber-50",    text: "text-amber-700",   dot: "bg-amber-500"    },
-  "Off Track": { bg: "bg-red-50",      text: "text-red-700",     dot: "bg-red-500"      },
-  "Complete":  { bg: "bg-[#6B7EFF]/10",text: "text-[#6B7EFF]",  dot: "bg-[#6B7EFF]"   },
-};
+  // ── 2. Quote pipeline ──────────────────────────────────────────────────────
+  let quoteCount    = 0;
+  let quotePipeline = "—";
+  let quoteSub      = "— connecting";
+  try {
+    const { data, error } = await supabase
+      .from("quotes")
+      .select("total_one_time, total_mrr")
+      .in("status", ["draft", "sent"]);
 
-export default function DashboardPage() {
+    if (!error && data) {
+      quoteCount = data.length;
+      const total = data.reduce(
+        (sum, q) => sum + (q.total_one_time ?? 0) + (q.total_mrr ?? 0),
+        0
+      );
+      const fmt = (n: number) =>
+        n >= 1000
+          ? `$${(n / 1000).toFixed(1)}k`
+          : `$${n.toLocaleString()}`;
+      quotePipeline = fmt(total);
+      quoteSub      = `${quoteCount} open quote${quoteCount !== 1 ? "s" : ""}`;
+    }
+  } catch (_) {
+    quoteSub = "— connecting";
+  }
+
+  // ── 3. Open Work Orders ────────────────────────────────────────────────────
+  let openWOCount = 0;
+  let openWOSub   = "— connecting";
+  try {
+    const { count, error } = await supabase
+      .from("work_orders")
+      .select("*", { count: "exact", head: true })
+      .in("status", ["open", "in_progress", "scheduled"]);
+
+    if (!error) {
+      openWOCount = count ?? 0;
+      openWOSub   = `${openWOCount} active job${openWOCount !== 1 ? "s" : ""}`;
+    }
+  } catch (_) {
+    openWOSub = "— connecting";
+  }
+
+  // ── 4. Accounts table rows ────────────────────────────────────────────────
+  type OrgRow = { id: string; name: string; org_tier: string; created_at: string };
+  let liveAccounts: OrgRow[] = [];
+  try {
+    const { data, error } = await supabase
+      .from("organizations")
+      .select("id, name, org_tier, created_at")
+      .not("org_tier", "eq", "corporate")
+      .order("created_at", { ascending: false })
+      .limit(12);
+
+    if (!error && data) liveAccounts = data as OrgRow[];
+  } catch (_) {
+    // fall through — liveAccounts stays empty, we'll show static fallback
+  }
+
+  // If Supabase returned rows, use them; otherwise keep static fallback
+  const staticAccounts = [
+    { id: "s1",  name: "Angel Oak - Properties",   org_tier: "client",       created_at: "" },
+    { id: "s2",  name: "Pegasus Properties",        org_tier: "client",       created_at: "" },
+    { id: "s3",  name: "Stonegate Townhomes",        org_tier: "client",       created_at: "" },
+    { id: "s4",  name: "3888 Peachtree",             org_tier: "client",       created_at: "" },
+    { id: "s5",  name: "Elevate Eagles Landing",     org_tier: "client",       created_at: "" },
+    { id: "s6",  name: "Elevate Greene",             org_tier: "client",       created_at: "" },
+    { id: "s7",  name: "Midwood Gardens",            org_tier: "client",       created_at: "" },
+    { id: "s8",  name: "Mitul Patel",                org_tier: "client",       created_at: "" },
+    { id: "s9",  name: "Flint River",                org_tier: "client",       created_at: "" },
+    { id: "s10", name: "Monitoring View",            org_tier: "client",       created_at: "" },
+    { id: "s11", name: "Columbia Residential",       org_tier: "sales_partner",created_at: "" },
+    { id: "s12", name: "Southeast Security Group",   org_tier: "master_dealer",created_at: "" },
+  ];
+  const accountRows = liveAccounts.length > 0 ? liveAccounts : staticAccounts;
+  const isLiveAccounts = liveAccounts.length > 0;
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Build KPI array (mix of live + static-with-demo badge)
+  const kpis = [
+    {
+      label:  "Active Accounts",
+      value:  activeAccountsCount > 0 ? String(activeAccountsCount) : "—",
+      sub:    activeAccountsSub,
+      icon:   Users,
+      color:  "text-brand-400",
+      bg:     "bg-brand-400/10",
+      live:   true,
+    },
+    {
+      label:  "Quote Pipeline",
+      value:  quotePipeline,
+      sub:    quoteSub,
+      icon:   TrendingUp,
+      color:  "text-brand-400",
+      bg:     "bg-brand-400/10",
+      live:   true,
+    },
+    {
+      label:  "Open Work Orders",
+      value:  openWOCount > 0 ? String(openWOCount) : "—",
+      sub:    openWOSub,
+      icon:   Shield,
+      color:  "text-blue-400",
+      bg:     "bg-blue-400/10",
+      live:   true,
+    },
+    {
+      label:  "Active Alerts",
+      value:  "3",
+      sub:    "live soon",
+      icon:   AlertTriangle,
+      color:  "text-red-400",
+      bg:     "bg-red-400/10",
+      live:   false,
+    },
+    {
+      label:  "Cameras Online",
+      value:  "115/138",
+      sub:    "23 offline — 2 properties",
+      icon:   Camera,
+      color:  "text-emerald-400",
+      bg:     "bg-emerald-400/10",
+      live:   false,
+    },
+    {
+      label:  "Doors / Gates",
+      value:  "124",
+      sub:    "All online",
+      icon:   Shield,
+      color:  "text-blue-400",
+      bg:     "bg-blue-400/10",
+      live:   false,
+    },
+    {
+      label:  "Monthly MRR",
+      value:  "$94.2k",
+      sub:    "+12% vs last month",
+      icon:   DollarSign,
+      color:  "text-emerald-400",
+      bg:     "bg-emerald-400/10",
+      live:   false,
+    },
+    {
+      label:  "DTV Activations",
+      value:  "1,284",
+      sub:    "91.4% ARS · 78.2% ABP",
+      icon:   Radio,
+      color:  "text-blue-400",
+      bg:     "bg-blue-400/10",
+      live:   false,
+    },
+  ] as const;
+
   return (
     <div className="flex flex-col min-h-full">
       <TopBar
@@ -92,8 +280,13 @@ export default function DashboardPage() {
                 <div className={`p-2.5 rounded-lg shrink-0 ${k.bg}`}>
                   <Icon size={16} className={k.color} />
                 </div>
-                <div className="min-w-0">
-                  <p className="text-xl font-bold text-foreground leading-tight">{k.value}</p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xl font-bold text-foreground leading-tight">{k.value}</p>
+                    {!k.live && (
+                      <span className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground/60 font-medium uppercase tracking-wide">demo</span>
+                    )}
+                  </div>
                   <p className="text-[11px] font-medium text-muted-foreground mt-0.5">{k.label}</p>
                   <p className="text-[10px] text-muted-foreground/60 mt-0.5 truncate">{k.sub}</p>
                 </div>
@@ -102,7 +295,7 @@ export default function DashboardPage() {
           })}
         </div>
 
-        {/* ── EOS Heartbeat — Q2 pulse ──────────────────────────────────── */}
+        {/* ── EOS Heartbeat — Q2 pulse ──────────────────────────────────────── */}
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="flex items-center gap-3 px-5 py-3 border-b border-border">
             <div className="flex items-center gap-2">
@@ -143,7 +336,7 @@ export default function DashboardPage() {
             {/* Scorecard pulse */}
             <div>
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                Scorecard Pulse — week of May 12
+                Scorecard Pulse — week of May 19
               </p>
               <div className="space-y-2">
                 {scorecardPulse.map(m => (
@@ -160,7 +353,7 @@ export default function DashboardPage() {
                   href="/eos?tab=L10+Meeting"
                   className="text-[11px] text-[#6B7EFF] font-medium hover:underline flex items-center gap-1"
                 >
-                  Next L10: Fri May 22 at 6:00 AM <ChevronRight size={11} />
+                  Next L10: Fri May 23 at 6:00 AM <ChevronRight size={11} />
                 </Link>
               </div>
             </div>
@@ -170,13 +363,15 @@ export default function DashboardPage() {
         {/* Main content */}
         <div className="grid grid-cols-3 gap-5">
           {/* Accounts table */}
-          {/* TODO: Add a search/filter input to this All Accounts panel — filter by name, tier, status, or assigned dealer */}
           <div className="col-span-2 bg-card border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-3 border-b border-border">
               <div className="flex items-center gap-2">
                 <Network size={14} className="text-brand-400" />
                 <span className="text-sm font-semibold text-foreground">All Accounts</span>
-                <span className="text-[11px] text-muted-foreground">({accounts.length} total)</span>
+                <span className="text-[11px] text-muted-foreground">({accountRows.length} total)</span>
+                {isLiveAccounts && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-400/10 text-emerald-500 font-medium uppercase tracking-wide">live</span>
+                )}
               </div>
               <a href="/customers" className="text-xs text-brand-400 hover:text-brand-300 flex items-center gap-1 transition-colors">
                 View All <ExternalLink size={11} />
@@ -187,35 +382,40 @@ export default function DashboardPage() {
                 <thead>
                   <tr className="border-b border-border bg-background/20">
                     <th className="text-left px-5 py-2.5 text-muted-foreground font-medium">Account</th>
-                    <th className="text-center px-3 py-2.5 text-muted-foreground font-medium">Cameras</th>
-                    <th className="text-center px-3 py-2.5 text-muted-foreground font-medium">Doors</th>
-                    <th className="text-center px-3 py-2.5 text-muted-foreground font-medium">Users</th>
-                    <th className="text-left px-3 py-2.5 text-muted-foreground font-medium">Last Active</th>
+                    <th className="text-left px-3 py-2.5 text-muted-foreground font-medium">Tier</th>
+                    <th className="text-left px-3 py-2.5 text-muted-foreground font-medium">Added</th>
                     <th className="px-3 py-2.5" />
                   </tr>
                 </thead>
                 <tbody>
-                  {accounts.map((a) => (
-                    <tr key={a.name} className="border-b border-border/40 hover:bg-accent/20 transition-colors cursor-pointer group">
-                      <td className="px-5 py-2.5">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.status === "online" ? "status-online" : "status-warning"}`} />
-                          <span className="font-medium text-foreground group-hover:text-brand-400 transition-colors">{a.name}</span>
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${tierColor[a.tier] || ""}`}>{a.tier}</span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2.5 text-center text-muted-foreground">{a.cameras || "—"}</td>
-                      <td className="px-3 py-2.5 text-center text-muted-foreground">{a.doors || "—"}</td>
-                      <td className="px-3 py-2.5 text-center text-muted-foreground">{a.users || "—"}</td>
-                      <td className="px-3 py-2.5 text-muted-foreground">{a.last}</td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button className="p-1 hover:bg-brand-400/10 rounded text-brand-400"><Eye size={12} /></button>
-                          <button className="p-1 hover:bg-accent rounded text-muted-foreground"><Settings size={12} /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {accountRows.map((a) => {
+                    const tierLabel = TIER_LABEL[a.org_tier] ?? a.org_tier;
+                    const tierCls   = TIER_COLOR[a.org_tier] ?? "bg-muted text-muted-foreground";
+                    const addedStr  = a.created_at
+                      ? new Date(a.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                      : "—";
+                    const href = `/customers/${a.id}`;
+                    return (
+                      <tr key={a.id} className="border-b border-border/40 hover:bg-accent/20 transition-colors cursor-pointer group">
+                        <td className="px-5 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full shrink-0 status-online" />
+                            <span className="font-medium text-foreground group-hover:text-brand-400 transition-colors">{a.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${tierCls}`}>{tierLabel}</span>
+                        </td>
+                        <td className="px-3 py-2.5 text-muted-foreground">{addedStr}</td>
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <a href={href} className="p-1 hover:bg-brand-400/10 rounded text-brand-400"><Eye size={12} /></a>
+                            <button className="p-1 hover:bg-accent rounded text-muted-foreground"><Settings size={12} /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -234,7 +434,7 @@ export default function DashboardPage() {
                 {notifications.map((n, i) => (
                   <div key={i} className="flex items-start gap-2.5 p-2.5 rounded-lg bg-background/40 border border-border/40">
                     <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${
-                      n.type === "error" ? "bg-red-400" :
+                      n.type === "error"   ? "bg-red-400" :
                       n.type === "success" ? "bg-emerald-400" : "bg-amber-400"
                     }`} />
                     <div className="flex-1 min-w-0">
@@ -251,10 +451,10 @@ export default function DashboardPage() {
               <p className="text-xs font-semibold text-foreground mb-3 uppercase tracking-wide">Quick Actions</p>
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { label: "New Quote",       icon: "📄", href: "/quotes"      },
-                  { label: "Work Order",       icon: "🔧", href: "/maintenance" },
-                  { label: "Add Account",      icon: "➕", href: "/customers"  },
-                  { label: "View SOC",         icon: "📡", href: "/soc"        },
+                  { label: "New Quote",  icon: "📄", href: "/quotes"      },
+                  { label: "Work Order", icon: "🔧", href: "/maintenance" },
+                  { label: "Add Account",icon: "➕", href: "/customers"  },
+                  { label: "View SOC",   icon: "📡", href: "/soc"        },
                 ].map((a) => (
                   <a key={a.label} href={a.href}
                     className="flex flex-col items-center gap-1.5 p-3 rounded-xl border border-border hover:border-brand-400/30 hover:bg-brand-400/5 transition-all text-center group">

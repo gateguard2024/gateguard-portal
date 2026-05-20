@@ -18,12 +18,13 @@ export async function GET(req: NextRequest) {
   const status        = searchParams.get('status')
   const q             = searchParams.get('q')
   const site_id       = searchParams.get('site_id')
-  const client_org_id = searchParams.get('client_org_id')
+  const client_org_id  = searchParams.get('client_org_id')
+  const opportunity_id = searchParams.get('opportunity_id')
 
   let query = supabase
     .from('quotes')
     .select(`
-      id, quote_number, org_id, client_org_id, site_id,
+      id, quote_number, org_id, client_org_id, site_id, opportunity_id,
       title, status, property_name, units,
       total_one_time, total_mrr, dealer_mrr,
       valid_until, accepted_at, sent_at, declined_at,
@@ -35,9 +36,10 @@ export async function GET(req: NextRequest) {
   // Org isolation
   query = applyOrgScope(query, scope, 'org_id')
 
-  if (status)        query = query.eq('status', status)
-  if (site_id)       query = query.eq('site_id', site_id)
-  if (client_org_id) query = query.eq('client_org_id', client_org_id)
+  if (status)         query = query.eq('status', status)
+  if (site_id)        query = query.eq('site_id', site_id)
+  if (client_org_id)  query = query.eq('client_org_id', client_org_id)
+  if (opportunity_id) query = query.eq('opportunity_id', opportunity_id)
   if (q) {
     query = query.or(
       `quote_number.ilike.%${q}%,property_name.ilike.%${q}%,title.ilike.%${q}%`
@@ -58,6 +60,7 @@ export async function POST(req: NextRequest) {
   const {
     title,
     client_org_id,
+    opportunity_id,
     site_id,
     property_name,
     units,
@@ -96,8 +99,9 @@ export async function POST(req: NextRequest) {
     .insert({
       quote_number,
       org_id,
-      client_org_id:  client_org_id ?? null,
-      site_id:        site_id ?? null,
+      client_org_id:  client_org_id  ?? null,
+      opportunity_id: opportunity_id ?? null,
+      site_id:        site_id        ?? null,
       title,
       property_name:  property_name ?? null,
       units:          units ?? null,

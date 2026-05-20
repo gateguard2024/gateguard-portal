@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { CheckCircle2, XCircle, Send, Check, X, Loader2 } from 'lucide-react';
 
 /* ─── Design tokens ──────────────────────────────────────────────────────────── */
@@ -62,6 +63,7 @@ function expiry(q: Quote) {
 
 /* ─── Main component ─────────────────────────────────────────────────────────── */
 export default function QuoteApprovePage({ params }: { params: { id: string } }) {
+  const searchParams = useSearchParams();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
   const [quote, setQuote]           = useState<Quote | null>(null);
 
@@ -121,6 +123,14 @@ export default function QuoteApprovePage({ params }: { params: { id: string } })
   useEffect(() => {
     commentEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [comments]);
+
+  // Auto-print when ?print=1 is set (for PDF export)
+  useEffect(() => {
+    if (searchParams.get('print') === '1' && pageStatus === 'pending') {
+      const t = setTimeout(() => window.print(), 500);
+      return () => clearTimeout(t);
+    }
+  }, [searchParams, pageStatus]);
 
   /* ── Computed values ───────────────────────────────────────────────────────── */
   const items = quote?.quote_line_items ?? [];
@@ -303,6 +313,12 @@ export default function QuoteApprovePage({ params }: { params: { id: string } })
 
   return (
     <div style={{ fontFamily: SANS, background: CREAM, minHeight: '100vh', color: TEXT }}>
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          body { background: white !important; }
+        }
+      `}</style>
 
       {/* ── COVER PAGE ─────────────────────────────────────────────────────────── */}
       <div style={{ background: NAVY, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '80px 32px', position: 'relative' }}>
@@ -480,7 +496,7 @@ export default function QuoteApprovePage({ params }: { params: { id: string } })
       )}
 
       {/* ── COMMENTS ─────────────────────────────────────────────────────────────── */}
-      <div style={{ background: WHITE }}>
+      <div className="no-print" style={{ background: WHITE }}>
         <div style={{ maxWidth: 760, margin: '0 auto', padding: '52px 24px' }}>
           <div style={{ fontFamily: MONO, fontSize: 10, color: BLUE, letterSpacing: '0.12em', marginBottom: 6, textTransform: 'uppercase' }}>CONVERSATION</div>
           <h2 style={{ fontSize: 28, fontWeight: 800, color: NAVY, margin: '0 0 6px', letterSpacing: '-0.5px' }}>Questions or Comments?</h2>
@@ -524,7 +540,7 @@ export default function QuoteApprovePage({ params }: { params: { id: string } })
       </div>
 
       {/* ── APPROVAL CTA ──────────────────────────────────────────────────────────── */}
-      <div style={{ background: NAVY }}>
+      <div className="no-print" style={{ background: NAVY }}>
         <div style={{ maxWidth: 760, margin: '0 auto', padding: '52px 24px', textAlign: 'center' }}>
           <h2 style={{ fontSize: 40, fontWeight: 900, color: WHITE, margin: '0 0 8px', letterSpacing: '-1px', lineHeight: 1.1 }}>
             Ready to Move Forward?

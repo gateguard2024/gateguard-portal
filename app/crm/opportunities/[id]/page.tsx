@@ -178,6 +178,7 @@ interface Opportunity {
   created_at: string;
   won_at?: string;
   site_id?: string | null;
+  related_org_id?: string | null;
 }
 
 // ── Stage Config ──────────────────────────────────────────────────────────
@@ -342,6 +343,8 @@ export default function OpportunityDetailPage() {
     units:              "",
     source:             "",
     est_mrr:            "",
+    related_org_id:     "" as string | null,
+    related_org_name:   "",  // display label only — not sent to API
   });
 
   // Sales cycle checklist — keys from documents_status JSONB
@@ -435,8 +438,18 @@ export default function OpportunityDetailPage() {
   const [countersigning,   setCountersigning]   = useState(false);
   const [countersignError, setCountersignError] = useState<string | null>(null);
 
-  // Create Quote from opportunity
+  // Quotes linked to this opportunity
   const [quoteCreating, setQuoteCreating] = useState(false);
+  const [oppQuotes,     setOppQuotes]     = useState<{ id: string; quote_number: string; status: string; total_one_time: number; total_mrr: number; created_at: string }[]>([]);
+  const [quotesLoaded,  setQuotesLoaded]  = useState(false);
+
+  useEffect(() => {
+    if (!id) return;
+    fetch(`/api/quotes?opportunity_id=${id}`)
+      .then(r => r.json())
+      .then(j => { setOppQuotes(j.quotes ?? []); setQuotesLoaded(true); })
+      .catch(() => setQuotesLoaded(true));
+  }, [id]);
 
   const handleCreateQuote = async () => {
     if (!opp) return;
@@ -446,24 +459,31 @@ export default function OpportunityDetailPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title:         `Quote — ${opp.account_name}`,
-          property_name: opp.account_name,
-          units:         opp.units ?? null,
-          site_id:       opp.site_id ?? null,
+          title:          `Quote — ${opp.account_name}`,
+          property_name:  opp.account_name,
+          units:          opp.units            ?? null,
+          site_id:        opp.site_id          ?? null,
+          opportunity_id: id,
+          client_org_id:  opp.related_org_id   ?? null,  // link to customer org if set
         }),
       });
       if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? 'Failed to create quote'); }
       const { quote } = await res.json();
-      // Link quote back to the opportunity
+      // Keep quote_url on opportunity for backwards compat (latest quote link)
       await fetch(`/api/crm/opportunities/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ quote_url: `/quotes/${quote.id}` }),
       });
       setOpp(prev => prev ? { ...prev, quote_url: `/quotes/${quote.id}` } : prev);
+      setOppQuotes(prev => [{
+        id: quote.id, quote_number: quote.quote_number,
+        status: quote.status, total_one_time: quote.total_one_time ?? 0,
+        total_mrr: quote.total_mrr ?? 0, created_at: quote.created_at,
+      }, ...prev]);
       router.push(`/quotes/${quote.id}`);
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed');
     } finally {
       setQuoteCreating(false);
     }
@@ -868,7 +888,9 @@ export default function OpportunityDetailPage() {
         property_state:     opp.property_state ?? "",
         units:              opp.units ? String(opp.units) : "",
         source:             opp.source ?? "",
-        est_mrr:            opp.est_mrr            ? String(opp.est_mrr) : "",
+        est_mrr:            opp.est_mrr ? String(opp.est_mrr) : "",
+        related_org_id:     opp.related_org_id ?? null,
+        related_org_name:   "",
       });
     }
   }, [showEdit]);
@@ -898,6 +920,7 @@ export default function OpportunityDetailPage() {
           units:              editForm.units !== "" ? Number(editForm.units) : undefined,
           source:             editForm.source             || undefined,
           est_mrr:            editForm.est_mrr !== "" ? Number(editForm.est_mrr) : undefined,
+          related_org_id:     editForm.related_org_id     ?? null,
         }),
       });
       await fetchOpp();
@@ -1827,31 +1850,72 @@ export default function OpportunityDetailPage() {
             )}
           </div>
 
-          {/* Portal Links */}
+          {/* Quotes Panel */}
           <div className="bg-white rounded-xl border border-border p-4">
-            <h3 className="text-sm font-semibold text-foreground mb-3">Portal Links</h3>
-            <div className="space-y-1.5">
-              {opp.quote_url ? (
-                <Link
-                  href={opp.quote_url}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-accent transition-colors text-sm"
-                >
-                  <FileText size={14} className="text-[#6B7EFF]" />
-                  <span className="text-foreground">View Quote</span>
-                  <ExternalLink size={11} className="text-muted-foreground ml-auto" />
-                </Link>
-              ) : (
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                <FileText size={14} className="text-[#6B7EFF]" />
+                Quotes
+                {oppQuotes.length > 0 && (
+                  <span className="text-[11px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full font-medium ml-0.5">{oppQuotes.length}</span>
+                )}
+              </h3>
+              <button
+                onClick={handleCreateQuote}
+                disabled={quoteCreating}
+                className="text-[11px] font-medium text-[#6B7EFF] hover:text-indigo-700 disabled:opacity-50"
+              >
+                {quoteCreating ? 'Creating…' : '+ New'}
+              </button>
+            </div>
+
+            {!quotesLoaded ? (
+              <div className="text-xs text-muted-foreground italic py-2">Loading…</div>
+            ) : oppQuotes.length === 0 ? (
+              <div className="text-center py-4">
+                <p className="text-xs text-muted-foreground italic mb-2">No quotes yet</p>
                 <button
                   onClick={handleCreateQuote}
                   disabled={quoteCreating}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-indigo-50 transition-colors text-sm w-full text-left disabled:opacity-50"
+                  className="text-xs font-medium text-[#6B7EFF] hover:underline disabled:opacity-50"
                 >
-                  <FileText size={14} className="text-[#6B7EFF]" />
-                  <span className="text-[#6B7EFF] font-medium">
-                    {quoteCreating ? 'Creating…' : '+ Create Quote'}
-                  </span>
+                  {quoteCreating ? 'Creating…' : '+ Create first quote →'}
                 </button>
-              )}
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {oppQuotes.map(q => {
+                  const statusColors: Record<string, string> = {
+                    draft:    'bg-gray-100 text-gray-600',
+                    sent:     'bg-blue-100 text-blue-700',
+                    accepted: 'bg-emerald-100 text-emerald-700',
+                    declined: 'bg-red-100 text-red-600',
+                    expired:  'bg-amber-100 text-amber-700',
+                  };
+                  return (
+                    <Link
+                      key={q.id}
+                      href={`/quotes/${q.id}`}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-accent transition-colors group border border-transparent hover:border-border"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-mono font-semibold text-[#6B7EFF]">{q.quote_number}</span>
+                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full capitalize ${statusColors[q.status] ?? 'bg-gray-100 text-gray-600'}`}>{q.status}</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          ${(q.total_one_time ?? 0).toLocaleString()} one-time
+                          {(q.total_mrr ?? 0) > 0 && <span className="ml-1">· ${q.total_mrr}/mo</span>}
+                        </p>
+                      </div>
+                      <ExternalLink size={11} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="border-t border-border mt-3 pt-2.5 space-y-1.5">
 
               <Link
                 href="/tech"
@@ -2425,6 +2489,16 @@ export default function OpportunityDetailPage() {
                   placeholder="e.g. Ashford Glen"
                 />
               </Field>
+              {/* Linked Customer Org */}
+              <Field label="Linked Customer">
+                <OrgSearch
+                  value={editForm.related_org_id}
+                  displayName={editForm.related_org_name || (opp?.related_org_id ? opp.account_name : "")}
+                  onChange={(id, name) => setEditForm(f => ({ ...f, related_org_id: id, related_org_name: name }))}
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">Links quotes from this opportunity to the customer record</p>
+              </Field>
+
               {/* Contact & Property */}
               <div className="pt-2 pb-1">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Contact & Property</p>
@@ -2678,6 +2752,78 @@ function ActivityFormCard({
         </button>
       </div>
       {children}
+    </div>
+  );
+}
+
+// ── Org live-search for linking an opportunity to a customer ─────────────────
+
+function OrgSearch({ value, displayName, onChange }: {
+  value:       string | null;
+  displayName: string;
+  onChange:    (id: string | null, name: string) => void;
+}) {
+  const [query, setQuery]     = useState(displayName || "");
+  const [results, setResults] = useState<{ id: string; name: string; org_tier: string }[]>([]);
+  const [open, setOpen]       = useState(false);
+  const [loading, setLoading] = useState(false);
+  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => { setQuery(displayName || ""); }, [displayName]);
+
+  function search(q: string) {
+    setQuery(q);
+    if (!q.trim()) { setResults([]); return; }
+    if (debounce.current) clearTimeout(debounce.current);
+    debounce.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const r = await fetch(`/api/customers?q=${encodeURIComponent(q)}&limit=8`);
+        const j = await r.json();
+        setResults((j.orgs ?? j.customers ?? []).map((o: { id: string; name: string; org_tier?: string }) => ({
+          id: o.id, name: o.name, org_tier: o.org_tier ?? "",
+        })));
+        setOpen(true);
+      } finally { setLoading(false); }
+    }, 300);
+  }
+
+  const inputCls2 = "w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-white";
+
+  return (
+    <div className="relative">
+      <div className="flex gap-1.5">
+        <input
+          className={inputCls2}
+          value={query}
+          onChange={e => search(e.target.value)}
+          onFocus={() => query && setOpen(true)}
+          placeholder="Search customers…"
+        />
+        {value && (
+          <button type="button" onClick={() => { onChange(null, ""); setQuery(""); setResults([]); }}
+            className="px-2 py-1 text-xs text-red-500 hover:bg-red-50 rounded-lg border border-border transition-colors">
+            ✕
+          </button>
+        )}
+      </div>
+      {value && !open && (
+        <p className="text-[11px] text-emerald-600 mt-1">✓ Linked to customer record</p>
+      )}
+      {open && results.length > 0 && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-xl shadow-xl z-50 overflow-hidden max-h-48 overflow-y-auto">
+          {results.map(r => (
+            <button key={r.id} type="button"
+              onMouseDown={() => { onChange(r.id, r.name); setQuery(r.name); setOpen(false); }}
+              className="w-full text-left px-3 py-2 hover:bg-accent text-sm flex items-center justify-between"
+            >
+              <span className="font-medium text-foreground">{r.name}</span>
+              <span className="text-[10px] text-muted-foreground capitalize">{r.org_tier?.replace("_", " ")}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {loading && <p className="text-[11px] text-muted-foreground mt-1">Searching…</p>}
     </div>
   );
 }
