@@ -2,6 +2,10 @@
   "framework": "nextjs",
   "installCommand": "npm install",
   "buildCommand": "rm -rf .next/cache && npm run build",
+  "functions": {
+    "app/api/aria/research/route.ts": { "maxDuration": 120 },
+    "app/api/surveys/[id]/generate/route.ts": { "maxDuration": 60 }
+  },
   "crons": [
     {
       "path": "/api/sync/residents",

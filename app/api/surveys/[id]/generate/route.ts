@@ -56,38 +56,60 @@ GATEGUARD BRANDING & PRODUCT RULES — follow exactly:
 
 GATEGUARD PRICING — use these exact values in the BOM:
 
-SETUP FEES (one-time, unit = "each") — priced PER ENTRY POINT, not per component:
-- Each entry point is ONE fee regardless of how many operators, arms, or motors it has
-- Working entry point (condition Good or Fair): $500 setup
-- Non-working entry point (condition Poor / needs repair): $750 setup
-- Examples: a dual-gate entry with two operators = ONE entry point = one setup fee
+SETUP FEES (one-time, unit = "each") — CRITICAL RULES:
+- TWO prices exist. ONLY two. No exceptions. No other numbers.
+  • Working (condition Good or Fair):     $500.00 — exactly five hundred dollars
+  • Non-working (condition Poor/repair):  $750.00 — exactly seven hundred fifty dollars
+- Every entry point type uses this SAME pricing:
+  Vehicle gates, pedestrian gates, gym doors, pool gates, amenity doors, callbox pedestals —
+  ALL use $500 (working) or $750 (non-working). Never any other amount.
+- ONE fee per physical entry point regardless of how many operators, arms, or motors it has
+  Example: a dual-gate entry with two operators = ONE entry point = one $500 or $750 fee
+- Never invent prices like $70, $350, $200, $400, $1,000 etc. — only $500 or $750 for setup fees.
+
+EACH ENTRY POINT GETS ITS OWN BOM LINE — named by location/type:
+  e.g. "Vehicle Entry Gate — Main (Non-Working)" qty:1 unit_price:750
+       "Vehicle Entry Gate — Rear (Working)"     qty:1 unit_price:500
+       "Pedestrian Gate — Non-Working"            qty:1 unit_price:750
+       "Gym Door Access — Working"                qty:1 unit_price:500
+       "Pool Gate Access — Working"               qty:1 unit_price:500
 
 MONTHLY RECURRING (unit = "mo"):
 - GateGuard Access & Maintenance Plan: $10/unit/month (use actual unit count as qty)
-  — This is the all-in plan. It replaces all legacy third-party subscriptions
-    (DoorKing monitoring, GateWise, SARA Plus, etc.)
-  — Resident billing: $150 one-time move-in access fee charged to new residents
+  — Replaces all legacy third-party subscriptions (DoorKing, GateWise, SARA Plus, etc.)
+  — Contract term: 60 months (5 years)
+  — Ramp-up: MRR builds over Year 1 as residents activate access; full MRR reached by Month 12
+  — Total effective contract value is based on 60 months at full MRR + setup fees
+  — Resident billing: $150 one-time move-in access fee (property bills residents directly)
   — Net to property: approximately $30/unit/year positive cash flow (Elevate Model)
-- Video Monitoring flat fee: 500/mo (if cameras are monitored)
+- Video Monitoring flat fee: $500/mo (if cameras are monitored)
 
 OPTIONAL ADD-ON (monthly, unit = "mo"):
 - Gate Mechanical Coverage: $250/gate/month — covers all future gate repairs, welding,
   and full gate replacement at no additional charge
 
 LABOR (unit = "hr"):
-- Standard installation/repair labor: 125/hr
-- Emergency service call: 250 one-time (unit = "each")
+- Standard installation/repair labor: $125/hr
+- Emergency service call: $250 one-time (unit = "each")
 
 BOM RULES:
-- Condition Good or Fair → monthly working price (unit="mo") only
-- Condition Poor → one-time setup fee (unit="each") PLUS a separate monthly recurring line
-- Always include the $10/unit/month Access Plan as a BOM line (qty = unit count)
-- Video Monitoring line only if cameras are in scope
+- ONLY include devices that were captured in the site survey device inventory — no invented hardware, no generic components, no controllers, no readers, no wiring, no network gear unless explicitly surveyed
+- One BOM line per surveyed entry point: description = device name/location from survey, qty = 1, unit_price = 500 (working) or 750 (non-working)
+- Always include the $10/unit/month Access Plan as a single BOM line (qty = unit count from property info)
+- Video Monitoring line only if cameras were explicitly captured in the survey
+- Do NOT add labor lines, repair line items, or any "additional repairs billed at $125/hr" language — labor is included in the setup fee
+- DOUBLE-CHECK: every setup fee unit_price must be exactly 500 or 750 — nothing else
 
 SOW RULES:
 - For the ai_sow field: write the full Scope of Work as a single string using section headers in ALL CAPS.
-- Sections: SITE OVERVIEW, EQUIPMENT TO BE INSTALLED/REPLACED, EQUIPMENT TO BE SERVICED/RETAINED, LABOR SCOPE, SPECIAL CONDITIONS
-- In SPECIAL CONDITIONS: include (1) setup fee total with per-opening breakdown, (2) $10/unit/month plan explanation with ramp-up schedule and resident billing, (3) subscription consolidation note, (4) any site-specific conditions (power, subcontractors, integrations)
+- Sections: SITE OVERVIEW, EQUIPMENT TO BE INSTALLED/REPLACED, EQUIPMENT TO BE SERVICED/RETAINED, LABOR SCOPE, ROLLOUT SCHEDULE, SPECIAL CONDITIONS
+- In ROLLOUT SCHEDULE — always include this exact GateGuard phased rollout language:
+  "Day 1 — Launch Event: Gate hours 10:00 AM – 6:00 PM, Monday through Saturday. Barrier arms will not be activated during this phase to allow for community orientation and resident onboarding.
+  Day 8 — Expanded Hours: Gate hours extend to 8:00 AM – 8:00 PM. Barrier arms remain inactive.
+  Day 15 — Full 24/7 Operation: Gates operate around the clock. During office hours, the center gate lane may be held open to provide open access for prospective residents and visitors.
+  Barrier Arms: Physical barrier arms are typically activated 30–60 days after Day 1, based on community traffic patterns and observed gate usage. Exact timing is determined in coordination with property management."
+- In SPECIAL CONDITIONS: include (1) setup fee total with per-opening breakdown at $500 working / $750 non-working each, (2) $10/unit/month Access Plan — 60-month term, MRR ramps over Year 1 as residents activate (full MRR by Month 12; effective term is 5 years + 1-year ramp = 6-year relationship), (3) resident billing: $150 move-in access fee billed by property — not by GateGuard, (4) subscription consolidation savings vs legacy monitoring fees, (5) any site-specific conditions (power, subcontractors, integrations)
+- Do NOT include any language about "gate mechanical condition re-verification" or "additional repairs billed separately at $125/hr"
 - Use "GateGuard" throughout — never competitor names for our own equipment`
 
   const userContent = `Property: ${survey.property_name || 'Unknown'}${survey.property_address ? `\nAddress: ${survey.property_address}` : ''}

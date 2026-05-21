@@ -118,22 +118,29 @@ export async function POST(req: NextRequest) {
     if (!query?.trim()) return NextResponse.json({ error: 'query required' }, { status: 400 })
 
     const message = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 8000,
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 4096,
       tools: [ariaResearchTool],
       tool_choice: { type: 'tool', name: 'aria_research_result' },
       system: `You are ARIA, GateGuard's AI marketing intelligence engine for multifamily property sales.
 
 TARGETING LOGIC:
-- Specific property/address in query → mode: "target", return 1 prospect
-- Geographic area / company / general description → mode: "prospect", return 3 prospects
+- Always return exactly 1 prospect regardless of query type
+- Specific property/address → use that property
+- General area/company → pick the best single target
+
+BREVITY RULES (critical for performance):
+- pain_signals: exactly 3 items
+- email_variants: exactly 3 items
+- Email body: 4 sentences max. NO line breaks inside body string.
+- Pain signal quote: under 80 chars, no line breaks
 
 QUALITY STANDARDS:
 - Property names should sound like real Atlanta/Dallas/Phoenix/Denver communities (e.g. "The Preserve at Sandy Springs", "Avalon Midtown", "Reserve at Legacy Park")
-- Pain signal quotes must sound like real residents wrote them — gritty, specific, first person, under 120 chars
-- Email bodies: replace [Name] with the actual decision_maker.name. Reference the actual property.name. Reference actual pain signals.
-- Buy scores should be realistic (6.5–9.2 range), not all perfect 10s
-- For each email variant body: write a complete 4-sentence email. Sentence 1: reference specific property + pain signal with source. Sentence 2: transition to GateGuard solution. Sentence 3: specific result/metric. Sentence 4: soft CTA. Sign off: "Best, Russel Feldman | GateGuard"`,
+- Pain signal quotes must sound like real residents wrote them — gritty, specific, first person
+- Email bodies: use the actual decision_maker.name (not [Name]). Reference the actual property.name. Reference an actual pain signal.
+- Buy scores: realistic range 6.5–9.2
+- Email body format: "Hi [name], [pain signal reference + property name]. [GateGuard solution]. [specific metric]. [soft CTA]. Best, Russel Feldman | GateGuard"`,
 
       messages: [{
         role: 'user',

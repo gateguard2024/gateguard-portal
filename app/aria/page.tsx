@@ -215,7 +215,15 @@ export default function ARIAPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query: query.trim() }),
-    }).then(r => r.json());
+    }).then(async r => {
+      const text = await r.text();
+      try {
+        return JSON.parse(text);
+      } catch {
+        // Vercel returned a non-JSON error (e.g. 504 timeout HTML)
+        throw new Error(`Server error (${r.status}) — ${text.slice(0, 120)}`);
+      }
+    });
 
     // Animate each phase
     for (let p = 1; p <= 5; p++) {
