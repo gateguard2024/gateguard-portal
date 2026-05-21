@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { useState, useRef, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -7,7 +8,7 @@ import {
   ChevronRight, ChevronLeft,
   Plus, Minus, Check,
   Camera, Network, Wifi, Trash2,
-  Loader2, X, Search, MapPin, AlertTriangle,
+  Loader2, X, Search, MapPin, AlertTriangle, Zap,
 } from 'lucide-react';
 import {
   calculateLineItems, calculateTotals, generateQuoteNumber, formatCurrency,
@@ -48,8 +49,13 @@ interface QuoteMeta {
   notes: string;
   tax_rate: number;
   discount_percent: number;
+  discount_mode: 'percent' | 'amount';
+  discount_amount: number;
+  mrr_discount: number;
+  mrr_discount_mode: 'percent' | 'amount';
   deposit_percent: number;
   package_mode: boolean;
+  opportunity_id?: string;
 }
 
 interface NewLineItem {
@@ -108,7 +114,13 @@ const defaultSurvey: SiteSurvey = {
     residentGates:  { working: 0, nonWorking: 0 },
     callbox: true,
   },
-  tier2: { accessPoints: { working: 0, nonWorking: 0 }, callbox: false },
+  tier2: {
+    residentGates:  { working: 0, nonWorking: 0 },
+    guestGates:     { working: 0, nonWorking: 0 },
+    primaryDoors:   { working: 0, nonWorking: 0 },
+    secondaryDoors: { working: 0, nonWorking: 0 },
+    callbox: false,
+  },
   cameras: {
     existing: { monitored: 0, standalone: 0 },
     new: { monitored: { qty: 0, billing: 'included' }, standalone: 0 },
@@ -123,7 +135,9 @@ const defaultSurvey: SiteSurvey = {
 const defaultMeta: QuoteMeta = {
   title: '', client_name: '', client_email: '', client_phone: '',
   property_name: '', property_address: '',
-  notes: '', tax_rate: 0, discount_percent: 0, deposit_percent: 50, package_mode: false,
+  notes: '', tax_rate: 0, discount_percent: 0, discount_mode: 'percent' as const, discount_amount: 0,
+  mrr_discount: 0, mrr_discount_mode: 'percent' as const,
+  deposit_percent: 50, package_mode: false,
 };
 
 function blankItem(): NewLineItem {
@@ -434,6 +448,89 @@ function ItemFormPanel({
 /* ════════════════════════════════════════════════════════════════════════════════
    MAIN COMPONENT
 ═══════════════════════════════════════════════════════════════════════════════ */
+// ── OppImportButton — search opportunities and import contact/property data ──
+interface OppImportResult {
+  id: string; property_name?: string; property_address?: string;
+  contact_name?: string; contact_email?: string; contact_phone?: string;
+  units?: number;
+}
+function OppImportButton({ onSelect }: { onSelect: (o: OppImportResult) => void }) {
+  const [open,    setOpen]    = React.useState(false)
+  const [q,       setQ]       = React.useState('')
+  const [results, setResults] = React.useState<OppImportResult[]>([])
+  const [loading, setLoading] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!open) return
+    setLoading(true)
+    fetch(`/api/crm/opportunities?limit=100${q ? `&search=${encodeURIComponent(q)}` : ''}`)
+      .then(r => r.ok ? r.json() : { opportunities: [] })
+      .then(d => {
+        const list = (d.opportunities ?? d.data ?? []) as Array<Record<string, unknown>>
+        setResults(list.map(o => ({
+          id:               String(o.id ?? ''),
+          property_name:    (o.property_name as string) || (o.name as string) || undefined,
+          property_address: (o.property_address as string) || undefined,
+          contact_name:     (o.contact_name as string) || undefined,
+          contact_email:    (o.contact_email as string) || undefined,
+          contact_phone:    (o.contact_phone as string) || undefined,
+          units:            o.units ? Number(o.units) : undefined,
+        })))
+      })
+      .catch(() => setResults([]))
+      .finally(() => setLoading(false))
+  }, [open, q])
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1 text-xs text-brand-400 hover:text-brand-500 font-medium"
+      >
+        <Zap className="w-3 h-3" /> Import from CRM
+      </button>
+      {open && (
+        <div className="absolute right-0 top-6 z-50 w-72 bg-card border border-border rounded-xl shadow-xl">
+          <div className="p-2 border-b border-border">
+            <input
+              autoFocus
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              placeholder="Search opportunities..."
+              className="w-full px-2.5 py-1.5 text-xs border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-400 bg-background text-foreground"
+            />
+          </div>
+          <div className="max-h-52 overflow-y-auto divide-y divide-border">
+            {loading ? (
+              <div className="text-center py-4 text-xs text-muted-foreground">Loading...</div>
+            ) : results.length === 0 ? (
+              <div className="text-center py-4 text-xs text-muted-foreground">No opportunities found</div>
+            ) : results.map(o => (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => { onSelect(o); setOpen(false); setQ('') }}
+                className="w-full text-left px-3 py-2 text-xs hover:bg-muted transition-colors"
+              >
+                <p className="font-medium text-foreground truncate">{o.property_name || 'Unnamed'}</p>
+                {o.property_address && <p className="text-muted-foreground truncate text-[10px]">{o.property_address}</p>}
+                {o.contact_name && <p className="text-muted-foreground text-[10px]">{o.contact_name}</p>}
+              </button>
+            ))}
+          </div>
+          <div className="p-2 border-t border-border">
+            <button type="button" onClick={() => { setOpen(false); setQ('') }}
+              className="text-[10px] text-muted-foreground hover:text-foreground w-full text-center">
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function NewQuotePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -516,7 +613,7 @@ export default function NewQuotePage() {
     setProperty(p => ({ ...p, [key]: key === 'units' ? parseInt(val) || 0 : val }));
 
   const lineItems = calculateLineItems(survey, property);
-  const totals    = calculateTotals(lineItems, property, meta.discount_percent, meta.deposit_percent || 50);
+  const totals    = calculateTotals(lineItems, property, meta.discount_percent, meta.deposit_percent || 50, meta.discount_mode, meta.discount_amount, meta.mrr_discount, meta.mrr_discount_mode);
 
   const setNet = (key: keyof NetworkSurvey, patch: Partial<{ qty: number; billing: BillingMode }>) =>
     setSurvey(s => ({ ...s, network: { ...s.network, [key]: { ...s.network[key], ...patch } } }));
@@ -1215,7 +1312,16 @@ export default function NewQuotePage() {
         <div className="border-t border-border pt-5">
           <div className="flex items-center justify-between mb-4">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Primary Contact</p>
-            <p className="text-xs text-brand-400">CRM lookup coming soon</p>
+            <OppImportButton onSelect={opp => {
+              // Auto-fill property + contact from opportunity
+              if (opp.property_name) setProp('name')(opp.property_name)
+              if (opp.property_address) setProp('address')(opp.property_address)
+              if (opp.contact_name)  setProp('contactName')(opp.contact_name)
+              if (opp.contact_email) setProp('contactEmail')(opp.contact_email)
+              if (opp.contact_phone) setProp('contactPhone')(opp.contact_phone)
+              if (opp.units)         setProp('units')(String(opp.units))
+              if (opp.id)            setM({ opportunity_id: opp.id })
+            }} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Contact Name">
@@ -1307,13 +1413,22 @@ export default function NewQuotePage() {
         {survey.accessTier === 'tier2_gg' && (
           <SectionCard title="Access Points — Tier 2 (GateGuard Integrated)" icon={Shield}>
             <div className="space-y-4">
-              <div className="flex items-start justify-between gap-4">
-                <div><p className="text-sm text-foreground">Access Points</p><p className="text-xs text-muted-foreground">Every point gets full reader + controller</p></div>
-                <DualCounter working={t2.accessPoints.working} nonWorking={t2.accessPoints.nonWorking}
-                  onWorking={v => setSurvey(s => ({ ...s, tier2: { ...s.tier2, accessPoints: { ...s.tier2.accessPoints, working: v } } }))}
-                  onNonWorking={v => setSurvey(s => ({ ...s, tier2: { ...s.tier2, accessPoints: { ...s.tier2.accessPoints, nonWorking: v } } }))}
-                  workingPrice="$500" nonWorkingPrice="$750" />
-              </div>
+              {([
+                { label: 'Resident Vehicle Gates', sub: 'Full reader + controller per gate', key: 'residentGates' as const, wp: '$500', nwp: '$750' },
+                { label: 'Guest Vehicle Gates',    sub: 'Full reader + controller per gate', key: 'guestGates' as const, wp: '$500', nwp: '$750' },
+                { label: 'Primary Common Doors',   sub: 'Lobby, main pedestrian entries',   key: 'primaryDoors' as const, wp: '$500', nwp: '$750' },
+                { label: 'Secondary Common Doors', sub: 'Amenity, utility, pool, gym doors',key: 'secondaryDoors' as const, wp: '$500', nwp: '$750' },
+              ]).map(({ label, sub, key, wp, nwp }, i) => (
+                <div key={key} className={i > 0 ? 'pt-4 border-t border-border' : ''}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0"><p className="text-sm text-foreground">{label}</p><p className="text-xs text-muted-foreground">{sub}</p></div>
+                    <DualCounter working={t2[key].working} nonWorking={t2[key].nonWorking}
+                      onWorking={v => setSurvey(s => ({ ...s, tier2: { ...s.tier2, [key]: { ...s.tier2[key], working: v } } }))}
+                      onNonWorking={v => setSurvey(s => ({ ...s, tier2: { ...s.tier2, [key]: { ...s.tier2[key], nonWorking: v } } }))}
+                      workingPrice={wp} nonWorkingPrice={nwp} />
+                  </div>
+                </div>
+              ))}
               <div className="flex items-center justify-between pt-4 border-t border-border">
                 <div><p className="text-sm text-foreground">GateGuard Video Callbox</p><p className="text-xs text-muted-foreground">$2,500 installed</p></div>
                 <Toggle checked={t2.callbox} onChange={() => setSurvey(s => ({ ...s, tier2: { ...s.tier2, callbox: !s.tier2.callbox } }))} />
@@ -1515,20 +1630,48 @@ export default function NewQuotePage() {
         <div className="bg-card border border-border rounded-xl p-5">
           <p className="text-sm font-semibold text-foreground mb-4">Pricing Adjustments</p>
           <div className="space-y-4">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm text-foreground">Setup Fee Discount</p>
                 <p className="text-xs text-muted-foreground">Applied to one-time billable setup fees only</p>
               </div>
               <div className="flex items-center gap-2">
-                <input
-                  type="number" min="0" max="50" step="1"
-                  value={meta.discount_percent || ''}
-                  onChange={e => setMeta(m => ({ ...m, discount_percent: Math.min(50, Math.max(0, parseFloat(e.target.value) || 0)) }))}
-                  placeholder="0"
-                  className="w-20 px-2 py-1.5 bg-background border border-border rounded text-sm text-right text-foreground focus:outline-none focus:ring-1 focus:ring-brand-400 tabular-nums"
-                />
-                <span className="text-sm text-muted-foreground">%</span>
+                {/* Mode toggle: % vs $ */}
+                <div className="flex rounded-lg border border-border overflow-hidden text-xs">
+                  <button type="button"
+                    onClick={() => setMeta(m => ({ ...m, discount_mode: 'percent' }))}
+                    className={`px-2.5 py-1.5 font-medium transition-colors ${meta.discount_mode === 'percent' ? 'bg-brand-400 text-white' : 'bg-background text-muted-foreground hover:bg-muted'}`}>
+                    %
+                  </button>
+                  <button type="button"
+                    onClick={() => setMeta(m => ({ ...m, discount_mode: 'amount' }))}
+                    className={`px-2.5 py-1.5 font-medium transition-colors ${meta.discount_mode === 'amount' ? 'bg-brand-400 text-white' : 'bg-background text-muted-foreground hover:bg-muted'}`}>
+                    $
+                  </button>
+                </div>
+                {meta.discount_mode === 'percent' ? (
+                  <>
+                    <input
+                      type="number" min="0" max="50" step="1"
+                      value={meta.discount_percent || ''}
+                      onChange={e => setMeta(m => ({ ...m, discount_percent: Math.min(50, Math.max(0, parseFloat(e.target.value) || 0)) }))}
+                      placeholder="0"
+                      className="w-16 px-2 py-1.5 bg-background border border-border rounded text-sm text-right text-foreground focus:outline-none focus:ring-1 focus:ring-brand-400 tabular-nums"
+                    />
+                    <span className="text-sm text-muted-foreground">%</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-sm text-muted-foreground">$</span>
+                    <input
+                      type="number" min="0" step="50"
+                      value={meta.discount_amount || ''}
+                      onChange={e => setMeta(m => ({ ...m, discount_amount: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                      placeholder="0"
+                      className="w-24 px-2 py-1.5 bg-background border border-border rounded text-sm text-right text-foreground focus:outline-none focus:ring-1 focus:ring-brand-400 tabular-nums"
+                    />
+                  </>
+                )}
               </div>
             </div>
             {hasDiscount && (
@@ -1553,6 +1696,58 @@ export default function NewQuotePage() {
                 <span className="text-sm text-muted-foreground">%</span>
               </div>
             </div>
+
+            {/* Monthly Discount — dealer-visible, hidden on proposal if 0 */}
+            <div className="flex items-start justify-between gap-4 pt-1 border-t border-border mt-2">
+              <div>
+                <p className="text-sm text-foreground">Monthly Discount</p>
+                <p className="text-xs text-muted-foreground">Dealer adjustment — hidden on proposal when $0</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {/* Mode toggle: % vs $ */}
+                <div className="flex rounded-lg border border-border overflow-hidden text-xs">
+                  <button type="button"
+                    onClick={() => setMeta(m => ({ ...m, mrr_discount_mode: 'percent' }))}
+                    className={`px-2.5 py-1.5 font-medium transition-colors ${meta.mrr_discount_mode === 'percent' ? 'bg-brand-400 text-white' : 'bg-background text-muted-foreground hover:bg-muted'}`}>
+                    %
+                  </button>
+                  <button type="button"
+                    onClick={() => setMeta(m => ({ ...m, mrr_discount_mode: 'amount' }))}
+                    className={`px-2.5 py-1.5 font-medium transition-colors ${meta.mrr_discount_mode === 'amount' ? 'bg-brand-400 text-white' : 'bg-background text-muted-foreground hover:bg-muted'}`}>
+                    $
+                  </button>
+                </div>
+                {meta.mrr_discount_mode === 'percent' ? (
+                  <>
+                    <input
+                      type="number" min="0" max="50" step="1"
+                      value={meta.mrr_discount || ''}
+                      onChange={e => setMeta(m => ({ ...m, mrr_discount: Math.min(50, Math.max(0, parseFloat(e.target.value) || 0)) }))}
+                      placeholder="0"
+                      className="w-16 px-2 py-1.5 bg-background border border-border rounded text-sm text-right text-foreground focus:outline-none focus:ring-1 focus:ring-brand-400 tabular-nums"
+                    />
+                    <span className="text-sm text-muted-foreground">%</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-sm text-muted-foreground">$</span>
+                    <input
+                      type="number" min="0" step="25"
+                      value={meta.mrr_discount || ''}
+                      onChange={e => setMeta(m => ({ ...m, mrr_discount: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                      placeholder="0"
+                      className="w-24 px-2 py-1.5 bg-background border border-border rounded text-sm text-right text-foreground focus:outline-none focus:ring-1 focus:ring-brand-400 tabular-nums"
+                    />
+                  </>
+                )}
+              </div>
+            </div>
+            {(meta.mrr_discount > 0) && (
+              <div className="flex items-center justify-between bg-emerald-400/5 border border-emerald-400/20 rounded-lg px-4 py-2.5">
+                <span className="text-sm text-emerald-400 font-medium">Monthly discount savings</span>
+                <span className="text-sm font-bold text-emerald-400">−{formatCurrency(totals.mrrDiscountSavings)}/mo</span>
+              </div>
+            )}
           </div>
         </div>
 

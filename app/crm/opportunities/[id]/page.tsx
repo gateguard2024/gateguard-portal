@@ -915,33 +915,40 @@ export default function OpportunityDetailPage() {
   const saveEdit = async () => {
     setEditSaving(true);
     try {
-      await fetch(`/api/crm/opportunities/${id}`, {
+      const res = await fetch(`/api/crm/opportunities/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: editForm.name || undefined,
-          account_name: editForm.account_name || undefined,
-          amount: editForm.amount !== "" ? Number(editForm.amount) : undefined,
-          close_date: editForm.close_date || undefined,
-          stage: editForm.stage || undefined,
-          description: editForm.description || undefined,
-          next_step: editForm.next_step || undefined,
-          probability: editForm.probability !== "" ? Number(editForm.probability) : undefined,
-          forecast_category: editForm.forecast_cat || undefined,
-          opportunity_type: editForm.opportunity_type || undefined,
+          name:               editForm.name              || undefined,
+          account_name:       editForm.account_name      || undefined,
+          amount:             editForm.amount !== ""     ? Number(editForm.amount)      : undefined,
+          close_date:         editForm.close_date        || undefined,
+          stage:              editForm.stage             || undefined,
+          description:        editForm.description       || undefined,
+          next_step:          editForm.next_step         || undefined,
+          probability:        editForm.probability !== "" ? Number(editForm.probability) : undefined,
+          forecast_cat:       editForm.forecast_cat      || undefined,   // DB column is forecast_cat
+          opportunity_type:   editForm.opportunity_type  || undefined,
           site_contact_name:  editForm.site_contact_name  || undefined,
           site_contact_email: editForm.site_contact_email || undefined,
           site_contact_phone: editForm.site_contact_phone || undefined,
           property_city:      editForm.property_city      || undefined,
           property_state:     editForm.property_state     || undefined,
-          units:              editForm.units !== "" ? Number(editForm.units) : undefined,
+          units:              editForm.units !== ""       ? Number(editForm.units)  : undefined,
           source:             editForm.source             || undefined,
-          est_mrr:            editForm.est_mrr !== "" ? Number(editForm.est_mrr) : undefined,
-          related_org_id:     editForm.related_org_id     ?? null,
+          est_mrr:            editForm.est_mrr !== ""     ? Number(editForm.est_mrr): undefined,
+          related_org_id:     editForm.related_org_id    ?? null,
         }),
       });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        alert(`Save failed: ${e.error ?? "Unknown error"}`);
+        return;
+      }
       await fetchOpp();
       setShowEdit(false);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Save failed");
     } finally {
       setEditSaving(false);
     }
@@ -2774,11 +2781,18 @@ function FieldRow({
         </div>
       ) : (
         <div className="flex items-center gap-1.5">
-          <p className="text-sm text-foreground">{value ?? "—"}</p>
+          <p
+            className={cn("text-sm text-foreground", canEdit && "cursor-pointer hover:text-[#6B7EFF] transition-colors")}
+            onClick={canEdit ? () => setEditing(true) : undefined}
+            title={canEdit ? "Click to edit" : undefined}
+          >
+            {value ?? "—"}
+          </p>
           {canEdit && (
             <button
               onClick={() => setEditing(true)}
-              className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 text-muted-foreground hover:text-brand-400"
+              className="opacity-30 group-hover:opacity-100 transition-opacity p-0.5 text-muted-foreground hover:text-brand-400"
+              title="Click to edit"
             >
               <Pencil size={11} />
             </button>

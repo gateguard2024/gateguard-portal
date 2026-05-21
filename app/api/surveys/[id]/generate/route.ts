@@ -39,11 +39,34 @@ export async function POST(
 
   // Build prompt context
   const devices = Array.isArray(survey.devices) ? survey.devices : []
+
+  // Pre-compute entry points with exact prices so Claude cannot hallucinate prices
+  const ENTRY_KEYWORDS = ['gate', 'door', 'entry', 'exit', 'pedestrian', 'gym', 'pool', 'lobby', 'callbox', 'intercom', 'keypad', 'amenity', 'barrier']
+  interface DeviceRecord { name?: string; brand?: string; model?: string; location?: string; condition?: string; action?: string; notes?: string }
+  const isEntryPoint = (d: DeviceRecord) => {
+    const text = `${d.name ?? ''} ${d.location ?? ''}`.toLowerCase()
+    return ENTRY_KEYWORDS.some(k => text.includes(k))
+  }
+  const entrySetupPrice = (d: DeviceRecord) =>
+    (d.condition ?? '').toLowerCase() === 'poor' ? 750 : 500
+
+  const entryPoints = devices.filter((d: DeviceRecord) => isEntryPoint(d))
+  const entryPointsList = entryPoints.length
+    ? entryPoints.map((d: DeviceRecord, i: number) => {
+        const price = entrySetupPrice(d)
+        const status = (d.condition ?? '').toLowerCase() === 'poor' ? 'Non-Working' : 'Working'
+        return `  EP${i + 1}. "${d.name ?? 'Entry Point'}" at "${d.location ?? 'unknown'}" — Condition: ${d.condition ?? 'unknown'} → Status: ${status} → SETUP FEE: $${price}.00`
+      }).join('\n')
+    : '  (none detected — review device names and add entry-point devices)'
+
   const deviceList = devices.length
-    ? devices.map((d: Record<string, string>, i: number) =>
+    ? devices.map((d: DeviceRecord, i: number) =>
         `${i + 1}. ${d.name ?? 'Device'}${d.brand ? ` (${d.brand}` : ''}${d.model ? ` ${d.model}` : ''}${d.brand ? ')' : ''} — Location: ${d.location ?? 'unknown'}, Condition: ${d.condition ?? 'unknown'}, Action: ${d.action ?? 'unknown'}${d.notes ? `. Notes: ${d.notes}` : ''}`
       ).join('\n')
     : 'No devices recorded.'
+
+  // List of valid BOM entry names for post-generation validation
+  const validDeviceNames = devices.map((d: DeviceRecord) => (d.name ?? '').toLowerCase().trim())
 
   const systemPrompt = `You are GateGuard's field survey AI. Analyze site survey data from access control and security system installations and produce professional, actionable output by calling the generate_survey_analysis tool.
 
@@ -116,8 +139,20 @@ SOW RULES:
 Survey Date: ${survey.survey_date ?? 'Today'}
 Surveyor: ${survey.surveyor_name ?? 'Unknown'}
 
-DEVICES FOUND ON SITE:
+DEVICES FOUND ON SITE (these are the ONLY ${devices.length} devices — do not invent any others):
 ${deviceList}
+
+ENTRY POINTS WITH PRE-COMPUTED SETUP FEES (you MUST include EXACTLY these ${entryPoints.length} setup fee lines in the BOM — no more, no fewer):
+${entryPointsList}
+
+BOM HARD RULES — ZERO TOLERANCE:
+- The BOM must contain EXACTLY the entry points listed above (${entryPoints.length} setup fee line(s)) — no extra setup lines
+- Do NOT add any line for: controllers, readers, wiring, conduit, network gear, sub-panel, surge protection, cable, cameras, or any hardware not named above in the device inventory
+- Add ONE line for the Access Plan: $10/unit/month (qty = property unit count if known, otherwise 1)
+- Add ONE line for Gate Mechanical Coverage: $250/gate/month — mark priority "optional", category "service", notes "Optional add-on — covers all gate repairs, welding, and full replacement at no charge"
+- Add ONE line for Video Monitoring ($500/mo) ONLY if camera devices appear in the device list above
+- NO labor lines, NO repair lines, NO "additional repairs billed at $X/hr" — labor is included in the setup fee
+- VERIFY: every setup fee line_price is exactly 500 or 750 — nothing else
 
 ${survey.notes_raw ? `SURVEYOR NOTES:\n${survey.notes_raw}` : ''}
 ${survey.voice_transcript ? `VOICE TRANSCRIPT:\n${survey.voice_transcript}` : ''}`
@@ -220,6 +255,27 @@ ${survey.voice_transcript ? `VOICE TRANSCRIPT:\n${survey.voice_transcript}` : ''
     }
 
     generated = toolBlock.input as Record<string, unknown>
+
+    // ── Post-generation BOM validation ────────────────────────────────────────
+    // Strip any BOM lines whose unit_price is not 500 or 750 AND whose description
+    // doesn't match a captured device. Keeps plan/service lines ($10/mo, $250/mo,
+    // $500/mo) untouched. Prevents Claude inventing hardware not in the inventory.
+    if (Array.isArray(generated.ai_bom)) {
+      const ALLOWED_SERVICE_KEYWORDS = ['access plan', 'access &', 'video monitoring', 'gate mechanical', 'mechanical coverage']
+      generated.ai_bom = (generated.ai_bom as Array<Record<string, unknown>>).filter((item) => {
+        const desc  = String(item.description ?? '').toLowerCase()
+        const price = Number(item.unit_price ?? 0)
+        const unit  = String(item.unit ?? '')
+        // Always keep plan / service lines (monthly)
+        if (unit === 'mo' || ALLOWED_SERVICE_KEYWORDS.some(k => desc.includes(k))) return true
+        // For setup-fee lines: must be $500 or $750 exactly
+        if (price !== 500 && price !== 750) {
+          console.warn('[generate] BOM: stripped hallucinated line:', item.description, price)
+          return false
+        }
+        return true
+      })
+    }
   } catch (err) {
     console.error('Claude generation error:', err)
     return NextResponse.json({

@@ -128,7 +128,7 @@ const team = [
 type WNPair   = { working: number; nonWorking: number };
 type Monthly  = { perUnit: number; minimum: number; dealerOverrideMax: number };
 type T1State  = { residentGate: WNPair; guestGate: WNPair; primaryDoor: WNPair; secondaryDoor: WNPair; callbox: number };
-type T2State  = { accessPoint: WNPair; callbox: number };
+type T2State  = { residentGate: WNPair; guestGate: WNPair; primaryDoor: WNPair; secondaryDoor: WNPair; callbox: number };
 type NetState = { router: number; switch4port: number; switch8port: number; switch16port: number; radioSmall: number; radioMedium: number; radioLarge: number; enclosure: number };
 type CamState = { newMonitoredIncludedSetup: number; newMonitoredIncludedMonthly: number; newMonitoredBillableSetup: number; newMonitoredBillableMonthly: number; newStandaloneSetup: number; existingMonitoredSetup: number; existingMonitoredMonthly: number; existingStandaloneSetup: number; lprSetup: number; lprMonthly: number };
 type AddOnState  = { gateMaintenancePerGate: number };
@@ -146,7 +146,10 @@ export default function SettingsPage() {
     callbox:        PRICING.tier1.callbox,
   });
   const [t2, setT2] = useState<T2State>({
-    accessPoint:    { ...PRICING.tier2.accessPoint    },
+    residentGate:  { ...PRICING.tier2.residentGate  },
+    guestGate:     { ...PRICING.tier2.guestGate     },
+    primaryDoor:   { ...PRICING.tier2.primaryDoor   },
+    secondaryDoor: { ...PRICING.tier2.secondaryDoor },
     callbox:        PRICING.tier2.callbox,
   });
   const [network,  setNetwork]  = useState<NetState>({ ...PRICING.network });
@@ -219,9 +222,21 @@ export default function SettingsPage() {
                 <ColHeader>Working</ColHeader>
                 <ColHeader>Non-Working</ColHeader>
               </div>
-              <PriceRow label="Access Point — Reader + Controller">
-                <PriceCell value={t2.accessPoint.working}    onChange={v => setT2(p => ({ ...p, accessPoint: { ...p.accessPoint, working: v }    }))} />
-                <PriceCell value={t2.accessPoint.nonWorking} onChange={v => setT2(p => ({ ...p, accessPoint: { ...p.accessPoint, nonWorking: v } }))} />
+              <PriceRow label="Resident Gate — Reader + Controller">
+                <PriceCell value={t2.residentGate.working}    onChange={v => setT2(p => ({ ...p, residentGate: { ...p.residentGate, working: v }    }))} />
+                <PriceCell value={t2.residentGate.nonWorking} onChange={v => setT2(p => ({ ...p, residentGate: { ...p.residentGate, nonWorking: v } }))} />
+              </PriceRow>
+              <PriceRow label="Guest Gate — Reader + Controller">
+                <PriceCell value={t2.guestGate.working}    onChange={v => setT2(p => ({ ...p, guestGate: { ...p.guestGate, working: v }    }))} />
+                <PriceCell value={t2.guestGate.nonWorking} onChange={v => setT2(p => ({ ...p, guestGate: { ...p.guestGate, nonWorking: v } }))} />
+              </PriceRow>
+              <PriceRow label="Primary Door — Reader + Controller">
+                <PriceCell value={t2.primaryDoor.working}    onChange={v => setT2(p => ({ ...p, primaryDoor: { ...p.primaryDoor, working: v }    }))} />
+                <PriceCell value={t2.primaryDoor.nonWorking} onChange={v => setT2(p => ({ ...p, primaryDoor: { ...p.primaryDoor, nonWorking: v } }))} />
+              </PriceRow>
+              <PriceRow label="Secondary Door — Reader + Controller">
+                <PriceCell value={t2.secondaryDoor.working}    onChange={v => setT2(p => ({ ...p, secondaryDoor: { ...p.secondaryDoor, working: v }    }))} />
+                <PriceCell value={t2.secondaryDoor.nonWorking} onChange={v => setT2(p => ({ ...p, secondaryDoor: { ...p.secondaryDoor, nonWorking: v } }))} />
               </PriceRow>
               <PriceRow label="GateGuard Video Callbox">
                 <PriceCell value={t2.callbox} onChange={v => setT2(p => ({ ...p, callbox: v }))} />

@@ -420,7 +420,7 @@ export function Sidebar() {
                   className={cn(
                     "w-full flex items-center justify-center p-2.5 rounded-lg transition-colors cursor-pointer",
                     isSectionActive
-                      ? "bg-brand-400/10 text-brand-400"
+                      ? "bg-brand-400/20 text-brand-400"
                       : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
                   )}
                   title={section.label}
@@ -441,14 +441,14 @@ export function Sidebar() {
                   className={cn(
                     "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all font-semibold text-sm",
                     isSectionActive
-                      ? "bg-brand-400/10 text-brand-400 border border-brand-400/20"
+                      ? "bg-brand-400/20 text-white border border-brand-400/40"
                       : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
                   )}
                 >
-                  <SectionIcon size={16} className="shrink-0" />
+                  <SectionIcon size={16} className={cn("shrink-0", isSectionActive ? "text-brand-400" : "")} />
                   <span className="flex-1">{section.label}</span>
                   {isSectionActive && (
-                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: "#6B7EFF" }} />
+                    <span className="w-2 h-2 rounded-full shrink-0 shadow-sm" style={{ background: "#6B7EFF", boxShadow: "0 0 6px #6B7EFF" }} />
                   )}
                 </Link>
               </div>
@@ -463,7 +463,7 @@ export function Sidebar() {
                 className={cn(
                   "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left group",
                   isSectionActive && !isExpanded
-                    ? "bg-brand-400/10 text-brand-400"
+                    ? "bg-brand-400/20 text-white"
                     : isExpanded
                     ? "bg-white/8 text-white"
                     : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
@@ -533,7 +533,7 @@ export function Sidebar() {
                         className={cn(
                           "flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all group/item",
                           isActive
-                            ? "bg-brand-400/10 text-brand-400 border border-brand-400/20"
+                            ? "bg-brand-400/20 text-white border border-brand-400/30"
                             : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
                         )}
                         title={item.description}

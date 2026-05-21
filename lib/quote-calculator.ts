@@ -66,11 +66,21 @@ export function calculateLineItems(survey: SiteSurvey, property: QuoteProperty):
     const t2 = survey.tier2;
     const p  = PRICING.tier2;
 
-    if (t2.accessPoints.working > 0) {
-      items.push({ id: makeId(), description: 'GateGuard Access Point — Reader + Controller (Working)', qty: t2.accessPoints.working, unitPrice: p.accessPoint.working, total: p.accessPoint.working * t2.accessPoints.working, recurring: false, billing: 'billable', editable: true });
-    }
-    if (t2.accessPoints.nonWorking > 0) {
-      items.push({ id: makeId(), description: 'GateGuard Access Point — Reader + Controller (Non-Working)', qty: t2.accessPoints.nonWorking, unitPrice: p.accessPoint.nonWorking, total: p.accessPoint.nonWorking * t2.accessPoints.nonWorking, recurring: false, billing: 'billable', editable: true });
+    const t2Lines: [string, number, number][] = [
+      ['Resident Gate — Full Reader + Controller (Working)',      t2.residentGates.working,    p.residentGate.working],
+      ['Resident Gate — Full Reader + Controller (Non-Working)',  t2.residentGates.nonWorking, p.residentGate.nonWorking],
+      ['Guest Gate — Full Reader + Controller (Working)',         t2.guestGates.working,    p.guestGate.working],
+      ['Guest Gate — Full Reader + Controller (Non-Working)',     t2.guestGates.nonWorking, p.guestGate.nonWorking],
+      ['Primary Door — Full Reader + Controller (Working)',       t2.primaryDoors.working,    p.primaryDoor.working],
+      ['Primary Door — Full Reader + Controller (Non-Working)',   t2.primaryDoors.nonWorking, p.primaryDoor.nonWorking],
+      ['Secondary Door — Full Reader + Controller (Working)',     t2.secondaryDoors.working,    p.secondaryDoor.working],
+      ['Secondary Door — Full Reader + Controller (Non-Working)', t2.secondaryDoors.nonWorking, p.secondaryDoor.nonWorking],
+    ];
+
+    for (const [desc, qty, unitPrice] of t2Lines) {
+      if (qty > 0) {
+        items.push({ id: makeId(), description: desc, qty, unitPrice, total: unitPrice * qty, recurring: false, billing: 'billable', editable: true });
+      }
     }
     if (t2.callbox) {
       items.push({ id: makeId(), description: 'GateGuard Video Callbox Installation', qty: 1, unitPrice: p.callbox, total: p.callbox, recurring: false, billing: 'billable', editable: true });
@@ -158,7 +168,7 @@ export function calculateLineItems(survey: SiteSurvey, property: QuoteProperty):
   return items;
 }
 
-export function calculateTotals(lineItems: QuoteLineItem[], property: QuoteProperty, discountPercent = 0, depositPercent = 50): QuoteTotals {
+export function calculateTotals(lineItems: QuoteLineItem[], property: QuoteProperty, discountPercent = 0, depositPercent = 50, discountMode: 'percent' | 'amount' = 'percent', discountAmount = 0, mrrDiscount = 0, mrrDiscountMode: 'percent' | 'amount' = 'percent'): QuoteTotals {
   const setupTotal = lineItems
     .filter(i => !i.recurring)
     .reduce((sum, i) => sum + i.total, 0);
@@ -171,12 +181,16 @@ export function calculateTotals(lineItems: QuoteLineItem[], property: QuotePrope
   // Apply discount to billable setup
   const clampedDiscount      = Math.min(Math.max(discountPercent, 0), 100);
   const discountFactor       = 1 - clampedDiscount / 100;
-  const discountedSetupTotal = billableSetupTotal * discountFactor;
+  const discountedSetupTotal = discountMode === 'amount'
+    ? Math.max(0, billableSetupTotal - discountAmount)
+    : billableSetupTotal * discountFactor;
   const discountSavings      = billableSetupTotal - discountedSetupTotal;
 
-  const monthlyTotal = lineItems
-    .filter(i => i.recurring)
-    .reduce((sum, i) => sum + i.total, 0);
+  const mrrRaw = lineItems.filter(i => i.recurring).reduce((s, i) => s + i.total, 0);
+  const mrrDiscountAmount2 = mrrDiscountMode === 'amount'
+    ? Math.min(mrrDiscount, mrrRaw)
+    : mrrRaw * (mrrDiscount / 100);
+  const monthlyTotal = Math.max(0, mrrRaw - mrrDiscountAmount2);
 
   const contractMonths = PRICING.contract.months;
   const yearOneTotal   = discountedSetupTotal + (monthlyTotal * 12);
@@ -190,7 +204,8 @@ export function calculateTotals(lineItems: QuoteLineItem[], property: QuotePrope
   const units     = property.units || 0;
   const dealerMRR = Math.min(units * PRICING.monthly.dealerOverrideMax, monthlyTotal * 0.25);
 
-  return { setupTotal, billableSetupTotal, discountedSetupTotal, discountSavings, monthlyTotal, yearOneTotal, contractValue, depositDue, goLivePayment, dealerMRR };
+  const mrrDiscountSavings = mrrRaw - monthlyTotal;
+  return { setupTotal, billableSetupTotal, discountedSetupTotal, discountSavings, monthlyTotal, mrrDiscountSavings, yearOneTotal, contractValue, depositDue, goLivePayment, dealerMRR };
 }
 
 export function generateQuoteNumber(): string {

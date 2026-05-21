@@ -20,9 +20,12 @@ export interface Tier1AccessSurvey {
 }
 
 // ── Access Control — Tier 2 (GateGuard Integrated) ───────────────────────────
-// Every access point gets a full reader + controller
+// Every access point gets a full reader + controller (same 4 categories as Tier 1)
 export interface Tier2AccessSurvey {
-  accessPoints: { working: number; nonWorking: number };
+  residentGates:  { working: number; nonWorking: number };
+  guestGates:     { working: number; nonWorking: number };
+  primaryDoors:   { working: number; nonWorking: number };
+  secondaryDoors: { working: number; nonWorking: number };
   callbox: boolean;
 }
 
@@ -109,7 +112,8 @@ export interface QuoteTotals {
   billableSetupTotal: number;      // one-time billable items only (before discount)
   discountedSetupTotal: number;    // billableSetupTotal after discount (drives deposit)
   discountSavings: number;         // dollar amount saved by discount
-  monthlyTotal: number;
+  monthlyTotal: number;            // after mrr discount
+  mrrDiscountSavings: number;      // mrr discount dollar amount (0 if none)
   yearOneTotal: number;
   contractValue: number;
   depositDue: number;              // discountedSetup × 50% + 1st month
@@ -171,9 +175,12 @@ export const PRICING = {
     callbox: 2500.00,
   },
 
-  // Tier 2 (GateGuard Integrated) — every point gets reader + controller
+  // Tier 2 (GateGuard Integrated) — every point gets full reader + controller (same pricing as Tier 1)
   tier2: {
-    accessPoint: { working: 500.00, nonWorking: 750.00 },
+    residentGate:  { working: 500.00, nonWorking: 750.00 },
+    guestGate:     { working: 500.00, nonWorking: 750.00 },
+    primaryDoor:   { working: 500.00, nonWorking: 750.00 },
+    secondaryDoor: { working: 500.00, nonWorking: 750.00 },
     callbox: 2500.00,
   },
 

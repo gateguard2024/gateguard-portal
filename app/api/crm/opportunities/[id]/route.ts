@@ -21,12 +21,22 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     ...data,
     // opp_type → opportunity_type (UI field name)
     opportunity_type: data.opp_type ?? null,
+    // forecast_cat → forecast_category (UI field name)
+    forecast_category: data.forecast_cat ?? null,
     // Map dtv_* columns to the names the UI expects
     directv_package: data.dtv_package ?? null,
     isp_service: data.isp_service ?? null,
     mdu_contract_expiry: data.mdu_contract_expiry ?? null,
     stage_history: history.data || [],
-    contacts: contacts.data || [],
+    contacts: (contacts.data || []).map((c: Record<string, unknown>) => ({
+      id: c.id,
+      name: c.contact_name ?? c.name ?? null,
+      title: c.contact_title ?? c.title ?? null,
+      email: c.contact_email ?? c.email ?? null,
+      phone: c.contact_phone ?? c.phone ?? null,
+      role: c.role ?? null,
+      is_primary: c.is_primary ?? false,
+    })),
     activities: activities.data || [],
   })
 }
@@ -34,13 +44,14 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json()
   // Map UI field names back to DB column names
-  const { opportunity_type, directv_package, ...rest } = body as Record<string, unknown>
+  const { opportunity_type, directv_package, forecast_category, ...rest } = body as Record<string, unknown>
   const dbPayload: Record<string, unknown> = {
     ...rest,
     updated_at: new Date().toISOString(),
   }
   if (opportunity_type !== undefined) dbPayload.opp_type = opportunity_type
-  if (directv_package !== undefined) dbPayload.dtv_package = directv_package
+  if (directv_package  !== undefined) dbPayload.dtv_package = directv_package
+  if (forecast_category !== undefined) dbPayload.forecast_cat = forecast_category
 
   const { data, error } = await supabase
     .from('opportunities')

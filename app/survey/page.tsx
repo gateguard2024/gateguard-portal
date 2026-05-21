@@ -54,6 +54,15 @@ interface UrgentItem {
   reason: string
 }
 
+interface OpportunityOption {
+  id:               string
+  name:             string
+  property_address: string | null
+  client_name:      string | null
+  client_email:     string | null
+  client_phone:     string | null
+}
+
 interface Survey {
   id:               string
   survey_number:    string
@@ -74,6 +83,8 @@ interface Survey {
   ai_install_notes: InstallNote[]
   ai_timeline:      string | null
   photos:           string[]
+  opportunity_id:   string | null
+  opportunity_name: string | null
   quote_id:         string | null
   created_at:       string
 }
@@ -489,14 +500,26 @@ function BomTable({ items, onChange }: BomTableProps) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {items.map((item, idx) => (
-              <tr key={idx} className="hover:bg-gray-50/40 transition-colors group">
+            {items.map((item, idx) => {
+              const isOptionalAddon = item.priority === "optional" &&
+                (item.description.toLowerCase().includes('mechanical') ||
+                 item.description.toLowerCase().includes('gate mechanical') ||
+                 item.description.toLowerCase().includes('gate coverage'))
+              return (
+              <tr key={idx} className={cn("hover:bg-gray-50/40 transition-colors group", isOptionalAddon && "bg-purple-50/30")}>
                 <td className="px-3 py-2">
-                  <input
-                    value={item.description}
-                    onChange={e => update(idx, { description: e.target.value })}
-                    className="w-full bg-transparent border-b border-transparent focus:border-blue-400 focus:outline-none py-0.5 font-medium text-gray-800"
-                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={item.description}
+                      onChange={e => update(idx, { description: e.target.value })}
+                      className="flex-1 bg-transparent border-b border-transparent focus:border-blue-400 focus:outline-none py-0.5 font-medium text-gray-800"
+                    />
+                    {isOptionalAddon && (
+                      <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 border border-purple-200 uppercase tracking-wide whitespace-nowrap">
+                        Optional Add-On
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-3 py-2 text-gray-500 font-mono">
                   <input
@@ -555,7 +578,8 @@ function BomTable({ items, onChange }: BomTableProps) {
                   </button>
                 </td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
           <tfoot>
             <tr className="bg-gray-50 border-t border-gray-200">
@@ -606,6 +630,10 @@ export default function SurveyPage() {
   const [genError,       setGenError]      = useState("")
   const [quoteSuccess,   setQuoteSuccess]  = useState<string | null>(null)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [opportunities,  setOpportunities]  = useState<OpportunityOption[]>([])
+  const [oppSearch,      setOppSearch]      = useState("")
+  const [showOppPicker,  setShowOppPicker]  = useState(false)
+  const [linkingOpp,     setLinkingOpp]     = useState(false)
 
   // Voice
   const [recording,      setRecording]     = useState(false)
@@ -626,6 +654,24 @@ export default function SurveyPage() {
   }, [])
 
   useEffect(() => { loadSurveys() }, [loadSurveys])
+
+  // Load opportunities for the picker (once on mount)
+  useEffect(() => {
+    fetch('/api/crm/opportunities?limit=200')
+      .then(r => r.ok ? r.json() : { opportunities: [] })
+      .then(d => {
+        const list = (d.opportunities ?? d.data ?? []) as Array<Record<string, string | null>>
+        setOpportunities(list.map(o => ({
+          id:               o.id ?? '',
+          name:             o.name ?? o.title ?? '',
+          property_address: o.property_address ?? null,
+          client_name:      o.contact_name ?? o.client_name ?? null,
+          client_email:     o.contact_email ?? o.client_email ?? null,
+          client_phone:     o.contact_phone ?? o.client_phone ?? null,
+        })))
+      })
+      .catch(() => {/* non-fatal */})
+  }, [])
 
   // ── Load detail ───────────────────────────────────────────────────────────
 
@@ -879,12 +925,18 @@ export default function SurveyPage() {
     setGenError("")
     try {
       const res  = await fetch(`/api/surveys/${survey.id}/generate`, { method: "POST" })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? "Generation failed")
+      let json: Record<string, unknown>
+      try {
+        json = await res.json()
+      } catch {
+        throw new Error(`Server error ${res.status} — response was not valid JSON. Check Vercel logs.`)
+      }
+      if (!res.ok) throw new Error((json.error as string) ?? "Generation failed")
       // Generate route returns only AI fields to keep payload small — merge into
       // existing survey state so voice_transcript / devices / photos are preserved.
-      setSurvey(prev => prev ? { ...prev, ...json.survey } : json.survey)
-      setSurveys(ss => ss.map(s => s.id === json.survey.id ? { ...s, ...json.survey } : s))
+      const surveyPatch = json.survey as Partial<Survey> & { id: string }
+      setSurvey(prev => prev ? { ...prev, ...surveyPatch } : (surveyPatch as Survey))
+      setSurveys(ss => ss.map(s => s.id === surveyPatch.id ? { ...s, ...surveyPatch } : s))
       setActiveTab("ai")
     } catch (e: unknown) {
       setGenError(e instanceof Error ? e.message : "Generation failed")
@@ -908,6 +960,22 @@ export default function SurveyPage() {
       })
     } finally {
       setSavingBom(false)
+    }
+  }
+
+  // ── Link opportunity ──────────────────────────────────────────────────────
+
+  async function linkOpportunity(opp: OpportunityOption) {
+    if (!survey) return
+    setLinkingOpp(true)
+    try {
+      await patchSurvey({ opportunity_id: opp.id })
+      setSurvey(s => s ? { ...s, opportunity_id: opp.id, opportunity_name: opp.name } : s)
+      setSurveys(ss => ss.map(s => s.id === survey.id ? { ...s, opportunity_id: opp.id, opportunity_name: opp.name } : s))
+    } finally {
+      setLinkingOpp(false)
+      setShowOppPicker(false)
+      setOppSearch("")
     }
   }
 
@@ -1080,6 +1148,65 @@ export default function SurveyPage() {
                     {survey.property_address && <span className="flex items-center gap-1"><MapPin size={10} />{survey.property_address}</span>}
                     <span className="flex items-center gap-1"><User size={10} />{survey.surveyor_name ?? "—"}</span>
                     <span>{survey.survey_date}</span>
+                    {/* Opportunity linker */}
+                    <div className="relative ml-2">
+                      {survey.opportunity_id ? (
+                        <button
+                          onClick={() => setShowOppPicker(v => !v)}
+                          className="flex items-center gap-1 text-[#6B7EFF] font-medium hover:underline"
+                        >
+                          <Layers size={10} />
+                          {survey.opportunity_name ?? "Opportunity"}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setShowOppPicker(v => !v)}
+                          className="flex items-center gap-1 text-gray-400 hover:text-[#6B7EFF] transition-colors"
+                        >
+                          <Layers size={10} /> Link Opportunity
+                        </button>
+                      )}
+                      {showOppPicker && (
+                        <div className="absolute top-6 left-0 z-50 w-72 bg-white border border-gray-200 rounded-xl shadow-xl">
+                          <div className="p-2 border-b border-gray-100">
+                            <input
+                              autoFocus
+                              value={oppSearch}
+                              onChange={e => setOppSearch(e.target.value)}
+                              placeholder="Search opportunities..."
+                              className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
+                            />
+                          </div>
+                          <div className="max-h-48 overflow-y-auto divide-y divide-gray-50">
+                            {opportunities
+                              .filter(o => !oppSearch || o.name.toLowerCase().includes(oppSearch.toLowerCase()))
+                              .slice(0, 20)
+                              .map(o => (
+                                <button
+                                  key={o.id}
+                                  onClick={() => linkOpportunity(o)}
+                                  disabled={linkingOpp}
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 transition-colors"
+                                >
+                                  <p className="font-medium text-gray-800 truncate">{o.name}</p>
+                                  {o.property_address && <p className="text-gray-400 truncate text-[10px]">{o.property_address}</p>}
+                                </button>
+                              ))}
+                            {opportunities.filter(o => !oppSearch || o.name.toLowerCase().includes(oppSearch.toLowerCase())).length === 0 && (
+                              <p className="text-xs text-gray-400 text-center py-4">No matching opportunities</p>
+                            )}
+                          </div>
+                          <div className="p-2 border-t border-gray-100">
+                            <button
+                              onClick={() => { setShowOppPicker(false); setOppSearch("") }}
+                              className="text-[10px] text-gray-400 hover:text-gray-600 w-full text-center"
+                            >
+                              Close
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
                 {survey.quote_id ? (
@@ -1410,6 +1537,34 @@ export default function SurveyPage() {
                 {/* ── AI OUTPUT TAB ── */}
                 {activeTab === "ai" && (
                   <>
+                    {/* Regenerate bar — always shown on AI tab */}
+                    <div className="flex items-center justify-between bg-white rounded-xl border border-gray-200 px-4 py-2.5 shadow-sm">
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        {survey.ai_sow ? (
+                          <><CheckCircle2 size={13} className="text-emerald-500" /> AI output generated</>
+                        ) : (
+                          <><Sparkles size={13} className="text-gray-400" /> No AI output yet</>
+                        )}
+                      </div>
+                      <button
+                        onClick={generate}
+                        disabled={generating}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors bg-[#6B7EFF] text-white hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {generating ? (
+                          <><Loader2 size={12} className="animate-spin" /> Regenerating...</>
+                        ) : (
+                          <><RefreshCw size={12} /> Regenerate from Capture</>
+                        )}
+                      </button>
+                    </div>
+
+                    {genError && (
+                      <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                        <AlertTriangle size={12} /> {genError}
+                      </div>
+                    )}
+
                     {!survey.ai_summary && !survey.ai_sow && (
                       <div className="text-center py-12">
                         <Sparkles size={28} className="mx-auto text-gray-300 mb-3" />
