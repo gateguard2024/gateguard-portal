@@ -560,6 +560,7 @@ Two recurring line item types per property:
 - Eagle Eye Networks API — live camera feeds, motion search, archive (`/cameras`)
 - Twilio — SMS notifications (planned: renewal reminders, WO alerts) + TRINITY voice calls (inbound/outbound). Env: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`
 - ElevenLabs — TTS voice synthesis for TRINITY (optional). Env: `ELEVENLABS_API_KEY`
+- Tavily — AI-optimized web search API powering ARIA Deep Intel. After ARIA returns a property, Tavily runs 4 parallel searches on the specific property name: ISP availability, bulk/included internet on listing sites, management company MDU patterns, resident forum posts. Returns live excerpts → Claude synthesizes into verified connectivity intel with source citations. Env: `TAVILY_API_KEY`. Register: app.tavily.com. Free tier: 1K searches/mo. Cost: ~$0.008/search or $30/mo for 10K.
 - Stripe — invoice payment links for customer billing (ACH + cards). Env: `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_APP_URL`
 - QuickBooks Online — outbound invoice sync only (portal → QB, never QB → portal). Env: `QBO_CLIENT_ID`, `QBO_CLIENT_SECRET`, `QBO_REALM_ID`, `QBO_ACCESS_TOKEN`
 
@@ -762,6 +763,7 @@ Note: `/reps`, `/compliance`, `/scorecard`, `/map`, `/reports` are placeholder U
 - `TWILIO_AUTH_TOKEN` — Twilio auth token
 - `TWILIO_FROM_NUMBER` — Twilio phone number for outbound calls
 - `ELEVENLABS_API_KEY` — ElevenLabs TTS for TRINITY voice (optional)
+- `TAVILY_API_KEY` — Tavily web search for ARIA Deep Intel (4 parallel property-specific searches per deep research run). Get at app.tavily.com.
 
 ---
 
