@@ -466,10 +466,11 @@ function OppImportButton({ onSelect }: { onSelect: (o: OppImportResult) => void 
   React.useEffect(() => {
     if (!open) return
     setLoading(true)
-    fetch(`/api/crm/opportunities?limit=100${q ? `&search=${encodeURIComponent(q)}` : ''}`)
-      .then(r => r.ok ? r.json() : { opportunities: [] })
+    fetch(`/api/crm/opportunities?limit=100${q ? `&q=${encodeURIComponent(q)}` : ''}`)
+      .then(r => r.ok ? r.json() : { records: [] })
       .then(d => {
-        const list = (d.opportunities ?? d.data ?? []) as Array<Record<string, unknown>>
+        // API returns { records, grouped, ... } — not "opportunities" or "data"
+        const list = (d.records ?? d.opportunities ?? d.data ?? []) as Array<Record<string, unknown>>
         setResults(list.map(o => ({
           id:               String(o.id ?? ''),
           // API returns account_name (not property_name), site_contact_name (not contact_name)
@@ -490,12 +491,12 @@ function OppImportButton({ onSelect }: { onSelect: (o: OppImportResult) => void 
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-1 text-xs text-brand-400 hover:text-brand-500 font-medium"
+        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-brand-400 hover:bg-brand-500 text-white text-xs font-semibold transition-colors"
       >
-        <Zap className="w-3 h-3" /> Import from CRM
+        <Zap className="w-3 h-3" /> Select Opportunity
       </button>
       {open && (
-        <div className="absolute right-0 top-6 z-50 w-72 bg-card border border-border rounded-xl shadow-xl">
+        <div className="absolute right-0 top-9 z-50 w-80 bg-card border border-border rounded-xl shadow-xl">
           <div className="p-2 border-b border-border">
             <input
               autoFocus
@@ -1304,8 +1305,27 @@ export default function NewQuotePage() {
      SURVEY WIZARD (existing steps, now wired to real API)
   ══════════════════════════════════════════════════════════════════════════ */
   function renderStep1() {
+    const handleOppSelect = (opp: OppImportResult) => {
+      if (opp.property_name)    setProp('name')(opp.property_name)
+      if (opp.property_address) setProp('address')(opp.property_address)
+      if (opp.contact_name)     setProp('contactName')(opp.contact_name)
+      if (opp.contact_email)    setProp('contactEmail')(opp.contact_email)
+      if (opp.contact_phone)    setProp('contactPhone')(opp.contact_phone)
+      if (opp.units)            setProp('units')(String(opp.units))
+      if (opp.id)               setM({ opportunity_id: opp.id })
+    }
     return (
       <div className="space-y-5">
+
+        {/* ── CRM Import — top of form, most prominent ── */}
+        <div className="flex items-center justify-between bg-brand-400/5 border border-brand-400/20 rounded-xl px-4 py-3">
+          <div>
+            <p className="text-sm font-medium text-foreground">Import from CRM</p>
+            <p className="text-xs text-muted-foreground">Auto-fill property &amp; contact from an existing opportunity</p>
+          </div>
+          <OppImportButton onSelect={handleOppSelect} />
+        </div>
+
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2">
             <Field label="Property Name" required>
@@ -1336,16 +1356,6 @@ export default function NewQuotePage() {
         <div className="border-t border-border pt-5">
           <div className="flex items-center justify-between mb-4">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Primary Contact</p>
-            <OppImportButton onSelect={opp => {
-              // Auto-fill property + contact from opportunity
-              if (opp.property_name) setProp('name')(opp.property_name)
-              if (opp.property_address) setProp('address')(opp.property_address)
-              if (opp.contact_name)  setProp('contactName')(opp.contact_name)
-              if (opp.contact_email) setProp('contactEmail')(opp.contact_email)
-              if (opp.contact_phone) setProp('contactPhone')(opp.contact_phone)
-              if (opp.units)         setProp('units')(String(opp.units))
-              if (opp.id)            setM({ opportunity_id: opp.id })
-            }} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Contact Name">
