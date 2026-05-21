@@ -7,10 +7,10 @@ import {
   ChevronLeft, Building2, Users, Wrench, Shield, Star,
   TrendingUp, ClipboardList, Layers, CheckCircle2, Clock,
   Mail, Phone, Globe, MapPin, FileText, Plus, Loader2,
-  AlertTriangle, X,
+  AlertTriangle, X, Upload, ExternalLink, Save,
 } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { DollarSign, Calendar, Hammer, Edit2, ToggleLeft, ToggleRight, Save } = require('lucide-react') as any
+const { DollarSign, Calendar, Edit2, ToggleLeft, ToggleRight, Activity } = require('lucide-react') as any
 
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -18,6 +18,16 @@ import { SlideOver, SlideOverFooter } from '@/components/ui/SlideOver'
 import { TopBar } from '@/components/layout/TopBar'
 
 /* ─── Types ──────────────────────────────────────────────── */
+interface PartnerDoc {
+  type: 'w9' | '1099' | 'coi' | 'license' | 'nda' | 'agreement' | 'background_check'
+  label: string
+  status: 'missing' | 'pending' | 'on_file' | 'expired'
+  url?: string
+  expires_at?: string
+  uploaded_at?: string
+  notes?: string
+}
+
 interface Org {
   id: string
   name: string
@@ -38,6 +48,10 @@ interface Org {
   state: string | null
   zip: string | null
   onboarding_complete: boolean | null
+  contact_name: string | null
+  contact_email: string | null
+  contact_phone: string | null
+  partner_docs: PartnerDoc[] | null
 }
 
 interface CommissionConfig {
@@ -88,14 +102,26 @@ interface Commission {
 }
 
 /* ─── Tier config ────────────────────────────────────────── */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const TIER_CONFIG: Record<string, { label: string; icon: any; color: string; bg: string }> = {
-  master_agent:       { label: 'Master Agent',       icon: Star,          color: 'text-violet-700',  bg: 'bg-violet-100'  },
-  master_dealer:      { label: 'MSO',                 icon: Layers,        color: 'text-brand-400',   bg: 'bg-brand-50'    },
-  full_dealer:        { label: 'Full Dealership',    icon: Shield,        color: 'text-indigo-700',  bg: 'bg-indigo-100'  },
-  service_dealer:     { label: 'Service Dealer',     icon: Wrench,        color: 'text-emerald-700', bg: 'bg-emerald-100' },
-  install_contractor: { label: 'Install Contractor', icon: ClipboardList, color: 'text-amber-700',   bg: 'bg-amber-100'   },
-  sales_partner:      { label: 'Sales Partner',      icon: TrendingUp,    color: 'text-sky-700',     bg: 'bg-sky-100'     },
+  master_agent:       { label: 'Master Agent',                     icon: Star,          color: 'text-violet-700',  bg: 'bg-violet-100'  },
+  master_dealer:      { label: 'MSO — Master System Operator',     icon: Layers,        color: 'text-brand-400',   bg: 'bg-brand-50'    },
+  full_dealer:        { label: 'System Operator (Full Dealership)', icon: Shield,        color: 'text-indigo-700',  bg: 'bg-indigo-100'  },
+  service_dealer:     { label: 'Servicing Partner',                icon: Wrench,        color: 'text-emerald-700', bg: 'bg-emerald-100' },
+  install_contractor: { label: 'Installation Partner',             icon: ClipboardList, color: 'text-amber-700',   bg: 'bg-amber-100'   },
+  sales_partner:      { label: 'Sales Partner',                    icon: TrendingUp,    color: 'text-sky-700',     bg: 'bg-sky-100'     },
 }
+
+/* ─── Document config ────────────────────────────────────── */
+const DOC_CONFIGS: Array<{ type: PartnerDoc['type']; label: string; hasExpiry: boolean }> = [
+  { type: 'w9',               label: 'W-9',                      hasExpiry: false },
+  { type: '1099',             label: '1099',                     hasExpiry: false },
+  { type: 'coi',              label: 'Certificate of Insurance', hasExpiry: true  },
+  { type: 'license',          label: 'License',                  hasExpiry: true  },
+  { type: 'nda',              label: 'NDA',                      hasExpiry: false },
+  { type: 'agreement',        label: 'Dealer Agreement',         hasExpiry: false },
+  { type: 'background_check', label: 'Background Check',        hasExpiry: true  },
+]
 
 /* ─── Helpers ────────────────────────────────────────────── */
 function TierPill({ tier, tierLabel }: { tier: string; tierLabel?: string | null }) {
@@ -141,7 +167,22 @@ function CommissionStatusBadge({ status }: { status: string }) {
   )
 }
 
-function fmtDate(iso: string | null) {
+function DocStatusBadge({ status }: { status: PartnerDoc['status'] }) {
+  const map: Record<PartnerDoc['status'], { cls: string; label: string }> = {
+    on_file:  { cls: 'bg-emerald-100 text-emerald-700', label: 'On File'  },
+    pending:  { cls: 'bg-amber-100 text-amber-700',     label: 'Pending'  },
+    expired:  { cls: 'bg-rose-100 text-rose-700',       label: 'Expired'  },
+    missing:  { cls: 'bg-slate-100 text-slate-500',     label: 'Missing'  },
+  }
+  const { cls, label } = map[status] ?? { cls: 'bg-slate-100 text-slate-400', label: status }
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${cls}`}>
+      {label}
+    </span>
+  )
+}
+
+function fmtDate(iso: string | null | undefined) {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
@@ -164,7 +205,6 @@ const ONBOARDING_STEPS = [
 ]
 
 function OnboardingStepper({ org }: { org: Org }) {
-  // Infer which steps are complete based on available data
   const completedSteps = new Set<string>()
   if (org.onboarded_at) { completedSteps.add('agreement'); completedSteps.add('portal') }
   if (org.onboarding_complete) { completedSteps.add('first_wo'); completedSteps.add('first_inv') }
@@ -177,9 +217,7 @@ function OnboardingStepper({ org }: { org: Org }) {
           <div key={step.key} className="flex items-center">
             <div className="flex flex-col items-center min-w-[100px]">
               <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors ${
-                done
-                  ? 'bg-emerald-500 border-emerald-500 text-white'
-                  : 'bg-white border-slate-200 text-slate-400'
+                done ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-slate-200 text-slate-400'
               }`}>
                 {done ? <CheckCircle2 size={14} /> : i + 1}
               </div>
@@ -197,29 +235,261 @@ function OnboardingStepper({ org }: { org: Org }) {
   )
 }
 
+/* ─── Compliance tab ─────────────────────────────────────── */
+interface DocSlideOverState {
+  open: boolean
+  docType: PartnerDoc['type'] | null
+  status: PartnerDoc['status']
+  url: string
+  expires_at: string
+  notes: string
+}
+
+function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
+  const docs: PartnerDoc[] = org.partner_docs ?? []
+  const docMap = new Map<string, PartnerDoc>()
+  for (const d of docs) docMap.set(d.type, d)
+
+  const [slide, setSlide] = useState<DocSlideOverState>({
+    open: false, docType: null,
+    status: 'missing', url: '', expires_at: '', notes: '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  const openSlide = (type: PartnerDoc['type']) => {
+    const existing = docMap.get(type)
+    setSlide({
+      open: true, docType: type,
+      status: existing?.status ?? 'missing',
+      url: existing?.url ?? '',
+      expires_at: existing?.expires_at ?? '',
+      notes: existing?.notes ?? '',
+    })
+  }
+
+  const handleSave = async () => {
+    if (!slide.docType) return
+    setSaving(true)
+    try {
+      const cfg = DOC_CONFIGS.find(d => d.type === slide.docType)!
+      const updatedDoc: PartnerDoc = {
+        type: slide.docType,
+        label: cfg.label,
+        status: slide.status,
+        url: slide.url || undefined,
+        expires_at: slide.expires_at || undefined,
+        notes: slide.notes || undefined,
+        uploaded_at: new Date().toISOString(),
+      }
+      // Merge with existing docs array
+      const existing = (org.partner_docs ?? []).filter(d => d.type !== slide.docType)
+      const newDocs = [...existing, updatedDoc]
+      await fetch(`/api/admin/dealers/${org.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partner_docs: newDocs }),
+      })
+      setSlide(s => ({ ...s, open: false }))
+      onSaved()
+    } catch (e) { console.error(e) }
+    finally { setSaving(false) }
+  }
+
+  // Overall compliance score
+  const onFileCount  = DOC_CONFIGS.filter(cfg => docMap.get(cfg.type)?.status === 'on_file').length
+  const expiredCount = DOC_CONFIGS.filter(cfg => docMap.get(cfg.type)?.status === 'expired').length
+  const missingCount = DOC_CONFIGS.filter(cfg => {
+    const s = docMap.get(cfg.type)?.status
+    return !s || s === 'missing'
+  }).length
+
+  const bannerColor = expiredCount > 0 ? 'bg-rose-50 border-rose-200 text-rose-700'
+    : missingCount > 0 ? 'bg-amber-50 border-amber-200 text-amber-700'
+    : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+
+  const bannerText = expiredCount > 0
+    ? `${expiredCount} document${expiredCount > 1 ? 's' : ''} expired — action required`
+    : missingCount > 0
+    ? `${missingCount} document${missingCount > 1 ? 's' : ''} missing — compliance incomplete`
+    : `All ${DOC_CONFIGS.length} documents on file — fully compliant`
+
+  const slideCfg = DOC_CONFIGS.find(d => d.type === slide.docType)
+
+  return (
+    <>
+      <div className="space-y-4">
+        {/* Banner */}
+        <div className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium ${bannerColor}`}>
+          {expiredCount > 0 || missingCount > 0 ? (
+            <AlertTriangle size={14} className="shrink-0" />
+          ) : (
+            <CheckCircle2 size={14} className="shrink-0" />
+          )}
+          {bannerText}
+          <span className="ml-auto text-xs opacity-75">{onFileCount} / {DOC_CONFIGS.length} complete</span>
+        </div>
+
+        {/* Doc cards grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {DOC_CONFIGS.map(cfg => {
+            const doc = docMap.get(cfg.type)
+            const status = doc?.status ?? 'missing'
+            return (
+              <div key={cfg.type} className="bg-card border border-border rounded-xl p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <FileText size={14} className="text-muted-foreground shrink-0" />
+                      <span className="font-semibold text-sm text-foreground">{cfg.label}</span>
+                    </div>
+                    {doc?.expires_at && (
+                      <div className="text-xs text-muted-foreground mt-0.5 ml-[22px]">
+                        Expires: {fmtDate(doc.expires_at)}
+                      </div>
+                    )}
+                    {doc?.uploaded_at && (
+                      <div className="text-xs text-muted-foreground mt-0.5 ml-[22px]">
+                        Uploaded: {fmtDate(doc.uploaded_at)}
+                      </div>
+                    )}
+                  </div>
+                  <DocStatusBadge status={status} />
+                </div>
+
+                {doc?.notes && (
+                  <p className="text-xs text-muted-foreground italic border-l-2 border-border pl-2">{doc.notes}</p>
+                )}
+
+                <div className="flex items-center gap-2 pt-1">
+                  {doc?.url && (
+                    <a
+                      href={doc.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border text-xs font-medium text-foreground hover:bg-accent transition-colors"
+                    >
+                      <ExternalLink size={11} /> View Document
+                    </a>
+                  )}
+                  <button
+                    onClick={() => openSlide(cfg.type)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-brand-400 text-white text-xs font-semibold hover:bg-brand-500 transition-colors"
+                  >
+                    <Upload size={11} />
+                    {doc?.url ? 'Update' : 'Upload / Update'}
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Doc SlideOver */}
+      <SlideOver
+        open={slide.open}
+        onClose={() => setSlide(s => ({ ...s, open: false }))}
+        title={`Update ${slideCfg?.label ?? 'Document'}`}
+        subtitle={org.name}
+        size="md"
+        footer={
+          <SlideOverFooter
+            onCancel={() => setSlide(s => ({ ...s, open: false }))}
+            onSave={() => { void handleSave() }}
+            saving={saving}
+            saveLabel="Save Document"
+          />
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">Status</label>
+            <select
+              value={slide.status}
+              onChange={e => setSlide(s => ({ ...s, status: e.target.value as PartnerDoc['status'] }))}
+              className="w-full px-3 py-2 h-9 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-background"
+            >
+              <option value="missing">Missing</option>
+              <option value="pending">Pending Review</option>
+              <option value="on_file">On File</option>
+              <option value="expired">Expired</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">Document URL</label>
+            <input
+              type="url"
+              value={slide.url}
+              onChange={e => setSlide(s => ({ ...s, url: e.target.value }))}
+              placeholder="https://drive.google.com/…"
+              className="w-full px-3 py-2 h-9 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-background"
+            />
+          </div>
+          {slideCfg?.hasExpiry && (
+            <div>
+              <label className="block text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">Expiry Date</label>
+              <input
+                type="date"
+                value={slide.expires_at}
+                onChange={e => setSlide(s => ({ ...s, expires_at: e.target.value }))}
+                className="w-full px-3 py-2 h-9 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-background"
+              />
+            </div>
+          )}
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">Notes</label>
+            <textarea
+              value={slide.notes}
+              onChange={e => setSlide(s => ({ ...s, notes: e.target.value }))}
+              rows={3}
+              placeholder="Optional notes about this document…"
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-background resize-none"
+            />
+          </div>
+        </div>
+      </SlideOver>
+    </>
+  )
+}
+
 /* ─── Main page ──────────────────────────────────────────── */
+type TabKey = 'overview' | 'properties' | 'work_orders' | 'commissions' | 'compliance' | 'reps' | 'activity'
+
+const TAB_LABELS: Record<TabKey, string> = {
+  overview:     'Overview',
+  properties:   'Properties',
+  work_orders:  'Work Orders',
+  commissions:  'Commissions',
+  compliance:   'Compliance',
+  reps:         'Reps',
+  activity:     'Activity Log',
+}
+
 export default function DealerDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const id = params.id
 
-  const [org, setOrg]                       = useState<Org | null>(null)
-  const [commConfig, setCommConfig]          = useState<CommissionConfig | null>(null)
-  const [stats, setStats]                    = useState<Stats | null>(null)
-  const [sites, setSites]                    = useState<Site[]>([])
-  const [wos, setWOs]                        = useState<WorkOrder[]>([])
-  const [commissions, setCommissions]        = useState<Commission[]>([])
-  const [loading, setLoading]                = useState(true)
-  const [tab, setTab]                        = useState<'overview' | 'properties' | 'work_orders' | 'commissions' | 'documents'>('overview')
-  const [editOpen, setEditOpen]              = useState(false)
-  const [saving, setSaving]                  = useState(false)
-  const [savingStatus, setSavingStatus]      = useState(false)
+  const [org, setOrg]                  = useState<Org | null>(null)
+  const [commConfig, setCommConfig]     = useState<CommissionConfig | null>(null)
+  const [stats, setStats]               = useState<Stats | null>(null)
+  const [sites, setSites]               = useState<Site[]>([])
+  const [wos, setWOs]                   = useState<WorkOrder[]>([])
+  const [commissions, setCommissions]   = useState<Commission[]>([])
+  const [loading, setLoading]           = useState(true)
+  const [tab, setTab]                   = useState<TabKey>('overview')
+  const [editOpen, setEditOpen]         = useState(false)
+  const [saving, setSaving]             = useState(false)
+  const [savingStatus, setSavingStatus] = useState(false)
 
   // Edit form state
-  const [editName, setEditName]         = useState('')
-  const [editEmail, setEditEmail]       = useState('')
-  const [editPhone, setEditPhone]       = useState('')
-  const [editWebsite, setEditWebsite]   = useState('')
+  const [editName, setEditName]               = useState('')
+  const [editEmail, setEditEmail]             = useState('')
+  const [editPhone, setEditPhone]             = useState('')
+  const [editWebsite, setEditWebsite]         = useState('')
+  const [editContactName, setEditContactName] = useState('')
+  const [editContactEmail, setEditContactEmail] = useState('')
+  const [editContactPhone, setEditContactPhone] = useState('')
 
   // Commission actions
   const [commActionId, setCommActionId] = useState<string | null>(null)
@@ -241,6 +511,9 @@ export default function DealerDetailPage() {
       setEditEmail(data.org.email ?? '')
       setEditPhone(data.org.phone ?? '')
       setEditWebsite(data.org.website ?? '')
+      setEditContactName(data.org.contact_name ?? '')
+      setEditContactEmail(data.org.contact_email ?? '')
+      setEditContactPhone(data.org.contact_phone ?? '')
     } catch (e) {
       console.error(e)
     } finally {
@@ -257,7 +530,10 @@ export default function DealerDetailPage() {
       await fetch(`/api/admin/dealers/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: editName, email: editEmail, phone: editPhone, website: editWebsite }),
+        body: JSON.stringify({
+          name: editName, email: editEmail, phone: editPhone, website: editWebsite,
+          contact_name: editContactName, contact_email: editContactEmail, contact_phone: editContactPhone,
+        }),
       })
       void load()
       setEditOpen(false)
@@ -335,12 +611,12 @@ export default function DealerDetailPage() {
     {
       key: 'last_wo_date',
       label: 'Last WO',
-      render: (_, row) => <span className="text-muted-foreground text-xs">{fmtDate(row.last_wo_date ?? null)}</span>,
+      render: (_, row) => <span className="text-muted-foreground text-xs">{fmtDate(row.last_wo_date)}</span>,
     },
     {
       key: 'contract_end_date',
       label: 'Contract End',
-      render: (_, row) => <span className="text-muted-foreground text-xs">{fmtDate(row.contract_end_date ?? null)}</span>,
+      render: (_, row) => <span className="text-muted-foreground text-xs">{fmtDate(row.contract_end_date)}</span>,
     },
   ]
 
@@ -376,7 +652,7 @@ export default function DealerDetailPage() {
     {
       key: 'scheduled_date',
       label: 'Scheduled',
-      render: (_, row) => <span className="text-muted-foreground text-xs">{fmtDate(row.scheduled_date ?? null)}</span>,
+      render: (_, row) => <span className="text-muted-foreground text-xs">{fmtDate(row.scheduled_date)}</span>,
     },
     {
       key: 'tech_name',
@@ -418,7 +694,7 @@ export default function DealerDetailPage() {
   if (loading) {
     return (
       <div className="flex flex-col min-h-screen bg-background">
-        <TopBar title="Dealer Detail" subtitle="Loading…" />
+        <TopBar title="Partner Detail" subtitle="Loading…" />
         <div className="flex-1 flex items-center justify-center">
           <Loader2 size={24} className="animate-spin text-brand-400" />
         </div>
@@ -429,13 +705,13 @@ export default function DealerDetailPage() {
   if (!org) {
     return (
       <div className="flex flex-col min-h-screen bg-background">
-        <TopBar title="Dealer Not Found" />
+        <TopBar title="Partner Not Found" />
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <AlertTriangle size={40} className="mx-auto text-amber-400 mb-3" />
-            <p className="font-semibold text-foreground">Dealer not found</p>
+            <p className="font-semibold text-foreground">Partner not found</p>
             <Link href="/admin/dealers" className="text-brand-400 text-sm mt-2 inline-block hover:underline">
-              ← Back to Dealer Network
+              ← Back to Partner Network
             </Link>
           </div>
         </div>
@@ -486,7 +762,7 @@ export default function DealerDetailPage() {
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Link href="/admin/dealers" className="hover:text-foreground flex items-center gap-1">
-            <ChevronLeft size={14} /> Dealer Network
+            <ChevronLeft size={14} /> Partner Network
           </Link>
           <span>/</span>
           <span className="text-foreground font-medium">{org.name}</span>
@@ -529,6 +805,23 @@ export default function DealerDetailPage() {
                   </span>
                 )}
               </div>
+              {/* Primary contact */}
+              {(org.contact_name || org.contact_email) && (
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground border-t border-border/50 pt-2">
+                  <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Primary Contact:</span>
+                  {org.contact_name && <span>{org.contact_name}</span>}
+                  {org.contact_email && (
+                    <span className="flex items-center gap-1.5">
+                      <Mail size={12} /> {org.contact_email}
+                    </span>
+                  )}
+                  {org.contact_phone && (
+                    <span className="flex items-center gap-1.5">
+                      <Phone size={12} /> {org.contact_phone}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -556,18 +849,18 @@ export default function DealerDetailPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 border-b border-border overflow-x-auto">
-          {(['overview', 'properties', 'work_orders', 'commissions', 'documents'] as const).map(t => (
+        <div className="flex gap-0.5 border-b border-border overflow-x-auto">
+          {(Object.keys(TAB_LABELS) as TabKey[]).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`px-4 py-2.5 text-sm font-medium capitalize whitespace-nowrap transition-colors border-b-2 -mb-px ${
+              className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
                 tab === t
                   ? 'border-brand-400 text-brand-400'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
-              {t.replace('_', ' ')}
+              {TAB_LABELS[t]}
             </button>
           ))}
         </div>
@@ -654,7 +947,7 @@ export default function DealerDetailPage() {
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <WOStatusBadge status={wo.status} />
-                        <span className="text-xs text-muted-foreground">{fmtDate(wo.scheduled_date ?? null)}</span>
+                        <span className="text-xs text-muted-foreground">{fmtDate(wo.scheduled_date)}</span>
                       </div>
                     </div>
                   ))
@@ -685,7 +978,7 @@ export default function DealerDetailPage() {
                 <EmptyState
                   icon={<Building2 size={32} className="text-muted-foreground" />}
                   title="No properties yet"
-                  description="Properties linked to this dealer will appear here"
+                  description="Properties linked to this partner will appear here"
                 />
               }
             />
@@ -713,7 +1006,7 @@ export default function DealerDetailPage() {
                 <EmptyState
                   icon={<Wrench size={32} className="text-muted-foreground" />}
                   title="No work orders"
-                  description="Work orders for this dealer will appear here"
+                  description="Work orders for this partner will appear here"
                 />
               }
             />
@@ -777,30 +1070,53 @@ export default function DealerDetailPage() {
                 <EmptyState
                   icon={<DollarSign size={32} className="text-muted-foreground" />}
                   title="No commission records"
-                  description="Commission payouts for this dealer will appear here"
+                  description="Commission payouts for this partner will appear here"
                 />
               }
             />
           </div>
         )}
 
-        {/* ── Documents ──────────────────────────────────────── */}
-        {tab === 'documents' && (
+        {/* ── Compliance ──────────────────────────────────────── */}
+        {tab === 'compliance' && (
+          <ComplianceTab org={org} onSaved={() => { void load() }} />
+        )}
+
+        {/* ── Reps ────────────────────────────────────────────── */}
+        {tab === 'reps' && (
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
               <div className="flex items-center gap-2">
-                <FileText size={15} className="text-brand-400" />
-                <h2 className="text-sm font-semibold">Documents</h2>
+                <Users size={15} className="text-brand-400" />
+                <h2 className="text-sm font-semibold">Sales Reps</h2>
               </div>
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-400 text-white text-xs font-semibold hover:bg-brand-500 transition-colors">
-                <Plus size={12} /> Upload
-              </button>
+              <Link
+                href={`/reps?org_id=${org.id}`}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-medium hover:bg-accent transition-colors"
+              >
+                View in Reps <ExternalLink size={11} />
+              </Link>
             </div>
             <EmptyState
-              icon={<FileText size={32} className="text-muted-foreground" />}
-              title="No documents uploaded"
-              description="Upload NDAs, dealer agreements, W9s, insurance certificates, and licenses here"
-              action={{ label: 'Upload Document', onClick: () => {} }}
+              icon={<Users size={32} className="text-muted-foreground" />}
+              title="No reps linked"
+              description="Sales reps assigned to this partner will appear here"
+              action={{ label: 'Manage Reps', onClick: () => router.push('/reps') }}
+            />
+          </div>
+        )}
+
+        {/* ── Activity Log ────────────────────────────────────── */}
+        {tab === 'activity' && (
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border">
+              <Activity size={15} className="text-brand-400" />
+              <h2 className="text-sm font-semibold">Activity Log</h2>
+            </div>
+            <EmptyState
+              icon={<Activity size={32} className="text-muted-foreground" />}
+              title="No activity recorded"
+              description="Onboarding steps, document uploads, and status changes will appear here"
             />
           </div>
         )}
@@ -810,7 +1126,7 @@ export default function DealerDetailPage() {
       <SlideOver
         open={editOpen}
         onClose={() => setEditOpen(false)}
-        title="Edit Dealer"
+        title="Edit Partner"
         subtitle={org.name}
         size="md"
         footer={
@@ -832,7 +1148,7 @@ export default function DealerDetailPage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">Email</label>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">Org Email</label>
             <input
               type="email"
               value={editEmail}
@@ -841,7 +1157,7 @@ export default function DealerDetailPage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">Phone</label>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">Org Phone</label>
             <input
               type="tel"
               value={editPhone}
@@ -857,6 +1173,41 @@ export default function DealerDetailPage() {
               onChange={e => setEditWebsite(e.target.value)}
               className="w-full px-3 py-2 h-9 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-background"
             />
+          </div>
+
+          <div className="pt-2 border-t border-border">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Primary Contact</p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Name</label>
+                <input
+                  value={editContactName}
+                  onChange={e => setEditContactName(e.target.value)}
+                  placeholder="Contact name"
+                  className="w-full px-3 py-2 h-9 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-background"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Email</label>
+                <input
+                  type="email"
+                  value={editContactEmail}
+                  onChange={e => setEditContactEmail(e.target.value)}
+                  placeholder="contact@example.com"
+                  className="w-full px-3 py-2 h-9 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-background"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Phone</label>
+                <input
+                  type="tel"
+                  value={editContactPhone}
+                  onChange={e => setEditContactPhone(e.target.value)}
+                  placeholder="+1 (555) 000-0000"
+                  className="w-full px-3 py-2 h-9 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-background"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </SlideOver>

@@ -1,365 +1,376 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   Users, Plus, Search, Building2, Star, Wrench,
   TrendingUp, ClipboardList, Layers, ChevronRight,
-  CheckCircle2, Clock, Copy, Shield, Hash,
+  CheckCircle2, Clock, Shield, Mail, Phone,
 } from 'lucide-react'
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { DollarSign, Hammer, UserCheck } = require('lucide-react') as any
 
 /* ─── Types ──────────────────────────────────────────────── */
-interface DealerOrg {
+interface PartnerOrg {
   id: string
   name: string
-  tier: string
+  org_tier: string
   tier_label: string | null
-  parent_id: string | null
-  master_agent_id: string | null
-  master_dealer_id: string | null
+  parent_org_id: string | null
   license_number: string | null
   service_area_states: string[]
   tech_count: number
   onboarded_at: string | null
   created_at: string
   is_active: boolean
-  onboarding_complete: boolean
-  // joined commission config
-  sales_partner_rate?: number | null
-  service_dealer_rate?: number | null
+  onboarding_complete: boolean | null
+  contact_name: string | null
+  contact_email: string | null
+  contact_phone: string | null
+  partner_docs: PartnerDoc[] | null
 }
 
-/* ─── Tier config (7 tiers) ──────────────────────────────── */
-const TIER_CONFIG: Record<string, { label: string; icon: any; color: string; bg: string; dot: string }> = {
-  master_agent:       { label: 'Master Agent',       icon: Star,          color: 'text-violet-700',  bg: 'bg-violet-100',  dot: 'bg-violet-500'  },
-  master_dealer:      { label: 'MSO',                 icon: Layers,        color: 'text-brand-400',   bg: 'bg-brand-50',    dot: 'bg-brand-400'   },
-  full_dealer:        { label: 'Full Dealership',    icon: Shield,        color: 'text-indigo-700',  bg: 'bg-indigo-100',  dot: 'bg-indigo-500'  },
-  service_dealer:     { label: 'Service Dealer',     icon: Wrench,        color: 'text-emerald-700', bg: 'bg-emerald-100', dot: 'bg-emerald-500' },
-  install_contractor: { label: 'Install Contractor', icon: ClipboardList, color: 'text-amber-700',   bg: 'bg-amber-100',   dot: 'bg-amber-500'   },
-  sales_partner:      { label: 'Sales Partner',      icon: TrendingUp,    color: 'text-sky-700',     bg: 'bg-sky-100',     dot: 'bg-sky-500'     },
-  // legacy tiers kept for back-compat
-  install_dealer:     { label: 'Install Dealer',     icon: ClipboardList, color: 'text-amber-700',   bg: 'bg-amber-100',   dot: 'bg-amber-500'   },
-  sales:              { label: 'Sales Dealer',       icon: TrendingUp,    color: 'text-sky-700',     bg: 'bg-sky-100',     dot: 'bg-sky-500'     },
+interface PartnerDoc {
+  type: 'w9' | '1099' | 'coi' | 'license' | 'nda' | 'agreement' | 'background_check'
+  label: string
+  status: 'missing' | 'pending' | 'on_file' | 'expired'
+  url?: string
+  expires_at?: string
+  uploaded_at?: string
+  notes?: string
 }
 
-/* ─── Stat pill ──────────────────────────────────────────── */
-function TierPill({ tier, tierLabel }: { tier: string; tierLabel: string | null }) {
+/* ─── Tier config ────────────────────────────────────────── */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const TIER_CONFIG: Record<string, { label: string; icon: any; color: string; bg: string; tabLabel: string }> = {
+  master_agent:       { label: 'Master Agent',                    icon: Star,          color: 'text-violet-700',  bg: 'bg-violet-100',  tabLabel: 'Master Agent'      },
+  master_dealer:      { label: 'MSO — Master System Operator',    icon: Layers,        color: 'text-brand-400',   bg: 'bg-brand-50',    tabLabel: 'MSO'               },
+  full_dealer:        { label: 'System Operator (Full Dealership)',icon: Shield,        color: 'text-indigo-700',  bg: 'bg-indigo-100',  tabLabel: 'System Operator'   },
+  service_dealer:     { label: 'Servicing Partner',               icon: Wrench,        color: 'text-emerald-700', bg: 'bg-emerald-100', tabLabel: 'Servicing Partner' },
+  install_contractor: { label: 'Installation Partner',            icon: ClipboardList, color: 'text-amber-700',   bg: 'bg-amber-100',   tabLabel: 'Install Partner'   },
+  sales_partner:      { label: 'Sales Partner',                   icon: TrendingUp,    color: 'text-sky-700',     bg: 'bg-sky-100',     tabLabel: 'Sales Partner'     },
+}
+
+const PARTNER_TIERS = Object.keys(TIER_CONFIG) as Array<keyof typeof TIER_CONFIG>
+
+/* ─── Document dot indicators ────────────────────────────── */
+const DOC_TYPES: Array<{ type: PartnerDoc['type']; abbr: string }> = [
+  { type: 'w9',               abbr: 'W9'  },
+  { type: '1099',             abbr: '1099'},
+  { type: 'coi',              abbr: 'COI' },
+  { type: 'license',          abbr: 'LIC' },
+  { type: 'nda',              abbr: 'NDA' },
+  { type: 'agreement',        abbr: 'AGR' },
+  { type: 'background_check', abbr: 'BGC' },
+]
+
+function ComplianceDots({ docs }: { docs: PartnerDoc[] | null | undefined }) {
+  const docMap = new Map<string, PartnerDoc['status']>()
+  if (docs) {
+    for (const d of docs) docMap.set(d.type, d.status)
+  }
+
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {DOC_TYPES.map(({ type, abbr }) => {
+        const status = docMap.get(type)
+        const dotColor =
+          status === 'on_file'  ? 'bg-emerald-500' :
+          status === 'pending'  ? 'bg-amber-400'   :
+          status === 'expired'  ? 'bg-rose-500'    :
+          status === 'missing'  ? 'bg-rose-300'    :
+          'bg-slate-200'
+        return (
+          <div key={type} className="flex flex-col items-center gap-0.5" title={`${abbr}: ${status ?? 'no data'}`}>
+            <div className={`w-2 h-2 rounded-full ${dotColor}`} />
+            <span className="text-[8px] text-slate-400 font-medium leading-none">{abbr}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ─── Tier pill ──────────────────────────────────────────── */
+function TierPill({ tier }: { tier: string }) {
   const cfg = TIER_CONFIG[tier]
-  if (!cfg) return <span className="text-xs text-slate-400">{tierLabel ?? tier}</span>
+  if (!cfg) return <span className="text-xs text-slate-400">{tier}</span>
   const Icon = cfg.icon
   return (
     <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${cfg.bg} ${cfg.color}`}>
       <Icon size={11} />
-      {tierLabel ?? cfg.label}
+      {cfg.label}
     </span>
   )
 }
 
-/* ─── Stat card ──────────────────────────────────────────── */
-function StatCard({
-  label, value, icon: Icon, color, active, onClick,
-}: {
-  label: string; value: number; icon: any; color: string; active: boolean; onClick: () => void
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all ${
-        active ? 'border-brand-400 bg-brand-50 shadow-sm' : 'border-slate-200 bg-white hover:border-brand-200'
-      }`}
-    >
-      <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${color}`}>
-        <Icon size={17} />
-      </div>
-      <div>
-        <div className="text-2xl font-bold text-slate-900 leading-none">{value}</div>
-        <div className="text-xs text-slate-500 mt-0.5">{label}</div>
-      </div>
-    </button>
-  )
-}
+/* ─── Tab bar ────────────────────────────────────────────── */
+type TabKey = 'all' | keyof typeof TIER_CONFIG
+
+const TABS: Array<{ key: TabKey; label: string }> = [
+  { key: 'all',               label: 'All'              },
+  { key: 'master_agent',      label: 'Master Agent'     },
+  { key: 'master_dealer',     label: 'MSO'              },
+  { key: 'full_dealer',       label: 'System Operator'  },
+  { key: 'service_dealer',    label: 'Servicing Partner'},
+  { key: 'install_contractor',label: 'Install Partner'  },
+  { key: 'sales_partner',     label: 'Sales Partner'    },
+]
 
 /* ─── Main page ──────────────────────────────────────────── */
-export default function DealersPage() {
+export default function PartnerNetworkPage() {
   const router = useRouter()
-  const [orgs, setOrgs]           = useState<DealerOrg[]>([])
-  const [loading, setLoading]     = useState(true)
-  const [q, setQ]                 = useState('')
-  const [filterTier, setFilter]   = useState<string | null>(null)
-  const [copied, setCopied]       = useState<string | null>(null)
+  const [allOrgs, setAllOrgs]   = useState<PartnerOrg[]>([])
+  const [loading, setLoading]   = useState(true)
+  const [q, setQ]               = useState('')
+  const [activeTab, setActiveTab] = useState<TabKey>('all')
 
-  const fetchOrgs = async () => {
+  const fetchOrgs = useCallback(async () => {
     setLoading(true)
-    const params = new URLSearchParams()
-    if (q)          params.set('q', q)
-    if (filterTier) params.set('tier', filterTier)
-    const res  = await fetch(`/api/admin/onboard-dealer?${params}`)
-    const json = await res.json()
-    setOrgs(json.orgs ?? [])
-    setLoading(false)
+    try {
+      const res  = await fetch('/api/admin/onboard-dealer')
+      const json = await res.json()
+      // Filter to partner tiers only (exclude corporate + client)
+      const partners = (json.orgs ?? []).filter((o: PartnerOrg) =>
+        PARTNER_TIERS.includes(o.org_tier as keyof typeof TIER_CONFIG)
+      )
+      setAllOrgs(partners)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { void fetchOrgs() }, [fetchOrgs])
+
+  // Count per tier (across full dataset, not filtered by search)
+  const counts: Record<string, number> = { all: allOrgs.length }
+  for (const tier of PARTNER_TIERS) {
+    counts[tier] = allOrgs.filter(o => o.org_tier === tier).length
   }
 
-  useEffect(() => { fetchOrgs() }, [q, filterTier])
+  // Apply tab + search filter
+  const filtered = allOrgs.filter(o => {
+    const tierMatch = activeTab === 'all' || o.org_tier === activeTab
+    const searchMatch = !q.trim() || o.name.toLowerCase().includes(q.toLowerCase()) ||
+      (o.contact_name ?? '').toLowerCase().includes(q.toLowerCase()) ||
+      (o.contact_email ?? '').toLowerCase().includes(q.toLowerCase())
+    return tierMatch && searchMatch
+  })
 
-  const counts = {
-    master_agent:       orgs.filter(o => o.tier === 'master_agent').length,
-    master_dealer:      orgs.filter(o => o.tier === 'master_dealer').length,
-    full_dealer:        orgs.filter(o => o.tier === 'full_dealer').length,
-    service_dealer:     orgs.filter(o => o.tier === 'service_dealer').length,
-    install_contractor: orgs.filter(o => o.tier === 'install_contractor').length,
-    sales_partner:      orgs.filter(o => o.tier === 'sales_partner' || o.tier === 'sales').length,
-  }
-
-  const formatDate = (iso: string | null) => {
+  const fmtDate = (iso: string | null) => {
     if (!iso) return '—'
     return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
-  const copyId = (id: string) => {
-    navigator.clipboard.writeText(id)
-    setCopied(id)
-    setTimeout(() => setCopied(null), 1500)
-  }
-
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-6 max-w-screen-2xl mx-auto space-y-6">
+
+      {/* ── Header ──────────────────────────────────────────── */}
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
             <Users size={24} className="text-brand-400" />
-            Dealer Network
+            Partner Network
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            All orgs in the GateGuard hierarchy — {orgs.length} total
+            Master Agents, MSOs, System Operators, and Servicing / Install / Sales Partners
           </p>
         </div>
         <Link
           href="/admin/dealers/new"
-          className="flex items-center gap-2 px-4 py-2 bg-brand-400 text-white rounded-lg text-sm font-medium hover:bg-brand-500"
+          className="flex items-center gap-2 px-4 py-2 bg-brand-400 text-white rounded-lg text-sm font-semibold hover:bg-brand-500 transition-colors shrink-0"
         >
-          <Plus size={16} /> Add Dealer
+          <Plus size={15} /> Add Partner
         </Link>
       </div>
 
-      {/* Tier filter bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-        <StatCard label="Master Agents"       value={counts.master_agent}       icon={Star}         color="bg-violet-100 text-violet-600"   active={filterTier === 'master_agent'}       onClick={() => setFilter(f => f === 'master_agent'       ? null : 'master_agent')}       />
-        <StatCard label="MSOs"                 value={counts.master_dealer}      icon={Layers}       color="bg-brand-50 text-brand-400"      active={filterTier === 'master_dealer'}      onClick={() => setFilter(f => f === 'master_dealer'      ? null : 'master_dealer')}      />
-        <StatCard label="Full Dealerships"    value={counts.full_dealer}        icon={Shield}       color="bg-indigo-100 text-indigo-600"   active={filterTier === 'full_dealer'}        onClick={() => setFilter(f => f === 'full_dealer'        ? null : 'full_dealer')}        />
-        <StatCard label="Service Dealers"     value={counts.service_dealer}     icon={Wrench}       color="bg-emerald-100 text-emerald-600" active={filterTier === 'service_dealer'}     onClick={() => setFilter(f => f === 'service_dealer'     ? null : 'service_dealer')}     />
-        <StatCard label="Install Contractors" value={counts.install_contractor} icon={ClipboardList}color="bg-amber-100 text-amber-600"     active={filterTier === 'install_contractor'} onClick={() => setFilter(f => f === 'install_contractor' ? null : 'install_contractor')} />
-        <StatCard label="Sales Partners"      value={counts.sales_partner}      icon={TrendingUp}   color="bg-sky-100 text-sky-600"         active={filterTier === 'sales_partner'}      onClick={() => setFilter(f => f === 'sales_partner'      ? null : 'sales_partner')}      />
-      </div>
-
-      {/* Search */}
-      <div className="relative mb-4">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+      {/* ── Search ──────────────────────────────────────────── */}
+      <div className="relative max-w-md">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
         <input
           type="text"
           value={q}
           onChange={e => setQ(e.target.value)}
-          placeholder="Search by company name…"
-          className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-white"
+          placeholder="Search by name, contact, email…"
+          className="w-full pl-9 pr-4 py-2 h-9 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-white"
         />
       </div>
 
-      {/* Table */}
+      {/* ── Tabs ────────────────────────────────────────────── */}
+      <div className="flex gap-0.5 border-b border-slate-200 overflow-x-auto">
+        {TABS.map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
+              activeTab === tab.key
+                ? 'border-brand-400 text-brand-400'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            {tab.label}
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center ${
+              activeTab === tab.key
+                ? 'bg-brand-100 text-brand-600'
+                : 'bg-slate-100 text-slate-500'
+            }`}>
+              {counts[tab.key] ?? 0}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* ── Table ───────────────────────────────────────────── */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-16 text-slate-400">
-            <div className="animate-spin w-6 h-6 border-2 border-brand-400 border-t-transparent rounded-full mr-3" />
-            Loading dealers…
+            <div className="animate-spin w-5 h-5 border-2 border-brand-400 border-t-transparent rounded-full mr-3" />
+            Loading partners…
           </div>
-        ) : orgs.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-            <Users size={40} className="mb-3 opacity-30" />
-            <p className="font-medium">No dealers yet</p>
-            <p className="text-sm mt-1">Use the onboarding wizard to add your first dealer</p>
-            <Link
-              href="/admin/dealers/new"
-              className="mt-4 flex items-center gap-2 px-4 py-2 bg-brand-400 text-white rounded-lg text-sm font-medium hover:bg-brand-500"
-            >
-              <Plus size={15} /> Add Dealer
-            </Link>
+            <Users size={36} className="mb-3 opacity-25" />
+            <p className="font-medium text-slate-600">No partners found</p>
+            <p className="text-sm mt-1">
+              {q ? 'Try a different search term' : 'Use the onboarding wizard to add your first partner'}
+            </p>
+            {!q && (
+              <Link
+                href="/admin/dealers/new"
+                className="mt-4 flex items-center gap-2 px-4 py-2 bg-brand-400 text-white rounded-lg text-sm font-semibold hover:bg-brand-500"
+              >
+                <Plus size={14} /> Add Partner
+              </Link>
+            )}
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">Organization</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">Tier</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">Commission Config</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">Service Area</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">Techs</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">Org ID</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">Onboarded</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Organization</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Partner Type</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Contact</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Service Area</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Sites</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Compliance</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Onboarded</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {orgs.map(org => (
-                <tr
-                  key={org.id}
-                  className="hover:bg-slate-50 group transition-colors cursor-pointer"
-                  onClick={() => router.push(`/admin/dealers/${org.id}`)}
-                >
-                  {/* Name */}
-                  <td className="px-4 py-3.5">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${TIER_CONFIG[org.tier]?.bg ?? 'bg-slate-100'}`}>
-                        {(() => {
-                          const Icon = TIER_CONFIG[org.tier]?.icon ?? Building2
-                          return <Icon size={14} className={TIER_CONFIG[org.tier]?.color ?? 'text-slate-500'} />
-                        })()}
-                      </div>
-                      <div>
-                        <div className="font-semibold text-slate-900">{org.name}</div>
-                        {org.license_number && (
-                          <div className="text-xs text-slate-400">License: {org.license_number}</div>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-
-                  {/* Tier */}
-                  <td className="px-4 py-3.5">
-                    <TierPill tier={org.tier} tierLabel={org.tier_label} />
-                    {!org.is_active && (
-                      <span className="block text-xs text-slate-400 mt-0.5">Inactive</span>
-                    )}
-                    {!org.onboarding_complete && org.onboarded_at === null && (
-                      <span className="block text-xs text-amber-500 mt-0.5">Onboarding</span>
-                    )}
-                  </td>
-
-                  {/* Commission config */}
-                  <td className="px-4 py-3.5">
-                    {(org.tier === 'master_dealer' || org.tier === 'full_dealer') ? (
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-1 text-xs text-slate-600">
-                          <DollarSign size={10} className="text-slate-400" />
-                          <span className="font-mono">${(org.sales_partner_rate ?? 1.00).toFixed(2)}</span>
-                          <span className="text-slate-400">sales</span>
+              {filtered.map(org => {
+                const cfg = TIER_CONFIG[org.org_tier]
+                const OrgIcon = cfg?.icon ?? Building2
+                return (
+                  <tr
+                    key={org.id}
+                    className="hover:bg-slate-50 group transition-colors cursor-pointer"
+                    onClick={() => router.push(`/admin/dealers/${org.id}`)}
+                  >
+                    {/* Organization */}
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${cfg?.bg ?? 'bg-slate-100'}`}>
+                          <OrgIcon size={14} className={cfg?.color ?? 'text-slate-500'} />
                         </div>
-                        <div className="flex items-center gap-1 text-xs text-slate-600">
-                          <DollarSign size={10} className="text-slate-400" />
-                          <span className="font-mono">${(org.service_dealer_rate ?? 3.00).toFixed(2)}</span>
-                          <span className="text-slate-400">service</span>
+                        <div className="min-w-0">
+                          <div className="font-semibold text-slate-900 truncate max-w-[200px]">{org.name}</div>
+                          {org.license_number && (
+                            <div className="text-[11px] text-slate-400">
+                              Lic: {org.license_number}
+                            </div>
+                          )}
+                          {!org.is_active && (
+                            <span className="text-[10px] text-rose-500 font-medium">Inactive</span>
+                          )}
                         </div>
                       </div>
-                    ) : org.tier === 'master_agent' ? (
-                      <div className="flex items-center gap-1 text-xs text-violet-600">
-                        <DollarSign size={10} />
-                        <span className="font-mono">$0.50</span>
-                        <span className="text-slate-400">fixed</span>
-                      </div>
-                    ) : org.tier === 'sales_partner' || org.tier === 'sales' ? (
-                      <div className="flex items-center gap-1 text-xs text-sky-600">
-                        <DollarSign size={10} />
-                        <span className="font-mono">${(org.sales_partner_rate ?? 1.00).toFixed(2)}</span>
-                        <span className="text-slate-400">/unit</span>
-                      </div>
-                    ) : org.tier === 'service_dealer' ? (
-                      <div className="flex items-center gap-1 text-xs text-emerald-600">
-                        <DollarSign size={10} />
-                        <span className="font-mono">${(org.service_dealer_rate ?? 3.00).toFixed(2)}</span>
-                        <span className="text-slate-400">/unit</span>
-                      </div>
-                    ) : (
-                      <span className="text-slate-300 text-xs">—</span>
-                    )}
-                  </td>
+                    </td>
 
-                  {/* Service area */}
-                  <td className="px-4 py-3.5">
-                    {org.service_area_states?.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
-                        {org.service_area_states.slice(0, 4).map(s => (
-                          <span key={s} className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-semibold">{s}</span>
-                        ))}
-                        {org.service_area_states.length > 4 && (
-                          <span className="text-xs text-slate-400">+{org.service_area_states.length - 4}</span>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-slate-300 text-xs">—</span>
-                    )}
-                  </td>
+                    {/* Partner Type */}
+                    <td className="px-4 py-3.5">
+                      <TierPill tier={org.org_tier} />
+                    </td>
 
-                  {/* Tech count */}
-                  <td className="px-4 py-3.5 text-slate-600">
-                    {org.tech_count > 0 ? (
-                      <span className="font-semibold">{org.tech_count}</span>
-                    ) : (
+                    {/* Contact */}
+                    <td className="px-4 py-3.5">
+                      {org.contact_name || org.contact_email ? (
+                        <div className="space-y-0.5">
+                          {org.contact_name && (
+                            <div className="text-sm font-medium text-slate-700">{org.contact_name}</div>
+                          )}
+                          {org.contact_email && (
+                            <div className="flex items-center gap-1 text-xs text-slate-400">
+                              <Mail size={10} />
+                              <span className="truncate max-w-[160px]">{org.contact_email}</span>
+                            </div>
+                          )}
+                          {org.contact_phone && (
+                            <div className="flex items-center gap-1 text-xs text-slate-400">
+                              <Phone size={10} />
+                              {org.contact_phone}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-300 text-xs">—</span>
+                      )}
+                    </td>
+
+                    {/* Service Area */}
+                    <td className="px-4 py-3.5">
+                      {org.service_area_states?.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {org.service_area_states.slice(0, 4).map(s => (
+                            <span key={s} className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-semibold">{s}</span>
+                          ))}
+                          {org.service_area_states.length > 4 && (
+                            <span className="text-xs text-slate-400">+{org.service_area_states.length - 4}</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-300 text-xs">—</span>
+                      )}
+                    </td>
+
+                    {/* Sites */}
+                    <td className="px-4 py-3.5 text-slate-500 text-sm">
                       <span className="text-slate-300">—</span>
-                    )}
-                  </td>
+                    </td>
 
-                  {/* Org ID (copy button) */}
-                  <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
-                    <button
-                      onClick={() => copyId(org.id)}
-                      className="flex items-center gap-1.5 text-xs font-mono text-slate-400 hover:text-brand-400 transition-colors"
-                      title="Copy org ID"
-                    >
-                      {org.id.slice(0, 8)}…
-                      <Copy size={11} className={copied === org.id ? 'text-emerald-500' : ''} />
-                    </button>
-                    {copied === org.id && (
-                      <span className="text-xs text-emerald-500 ml-0.5">Copied!</span>
-                    )}
-                  </td>
+                    {/* Compliance dots */}
+                    <td className="px-4 py-3.5">
+                      <ComplianceDots docs={org.partner_docs} />
+                    </td>
 
-                  {/* Onboarded */}
-                  <td className="px-4 py-3.5 text-slate-500 text-xs">
-                    {org.onboarded_at ? (
-                      <div className="flex items-center gap-1.5">
-                        <CheckCircle2 size={12} className="text-emerald-500" />
-                        {formatDate(org.onboarded_at)}
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5 text-slate-400">
-                        <Clock size={12} />
-                        Pending
-                      </div>
-                    )}
-                  </td>
+                    {/* Onboarded */}
+                    <td className="px-4 py-3.5 text-xs text-slate-500">
+                      {org.onboarded_at ? (
+                        <div className="flex items-center gap-1.5">
+                          <CheckCircle2 size={11} className="text-emerald-500 shrink-0" />
+                          {fmtDate(org.onboarded_at)}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-slate-400">
+                          <Clock size={11} className="shrink-0" />
+                          Pending
+                        </div>
+                      )}
+                    </td>
 
-                  {/* Arrow */}
-                  <td className="px-4 py-3.5 text-right">
-                    <ChevronRight size={18} className="text-slate-300 group-hover:text-brand-400 transition-colors ml-auto" />
-                  </td>
-                </tr>
-              ))}
+                    {/* Arrow */}
+                    <td className="px-4 py-3.5 text-right">
+                      <ChevronRight size={17} className="text-slate-300 group-hover:text-brand-400 transition-colors ml-auto" />
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}
       </div>
 
-      {/* Quick onboard CTA if empty */}
-      {!loading && orgs.length === 0 && (
-        <div className="mt-6 bg-brand-50 border border-brand-200 rounded-xl p-5 flex items-start gap-4">
-          <div className="w-10 h-10 bg-brand-400 rounded-lg flex items-center justify-center shrink-0">
-            <Users size={20} className="text-white" />
-          </div>
-          <div className="flex-1">
-            <p className="font-semibold text-brand-900">Ready to onboard your first dealer?</p>
-            <p className="text-sm text-brand-700 mt-1">
-              The onboarding wizard creates the org, sends the invite, and wires their portal access — all in one flow.
-            </p>
-          </div>
-          <Link
-            href="/admin/dealers/new"
-            className="shrink-0 px-4 py-2 bg-brand-400 text-white rounded-lg text-sm font-medium hover:bg-brand-500"
-          >
-            Start Wizard →
-          </Link>
-        </div>
-      )}
     </div>
   )
 }

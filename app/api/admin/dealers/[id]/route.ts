@@ -133,7 +133,11 @@ export async function PATCH(
   }
 
   // Allowed fields only
-  const allowed = ['is_active', 'name', 'email', 'phone', 'website', 'address', 'city', 'state', 'zip', 'license_number', 'tech_count']
+  const allowed = [
+    'is_active', 'name', 'email', 'phone', 'website',
+    'address', 'city', 'state', 'zip', 'license_number', 'tech_count',
+    'partner_docs', 'contact_name', 'contact_email', 'contact_phone',
+  ]
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
   for (const k of allowed) {
     if (k in body) updates[k] = body[k]
