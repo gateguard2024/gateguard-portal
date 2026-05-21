@@ -464,6 +464,8 @@ export default function NewQuotePage() {
   const [selectedSurveyId, setSelectedSurveyId]   = useState<string | null>(null);
   const [surveyImporting, setSurveyImporting]     = useState(false);
   const [surveyImportError, setSurveyImportError] = useState<string | null>(null);
+  const [surveySourceId, setSurveySourceId]       = useState<string | null>(null);
+  const [surveySow, setSurveySow]                 = useState<string | null>(null);
 
   // Fetch surveys when survey_import mode is activated
   useEffect(() => {
@@ -555,7 +557,7 @@ export default function NewQuotePage() {
           client_phone:     meta.client_phone || null,
           property_name:    meta.property_name || null,
           property_address: meta.property_address || null,
-          notes:            meta.notes || null,
+          notes:            surveySow || meta.notes || null,
           tax_rate:         meta.tax_rate,
           discount_percent: meta.discount_percent,
           deposit_percent:  meta.deposit_percent,
@@ -563,6 +565,7 @@ export default function NewQuotePage() {
           total_mrr:        liMrr,
           client_org_id:    prefilledClientOrgId  || null,
           opportunity_id:   prefilledOpportunityId || null,
+          survey_id:        surveySourceId || null,
         }),
       });
       if (!res.ok) throw new Error('Failed to create quote');
@@ -637,25 +640,74 @@ export default function NewQuotePage() {
     }
   }
 
-  /* ── Create quote (survey import mode) ────────────────────────────────────── */
+  /* ── Create quote (survey import mode) ─────────────────────────────────────
+     Instead of calling the API directly, we fetch the survey, pre-populate the
+     line-item builder with BOM items + property info, then switch to that mode
+     so the user can review and edit everything before saving.
+  ─────────────────────────────────────────────────────────────────────────── */
   async function createSurveyImportQuote() {
     if (!selectedSurveyId) return;
     setSurveyImporting(true);
     setSurveyImportError(null);
     try {
-      const res = await fetch(`/api/surveys/${selectedSurveyId}/create-quote`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(err.error ?? 'Failed to create quote');
+      const res = await fetch(`/api/surveys/${selectedSurveyId}`);
+      if (!res.ok) throw new Error('Could not load survey');
+      const { survey: s } = await res.json();
+
+      // Pre-populate meta from survey property info
+      setMeta(m => ({
+        ...m,
+        title:            s.property_name ?? m.title,
+        property_name:    s.property_name ?? m.property_name,
+        property_address: s.property_address ?? m.property_address,
+        client_name:      s.property_name ?? m.client_name,
+        deposit_percent:  50,
+        discount_percent: 0,
+      }));
+
+      // Map AI BOM items → line items
+      const bom: Array<{
+        description: string; sku?: string|null; qty?: number; unit?: string;
+        unit_price?: number; priority?: string; category?: string; notes?: string|null;
+      }> = Array.isArray(s.ai_bom) ? s.ai_bom : [];
+
+      if (bom.length > 0) {
+        const priorityToSection = (p: string) => {
+          if (p === 'urgent')      return 'Urgent Repairs';
+          if (p === 'recommended') return 'Recommended Work';
+          return 'Optional Add-Ons';
+        };
+        const mapped: NewLineItem[] = bom.map(item => ({
+          _id:          crypto.randomUUID(),
+          description:  item.description ?? 'Item',
+          qty:          item.qty ?? 1,
+          unit_price:   item.unit_price ?? 0,
+          unit:         item.unit ?? 'each',
+          is_recurring: item.unit === 'mo',
+          section_name: priorityToSection(item.priority ?? 'recommended'),
+          item_type:    item.category === 'labor' ? 'labor' : 'equipment',
+          is_optional:  item.priority === 'optional',
+          category:     item.category ?? 'equipment',
+          notes:        item.notes ?? '',
+          product_id:   null,
+          image_url:    null,
+          model_number: null,
+          sku:          item.sku ?? null,
+          package_tier: null,
+        }));
+        setLiItems(mapped);
       }
-      const result = await res.json();
-      router.push(`/quotes/${result.quote_id}`);
+
+      // Store survey id and sow for proposal page
+      setSurveySourceId(selectedSurveyId);
+      setSurveySow(s.ai_sow ?? null);
+
+      // Jump straight to line-item builder (step 1 = property info, pre-filled)
+      setLiStep(1);
+      setAppMode('line_item');
     } catch (e) {
-      setSurveyImportError(e instanceof Error ? e.message : 'Failed to create quote');
+      setSurveyImportError(e instanceof Error ? e.message : 'Failed to load survey');
+    } finally {
       setSurveyImporting(false);
     }
   }

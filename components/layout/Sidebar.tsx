@@ -38,6 +38,8 @@ type NavSection = {
   icon: React.ElementType;
   color?: string;
   items: NavItem[];
+  // When true, section renders as a single direct link to items[0].href — no accordion
+  directLink?: boolean;
 };
 
 // ─── Navigation Architecture ──────────────────────────────────────────────────
@@ -46,11 +48,19 @@ type NavSection = {
 
 const NAV_SECTIONS: NavSection[] = [
   {
+    key: "dashboard",
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    directLink: true,
+    items: [
+      { label: "Dashboard", href: "/", icon: LayoutDashboard, description: "Your command center — KPIs, alerts, activity" },
+    ],
+  },
+  {
     key: "operations",
     label: "Operations",
-    icon: LayoutDashboard,
+    icon: ClipboardList,
     items: [
-      { label: "Dashboard",          href: "/",       icon: LayoutDashboard, description: "Your command center — KPIs, alerts, activity" },
       { label: "To-Dos",             href: "/todos",    icon: CheckSquare,    description: "Personal tasks and team assignments" },
       { label: "Calendar",           href: "/calendar", icon: CalendarDays,   description: "Schedule, to-dos, and work orders in one view" },
       { label: "Operating System",   href: "/eos",      icon: Layers,          description: "EOS — V/TO, Rocks, Scorecard, L10 meetings" },
@@ -190,10 +200,12 @@ export function Sidebar() {
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Accordion state — which sections are open
+  // Dashboard is directLink so never needs to be in expandedSections
   const activeSection = getSectionForPath(pathname);
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(
-    () => new Set(activeSection ? [activeSection] : ["operations"])
-  );
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => {
+    const initial = activeSection && activeSection !== "dashboard" ? activeSection : "operations";
+    return new Set([initial]);
+  });
 
   const { user } = useUser();
   const { signOut, openUserProfile } = useClerk();
@@ -394,16 +406,19 @@ export function Sidebar() {
 
           const SectionIcon = section.icon;
           const isExpanded = expandedSections.has(section.key);
-          const isSectionActive = getSectionForPath(pathname) === section.key;
+          const isSectionActive = getSectionForPath(pathname) === section.key ||
+            (section.directLink && section.items[0] && (section.items[0].href === "/" ? pathname === "/" : pathname.startsWith(section.items[0].href)));
 
           if (collapsed) {
             // Collapsed: show section icon only, no accordion
+            const collapseHref = section.directLink ? section.items[0]?.href : undefined;
+            const CollapseWrapper = collapseHref ? Link : ("div" as React.ElementType);
             return (
               <div key={section.key} className="relative group">
-                <button
-                  onClick={() => toggleSection(section.key)}
+                <CollapseWrapper
+                  {...(collapseHref ? { href: collapseHref } : { onClick: () => toggleSection(section.key) })}
                   className={cn(
-                    "w-full flex items-center justify-center p-2.5 rounded-lg transition-colors",
+                    "w-full flex items-center justify-center p-2.5 rounded-lg transition-colors cursor-pointer",
                     isSectionActive
                       ? "bg-brand-400/10 text-brand-400"
                       : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
@@ -411,7 +426,31 @@ export function Sidebar() {
                   title={section.label}
                 >
                   <SectionIcon size={18} />
-                </button>
+                </CollapseWrapper>
+              </div>
+            );
+          }
+
+          // ── Direct-link section (e.g. Dashboard) — renders as a flat Link, no accordion ──
+          if (section.directLink && section.items[0]) {
+            const dlItem = section.items[0];
+            return (
+              <div key={section.key}>
+                <Link
+                  href={dlItem.href}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all font-semibold text-sm",
+                    isSectionActive
+                      ? "bg-brand-400/10 text-brand-400 border border-brand-400/20"
+                      : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
+                  )}
+                >
+                  <SectionIcon size={16} className="shrink-0" />
+                  <span className="flex-1">{section.label}</span>
+                  {isSectionActive && (
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: "#6B7EFF" }} />
+                  )}
+                </Link>
               </div>
             );
           }

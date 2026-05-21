@@ -534,6 +534,23 @@ export default function OpportunityDetailPage() {
     }
   };
 
+  // ── Inline field save ───────────────────────────────────────────────────
+  const saveField = async (key: string, val: string) => {
+    const numericFields = ['units','vehicle_gates','pedestrian_gates','amenity_doors',
+      'existing_cameras','new_cameras','est_deposit','monthly_per_unit',
+      'monthly_total','est_mrr','amount','probability'];
+    const payload: Record<string, string | number | null> = {
+      [key]: numericFields.includes(key) ? (val === '' ? null : Number(val)) : (val || null),
+    };
+    const res = await fetch(`/api/crm/opportunities/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? 'Save failed'); }
+    setOpp(prev => prev ? { ...prev, ...payload } as typeof prev : prev);
+  };
+
   // Upload Executed Doc state
   const [showUploadExec,   setShowUploadExec]   = useState(false);
   const [uploadFile,       setUploadFile]       = useState<File | null>(null);
@@ -1145,44 +1162,44 @@ export default function OpportunityDetailPage() {
               {/* About */}
               <DetailCard title="About">
                 <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                  <FieldRow label="Opportunity Name" value={opp.name} />
-                  <FieldRow label="Account Name" value={opp.account_name} />
-                  <FieldRow label="Close Date" value={fmtDate(opp.close_date)} />
-                  <FieldRow label="Amount" value={opp.amount != null ? fmt$(opp.amount) : undefined} />
-                  <FieldRow label="Description" value={opp.description} className="col-span-2" />
-                  <FieldRow label="Opportunity Owner" value={opp.owner_name} />
-                  <FieldRow label="Site Point of Contact" value={opp.site_contact_name} />
-                  <FieldRow label="Site Phone Number" value={opp.site_contact_phone} />
-                  <FieldRow label="Site Contact E-Mail" value={opp.site_contact_email} />
-                  <FieldRow label="Next Step" value={opp.next_step} className="col-span-2" />
-                  <FieldRow label="Probability %" value={opp.probability != null ? `${opp.probability}%` : undefined} />
-                  <FieldRow label="Forecast Category" value={opp.forecast_category} />
-                  <FieldRow label="Stage" value={cfg.label} />
+                  <FieldRow label="Opportunity Name"     value={opp.name}               fieldKey="name"               onSave={saveField} />
+                  <FieldRow label="Account Name"         value={opp.account_name}       fieldKey="account_name"       onSave={saveField} />
+                  <FieldRow label="Close Date"           value={opp.close_date}         fieldKey="close_date"         type="date"     onSave={saveField} />
+                  <FieldRow label="Amount"               value={opp.amount != null ? String(opp.amount) : undefined} fieldKey="amount" type="number" onSave={saveField} />
+                  <FieldRow label="Description"          value={opp.description}        fieldKey="description"        type="textarea" onSave={saveField} className="col-span-2" />
+                  <FieldRow label="Opportunity Owner"    value={opp.owner_name}         fieldKey="owner_name"         onSave={saveField} />
+                  <FieldRow label="Site Point of Contact" value={opp.site_contact_name} fieldKey="site_contact_name"  onSave={saveField} />
+                  <FieldRow label="Site Phone Number"    value={opp.site_contact_phone} fieldKey="site_contact_phone" type="tel"      onSave={saveField} />
+                  <FieldRow label="Site Contact E-Mail"  value={opp.site_contact_email} fieldKey="site_contact_email" type="email"    onSave={saveField} />
+                  <FieldRow label="Next Step"            value={opp.next_step}          fieldKey="next_step"          type="textarea" onSave={saveField} className="col-span-2" />
+                  <FieldRow label="Probability %"        value={opp.probability != null ? String(opp.probability) : undefined} fieldKey="probability" type="number" onSave={saveField} />
+                  <FieldRow label="Forecast Category"    value={opp.forecast_category}  fieldKey="forecast_category"  onSave={saveField} />
+                  <FieldRow label="Stage"                value={cfg.label} />
                 </div>
               </DetailCard>
 
               {/* Property Specs */}
               <DetailCard title="Property Specs">
                 <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                  <FieldRow label="Number of Units" value={opp.units != null ? String(opp.units) : undefined} />
-                  <FieldRow label="Vehicle Gates" value={opp.vehicle_gates != null ? String(opp.vehicle_gates) : undefined} />
-                  <FieldRow label="Pedestrian Gates" value={opp.pedestrian_gates != null ? String(opp.pedestrian_gates) : undefined} />
-                  <FieldRow label="Amenity Doors" value={opp.amenity_doors != null ? String(opp.amenity_doors) : undefined} />
-                  <FieldRow label="Existing Cameras" value={opp.existing_cameras != null ? String(opp.existing_cameras) : undefined} />
-                  <FieldRow label="New Cameras" value={opp.new_cameras != null ? String(opp.new_cameras) : undefined} />
+                  <FieldRow label="Number of Units"  value={opp.units != null ? String(opp.units) : undefined}                     fieldKey="units"            type="number" onSave={saveField} />
+                  <FieldRow label="Vehicle Gates"    value={opp.vehicle_gates != null ? String(opp.vehicle_gates) : undefined}     fieldKey="vehicle_gates"    type="number" onSave={saveField} />
+                  <FieldRow label="Pedestrian Gates" value={opp.pedestrian_gates != null ? String(opp.pedestrian_gates) : undefined} fieldKey="pedestrian_gates" type="number" onSave={saveField} />
+                  <FieldRow label="Amenity Doors"    value={opp.amenity_doors != null ? String(opp.amenity_doors) : undefined}     fieldKey="amenity_doors"    type="number" onSave={saveField} />
+                  <FieldRow label="Existing Cameras" value={opp.existing_cameras != null ? String(opp.existing_cameras) : undefined} fieldKey="existing_cameras" type="number" onSave={saveField} />
+                  <FieldRow label="New Cameras"      value={opp.new_cameras != null ? String(opp.new_cameras) : undefined}         fieldKey="new_cameras"      type="number" onSave={saveField} />
                 </div>
               </DetailCard>
 
               {/* Financial Details */}
               <DetailCard title="Financial Details">
                 <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                  <FieldRow label="Est. Deposit" value={opp.est_deposit != null ? fmt$(opp.est_deposit) : undefined} />
-                  <FieldRow label="Monthly Per Unit" value={opp.monthly_per_unit != null ? fmt$(opp.monthly_per_unit) : undefined} />
-                  <FieldRow label="Monthly Total" value={opp.monthly_total != null ? fmt$(opp.monthly_total) : undefined} />
-                  <FieldRow label="Est. MRR" value={opp.est_mrr != null ? fmt$(opp.est_mrr) : undefined} />
-                  <FieldRow label="DirecTV Package" value={opp.directv_package} />
-                  <FieldRow label="ISP Service" value={opp.isp_service} />
-                  <FieldRow label="MDU Contract Expiry" value={fmtDate(opp.mdu_contract_expiry)} />
+                  <FieldRow label="Est. Deposit"      value={opp.est_deposit != null ? String(opp.est_deposit) : undefined}           fieldKey="est_deposit"      type="number" onSave={saveField} />
+                  <FieldRow label="Monthly Per Unit"  value={opp.monthly_per_unit != null ? String(opp.monthly_per_unit) : undefined} fieldKey="monthly_per_unit" type="number" onSave={saveField} />
+                  <FieldRow label="Monthly Total"     value={opp.monthly_total != null ? String(opp.monthly_total) : undefined}       fieldKey="monthly_total"    type="number" onSave={saveField} />
+                  <FieldRow label="Est. MRR"          value={opp.est_mrr != null ? String(opp.est_mrr) : undefined}                   fieldKey="est_mrr"          type="number" onSave={saveField} />
+                  <FieldRow label="DirecTV Package"   value={opp.directv_package}   fieldKey="directv_package"   onSave={saveField} />
+                  <FieldRow label="ISP Service"       value={opp.isp_service}       fieldKey="isp_service"       onSave={saveField} />
+                  <FieldRow label="MDU Contract Expiry" value={opp.mdu_contract_expiry} fieldKey="mdu_contract_expiry" type="date" onSave={saveField} />
                 </div>
               </DetailCard>
             </div>
@@ -2692,17 +2709,82 @@ function FieldRow({
   label,
   value,
   className,
+  fieldKey,
+  type = "text",
+  onSave,
 }: {
   label: string;
   value?: string | null;
   className?: string;
+  fieldKey?: string;
+  type?: "text" | "number" | "email" | "tel" | "date" | "textarea";
+  onSave?: (key: string, value: string) => Promise<void>;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
+
+  useEffect(() => { setDraft(value ?? ""); }, [value]);
+  useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
+
+  const commit = async () => {
+    if (!fieldKey || !onSave) return;
+    setSaving(true);
+    try { await onSave(fieldKey, draft); } finally { setSaving(false); setEditing(false); }
+  };
+
+  const cancel = () => { setDraft(value ?? ""); setEditing(false); };
+
+  const canEdit = !!fieldKey && !!onSave;
+
   return (
     <div className={cn("group", className)}>
       <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5 font-medium">
         {label}
       </p>
-      <p className="text-sm text-foreground">{value ?? "—"}</p>
+      {editing ? (
+        <div className="flex items-center gap-1">
+          {type === "textarea" ? (
+            <textarea
+              ref={inputRef as React.RefObject<HTMLTextAreaElement>}
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === "Escape") cancel(); }}
+              rows={2}
+              className="flex-1 px-2 py-1 text-sm bg-background border border-brand-400 rounded focus:outline-none resize-none"
+            />
+          ) : (
+            <input
+              ref={inputRef as React.RefObject<HTMLInputElement>}
+              type={type}
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") cancel(); }}
+              className="flex-1 px-2 py-1 text-sm bg-background border border-brand-400 rounded focus:outline-none"
+            />
+          )}
+          <button onClick={commit} disabled={saving}
+            className="p-1 text-emerald-500 hover:text-emerald-600 disabled:opacity-50">
+            <Check size={13} />
+          </button>
+          <button onClick={cancel} className="p-1 text-muted-foreground hover:text-foreground">
+            <X size={13} />
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm text-foreground">{value ?? "—"}</p>
+          {canEdit && (
+            <button
+              onClick={() => setEditing(true)}
+              className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 text-muted-foreground hover:text-brand-400"
+            >
+              <Pencil size={11} />
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
