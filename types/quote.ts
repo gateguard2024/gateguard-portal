@@ -105,13 +105,15 @@ export interface QuoteLineItem {
 }
 
 export interface QuoteTotals {
-  setupTotal: number;           // all one-time items (for display)
-  billableSetupTotal: number;   // one-time billable items only (drives deposit)
+  setupTotal: number;              // all one-time items (for display)
+  billableSetupTotal: number;      // one-time billable items only (before discount)
+  discountedSetupTotal: number;    // billableSetupTotal after discount (drives deposit)
+  discountSavings: number;         // dollar amount saved by discount
   monthlyTotal: number;
   yearOneTotal: number;
   contractValue: number;
-  depositDue: number;           // billableSetup × 50% + 1st month
-  goLivePayment: number;        // billableSetup × 50% + 1st month (at launch event)
+  depositDue: number;              // discountedSetup × 50% + 1st month
+  goLivePayment: number;           // discountedSetup × 50% + 1st month (at launch)
   dealerMRR: number;
 }
 
@@ -159,12 +161,13 @@ export const PRICING = {
     dealerOverrideMax: 2.50,
   },
 
-  // Tier 1 (Mobile Pass) — per access point
+  // Tier 1 (Mobile Pass) — per entry point, uniform rate regardless of hardware type
+  // $500 working / $750 non-working per opening (same as Tier 2)
   tier1: {
     primaryDoor:   { working: 500.00,  nonWorking: 750.00  },  // controller + reader
-    secondaryDoor: { working: 350.00,  nonWorking: 500.00  },  // controller only
-    guestGate:     { working: 350.00,  nonWorking: 500.00  },  // app-only controller
-    residentGate:  { working: 200.00,  nonWorking: 350.00  },  // reader only
+    secondaryDoor: { working: 500.00,  nonWorking: 750.00  },  // controller only
+    guestGate:     { working: 500.00,  nonWorking: 750.00  },  // app-only controller
+    residentGate:  { working: 500.00,  nonWorking: 750.00  },  // reader
     callbox: 2500.00,
   },
 

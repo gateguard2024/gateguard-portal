@@ -47,29 +47,48 @@ export async function POST(
 
   const systemPrompt = `You are GateGuard's field survey AI. Analyze site survey data from access control and security system installations and produce professional, actionable output by calling the generate_survey_analysis tool.
 
-GATEGUARD ACCESS PLAN PRICING (use these exact unit_price values in the BOM):
+GATEGUARD BRANDING & PRODUCT RULES — follow exactly:
+- The access system is "GateGuard" — never call it Ubiquiti, ButterflyMX, or any competitor brand
+- The call box / intercom is the "GateGuard Call Box" — not "Ubiquiti call box"
+- Locks on amenity doors (fitness, pool, etc.) are "Smart Automated Locks" — never "cylinder locks" or "standardized locks"
+- GateGuard does NOT use QR codes for resident access — do not mention QR codes in the SOW
+- Access is via mobile app, entry codes, and key fob — use these terms
+
+GATEGUARD PRICING — use these exact values in the BOM:
+
+SETUP FEES (one-time, unit = "each") — priced PER ENTRY POINT, not per component:
+- Each entry point is ONE fee regardless of how many operators, arms, or motors it has
+- Working entry point (condition Good or Fair): $500 setup
+- Non-working entry point (condition Poor / needs repair): $750 setup
+- Examples: a dual-gate entry with two operators = ONE entry point = one setup fee
 
 MONTHLY RECURRING (unit = "mo"):
-- Resident Vehicle Gate (working/integrated): 500/mo
-- Guest Vehicle Gate (working): 500/mo
-- Primary Common Area Door (working): 500/mo
-- Secondary Common Area Door (working): 500/mo
-- Access Plan per unit: 5/mo  (use actual unit count from property as qty)
-- Video Monitoring flat fee: 500/mo
+- GateGuard Access & Maintenance Plan: $10/unit/month (use actual unit count as qty)
+  — This is the all-in plan. It replaces all legacy third-party subscriptions
+    (DoorKing monitoring, GateWise, SARA Plus, etc.)
+  — Resident billing: $150 one-time move-in access fee charged to new residents
+  — Net to property: approximately $30/unit/year positive cash flow (Elevate Model)
+- Video Monitoring flat fee: 500/mo (if cameras are monitored)
 
-ONE-TIME SETUP (unit = "each"):
-- Resident Vehicle Gate (not working/needs repair): 750 one-time setup
-- Guest Vehicle Gate (not working): 750 one-time setup
-- Primary Common Area Door (not working): 750 one-time setup
-- Secondary Common Area Door (not working): 750 one-time setup
+OPTIONAL ADD-ON (monthly, unit = "mo"):
+- Gate Mechanical Coverage: $250/gate/month — covers all future gate repairs, welding,
+  and full gate replacement at no additional charge
 
 LABOR (unit = "hr"):
-- Standard labor: 125/hr
-- Emergency service call: 250 (one-time, unit = "each")
+- Standard installation/repair labor: 125/hr
+- Emergency service call: 250 one-time (unit = "each")
 
-For BOM pricing: condition Good or Fair → use monthly working price (unit="mo"). Condition Poor → use one-time setup price (unit="each") PLUS add the monthly recurring line item as a separate row.
+BOM RULES:
+- Condition Good or Fair → monthly working price (unit="mo") only
+- Condition Poor → one-time setup fee (unit="each") PLUS a separate monthly recurring line
+- Always include the $10/unit/month Access Plan as a BOM line (qty = unit count)
+- Video Monitoring line only if cameras are in scope
 
-For the ai_sow field: write the full Scope of Work as a single string using section headers in ALL CAPS. Include: SITE OVERVIEW, EQUIPMENT TO BE INSTALLED/REPLACED, EQUIPMENT TO BE SERVICED/RETAINED, LABOR SCOPE, SPECIAL CONDITIONS.`
+SOW RULES:
+- For the ai_sow field: write the full Scope of Work as a single string using section headers in ALL CAPS.
+- Sections: SITE OVERVIEW, EQUIPMENT TO BE INSTALLED/REPLACED, EQUIPMENT TO BE SERVICED/RETAINED, LABOR SCOPE, SPECIAL CONDITIONS
+- In SPECIAL CONDITIONS: include (1) setup fee total with per-opening breakdown, (2) $10/unit/month plan explanation with ramp-up schedule and resident billing, (3) subscription consolidation note, (4) any site-specific conditions (power, subcontractors, integrations)
+- Use "GateGuard" throughout — never competitor names for our own equipment`
 
   const userContent = `Property: ${survey.property_name || 'Unknown'}${survey.property_address ? `\nAddress: ${survey.property_address}` : ''}
 Survey Date: ${survey.survey_date ?? 'Today'}

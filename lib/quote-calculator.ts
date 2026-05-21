@@ -18,13 +18,13 @@ export function calculateLineItems(survey: SiteSurvey, property: QuoteProperty):
   const items: QuoteLineItem[] = [];
   const units = property.units || 0;
 
-  // ── Monthly Service Fee ────────────────────────────────────────────────────
+  // ── Monthly Service Fee — GateGuard bills property directly ────────────────
   const baseMonthly = Math.max(units * PRICING.monthly.perUnit, PRICING.monthly.minimum);
   items.push({
     id: makeId(),
-    description: `GateGuard Monthly Service — ${units} units @ $${PRICING.monthly.perUnit}/unit/mo${
-      units * PRICING.monthly.perUnit < PRICING.monthly.minimum ? ' (minimum applies)' : ''
-    }`,
+    description: `GateGuard Access & Maintenance Plan — ${units} units @ $${PRICING.monthly.perUnit}/unit/mo${
+      units * PRICING.monthly.perUnit < PRICING.monthly.minimum ? ' ($1,200/mo minimum applies)' : ''
+    } (GateGuard bills property directly)`,
     qty: 1,
     unitPrice: baseMonthly,
     total: baseMonthly,
@@ -158,7 +158,7 @@ export function calculateLineItems(survey: SiteSurvey, property: QuoteProperty):
   return items;
 }
 
-export function calculateTotals(lineItems: QuoteLineItem[], property: QuoteProperty): QuoteTotals {
+export function calculateTotals(lineItems: QuoteLineItem[], property: QuoteProperty, discountPercent = 0, depositPercent = 50): QuoteTotals {
   const setupTotal = lineItems
     .filter(i => !i.recurring)
     .reduce((sum, i) => sum + i.total, 0);
@@ -168,22 +168,29 @@ export function calculateTotals(lineItems: QuoteLineItem[], property: QuotePrope
     .filter(i => !i.recurring && i.billing !== 'included')
     .reduce((sum, i) => sum + i.total, 0);
 
+  // Apply discount to billable setup
+  const clampedDiscount      = Math.min(Math.max(discountPercent, 0), 100);
+  const discountFactor       = 1 - clampedDiscount / 100;
+  const discountedSetupTotal = billableSetupTotal * discountFactor;
+  const discountSavings      = billableSetupTotal - discountedSetupTotal;
+
   const monthlyTotal = lineItems
     .filter(i => i.recurring)
     .reduce((sum, i) => sum + i.total, 0);
 
   const contractMonths = PRICING.contract.months;
-  const yearOneTotal   = setupTotal + (monthlyTotal * 12);
-  const contractValue  = setupTotal + (monthlyTotal * contractMonths);
+  const yearOneTotal   = discountedSetupTotal + (monthlyTotal * 12);
+  const contractValue  = discountedSetupTotal + (monthlyTotal * contractMonths);
 
-  // Deposit = 50% of billable setup + 1st month; same at go-live
-  const depositDue    = billableSetupTotal * PRICING.contract.depositPercent + monthlyTotal;
-  const goLivePayment = billableSetupTotal * PRICING.contract.goLivePercent  + monthlyTotal;
+  // Deposit = depositPercent% of discounted setup + 1st month; balance = remainder + 1st month
+  const depositFraction = Math.min(Math.max(depositPercent, 0), 100) / 100;
+  const depositDue      = discountedSetupTotal * depositFraction + monthlyTotal;
+  const goLivePayment   = discountedSetupTotal * (1 - depositFraction) + monthlyTotal;
 
-  const units    = property.units || 0;
+  const units     = property.units || 0;
   const dealerMRR = Math.min(units * PRICING.monthly.dealerOverrideMax, monthlyTotal * 0.25);
 
-  return { setupTotal, billableSetupTotal, monthlyTotal, yearOneTotal, contractValue, depositDue, goLivePayment, dealerMRR };
+  return { setupTotal, billableSetupTotal, discountedSetupTotal, discountSavings, monthlyTotal, yearOneTotal, contractValue, depositDue, goLivePayment, dealerMRR };
 }
 
 export function generateQuoteNumber(): string {

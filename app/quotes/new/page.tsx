@@ -514,7 +514,7 @@ export default function NewQuotePage() {
     setProperty(p => ({ ...p, [key]: key === 'units' ? parseInt(val) || 0 : val }));
 
   const lineItems = calculateLineItems(survey, property);
-  const totals    = calculateTotals(lineItems, property);
+  const totals    = calculateTotals(lineItems, property, meta.discount_percent, meta.deposit_percent || 50);
 
   const setNet = (key: keyof NetworkSurvey, patch: Partial<{ qty: number; billing: BillingMode }>) =>
     setSurvey(s => ({ ...s, network: { ...s.network, [key]: { ...s.network[key], ...patch } } }));
@@ -1193,7 +1193,7 @@ export default function NewQuotePage() {
               <span className="text-sm font-normal text-muted-foreground">/mo</span>
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {property.units} units @ $10/unit{property.units * 10 < 1200 && ' — $1,200/mo minimum applies'}
+              {property.units} units @ $10/unit{property.units * 10 < 1200 && ' — $1,200/mo minimum'} · GateGuard bills property directly
             </p>
           </div>
         )}
@@ -1229,10 +1229,10 @@ export default function NewQuotePage() {
           <SectionCard title="Access Points — Tier 1 (Mobile Pass)" icon={Shield}>
             <div className="space-y-4">
               {([
-                { label: 'Resident Vehicle Gates', sub: 'Resident-credentialed vehicular entry', key: 'residentGates' as const, wp: '$200', nwp: '$350' },
-                { label: 'Guest Vehicle Gates', sub: 'App-only guest vehicular entry', key: 'guestGates' as const, wp: '$350', nwp: '$500' },
+                { label: 'Resident Vehicle Gates', sub: 'Resident vehicle entry — reader', key: 'residentGates' as const, wp: '$500', nwp: '$750' },
+                { label: 'Guest Vehicle Gates', sub: 'Guest entry — app-only controller', key: 'guestGates' as const, wp: '$500', nwp: '$750' },
                 { label: 'Primary Common Doors', sub: 'Main pedestrian entries — controller + reader', key: 'primaryDoors' as const, wp: '$500', nwp: '$750' },
-                { label: 'Secondary Common Doors', sub: 'Amenity rooms, utility doors', key: 'secondaryDoors' as const, wp: '$350', nwp: '$500' },
+                { label: 'Secondary Common Doors', sub: 'Amenity rooms, utility doors — controller', key: 'secondaryDoors' as const, wp: '$500', nwp: '$750' },
               ]).map(({ label, sub, key, wp, nwp }, i) => (
                 <div key={key} className={i > 0 ? 'pt-4 border-t border-border' : ''}>
                   <div className="flex items-start justify-between gap-4">
@@ -1455,16 +1455,96 @@ export default function NewQuotePage() {
   }
 
   function renderStep4() {
+    const hasDiscount = meta.discount_percent > 0;
     return (
       <div className="space-y-5">
+
+        {/* Pricing Adjustments */}
+        <div className="bg-card border border-border rounded-xl p-5">
+          <p className="text-sm font-semibold text-foreground mb-4">Pricing Adjustments</p>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-foreground">Setup Fee Discount</p>
+                <p className="text-xs text-muted-foreground">Applied to one-time billable setup fees only</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number" min="0" max="50" step="1"
+                  value={meta.discount_percent || ''}
+                  onChange={e => setMeta(m => ({ ...m, discount_percent: Math.min(50, Math.max(0, parseFloat(e.target.value) || 0)) }))}
+                  placeholder="0"
+                  className="w-20 px-2 py-1.5 bg-background border border-border rounded text-sm text-right text-foreground focus:outline-none focus:ring-1 focus:ring-brand-400 tabular-nums"
+                />
+                <span className="text-sm text-muted-foreground">%</span>
+              </div>
+            </div>
+            {hasDiscount && (
+              <div className="flex items-center justify-between bg-emerald-400/5 border border-emerald-400/20 rounded-lg px-4 py-2.5">
+                <span className="text-sm text-emerald-400 font-medium">Discount savings</span>
+                <span className="text-sm font-bold text-emerald-400">−{formatCurrency(totals.discountSavings)}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between gap-4 pt-1">
+              <div>
+                <p className="text-sm text-foreground">Deposit %</p>
+                <p className="text-xs text-muted-foreground">Percent of setup fee due at signing</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number" min="0" max="100" step="5"
+                  value={meta.deposit_percent || ''}
+                  onChange={e => setMeta(m => ({ ...m, deposit_percent: Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)) }))}
+                  placeholder="50"
+                  className="w-20 px-2 py-1.5 bg-background border border-border rounded text-sm text-right text-foreground focus:outline-none focus:ring-1 focus:ring-brand-400 tabular-nums"
+                />
+                <span className="text-sm text-muted-foreground">%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* KPI Cards */}
         <div className="grid grid-cols-2 gap-4">
           {[
-            { label: 'Total Setup Fees',         value: formatCurrency(totals.setupTotal),          sub: `${formatCurrency(totals.billableSetupTotal)} billable`, color: 'text-foreground' },
-            { label: 'Monthly Recurring',        value: `${formatCurrency(totals.monthlyTotal)}/mo`, sub: '60-month term',                                         color: 'text-brand-400' },
-            { label: 'Deposit at Signing (50%)', value: formatCurrency(totals.depositDue),           sub: '50% billable setup + 1st month MRR',                    color: 'text-amber-400' },
-            { label: 'Launch Payment (50%)',      value: formatCurrency(totals.goLivePayment),        sub: '50% billable setup + 1st month MRR',                    color: 'text-blue-400' },
-            { label: 'Contract Value (5 yr)',     value: formatCurrency(totals.contractValue),        sub: 'Setup + 60 months recurring',                           color: 'text-foreground' },
-            { label: 'Dealer Override MRR',       value: `${formatCurrency(totals.dealerMRR)}/mo`,   sub: 'Up to $2.50/unit/mo',                                   color: 'text-violet-400' },
+            {
+              label: 'Setup Fees',
+              value: formatCurrency(totals.discountedSetupTotal),
+              sub: hasDiscount
+                ? `${formatCurrency(totals.billableSetupTotal)} list · ${meta.discount_percent}% off`
+                : `${formatCurrency(totals.billableSetupTotal)} billable`,
+              color: 'text-foreground',
+            },
+            {
+              label: 'GateGuard Direct Monthly',
+              value: `${formatCurrency(totals.monthlyTotal)}/mo`,
+              sub: `Billed to property · ${property.units} units @ $10/unit`,
+              color: 'text-brand-400',
+            },
+            {
+              label: `Deposit at Signing (${meta.deposit_percent || 50}%)`,
+              value: formatCurrency(totals.depositDue),
+              sub: `${meta.deposit_percent || 50}% setup + 1st month`,
+              color: 'text-amber-400',
+            },
+            {
+              label: 'Balance at Launch',
+              value: formatCurrency(totals.goLivePayment),
+              sub: `${100 - (meta.deposit_percent || 50)}% setup + 1st month`,
+              color: 'text-blue-400',
+            },
+            {
+              label: 'Contract Value (5 yr)',
+              value: formatCurrency(totals.contractValue),
+              sub: 'Setup + 60 months recurring',
+              color: 'text-foreground',
+            },
+            {
+              label: 'Dealer Override MRR',
+              value: `${formatCurrency(totals.dealerMRR)}/mo`,
+              sub: 'Up to $2.50/unit/mo',
+              color: 'text-violet-400',
+            },
           ].map(item => (
             <div key={item.label} className="bg-card border border-border rounded-xl p-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">{item.label}</p>
@@ -1473,6 +1553,8 @@ export default function NewQuotePage() {
             </div>
           ))}
         </div>
+
+        {/* Property Summary */}
         <div className="bg-card border border-border rounded-xl p-5 space-y-3">
           <p className="text-sm font-semibold text-foreground">Summary</p>
           <div className="grid grid-cols-2 gap-2 text-sm">
@@ -1481,13 +1563,15 @@ export default function NewQuotePage() {
             <span className="text-muted-foreground">Location</span><span className="text-foreground">{property.city}, {property.state}</span>
             <span className="text-muted-foreground">Access Tier</span><span className="text-foreground">{survey.accessTier === 'tier1_mobile' ? 'Tier 1 — Mobile Pass' : 'Tier 2 — GG Integrated'}</span>
             <span className="text-muted-foreground">Contact</span><span className="text-foreground">{property.contactName || '—'}</span>
+            <span className="text-muted-foreground">Resident Move-In Fee</span><span className="text-foreground">$150 (property bills residents)</span>
           </div>
         </div>
+
         <div className="bg-emerald-400/5 border border-emerald-400/20 rounded-xl p-4 flex gap-3">
           <Check className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-medium text-foreground">Ready to generate proposal</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Creates a draft quote. You can edit before sending to the client.</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Creates a draft quote. You can edit line items, add notes, and send to the client for approval.</p>
           </div>
         </div>
       </div>
