@@ -2,12 +2,8 @@
  * POST /api/aria/research
  *
  * ARIA — Lead Intelligence Engine
- * Takes a natural-language query about multifamily targets and returns:
- *   - Property intelligence (units, class, management company, owner)
- *   - Decision maker discovery (name, email, LinkedIn, phone)
- *   - Intent signals mined from public sources (reviews, Reddit, forums)
- *   - Psychographic profile + buy score
- *   - 3 hyper-personalized email variants with predicted reply rates
+ * Returns property intel, decision maker, intent signals, psychographic profile,
+ * and 3 hyper-personalized email variants with predicted reply rates.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -19,6 +15,53 @@ export const dynamic = 'force-dynamic'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
+/** Aggressively clean a raw string so JSON.parse doesn't choke */
+function safeParseJSON(raw: string): any {
+  // Extract the outermost {...}
+  const start = raw.indexOf('{')
+  const end   = raw.lastIndexOf('}')
+  if (start === -1 || end === -1) throw new Error('No JSON object found in response')
+  let s = raw.slice(start, end + 1)
+
+  // Replace literal newlines / carriage returns / tabs inside JSON string values
+  // Strategy: walk char by char, track whether we're inside a string
+  let result = ''
+  let inString = false
+  let escaped = false
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]
+    if (escaped) {
+      result += ch
+      escaped = false
+      continue
+    }
+    if (ch === '\\' && inString) {
+      result += ch
+      escaped = true
+      continue
+    }
+    if (ch === '"') {
+      inString = !inString
+      result += ch
+      continue
+    }
+    if (inString) {
+      // Replace bare control characters with safe equivalents
+      if (ch === '\n') { result += '\\n'; continue }
+      if (ch === '\r') { result += '\\r'; continue }
+      if (ch === '\t') { result += '\\t'; continue }
+    }
+    result += ch
+  }
+
+  try {
+    return JSON.parse(result)
+  } catch {
+    // Nuclear fallback: strip ALL literal newlines and retry
+    return JSON.parse(result.replace(/\n/g, ' ').replace(/\r/g, ' '))
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { userId } = await auth()
@@ -28,131 +71,135 @@ export async function POST(req: NextRequest) {
     if (!query?.trim()) return NextResponse.json({ error: 'query required' }, { status: 400 })
 
     const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 3000,
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4000,
       system: `You are ARIA, GateGuard's AI marketing intelligence engine for multifamily property sales.
 
-Given a natural-language query, generate realistic property intelligence for outreach campaigns.
-- If the query mentions a SPECIFIC property or address → return 1 deep-dive prospect (mode: "target")
-- If the query is geographic, general, or describes a type of property → return 3 prospects (mode: "prospect")
+CRITICAL JSON RULES — violations will break the parser:
+- Return ONLY a valid JSON object. No prose, no markdown, no code fences.
+- ALL string values must be on ONE line — never use literal newline characters inside a string value.
+- Use \\n (backslash-n) if you need a line break inside a string.
+- Escape any double quotes inside strings with \\".
+- Do not use smart quotes — only straight ASCII double quotes.
 
-Return ONLY valid JSON — no prose, no markdown fences. Schema:
+TARGETING LOGIC:
+- Specific property/address in query → mode: "target", return 1 prospect
+- Geographic area / company / general description → mode: "prospect", return 3 prospects
+
+JSON SCHEMA (follow exactly):
 {
   "mode": "target" | "prospect",
-  "query_interpretation": "string — what you understood the query to mean",
+  "query_interpretation": "one sentence describing what you understood",
   "prospects": [
     {
       "property": {
-        "name": "string — real-sounding apartment community name",
-        "address": "string — full address matching the geographic area",
-        "units": number,
-        "year_built": number (1985-2020),
-        "management_company": "string — realistic PM company name",
-        "owner_entity": "string — realistic LLC name",
-        "property_type": "garden-style" | "mid-rise" | "high-rise" | "townhome",
-        "class": "A+" | "A" | "B+" | "B" | "C+",
-        "occupancy": "string (e.g. '93%')"
+        "name": "Apartment community name",
+        "address": "Full street address, City, ST ZIP",
+        "units": 247,
+        "year_built": 2008,
+        "management_company": "Company Name",
+        "owner_entity": "Owner LLC Name",
+        "property_type": "garden-style",
+        "class": "B+",
+        "occupancy": "93%"
       },
       "decision_maker": {
-        "name": "string — realistic full name",
-        "title": "string — realistic PM title",
-        "company": "string — same as management_company",
-        "linkedin_slug": "string — realistic LinkedIn URL slug (e.g. 'jennifer-walsh-pm-dallas')",
-        "email": "string — realistic work email",
-        "email_confidence": number (65-94),
-        "phone": "string — realistic US phone",
-        "tenure_years": number (0.5-6, one decimal)
+        "name": "Full Name",
+        "title": "Property Manager",
+        "company": "Same as management_company",
+        "linkedin_slug": "firstname-lastname-city",
+        "email": "fname.lname@company.com",
+        "email_confidence": 84,
+        "phone": "(555) 000-0000",
+        "tenure_years": 2.5
       },
       "pain_signals": [
         {
-          "source": "Google Reviews" | "ApartmentList" | "Reddit" | "Apartments.com" | "Yelp" | "BiggerPockets",
-          "date": "string (e.g. 'February 2026')",
-          "signal_type": "gate_access" | "package_theft" | "internet" | "intercom" | "visitor_management" | "mdu_tv",
-          "quote": "string — realistic review excerpt (1-2 sentences, first person, sounds like a real resident or property manager post)",
-          "severity": "high" | "medium" | "low"
+          "source": "Google Reviews",
+          "date": "March 2026",
+          "signal_type": "gate_access",
+          "quote": "One-line resident quote — no line breaks — referencing a real-sounding complaint about the property",
+          "severity": "high"
+        },
+        {
+          "source": "ApartmentList",
+          "date": "January 2026",
+          "signal_type": "visitor_management",
+          "quote": "Another one-line quote from a resident",
+          "severity": "medium"
+        },
+        {
+          "source": "Reddit",
+          "date": "February 2026",
+          "signal_type": "internet",
+          "quote": "One-line post or comment referencing an issue",
+          "severity": "medium"
         }
       ],
       "profile": {
-        "buy_score": number (5.0-9.5, one decimal),
-        "urgency": "critical" | "high" | "medium" | "low",
-        "primary_concern": "string (e.g. 'Resident retention + liability exposure from gate failures')",
-        "current_vendor": "string (e.g. 'DoorKing gates + Comcast Business MDU')",
-        "contract_window": "string (e.g. 'Q3 2026 — estimated 4-6 months out')",
-        "communication_style": "data-driven" | "relationship-first" | "cost-focused" | "tech-forward"
+        "buy_score": 8.2,
+        "urgency": "high",
+        "primary_concern": "Resident retention + liability from gate failures",
+        "current_vendor": "DoorKing gates + Comcast Business MDU",
+        "contract_window": "Q3 2026 — estimated 4-6 months out",
+        "communication_style": "data-driven"
       },
       "email_variants": [
         {
-          "angle": "string (e.g. 'Pain Point', 'Competitive Displacement', 'Revenue Opportunity', 'Lease-Up Advantage', 'ROI Case')",
-          "subject": "string — compelling, personalized, under 58 chars, references their specific situation",
-          "body": "string — 3 paragraphs, 160-200 words total. Para 1: reference a specific pain signal (mention the source). Para 2: how GateGuard solves it (specific, not generic). Para 3: CTA with urgency. NO 'Dear [Name]' — start with their name directly. Sign off as 'Russel Feldman, GateGuard'.",
-          "predicted_reply_rate": number (13-27, integer),
-          "tone": "direct" | "consultative" | "executive"
+          "angle": "Pain Point",
+          "subject": "Subject line under 58 chars referencing their specific issue",
+          "body": "Hi [Name], opening sentence referencing their specific property and a pain signal (cite the source). Second sentence: transition to GateGuard solution. Third sentence: specific result or metric. Fourth sentence: soft CTA — 15-min call this week? Best, Russel Feldman | GateGuard",
+          "predicted_reply_rate": 22,
+          "tone": "direct"
         },
         {
-          "angle": "different angle than first",
-          "subject": "different subject line",
-          "body": "different angle, same personalization standard",
-          "predicted_reply_rate": number (11-24, integer),
-          "tone": "direct" | "consultative" | "executive"
+          "angle": "Revenue Opportunity",
+          "subject": "Different subject line under 58 chars",
+          "body": "Hi [Name], opening referencing the Elevate Model and how their gate install pays them back. Second sentence: specific numbers ($30/unit/yr net). Third sentence: how GateGuard delivers this at no cost to the property. Fourth sentence: CTA. Best, Russel Feldman | GateGuard",
+          "predicted_reply_rate": 18,
+          "tone": "consultative"
         },
         {
-          "angle": "different angle than first two",
-          "subject": "different subject line",
-          "body": "different angle, same personalization standard",
-          "predicted_reply_rate": number (10-22, integer),
-          "tone": "direct" | "consultative" | "executive"
+          "angle": "Competitive Displacement",
+          "subject": "Different subject line under 58 chars",
+          "body": "Hi [Name], opening sentence referencing their current vendor by name and a known pain point with that vendor. Second sentence: contrast with GateGuard's approach. Third sentence: proof point or stat. Fourth sentence: CTA. Best, Russel Feldman | GateGuard",
+          "predicted_reply_rate": 15,
+          "tone": "executive"
         }
       ],
-      "generic_reply_rate": number (1.8-3.2, one decimal)
+      "generic_reply_rate": 2.3
     }
   ]
 }
 
-Pain signals must sound like REAL reviews/posts — gritty, first-person, property-specific. Not generic.
-Email bodies must reference the exact property name, the exact pain signal source, and a specific detail. This is the whole point.
-Make buy scores and urgency realistic — not everything is critical/10.`,
+QUALITY STANDARDS:
+- Property names should sound like real Atlanta/Dallas/Phoenix/Denver communities (e.g. "The Preserve at Sandy Springs", "Avalon Midtown", "Reserve at Legacy Park")
+- Pain signal quotes must sound like real residents wrote them — gritty, specific, first person, under 120 chars
+- Email bodies: replace [Name] with the actual decision_maker.name. Reference the actual property.name. Reference actual pain signals. Keep each email body as ONE continuous string with \\n between paragraphs if needed.
+- Buy scores should be realistic (6.5–9.2 range), not all perfect 10s`,
 
       messages: [{
         role: 'user',
-        content: `Research query: "${query}"
+        content: `ARIA research query: "${query.trim()}"
 
-GateGuard offerings:
-- Access control systems: gate operators, intercoms, readers, cameras
-- Visitor management: GateCard resident kiosk, delivery management
-- DirecTV/AT&T MDU bulk TV + internet packages for apartment communities
-- The Elevate Model: residents pay $150/yr, property nets $30/unit/yr profit
+GateGuard offerings to weave into emails where relevant:
+- Gate operators, access control (Brivo), intercoms, cameras — full stack install
+- Visitor management: GateCard platform — resident app, mobile access, delivery management
+- DirecTV/AT&T MDU bulk TV + internet for whole building
+- The Elevate Model: $10/unit/mo GateGuard cost → $150/yr resident fee → $30/unit/yr net profit for property
+- SARA Bridge: easy migration path from SARA Plus
 
-Generate intelligence now.`
+Return the JSON object now.`
       }]
     })
 
     const raw = message.content[0].type === 'text' ? message.content[0].text : ''
-    const match = raw.match(/\{[\s\S]*\}/)
-    if (!match) throw new Error(`ARIA: no JSON in response: ${raw.slice(0, 200)}`)
+    if (!raw) throw new Error('Empty response from AI')
 
-    // Sanitize: replace literal newlines/tabs inside JSON string values
-    // (Claude sometimes writes real \n in email bodies instead of escaped \\n)
-    let jsonStr = match[0]
-    // Replace unescaped control characters inside JSON strings
-    jsonStr = jsonStr.replace(/[\x00-\x09\x0b\x0c\x0e-\x1f]/g, ' ')
-    // Replace literal newlines that appear inside string values (between quotes)
-    // We do this by collapsing runs of whitespace only within string-value positions
-    jsonStr = jsonStr.replace(/"([^"\\]*(\\.[^"\\]*)*)"/g, (match) =>
-      match.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')
-    )
+    const data = safeParseJSON(raw)
 
-    let data: any
-    try {
-      data = JSON.parse(jsonStr)
-    } catch (parseErr: any) {
-      // Last resort: strip all literal newlines and retry
-      const cleaned = jsonStr.replace(/\n/g, ' ').replace(/\r/g, ' ')
-      data = JSON.parse(cleaned)
-    }
-
-    // Validate basic shape
     if (!Array.isArray(data.prospects) || data.prospects.length === 0) {
-      throw new Error('ARIA: invalid response shape')
+      throw new Error('No prospects in response — try rephrasing your query')
     }
 
     return NextResponse.json(data)
