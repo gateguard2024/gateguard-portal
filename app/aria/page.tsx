@@ -1,16 +1,41 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Cpu, Zap, Users, Radio, Target, Mail,
   Building2, User, MapPin, CheckCircle2,
   ExternalLink, Star, Copy, Send,
   Loader2, Shield, Package, Wifi, AlertCircle,
-  ChevronRight, TrendingUp, Globe,
+  ChevronRight, TrendingUp, Globe, Clock, Download, Trash2, Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+interface SavedSearch {
+  id: string;
+  query: string;
+  query_interpretation: string | null;
+  imported_count: number;
+  imported_at: string | null;
+  expires_at: string;
+  created_at: string;
+  results: {
+    prospects: Array<{
+      property: { name: string; units: number; address: string };
+      decision_maker: { name: string; title: string };
+      profile: { buy_score: number };
+    }>;
+  };
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+interface BulkAgreement {
+  provider: string;
+  service_type: 'internet' | 'video' | 'bundled';
+  agreement_type: 'exclusive' | 'bulk' | 'preferred' | 'unknown';
+  expiry_estimate: string;
+  confidence: 'high' | 'medium' | 'low';
+}
 
 interface Property {
   name: string;
@@ -22,6 +47,11 @@ interface Property {
   property_type: string;
   class: string;
   occupancy: string;
+  isp_providers?: string[];
+  video_providers?: string[];
+  bulk_agreements?: BulkAgreement[];
+  _fcc_verified?: boolean;
+  _fcc_providers?: string[];
 }
 
 interface DecisionMaker {
@@ -73,6 +103,24 @@ interface ResearchResult {
   mode: string;
   query_interpretation: string;
   prospects: Prospect[];
+  fccVerified?: boolean;
+}
+
+interface DeepIntelSource {
+  title: string;
+  url: string;
+  excerpt: string;
+  score: number;
+}
+
+interface DeepIntelResult {
+  isp_providers: string[];
+  video_providers: string[];
+  bulk_agreements: BulkAgreement[];
+  key_finding: string;
+  confidence: 'high' | 'medium' | 'low';
+  atlas_opportunity?: boolean;
+  sources: DeepIntelSource[];
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -80,8 +128,8 @@ interface ResearchResult {
 const PHASES = [
   {
     id: 1, name: "Property Intel", icon: Building2,
-    sources: ["County Assessor", "CoStar", "Google Maps"],
-    detail: "Pulling unit count, ownership, class rating",
+    sources: ["FCC Broadband Map", "County Assessor", "CoStar"],
+    detail: "Unit count, ownership, ISP/video providers, bulk agreements",
   },
   {
     id: 2, name: "Decision Maker", icon: Users,
@@ -190,6 +238,19 @@ function ReplyRateBanner({ variant, generic }: { variant: EmailVariant; generic:
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
+function formatAge(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function daysUntil(iso: string) {
+  return Math.max(0, Math.floor((new Date(iso).getTime() - Date.now()) / 86400000));
+}
+
 export default function ARIAPage() {
   const [query, setQuery]                   = useState("");
   const [phase, setPhase]                   = useState(0); // 0=idle 1-5=animating 6=done
@@ -198,14 +259,60 @@ export default function ARIAPage() {
   const [selectedProspect, setSelectedProspect] = useState(0);
   const [selectedEmail, setSelectedEmail]   = useState(0);
   const [copied, setCopied]                 = useState(false);
+  const [savedSearchId, setSavedSearchId]   = useState<string | null>(null);
+  const [savedSearches, setSavedSearches]   = useState<SavedSearch[]>([]);
+  const [importing, setImporting]           = useState<string | null>(null); // id being imported
+  const [importResult, setImportResult]     = useState<Record<string, { created: number; skipped: number }>>({});
+  const [showHistory, setShowHistory]       = useState(false);
+  const [deepLoading, setDeepLoading]       = useState(false);
+  const [deepIntel, setDeepIntel]           = useState<DeepIntelResult | null>(null);
+  const [deepError, setDeepError]           = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Load saved searches on mount
+  useEffect(() => {
+    fetch('/api/aria/searches')
+      .then(r => r.ok ? r.json() : { searches: [] })
+      .then(d => setSavedSearches(d.searches ?? []))
+      .catch(() => {});
+  }, []);
+
   const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+  async function runDeepIntel(prospect: Prospect) {
+    setDeepLoading(true);
+    setDeepError(null);
+    setDeepIntel(null);
+    try {
+      const addrParts = (prospect.property.address ?? '').split(',').map((s: string) => s.trim());
+      const r = await fetch('/api/aria/research/deep', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          property_name:      prospect.property.name,
+          address:            prospect.property.address,
+          management_company: prospect.property.management_company,
+          city:               addrParts[1] ?? '',
+          state:              addrParts[2]?.split(' ')[1] ?? '',
+        }),
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setDeepIntel(d);
+    } catch (e: any) {
+      setDeepError(e.message || 'Deep intel failed');
+    } finally {
+      setDeepLoading(false);
+    }
+  }
 
   const runARIA = useCallback(async () => {
     if (!query.trim() || phase > 0) return;
     setError(null);
     setResults(null);
+    setSavedSearchId(null);
+    setDeepIntel(null);
+    setDeepError(null);
     setSelectedProspect(0);
     setSelectedEmail(0);
     setPhase(1);
@@ -220,7 +327,6 @@ export default function ARIAPage() {
       try {
         return JSON.parse(text);
       } catch {
-        // Vercel returned a non-JSON error (e.g. 504 timeout HTML)
         throw new Error(`Server error (${r.status}) — ${text.slice(0, 120)}`);
       }
     });
@@ -236,11 +342,38 @@ export default function ARIAPage() {
       if (data.error) throw new Error(data.error);
       setResults(data);
       setPhase(6);
+      if (data.savedSearchId) {
+        setSavedSearchId(data.savedSearchId);
+        // Refresh history
+        fetch('/api/aria/searches')
+          .then(r => r.ok ? r.json() : { searches: [] })
+          .then(d => setSavedSearches(d.searches ?? []))
+          .catch(() => {});
+      }
     } catch (e: any) {
       setError(e.message || "Research failed — check ANTHROPIC_API_KEY and try again");
       setPhase(0);
     }
   }, [query, phase]);
+
+  async function importSearch(id: string) {
+    setImporting(id);
+    try {
+      const r = await fetch(`/api/aria/searches/${id}/import`, { method: 'POST' });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setImportResult(prev => ({ ...prev, [id]: { created: d.created, skipped: d.skipped } }));
+      // Update local saved searches list
+      setSavedSearches(prev => prev.map(s => s.id === id
+        ? { ...s, imported_count: (s.imported_count ?? 0) + d.created, imported_at: new Date().toISOString() }
+        : s
+      ));
+    } catch (e: any) {
+      setImportResult(prev => ({ ...prev, [id]: { created: -1, skipped: 0 } }));
+    } finally {
+      setImporting(null);
+    }
+  }
 
   function copyEmail(subject: string, body: string) {
     navigator.clipboard.writeText(`Subject: ${subject}\n\n${body}`);
@@ -388,6 +521,11 @@ export default function ARIAPage() {
               {isDone && (
                 <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
                   <CheckCircle2 size={9} /> Complete
+                </span>
+              )}
+              {isDone && savedSearchId && (
+                <span className="flex items-center gap-1 text-[10px] font-semibold text-brand-400 bg-brand-400/10 border border-brand-400/20 px-2 py-0.5 rounded-full">
+                  <Clock size={9} /> Saved 30d
                 </span>
               )}
               <div className="flex-1" />
@@ -585,6 +723,167 @@ export default function ARIAPage() {
                         <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Owner Entity</p>
                         <p className="text-[11px] text-gray-500 mt-0.5">{prospect.property.owner_entity}</p>
                       </div>
+                    </div>
+
+                    {/* Connectivity Intel — FCC baseline + Deep Intel */}
+                    <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
+                      {/* Section header + Deep Intel button */}
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Connectivity Intel</p>
+                        {deepIntel ? (
+                          <span className="flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-violet-50 border border-violet-200 text-violet-700">
+                            <CheckCircle2 size={8} /> Deep Research
+                          </span>
+                        ) : prospect.property._fcc_verified ? (
+                          <span className="flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700">
+                            <CheckCircle2 size={8} /> FCC 477
+                          </span>
+                        ) : (
+                          <span className="text-[9px] text-amber-600 font-medium">⚠ AI-estimated</span>
+                        )}
+                        <div className="flex-1" />
+                        {!deepIntel && (
+                          <button
+                            onClick={() => runDeepIntel(prospect)}
+                            disabled={deepLoading}
+                            className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg border transition-all disabled:opacity-50"
+                            style={{
+                              background: deepLoading ? '#F3F4F6' : '#F5F3FF',
+                              borderColor: deepLoading ? '#E5E7EB' : '#DDD6FE',
+                              color: deepLoading ? '#9CA3AF' : '#7C3AED',
+                            }}
+                          >
+                            {deepLoading ? (
+                              <><Loader2 size={9} className="animate-spin" /> Searching...</>
+                            ) : (
+                              <><Globe size={9} /> Deep Intel</>
+                            )}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Deep intel key finding banner */}
+                      {deepIntel?.key_finding && (
+                        <div className={`rounded-lg px-2.5 py-2 border text-[10px] ${
+                          deepIntel.atlas_opportunity
+                            ? 'bg-amber-50 border-amber-200'
+                            : 'bg-violet-50 border-violet-200'
+                        }`}>
+                          {deepIntel.atlas_opportunity && (
+                            <div className="flex items-center gap-1 mb-1">
+                              <span className="text-[9px] font-bold uppercase text-amber-700 bg-amber-200 px-1.5 py-0.5 rounded">🎯 ATLAS OPPORTUNITY</span>
+                            </div>
+                          )}
+                          <p className={deepIntel.atlas_opportunity ? 'text-amber-800' : 'text-violet-800'}>
+                            {deepIntel.key_finding}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Deep intel error */}
+                      {deepError && (
+                        <p className="text-[10px] text-red-500">{deepError}</p>
+                      )}
+
+                      {/* ISP providers — deep intel takes priority over FCC */}
+                      {(() => {
+                        const isps = deepIntel?.isp_providers?.length ? deepIntel.isp_providers : prospect.property.isp_providers;
+                        const isDeep = !!deepIntel?.isp_providers?.length;
+                        const isFCC = !isDeep && prospect.property._fcc_verified;
+                        if (!isps?.length) return null;
+                        return (
+                          <div>
+                            <div className="flex items-center gap-1 mb-1">
+                              <p className="text-[9px] text-gray-400">ISP</p>
+                              <span className={`text-[8px] font-medium ${isDeep ? 'text-violet-600' : isFCC ? 'text-emerald-600' : 'text-gray-400'}`}>
+                                · {isDeep ? 'web-verified' : isFCC ? 'FCC data' : 'AI-estimated'}
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {isps.map((p: string) => (
+                                <span key={p} className={`text-[10px] px-1.5 py-0.5 rounded font-medium border ${
+                                  isDeep ? 'bg-violet-50 text-violet-700 border-violet-200' :
+                                  isFCC  ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                           'bg-blue-50 text-blue-700 border-blue-100'
+                                }`}>{p}</span>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Video providers */}
+                      {(() => {
+                        const vids = deepIntel?.video_providers?.length ? deepIntel.video_providers : prospect.property.video_providers;
+                        if (!vids?.length) return null;
+                        return (
+                          <div>
+                            <p className="text-[9px] text-gray-400 mb-1">Video / TV</p>
+                            <div className="flex flex-wrap gap-1">
+                              {vids.map((p: string) => (
+                                <span key={p} className="text-[10px] bg-violet-50 text-violet-700 border border-violet-100 px-1.5 py-0.5 rounded font-medium">{p}</span>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Bulk agreements — deep intel takes priority */}
+                      {(() => {
+                        const agreements = deepIntel?.bulk_agreements?.length ? deepIntel.bulk_agreements : prospect.property.bulk_agreements;
+                        if (!agreements?.length) return null;
+                        return (
+                          <div className="space-y-1.5">
+                            {agreements.map((a: BulkAgreement & { evidence?: string }, i: number) => (
+                              <div key={i} className={`rounded-lg px-2.5 py-2 border text-[10px] ${
+                                a.agreement_type === 'exclusive' ? 'bg-amber-50 border-amber-200' :
+                                a.agreement_type === 'bulk'      ? 'bg-emerald-50 border-emerald-200' :
+                                                                   'bg-gray-50 border-gray-200'
+                              }`}>
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="font-semibold text-gray-800">{a.provider}</span>
+                                  <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                                    a.agreement_type === 'exclusive' ? 'bg-amber-200 text-amber-800' :
+                                    a.agreement_type === 'bulk'      ? 'bg-emerald-200 text-emerald-800' :
+                                                                       'bg-gray-200 text-gray-600'
+                                  }`}>{a.agreement_type}</span>
+                                </div>
+                                <div className="flex items-center gap-2 mt-0.5 text-gray-500">
+                                  <span className="capitalize">{a.service_type}</span>
+                                  {a.expiry_estimate && a.expiry_estimate !== 'unknown' && (
+                                    <><span>·</span><span className="text-amber-600 font-medium">Expires ~{a.expiry_estimate}</span></>
+                                  )}
+                                  <span className="ml-auto text-[9px] opacity-60">{a.confidence} conf.</span>
+                                </div>
+                                {a.evidence && (
+                                  <p className="mt-1 text-[9px] text-gray-400 italic">"{a.evidence}"</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Tavily sources */}
+                      {deepIntel?.sources && deepIntel.sources.length > 0 && (
+                        <div className="pt-1.5 border-t border-gray-100">
+                          <p className="text-[9px] text-gray-400 mb-1.5">Sources</p>
+                          <div className="space-y-1">
+                            {deepIntel.sources.slice(0, 4).map((s, i) => (
+                              <a
+                                key={i}
+                                href={s.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-start gap-1.5 group"
+                              >
+                                <ExternalLink size={8} className="text-gray-300 group-hover:text-[#6B7EFF] mt-0.5 shrink-0" />
+                                <span className="text-[9px] text-gray-400 group-hover:text-[#6B7EFF] truncate leading-tight">{s.title}</span>
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -811,20 +1110,134 @@ export default function ARIAPage() {
               </div>
             )}
 
-            {/* New search CTA */}
-            <div className="flex justify-center pt-2 pb-4">
+            {/* New search CTA + Import */}
+            <div className="flex items-center justify-center gap-4 pt-2 pb-4">
               <button
                 onClick={() => {
                   setPhase(0);
                   setResults(null);
                   setQuery("");
+                  setSavedSearchId(null);
                   setTimeout(() => inputRef.current?.focus(), 100);
                 }}
                 className="flex items-center gap-2 text-sm text-gray-500 hover:text-[#6B7EFF] transition-colors font-medium"
               >
-                <Zap size={14} /> Run another ARIA search
+                <Zap size={14} /> Run another search
               </button>
+              {savedSearchId && !importResult[savedSearchId] && (
+                <button
+                  onClick={() => importSearch(savedSearchId)}
+                  disabled={importing === savedSearchId}
+                  className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-xl text-white font-semibold transition-all shadow-sm disabled:opacity-60"
+                  style={{ background: "linear-gradient(135deg, #6B7EFF 0%, #3B4FCC 100%)" }}
+                >
+                  {importing === savedSearchId
+                    ? <><Loader2 size={13} className="animate-spin" /> Importing…</>
+                    : <><Download size={13} /> Import to Leads</>}
+                </button>
+              )}
+              {savedSearchId && importResult[savedSearchId] && (
+                <span className={cn(
+                  "flex items-center gap-1.5 text-sm px-4 py-2 rounded-xl font-semibold",
+                  importResult[savedSearchId].created >= 0
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                    : "bg-red-50 text-red-700 border border-red-200"
+                )}>
+                  {importResult[savedSearchId].created >= 0
+                    ? <><Check size={13} /> {importResult[savedSearchId].created} lead{importResult[savedSearchId].created !== 1 ? 's' : ''} imported
+                        {importResult[savedSearchId].skipped > 0 && <span className="opacity-60 ml-1">({importResult[savedSearchId].skipped} skipped)</span>}</>
+                    : <>Import failed</>}
+                </span>
+              )}
             </div>
+          </div>
+        )}
+
+        {/* ── Search History ───────────────────────────────────────────── */}
+        {savedSearches.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <button
+              onClick={() => setShowHistory(h => !h)}
+              className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+            >
+              <div className="flex items-center gap-2.5">
+                <Clock size={14} className="text-[#6B7EFF]" />
+                <span className="text-sm font-semibold text-gray-800">Search History</span>
+                <span className="text-[10px] font-bold bg-[#EEF0FF] text-[#6B7EFF] px-2 py-0.5 rounded-full">
+                  {savedSearches.length} saved · 30 days
+                </span>
+              </div>
+              <ChevronRight size={14} className={cn("text-gray-400 transition-transform", showHistory && "rotate-90")} />
+            </button>
+
+            {showHistory && (
+              <div className="border-t border-gray-100 divide-y divide-gray-50">
+                {savedSearches.map(s => {
+                  const res = importResult[s.id];
+                  const alreadyImported = s.imported_count > 0;
+                  const prospects = s.results?.prospects ?? [];
+                  return (
+                    <div key={s.id} className="px-5 py-3.5 flex items-start gap-4 hover:bg-gray-50/50 transition-colors">
+                      {/* Query + meta */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{s.query}</p>
+                        {s.query_interpretation && (
+                          <p className="text-[11px] text-gray-400 truncate mt-0.5">{s.query_interpretation}</p>
+                        )}
+                        <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                          <span className="text-[10px] text-gray-400">{formatAge(s.created_at)}</span>
+                          <span className="text-[10px] text-gray-300">·</span>
+                          <span className="text-[10px] text-gray-400">{prospects.length} prospect{prospects.length !== 1 ? 's' : ''}</span>
+                          {alreadyImported && (
+                            <>
+                              <span className="text-[10px] text-gray-300">·</span>
+                              <span className="text-[10px] text-emerald-600 font-medium">{s.imported_count} lead{s.imported_count !== 1 ? 's' : ''} imported</span>
+                            </>
+                          )}
+                          <span className="text-[10px] text-gray-300">·</span>
+                          <span className={cn("text-[10px] font-medium", daysUntil(s.expires_at) <= 3 ? "text-amber-500" : "text-gray-400")}>
+                            expires in {daysUntil(s.expires_at)}d
+                          </span>
+                        </div>
+                        {/* Top prospect names */}
+                        {prospects.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {prospects.slice(0, 3).map((p, i) => (
+                              <span key={i} className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
+                                {p.property.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {res ? (
+                          <span className={cn(
+                            "text-[11px] px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1",
+                            res.created >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+                          )}>
+                            {res.created >= 0 ? <><Check size={10} /> {res.created} imported</> : "Error"}
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => importSearch(s.id)}
+                            disabled={importing === s.id}
+                            className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg text-white font-semibold transition-all shadow-sm disabled:opacity-60"
+                            style={{ background: "linear-gradient(135deg, #6B7EFF 0%, #3B4FCC 100%)" }}
+                          >
+                            {importing === s.id
+                              ? <><Loader2 size={10} className="animate-spin" /> Importing…</>
+                              : <><Download size={10} /> Import to Leads</>}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>

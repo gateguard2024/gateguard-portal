@@ -299,6 +299,12 @@ GateGuard is going live. Two parallel Vercel deployments must exist from this po
 - **Master Agent visibility fix**: `/api/admin/dealers` now uses `.in('org_tier', [all 6 partner tiers])` allowlist — previous `.not('org_tier', 'eq', 'corporate')` was silently excluding `master_agent` rows.
 - **Survey Wizard fix**: CRM Import jumps to step 2 after importing a survey (not step 1), carries `opportunity_id`, shows "Survey imported — BOM pre-loaded" banner. API response parsing fixed (`d.records` not `d.opportunities`); search param fixed (`&q=` not `&search=`). CRM Import card moved to top of form.
 - **Quote calculator updates**: Gate Operator Service Plan renamed from "Entry Gate Repair Plan" + amber disclaimer that physical gate structure is NOT covered. Physical Gate Coverage added as separate add-on ($250/gate/month: steel gate, tracks, hinges, rollers, structural). Ramp-Up Plan section added to quote wizard step 4 (30/60/90 day 3-phase toggle + notes field).
+- **Gate Operator Service Plan fix (May 21 2026):**
+  - Gate Operator Service Plan is now INCLUDED in the base plan — not optional, not billable. Removed the toggle from the wizard UI. Line item shows with `billing: 'included'`, `unitPrice: 0`. Description: "operators, wiring & control equipment (Included with base plan)". Always generated when `entryGates > 0`.
+  - Physical Gate Coverage remains the OPTIONAL add-on at $250/gate/month for the iron/steel gate structure (panels, tracks, hinges, rollers). Toggle remains.
+  - Default `entryGates` changed from `1` → `0` in the wizard initial state.
+  - `GateMaintenanceSurvey.enabled` field kept for backwards compat but is now always `true`; no UI toggle.
+  - PRICING NOTE (`types/quote.ts`): Gate Operator Service Plan is included (not a billable add-on). Physical Gate Coverage = $250/gate/month (optional add-on).
 
 ### Pending / Next Up
 - [x] Lead → Opportunity conversion flow (qualify button on lead detail) ✅ Sprint 4

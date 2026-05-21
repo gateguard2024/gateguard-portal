@@ -165,6 +165,7 @@ interface Opportunity {
   monthly_per_unit?: number;
   monthly_total?: number;
   est_mrr?: number;
+  property_address?: string;
   property_city?: string;
   property_state?: string;
   source?: string;
@@ -338,6 +339,7 @@ export default function OpportunityDetailPage() {
     site_contact_name:  "",
     site_contact_email: "",
     site_contact_phone: "",
+    property_address:   "",
     property_city:      "",
     property_state:     "",
     units:              "",
@@ -587,9 +589,10 @@ export default function OpportunityDetailPage() {
       // Pre-fill Create Property form from opp data
       setCreatePropForm(f => ({
         ...f,
-        name:  data.account_name ?? f.name,
-        city:  data.property_city  ?? f.city,
-        state: data.property_state ?? f.state,
+        name:    data.account_name     ?? f.name,
+        address: data.property_address ?? f.address,
+        city:    data.property_city    ?? f.city,
+        state:   data.property_state   ?? f.state,
         units: data.units ? String(data.units) : f.units,
         pm_name:  data.site_contact_name  ?? f.pm_name,
         pm_email: data.site_contact_email ?? f.pm_email,
@@ -927,6 +930,7 @@ export default function OpportunityDetailPage() {
         site_contact_name:  opp.site_contact_name  ?? "",
         site_contact_email: opp.site_contact_email ?? "",
         site_contact_phone: opp.site_contact_phone ?? "",
+        property_address:   opp.property_address ?? "",
         property_city:      opp.property_city  ?? "",
         property_state:     opp.property_state ?? "",
         units:              opp.units ? String(opp.units) : "",
@@ -958,6 +962,7 @@ export default function OpportunityDetailPage() {
           site_contact_name:  editForm.site_contact_name  || undefined,
           site_contact_email: editForm.site_contact_email || undefined,
           site_contact_phone: editForm.site_contact_phone || undefined,
+          property_address:   editForm.property_address   || undefined,
           property_city:      editForm.property_city      || undefined,
           property_state:     editForm.property_state     || undefined,
           units:              editForm.units !== ""       ? Number(editForm.units)  : undefined,
@@ -1201,6 +1206,9 @@ export default function OpportunityDetailPage() {
                   <FieldRow label="Amount"               value={opp.amount != null ? String(opp.amount) : undefined} fieldKey="amount" type="number" onSave={saveField} />
                   <FieldRow label="Description"          value={opp.description}        fieldKey="description"        type="textarea" onSave={saveField} className="col-span-2" />
                   <FieldRow label="Opportunity Owner"    value={opp.owner_name}         fieldKey="owner_name"         onSave={saveField} />
+                  <FieldRow label="Street Address"        value={opp.property_address}   fieldKey="property_address"   onSave={saveField} className="col-span-2" />
+                  <FieldRow label="City"                 value={opp.property_city}      fieldKey="property_city"      onSave={saveField} />
+                  <FieldRow label="State"                value={opp.property_state}     fieldKey="property_state"     onSave={saveField} />
                   <FieldRow label="Site Point of Contact" value={opp.site_contact_name} fieldKey="site_contact_name"  onSave={saveField} />
                   <FieldRow label="Site Phone Number"    value={opp.site_contact_phone} fieldKey="site_contact_phone" type="tel"      onSave={saveField} />
                   <FieldRow label="Site Contact E-Mail"  value={opp.site_contact_email} fieldKey="site_contact_email" type="email"    onSave={saveField} />
@@ -1980,11 +1988,20 @@ export default function OpportunityDetailPage() {
             <div className="border-t border-border mt-3 pt-2.5 space-y-1.5">
 
               <Link
-                href="/tech"
+                href={`/survey?opportunity_id=${id}`}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-accent transition-colors text-sm"
               >
                 <Wrench size={14} className="text-[#6B7EFF]" />
                 <span className="text-foreground">Site Survey</span>
+                <ExternalLink size={11} className="text-muted-foreground ml-auto" />
+              </Link>
+
+              <Link
+                href={`/quotes/new?opportunity_id=${id}`}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-accent transition-colors text-sm"
+              >
+                <FileText size={14} className="text-[#6B7EFF]" />
+                <span className="text-foreground">New Quote</span>
                 <ExternalLink size={11} className="text-muted-foreground ml-auto" />
               </Link>
 
@@ -2576,6 +2593,9 @@ export default function OpportunityDetailPage() {
                   <input type="tel" value={editForm.site_contact_phone} onChange={e => setEditForm({...editForm, site_contact_phone: e.target.value})} className={inputCls} placeholder="(404) 555-1234" />
                 </Field>
               </div>
+              <Field label="Street Address">
+                <input type="text" value={editForm.property_address} onChange={e => setEditForm({...editForm, property_address: e.target.value})} className={inputCls} placeholder="123 Main St" />
+              </Field>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="City">
                   <input type="text" value={editForm.property_city} onChange={e => setEditForm({...editForm, property_city: e.target.value})} className={inputCls} placeholder="Atlanta" />

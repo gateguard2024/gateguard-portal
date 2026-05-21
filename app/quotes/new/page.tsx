@@ -458,10 +458,11 @@ interface OppImportResult {
   units?: number;
 }
 function OppImportButton({ onSelect }: { onSelect: (o: OppImportResult) => void }) {
-  const [open,    setOpen]    = React.useState(false)
-  const [q,       setQ]       = React.useState('')
-  const [results, setResults] = React.useState<OppImportResult[]>([])
-  const [loading, setLoading] = React.useState(false)
+  const [open,        setOpen]        = React.useState(false)
+  const [q,           setQ]           = React.useState('')
+  const [results,     setResults]     = React.useState<OppImportResult[]>([])
+  const [loading,     setLoading]     = React.useState(false)
+  const [selecting,   setSelecting]   = React.useState<string | null>(null)
 
   React.useEffect(() => {
     if (!open) return
@@ -515,8 +516,28 @@ function OppImportButton({ onSelect }: { onSelect: (o: OppImportResult) => void 
               <button
                 key={o.id}
                 type="button"
-                onClick={() => { onSelect(o); setOpen(false); setQ('') }}
-                className="w-full text-left px-3 py-2 text-xs hover:bg-muted transition-colors"
+                onClick={async () => {
+                  setSelecting(o.id)
+                  try {
+                    const detailed = await fetch(`/api/crm/opportunities/${o.id}`).then(r => r.json())
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const primaryContact = (detailed.contacts ?? []).find((c: any) => c.is_primary) ?? (detailed.contacts ?? [])[0] ?? null
+                    onSelect({
+                      ...o,
+                      contact_name:  primaryContact?.name  ?? o.contact_name,
+                      contact_email: primaryContact?.email ?? o.contact_email,
+                      contact_phone: primaryContact?.phone ?? o.contact_phone,
+                    })
+                  } catch {
+                    onSelect(o)
+                  } finally {
+                    setSelecting(null)
+                    setOpen(false)
+                    setQ('')
+                  }
+                }}
+                disabled={selecting === o.id}
+                className="w-full text-left px-3 py-2 text-xs hover:bg-muted transition-colors disabled:opacity-50"
               >
                 <p className="font-medium text-foreground truncate">{o.property_name || 'Unnamed'}</p>
                 {o.property_address && <p className="text-muted-foreground truncate text-[10px]">{o.property_address}</p>}
@@ -613,6 +634,40 @@ export default function NewQuotePage() {
       .catch(() => {})
   }, [prefilledClientOrgId])
 
+  // Auto-populate from opportunity when coming from opportunity detail page (?opportunity_id=)
+  const prefilledOppRef = useRef(false)
+  useEffect(() => {
+    if (!prefilledOpportunityId || prefilledOppRef.current) return
+    prefilledOppRef.current = true
+    fetch(`/api/crm/opportunities/${prefilledOpportunityId}`)
+      .then(r => r.ok ? r.json() : null)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .then((opp: any) => {
+        if (!opp) return
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const primaryContact = (opp.contacts ?? []).find((c: any) => c.is_primary) ?? (opp.contacts ?? [])[0] ?? null
+        setMeta(m => ({
+          ...m,
+          opportunity_id:   prefilledOpportunityId,
+          client_name:      primaryContact?.name  ?? m.client_name,
+          client_email:     primaryContact?.email ?? m.client_email,
+          client_phone:     primaryContact?.phone ?? m.client_phone,
+          property_name:    opp.account_name      ?? m.property_name,
+          property_address: opp.property_address  ?? m.property_address,
+        }))
+        setProperty(p => ({
+          ...p,
+          name:         opp.account_name     ?? p.name,
+          address:      opp.property_address ?? p.address,
+          units:        opp.units            ?? p.units,
+          contactName:  primaryContact?.name  ?? p.contactName,
+          contactEmail: primaryContact?.email ?? p.contactEmail,
+          contactPhone: primaryContact?.phone ?? p.contactPhone,
+        }))
+      })
+      .catch(() => {})
+  }, [prefilledOpportunityId])
+
   const setM = (patch: Partial<QuoteMeta>) => setMeta(m => ({ ...m, ...patch }));
   const setProp = (key: keyof QuoteProperty) => (val: string) =>
     setProperty(p => ({ ...p, [key]: key === 'units' ? parseInt(val) || 0 : val }));
@@ -684,6 +739,22 @@ export default function NewQuotePage() {
         });
       }
 
+      // Write contact back to opportunity (fire-and-forget)
+      if (meta.opportunity_id && property.contactName) {
+        void fetch(`/api/crm/opportunities/${meta.opportunity_id}/contacts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name:      property.contactName,
+            email:     property.contactEmail || undefined,
+            phone:     property.contactPhone || undefined,
+            title:     property.propertyManager || undefined,
+            role:      'Property Contact',
+            is_primary: true,
+          }),
+        }).catch(() => {})
+      }
+
       router.push(`/quotes/${quote.id}`);
     } catch {
       setLiSaving(false);
@@ -734,6 +805,22 @@ export default function NewQuotePage() {
             is_included:  true,
           }),
         });
+      }
+
+      // Write contact back to opportunity (fire-and-forget)
+      if (meta.opportunity_id && property.contactName) {
+        void fetch(`/api/crm/opportunities/${meta.opportunity_id}/contacts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name:      property.contactName,
+            email:     property.contactEmail || undefined,
+            phone:     property.contactPhone || undefined,
+            title:     property.propertyManager || undefined,
+            role:      'Property Contact',
+            is_primary: true,
+          }),
+        }).catch(() => {})
       }
 
       router.push(`/quotes/${quote.id}`);
