@@ -15,6 +15,12 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     supabase.from('crm_activities').select('*').eq('opportunity_id', params.id).order('created_at', { ascending: false }).limit(20),
   ])
   if (opp.error) return NextResponse.json({ error: opp.error.message }, { status: 404 })
+
+  // Log any secondary query errors so they surface in Vercel logs
+  if (contacts.error) console.error('[opp GET] contacts query error:', contacts.error.message)
+  if (history.error)  console.error('[opp GET] stage_history query error:', history.error.message)
+  if (activities.error) console.error('[opp GET] activities query error:', activities.error.message)
+
   // Normalize DB field names to UI field names
   const data = opp.data as Record<string, unknown>
   return NextResponse.json({

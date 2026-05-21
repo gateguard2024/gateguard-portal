@@ -34,6 +34,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { clerkClient } from '@clerk/nextjs/server'
 import { getCurrentUser, OrgTier, PortalRole } from '@/lib/current-user'
+import { sendEmail } from '@/lib/email-sender'
+import { generateNdaEmail, generateAgreementEmail } from '@/lib/email-templates'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -53,6 +55,16 @@ const TIER_LABELS: Record<string, string> = {
   service_dealer:     'Service Dealer',
   install_contractor: 'Install Contractor',
   sales_partner:      'Sales Partner',
+}
+
+/** Maps org_tier → { ndaType, agreementType } for automatic document dispatch */
+const TIER_DOC_MAP: Record<string, { ndaType: 'A' | 'B' | 'C'; agreementType: string }> = {
+  master_agent:       { ndaType: 'A', agreementType: 'Master Agent Agreement'    },
+  master_dealer:      { ndaType: 'A', agreementType: 'MSO Agreement'             },
+  full_dealer:        { ndaType: 'B', agreementType: 'Dealer Agreement'          },
+  service_dealer:     { ndaType: 'B', agreementType: 'Service Partner Agreement' },
+  install_contractor: { ndaType: 'B', agreementType: 'Install Partner Agreement' },
+  sales_partner:      { ndaType: 'C', agreementType: 'Sales Partner Agreement'   },
 }
 
 export async function POST(req: NextRequest) {
@@ -192,12 +204,59 @@ export async function POST(req: NextRequest) {
     ip_address: req.headers.get('x-forwarded-for') ?? null,
   })
 
+  // ── Step 4: Fire-and-forget NDA + Agreement emails ─────────────────
+  // Non-blocking — dealer creation is not affected if email delivery fails.
+  const docConfig = TIER_DOC_MAP[org_tier]
+  let docs_sent = false
+  if (docConfig && admin_email) {
+    const recipientName = `${admin_first_name.trim()} ${admin_last_name.trim()}`
+    const senderName = 'Russel Feldman'
+    const ndaUrl = `https://portal.gateguard.co/sign/nda?dealer=${encodeURIComponent(org.id)}`
+    const agreementUrl = `https://portal.gateguard.co/sign/agreement?dealer=${encodeURIComponent(org.id)}`
+
+    void (async () => {
+      try {
+        await sendEmail({
+          to: admin_email,
+          subject: `Action Required: NDA-${docConfig.ndaType} for ${org_name.trim()}`,
+          html: generateNdaEmail({
+            recipientName,
+            orgName: org_name.trim(),
+            ndaType: docConfig.ndaType,
+            signUrl: ndaUrl,
+            senderName,
+          }),
+          replyTo: 'rfeldman@gateguard.co',
+        })
+        await sendEmail({
+          to: admin_email,
+          subject: `Action Required: ${docConfig.agreementType} for ${org_name.trim()}`,
+          html: generateAgreementEmail({
+            recipientName,
+            orgName: org_name.trim(),
+            agreementType: docConfig.agreementType,
+            signUrl: agreementUrl,
+            senderName,
+          }),
+          replyTo: 'rfeldman@gateguard.co',
+        })
+      } catch (emailErr) {
+        console.error('[onboard-dealer] Doc email send error:', emailErr)
+      }
+    })()
+    docs_sent = true
+  }
+
   return NextResponse.json({
     ok:            true,
     org,
     clerk_user_id,
     invite_status,
     admin_email,
+    docs_sent,
+    docs_note: docs_sent
+      ? `NDA-${docConfig?.ndaType} and ${docConfig?.agreementType} queued for ${admin_email}`
+      : 'No document emails sent (tier not mapped)',
     message: invite_status === 'invited'
       ? `Invite sent to ${admin_email}. Their portal access will activate when they accept.`
       : invite_status === 'existing_user'
@@ -220,8 +279,8 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from('organizations')
-    .select('id, name, org_tier, tier_label, parent_org_id, license_number, service_area_states, tech_count, onboarded_at, created_at')
-    .not('org_tier', 'eq', 'corporate')
+    .select('id, name, org_tier, tier_label, parent_org_id, license_number, service_area_states, tech_count, onboarded_at, created_at, is_active, onboarding_complete, contact_name, contact_email, contact_phone, partner_docs')
+    .in('org_tier', ['master_agent', 'master_dealer', 'full_dealer', 'service_dealer', 'install_contractor', 'sales_partner'])
     .order('onboarded_at', { ascending: false, nullsFirst: false })
 
   if (tier)   query = query.eq('org_tier', tier)

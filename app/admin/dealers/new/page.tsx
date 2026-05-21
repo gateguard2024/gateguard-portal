@@ -516,6 +516,18 @@ export default function NewDealerPage() {
             )}
           </div>
 
+          {result.docs_sent && (
+            <div className="bg-indigo-50 border border-indigo-200 text-indigo-800 rounded-xl p-4 text-sm text-left mb-4">
+              <div className="flex items-start gap-2">
+                <Mail size={15} className="mt-0.5 shrink-0 text-indigo-500" />
+                <div>
+                  <p className="font-semibold">NDA &amp; Agreement sent</p>
+                  <p className="mt-0.5 text-xs text-indigo-600">{result.docs_note}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {result.clerk_error && (
             <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-4 text-sm text-left mb-6">
               <div className="flex items-start gap-2">

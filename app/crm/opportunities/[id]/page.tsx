@@ -387,6 +387,7 @@ export default function OpportunityDetailPage() {
   const [showAddContact, setShowAddContact] = useState(false);
   const [contactForm, setContactForm] = useState({ name: "", title: "", phone: "", email: "", role: "" });
   const [savingContact, setSavingContact] = useState(false);
+  const [contactError, setContactError] = useState<string | null>(null);
 
   // Activity forms state
   const [callForm, setCallForm] = useState({ subject: "", outcome: "Connected", duration: "", notes: "" });
@@ -870,17 +871,42 @@ export default function OpportunityDetailPage() {
   const saveContact = async () => {
     if (!contactForm.name.trim()) return;
     setSavingContact(true);
+    setContactError(null);
     try {
-      await fetch(`/api/crm/opportunities/${id}/contacts`, {
+      const res = await fetch(`/api/crm/opportunities/${id}/contacts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(contactForm),
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        setContactError(err.error ?? `Failed to save contact (${res.status})`);
+        return;
+      }
       await fetchOpp();
       setShowAddContact(false);
       setContactForm({ name: "", title: "", phone: "", email: "", role: "" });
+    } catch (err: any) {
+      setContactError(err.message ?? "Network error saving contact");
     } finally {
       setSavingContact(false);
+    }
+  };
+
+  const deleteContact = async (contactId: string) => {
+    try {
+      const res = await fetch(
+        `/api/crm/opportunities/${id}/contacts?contactId=${contactId}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        setContactError(err.error ?? "Failed to delete contact");
+        return;
+      }
+      await fetchOpp();
+    } catch (err: any) {
+      setContactError(err.message ?? "Network error deleting contact");
     }
   };
 
@@ -1562,7 +1588,7 @@ export default function OpportunityDetailPage() {
 
             {showAddContact && (
               <div className="mb-4 p-3 bg-slate-50 rounded-lg border border-border space-y-2">
-                <input type="text" placeholder="Full Name *" value={contactForm.name} onChange={e => setContactForm({...contactForm, name: e.target.value})} className={cn(inputCls, "text-xs py-1.5")} />
+                <input type="text" placeholder="Full Name *" value={contactForm.name} onChange={e => { setContactForm({...contactForm, name: e.target.value}); setContactError(null); }} className={cn(inputCls, "text-xs py-1.5")} />
                 <input type="text" placeholder="Title" value={contactForm.title} onChange={e => setContactForm({...contactForm, title: e.target.value})} className={cn(inputCls, "text-xs py-1.5")} />
                 <input type="tel" placeholder="Phone" value={contactForm.phone} onChange={e => setContactForm({...contactForm, phone: e.target.value})} className={cn(inputCls, "text-xs py-1.5")} />
                 <input type="email" placeholder="Email" value={contactForm.email} onChange={e => setContactForm({...contactForm, email: e.target.value})} className={cn(inputCls, "text-xs py-1.5")} />
@@ -1574,6 +1600,9 @@ export default function OpportunityDetailPage() {
                   <option>Maintenance</option>
                   <option>Other</option>
                 </select>
+                {contactError && (
+                  <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{contactError}</p>
+                )}
                 <button
                   onClick={saveContact}
                   disabled={savingContact || !contactForm.name.trim()}
@@ -1589,19 +1618,28 @@ export default function OpportunityDetailPage() {
             ) : (
               <div className="space-y-2">
                 {(opp.contacts ?? []).map((c) => (
-                  <div key={c.id} className="flex items-start gap-2">
+                  <div key={c.id} className="flex items-start gap-2 group">
                     <div className="w-8 h-8 rounded-full bg-slate-100 border border-border flex items-center justify-center text-xs font-bold text-slate-600 flex-shrink-0">
                       {(c.name ?? "?").slice(0, 2).toUpperCase()}
                     </div>
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-foreground truncate">{c.name}</p>
                       {c.title && <p className="text-xs text-muted-foreground truncate">{c.title}</p>}
+                      {c.email && <p className="text-xs text-muted-foreground truncate">{c.email}</p>}
+                      {c.phone && <p className="text-xs text-muted-foreground truncate">{c.phone}</p>}
                       {c.role && (
                         <span className="inline-block text-[10px] bg-[#6B7EFF]/10 text-[#6B7EFF] px-1.5 py-0.5 rounded-full mt-0.5">
                           {c.role}
                         </span>
                       )}
                     </div>
+                    <button
+                      onClick={() => deleteContact(c.id)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-500 p-1 flex-shrink-0"
+                      title="Remove contact"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 ))}
               </div>

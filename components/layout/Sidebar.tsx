@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, Users, Camera, Shield, FileText,
   Wrench, CreditCard, Settings, ChevronRight, ChevronDown,
-  Radio, MessageSquare, BarChart3,
+  Radio, MessageSquare, BarChart3, Bell, Phone, Calendar,
   Network, Truck, Package, Repeat, TrendingUp,
   Globe, ClipboardList, Headphones, FileCheck,
   Megaphone, Map, BookOpen, Tv, Zap,
@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 // Icons not in type declarations for lucide-react 0.383.0 but available at runtime
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays } = require("lucide-react") as any;
+const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, AlertCircle } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useUser, useClerk, useSession } from "@clerk/nextjs";
@@ -57,6 +57,15 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    key: "alerts",
+    label: "Alerts",
+    icon: Bell,
+    directLink: true,
+    items: [
+      { label: "Alerts", href: "/alerts", icon: Bell, description: "Gate events, permit expirations, overdue WOs, and new leads" },
+    ],
+  },
+  {
     key: "operations",
     label: "Operations",
     icon: ClipboardList,
@@ -71,6 +80,9 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Renewals",     href: "/renewals",    icon: Repeat,          description: "Contract renewals and alerts" },
       { label: "Revenue",      href: "/revenue",     icon: TrendingUp,      description: "MRR/ARR and commission overview" },
       { label: "Contracts",    href: "/contracts",   icon: FileCheck,       description: "Contract storage" },
+      { label: "Events",       href: "/events",      icon: Calendar,        description: "Property inspections, dealer training days, installs" },
+      { label: "Incidents",    href: "/incidents",   icon: AlertOctagon,    description: "Gate failures, security events, equipment issues" },
+      { label: "Analytics",    href: "/analytics",   icon: BarChart3Icon,   description: "MRR trends, property health, tech performance" },
     ],
   },
   {
@@ -86,6 +98,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Dispatch",       href: "/dispatch",    icon: Truck,          description: "Tech scheduling and job board" },
       { label: "Inventory",      href: "/inventory",   icon: Package,        description: "Parts, stock, and POs" },
       { label: "Site Survey",    href: "/survey",      icon: ClipboardCheck, description: "Site walk and proposal builder" },
+      { label: "Documents",      href: "/documents",   icon: FolderOpen,     description: "Agreements, NDAs, permits, certificates, manuals" },
       { label: "Reports",        href: "/reports",     icon: BarChart3,      description: "Multi-site rollup and analytics" },
     ],
   },
@@ -122,6 +135,7 @@ const NAV_SECTIONS: NavSection[] = [
     color: "#6B7EFF",
     items: [
       { label: "ARIA — Lead Intel",      href: "/aria",     icon: Crosshair,     description: "AI-powered outreach and lead research", badge: "AI" },
+      { label: "TRINITY — Voice AI",     href: "/trinity",  icon: Phone,         description: "Inbound/outbound voice agent with call analytics", badge: "AI" },
       { label: "DirecTV / ATLAS",        href: "/directv",  icon: Satellite,     description: "DirecTV channel dashboard and orders" },
       { label: "New Order",              href: "/orders/new", icon: Zap,          description: "Submit a DirecTV order" },
       { label: "SARA Bridge",            href: "/migrate",  icon: ArrowRightLeft,description: "Migrate from SARA Plus to Nexus" },
@@ -164,7 +178,7 @@ const integrations = [
 
 const aiAgents = [
   { name: "ARIA",    role: "Lead Intel",    color: "#6B7EFF", active: true,  href: "/aria" },
-  { name: "TRINITY", role: "Voice",         color: "#0B7285", active: true,  href: null },
+  { name: "TRINITY", role: "Voice",         color: "#0B7285", active: true,  href: "/trinity" },
   { name: "SCOUT",   role: "Market",        color: "#7C3AED", active: true,  href: null },
   { name: "BEACON",  role: "Client Comms",  color: "#B45309", active: false, href: null },
   { name: "FORGE",   role: "Quote Builder", color: "#0B7285", active: true,  href: null },
