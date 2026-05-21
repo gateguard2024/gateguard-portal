@@ -145,17 +145,18 @@ export function calculateLineItems(survey: SiteSurvey, property: QuoteProperty):
     items.push({ id: makeId(), description: 'LPR Camera Monitoring & Analytics', qty: lprQty, unitPrice: PRICING.cameras.lprMonthly, total: PRICING.cameras.lprMonthly * lprQty, recurring: true, period: 'monthly', billing: 'billable', editable: true });
   }
 
-  // ── Gate Operator Service Plan ────────────────────────────────────────────
-  // Covers operators, wiring & control equipment — NOT the physical gate structure
+  // ── Gate Operator Service Plan ─────────────────────────────────────────────
+  // INCLUDED in base GateGuard plan — operators, wiring & control equipment only.
+  // Not billable. Shown on quote to set expectations.
+  // The physical iron/steel gate itself is NOT covered — see Physical Gate Coverage below.
   const gm = survey.addOns.gateMaintenance;
-  if (gm.enabled) {
+  if (gm.entryGates > 0) {
+    // One-time initial repair (if gates need pre-service work before plan starts)
     if (gm.initialRepairCost > 0) {
       items.push({ id: makeId(), description: 'Gate Operator Initial Service' + (gm.initialRepairBilling === 'included' ? ' (Included)' : ''), qty: 1, unitPrice: gm.initialRepairBilling === 'billable' ? gm.initialRepairCost : 0, total: gm.initialRepairBilling === 'billable' ? gm.initialRepairCost : 0, recurring: false, billing: gm.initialRepairBilling, editable: true });
     }
-    if (gm.entryGates > 0) {
-      const maintMonthly = PRICING.addOns.gateMaintenancePerGate * gm.entryGates;
-      items.push({ id: makeId(), description: `Gate Operator Service Plan — ${gm.entryGates} gate${gm.entryGates > 1 ? 's' : ''} · operators, wiring & controls only`, qty: gm.entryGates, unitPrice: PRICING.addOns.gateMaintenancePerGate, total: maintMonthly, recurring: true, period: 'monthly', billing: 'billable', editable: true });
-    }
+    // Ongoing operator service plan — INCLUDED at $0/mo (part of base plan)
+    items.push({ id: makeId(), description: `Gate Operator Service Plan — ${gm.entryGates} gate${gm.entryGates > 1 ? 's' : ''} · operators, wiring & control equipment (Included with base plan)`, qty: gm.entryGates, unitPrice: 0, total: 0, recurring: true, period: 'monthly', billing: 'included', editable: false });
   }
 
   // ── Physical Gate Structure Coverage (optional add-on) ─────────────────────

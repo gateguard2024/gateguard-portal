@@ -289,6 +289,16 @@ GateGuard is going live. Two parallel Vercel deployments must exist from this po
 - `/reps/[id]` — Rep detail page: 30/60/90d pipeline breakdown, deal history, commission timeline
 - `/compliance` — Permit detail SlideOver with edit mode, document attachments (Supabase Storage), renewal reminders cron (daily at 9am via Resend `/api/cron/permit-reminders`), per-site filtering
 - `/map` — Real Mapbox GL JS v3.3.0 integration: live sites data, geocoded property pins, health-colored markers (green/amber/red) with popups, sidebar panel synced to live Supabase data
+- **Most recent session additions (May 21 2026):**
+- `/trinity` — Full TRINITY voice AI dashboard: live call feed, call history table, sentiment scores + labels, outcome tracking. Dark two-tone UI matching /tech. Backed by `trinity_calls` Supabase table (migration 062).
+- `/events`, `/incidents`, `/documents`, `/analytics`, `/alerts` — polished placeholder pages with demo data, all added to Sidebar under Operations.
+- `lib/email-templates.ts` + `lib/email-sender.ts` — 7 HTML transactional email templates + safe Resend wrapper. Dark navy `#0B1728` header, `#6B7EFF` CTA. Used by dealer onboarding send-docs flow.
+- `/api/admin/dealers/send-docs` — auto-fires NDA + Agreement emails on new dealer creation with tier-appropriate doc selection.
+- **CRM bug fixes**: opportunity contacts now persist (RLS fixed via migration 063 on `opportunity_contacts` + `opportunity_stage_history`); `saveContact()` checks `res.ok` + shows error banner; `deleteContact()` added; contact cards show email/phone with hover × delete button.
+- **Google Calendar OAuth fix**: callback now writes to dedicated `gcal_refresh_token`, `gcal_connected_at`, `gcal_last_synced_at` columns on `user_settings` (migration 053) instead of broken key/value pattern.
+- **Master Agent visibility fix**: `/api/admin/dealers` now uses `.in('org_tier', [all 6 partner tiers])` allowlist — previous `.not('org_tier', 'eq', 'corporate')` was silently excluding `master_agent` rows.
+- **Survey Wizard fix**: CRM Import jumps to step 2 after importing a survey (not step 1), carries `opportunity_id`, shows "Survey imported — BOM pre-loaded" banner. API response parsing fixed (`d.records` not `d.opportunities`); search param fixed (`&q=` not `&search=`). CRM Import card moved to top of form.
+- **Quote calculator updates**: Gate Operator Service Plan renamed from "Entry Gate Repair Plan" + amber disclaimer that physical gate structure is NOT covered. Physical Gate Coverage added as separate add-on ($250/gate/month: steel gate, tracks, hinges, rollers, structural). Ramp-Up Plan section added to quote wizard step 4 (30/60/90 day 3-phase toggle + notes field).
 
 ### Pending / Next Up
 - [x] Lead → Opportunity conversion flow (qualify button on lead detail) ✅ Sprint 4
@@ -384,6 +394,20 @@ Run on beta first, verify site billing tab in `/sites/[id]`, then prod.
 `documents jsonb` (array of {name, url, uploaded_at}), `inspector_name text`, `inspection_date date`,
 `jurisdiction text`, `notes text`, `reminder_sent_at timestamptz`
 Run on beta first, verify permit detail SlideOver + document upload in `/compliance`, then prod.
+
+### Migration 062 — TRINITY calls table
+`supabase/migrations/062_trinity.sql` creates the `trinity_calls` table:
+- `id uuid PK`, `call_sid text` (Twilio SID), `direction text` (inbound|outbound), `from_number text`, `to_number text`
+- `duration_sec integer`, `status text`, `transcript text`, `sentiment_score numeric`, `sentiment_label text`
+- `outcome text`, `agent_name text`, `dealer_org_id uuid`, `property_name text`, `call_notes text`
+- `created_at timestamptz`; RLS enabled + `service_role_all` policy
+Run on beta first, verify `/trinity` page + `/api/trinity/calls`, then prod.
+
+### Migration 063 — opportunity contacts + stage history RLS
+`supabase/migrations/063_opportunity_contacts_rls.sql` enables RLS + adds `service_role_all` policy on:
+- `opportunity_contacts` table (created in migration 008 without RLS policies — was causing silent insert failures)
+- `opportunity_stage_history` table (same issue — created in migration 008)
+Run on beta first, verify contact saves on `/crm/opportunities/[id]`, then prod.
 
 ### ⚠️ Known Build Gotchas (Vercel)
 
@@ -528,7 +552,8 @@ Two recurring line item types per property:
 - Resend — transactional email (WO notifications, CRM email send/track, dealer welcome emails, permit renewal reminders). Env: `RESEND_API_KEY`
 - Plaud API — voice recording transcription for /tech site survey. Env: `PLAUD_CLIENT_ID`, `PLAUD_SECRET_KEY`. Register: platform.plaud.ai/developer
 - Eagle Eye Networks API — live camera feeds, motion search, archive (`/cameras`)
-- Twilio — SMS notifications (planned: renewal reminders, WO alerts)
+- Twilio — SMS notifications (planned: renewal reminders, WO alerts) + TRINITY voice calls (inbound/outbound). Env: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`
+- ElevenLabs — TTS voice synthesis for TRINITY (optional). Env: `ELEVENLABS_API_KEY`
 - Stripe — invoice payment links for customer billing (ACH + cards). Env: `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_APP_URL`
 - QuickBooks Online — outbound invoice sync only (portal → QB, never QB → portal). Env: `QBO_CLIENT_ID`, `QBO_CLIENT_SECRET`, `QBO_REALM_ID`, `QBO_ACCESS_TOKEN`
 
@@ -556,6 +581,13 @@ Two recurring line item types per property:
 - `/revenue` — MRR trends, ARR, commission dashboard
 - `/contracts` — Contract storage
 
+### Operations
+- `/events` — Property event log (polished placeholder with demo data)
+- `/incidents` — Incident tracker (polished placeholder with demo data)
+- `/analytics` — Analytics dashboard (polished placeholder with demo data)
+- `/documents` — Document library (polished placeholder with demo data)
+- `/alerts` — Alert center (polished placeholder with demo data)
+
 ### Field Service
 - `/maintenance` — Work orders: open, in-progress, scheduled, completed
 - `/dispatch` — Job dispatch board, tech roster
@@ -576,6 +608,7 @@ Two recurring line item types per property:
 ### Platform & Tools
 - `/kb` — AI diagnostic engine (vector search + Claude)
 - `/tech` — Field diagnostic tool v4 (see /tech section below)
+- `/trinity` — TRINITY voice AI dashboard: live call monitoring, call history, sentiment scores, outcome tracking. Dark two-tone UI matching /tech.
 - `/portal` — Customer portal (property manager read-only)
 - `/survey` — Site survey tool (DVI enhancement planned)
 - `/onboarding` — Customer onboarding
@@ -607,6 +640,10 @@ Two recurring line item types per property:
 - `POST /api/kb/analyze-image` — Claude vision analysis of tech photos
 - `GET  /api/kb/products` — product list for /tech (auth: x-tech-code header)
 - `GET  /api/sync/residents` — LEGACY: Brivo → DB → UniFi sync. **New sync work belongs in gatecard.co, not here.**
+- `POST /api/admin/dealers/send-docs` — auto-send NDA + Agreement emails on new dealer creation. Tier→doc mapping: master_agent/master_dealer → NDA-A, full_dealer/service_dealer/install_contractor → NDA-B, sales_partner → NDA-C.
+- `POST /api/trinity/webhook` — Twilio call status callback + Claude sentiment analysis
+- `POST /api/trinity/initiate` — initiate outbound TRINITY call
+- `GET  /api/trinity/calls` — last 50 calls from `trinity_calls` table
 
 ---
 
@@ -715,6 +752,10 @@ Note: `/reps`, `/compliance`, `/scorecard`, `/map`, `/reports` are placeholder U
 - `QBO_CLIENT_SECRET` — QuickBooks Online OAuth client secret
 - `QBO_REALM_ID` — QuickBooks Online company ID
 - `QBO_ACCESS_TOKEN` — QuickBooks Online OAuth access token
+- `TWILIO_ACCOUNT_SID` — Twilio account SID for TRINITY voice calls
+- `TWILIO_AUTH_TOKEN` — Twilio auth token
+- `TWILIO_FROM_NUMBER` — Twilio phone number for outbound calls
+- `ELEVENLABS_API_KEY` — ElevenLabs TTS for TRINITY voice (optional)
 
 ---
 
@@ -759,13 +800,33 @@ Note: `/reps`, `/compliance`, `/scorecard`, `/map`, `/reports` are placeholder U
 ### Portal pages
 | File | Purpose |
 |------|---------|
-| `components/layout/Sidebar.tsx` | Navigation. Add new routes here. |
+| `components/layout/Sidebar.tsx` | Navigation. Add new routes here. Events/Incidents/Analytics/Documents/Alerts added under Operations. TRINITY link points to `/trinity`. |
 | `app/reps/page.tsx` | Rep hierarchy + commission tracker (placeholder data) |
 | `app/compliance/page.tsx` | Permit tracker (placeholder data) |
 | `app/map/page.tsx` | Territory map (placeholder, needs Mapbox) |
 | `app/scorecard/page.tsx` | Dealer scorecard (placeholder data) |
 | `app/reports/page.tsx` | Roll-up reports (placeholder data) |
 | `app/revenue/page.tsx` | MRR/ARR dashboard (placeholder data) |
+| `app/events/page.tsx` | Polished placeholder page with demo events data |
+| `app/incidents/page.tsx` | Polished placeholder page with demo incidents data |
+| `app/documents/page.tsx` | Polished placeholder page with demo documents data |
+| `app/analytics/page.tsx` | Polished placeholder page with demo analytics data |
+| `app/alerts/page.tsx` | Polished placeholder page with demo alerts data |
+| `app/trinity/page.tsx` | Full TRINITY voice AI dashboard — dark two-tone style matching /tech. Shows live calls, call history, sentiment scores, outcome tracking. |
+
+### Email + Dealer Onboarding
+| File | Purpose |
+|------|---------|
+| `lib/email-templates.ts` | 7 HTML email generator functions: dealer welcome, NDA, agreement, work order, quote approval, permit renewal, invoice. Dark navy `#0B1728` header, `#6B7EFF` CTA button. |
+| `lib/email-sender.ts` | `sendEmail()` utility wrapping Resend — never throws, safe fire-and-forget. |
+| `app/api/admin/dealers/send-docs/route.ts` | POST → auto-sends NDA + Agreement emails when a new dealer is created. Tier→doc mapping: master_agent/master_dealer → NDA-A, full_dealer/service_dealer/install_contractor → NDA-B, sales_partner → NDA-C. |
+
+### TRINITY Voice AI
+| File | Purpose |
+|------|---------|
+| `app/api/trinity/webhook/route.ts` | Twilio callback handler + Claude sentiment analysis on call transcripts. |
+| `app/api/trinity/initiate/route.ts` | POST → initiates outbound call via Twilio. |
+| `app/api/trinity/calls/route.ts` | GET → returns last 50 calls from `trinity_calls` table. |
 
 ---
 

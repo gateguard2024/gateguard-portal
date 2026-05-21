@@ -129,8 +129,8 @@ const defaultSurvey: SiteSurvey = {
   },
   addOns: {
     lprCameras: { qty: 0 },
-    gateMaintenance: { enabled: false, initialRepairCost: 0, initialRepairBilling: 'billable', entryGates: 1 },
-    physicalGateCoverage: { enabled: false, entryGates: 1 },
+    gateMaintenance: { enabled: true, initialRepairCost: 0, initialRepairBilling: 'billable', entryGates: 0 },
+    physicalGateCoverage: { enabled: false, entryGates: 0 },
     customItems: [],
   },
 };
@@ -1528,20 +1528,31 @@ export default function NewQuotePage() {
             <div><p className="text-sm text-foreground">LPR Cameras</p><p className="text-xs text-muted-foreground">$1,500 billable · $150/mo required</p></div>
             <Counter value={survey.addOns.lprCameras.qty} onChange={v => setSurvey(s => ({ ...s, addOns: { ...s.addOns, lprCameras: { qty: v } } }))} />
           </div>
+          {/* Gate Operator Service Plan — INCLUDED in base plan, no toggle */}
           <div className="pt-4 border-t border-border">
             <div className="flex items-start justify-between mb-1">
               <div>
-                <p className="text-sm text-foreground">Gate Operator Service Plan</p>
-                <p className="text-xs text-muted-foreground">Covers operators, wiring &amp; control equipment · $250/mo per gate</p>
-                <p className="text-xs text-amber-500 mt-0.5">⚠ Physical gate structure (steel gate, tracks, hinges) is NOT included — see add-on below</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-foreground">Gate Operator Service Plan</p>
+                  <span className="text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">INCLUDED</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">Operators, wiring &amp; control equipment · covered in base plan</p>
               </div>
-              <Toggle checked={gm.enabled} onChange={() => setSurvey(s => ({ ...s, addOns: { ...s.addOns, gateMaintenance: { ...s.addOns.gateMaintenance, enabled: !s.addOns.gateMaintenance.enabled } } }))} />
             </div>
-            {gm.enabled && (
-              <div className="bg-background/60 border border-border rounded-lg p-4 space-y-4 mt-2">
-                <div className="flex items-start justify-between gap-4">
+            <div className="bg-background/60 border border-border rounded-lg p-4 space-y-4 mt-2">
+              {/* Gate count */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-foreground">Number of Entry Gates</p>
+                  <p className="text-xs text-muted-foreground">Set to 0 if no gates at this property</p>
+                </div>
+                <Counter value={gm.entryGates} onChange={v => setSurvey(s => ({ ...s, addOns: { ...s.addOns, gateMaintenance: { ...s.addOns.gateMaintenance, entryGates: v } } }))} min={0} />
+              </div>
+              {/* Optional initial repair cost */}
+              {gm.entryGates > 0 && (
+                <div className="flex items-start justify-between gap-4 pt-3 border-t border-border">
                   <div className="flex-1">
-                    <p className="text-sm text-foreground">Initial Gate Repair Cost</p>
+                    <p className="text-sm text-foreground">Initial Gate Repair Cost <span className="text-xs text-muted-foreground">(if pre-service work needed)</span></p>
                     <BillingToggle value={gm.initialRepairBilling} onChange={b => setSurvey(s => ({ ...s, addOns: { ...s.addOns, gateMaintenance: { ...s.addOns.gateMaintenance, initialRepairBilling: b } } }))} />
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -1550,19 +1561,19 @@ export default function NewQuotePage() {
                       className="w-24 px-2 py-1.5 bg-background border border-border rounded text-sm text-foreground text-right focus:outline-none focus:ring-1 focus:ring-brand-400" />
                   </div>
                 </div>
-                <div className="flex items-center justify-between pt-3 border-t border-border">
-                  <div><p className="text-sm text-foreground">Entry Gates</p><p className="text-xs text-muted-foreground">{formatCurrency(250 * gm.entryGates)}/mo</p></div>
-                  <Counter value={gm.entryGates} onChange={v => setSurvey(s => ({ ...s, addOns: { ...s.addOns, gateMaintenance: { ...s.addOns.gateMaintenance, entryGates: v } } }))} min={1} />
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-          {/* Physical Gate Structure Coverage — separate from operator plan */}
+
+          {/* Physical Gate Coverage — OPTIONAL at $250/gate/month */}
           <div className="pt-4 border-t border-border">
             <div className="flex items-start justify-between mb-1">
               <div>
-                <p className="text-sm text-foreground">Physical Gate Coverage <span className="text-xs text-muted-foreground ml-1">Optional add-on</span></p>
-                <p className="text-xs text-muted-foreground">Covers steel gate panel, tracks, hinges, rollers &amp; structural components · $250/gate/mo</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-foreground">Physical Gate Coverage</p>
+                  <span className="text-[10px] font-semibold bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 rounded-full">OPTIONAL · $250/gate/mo</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">Covers the iron/steel gate itself — panels, tracks, hinges, rollers &amp; structural components</p>
               </div>
               <Toggle checked={survey.addOns.physicalGateCoverage.enabled} onChange={() => setSurvey(s => ({ ...s, addOns: { ...s.addOns, physicalGateCoverage: { ...s.addOns.physicalGateCoverage, enabled: !s.addOns.physicalGateCoverage.enabled } } }))} />
             </div>

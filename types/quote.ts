@@ -60,15 +60,16 @@ export interface CameraSurvey {
   };
 }
 
-// ── Gate Maintenance ──────────────────────────────────────────────────────────
-// Covers gate OPERATORS, wiring, and control equipment only.
-// The physical gate structure (steel gate panel, tracks, hinges) is NOT included.
-// Physical gate coverage is a separate optional add-on at $250/gate/month.
+// ── Gate Operator Service Plan ────────────────────────────────────────────────
+// INCLUDED in the GateGuard base plan — operators, wiring & control equipment only.
+// This is NOT optional and does NOT add to the invoice total.
+// The physical iron/steel gate structure is NOT covered here.
+// Physical gate coverage is a SEPARATE optional add-on at $250/gate/month.
 export interface GateMaintenanceSurvey {
-  enabled: boolean;
-  initialRepairCost: number;          // entered by agent
-  initialRepairBilling: BillingMode;
-  entryGates: number;                 // count for $250/gate/mo operator service plan
+  enabled: boolean;                   // always true; kept for backwards compat
+  initialRepairCost: number;          // one-time pre-service repair (if gates need work first)
+  initialRepairBilling: BillingMode;  // whether that one-time cost is billable or included
+  entryGates: number;                 // number of entry gates at this property
 }
 
 // ── Physical Gate Structure Coverage (separate add-on) ────────────────────────
