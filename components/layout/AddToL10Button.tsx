@@ -112,7 +112,7 @@ export function AddToL10Button() {
 
   if (saved) {
     return (
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+      <div className="fixed bottom-6 left-72 z-50">
         <div className="flex items-center gap-2.5 bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-lg text-sm font-semibold animate-in fade-in slide-in-from-bottom-2">
           <CheckCircle2 size={16} />
           Added to next L10 {type === "issue" ? "Issues" : "To-Do"} list
@@ -122,10 +122,10 @@ export function AddToL10Button() {
   }
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50" ref={panelRef}>
+    <div className="fixed bottom-6 left-72 z-50" ref={panelRef}>
       {/* Expanded panel */}
       {open && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-96 bg-white rounded-2xl shadow-2xl border border-border overflow-hidden">
+        <div className="absolute bottom-full left-0 mb-3 w-96 bg-white rounded-2xl shadow-2xl border border-border overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-[#6B7EFF]/5 to-white border-b border-border">
             <div className="flex items-center gap-2">

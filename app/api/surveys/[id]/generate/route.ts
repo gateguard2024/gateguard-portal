@@ -19,6 +19,7 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  try {
   const user  = await getCurrentUser()
   const scope = await resolveOrgScope(user)
 
@@ -237,4 +238,12 @@ ${survey.voice_transcript ? `VOICE TRANSCRIPT:\n${survey.voice_transcript}` : ''
       updated_at:         coreUpdate.updated_at,
     },
   })
+  } catch (err: unknown) {
+    // Top-level catch — ensures we always return JSON even on unexpected throws
+    console.error('[generate] unhandled error:', err)
+    return NextResponse.json(
+      { error: `Generation failed: ${err instanceof Error ? err.message : String(err)}` },
+      { status: 500 }
+    )
+  }
 }
