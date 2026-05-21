@@ -61,11 +61,22 @@ export interface CameraSurvey {
 }
 
 // ── Gate Maintenance ──────────────────────────────────────────────────────────
+// Covers gate OPERATORS, wiring, and control equipment only.
+// The physical gate structure (steel gate panel, tracks, hinges) is NOT included.
+// Physical gate coverage is a separate optional add-on at $250/gate/month.
 export interface GateMaintenanceSurvey {
   enabled: boolean;
   initialRepairCost: number;          // entered by agent
   initialRepairBilling: BillingMode;
-  entryGates: number;                 // count for $250/gate/mo ongoing maintenance
+  entryGates: number;                 // count for $250/gate/mo operator service plan
+}
+
+// ── Physical Gate Structure Coverage (separate add-on) ────────────────────────
+// Covers the physical steel gate panel, tracks, hinges, rollers, and structural components.
+// $250/gate/month per entry gate.
+export interface PhysicalGateCoverageSurvey {
+  enabled: boolean;
+  entryGates: number;
 }
 
 // ── Custom / Missing Equipment Items ─────────────────────────────────────────
@@ -81,6 +92,7 @@ export interface CustomSurveyItem {
 export interface AddOnsSurvey {
   lprCameras: { qty: number };        // always billable install + required MRR
   gateMaintenance: GateMaintenanceSurvey;
+  physicalGateCoverage: PhysicalGateCoverageSurvey; // steel gate structure — separate from operator plan
   customItems: CustomSurveyItem[];    // agent-entered custom line items
 }
 

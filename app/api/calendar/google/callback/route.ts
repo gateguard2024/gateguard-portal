@@ -76,31 +76,24 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${appUrl}/calendar?error=exception`)
   }
 
-  // Store refresh_token in user_settings table
-  // user_settings: user_id text, key text, value text, PRIMARY KEY (user_id, key)
+  // Store refresh_token in user_settings table (migration 053 schema)
+  const now = new Date().toISOString()
   const { error: upsertError } = await supabase
     .from('user_settings')
     .upsert(
-      { user_id: userId, key: 'google_calendar_refresh_token', value: refreshToken },
-      { onConflict: 'user_id,key' }
+      {
+        user_id:          userId,
+        gcal_refresh_token: refreshToken,
+        gcal_connected_at:  now,
+        gcal_last_synced_at: now,
+      },
+      { onConflict: 'user_id' }
     )
 
   if (upsertError) {
     console.error('Failed to store Google refresh token:', upsertError)
     return NextResponse.redirect(`${appUrl}/calendar?error=storage_failed`)
   }
-
-  // Also store last_synced_at
-  void (async () => {
-    try {
-      await supabase
-        .from('user_settings')
-        .upsert(
-          { user_id: userId, key: 'google_calendar_last_synced', value: new Date().toISOString() },
-          { onConflict: 'user_id,key' }
-        )
-    } catch (_) { /* non-blocking */ }
-  })()
 
   return NextResponse.redirect(`${appUrl}/calendar?connected=true`)
 }

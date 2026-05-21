@@ -56,6 +56,8 @@ interface QuoteMeta {
   deposit_percent: number;
   package_mode: boolean;
   opportunity_id?: string;
+  rampUp?: boolean;
+  rampUpNotes?: string;
 }
 
 interface NewLineItem {
@@ -128,6 +130,7 @@ const defaultSurvey: SiteSurvey = {
   addOns: {
     lprCameras: { qty: 0 },
     gateMaintenance: { enabled: false, initialRepairCost: 0, initialRepairBilling: 'billable', entryGates: 1 },
+    physicalGateCoverage: { enabled: false, entryGates: 1 },
     customItems: [],
   },
 };
@@ -469,11 +472,12 @@ function OppImportButton({ onSelect }: { onSelect: (o: OppImportResult) => void 
         const list = (d.opportunities ?? d.data ?? []) as Array<Record<string, unknown>>
         setResults(list.map(o => ({
           id:               String(o.id ?? ''),
-          property_name:    (o.property_name as string) || (o.name as string) || undefined,
+          // API returns account_name (not property_name), site_contact_name (not contact_name)
+          property_name:    (o.account_name as string) || (o.name as string) || undefined,
           property_address: (o.property_address as string) || undefined,
-          contact_name:     (o.contact_name as string) || undefined,
-          contact_email:    (o.contact_email as string) || undefined,
-          contact_phone:    (o.contact_phone as string) || undefined,
+          contact_name:     (o.site_contact_name as string) || undefined,
+          contact_email:    (o.site_contact_email as string) || undefined,
+          contact_phone:    (o.site_contact_phone as string) || undefined,
           units:            o.units ? Number(o.units) : undefined,
         })))
       })
@@ -798,9 +802,12 @@ export default function NewQuotePage() {
       // Store survey id and sow for proposal page
       setSurveySourceId(selectedSurveyId);
       setSurveySow(s.ai_sow ?? null);
+      // Also carry over any opportunity_id from the survey
+      if (s.opportunity_id) setM({ opportunity_id: s.opportunity_id });
 
-      // Jump straight to line-item builder (step 1 = property info, pre-filled)
-      setLiStep(1);
+      // Jump to line-item builder step 2 (Line Items) — property info is already
+      // pre-filled so skip step 1 and land the user directly on the BOM list.
+      setLiStep(2);
       setAppMode('line_item');
     } catch (e) {
       setSurveyImportError(e instanceof Error ? e.message : 'Failed to load survey');
@@ -1071,6 +1078,23 @@ export default function NewQuotePage() {
             <p className="text-sm text-muted-foreground mt-0.5">Build a custom proposal item by item</p>
           </div>
         </div>
+
+        {/* Survey import banner */}
+        {surveySourceId && (
+          <div className="flex items-start gap-3 px-4 py-3 bg-brand-400/5 border border-brand-400/20 rounded-xl">
+            <Check className="w-4 h-4 text-brand-400 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground">Survey imported — BOM pre-loaded</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Property info and line items are pre-filled from your site survey. Review and adjust below, then advance to Review to save.
+                {meta.opportunity_id && <span className="ml-1 text-brand-400">· Linked to opportunity ✓</span>}
+              </p>
+            </div>
+            <button type="button" onClick={() => setSurveySourceId(null)} className="text-muted-foreground hover:text-foreground p-0.5 rounded transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         <StepBar steps={LI_STEPS} current={liStep} onGo={setLiStep} />
 
@@ -1495,8 +1519,12 @@ export default function NewQuotePage() {
             <Counter value={survey.addOns.lprCameras.qty} onChange={v => setSurvey(s => ({ ...s, addOns: { ...s.addOns, lprCameras: { qty: v } } }))} />
           </div>
           <div className="pt-4 border-t border-border">
-            <div className="flex items-center justify-between mb-3">
-              <div><p className="text-sm text-foreground">Entry Gate Repair Plan</p><p className="text-xs text-muted-foreground">Initial repair + $250/mo per entry gate</p></div>
+            <div className="flex items-start justify-between mb-1">
+              <div>
+                <p className="text-sm text-foreground">Gate Operator Service Plan</p>
+                <p className="text-xs text-muted-foreground">Covers operators, wiring &amp; control equipment · $250/mo per gate</p>
+                <p className="text-xs text-amber-500 mt-0.5">⚠ Physical gate structure (steel gate, tracks, hinges) is NOT included — see add-on below</p>
+              </div>
               <Toggle checked={gm.enabled} onChange={() => setSurvey(s => ({ ...s, addOns: { ...s.addOns, gateMaintenance: { ...s.addOns.gateMaintenance, enabled: !s.addOns.gateMaintenance.enabled } } }))} />
             </div>
             {gm.enabled && (
@@ -1516,6 +1544,25 @@ export default function NewQuotePage() {
                   <div><p className="text-sm text-foreground">Entry Gates</p><p className="text-xs text-muted-foreground">{formatCurrency(250 * gm.entryGates)}/mo</p></div>
                   <Counter value={gm.entryGates} onChange={v => setSurvey(s => ({ ...s, addOns: { ...s.addOns, gateMaintenance: { ...s.addOns.gateMaintenance, entryGates: v } } }))} min={1} />
                 </div>
+              </div>
+            )}
+          </div>
+          {/* Physical Gate Structure Coverage — separate from operator plan */}
+          <div className="pt-4 border-t border-border">
+            <div className="flex items-start justify-between mb-1">
+              <div>
+                <p className="text-sm text-foreground">Physical Gate Coverage <span className="text-xs text-muted-foreground ml-1">Optional add-on</span></p>
+                <p className="text-xs text-muted-foreground">Covers steel gate panel, tracks, hinges, rollers &amp; structural components · $250/gate/mo</p>
+              </div>
+              <Toggle checked={survey.addOns.physicalGateCoverage.enabled} onChange={() => setSurvey(s => ({ ...s, addOns: { ...s.addOns, physicalGateCoverage: { ...s.addOns.physicalGateCoverage, enabled: !s.addOns.physicalGateCoverage.enabled } } }))} />
+            </div>
+            {survey.addOns.physicalGateCoverage.enabled && (
+              <div className="bg-background/60 border border-border rounded-lg p-3 mt-2 flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-foreground">Entry Gates</p>
+                  <p className="text-xs text-muted-foreground">{formatCurrency(250 * survey.addOns.physicalGateCoverage.entryGates)}/mo</p>
+                </div>
+                <Counter value={survey.addOns.physicalGateCoverage.entryGates} onChange={v => setSurvey(s => ({ ...s, addOns: { ...s.addOns, physicalGateCoverage: { ...s.addOns.physicalGateCoverage, entryGates: v } } }))} min={1} />
               </div>
             )}
           </div>
@@ -1812,6 +1859,51 @@ export default function NewQuotePage() {
             <span className="text-muted-foreground">Contact</span><span className="text-foreground">{property.contactName || '—'}</span>
             <span className="text-muted-foreground">Resident Move-In Fee</span><span className="text-foreground">$150 (property bills residents)</span>
           </div>
+        </div>
+
+        {/* Ramp-Up Plan */}
+        <div className="bg-card border border-border rounded-xl p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Phased Ramp-Up Plan</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Offer a staged deployment across multiple phases instead of a single install event.
+                Ideal for large properties where complete downtime is not feasible.
+              </p>
+            </div>
+            <Toggle checked={meta.rampUp ?? false} onChange={() => setM({ rampUp: !(meta.rampUp ?? false) })} />
+          </div>
+          {(meta.rampUp) && (
+            <div className="mt-4 space-y-3">
+              <div className="bg-background/60 border border-border rounded-lg p-4 space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Typical 3-Phase Schedule</p>
+                {[
+                  { phase: 'Phase 1 — Entry Gates', timing: 'Month 1', desc: 'Resident vehicle gates + guest gates activated. GateCard app goes live for all units.' },
+                  { phase: 'Phase 2 — Common Areas', timing: 'Month 2', desc: 'Primary pedestrian doors, amenity rooms, mailroom, package room.' },
+                  { phase: 'Phase 3 — Full Commissioning', timing: 'Month 3', desc: 'Secondary doors, camera integration, final walkthrough, resident onboarding complete.' },
+                ].map(({ phase, timing, desc }) => (
+                  <div key={phase} className="flex gap-3 pt-2 first:pt-0 first:border-t-0 border-t border-border">
+                    <div className="w-2 h-2 rounded-full bg-brand-400 mt-1.5 shrink-0" />
+                    <div>
+                      <p className="text-xs font-medium text-foreground">{phase} <span className="text-muted-foreground font-normal">· {timing}</span></p>
+                      <p className="text-xs text-muted-foreground">{desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <Field label="Ramp-Up Notes (appears in proposal)">
+                  <textarea
+                    value={meta.rampUpNotes ?? ''}
+                    onChange={e => setM({ rampUpNotes: e.target.value })}
+                    rows={2}
+                    placeholder="e.g. Phase 1 contingent on existing gate operator compatibility assessment at kick-off…"
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-brand-400 resize-none"
+                  />
+                </Field>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="bg-emerald-400/5 border border-emerald-400/20 rounded-xl p-4 flex gap-3">

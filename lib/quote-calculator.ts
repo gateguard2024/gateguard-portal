@@ -145,16 +145,25 @@ export function calculateLineItems(survey: SiteSurvey, property: QuoteProperty):
     items.push({ id: makeId(), description: 'LPR Camera Monitoring & Analytics', qty: lprQty, unitPrice: PRICING.cameras.lprMonthly, total: PRICING.cameras.lprMonthly * lprQty, recurring: true, period: 'monthly', billing: 'billable', editable: true });
   }
 
-  // ── Gate Maintenance ───────────────────────────────────────────────────────
+  // ── Gate Operator Service Plan ────────────────────────────────────────────
+  // Covers operators, wiring & control equipment — NOT the physical gate structure
   const gm = survey.addOns.gateMaintenance;
   if (gm.enabled) {
     if (gm.initialRepairCost > 0) {
-      items.push({ id: makeId(), description: 'Entry Gate Repair — Initial Service' + (gm.initialRepairBilling === 'included' ? ' (Included)' : ''), qty: 1, unitPrice: gm.initialRepairBilling === 'billable' ? gm.initialRepairCost : 0, total: gm.initialRepairBilling === 'billable' ? gm.initialRepairCost : 0, recurring: false, billing: gm.initialRepairBilling, editable: true });
+      items.push({ id: makeId(), description: 'Gate Operator Initial Service' + (gm.initialRepairBilling === 'included' ? ' (Included)' : ''), qty: 1, unitPrice: gm.initialRepairBilling === 'billable' ? gm.initialRepairCost : 0, total: gm.initialRepairBilling === 'billable' ? gm.initialRepairCost : 0, recurring: false, billing: gm.initialRepairBilling, editable: true });
     }
     if (gm.entryGates > 0) {
       const maintMonthly = PRICING.addOns.gateMaintenancePerGate * gm.entryGates;
-      items.push({ id: makeId(), description: `Entry Gate Repair Plan — ${gm.entryGates} gate${gm.entryGates > 1 ? 's' : ''} (up to 2 leafs each)`, qty: gm.entryGates, unitPrice: PRICING.addOns.gateMaintenancePerGate, total: maintMonthly, recurring: true, period: 'monthly', billing: 'billable', editable: true });
+      items.push({ id: makeId(), description: `Gate Operator Service Plan — ${gm.entryGates} gate${gm.entryGates > 1 ? 's' : ''} · operators, wiring & controls only`, qty: gm.entryGates, unitPrice: PRICING.addOns.gateMaintenancePerGate, total: maintMonthly, recurring: true, period: 'monthly', billing: 'billable', editable: true });
     }
+  }
+
+  // ── Physical Gate Structure Coverage (optional add-on) ─────────────────────
+  // Covers steel gate panel, tracks, hinges, rollers, and structural components
+  const pgc = survey.addOns.physicalGateCoverage;
+  if (pgc && pgc.enabled && pgc.entryGates > 0) {
+    const pgcMonthly = PRICING.addOns.gateMaintenancePerGate * pgc.entryGates;
+    items.push({ id: makeId(), description: `Physical Gate Coverage — ${pgc.entryGates} gate${pgc.entryGates > 1 ? 's' : ''} · steel gate, tracks & structural components`, qty: pgc.entryGates, unitPrice: PRICING.addOns.gateMaintenancePerGate, total: pgcMonthly, recurring: true, period: 'monthly', billing: 'billable', editable: true });
   }
 
   // ── Custom / Missing Equipment Items ──────────────────────────────────────
