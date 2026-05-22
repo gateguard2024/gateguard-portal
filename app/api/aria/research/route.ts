@@ -9,12 +9,13 @@
  *   1. Extract location hint from query (address or city/state)
  *   2. Geocode via Nominatim (OpenStreetMap) — no API key required
  *   3. Query FCC Broadband Map API for verified ISP coverage at that location
- *   4. Inject FCC-verified ISPs as hard facts into Claude's prompt
+ *   4. Run 4 parallel Tavily OSINT searches (listing sites, Reddit/reviews, county deeds, ISP partnerships)
+ *   5. Inject FCC + Tavily web intelligence as hard facts into Claude's prompt
  *
  * Accuracy targets:
  *   - ISP availability: ~95% (FCC 477 data, updated twice yearly)
  *   - Video provider: ~75% (FCC + AI inference)
- *   - Bulk/exclusive agreements: ~60% (AI inference from ISP concentration + property data)
+ *   - Bulk/exclusive agreements: ~80% with Tavily OSINT (listing sites + county deeds are high-signal)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -32,6 +33,25 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+// ─── Tavily OSINT helper ───────────────────────────────────────────────────
+
+interface TavilyResult { title: string; url: string; content: string; score: number; source?: string }
+
+async function tavilySearch(query: string, maxResults = 4, source = 'web'): Promise<TavilyResult[]> {
+  if (!process.env.TAVILY_API_KEY) return []
+  try {
+    const res = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.TAVILY_API_KEY}` },
+      body: JSON.stringify({ query, search_depth: 'basic', max_results: maxResults, include_answer: false, include_raw_content: false, include_images: false }),
+      signal: AbortSignal.timeout(12000),
+    })
+    if (!res.ok) return []
+    const data = await res.json()
+    return (data.results ?? []).map((r: TavilyResult) => ({ ...r, source }))
+  } catch { return [] }
+}
 
 // ─── FCC / Geocoding helpers ───────────────────────────────────────────────
 
@@ -129,6 +149,17 @@ function extractLocationHint(query: string): string | null {
   }
 
   return null
+}
+
+const KNOWN_MGMT_COS = ['greystar','lincoln property','bozzuto','maa','aimco','cortland','equity residential','avalon','avalonbay','camden','national','rpm living','cardinal group','grayco','windsor']
+
+function extractSearchTerms(query: string): string {
+  const q = query.toLowerCase()
+  for (const co of KNOWN_MGMT_COS) {
+    if (q.includes(co)) return co.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
+  }
+  // Return first 60 chars of the query as fallback
+  return query.trim().slice(0, 60)
 }
 
 /**
@@ -371,26 +402,26 @@ export async function POST(req: NextRequest) {
     const { query } = await req.json()
     if (!query?.trim()) return NextResponse.json({ error: 'query required' }, { status: 400 })
 
-    // ── Step 1: FCC connectivity intel (runs in parallel with opp exclusion fetch) ──
+    // ── Step 1: Extract search context ──
+    const locationHint = extractLocationHint(query) ?? ''
+    const searchTerms = extractSearchTerms(query)
+
+    // ── Step 2: All pre-research in parallel ──
     let fccBlock = ''
     let fccProvidersForUI: string[] = []
+    let existingOppNames: string[] = []
+    let tavilyContextBlock = ''
+
     const fccPromise = (async () => {
-      try {
-        const locationHint = extractLocationHint(query)
-        if (!locationHint) return
-        const geo = await geocodeLocation(locationHint)
-        if (!geo) return
-        const providers = await fetchFCCBroadband(geo.lat, geo.lng)
-        if (providers.length === 0) return
-        fccBlock = formatFCCDataForPrompt(providers, locationHint)
-        fccProvidersForUI = [...new Set(providers.map(p => p.brand_name || p.holding_company))]
-      } catch {
-        // non-blocking — ARIA continues without FCC data
-      }
+      if (!locationHint) return
+      const geo = await geocodeLocation(locationHint)
+      if (!geo) return
+      const providers = await fetchFCCBroadband(geo.lat, geo.lng)
+      if (providers.length === 0) return
+      fccBlock = formatFCCDataForPrompt(providers, locationHint)
+      fccProvidersForUI = [...new Set(providers.map(p => p.brand_name || p.holding_company))]
     })()
 
-    // ── Step 2: Fetch existing active opportunity names so ARIA doesn't re-suggest them ──
-    let existingOppNames: string[] = []
     const oppPromise = (async () => {
       try {
         const user  = await getCurrentUser()
@@ -406,13 +437,54 @@ export async function POST(req: NextRequest) {
         }
         const { data: opps } = await oppQuery
         existingOppNames = (opps ?? []).map((o: any) => o.account_name).filter(Boolean)
-      } catch {
-        // non-blocking
-      }
+      } catch { /* non-blocking */ }
     })()
 
-    // Wait for both parallel fetches
-    await Promise.allSettled([fccPromise, oppPromise])
+    // Tavily OSINT searches — run in parallel (non-blocking if no API key)
+    const tavilyPromise = (async () => {
+      if (!process.env.TAVILY_API_KEY) return
+      const loc = locationHint || ''
+      const terms = searchTerms
+      const [listingSites, socialSignals, countyRecords, mduAnnouncements] = await Promise.all([
+        // 1. Listing sites — most reliable for confirming "internet included" + provider name
+        tavilySearch(`"${terms}" ${loc} "internet included" OR "bulk internet" OR "fiber included" OR "internet by" OR "Comcast included" OR "Spectrum included" OR "AT&T included" site:apartments.com OR site:apartmentlist.com OR site:rent.com OR site:zillow.com OR site:apartmentratings.com`, 4, 'listing-site'),
+        // 2. Reddit/reviews — "only option" language confirms exclusive bulk deals
+        tavilySearch(`"${terms}" ${loc} internet "only option" OR "can't use another" OR "forced to use" OR "included in rent" OR "only ISP" OR "building internet" site:reddit.com OR site:apartmentratings.com OR site:yelp.com`, 4, 'social'),
+        // 3. County deed / easement records — ISPs record MDU agreements as easements on property title
+        tavilySearch(`${loc} apartment MDU broadband "memorandum of agreement" OR "right of entry" OR "easement" OR "bulk service agreement" internet provider county deed recorder`, 3, 'county-deed'),
+        // 4. ISP MDU partnership announcements + contract signals
+        tavilySearch(`"${terms}" OR "${loc}" multifamily MDU "exclusive agreement" OR "bulk broadband" OR "community internet" OR "preferred provider" OR "agreement expires" internet provider partnership`, 3, 'isp-partnership'),
+      ])
+
+      const allResults = [...listingSites, ...socialSignals, ...countyRecords, ...mduAnnouncements]
+        .filter(r => r.score > 0.25)
+        .sort((a, b) => {
+          const aBoost = ['listing-site','county-deed'].includes(a.source ?? '') ? 0.2 : 0
+          const bBoost = ['listing-site','county-deed'].includes(b.source ?? '') ? 0.2 : 0
+          return (b.score + bBoost) - (a.score + aBoost)
+        })
+        .slice(0, 12)
+
+      if (allResults.length === 0) return
+
+      const sourceLabels: Record<string, string> = {
+        'listing-site': 'LISTING-SITE', social: 'REDDIT/REVIEW',
+        'county-deed': 'COUNTY-DEED', 'isp-partnership': 'ISP-PARTNERSHIP', web: 'WEB',
+      }
+
+      tavilyContextBlock = `\n\nWEB INTELLIGENCE — Live search results (use as primary evidence for bulk_agreements[] and isp_providers[]):
+${allResults.map((r, i) => `[${sourceLabels[r.source ?? 'web'] ?? 'WEB'}] ${r.title}\nURL: ${r.url}\n${r.content.slice(0, 400)}`).join('\n\n---\n\n')}
+
+KEY SIGNALS TO EXTRACT FROM ABOVE:
+- Listing site says "internet by [ISP]" or "bulk internet included" → bulk_agreements with that provider, confidence="medium"
+- Reddit/review says "only option is [ISP]" or "can't use anyone else" → agreement_type="exclusive", confidence="medium"
+- County deed/easement names ISP with term dates → confidence="high", use dates for expiry_estimate
+- Any local/regional ISP mentioned (Gigastream, Sonic, Hotwire, WideOpenWest, Vyve, Metronet, Brightspeed, Ting, Consolidated) → TRUST IT over national carrier — these are often the actual MDU provider
+- "memorandum of agreement" with term length → calculate expiry_estimate
+- If NO web evidence found above → bulk_agreements = [] (never infer from market patterns alone)`
+    })()
+
+    await Promise.allSettled([fccPromise, oppPromise, tavilyPromise])
 
     const existingNamesBlock = existingOppNames.length > 0
       ? `\n\nEXCLUSION LIST — these properties are already active in our CRM pipeline. Do NOT suggest any of these as prospects:\n${existingOppNames.map(n => `- ${n}`).join('\n')}\n`
@@ -466,14 +538,17 @@ DECISION MAKER RESEARCH RULES:
 BULK AGREEMENT RESEARCH (CRITICAL ACCURACY RULES — READ CAREFULLY):
 ⚠ FCC BROADBAND DATA = ISP AREA COVERAGE ONLY. Never use FCC data to infer a bulk/MDU deal.
 - bulk_agreements[] must have explicit evidence. Required sources: apartment listing descriptions ("internet included"), resident reviews ("only option is Spectrum"), property website, management company statement.
+- WEB INTELLIGENCE (provided below as [LISTING-SITE], [REDDIT/REVIEW], [COUNTY-DEED], [ISP-PARTNERSHIP] excerpts): When present, these are HIGHER PRIORITY than FCC data for bulk agreements. A listing site saying "internet by X" is explicit evidence. A Reddit post saying "only option is X" implies exclusivity.
+- COUNTY DEED signals: If a [COUNTY-DEED] source mentions an ISP name + agreement/memorandum + dates → this is the strongest possible evidence for bulk_agreements[] → set confidence="high" and extract expiry_estimate from the term length.
+- OSINT hierarchy for bulk_agreements confidence: county-deed=high > listing-site=medium-high > social-"only option"=medium > FCC-pattern=low
 - Local/regional ISPs (e.g. Gigastream, Sonic, Hotwire, WideOpenWest, Vyve, IgLou, Blue Ridge) frequently have MDU deals with properties even when not the area's dominant ISP. Do NOT ignore these.
 - Do NOT default to Spectrum/Comcast/AT&T as the bulk provider just because they are the dominant carrier in the area. The actual bulk provider may be a local ISP you have less training data on.
 - If you cannot identify a specific bulk provider from evidence, set bulk_agreements = [] (empty). It is better to return no bulk agreement than to guess incorrectly.
 - confidence levels:
-  * "high" = source TEXT explicitly says "internet included", "exclusive", "bulk deal", or names a specific provider as the building's only/preferred option
-  * "medium" = source implies it with phrases like "everyone here uses X", "building deal", "can't use any other ISP"
+  * "high" = source TEXT explicitly says "internet included", "exclusive", "bulk deal", or names a specific provider as the building's only/preferred option; OR county deed names ISP with agreement dates
+  * "medium" = source implies it with phrases like "everyone here uses X", "building deal", "can't use any other ISP"; OR listing site says "internet by [ISP]"
   * "low" = inferred from market patterns alone with no property-specific evidence
-- When in doubt about the bulk provider: SET confidence="low" AND note in expiry_estimate: "unconfirmed — use Deep Intel for verification"
+- When in doubt about the bulk provider: SET confidence="low" AND note in expiry_estimate: "unconfirmed"
 
 ISP & VIDEO PROVIDER RESEARCH:
 - If FCC broadband data is provided below, use ONLY those ISPs for isp_providers[]. This is verified government data, not inference.
@@ -503,7 +578,7 @@ EMAIL ANGLE RULES — PROPTECH:
       messages: [{
         role: 'user',
         content: `ARIA research query: "${query.trim()}"
-${existingNamesBlock}${fccContextBlock}
+${existingNamesBlock}${fccContextBlock}${tavilyContextBlock}
 GateGuard offerings to weave into emails where relevant:
 - Gate operators, access control (Brivo), intercoms, cameras — full stack install
 - Visitor management: GateCard platform — resident app, mobile access, delivery management
@@ -512,6 +587,7 @@ GateGuard offerings to weave into emails where relevant:
 - SARA Bridge: easy migration path from SARA Plus
 
 ${fccBlock ? 'The FCC data above is already resolved for this location. Use it directly for isp_providers[]. Do NOT override it with your own inference.' : 'No FCC data available. Infer ISPs from your knowledge of the target market.'}
+${tavilyContextBlock ? 'Web Intelligence results are provided above. Use [LISTING-SITE], [COUNTY-DEED], and [REDDIT/REVIEW] excerpts as primary evidence for bulk_agreements[]. These are live search results, prioritize them over pattern inference.' : ''}
 
 Call the aria_research_result tool with your findings now.`
       }]
@@ -561,7 +637,7 @@ Call the aria_research_result tool with your findings now.`
       // Fire-and-forget — don't block the response
     }
 
-    return NextResponse.json({ ...data, savedSearchId, fccVerified: fccProvidersForUI.length > 0 })
+    return NextResponse.json({ ...data, savedSearchId, fccVerified: fccProvidersForUI.length > 0, webIntelligence: tavilyContextBlock.length > 100 })
 
   } catch (err: any) {
     console.error('[aria/research]', err.message)

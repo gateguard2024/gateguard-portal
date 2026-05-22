@@ -168,6 +168,7 @@ interface Opportunity {
   property_address?: string;
   property_city?: string;
   property_state?: string;
+  property_zip?: string;
   source?: string;
   directv_package?: string;
   isp_service?: string;
@@ -342,6 +343,7 @@ export default function OpportunityDetailPage() {
     property_address:   "",
     property_city:      "",
     property_state:     "",
+    property_zip:       "",
     units:              "",
     source:             "",
     est_mrr:            "",
@@ -933,6 +935,7 @@ export default function OpportunityDetailPage() {
         property_address:   opp.property_address ?? "",
         property_city:      opp.property_city  ?? "",
         property_state:     opp.property_state ?? "",
+        property_zip:       opp.property_zip   ?? "",
         units:              opp.units ? String(opp.units) : "",
         source:             opp.source ?? "",
         est_mrr:            opp.est_mrr ? String(opp.est_mrr) : "",
@@ -965,6 +968,7 @@ export default function OpportunityDetailPage() {
           property_address:   editForm.property_address   || undefined,
           property_city:      editForm.property_city      || undefined,
           property_state:     editForm.property_state     || undefined,
+          property_zip:       editForm.property_zip       || undefined,
           units:              editForm.units !== ""       ? Number(editForm.units)  : undefined,
           source:             editForm.source             || undefined,
           est_mrr:            editForm.est_mrr !== ""     ? Number(editForm.est_mrr): undefined,
@@ -1209,6 +1213,7 @@ export default function OpportunityDetailPage() {
                   <FieldRow label="Street Address"        value={opp.property_address}   fieldKey="property_address"   onSave={saveField} className="col-span-2" />
                   <FieldRow label="City"                 value={opp.property_city}      fieldKey="property_city"      onSave={saveField} />
                   <FieldRow label="State"                value={opp.property_state}     fieldKey="property_state"     onSave={saveField} />
+                  <FieldRow label="ZIP"                  value={opp.property_zip}       fieldKey="property_zip"       onSave={saveField} />
                   <FieldRow label="Site Point of Contact" value={opp.site_contact_name} fieldKey="site_contact_name"  onSave={saveField} />
                   <FieldRow label="Site Phone Number"    value={opp.site_contact_phone} fieldKey="site_contact_phone" type="tel"      onSave={saveField} />
                   <FieldRow label="Site Contact E-Mail"  value={opp.site_contact_email} fieldKey="site_contact_email" type="email"    onSave={saveField} />
@@ -2596,12 +2601,15 @@ export default function OpportunityDetailPage() {
               <Field label="Street Address">
                 <input type="text" value={editForm.property_address} onChange={e => setEditForm({...editForm, property_address: e.target.value})} className={inputCls} placeholder="123 Main St" />
               </Field>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <Field label="City">
                   <input type="text" value={editForm.property_city} onChange={e => setEditForm({...editForm, property_city: e.target.value})} className={inputCls} placeholder="Atlanta" />
                 </Field>
                 <Field label="State">
                   <input type="text" value={editForm.property_state} onChange={e => setEditForm({...editForm, property_state: e.target.value})} className={inputCls} placeholder="GA" maxLength={2} />
+                </Field>
+                <Field label="ZIP">
+                  <input type="text" value={editForm.property_zip ?? ''} onChange={e => setEditForm({...editForm, property_zip: e.target.value})} className={inputCls} placeholder="30301" />
                 </Field>
               </div>
               <div className="grid grid-cols-2 gap-3">

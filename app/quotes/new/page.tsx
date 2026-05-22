@@ -653,12 +653,15 @@ export default function NewQuotePage() {
           client_email:     primaryContact?.email ?? m.client_email,
           client_phone:     primaryContact?.phone ?? m.client_phone,
           property_name:    opp.account_name      ?? m.property_name,
-          property_address: opp.property_address  ?? m.property_address,
+          property_address: [opp.property_address, opp.property_city, opp.property_state, opp.property_zip].filter(Boolean).join(', ') || m.property_address,
         }))
         setProperty(p => ({
           ...p,
           name:         opp.account_name     ?? p.name,
           address:      opp.property_address ?? p.address,
+          city:         opp.property_city    ?? p.city,
+          state:        opp.property_state   ?? p.state,
+          zip:          opp.property_zip     ?? p.zip,
           units:        opp.units            ?? p.units,
           contactName:  primaryContact?.name  ?? p.contactName,
           contactEmail: primaryContact?.email ?? p.contactEmail,
@@ -1908,52 +1911,67 @@ export default function NewQuotePage() {
 
         {/* KPI Cards */}
         <div className="grid grid-cols-2 gap-4">
-          {[
-            {
-              label: 'Setup Fees',
-              value: formatCurrency(totals.discountedSetupTotal),
-              sub: hasDiscount
-                ? `${formatCurrency(totals.billableSetupTotal)} list · ${meta.discount_percent}% off`
-                : `${formatCurrency(totals.billableSetupTotal)} billable`,
-              color: 'text-foreground',
-            },
-            {
-              label: 'GateGuard Direct Monthly',
-              value: `${formatCurrency(totals.monthlyTotal)}/mo`,
-              sub: `Billed to property · ${property.units} units @ $10/unit`,
-              color: 'text-brand-400',
-            },
-            {
-              label: `Deposit at Signing (${meta.deposit_percent || 50}%)`,
-              value: formatCurrency(totals.depositDue),
-              sub: `${meta.deposit_percent || 50}% setup + 1st month`,
-              color: 'text-amber-400',
-            },
-            {
-              label: 'Balance at Launch',
-              value: formatCurrency(totals.goLivePayment),
-              sub: `${100 - (meta.deposit_percent || 50)}% setup + 1st month`,
-              color: 'text-blue-400',
-            },
-            {
-              label: 'Contract Value (5 yr)',
-              value: formatCurrency(totals.contractValue),
-              sub: 'Setup + 60 months recurring',
-              color: 'text-foreground',
-            },
-            {
-              label: 'Dealer Override MRR',
-              value: `${formatCurrency(totals.dealerMRR)}/mo`,
-              sub: 'Up to $2.50/unit/mo',
-              color: 'text-violet-400',
-            },
-          ].map(item => (
-            <div key={item.label} className="bg-card border border-border rounded-xl p-4">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">{item.label}</p>
-              <p className={`text-xl font-bold ${item.color} mt-1`}>{item.value}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{item.sub}</p>
-            </div>
-          ))}
+          {/* Setup Fees */}
+          <div className="bg-card border border-border rounded-xl p-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Setup Fees</p>
+            {hasDiscount ? (
+              <>
+                <p className="text-sm text-muted-foreground line-through mt-1">{formatCurrency(totals.billableSetupTotal)}</p>
+                <p className="text-xl font-bold text-foreground">{formatCurrency(totals.discountedSetupTotal)}</p>
+                <p className="text-xs text-emerald-500 font-medium">−{formatCurrency(totals.billableSetupTotal - totals.discountedSetupTotal)} savings</p>
+              </>
+            ) : (
+              <>
+                <p className="text-xl font-bold text-foreground mt-1">{formatCurrency(totals.discountedSetupTotal)}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{formatCurrency(totals.billableSetupTotal)} billable</p>
+              </>
+            )}
+          </div>
+
+          {/* GateGuard Direct Monthly */}
+          <div className="bg-card border border-border rounded-xl p-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">GateGuard Direct Monthly</p>
+            {totals.mrrDiscountSavings > 0 ? (
+              <>
+                <p className="text-sm text-muted-foreground line-through mt-1">{formatCurrency(totals.monthlyTotal)}/mo</p>
+                <p className="text-xl font-bold text-brand-400">{formatCurrency(totals.monthlyTotal - totals.mrrDiscountSavings)}/mo</p>
+                <p className="text-xs text-emerald-500 font-medium">−{formatCurrency(totals.mrrDiscountSavings)}/mo savings</p>
+              </>
+            ) : (
+              <>
+                <p className="text-xl font-bold text-brand-400 mt-1">{formatCurrency(totals.monthlyTotal)}/mo</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Billed to property · {property.units} units @ $10/unit</p>
+              </>
+            )}
+          </div>
+
+          {/* Deposit at Signing */}
+          <div className="bg-card border border-border rounded-xl p-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Deposit at Signing ({meta.deposit_percent || 50}%)</p>
+            <p className="text-xl font-bold text-amber-400 mt-1">{formatCurrency(totals.depositDue)}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{meta.deposit_percent || 50}% setup + 1st month</p>
+          </div>
+
+          {/* Balance at Launch */}
+          <div className="bg-card border border-border rounded-xl p-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Balance at Launch</p>
+            <p className="text-xl font-bold text-blue-400 mt-1">{formatCurrency(totals.goLivePayment)}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{100 - (meta.deposit_percent || 50)}% setup + 1st month</p>
+          </div>
+
+          {/* Contract Value */}
+          <div className="bg-card border border-border rounded-xl p-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Contract Value (5 yr)</p>
+            <p className="text-xl font-bold text-foreground mt-1">{formatCurrency(totals.contractValue)}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Setup + 60 months recurring</p>
+          </div>
+
+          {/* Dealer Override MRR */}
+          <div className="bg-card border border-border rounded-xl p-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Dealer Override MRR</p>
+            <p className="text-xl font-bold text-violet-400 mt-1">{formatCurrency(totals.dealerMRR)}/mo</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Up to $2.50/unit/mo</p>
+          </div>
         </div>
 
         {/* Property Summary */}

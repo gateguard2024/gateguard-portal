@@ -119,49 +119,7 @@ interface ResearchResult {
   query_interpretation: string;
   prospects: Prospect[];
   fccVerified?: boolean;
-}
-
-interface DeepIntelSource {
-  title: string;
-  url: string;
-  excerpt: string;
-  score: number;
-}
-
-interface DeepIntelResult {
-  isp_providers: string[];
-  video_providers: string[];
-  bulk_agreements: BulkAgreement[];
-  proptech?: PropTech;
-  key_finding: string;
-  confidence: 'high' | 'medium' | 'low';
-  atlas_opportunity?: boolean;
-  edgar_signal?: boolean;
-  permit_signal?: boolean;
-  sources: DeepIntelSource[];
-  intelligence_sources?: {
-    edgar: boolean;
-    puc: boolean;
-    permits: boolean;
-    isp_press: boolean;
-    listing_sites: boolean;
-  };
-  ownership?: {
-    owner_entity?: string;
-    owner_type?: string;
-    portfolio_size?: string;
-    acquisition_year?: string;
-    capex_signal?: string;
-    sec_filing_ref?: string;
-    asset_manager?: {
-      name?: string;
-      title?: string;
-      company?: string;
-      linkedin_slug?: string;
-      email?: string;
-      email_confidence?: number;
-    };
-  };
+  webIntelligence?: boolean;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -307,9 +265,6 @@ export default function ARIAPage() {
   const [showHistory, setShowHistory]       = useState(true);
   const [scoutLoading, setScoutLoading]     = useState<string | null>(null); // search id being scouted
   const [scoutResult, setScoutResult]       = useState<Record<string, { sent: number; skipped: number; errors: number }>>({});
-  const [deepLoading, setDeepLoading]       = useState(false);
-  const [deepIntel, setDeepIntel]           = useState<DeepIntelResult | null>(null);
-  const [deepError, setDeepError]           = useState<string | null>(null);
   const [usageStats, setUsageStats]         = useState<{
     my_searches: { total: number; base: number; deep: number; this_week: number; this_month: number };
     my_org:      { org_name: string | null; total: number; this_month: number; top_users: { user_name: string; count: number }[] };
@@ -332,40 +287,11 @@ export default function ARIAPage() {
 
   const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-  async function runDeepIntel(prospect: Prospect) {
-    setDeepLoading(true);
-    setDeepError(null);
-    setDeepIntel(null);
-    try {
-      const addrParts = (prospect.property.address ?? '').split(',').map((s: string) => s.trim());
-      const r = await fetch('/api/aria/research/deep', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          property_name:      prospect.property.name,
-          address:            prospect.property.address,
-          management_company: prospect.property.management_company,
-          city:               addrParts[1] ?? '',
-          state:              addrParts[2]?.split(' ')[1] ?? '',
-        }),
-      });
-      const d = await r.json();
-      if (d.error) throw new Error(d.error);
-      setDeepIntel(d);
-    } catch (e: any) {
-      setDeepError(e.message || 'Deep intel failed');
-    } finally {
-      setDeepLoading(false);
-    }
-  }
-
   const runARIA = useCallback(async () => {
     if (!query.trim() || phase > 0) return;
     setError(null);
     setResults(null);
     setSavedSearchId(null);
-    setDeepIntel(null);
-    setDeepError(null);
     setSelectedProspect(0);
     setSelectedEmail(0);
     setPhase(1);
@@ -462,8 +388,6 @@ export default function ARIAPage() {
     setSavedSearchId(s.id);
     setSelectedProspect(0);
     setSelectedEmail(0);
-    setDeepIntel(null);
-    setDeepError(null);
     // Scroll to results
     setTimeout(() => window.scrollTo({ top: 400, behavior: 'smooth' }), 100);
   }
@@ -484,169 +408,121 @@ export default function ARIAPage() {
       <div className="max-w-7xl mx-auto space-y-5">
 
         {/* ── Header ──────────────────────────────────────────────────── */}
-        <div className="flex items-start justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-lg"
-              style={{ background: "linear-gradient(135deg, #6B7EFF 0%, #3B4FCC 100%)" }}
-            >
-              AR
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl font-bold text-gray-900">ARIA</h1>
-                <span className="text-xl font-light text-gray-400">—</span>
-                <h1 className="text-xl font-bold text-gray-900">Lead Intelligence Engine</h1>
-                <span
-                  className="text-[10px] font-bold px-2.5 py-0.5 rounded-full"
-                  style={{ background: "#EEF0FF", color: "#6B7EFF" }}
-                >
-                  AI AGENT
-                </span>
-                <span className="flex h-2 w-2 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: "#6B7EFF" }} />
-                  <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: "#6B7EFF" }} />
-                </span>
-              </div>
-              <p className="text-sm text-gray-500 mt-0.5">
-                Researches properties · Discovers decision makers · Mines intent signals · Generates hyper-personalized campaigns
-              </p>
-            </div>
+        <div className="flex items-center gap-4">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-lg"
+            style={{ background: "linear-gradient(135deg, #6B7EFF 0%, #3B4FCC 100%)" }}
+          >
+            AR
           </div>
-
-          {/* Stats strip — live usage */}
-          <div className="flex gap-6 shrink-0">
-            <div className="text-center">
-              <p className="text-lg font-bold text-gray-900 tabular-nums">
-                {usageStats ? usageStats.my_searches.total : '—'}
-              </p>
-              <p className="text-[11px] text-gray-400">My Searches</p>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-lg font-bold text-gray-900">ARIA — Lead Intelligence Engine</h1>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: "#EEF0FF", color: "#6B7EFF" }}>AI AGENT</span>
+              <span className="flex h-2 w-2 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: "#6B7EFF" }} />
+                <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: "#6B7EFF" }} />
+              </span>
             </div>
-            <div className="text-center">
-              <p className="text-lg font-bold text-gray-900 tabular-nums">
-                {usageStats ? usageStats.my_org.total : '—'}
-              </p>
-              <p className="text-[11px] text-gray-400">{usageStats?.my_org.org_name ?? 'My Org'}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-lg font-bold text-[#6B7EFF] tabular-nums">
-                {usageStats ? usageStats.corporate_total : '—'}
-              </p>
-              <p className="text-[11px] text-gray-400">Network Total</p>
-            </div>
+            <p className="text-xs text-gray-400 mt-0.5">Researches properties · Discovers decision makers · Mines intent signals · Generates hyper-personalized campaigns</p>
           </div>
         </div>
 
-        {/* ── ARIA Usage Panel ────────────────────────────────────────── */}
-        {usageStats && (usageStats.my_searches.total > 0 || usageStats.hierarchy.length > 0) && (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
-              <div className="flex items-center gap-2">
-                <TrendingUp size={13} className="text-[#6B7EFF]" />
-                <span className="text-sm font-semibold text-gray-800">ARIA Usage</span>
-                <span className="text-[10px] font-bold bg-[#EEF0FF] text-[#6B7EFF] px-2 py-0.5 rounded-full">
-                  {usageStats.corporate_total} total searches
-                </span>
-              </div>
-              <span className="text-[11px] text-gray-400">Rolls up through org hierarchy</span>
+        {/* ── Search bar ──────────────────────────────────────────────── */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+          <div className="flex gap-3">
+            <div
+              className={cn(
+                "flex-1 flex items-center gap-3 px-4 rounded-xl border bg-gray-50 transition-all",
+                isRunning ? "border-[#6B7EFF]/40" : "border-gray-200 focus-within:border-[#6B7EFF]/60 focus-within:shadow-[0_0_0_3px_rgba(107,126,255,0.1)]"
+              )}
+            >
+              <Cpu size={18} className={cn("shrink-0 transition-colors", isRunning ? "text-[#6B7EFF] animate-pulse" : "text-gray-400")} />
+              <input
+                ref={inputRef}
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && !isRunning && runARIA()}
+                placeholder="Describe your target — property name, area, management company, or pain point..."
+                className="flex-1 bg-transparent py-3 text-sm text-gray-800 placeholder:text-gray-400 outline-none"
+                disabled={isRunning}
+              />
+              {isRunning && <Loader2 size={15} className="text-[#6B7EFF] animate-spin shrink-0" />}
             </div>
-            <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* My stats */}
-              <div className="rounded-xl bg-[#F8FAFC] border border-gray-100 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">My Activity</p>
-                <div className="space-y-1.5">
-                  {[
-                    { label: 'Total searches', value: usageStats.my_searches.total },
-                    { label: 'Base searches',  value: usageStats.my_searches.base },
-                    { label: 'Deep intel',     value: usageStats.my_searches.deep },
-                    { label: 'This week',      value: usageStats.my_searches.this_week },
-                    { label: 'This month',     value: usageStats.my_searches.this_month },
-                  ].map(({ label, value }) => (
-                    <div key={label} className="flex items-center justify-between">
-                      <span className="text-[11px] text-gray-500">{label}</span>
-                      <span className="text-[12px] font-bold text-gray-800 tabular-nums">{value}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+            <button
+              onClick={runARIA}
+              disabled={isRunning || !query.trim()}
+              className="px-6 py-3 rounded-xl text-white font-semibold text-sm flex items-center gap-2 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              style={{
+                background: isRunning ? "#9CA3AF" : "linear-gradient(135deg, #6B7EFF 0%, #3B4FCC 100%)",
+                boxShadow: isRunning ? "none" : "0 4px 14px rgba(107,126,255,0.35)",
+              }}
+            >
+              {isRunning ? <><Loader2 size={15} className="animate-spin" /> Researching...</> : <><Zap size={15} /> Launch ARIA</>}
+            </button>
+          </div>
 
-              {/* Org stats + top users */}
-              <div className="rounded-xl bg-[#F8FAFC] border border-gray-100 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">
-                  {usageStats.my_org.org_name ?? 'My Organization'}
-                </p>
-                <div className="space-y-1.5 mb-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-gray-500">Total searches</span>
-                    <span className="text-[12px] font-bold text-gray-800 tabular-nums">{usageStats.my_org.total}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-gray-500">This month</span>
-                    <span className="text-[12px] font-bold text-gray-800 tabular-nums">{usageStats.my_org.this_month}</span>
-                  </div>
-                </div>
-                {usageStats.my_org.top_users.length > 0 && (
-                  <>
-                    <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Top Users</p>
-                    <div className="space-y-1">
-                      {usageStats.my_org.top_users.map((u, i) => (
-                        <div key={i} className="flex items-center justify-between">
-                          <span className="text-[11px] text-gray-600 truncate max-w-[120px]">{u.user_name}</span>
-                          <span className="text-[11px] font-bold text-[#6B7EFF] tabular-nums">{u.count}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
+          {!isRunning && !isDone && (
+            <div className="mt-3">
+              <div className="flex flex-wrap gap-2">
+                {EXAMPLE_QUERIES.map((q, i) => (
+                  <button key={i} onClick={() => { setQuery(q); inputRef.current?.focus(); }}
+                    className="text-[11px] px-3 py-1 rounded-full border border-gray-200 text-gray-500 hover:border-[#6B7EFF]/50 hover:text-[#6B7EFF] hover:bg-[#6B7EFF]/5 transition-all bg-white">
+                    {q}
+                  </button>
+                ))}
               </div>
+            </div>
+          )}
 
-              {/* Hierarchy rollup */}
-              <div className="rounded-xl bg-[#F8FAFC] border border-gray-100 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Network Rollup</p>
-                {usageStats.hierarchy.length === 0 ? (
-                  <p className="text-[11px] text-gray-400">No hierarchy data</p>
-                ) : (
-                  <div className="space-y-2">
-                    {usageStats.hierarchy.map(h => (
-                      <div key={h.org_id} style={{ paddingLeft: `${h.depth * 10}px` }}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <div className="w-1 h-1 rounded-full bg-gray-300 shrink-0" />
-                            <span className="text-[11px] text-gray-700 truncate max-w-[110px]">{h.org_name}</span>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <span className="text-[11px] font-bold text-[#6B7EFF] tabular-nums">{h.total_count}</span>
-                            {h.child_count > 0 && (
-                              <span className="text-[9px] text-gray-400">({h.own_count}+{h.child_count})</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    <div className="pt-1.5 mt-1.5 border-t border-gray-200 flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-gray-700">Network Total</span>
-                      <span className="text-[13px] font-bold text-[#6B7EFF] tabular-nums">{usageStats.corporate_total}</span>
-                    </div>
-                  </div>
-                )}
+          {isDone && results?.query_interpretation && (
+            <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
+              <Cpu size={12} className="text-[#6B7EFF]" />
+              <span>ARIA interpreted: <span className="font-medium text-gray-700">{results.query_interpretation}</span></span>
+            </div>
+          )}
+        </div>
+
+        {/* ── Usage strip ─────────────────────────────────────────────── */}
+        {usageStats && (
+          <div className="bg-white rounded-xl border border-gray-100 px-4 py-2.5 flex items-center gap-6 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <TrendingUp size={12} className="text-[#6B7EFF]" />
+              <span className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Usage</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-[12px] font-bold text-gray-800 tabular-nums">{usageStats.my_searches.total}</span>
+              <span className="text-[11px] text-gray-400">mine</span>
+            </div>
+            {usageStats.my_org.org_name && (
+              <div className="flex items-center gap-1">
+                <span className="text-[12px] font-bold text-gray-800 tabular-nums">{usageStats.my_org.total}</span>
+                <span className="text-[11px] text-gray-400 truncate max-w-[120px]">{usageStats.my_org.org_name}</span>
               </div>
+            )}
+            {usageStats.hierarchy.map(h => h.depth === 0 ? null : (
+              <div key={h.org_id} className="flex items-center gap-1">
+                <span className="text-[11px] text-gray-300">›</span>
+                <span className="text-[12px] font-bold text-gray-700 tabular-nums">{h.total_count}</span>
+                <span className="text-[11px] text-gray-400 truncate max-w-[100px]">{h.org_name}</span>
+              </div>
+            ))}
+            <div className="ml-auto flex items-center gap-1">
+              <span className="text-[13px] font-bold text-[#6B7EFF] tabular-nums">{usageStats.corporate_total}</span>
+              <span className="text-[11px] text-gray-400">network total</span>
             </div>
           </div>
         )}
 
-        {/* ── Recent ARIA Searches ────────────────────────────────────── */}
+        {/* ── Saved searches — compact list ───────────────────────────── */}
         {savedSearches.length > 0 && (
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <div className="flex items-center gap-2.5">
-                <Clock size={14} className="text-[#6B7EFF]" />
-                <span className="text-sm font-semibold text-gray-800">Recent ARIA Searches</span>
-                <span className="text-[10px] font-bold bg-[#EEF0FF] text-[#6B7EFF] px-2 py-0.5 rounded-full">
-                  {savedSearches.length} saved · 30 days
-                </span>
-              </div>
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100">
+              <Clock size={12} className="text-[#6B7EFF]" />
+              <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-widest">Recent Searches</span>
+              <span className="text-[10px] text-gray-400">{savedSearches.length} saved · expires in 30 days</span>
             </div>
-            <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            <div className="divide-y divide-gray-50">
               {savedSearches.map(s => {
                 const res = importResult[s.id];
                 const alreadyImported = s.imported_count > 0 || (res?.created ?? 0) > 0;
@@ -654,107 +530,61 @@ export default function ARIAPage() {
                 const expDays = daysUntil(s.expires_at);
                 const scoutRes = scoutResult[s.id];
                 return (
-                  <div key={s.id} className="border border-gray-100 rounded-xl p-4 flex flex-col gap-3 hover:border-[#6B7EFF]/30 hover:shadow-sm transition-all bg-gray-50/40">
-                    {/* Query text */}
-                    <div>
-                      <p className="text-sm font-semibold text-gray-800 line-clamp-2 leading-snug">{s.query}</p>
-                      {s.query_interpretation && (
-                        <p className="text-[11px] text-gray-400 mt-0.5 truncate">{s.query_interpretation}</p>
-                      )}
-                    </div>
-
-                    {/* Meta row */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[10px] text-gray-400">{formatAge(s.created_at)}</span>
-                      <span className="text-[10px] text-gray-300">·</span>
-                      <span className="text-[10px] text-gray-500 font-medium">{prospects.length} prospect{prospects.length !== 1 ? 's' : ''}</span>
-                      {alreadyImported && (
-                        <>
-                          <span className="text-[10px] text-gray-300">·</span>
-                          <span className="text-[10px] text-emerald-600 font-medium">
-                            {s.imported_count > 0 ? s.imported_count : (res?.created ?? 0)} imported
-                          </span>
-                        </>
-                      )}
-                      <span className="text-[10px] text-gray-300">·</span>
-                      <span className={cn("text-[10px] font-medium", expDays <= 3 ? "text-amber-500" : "text-gray-400")}>
-                        {expDays <= 3 ? `⚠ expires in ${expDays}d` : `expires in ${expDays}d`}
-                      </span>
-                    </div>
-
-                    {/* Property name chips */}
-                    {prospects.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {prospects.slice(0, 3).map((p, i) => (
-                          <span key={i} className="text-[10px] bg-white border border-gray-200 text-gray-600 px-1.5 py-0.5 rounded">
-                            {p.property.name}
-                          </span>
-                        ))}
-                        {prospects.length > 3 && (
-                          <span className="text-[10px] text-gray-400 px-1.5 py-0.5">+{prospects.length - 3} more</span>
+                  <div key={s.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50/60 transition-colors group">
+                    {/* Query */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{s.query}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] text-gray-400">{formatAge(s.created_at)}</span>
+                        <span className="text-[10px] text-gray-300">·</span>
+                        <span className="text-[10px] text-gray-500">{prospects.length} prospect{prospects.length !== 1 ? 's' : ''}</span>
+                        {prospects.length > 0 && (
+                          <>
+                            <span className="text-[10px] text-gray-300">·</span>
+                            <span className="text-[10px] text-gray-400 truncate max-w-[200px]">
+                              {prospects.slice(0, 2).map((p: Prospect) => p.property.name).join(', ')}{prospects.length > 2 ? ` +${prospects.length - 2}` : ''}
+                            </span>
+                          </>
                         )}
+                        {expDays <= 3 && <span className="text-[10px] text-amber-500 font-medium">⚠ {expDays}d left</span>}
                       </div>
-                    )}
+                    </div>
 
-                    {/* Action buttons */}
-                    <div className="flex items-center gap-2 flex-wrap pt-1">
-                      {/* Restore button — always shown if there are prospects */}
-                      {prospects.length > 0 && (
-                        <button
-                          onClick={() => restoreSearch(s)}
-                          className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg font-semibold border border-gray-200 bg-white text-gray-600 hover:border-[#6B7EFF]/50 hover:text-[#6B7EFF] transition-all"
-                        >
-                          ▶ View Results
-                        </button>
-                      )}
-
-                      {/* Import button */}
-                      {res ? (
-                        <span className={cn(
-                          "text-[11px] px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1",
-                          res.created >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
-                        )}>
-                          {res.created >= 0 ? <><Check size={10} /> {res.created} imported</> : "Error"}
+                    {/* Status + actions */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {alreadyImported && (
+                        <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                          {s.imported_count > 0 ? s.imported_count : (res?.created ?? 0)} imported
                         </span>
-                      ) : alreadyImported ? (
-                        <span className="text-[11px] px-3 py-1.5 rounded-lg font-semibold bg-emerald-50 text-emerald-700 flex items-center gap-1">
-                          <Check size={10} /> {s.imported_count} imported
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => importSearch(s.id)}
-                          disabled={importing === s.id}
-                          className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg text-white font-semibold transition-all shadow-sm disabled:opacity-60"
-                          style={{ background: "linear-gradient(135deg, #6B7EFF 0%, #3B4FCC 100%)" }}
-                        >
-                          {importing === s.id
-                            ? <><Loader2 size={10} className="animate-spin" /> Importing…</>
-                            : <><Download size={10} /> Import to Leads</>}
-                        </button>
                       )}
-
-                      {/* SCOUT launch button — only if leads are imported and SCOUT not yet launched */}
-                      {alreadyImported && !scoutRes && (
-                        <button
-                          onClick={() => launchScout(s.id)}
-                          disabled={scoutLoading === s.id}
-                          className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg text-white font-semibold transition-all shadow-sm disabled:opacity-60"
-                          style={{ background: "linear-gradient(135deg, #10B981 0%, #059669 100%)" }}
-                        >
-                          {scoutLoading === s.id
-                            ? <><Loader2 size={10} className="animate-spin" /> Launching…</>
-                            : <><Zap size={10} /> Launch SCOUT</>}
-                        </button>
-                      )}
-
-                      {/* SCOUT result */}
                       {scoutRes && (
-                        <span className={cn(
-                          "text-[11px] px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1",
-                          scoutRes.sent >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
-                        )}>
-                          {scoutRes.sent >= 0 ? <><Check size={10} /> {scoutRes.sent} sent</> : "SCOUT failed"}
+                        <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                          {scoutRes.sent} sent
                         </span>
+                      )}
+                      {prospects.length > 0 && (
+                        <button onClick={() => restoreSearch(s)}
+                          className="text-[11px] px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:border-[#6B7EFF]/50 hover:text-[#6B7EFF] transition-all bg-white font-medium">
+                          View
+                        </button>
+                      )}
+                      {res ? (
+                        <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-semibold", res.created >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700")}>
+                          {res.created >= 0 ? `+${res.created}` : "Error"}
+                        </span>
+                      ) : !alreadyImported && (
+                        <button onClick={() => importSearch(s.id)} disabled={importing === s.id}
+                          className="text-[11px] px-2.5 py-1 rounded-lg text-white font-semibold disabled:opacity-60 transition-all"
+                          style={{ background: "linear-gradient(135deg, #6B7EFF 0%, #3B4FCC 100%)" }}>
+                          {importing === s.id ? <Loader2 size={10} className="animate-spin" /> : 'Import'}
+                        </button>
+                      )}
+                      {alreadyImported && !scoutRes && (
+                        <button onClick={() => launchScout(s.id)} disabled={scoutLoading === s.id}
+                          className="text-[11px] px-2.5 py-1 rounded-lg text-white font-semibold disabled:opacity-60 transition-all"
+                          style={{ background: "linear-gradient(135deg, #10B981 0%, #059669 100%)" }}>
+                          {scoutLoading === s.id ? <Loader2 size={10} className="animate-spin" /> : <><Zap size={10} /> SCOUT</>}
+                        </button>
                       )}
                     </div>
                   </div>
@@ -1053,86 +883,41 @@ export default function ARIAPage() {
                       </div>
                     </div>
 
-                    {/* Connectivity Intel — FCC baseline + Deep Intel */}
+                    {/* Connectivity Intel — FCC baseline + Tavily Web Intel */}
                     <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
-                      {/* Section header + Deep Intel button */}
-                      <div className="flex items-center gap-1.5">
+                      {/* Section header */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Connectivity Intel</p>
-                        {deepIntel ? (
-                          <span className="flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-violet-50 border border-violet-200 text-violet-700">
-                            <CheckCircle2 size={8} /> Deep Research
-                          </span>
-                        ) : prospect.property._fcc_verified ? (
+                        {prospect.property._fcc_verified ? (
                           <span className="flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700">
                             <CheckCircle2 size={8} /> FCC 477
                           </span>
                         ) : (
                           <span className="text-[9px] text-amber-600 font-medium">⚠ AI-estimated</span>
                         )}
-                        <div className="flex-1" />
-                        {!deepIntel && (
-                          <button
-                            onClick={() => runDeepIntel(prospect)}
-                            disabled={deepLoading}
-                            className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg border transition-all disabled:opacity-50"
-                            style={{
-                              background: deepLoading ? '#F3F4F6' : '#F5F3FF',
-                              borderColor: deepLoading ? '#E5E7EB' : '#DDD6FE',
-                              color: deepLoading ? '#9CA3AF' : '#7C3AED',
-                            }}
-                          >
-                            {deepLoading ? (
-                              <><Loader2 size={9} className="animate-spin" /> Searching...</>
-                            ) : (
-                              <><Globe size={9} /> Deep Intel</>
-                            )}
-                          </button>
+                        {results?.webIntelligence && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-violet-50 text-violet-600">Web Intel</span>
                         )}
                       </div>
 
-                      {/* Deep intel key finding banner */}
-                      {deepIntel?.key_finding && (
-                        <div className={`rounded-lg px-2.5 py-2 border text-[10px] ${
-                          deepIntel.atlas_opportunity
-                            ? 'bg-amber-50 border-amber-200'
-                            : 'bg-violet-50 border-violet-200'
-                        }`}>
-                          {deepIntel.atlas_opportunity && (
-                            <div className="flex items-center gap-1 mb-1">
-                              <span className="text-[9px] font-bold uppercase text-amber-700 bg-amber-200 px-1.5 py-0.5 rounded">🎯 ATLAS OPPORTUNITY</span>
-                            </div>
-                          )}
-                          <p className={deepIntel.atlas_opportunity ? 'text-amber-800' : 'text-violet-800'}>
-                            {deepIntel.key_finding}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Deep intel error */}
-                      {deepError && (
-                        <p className="text-[10px] text-red-500">{deepError}</p>
-                      )}
-
-                      {/* ISP providers — deep intel takes priority over FCC */}
+                      {/* ISP providers */}
                       {(() => {
-                        const isps = deepIntel?.isp_providers?.length ? deepIntel.isp_providers : prospect.property.isp_providers;
-                        const isDeep = !!deepIntel?.isp_providers?.length;
-                        const isFCC = !isDeep && prospect.property._fcc_verified;
+                        const isps = prospect.property.isp_providers;
+                        const isFCC = prospect.property._fcc_verified;
                         if (!isps?.length) return null;
                         return (
                           <div>
                             <div className="flex items-center gap-1 mb-1">
                               <p className="text-[9px] text-gray-400">ISP</p>
-                              <span className={`text-[8px] font-medium ${isDeep ? 'text-violet-600' : isFCC ? 'text-emerald-600' : 'text-gray-400'}`}>
-                                · {isDeep ? 'web-verified' : isFCC ? 'FCC data' : 'AI-estimated'}
+                              <span className={`text-[8px] font-medium ${isFCC ? 'text-emerald-600' : 'text-gray-400'}`}>
+                                · {isFCC ? 'FCC data' : 'AI-estimated'}
                               </span>
                             </div>
                             <div className="flex flex-wrap gap-1">
                               {isps.map((p: string) => (
                                 <span key={p} className={`text-[10px] px-1.5 py-0.5 rounded font-medium border ${
-                                  isDeep ? 'bg-violet-50 text-violet-700 border-violet-200' :
-                                  isFCC  ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                           'bg-blue-50 text-blue-700 border-blue-100'
+                                  isFCC ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                          'bg-blue-50 text-blue-700 border-blue-100'
                                 }`}>{p}</span>
                               ))}
                             </div>
@@ -1142,7 +927,7 @@ export default function ARIAPage() {
 
                       {/* Video providers */}
                       {(() => {
-                        const vids = deepIntel?.video_providers?.length ? deepIntel.video_providers : prospect.property.video_providers;
+                        const vids = prospect.property.video_providers;
                         if (!vids?.length) return null;
                         return (
                           <div>
@@ -1156,9 +941,9 @@ export default function ARIAPage() {
                         );
                       })()}
 
-                      {/* Bulk agreements — deep intel takes priority */}
+                      {/* Bulk agreements */}
                       {(() => {
-                        const agreements = deepIntel?.bulk_agreements?.length ? deepIntel.bulk_agreements : prospect.property.bulk_agreements;
+                        const agreements = prospect.property.bulk_agreements;
                         if (!agreements?.length) return null;
                         return (
                           <div className="space-y-1.5">
@@ -1191,129 +976,12 @@ export default function ARIAPage() {
                           </div>
                         );
                       })()}
-
-                      {/* Intelligence source badges — show which premium sources fired */}
-                      {deepIntel?.intelligence_sources && (
-                        <div className="pt-1.5 border-t border-gray-100">
-                          <p className="text-[9px] text-gray-400 mb-1.5 uppercase font-bold tracking-widest">Intelligence Sources</p>
-                          <div className="flex flex-wrap gap-1">
-                            {deepIntel.intelligence_sources.edgar && (
-                              <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-700">
-                                📋 SEC EDGAR
-                              </span>
-                            )}
-                            {deepIntel.intelligence_sources.puc && (
-                              <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-50 border border-purple-200 text-purple-700">
-                                🏛 State PUC
-                              </span>
-                            )}
-                            {deepIntel.intelligence_sources.permits && (
-                              <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange-50 border border-orange-200 text-orange-700">
-                                🔨 City Permits
-                              </span>
-                            )}
-                            {deepIntel.intelligence_sources.isp_press && (
-                              <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-cyan-50 border border-cyan-200 text-cyan-700">
-                                📡 ISP Press
-                              </span>
-                            )}
-                            {deepIntel.intelligence_sources.listing_sites && (
-                              <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-700">
-                                🏠 Listing Sites
-                              </span>
-                            )}
-                            <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-50 border border-gray-200 text-gray-600">
-                              🌐 Web Search
-                            </span>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Ownership / Asset Manager card — appears when Deep Intel finds ownership data */}
-                      {deepIntel?.ownership?.owner_entity && deepIntel.ownership.owner_entity !== 'Unknown' && (
-                        <div className="pt-2 border-t border-gray-100">
-                          <div className="flex items-center gap-1 mb-1.5">
-                            <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Ownership Intel</p>
-                            {deepIntel.edgar_signal && (
-                              <span className="text-[8px] font-bold px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200">SEC VERIFIED</span>
-                            )}
-                          </div>
-                          <div className="rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-2 space-y-1.5">
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <p className="text-[11px] font-bold text-slate-800">{deepIntel.ownership.owner_entity}</p>
-                                {deepIntel.ownership.owner_type && deepIntel.ownership.owner_type !== 'unknown' && (
-                                  <p className="text-[9px] text-slate-500 capitalize mt-0.5">{deepIntel.ownership.owner_type.replace(/_/g, ' ')}</p>
-                                )}
-                              </div>
-                              {deepIntel.ownership.portfolio_size && (
-                                <span className="text-[9px] text-slate-500 shrink-0">{deepIntel.ownership.portfolio_size}</span>
-                              )}
-                            </div>
-                            {deepIntel.ownership.capex_signal && (
-                              <div className="flex items-start gap-1">
-                                <span className="text-amber-500 text-[10px]">⚡</span>
-                                <p className="text-[9px] text-amber-700">{deepIntel.ownership.capex_signal}</p>
-                              </div>
-                            )}
-                            {deepIntel.ownership.asset_manager?.name && (
-                              <div className="pt-1.5 border-t border-slate-200">
-                                <p className="text-[9px] font-bold text-[#6B7EFF] uppercase tracking-widest mb-0.5">📞 Call This Person</p>
-                                <p className="text-[11px] font-semibold text-slate-800">{deepIntel.ownership.asset_manager.name}</p>
-                                <p className="text-[10px] text-slate-500">{deepIntel.ownership.asset_manager.title} · {deepIntel.ownership.asset_manager.company}</p>
-                                {deepIntel.ownership.asset_manager.email && (
-                                  <p className="text-[9px] text-[#6B7EFF] mt-0.5 font-mono">{deepIntel.ownership.asset_manager.email}
-                                    {deepIntel.ownership.asset_manager.email_confidence && (
-                                      <span className="ml-1 text-gray-400">({Math.round((deepIntel.ownership.asset_manager.email_confidence ?? 0) * 100)}% conf)</span>
-                                    )}
-                                  </p>
-                                )}
-                                {deepIntel.ownership.sec_filing_ref && (
-                                  <p className="text-[8px] text-gray-400 mt-0.5 italic">Source: {deepIntel.ownership.sec_filing_ref}</p>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Sources list */}
-                      {deepIntel?.sources && deepIntel.sources.length > 0 && (
-                        <div className="pt-1.5 border-t border-gray-100">
-                          <p className="text-[9px] text-gray-400 mb-1.5">Sources</p>
-                          <div className="space-y-1">
-                            {deepIntel.sources.slice(0, 5).map((s, i) => {
-                              const sourceType = (s as any).type as string | undefined
-                              const typeBadge: Record<string, string> = {
-                                EDGAR: 'text-blue-600', PUC: 'text-purple-600',
-                                CityPermit: 'text-orange-600', 'ISP-Press': 'text-cyan-600',
-                                'listing-site': 'text-emerald-600',
-                              }
-                              return (
-                                <a
-                                  key={i}
-                                  href={s.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-start gap-1.5 group"
-                                >
-                                  <ExternalLink size={8} className={`${typeBadge[sourceType ?? ''] ?? 'text-gray-300'} group-hover:text-[#6B7EFF] mt-0.5 shrink-0`} />
-                                  <span className="text-[9px] text-gray-400 group-hover:text-[#6B7EFF] truncate leading-tight">{s.title}</span>
-                                  {sourceType && typeBadge[sourceType] && (
-                                    <span className={`text-[8px] font-bold shrink-0 ${typeBadge[sourceType]}`}>{sourceType}</span>
-                                  )}
-                                </a>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
 
                   {/* PropTech Stack Card */}
                   {(() => {
-                    const pt: PropTech = { ...(prospect.property.proptech ?? {}), ...(deepIntel?.proptech ?? {}) };
+                    const pt: PropTech = prospect.property.proptech ?? {};
                     const hasAnyData = [pt.gate_operators, pt.access_control, pt.intercoms, pt.cameras, pt.smart_locks, pt.resident_apps, pt.package_solutions].some(a => a?.length);
                     if (!hasAnyData && !pt.tech_generation && !pt.sara_signals) return null;
 
