@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import {
-  Cpu, Zap, Users, Radio, Target, Mail,
+  Cpu, Zap, Users, Radio, Target,
   Building2, User, MapPin, CheckCircle2,
   ExternalLink, Star, Copy, Send,
   Loader2, Shield, Package, Wifi, AlertCircle,
@@ -35,6 +35,8 @@ interface BulkAgreement {
   agreement_type: 'exclusive' | 'bulk' | 'preferred' | 'unknown';
   expiry_estimate: string;
   confidence: 'confirmed' | 'high' | 'medium' | 'low';
+  source_url?: string;
+  source_snippet?: string;
 }
 
 interface PropTech {
@@ -75,7 +77,7 @@ interface DecisionMaker {
   company: string;
   linkedin_slug: string;
   email: string;
-  email_confidence: number;
+  top_email_format: string; // e.g. "firstname.lastname@greystar.com — 78% (Greystar standard pattern for VPs)"
   phone: string;
   tenure_years: number;
 }
@@ -97,12 +99,11 @@ interface Profile {
   communication_style: string;
 }
 
-interface EmailVariant {
-  angle: string;
-  subject: string;
-  body: string;
-  predicted_reply_rate: number;
-  tone: string;
+interface ScoutBrief {
+  primary_contact: string;
+  outreach_angle: 'contract_window' | 'proptech_pain' | 'acquisition' | 'tech_displacement' | 'sara_bridge' | 'upgrade_path' | 'lease_up' | 'general';
+  contract_window_urgency: 'critical' | 'high' | 'medium' | 'low' | 'none';
+  key_data_points: string[];
 }
 
 interface Prospect {
@@ -110,8 +111,7 @@ interface Prospect {
   decision_maker: DecisionMaker;
   pain_signals: PainSignal[];
   profile: Profile;
-  email_variants: EmailVariant[];
-  generic_reply_rate: number;
+  scout_brief: ScoutBrief;
 }
 
 interface ResearchResult {
@@ -146,13 +146,30 @@ const PHASES = [
     detail: "Building psychographic profile & contract window estimate",
   },
   {
-    id: 5, name: "Campaign Gen", icon: Star,
-    sources: ["ARIA AI", "A/B Variants"],
-    detail: "Generating 3 personalized email variants",
+    id: 5, name: "Intel Synthesis", icon: Star,
+    sources: ["27 OSINT Sources", "Contract DB", "SEC EDGAR"],
+    detail: "Cross-referencing all intelligence layers, building SCOUT handoff packet",
   },
 ];
 
-const PHASE_MS = 1500;
+// Variable phase durations — front-loads the animation so by phase 5 we're deep
+// into the actual API call. Phase 5 holds (no sleep) until the response arrives.
+// Total phases 1–4: 3500+4500+5000+4000 = 17 000 ms — typical searches take 20–45 s.
+const PHASE_DURATIONS = [0, 3500, 4500, 5000, 4000] // index = phase id (0 unused)
+
+// Cycling status messages shown during phase 5 ("Intel Synthesis")
+// Keeps the tile feeling alive while the AI processes the full 27-source pipeline
+const SYNTHESIS_STEPS = [
+  "Querying 27 OSINT sources...",
+  "Searching SEC EDGAR filings...",
+  "Cross-referencing Wayback CDX...",
+  "Mining county recorder indexes...",
+  "Checking UCC-1 filings...",
+  "Scanning contract PDF database...",
+  "Correlating prior findings...",
+  "Synthesizing intelligence...",
+  "Building SCOUT handoff packet...",
+]
 
 const EXAMPLE_QUERIES = [
   "Multifamily communities in Atlanta with gate access complaints",
@@ -235,35 +252,6 @@ function ScoreGauge({ score }: { score: number }) {
   );
 }
 
-function ReplyRateBanner({ variant, generic }: { variant: EmailVariant; generic: number }) {
-  const lift = Math.round(((variant.predicted_reply_rate / generic) - 1) * 100);
-  return (
-    <div
-      className="rounded-2xl p-5 flex items-center gap-8"
-      style={{ background: "linear-gradient(135deg, #6B7EFF 0%, #3B4FCC 100%)" }}
-    >
-      <div>
-        <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest mb-1">ARIA Predicted Reply Rate</p>
-        <p className="text-4xl font-bold text-white tabular-nums">{variant.predicted_reply_rate}%</p>
-      </div>
-      <div className="text-white/30 text-3xl font-light">vs</div>
-      <div>
-        <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest mb-1">Generic Cold Outreach</p>
-        <p className="text-4xl font-bold text-white/40 tabular-nums">{generic}%</p>
-      </div>
-      <div className="flex-1" />
-      <div className="text-right">
-        <div className="flex items-center gap-1.5 justify-end">
-          <TrendingUp size={16} className="text-emerald-300" />
-          <span className="text-2xl font-bold text-emerald-300">+{lift}%</span>
-        </div>
-        <p className="text-white/50 text-xs mt-0.5">better conversion</p>
-        <p className="text-white/30 text-[10px] mt-1">vs industry avg 1-3%</p>
-      </div>
-    </div>
-  );
-}
-
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 function formatAge(iso: string) {
@@ -282,10 +270,10 @@ function daysUntil(iso: string) {
 export default function ARIAPage() {
   const [query, setQuery]                   = useState("");
   const [phase, setPhase]                   = useState(0); // 0=idle 1-5=animating 6=done
+  const [synthStep, setSynthStep]           = useState(0); // cycles through SYNTHESIS_STEPS during phase 5
   const [results, setResults]               = useState<ResearchResult | null>(null);
   const [error, setError]                   = useState<string | null>(null);
   const [selectedProspect, setSelectedProspect] = useState(0);
-  const [selectedEmail, setSelectedEmail]   = useState(0);
   const [copied, setCopied]                 = useState(false);
   const [savedSearchId, setSavedSearchId]   = useState<string | null>(null);
   const [savedSearches, setSavedSearches]   = useState<SavedSearch[]>([]);
@@ -323,7 +311,6 @@ export default function ARIAPage() {
     setResults(null);
     setSavedSearchId(null);
     setSelectedProspect(0);
-    setSelectedEmail(0);
     setPhase(1);
 
     // Fire API in parallel with animation
@@ -340,14 +327,24 @@ export default function ARIAPage() {
       }
     });
 
-    // Animate each phase
-    for (let p = 1; p <= 5; p++) {
+    // Animate phases 1–4 with variable durations front-loading the wait time.
+    // By the time phase 5 starts we're typically ~17s in; most searches take 20–45s.
+    for (let p = 1; p <= 4; p++) {
       setPhase(p);
-      await sleep(PHASE_MS);
+      await sleep(PHASE_DURATIONS[p]);
     }
+
+    // Phase 5 holds until the API responds.
+    // A cycling interval keeps the tile feeling alive with status messages.
+    setPhase(5);
+    setSynthStep(0);
+    const synthInterval = setInterval(() => {
+      setSynthStep(s => (s + 1) % SYNTHESIS_STEPS.length);
+    }, 2800);
 
     try {
       const data = await apiPromise;
+      clearInterval(synthInterval);
       if (data.error) throw new Error(data.error);
       setResults(data);
       setPhase(6);
@@ -360,6 +357,7 @@ export default function ARIAPage() {
           .catch(() => {});
       }
     } catch (e: any) {
+      clearInterval(synthInterval);
       setError(e.message || "Research failed — check ANTHROPIC_API_KEY and try again");
       setPhase(0);
     }
@@ -429,7 +427,6 @@ export default function ARIAPage() {
     setPhase(6);
     setSavedSearchId(s.id);
     setSelectedProspect(0);
-    setSelectedEmail(0);
     // Scroll to results
     setTimeout(() => window.scrollTo({ top: 400, behavior: 'smooth' }), 100);
   }
@@ -443,7 +440,6 @@ export default function ARIAPage() {
   const isRunning = phase >= 1 && phase <= 5;
   const isDone    = phase === 6;
   const prospect  = results?.prospects[selectedProspect];
-  const emailV    = prospect?.email_variants[selectedEmail];
 
   return (
     <div className="min-h-screen bg-[hsl(var(--background))] p-6">
@@ -740,21 +736,31 @@ export default function ARIAPage() {
                       </span>
                     </div>
 
-                    {/* Sources */}
+                    {/* Sources / live synthesis step */}
                     <div className="space-y-1 mb-2.5">
-                      {p.sources.map(s => (
-                        <div key={s} className="flex items-center gap-1.5">
-                          <div
-                            className={cn(
-                              "w-1 h-1 rounded-full transition-all",
-                              status === "done"    ? "bg-emerald-400" :
-                              status === "running" ? "bg-[#6B7EFF] animate-pulse" :
-                                                    "bg-gray-300"
-                            )}
-                          />
-                          <span className="text-[10px] text-gray-400">{s}</span>
+                      {status === "running" && p.id === 5 ? (
+                        // Phase 5: show cycling synthesis status instead of static source list
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-1 h-1 rounded-full bg-[#6B7EFF] animate-ping" />
+                          <span className="text-[10px] text-[#6B7EFF] font-medium transition-all duration-500">
+                            {SYNTHESIS_STEPS[synthStep]}
+                          </span>
                         </div>
-                      ))}
+                      ) : (
+                        p.sources.map(s => (
+                          <div key={s} className="flex items-center gap-1.5">
+                            <div
+                              className={cn(
+                                "w-1 h-1 rounded-full transition-all",
+                                status === "done"    ? "bg-emerald-400" :
+                                status === "running" ? "bg-[#6B7EFF] animate-pulse" :
+                                                      "bg-gray-300"
+                              )}
+                            />
+                            <span className="text-[10px] text-gray-400">{s}</span>
+                          </div>
+                        ))
+                      )}
                     </div>
 
                     {/* Progress bar */}
@@ -762,12 +768,24 @@ export default function ARIAPage() {
                       {status === "done" && (
                         <div className="h-full w-full rounded-full bg-emerald-400" />
                       )}
-                      {status === "running" && (
+                      {status === "running" && p.id < 5 && (
                         <div
                           className="h-full rounded-full"
                           style={{
                             background: "#6B7EFF",
-                            animation: "aria-fill 1.5s ease-in-out forwards",
+                            animation: `aria-fill ${PHASE_DURATIONS[p.id]}ms ease-in-out forwards`,
+                          }}
+                        />
+                      )}
+                      {status === "running" && p.id === 5 && (
+                        // Phase 5 holds until API resolves — show infinite shimmer
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            background: "linear-gradient(90deg, #6B7EFF 0%, #9BA8FF 50%, #6B7EFF 100%)",
+                            backgroundSize: "200% 100%",
+                            animation: "aria-shimmer 1.6s ease-in-out infinite",
+                            width: "100%",
                           }}
                         />
                       )}
@@ -804,7 +822,7 @@ export default function ARIAPage() {
                   {results.prospects.map((p, i) => (
                     <button
                       key={i}
-                      onClick={() => { setSelectedProspect(i); setSelectedEmail(0); }}
+                      onClick={() => setSelectedProspect(i)}
                       className={cn(
                         "text-left p-4 rounded-xl border transition-all",
                         selectedProspect === i
@@ -1080,20 +1098,11 @@ export default function ARIAPage() {
                     </div>
 
                     <div className="space-y-2.5 text-xs">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-gray-400 shrink-0">Email</span>
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="font-mono text-gray-700 text-[10px] truncate">{prospect.decision_maker.email}</span>
-                          <span
-                            className="shrink-0 text-[9px] px-1.5 py-0.5 rounded-full font-bold"
-                            style={{
-                              background: prospect.decision_maker.email_confidence >= 80 ? "#D1FAE5" : "#FEF3C7",
-                              color: prospect.decision_maker.email_confidence >= 80 ? "#065F46" : "#92400E",
-                            }}
-                          >
-                            {prospect.decision_maker.email_confidence}%
-                          </span>
-                        </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-gray-400 shrink-0">Best Email Format</span>
+                        <span className="font-mono text-gray-700 text-[10px] break-all leading-relaxed">
+                          {prospect.decision_maker.top_email_format || prospect.decision_maker.email}
+                        </span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-gray-400">Phone</span>
@@ -1190,90 +1199,75 @@ export default function ARIAPage() {
                     </div>
                   </div>
 
-                  {/* Reply rate banner — updates with selected email variant */}
-                  {emailV && (
-                    <ReplyRateBanner variant={emailV} generic={prospect.generic_reply_rate} />
-                  )}
+                  {/* SCOUT Brief — handoff packet for campaign generation */}
+                  {prospect.scout_brief && (
+                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Send size={13} style={{ color: "#10B981" }} />
+                        <span className="text-[10px] font-bold tracking-widest uppercase text-emerald-700">
+                          SCOUT Handoff Packet
+                        </span>
+                        <span className="ml-auto text-[10px] text-gray-400">
+                          Ready for campaign generation
+                        </span>
+                      </div>
 
-                  {/* Email Variants */}
-                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-                    <div className="flex items-center gap-2 mb-4">
-                      <Mail size={13} style={{ color: "#6B7EFF" }} />
-                      <span className="text-[10px] font-bold tracking-widest uppercase" style={{ color: "#6B7EFF" }}>
-                        Personalized Campaign Variants
-                      </span>
-                      <span className="ml-auto text-[10px] text-gray-400">
-                        Powered by Claude · A/B ready
-                      </span>
-                    </div>
-
-                    {/* Variant tab pills */}
-                    <div className="flex gap-2 mb-5">
-                      {prospect.email_variants.map((v, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setSelectedEmail(i)}
-                          className={cn(
-                            "flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all border text-center",
-                            selectedEmail === i
-                              ? "border-[#6B7EFF] bg-[#6B7EFF]/8 text-[#6B7EFF] shadow-sm"
-                              : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"
-                          )}
-                        >
-                          <div className="font-bold">{v.angle}</div>
-                          <div className={cn("text-[10px] mt-0.5 font-normal", selectedEmail === i ? "text-[#6B7EFF]/70" : "text-gray-400")}>
-                            ~{v.predicted_reply_rate}% reply est.
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Email preview */}
-                    {emailV && (
-                      <div className="rounded-xl border border-gray-100 bg-gray-50/80">
-                        {/* Email header */}
-                        <div className="px-5 py-4 border-b border-gray-100">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mb-1">Subject</p>
-                              <p className="text-sm font-semibold text-gray-900 leading-snug">{emailV.subject}</p>
-                            </div>
-                            <span className="shrink-0 text-[10px] px-2.5 py-1 rounded-full bg-gray-200 text-gray-600 capitalize font-medium">
-                              {emailV.tone}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Email body */}
-                        <div className="px-5 py-4">
-                          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
-                            {emailV.body}
-                          </p>
-                        </div>
-
-                        {/* Actions */}
-                        <div className="px-5 py-3 border-t border-gray-100 flex items-center gap-2">
-                          <button
-                            onClick={() => copyEmail(emailV.subject, emailV.body)}
-                            className="flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 transition-colors font-medium"
-                          >
-                            <Copy size={12} />
-                            {copied ? "Copied!" : "Copy Email"}
-                          </button>
-                          <button
-                            className="flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg text-white font-semibold transition-all shadow-sm"
-                            style={{ background: "linear-gradient(135deg, #6B7EFF 0%, #3B4FCC 100%)" }}
-                          >
-                            <Send size={12} /> Add to Sequence
-                          </button>
-                          <div className="flex-1" />
-                          <span className="text-[10px] text-gray-400">
-                            ARIA Verified · Multi-Source
+                      {/* Outreach angle + urgency row */}
+                      <div className="flex items-center gap-2 flex-wrap mb-4">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#6B7EFF]/8 border border-[#6B7EFF]/20">
+                          <Target size={11} className="text-[#6B7EFF]" />
+                          <span className="text-[11px] font-semibold text-[#6B7EFF] capitalize">
+                            {prospect.scout_brief.outreach_angle.replace(/_/g, ' ')}
                           </span>
                         </div>
+                        <span
+                          className={cn(
+                            "text-[10px] font-bold px-2 py-1 rounded-full capitalize",
+                            URGENCY_PILL[prospect.scout_brief.contract_window_urgency] || "bg-gray-100 text-gray-600"
+                          )}
+                        >
+                          {prospect.scout_brief.contract_window_urgency} window
+                        </span>
+                        <span className="text-[10px] text-gray-400 ml-auto">
+                          Primary: {prospect.scout_brief.primary_contact}
+                        </span>
                       </div>
-                    )}
-                  </div>
+
+                      {/* Key data points */}
+                      <div>
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mb-2.5">Key Intel Points</p>
+                        <div className="space-y-2">
+                          {prospect.scout_brief.key_data_points.map((point, i) => (
+                            <div key={i} className="flex items-start gap-2">
+                              <div className="w-4 h-4 rounded-full bg-[#6B7EFF]/10 flex items-center justify-center shrink-0 mt-0.5">
+                                <span className="text-[9px] font-bold text-[#6B7EFF]">{i + 1}</span>
+                              </div>
+                              <p className="text-[11px] text-gray-700 leading-relaxed">{point}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* SCOUT CTA */}
+                      <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-3">
+                        <button
+                          onClick={() => {
+                            const text = `SCOUT Brief\n\nPrimary Contact: ${prospect.scout_brief.primary_contact}\nAngle: ${prospect.scout_brief.outreach_angle.replace(/_/g, ' ')}\nContract Window: ${prospect.scout_brief.contract_window_urgency}\n\nKey Intel:\n${prospect.scout_brief.key_data_points.map((p, i) => `${i+1}. ${p}`).join('\n')}`;
+                            navigator.clipboard.writeText(text);
+                            setCopied(true);
+                            setTimeout(() => setCopied(false), 2000);
+                          }}
+                          className="flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 transition-colors font-medium"
+                        >
+                          <Copy size={12} />
+                          {copied ? "Copied!" : "Copy Brief"}
+                        </button>
+                        <div className="text-[10px] text-gray-400 flex-1">
+                          ARIA collects intel · SCOUT writes campaigns
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                 </div>
               </div>
@@ -1353,6 +1347,10 @@ export default function ARIAPage() {
         @keyframes aria-fill {
           from { width: 0%; }
           to   { width: 100%; }
+        }
+        @keyframes aria-shimmer {
+          0%   { background-position: 200% center; }
+          100% { background-position: -200% center; }
         }
       `}</style>
     </div>
