@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { CheckCircle2, XCircle, Send, Check, X, Loader2, Copy, Mail, Shield, Calendar, Zap, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -128,7 +128,15 @@ ${org}`;
 }
 
 /* ─── Main component ─────────────────────────────────────────────────────────── */
-export default function QuoteApprovePage({ params }: { params: { id: string } }) {
+export default function QuoteApprovePageWrapper({ params }: { params: { id: string } }) {
+  return (
+    <Suspense fallback={<div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Loader2 style={{ width: 32, height: 32, color: '#6B7EFF' }} className="animate-spin" /></div>}>
+      <QuoteApprovePage params={params} />
+    </Suspense>
+  );
+}
+
+function QuoteApprovePage({ params }: { params: { id: string } }) {
   const searchParams = useSearchParams();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
   const [quote, setQuote]           = useState<Quote | null>(null);

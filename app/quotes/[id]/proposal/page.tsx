@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import {
   Shield, Check, CheckCircle2, XCircle, Phone, Mail,
@@ -143,7 +143,16 @@ function RampUpSchedule({ mrr, startPct, stepPct, fullMonth }: {
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
-export default function ProposalPage() {
+// useSearchParams() requires a Suspense boundary in Next.js 14
+export default function ProposalPageWrapper() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-brand-400" /></div>}>
+      <ProposalPage />
+    </Suspense>
+  );
+}
+
+function ProposalPage() {
   const params       = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const quoteId      = params?.id ?? '';

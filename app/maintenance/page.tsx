@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
 import { AISearch } from "@/components/ai/AISearch";
@@ -467,7 +467,15 @@ const priorityDot: Record<WOPriority, string> = {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-export default function MaintenancePage() {
+export default function MaintenancePageWrapper() {
+  return (
+    <Suspense fallback={<div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{color:'#6B7EFF'}}>Loading...</div></div>}>
+      <MaintenancePage />
+    </Suspense>
+  );
+}
+
+function MaintenancePage() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);

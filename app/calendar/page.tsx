@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -149,7 +149,15 @@ function EventPopover({
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-export default function CalendarPage() {
+export default function CalendarPageWrapper() {
+  return (
+    <Suspense fallback={<div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{color:'#6B7EFF'}}>Loading...</div></div>}>
+      <CalendarPage />
+    </Suspense>
+  );
+}
+
+function CalendarPage() {
   const searchParams = useSearchParams();
 
   const [view, setView] = useState<CalendarView>("week");

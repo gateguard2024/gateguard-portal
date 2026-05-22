@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Building2, Shield, DollarSign, FileText,
@@ -561,7 +561,15 @@ function OppImportButton({ onSelect }: { onSelect: (o: OppImportResult) => void 
   )
 }
 
-export default function NewQuotePage() {
+export default function NewQuotePageWrapper() {
+  return (
+    <Suspense fallback={<div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{color:'#6B7EFF'}}>Loading...</div></div>}>
+      <NewQuotePage />
+    </Suspense>
+  );
+}
+
+function NewQuotePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const prefilledClientOrgId  = searchParams.get('client_org_id') ?? undefined;
