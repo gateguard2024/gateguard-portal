@@ -1,60 +1,193 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
 import {
   Shield, Check, CheckCircle2, XCircle, Phone, Mail,
-  MapPin, Calendar, Clock, FileText, ChevronDown, ChevronUp, Building2,
+  MapPin, Calendar, Clock, Building2, ChevronDown, ChevronUp,
+  Loader2, AlertTriangle, ExternalLink,
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/quote-calculator';
 
-// ── Mock proposal data (will come from Supabase) ─────────────────────────────
-const MOCK_PROPOSAL = {
-  quoteNumber: 'GG-2026-0042',
-  status: 'viewed',
-  validUntil: '2026-05-24',
-  createdAt: 'April 17, 2026',
-  property: {
-    name: 'The Villages on Riverwalk',
-    address: '1200 Riverwalk Pkwy',
-    city: 'Augusta', state: 'GA', zip: '30901',
-    units: 248,
-    contactName: 'Marcus Davis',
-    contactEmail: 'mdavis@riverwalkvillages.com',
-    contactPhone: '(706) 555-0182',
-    managementCompany: 'Willow Creek Property Management',
-  },
-  lineItems: [
-    { id: '1', description: 'GateGuard Monthly Service — 248 units @ $10/unit/mo', qty: 1, unitPrice: 2480, total: 2480, recurring: true },
-    { id: '2', description: 'Working Vehicular Gate — Setup Fee', qty: 2, unitPrice: 500, total: 1000, recurring: false },
-    { id: '3', description: 'Non-Working Amenity Door — Setup Fee', qty: 3, unitPrice: 750, total: 2250, recurring: false },
-    { id: '4', description: 'Callbox Installation — Unifi Gate Access (replaces existing)', qty: 2, unitPrice: 2500, total: 5000, recurring: false },
-    { id: '5', description: 'New Camera Installation (included with service contract)', qty: 4, unitPrice: 0, total: 0, recurring: false },
-    { id: '6', description: 'Camera Cloud Monitoring — New Cameras', qty: 4, unitPrice: 100, total: 400, recurring: true },
-    { id: '7', description: 'Camera Cloud Monitoring — Existing Cameras', qty: 1, unitPrice: 85, total: 85, recurring: true },
-  ],
-  totals: {
-    setupTotal: 8250,
-    monthlyTotal: 2965,
-    depositDue: 7090,
-    goLivePayment: 7090,
-    contractValue: 186150,
-    dealerMRR: 497,
-  },
-  preparedBy: {
-    name: 'Russel Feldman',
-    title: 'Gate Guard, LLC',
-    phone: '844-469-4283',
-    email: 'rfeldman@gateguard.co',
-  },
-};
+// ── Types ────────────────────────────────────────────────────────────────────
+
+interface LineItem {
+  id: string;
+  description: string;
+  qty: number;
+  unitPrice: number;
+  total: number;
+  recurring: boolean;
+  section_name?: string;
+  is_optional?: boolean;
+  is_included?: boolean;
+}
+
+interface QuoteData {
+  id: string;
+  quote_number: string;
+  status: string;
+  created_at: string;
+  expiry_date?: string;
+  // property / contact
+  property_name?: string;
+  property_address?: string;
+  property_city?: string;
+  property_state?: string;
+  property_zip?: string;
+  client_name?: string;
+  client_email?: string;
+  client_phone?: string;
+  units?: number;
+  cover_message?: string;
+  // financial
+  total_one_time?: number;
+  total_mrr?: number;
+  tax_rate?: number;
+  discount_percent?: number;
+  deposit_percent?: number;
+  // relations
+  opportunity_id?: string;
+  org_name?: string;
+  created_by_name?: string;
+}
+
+interface PublicResponse {
+  quote: QuoteData;
+  lineItems: LineItem[];
+  org_name?: string;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function computeTotals(items: LineItem[]) {
+  const setupItems   = items.filter(i => !i.recurring);
+  const monthlyItems = items.filter(i => i.recurring);
+  const setupTotal   = setupItems.reduce((s, i) => s + (i.total ?? 0), 0);
+  const monthlyTotal = monthlyItems.reduce((s, i) => s + (i.total ?? 0), 0);
+  const depositDue   = setupTotal / 2 + monthlyTotal;
+  const goLivePayment = setupTotal / 2 + monthlyTotal;
+  const contractValue = setupTotal + monthlyTotal * 60;
+  return { setupTotal, monthlyTotal, depositDue, goLivePayment, contractValue, setupItems, monthlyItems };
+}
+
+function fmtDate(iso: string | undefined): string {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  } catch { return iso; }
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ProposalPage() {
-  const [showTerms, setShowTerms] = useState(false);
-  const [accepted, setAccepted] = useState(false);
-  const p = MOCK_PROPOSAL;
-  const setupItems = p.lineItems.filter(i => !i.recurring);
-  const monthlyItems = p.lineItems.filter(i => i.recurring);
+  const params   = useParams<{ id: string }>();
+  const quoteId  = params?.id ?? '';
 
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState<string | null>(null);
+  const [data,      setData]      = useState<PublicResponse | null>(null);
+  const [showTerms, setShowTerms] = useState(false);
+  const [accepted,  setAccepted]  = useState(false);
+  const [declined,  setDeclined]  = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // ── Fetch quote ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!quoteId) return;
+    fetch(`/api/quotes/${quoteId}/public`)
+      .then(r => r.ok ? r.json() : r.json().then((d: { error?: string }) => { throw new Error(d.error ?? `HTTP ${r.status}`) }))
+      .then((d: PublicResponse) => setData(d))
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [quoteId]);
+
+  // ── Accept / Decline ───────────────────────────────────────────────────────
+  async function handleAccept() {
+    setSubmitting(true);
+    try {
+      const r = await fetch(`/api/quotes/${quoteId}/public`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'accept' }),
+      });
+      if (!r.ok) throw new Error((await r.json()).error ?? 'Failed to accept');
+
+      // If linked to an opportunity, push financial fields
+      if (data?.quote.opportunity_id) {
+        const totals = computeTotals(data.lineItems);
+        void fetch(`/api/crm/opportunities/${data.quote.opportunity_id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            est_deposit:   totals.depositDue,
+            monthly_total: totals.monthlyTotal,
+            est_mrr:       totals.monthlyTotal,
+            units:         data.quote.units ?? undefined,
+          }),
+        }).catch(() => { /* non-blocking */ });
+      }
+
+      setAccepted(true);
+    } catch (e: unknown) {
+      alert((e instanceof Error ? e.message : 'Error') + ' — please try again or contact your dealer.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDecline() {
+    setSubmitting(true);
+    try {
+      await fetch(`/api/quotes/${quoteId}/public`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'decline' }),
+      });
+      setDeclined(true);
+    } catch {
+      setDeclined(true); // still show declined state even if call fails
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // ── Loading ────────────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-brand-400 animate-spin" />
+      </div>
+    );
+  }
+
+  // ── Error ──────────────────────────────────────────────────────────────────
+  if (error || !data) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="text-center max-w-sm">
+          <AlertTriangle className="w-10 h-10 text-amber-400 mx-auto mb-4" />
+          <h1 className="text-xl font-bold text-foreground mb-2">Proposal Not Found</h1>
+          <p className="text-sm text-muted-foreground">{error ?? 'This proposal link may have expired or been removed.'}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const q      = data.quote;
+  const items  = data.lineItems;
+  const totals = computeTotals(items);
+
+  const propertyName = q.property_name || 'Your Property';
+  const propertyCity = [q.property_city, q.property_state].filter(Boolean).join(', ');
+  const contactName  = q.client_name || 'there';
+  const orgName      = data.org_name || q.org_name || 'GateGuard';
+  const preparedBy   = q.created_by_name || 'GateGuard Team';
+  const expiryDate   = q.expiry_date ? fmtDate(q.expiry_date) : '';
+  const createdDate  = fmtDate(q.created_at);
+  const quoteNumber  = q.quote_number || `GQ-${q.id.slice(0, 8).toUpperCase()}`;
+
+  // ── Accepted screen ────────────────────────────────────────────────────────
   if (accepted) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
@@ -64,31 +197,47 @@ export default function ProposalPage() {
           </div>
           <h1 className="text-2xl font-bold text-foreground mb-2">Proposal Accepted!</h1>
           <p className="text-muted-foreground mb-6">
-            Thank you, {p.property.contactName}. The GateGuard team will be in touch within 1 business day to schedule your kickoff call.
+            Thank you, {contactName}. The GateGuard team will be in touch within 1 business day to schedule your kickoff call.
           </p>
           <div className="bg-card border border-border rounded-xl p-5 text-left space-y-2">
             <p className="text-sm font-semibold text-foreground mb-3">Next Steps</p>
             {[
               'GateGuard sends your service agreement for e-signature',
-              `Deposit of ${formatCurrency(p.totals.depositDue)} collected at signing`,
+              `Deposit of ${formatCurrency(totals.depositDue)} collected at signing`,
               'Site survey scheduled with your installation technician',
               'Equipment pre-configured and shipped to job site',
               'Go-live scheduled — dealer on-site 9 AM – 6 PM',
             ].map((step, i) => (
               <div key={i} className="flex items-start gap-2">
-                <div className="w-5 h-5 rounded-full bg-brand-400/20 text-brand-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{i+1}</div>
+                <div className="w-5 h-5 rounded-full bg-brand-400/20 text-brand-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</div>
                 <p className="text-sm text-muted-foreground">{step}</p>
               </div>
             ))}
           </div>
           <p className="text-xs text-muted-foreground mt-6">
-            Questions? Call {p.preparedBy.phone} or email {p.preparedBy.email}
+            Questions? Visit <span className="text-brand-400">gateguard.co</span>
           </p>
         </div>
       </div>
     );
   }
 
+  // ── Declined screen ────────────────────────────────────────────────────────
+  if (declined) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="text-center max-w-md">
+          <XCircle className="w-14 h-14 text-muted-foreground mx-auto mb-4" />
+          <h1 className="text-xl font-bold text-foreground mb-2">Proposal Declined</h1>
+          <p className="text-sm text-muted-foreground">
+            We&#39;ve recorded your response. If you change your mind or have questions, reach out to your GateGuard representative.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Main proposal view ─────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background">
 
@@ -104,9 +253,21 @@ export default function ProposalPage() {
               <p className="text-xs text-muted-foreground">Unrivaled Security</p>
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-xs text-muted-foreground font-mono">{p.quoteNumber}</p>
-            <p className="text-xs text-muted-foreground">Valid until {p.validUntil}</p>
+          <div className="text-right flex items-center gap-3">
+            <div>
+              <p className="text-xs text-muted-foreground font-mono">{quoteNumber}</p>
+              {expiryDate && <p className="text-xs text-muted-foreground">Valid until {expiryDate}</p>}
+            </div>
+            {/* Internal portal link — only visible in browser (no auth required, just helpful) */}
+            <a
+              href={`/quotes/${quoteId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden sm:flex items-center gap-1 text-[10px] text-brand-400/60 hover:text-brand-400 transition-colors"
+              title="View in portal"
+            >
+              <ExternalLink className="w-3 h-3" />
+            </a>
           </div>
         </div>
       </div>
@@ -116,12 +277,21 @@ export default function ProposalPage() {
         {/* Hero */}
         <div className="space-y-2">
           <p className="text-xs text-brand-400 font-semibold uppercase tracking-widest">Security Proposal</p>
-          <h1 className="text-3xl font-bold text-foreground">{p.property.name}</h1>
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />{p.property.city}, {p.property.state}</span>
-            <span className="flex items-center gap-1.5"><Building2 className="w-3.5 h-3.5 opacity-0" />{p.property.units} residential units</span>
-            <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" />Prepared {p.createdAt}</span>
+          <h1 className="text-3xl font-bold text-foreground">{propertyName}</h1>
+          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+            {propertyCity && (
+              <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />{propertyCity}</span>
+            )}
+            {q.units && (
+              <span className="flex items-center gap-1.5"><Building2 className="w-3.5 h-3.5" />{q.units} residential units</span>
+            )}
+            {createdDate && (
+              <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" />Prepared {createdDate}</span>
+            )}
           </div>
+          {q.cover_message && (
+            <p className="text-sm text-muted-foreground mt-3 max-w-2xl whitespace-pre-wrap">{q.cover_message}</p>
+          )}
         </div>
 
         {/* What's included */}
@@ -149,85 +319,89 @@ export default function ProposalPage() {
         </div>
 
         {/* Setup fees */}
-        <div className="bg-card border border-border rounded-2xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-border">
-            <h2 className="text-lg font-semibold text-foreground">One-Time Setup</h2>
-            <p className="text-sm text-muted-foreground">Paid in two installments — see payment schedule below</p>
-          </div>
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border bg-background/50">
-                <th className="text-left text-xs text-muted-foreground font-medium px-6 py-3">Description</th>
-                <th className="text-right text-xs text-muted-foreground font-medium px-4 py-3">Qty</th>
-                <th className="text-right text-xs text-muted-foreground font-medium px-4 py-3">Unit</th>
-                <th className="text-right text-xs text-muted-foreground font-medium px-6 py-3">Total</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {setupItems.map(item => (
-                <tr key={item.id}>
-                  <td className="px-6 py-3 text-sm text-foreground">{item.description}</td>
-                  <td className="px-4 py-3 text-sm text-right text-muted-foreground">{item.qty}</td>
-                  <td className="px-4 py-3 text-sm text-right text-muted-foreground">
-                    {item.unitPrice === 0 ? <span className="text-emerald-400 font-medium">Included</span> : formatCurrency(item.unitPrice)}
-                  </td>
-                  <td className="px-6 py-3 text-sm text-right font-semibold text-foreground">
-                    {item.total === 0 ? <span className="text-emerald-400">$0</span> : formatCurrency(item.total)}
-                  </td>
+        {totals.setupItems.length > 0 && (
+          <div className="bg-card border border-border rounded-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-border">
+              <h2 className="text-lg font-semibold text-foreground">One-Time Setup</h2>
+              <p className="text-sm text-muted-foreground">Paid in two installments — see payment schedule below</p>
+            </div>
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border bg-background/50">
+                  <th className="text-left text-xs text-muted-foreground font-medium px-6 py-3">Description</th>
+                  <th className="text-right text-xs text-muted-foreground font-medium px-4 py-3">Qty</th>
+                  <th className="text-right text-xs text-muted-foreground font-medium px-4 py-3">Unit</th>
+                  <th className="text-right text-xs text-muted-foreground font-medium px-6 py-3">Total</th>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-border bg-background/50">
-                <td colSpan={3} className="px-6 py-4 text-sm font-bold text-foreground text-right">Setup Total</td>
-                <td className="px-6 py-4 text-lg font-bold text-foreground text-right">{formatCurrency(p.totals.setupTotal)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {totals.setupItems.map(item => (
+                  <tr key={item.id}>
+                    <td className="px-6 py-3 text-sm text-foreground">{item.description}</td>
+                    <td className="px-4 py-3 text-sm text-right text-muted-foreground">{item.qty}</td>
+                    <td className="px-4 py-3 text-sm text-right text-muted-foreground">
+                      {item.unitPrice === 0 ? <span className="text-emerald-400 font-medium">Included</span> : formatCurrency(item.unitPrice)}
+                    </td>
+                    <td className="px-6 py-3 text-sm text-right font-semibold text-foreground">
+                      {item.total === 0 ? <span className="text-emerald-400">$0</span> : formatCurrency(item.total)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-border bg-background/50">
+                  <td colSpan={3} className="px-6 py-4 text-sm font-bold text-foreground text-right">Setup Total</td>
+                  <td className="px-6 py-4 text-lg font-bold text-foreground text-right">{formatCurrency(totals.setupTotal)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
 
         {/* Monthly recurring */}
-        <div className="bg-card border border-border rounded-2xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-border">
-            <h2 className="text-lg font-semibold text-foreground">Monthly Recurring</h2>
-            <p className="text-sm text-muted-foreground">60-month service agreement · auto-renews annually after Year 5</p>
-          </div>
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border bg-background/50">
-                <th className="text-left text-xs text-muted-foreground font-medium px-6 py-3">Service</th>
-                <th className="text-right text-xs text-muted-foreground font-medium px-4 py-3">Qty</th>
-                <th className="text-right text-xs text-muted-foreground font-medium px-4 py-3">Rate</th>
-                <th className="text-right text-xs text-muted-foreground font-medium px-6 py-3">Monthly</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {monthlyItems.map(item => (
-                <tr key={item.id}>
-                  <td className="px-6 py-3 text-sm text-foreground">{item.description}</td>
-                  <td className="px-4 py-3 text-sm text-right text-muted-foreground">{item.qty}</td>
-                  <td className="px-4 py-3 text-sm text-right text-muted-foreground">{formatCurrency(item.unitPrice)}/mo</td>
-                  <td className="px-6 py-3 text-sm text-right font-semibold text-foreground">{formatCurrency(item.total)}/mo</td>
+        {totals.monthlyItems.length > 0 && (
+          <div className="bg-card border border-border rounded-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-border">
+              <h2 className="text-lg font-semibold text-foreground">Monthly Recurring</h2>
+              <p className="text-sm text-muted-foreground">60-month service agreement · auto-renews annually after Year 5</p>
+            </div>
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border bg-background/50">
+                  <th className="text-left text-xs text-muted-foreground font-medium px-6 py-3">Service</th>
+                  <th className="text-right text-xs text-muted-foreground font-medium px-4 py-3">Qty</th>
+                  <th className="text-right text-xs text-muted-foreground font-medium px-4 py-3">Rate</th>
+                  <th className="text-right text-xs text-muted-foreground font-medium px-6 py-3">Monthly</th>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-border bg-background/50">
-                <td colSpan={3} className="px-6 py-4 text-sm font-bold text-foreground text-right">Monthly Total</td>
-                <td className="px-6 py-4 text-xl font-bold text-brand-400 text-right">{formatCurrency(p.totals.monthlyTotal)}/mo</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {totals.monthlyItems.map(item => (
+                  <tr key={item.id}>
+                    <td className="px-6 py-3 text-sm text-foreground">{item.description}</td>
+                    <td className="px-4 py-3 text-sm text-right text-muted-foreground">{item.qty}</td>
+                    <td className="px-4 py-3 text-sm text-right text-muted-foreground">{formatCurrency(item.unitPrice)}/mo</td>
+                    <td className="px-6 py-3 text-sm text-right font-semibold text-foreground">{formatCurrency(item.total)}/mo</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-border bg-background/50">
+                  <td colSpan={3} className="px-6 py-4 text-sm font-bold text-foreground text-right">Monthly Total</td>
+                  <td className="px-6 py-4 text-xl font-bold text-brand-400 text-right">{formatCurrency(totals.monthlyTotal)}/mo</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
 
         {/* Payment schedule */}
         <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
           <h2 className="text-lg font-semibold text-foreground">Payment Schedule</h2>
           <div className="space-y-3">
             {[
-              { label: 'Deposit — Due at Signing', amount: p.totals.depositDue, sub: '50% of setup fees + first month service', color: 'text-amber-400', dot: 'bg-amber-400' },
-              { label: 'Go-Live Payment', amount: p.totals.goLivePayment, sub: '50% of setup fees + first month service (due on scheduled go-live date)', color: 'text-blue-400', dot: 'bg-blue-400' },
-              { label: 'Monthly Recurring', amount: p.totals.monthlyTotal, sub: 'Begins on the 15th of the month following go-live', color: 'text-brand-400', dot: 'bg-brand-400', suffix: '/mo' },
+              { label: 'Deposit — Due at Signing', amount: totals.depositDue, sub: '50% of setup fees + first month service', color: 'text-amber-400', dot: 'bg-amber-400' },
+              { label: 'Go-Live Payment', amount: totals.goLivePayment, sub: '50% of setup fees + first month service (due on scheduled go-live date)', color: 'text-blue-400', dot: 'bg-blue-400' },
+              { label: 'Monthly Recurring', amount: totals.monthlyTotal, sub: 'Begins on the 15th of the month following go-live', color: 'text-brand-400', dot: 'bg-brand-400', suffix: '/mo' },
             ].map(item => (
               <div key={item.label} className="flex items-center justify-between p-4 bg-background/50 rounded-xl border border-border">
                 <div className="flex items-center gap-3">
@@ -243,7 +417,7 @@ export default function ProposalPage() {
           </div>
         </div>
 
-        {/* Early termination (collapsible) */}
+        {/* Contract terms (collapsible) */}
         <div className="bg-card border border-border rounded-2xl overflow-hidden">
           <button
             onClick={() => setShowTerms(!showTerms)}
@@ -266,7 +440,7 @@ export default function ProposalPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border text-sm">
-                  {[['Year 1','30% of remaining contract value'],['Year 2','20% of remaining contract value'],['Year 3','10% of remaining contract value'],['Year 4+','No fee']].map(([yr,fee]) => (
+                  {[['Year 1','30% of remaining contract value'],['Year 2','20% of remaining contract value'],['Year 3','10% of remaining contract value'],['Year 4+','No fee']].map(([yr, fee]) => (
                     <tr key={yr}><td className="py-2 text-foreground">{yr}</td><td className="py-2 text-right text-muted-foreground">{fee}</td></tr>
                   ))}
                 </tbody>
@@ -284,14 +458,14 @@ export default function ProposalPage() {
               <Shield className="w-6 h-6 text-brand-400" />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-semibold text-foreground">{p.preparedBy.name}</p>
-              <p className="text-xs text-muted-foreground">{p.preparedBy.title}</p>
+              <p className="text-sm font-semibold text-foreground">{preparedBy}</p>
+              <p className="text-xs text-muted-foreground">{orgName}</p>
               <div className="flex gap-4 mt-1">
-                <a href={`tel:${p.preparedBy.phone}`} className="flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300">
-                  <Phone className="w-3 h-3" />{p.preparedBy.phone}
+                <a href="tel:844-469-4283" className="flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300">
+                  <Phone className="w-3 h-3" />844-469-4283
                 </a>
-                <a href={`mailto:${p.preparedBy.email}`} className="flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300">
-                  <Mail className="w-3 h-3" />{p.preparedBy.email}
+                <a href="mailto:info@gateguard.co" className="flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300">
+                  <Mail className="w-3 h-3" />info@gateguard.co
                 </a>
               </div>
             </div>
@@ -308,32 +482,39 @@ export default function ProposalPage() {
           <h2 className="text-lg font-semibold text-foreground">Ready to get started?</h2>
           <p className="text-sm text-muted-foreground max-w-lg mx-auto">
             By accepting this proposal, you agree to the GateGuard service agreement terms. A deposit of{' '}
-            <span className="text-foreground font-semibold">{formatCurrency(p.totals.depositDue)}</span> is due at signing.
+            <span className="text-foreground font-semibold">{formatCurrency(totals.depositDue)}</span> is due at signing.
           </p>
           <div className="flex items-center justify-center gap-4">
             <button
-              onClick={() => setAccepted(true)}
-              className="flex items-center gap-2 px-8 py-3 bg-brand-400 hover:bg-brand-500 text-navy font-bold rounded-xl transition-colors gg-glow"
+              onClick={handleAccept}
+              disabled={submitting}
+              className="flex items-center gap-2 px-8 py-3 bg-brand-400 hover:bg-brand-500 text-navy font-bold rounded-xl transition-colors gg-glow disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <CheckCircle2 className="w-5 h-5" />
+              {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
               Accept Proposal
             </button>
-            <button className="flex items-center gap-2 px-6 py-3 border border-border text-muted-foreground hover:text-foreground rounded-xl transition-colors text-sm">
+            <button
+              onClick={handleDecline}
+              disabled={submitting}
+              className="flex items-center gap-2 px-6 py-3 border border-border text-muted-foreground hover:text-foreground rounded-xl transition-colors text-sm disabled:opacity-60"
+            >
               <XCircle className="w-4 h-4" />
               Decline
             </button>
           </div>
-          <p className="text-xs text-muted-foreground flex items-center justify-center gap-1">
-            <Clock className="w-3.5 h-3.5" />
-            Proposal valid until {p.validUntil}
-          </p>
+          {expiryDate && (
+            <p className="text-xs text-muted-foreground flex items-center justify-center gap-1">
+              <Clock className="w-3.5 h-3.5" />
+              Proposal valid until {expiryDate}
+            </p>
+          )}
         </div>
 
         {/* Footer */}
         <div className="text-center text-xs text-muted-foreground pb-6 space-y-1">
           <p>GateGuard, LLC · 980 Hammond Drive, Ste. 200 · Atlanta, GA 30328</p>
           <p>844-4MY-GATE · info@gateguard.co · gateguard.co</p>
-          <p className="text-xs opacity-50 mt-2">Quote {p.quoteNumber} · Generated {p.createdAt}</p>
+          <p className="text-xs opacity-50 mt-2">Quote {quoteNumber} · Generated {createdDate}</p>
         </div>
       </div>
     </div>

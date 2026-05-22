@@ -179,6 +179,10 @@ const SOURCE_DISPLAY: Record<string, string> = {
   'HOA-MINUTES/RFP': 'Property Document',
   'linkedin-mdu':    'Industry Signal',
   'LINKEDIN-MDU-REP':'Industry Signal',
+  'locator-site':    'Property Review',
+  'LOCATOR-REVIEW':  'Property Review',
+  'forced-service':  'Resident Complaint',
+  'FORCED-SERVICE':  'Resident Complaint',
   'web':             'ARIA Verified',
   'WEB':             'ARIA Verified',
 };
@@ -290,6 +294,7 @@ export default function ARIAPage() {
   const [showHistory, setShowHistory]       = useState(true);
   const [scoutLoading, setScoutLoading]     = useState<string | null>(null); // search id being scouted
   const [scoutResult, setScoutResult]       = useState<Record<string, { sent: number; skipped: number; errors: number }>>({});
+  const [deleting, setDeleting]             = useState<string | null>(null);
   const [usageStats, setUsageStats]         = useState<{
     my_searches: { total: number; base: number; deep: number; this_week: number; this_month: number };
     my_org:      { org_name: string | null; total: number; this_month: number; top_users: { user_name: string; count: number }[] };
@@ -401,6 +406,18 @@ export default function ARIAPage() {
       setScoutResult(prev => ({ ...prev, [searchId]: { sent: -1, skipped: 0, errors: 1 } }));
     } finally {
       setScoutLoading(null);
+    }
+  }
+
+  async function deleteSearch(id: string) {
+    setDeleting(id);
+    try {
+      await fetch(`/api/aria/searches/${id}`, { method: 'DELETE' });
+      setSavedSearches(prev => prev.filter(s => s.id !== id));
+    } catch {
+      // fail silently — search stays in list
+    } finally {
+      setDeleting(null);
     }
   }
 
@@ -611,6 +628,17 @@ export default function ARIAPage() {
                           {scoutLoading === s.id ? <Loader2 size={10} className="animate-spin" /> : <><Zap size={10} /> SCOUT</>}
                         </button>
                       )}
+                      <button
+                        onClick={() => deleteSearch(s.id)}
+                        disabled={deleting === s.id}
+                        title="Remove search"
+                        className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 hover:bg-red-50 rounded-lg p-1 transition-all disabled:opacity-40"
+                      >
+                        {deleting === s.id
+                          ? <Loader2 size={12} className="animate-spin" />
+                          : <Trash2 size={12} />
+                        }
+                      </button>
                     </div>
                   </div>
                 );

@@ -87,6 +87,7 @@ interface QuoteDetail {
   ramp_up_start_pct:   number | null;
   ramp_up_step_pct:    number | null;
   ramp_up_full_month:  number | null;
+  opportunity_id:      string | null;
 }
 
 // ── Survey type ────────────────────────────────────────────────────────────────
@@ -626,7 +627,25 @@ export default function QuoteDetailPage() {
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
+      const updatedQuote = { ...quote, ...data.quote };
       setQuote(q => q ? { ...q, ...data.quote } : q);
+
+      // Sync financial details to linked opportunity when quote is sent or accepted
+      if ((status === 'sent' || status === 'accepted') && updatedQuote.opportunity_id) {
+        const depositPct = updatedQuote.deposit_percent ?? 50;
+        const depositDue = (updatedQuote.total_one_time * (depositPct / 100)) + (updatedQuote.total_mrr ?? 0);
+        void fetch(`/api/crm/opportunities/${updatedQuote.opportunity_id}`, {
+          method:  'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            est_deposit:   Math.round(depositDue),
+            monthly_total: updatedQuote.total_mrr,
+            est_mrr:       updatedQuote.total_mrr,
+            ...(updatedQuote.units ? { units: updatedQuote.units } : {}),
+          }),
+        }).catch(() => { /* non-blocking — don't let this fail the quote action */ });
+      }
+
       // Show email confirmation toast for 'sent'
       if (status === 'sent' && data.email_sent) {
         alert(`✓ Quote sent! Email delivered to ${data.email_to} (CC: ${data.email_cc})`);
@@ -900,6 +919,13 @@ export default function QuoteDetailPage() {
             className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 text-sm text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <Eye size={13} /> Preview
+          </Link>
+          <Link
+            href={`/quotes/${id}/proposal`}
+            target="_blank"
+            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 text-sm text-gray-600 rounded-lg hover:bg-gray-50 hover:text-[#6B7EFF] hover:border-blue-200 transition-colors"
+          >
+            <FileText size={13} /> Proposal
           </Link>
           <button
             onClick={copyApprovalLink}

@@ -9,7 +9,7 @@
  *   1. Extract location hint from query (address or city/state)
  *   2. Geocode via Nominatim (OpenStreetMap) — no API key required
  *   3. Query FCC Broadband Map API for verified ISP coverage at that location
- *   4. Run 7 parallel Tavily OSINT searches:
+ *   4. Run 9 parallel Tavily OSINT searches:
  *      - Apartment listing sites (apartments.com, americantv.com, etc.)
  *      - Reddit/ApartmentRatings social signals
  *      - County deed/easement records (ISPs record MDU agreements against title)
@@ -17,12 +17,14 @@
  *      - Commercial RE Offering Memoranda (LoopNet/Crexi "ancillary income" section = 99% accuracy)
  *      - HOA meeting minutes + RFP documents (explicit contract dates)
  *      - LinkedIn MDU account executive win posts
+ *      - Third-party locator sites (fee breakdowns exposing bundled service charges)
+ *      - Forced-service resident complaints (exclusive provider signals)
  *   5. Inject FCC + Tavily web intelligence as hard facts into ARIA's prompt
  *
- * Accuracy targets (with all 7 sources):
+ * Accuracy targets (with all 9 sources):
  *   - ISP availability: ~95% (FCC 477 data, updated twice yearly)
- *   - Video provider: ~80% (FCC + americantv.com + PCO sites)
- *   - Bulk/exclusive agreements: ~90%+ when OM or county deed found
+ *   - Video provider: ~85% (FCC + americantv.com + PCO sites + locator reviews)
+ *   - Bulk/exclusive agreements: ~93%+ when OM or county deed found; locator/complaint sites add coverage
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -447,7 +449,7 @@ export async function POST(req: NextRequest) {
       } catch { /* non-blocking */ }
     })()
 
-    // Tavily OSINT searches — 7 parallel sources, non-blocking if no API key
+    // Tavily OSINT searches — 9 parallel sources, non-blocking if no API key
     const tavilyPromise = (async () => {
       if (!process.env.TAVILY_API_KEY) return
       const loc = locationHint || ''
@@ -461,6 +463,8 @@ export async function POST(req: NextRequest) {
         commercialRE,        // 5. Offering Memoranda (LoopNet/Crexi) — "ancillary income" gold mine
         hoaRfpDocs,          // 6. HOA meeting minutes + RFPs — explicit contract expiry dates
         linkedinMduReps,     // 7. LinkedIn MDU account executive win posts + americantv.com
+        locatorSites,        // 8. Third-party locator sites — fee breakdowns exposing bundled charges
+        forcedService,       // 9. Explicit forced-service resident complaints
       ] = await Promise.all([
 
         // 1. Listing sites — most reliable for confirming "internet included" + exact provider
@@ -501,6 +505,19 @@ export async function POST(req: NextRequest) {
         tavilySearch(
           `"MDU account executive" OR "connected communities" OR "MDU sales" ${loc} "secured" OR "awarded" OR "signed" OR "agreement" apartment OR multifamily DirecTV OR Charter OR Comcast OR Gigastream OR "Hotwire" OR "Spectrum" site:linkedin.com OR site:americantv.com`,
           3, 'linkedin-mdu'),
+
+        // 8. Third-party locator sites — fee breakdowns reveal bundled service charges
+        // TacoStreetLocating, Apartment List locators, Dwellsy post move-in cost breakdowns
+        // that explicitly show "$80/month DirecTV fee" or "required internet: $65/month Gigastream"
+        tavilySearch(
+          `"${terms}" ${loc} ("internet fee" OR "cable fee" OR "DirecTV included" OR "TV fee" OR "bundled fee" OR "required fee" OR "internet included" OR "forced service" OR "bulk service fee" OR "mandatory cable" OR "required internet") apartment fees breakdown`,
+          4, 'locator-site'),
+
+        // 9. Forced-service explicit resident complaints — strongest exclusive-provider signal
+        // "I can't switch" / "only option" complaints on Google Maps, Yelp, Reddit NOT on official site
+        tavilySearch(
+          `"${terms}" ${loc} ("forced to use" OR "have to use" OR "only option" OR "can't switch" OR "required to pay for" OR "no choice" OR "stuck with" OR "mandatory" OR "can't cancel") ("DirecTV" OR "Spectrum" OR "Comcast" OR "AT&T" OR "internet" OR "cable" OR "Gigastream" OR "DISH") -site:cortland.com -site:apartments.com -site:cortlandliving.com`,
+          4, 'forced-service'),
       ])
 
       const allResults = [
@@ -511,18 +528,22 @@ export async function POST(req: NextRequest) {
         ...commercialRE,
         ...hoaRfpDocs,
         ...linkedinMduReps,
+        ...locatorSites,
+        ...forcedService,
       ]
         .filter(r => r.score > 0.20)
         .sort((a, b) => {
           // Boost highest-signal sources: county deed, commercial RE OM, HOA/RFP docs
           const boostMap: Record<string, number> = {
-            'county-deed': 0.35,
-            'commercial-re': 0.30,
-            'hoa-rfp': 0.25,
-            'listing-site': 0.20,
-            'linkedin-mdu': 0.15,
-            'isp-partnership': 0.10,
-            social: 0.05,
+            'county-deed':    0.35,
+            'commercial-re':  0.30,
+            'hoa-rfp':        0.25,
+            'listing-site':   0.20,
+            'locator-site':   0.22,
+            'forced-service': 0.18,
+            'linkedin-mdu':   0.15,
+            'isp-partnership':0.10,
+            social:           0.05,
           }
           const aBoost = boostMap[a.source ?? ''] ?? 0
           const bBoost = boostMap[b.source ?? ''] ?? 0
@@ -540,10 +561,12 @@ export async function POST(req: NextRequest) {
         'commercial-re':  'OFFERING-MEMO',
         'hoa-rfp':        'HOA-MINUTES/RFP',
         'linkedin-mdu':   'LINKEDIN-MDU-REP',
+        'locator-site':   'LOCATOR-REVIEW',
+        'forced-service': 'FORCED-SERVICE',
         web:              'WEB',
       }
 
-      tavilyContextBlock = `\n\nWEB INTELLIGENCE — Live OSINT (7 sources, use as primary evidence for bulk_agreements[] and isp_providers[]):
+      tavilyContextBlock = `\n\nWEB INTELLIGENCE — Live OSINT (9 sources, use as primary evidence for bulk_agreements[] and isp_providers[]):
 ${allResults.map((r) => `[${sourceLabels[r.source ?? 'web'] ?? 'WEB'}] ${r.title}\nURL: ${r.url}\n${r.content.slice(0, 450)}`).join('\n\n---\n\n')}
 
 SIGNAL EXTRACTION RULES (apply in this priority order):
@@ -552,11 +575,13 @@ SIGNAL EXTRACTION RULES (apply in this priority order):
 3. [HOA-MINUTES/RFP] board minutes or RFP mentions contract renewal/expiry → confidence="high" for timing, "medium" if provider unclear
 4. [LINKEDIN-MDU-REP] sales rep post: "secured 10-year agreement with [Property]" → confidence="medium-high", calculate expiry from post year + term
 5. [LISTING-SITE] "internet by [ISP]" or "bulk internet included" → confidence="medium"
-6. [REDDIT/REVIEW] "only option is [ISP]" or "can't use anyone else" → agreement_type="exclusive", confidence="medium"
-7. [ISP-PARTNERSHIP] PCO (World Cinema/KruseCom/WhiteSky) case study → confidence="medium" for DISH/DirecTV provider
-8. Local/regional ISPs (Gigastream, Sonic, Hotwire, WideOpenWest, Vyve, Metronet, Brightspeed, Ting, Consolidated) → TRUST over national carrier — they often ARE the MDU bulk provider
-9. americantv.com listing for DirecTV/DISH dealer serving this area → use as supporting evidence for video_providers[]
-10. If NO web evidence found above → bulk_agreements = [] (never infer from market patterns alone)`
+6. [LOCATOR-REVIEW] third-party locator site (TacoStreetLocating, Dwellsy, etc.) shows move-in fee breakdown with "internet fee: $X/mo [ISP]" or "required DirecTV: $Y/mo" → confidence="medium-high" — these are highly reliable because locators list actual move-in costs residents must pay
+7. [FORCED-SERVICE] resident explicitly says "forced to use [ISP]", "can't switch", "only option", "stuck with [ISP]" on Google Maps/Yelp/Reddit → agreement_type="exclusive", confidence="medium"
+8. [REDDIT/REVIEW] "only option is [ISP]" or "can't use anyone else" → agreement_type="exclusive", confidence="medium"
+9. [ISP-PARTNERSHIP] PCO (World Cinema/KruseCom/WhiteSky) case study → confidence="medium" for DISH/DirecTV provider
+10. Local/regional ISPs (Gigastream, Sonic, Hotwire, WideOpenWest, Vyve, Metronet, Brightspeed, Ting, Consolidated) → TRUST over national carrier — they often ARE the MDU bulk provider
+11. americantv.com listing for DirecTV/DISH dealer serving this area → use as supporting evidence for video_providers[]
+12. If NO web evidence found above → bulk_agreements = [] (never infer from market patterns alone)`
     })()
 
     await Promise.allSettled([fccPromise, oppPromise, tavilyPromise])
@@ -618,7 +643,9 @@ BULK AGREEMENT RESEARCH (CRITICAL ACCURACY RULES — READ CAREFULLY):
   3. [HOA-MINUTES/RFP] board meeting explicitly mentions contract renewal/expiry with provider → confidence="high"
   4. [LINKEDIN-MDU-REP] MDU Account Exec posts win for this property + term length → confidence="medium-high"
   5. [LISTING-SITE] "internet by [ISP]" or "internet included" or "DISH included" in listing → confidence="medium"
+  5b. [LOCATOR-REVIEW] third-party locator site (TacoStreetLocating, Dwellsy, etc.) lists move-in fee breakdown showing "internet fee: $X/mo [ISP]" or "required DirecTV: $Y/mo" → confidence="medium-high" — locators show actual costs tenants must pay; highly reliable for confirming forced/bulk service
   6. [REDDIT/REVIEW] resident says "only option is [ISP]", "can't use any other provider" → agreement_type="exclusive", confidence="medium"
+  6b. [FORCED-SERVICE] resident complaint on Google/Yelp/Reddit (not official property site) explicitly says "forced to use [ISP]", "can't switch", "stuck with [ISP]" → agreement_type="exclusive", confidence="medium-high" — unsolicited complaints are strong exclusive-provider signals
   7. [ISP-PARTNERSHIP] PCO (World Cinema/KruseCom/WhiteSky) case study names building → confidence="medium"
 - WEB INTELLIGENCE (provided below with source labels): ALWAYS higher priority than FCC data or pattern inference.
 - Local/regional ISPs (Gigastream, Sonic, Hotwire, WideOpenWest, Vyve, Metronet, IgLou, Blue Ridge) frequently have MDU exclusive deals. Trust these when mentioned even once.
@@ -628,12 +655,14 @@ BULK AGREEMENT RESEARCH (CRITICAL ACCURACY RULES — READ CAREFULLY):
 - If zero web evidence found → bulk_agreements = [] (empty is better than a guess).
 - confidence levels:
   * "high" = Offering Memo OR county deed OR HOA minutes explicitly names provider + terms
+  * "medium-high" = locator site fee breakdown OR unsolicited forced-service resident complaint names specific ISP
   * "medium" = listing site, LinkedIn rep post, or PCO portfolio names provider; OR resident says "only option"
   * "low" = FCC pattern only, no property-specific source
 
 ISP & VIDEO PROVIDER RESEARCH:
 - If FCC broadband data is provided below, use ONLY those ISPs for isp_providers[]. This is verified government data, not inference.
 - For video_providers: FCC 477 does not cover video. Research which video/TV providers serve the property.
+- Third-party locator sites (TacoStreetLocating, Dwellsy, Apartment List locators) sometimes itemize ALL required fees including bundled TV/internet — treat this as ground truth for video_providers[] and bulk_agreements[].
 - EMAIL ANGLE RULE — ISP/VIDEO INTEL:
   * If a bulk agreement expiry is within 18 months → use "contract_window" email angle
   * If property is on Comcast/Spectrum exclusively but AT&T Fiber is in the FCC data → use "upgrade path" angle
@@ -668,7 +697,7 @@ GateGuard offerings to weave into emails where relevant:
 - SARA Bridge: easy migration path from SARA Plus
 
 ${fccBlock ? 'The FCC data above is already resolved for this location. Use it directly for isp_providers[]. Do NOT override it with your own inference.' : 'No FCC data available. Infer ISPs from your knowledge of the target market.'}
-${tavilyContextBlock ? 'Web Intelligence results are provided above (7 OSINT sources). Prioritize [OFFERING-MEMO] and [COUNTY-DEED] for contract expiry dates. Use [LISTING-SITE], [REDDIT/REVIEW], [HOA-MINUTES/RFP], [LINKEDIN-MDU-REP], and [ISP-PARTNERSHIP] as supporting evidence. These are live search results — always prioritize them over pattern inference.' : ''}
+${tavilyContextBlock ? 'Web Intelligence results are provided above (9 OSINT sources). Prioritize [OFFERING-MEMO] and [COUNTY-DEED] for contract expiry dates. [LOCATOR-REVIEW] and [FORCED-SERVICE] are high-reliability sources for bulk/exclusive agreements — treat them as ground truth when present. Use [LISTING-SITE], [REDDIT/REVIEW], [HOA-MINUTES/RFP], [LINKEDIN-MDU-REP], and [ISP-PARTNERSHIP] as supporting evidence. These are live search results — always prioritize them over pattern inference.' : ''}
 
 Call the aria_research_result tool with your findings now.`
       }]

@@ -454,6 +454,7 @@ function ItemFormPanel({
 // ── OppImportButton — search opportunities and import contact/property data ──
 interface OppImportResult {
   id: string; property_name?: string; property_address?: string;
+  property_city?: string; property_state?: string; property_zip?: string;
   contact_name?: string; contact_email?: string; contact_phone?: string;
   units?: number;
 }
@@ -519,14 +520,17 @@ function OppImportButton({ onSelect }: { onSelect: (o: OppImportResult) => void 
                 onClick={async () => {
                   setSelecting(o.id)
                   try {
-                    const detailed = await fetch(`/api/crm/opportunities/${o.id}`).then(r => r.json())
+                    const detailed = await fetch(`/api/crm/opportunities/${o.id}`).then(r => r.ok ? r.json() : null)
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    const primaryContact = (detailed.contacts ?? []).find((c: any) => c.is_primary) ?? (detailed.contacts ?? [])[0] ?? null
+                    const primaryContact = detailed ? ((detailed.contacts ?? []).find((c: any) => c.is_primary) ?? (detailed.contacts ?? [])[0] ?? null) : null
                     onSelect({
                       ...o,
-                      contact_name:  primaryContact?.name  ?? o.contact_name,
-                      contact_email: primaryContact?.email ?? o.contact_email,
-                      contact_phone: primaryContact?.phone ?? o.contact_phone,
+                      property_city:  detailed?.property_city  || o.property_city,
+                      property_state: detailed?.property_state || o.property_state,
+                      property_zip:   detailed?.property_zip   || o.property_zip,
+                      contact_name:   primaryContact?.name  ?? detailed?.site_contact_name  ?? o.contact_name,
+                      contact_email:  primaryContact?.email ?? detailed?.site_contact_email ?? o.contact_email,
+                      contact_phone:  primaryContact?.phone ?? detailed?.site_contact_phone ?? o.contact_phone,
                     })
                   } catch {
                     onSelect(o)
@@ -1494,6 +1498,9 @@ export default function NewQuotePage() {
     const handleOppSelect = (opp: OppImportResult) => {
       if (opp.property_name)    setProp('name')(opp.property_name)
       if (opp.property_address) setProp('address')(opp.property_address)
+      if (opp.property_city)    setProp('city')(opp.property_city)
+      if (opp.property_state)   setProp('state')(opp.property_state)
+      if (opp.property_zip)     setProp('zip')(opp.property_zip)
       if (opp.contact_name)     setProp('contactName')(opp.contact_name)
       if (opp.contact_email)    setProp('contactEmail')(opp.contact_email)
       if (opp.contact_phone)    setProp('contactPhone')(opp.contact_phone)
