@@ -134,6 +134,7 @@ const NAV_SECTIONS: NavSection[] = [
     icon: DollarSign,
     color: "#059669",
     items: [
+      { label: "Service Marketplace",  href: "/services", icon: Package,      description: "TV, internet, video monitoring & more", badge: "New" },
       { label: "Billing",            href: "/billing",  icon: CreditCard,   description: "Invoices and payments" },
       { label: "Revenue",            href: "/revenue",  icon: TrendingUp,   description: "MRR/ARR dashboard" },
       { label: "Reps & Commissions", href: "/reps",     icon: UserCheck,    description: "Rep hierarchy and payouts" },
@@ -299,8 +300,8 @@ export function Sidebar() {
         </div>
         {!collapsed && (
           <div className="flex-1 min-w-0">
-            <span className="text-sm font-bold text-white tracking-wide">GateGuard</span>
-            <p className="text-[10px] font-black tracking-[0.2em] uppercase -mt-0.5" style={{ color: "#6B7EFF" }}>NEXUS</p>
+            <span className="text-base font-black tracking-[0.12em] uppercase leading-none" style={{ color: "#6B7EFF" }}>NEXUS</span>
+            <p className="text-[9px] font-semibold tracking-[0.18em] uppercase -mt-0.5 text-white/50">by GateGuard</p>
           </div>
         )}
         <button
