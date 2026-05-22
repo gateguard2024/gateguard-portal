@@ -414,7 +414,7 @@ const ariaResearchTool: Anthropic.Tool = {
                       service_type:    { type: 'string', enum: ['internet', 'video', 'bundled'] },
                       agreement_type:  { type: 'string', enum: ['exclusive', 'bulk', 'preferred', 'unknown'] },
                       expiry_estimate: { type: 'string', description: 'e.g. "Q2 2026", "~2027", "unknown"' },
-                      confidence:      { type: 'string', enum: ['high', 'medium', 'low'] },
+                      confidence:      { type: 'string', enum: ['confirmed', 'high', 'medium', 'low'] },
                     },
                   },
                 },
@@ -645,6 +645,8 @@ export async function POST(req: NextRequest) {
         reitEarnings,        // 11. REIT earnings calls + investor docs — portfolio-wide MDU rollout announcements
         cityPermits,         // 12. City low-voltage / telecom permits — ISPs pull permits when installing bulk
         communitySocial,     // 13. Property Facebook/Instagram/Nextdoor pages — official ISP partnership announcements
+        ispPressRelease,     // 14. ISP press releases naming the property + contract term length → exact expiry calc
+        historicalListing,   // 15. Older/archived listings revealing prior provider (switch = prior contract expired)
       ] = await Promise.all([
 
         // 1. Listing sites — most reliable for confirming "internet included" + exact provider
@@ -726,6 +728,22 @@ export async function POST(req: NextRequest) {
         tavilySearch(
           `"${terms}" ${loc} "excited to announce" OR "thrilled to announce" OR "new internet" OR "new WiFi" OR "new partnership" OR "now offering" OR "bulk internet" OR "community WiFi" OR "included internet" "DirecTV" OR "Spectrum" OR "Comcast" OR "AT&T" OR "Gigastream" OR "Hotwire" OR "Boingo" OR "WhiteSky" site:facebook.com OR site:nextdoor.com OR site:instagram.com OR site:twitter.com OR site:x.com`,
           3, 'community-social'),
+
+        // 14. ISP press releases with contract term details — ISPs issue press releases naming the property + deal term
+        // "Hotwire Communications signs 10-year agreement with The Reserve at Peake"
+        // PR Newswire, BusinessWire, Globe Newswire, and ISP newsrooms index these publicly
+        // GOLD MINE for contract expiry: post date + stated term = exact expiry year
+        tavilySearch(
+          `"${terms}" OR "${loc}" "signed" OR "agreement" OR "partnership" OR "contract" "year" "managed WiFi" OR "bulk internet" OR "bulk broadband" OR "community internet" OR "MDU" OR "multi-family" Hotwire OR Spectrum OR Comcast OR "World Cinema" OR Gigastream OR Boingo OR "Pavlov Media" OR "Bsquared" OR "WhiteSky" OR "KruseCom" site:prnewswire.com OR site:businesswire.com OR site:globenewswire.com OR site:accesswire.com`,
+          3, 'isp-press-release'),
+
+        // 15. Historical listing snapshots — detect provider SWITCHES (old listing shows Comcast, new shows Spectrum = Comcast contract expired)
+        // Archive.org / Google cache / Wayback Machine indexes old apartment listing pages
+        // A provider change is the CLEAREST possible signal that the prior contract expired
+        // Also catches properties that previously showed "internet included" but no longer do (contract expired, not renewed)
+        tavilySearch(
+          `"${terms}" ${loc} "internet included" OR "internet by" OR "bulk internet" OR "DirecTV included" OR "Spectrum included" OR "Comcast included" -site:apartments.com -site:zillow.com -site:apartmentlist.com`,
+          3, 'historical-listing'),
       ])
 
       // 10. Provider slug page searches — check known MDU ISPs' property/operator pages
@@ -773,6 +791,8 @@ export async function POST(req: NextRequest) {
         ...reitEarnings,
         ...cityPermits,
         ...communitySocial,
+        ...ispPressRelease,
+        ...historicalListing,
       ]
         .filter(r => r.score > 0.20)
         .sort((a, b) => {
@@ -787,7 +807,9 @@ export async function POST(req: NextRequest) {
             'listing-site':   0.20,
             'locator-site':   0.22,
             'job-posting':    0.20, // Community manager job descriptions name the systems they manage
-            'community-social': 0.22, // Official property social media announcing ISP partnerships
+            'community-social':   0.22, // Official property social media announcing ISP partnerships
+            'isp-press-release':  0.38, // ISP PR with property name + term length = direct expiry calculation
+            'historical-listing': 0.20, // Provider change detected = prior contract just expired
             'forced-service': 0.18,
             'linkedin-mdu':   0.15,
             'isp-partnership':0.10,
@@ -815,7 +837,9 @@ export async function POST(req: NextRequest) {
         'job-posting':    'JOB-POSTING',
         'reit-earnings':  'REIT-EARNINGS',
         'city-permit':    'CITY-PERMIT',
-        'community-social': 'COMMUNITY-SOCIAL',
+        'community-social':   'COMMUNITY-SOCIAL',
+        'isp-press-release':  'ISP-PRESS-RELEASE',
+        'historical-listing': 'HISTORICAL-LISTING',
         web:              'WEB',
       }
 
@@ -825,23 +849,49 @@ ${allResults.map((r) => `[${sourceLabels[r.source ?? 'web'] ?? 'WEB'}] ${r.title
 SIGNAL EXTRACTION RULES (apply in this priority order):
 0. [PROVIDER-SLUG-PAGE] ISP's own property or operator portal page for this property → confidence="confirmed", agreement_type="bulk" — this is the highest-confidence source possible
 1. [COUNTY-DEED] names ISP + "memorandum/easement/agreement" + dates → confidence="high", extract expiry_estimate from term length
-2. [OFFERING-MEMO] "ancillary income" line item names provider + $ amount + expiry → confidence="high", this is the 99% accuracy source
-3. [CITY-PERMIT] low-voltage or telecom permit pulled at this property's address naming an ISP → confidence="high" — ISPs only pull permits when they're actively installing infrastructure at the building
-4. [HOA-MINUTES/RFP] board minutes or RFP mentions contract renewal/expiry → confidence="high" for timing, "medium" if provider unclear
-5. [REIT-EARNINGS] REIT CEO/CFO names a portfolio-wide rollout in earnings call or investor filing → confidence="high" for the named provider, especially if this property is in that portfolio
-6. [LINKEDIN-MDU-REP] sales rep post: "secured 10-year agreement with [Property]" → confidence="medium-high", calculate expiry from post year + term
-7. [JOB-POSTING] property manager job description lists specific telecom systems as required knowledge → confidence="medium-high" — employers list the actual systems their staff must manage (they wouldn't list Boingo if they didn't have Boingo)
-8. [LISTING-SITE] "internet by [ISP]" or "bulk internet included" → confidence="medium"
-9. [LOCATOR-REVIEW] third-party locator site (TacoStreetLocating, Dwellsy, etc.) shows move-in fee breakdown with "internet fee: $X/mo [ISP]" or "required DirecTV: $Y/mo" → confidence="medium-high" — these are highly reliable because locators list actual move-in costs residents must pay
-10. [FORCED-SERVICE] resident explicitly says "forced to use [ISP]", "can't switch", "only option", "stuck with [ISP]" on Google Maps/Yelp/Reddit → agreement_type="exclusive", confidence="medium"
-11. [REDDIT/REVIEW] "only option is [ISP]" or "can't use anyone else" → agreement_type="exclusive", confidence="medium"
-12. [ISP-PARTNERSHIP] PCO (World Cinema/KruseCom/WhiteSky) case study → confidence="medium" for DISH/DirecTV provider
-13. Local/regional ISPs (Gigastream, Sonic, Hotwire, WideOpenWest, Vyve, Metronet, Brightspeed, Ting, Consolidated) → TRUST over national carrier — they often ARE the MDU bulk provider
-14. [COMMUNITY-SOCIAL] property's official Facebook/Instagram/Nextdoor page announces "new internet partnership with [ISP]" or "we now offer bulk internet through [ISP]" → confidence="high" — this is the management company speaking officially, not a resident complaint
-15. americantv.com listing for DirecTV/DISH dealer serving this area → use as supporting evidence for video_providers[]
-16. TRIANGULATION RULE: If you find evidence from 2 of these 3 categories — (Legal/Financial: COUNTY-DEED, OFFERING-MEMO, CITY-PERMIT, REIT-EARNINGS) + (Infrastructure: PROVIDER-SLUG-PAGE, FCC monopoly) + (Human: FORCED-SERVICE, REDDIT/REVIEW, JOB-POSTING, LOCATOR-REVIEW, COMMUNITY-SOCIAL) — upgrade confidence to "high". If you find all 3, set confidence="confirmed".
-17. FCC MONOPOLY SIGNAL: If FCC data shows only 1 ISP with fiber infrastructure at this address (no competing fiber providers), this is strong corroborating evidence for an exclusive bulk arrangement with that provider. Note this in your analysis.
-18. If NO web evidence found above → bulk_agreements = [] (never infer from market patterns alone)`
+2. [ISP-PRESS-RELEASE] ISP or property management PR naming this property + contract term length → confidence="high" — this is PRIMARY for calculating exact expiry dates. CALCULATION: find the publication date of the press release (in URL or article date), add the stated term (e.g. "10-year agreement" published 2018 = expires 2028). Always compute and output this year as expiry_estimate.
+3. [OFFERING-MEMO] "ancillary income" line item names provider + $ amount + expiry → confidence="high", this is the 99% accuracy source
+4. [CITY-PERMIT] low-voltage or telecom permit pulled at this property's address naming an ISP → confidence="high" — ISPs only pull permits when actively installing. For expiry: typical MDU terms are 7-10 years from permit date. Calculate: permit_year + 8 = estimated expiry.
+5. [HOA-MINUTES/RFP] board minutes or RFP mentions contract renewal/expiry → confidence="high" for timing, "medium" if provider unclear. Extract any explicit years or phrases like "expires 2026", "up for renewal next year"
+6. [REIT-EARNINGS] REIT CEO/CFO names a portfolio-wide rollout in earnings call or investor filing → confidence="high" for the named provider, especially if this property is in that portfolio
+7. [LINKEDIN-MDU-REP] sales rep post: "secured 10-year agreement with [Property]" → confidence="medium-high". EXPIRY CALC: extract post year from URL or text (e.g., linkedin.com/posts/... from 2019) + stated term = expiry year.
+8. [JOB-POSTING] property manager job description lists specific telecom systems → confidence="medium-high". For expiry: if job was posted recently and lists an ISP as a "required" system, the contract is active. If the same property's prior job posting listed a DIFFERENT ISP, the switch date = approximate prior contract expiry.
+9. [COMMUNITY-SOCIAL] property's official Facebook/Instagram/Nextdoor page announces partnership → confidence="high". EXPIRY CALC: post date + typical 5-10 year MDU term = estimate. Flag the post date explicitly.
+10. [HISTORICAL-LISTING] old listing showed ISP-A, current shows ISP-B → the contract with ISP-A expired approximately when the listing changed. The current ISP's contract started then. Apply typical 7-10 year term → estimate when CURRENT contract expires.
+11. [LISTING-SITE] "internet by [ISP]" or "bulk internet included" → confidence="medium"
+12. [LOCATOR-REVIEW] third-party locator fee breakdown with "internet fee: $X/mo [ISP]" → confidence="medium-high"
+13. [FORCED-SERVICE] resident explicitly says "forced to use [ISP]", "can't switch" → agreement_type="exclusive", confidence="medium"
+14. [REDDIT/REVIEW] "only option is [ISP]" → agreement_type="exclusive", confidence="medium"
+15. [ISP-PARTNERSHIP] PCO (World Cinema/KruseCom/WhiteSky) case study → confidence="medium" for DISH/DirecTV provider
+16. Local/regional ISPs (Gigastream, Sonic, Hotwire, WideOpenWest, Vyve, Metronet, Brightspeed, Ting, Consolidated) → TRUST over national carrier — they often ARE the MDU bulk provider
+17. americantv.com listing for DirecTV/DISH dealer serving this area → use as supporting evidence for video_providers[]
+
+CONTRACT EXPIRY DATE CALCULATION (apply every time, in priority order):
+A. EXPLICIT DATE: Any source states "expires [month/year]" or "through [year]" → use directly, confidence="high"
+B. PRESS RELEASE CALC: [PR publication date] + [stated term in years] = expiry year. Example: PR from March 2017 says "5-year agreement" → expiry = 2022. Output as expiry_estimate: "~2022 (est. from 2017 press release + 5yr term)"
+C. LINKEDIN CALC: [Post date from URL/content] + [stated term] = expiry year. Example: 2019 post says "10-year deal" → expiry ~2029
+D. PERMIT CALC: [Permit date] + 8 years (MDU industry standard term) = estimated expiry. Output as "~[year] (est. from [permit_date] permit + 8yr typical MDU term)"
+E. PROPERTY ACQUISITION CALC: if OM from a sale shows a bulk agreement and remaining years, calculate: [sale date] + [remaining years] = expiry
+F. PROVIDER SWITCH INFERENCE: if historical listing shows provider changed, current contract started ~[switch date]. Apply typical 7-10 year term → "~[switch_year + 8] (est. from provider switch detection)"
+G. NO DATE FOUND: output expiry_estimate: "unknown — no term data found" — never guess without a calculation basis
+
+MULTI-CONFIRMATION INFERENCE RULES:
+- Same provider named in 2+ independent sources (e.g., Reddit complaint + listing site + job posting all say "Spectrum") → upgrade confidence from "medium" to "high"
+- Same provider named in 3+ independent sources → confidence="confirmed"
+- Conflicting providers named (Reddit says Spectrum, listing says Comcast) → report BOTH in bulk_agreements[], lower confidence on each, note the conflict
+- A "forced service" complaint + listing confirmation = agreement_type="exclusive" with confidence="high"
+- FCC shows ONLY 1 fiber provider at this address + any human source confirms that same provider = confidence="high"
+- FCC shows ONLY 1 fiber provider + 2 human confirmations = confidence="confirmed"
+
+TRIANGULATION RULE: If you find evidence from 2 of these 3 categories:
+  (A) Legal/Financial: COUNTY-DEED, OFFERING-MEMO, CITY-PERMIT, REIT-EARNINGS, ISP-PRESS-RELEASE
+  (B) Infrastructure: PROVIDER-SLUG-PAGE, FCC fiber monopoly at address
+  (C) Human: FORCED-SERVICE, REDDIT/REVIEW, JOB-POSTING, LOCATOR-REVIEW, COMMUNITY-SOCIAL, HISTORICAL-LISTING
+→ upgrade confidence to "high". If all 3 categories have evidence → confidence="confirmed".
+
+FCC MONOPOLY SIGNAL: If FCC data shows only 1 ISP with fiber infrastructure at this address, this is strong corroborating evidence for an exclusive bulk arrangement. Note the specific ISP in your analysis.
+
+If NO web evidence found above → bulk_agreements = [] (never infer from market patterns alone)`
     })()
 
     await Promise.allSettled([fccPromise, oppPromise, tavilyPromise, mduProviderPromise])

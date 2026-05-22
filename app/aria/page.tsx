@@ -34,7 +34,7 @@ interface BulkAgreement {
   service_type: 'internet' | 'video' | 'bundled';
   agreement_type: 'exclusive' | 'bulk' | 'preferred' | 'unknown';
   expiry_estimate: string;
-  confidence: 'high' | 'medium' | 'low';
+  confidence: 'confirmed' | 'high' | 'medium' | 'low';
 }
 
 interface PropTech {
@@ -470,6 +470,78 @@ export default function ARIAPage() {
           </div>
         </div>
 
+        {/* ── Search ──────────────────────────────────────────────────── */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+          <div className="flex gap-3">
+            {/* Input */}
+            <div
+              className={cn(
+                "flex-1 flex items-center gap-3 px-4 rounded-xl border bg-gray-50 transition-all",
+                isRunning ? "border-[#6B7EFF]/40" : "border-gray-200 focus-within:border-[#6B7EFF]/60 focus-within:shadow-[0_0_0_3px_rgba(107,126,255,0.1)]"
+              )}
+            >
+              <Cpu size={18} className={cn("shrink-0 transition-colors", isRunning ? "text-[#6B7EFF] animate-pulse" : "text-gray-400")} />
+              <input
+                ref={inputRef}
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && !isRunning && runARIA()}
+                placeholder="Describe your target — property name, area, management company, or pain point..."
+                className="flex-1 bg-transparent py-3.5 text-sm text-gray-800 placeholder:text-gray-400 outline-none"
+                disabled={isRunning}
+              />
+              {isRunning && (
+                <Loader2 size={15} className="text-[#6B7EFF] animate-spin shrink-0" />
+              )}
+            </div>
+
+            {/* CTA */}
+            <button
+              onClick={runARIA}
+              disabled={isRunning || !query.trim()}
+              className="px-6 py-3.5 rounded-xl text-white font-semibold text-sm flex items-center gap-2 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              style={{
+                background: isRunning
+                  ? "#9CA3AF"
+                  : "linear-gradient(135deg, #6B7EFF 0%, #3B4FCC 100%)",
+                boxShadow: isRunning ? "none" : "0 4px 14px rgba(107,126,255,0.35)",
+              }}
+            >
+              {isRunning ? (
+                <><Loader2 size={15} className="animate-spin" /> Researching...</>
+              ) : (
+                <><Zap size={15} /> Launch ARIA</>
+              )}
+            </button>
+          </div>
+
+          {/* Example queries */}
+          {!isRunning && !isDone && (
+            <div className="mt-4">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Try an example</p>
+              <div className="flex flex-wrap gap-2">
+                {EXAMPLE_QUERIES.map((q, i) => (
+                  <button
+                    key={i}
+                    onClick={() => { setQuery(q); inputRef.current?.focus(); }}
+                    className="text-[11px] px-3 py-1.5 rounded-full border border-gray-200 text-gray-500 hover:border-[#6B7EFF]/50 hover:text-[#6B7EFF] hover:bg-[#6B7EFF]/5 transition-all bg-white"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Query interpretation */}
+          {isDone && results?.query_interpretation && (
+            <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
+              <Cpu size={12} className="text-[#6B7EFF]" />
+              <span>ARIA interpreted: <span className="font-medium text-gray-700">{results.query_interpretation}</span></span>
+            </div>
+          )}
+        </div>
+
         {/* ── Usage strip ─────────────────────────────────────────────── */}
         {usageStats && (
           <div className="bg-white rounded-xl border border-gray-100 px-4 py-2.5 flex items-center gap-6 flex-wrap">
@@ -591,78 +663,6 @@ export default function ARIAPage() {
             </div>
           </div>
         )}
-
-        {/* ── Search ──────────────────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-          <div className="flex gap-3">
-            {/* Input */}
-            <div
-              className={cn(
-                "flex-1 flex items-center gap-3 px-4 rounded-xl border bg-gray-50 transition-all",
-                isRunning ? "border-[#6B7EFF]/40" : "border-gray-200 focus-within:border-[#6B7EFF]/60 focus-within:shadow-[0_0_0_3px_rgba(107,126,255,0.1)]"
-              )}
-            >
-              <Cpu size={18} className={cn("shrink-0 transition-colors", isRunning ? "text-[#6B7EFF] animate-pulse" : "text-gray-400")} />
-              <input
-                ref={inputRef}
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && !isRunning && runARIA()}
-                placeholder="Describe your target — property name, area, management company, or pain point..."
-                className="flex-1 bg-transparent py-3.5 text-sm text-gray-800 placeholder:text-gray-400 outline-none"
-                disabled={isRunning}
-              />
-              {isRunning && (
-                <Loader2 size={15} className="text-[#6B7EFF] animate-spin shrink-0" />
-              )}
-            </div>
-
-            {/* CTA */}
-            <button
-              onClick={runARIA}
-              disabled={isRunning || !query.trim()}
-              className="px-6 py-3.5 rounded-xl text-white font-semibold text-sm flex items-center gap-2 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-              style={{
-                background: isRunning
-                  ? "#9CA3AF"
-                  : "linear-gradient(135deg, #6B7EFF 0%, #3B4FCC 100%)",
-                boxShadow: isRunning ? "none" : "0 4px 14px rgba(107,126,255,0.35)",
-              }}
-            >
-              {isRunning ? (
-                <><Loader2 size={15} className="animate-spin" /> Researching...</>
-              ) : (
-                <><Zap size={15} /> Launch ARIA</>
-              )}
-            </button>
-          </div>
-
-          {/* Example queries */}
-          {!isRunning && !isDone && (
-            <div className="mt-4">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Try an example</p>
-              <div className="flex flex-wrap gap-2">
-                {EXAMPLE_QUERIES.map((q, i) => (
-                  <button
-                    key={i}
-                    onClick={() => { setQuery(q); inputRef.current?.focus(); }}
-                    className="text-[11px] px-3 py-1.5 rounded-full border border-gray-200 text-gray-500 hover:border-[#6B7EFF]/50 hover:text-[#6B7EFF] hover:bg-[#6B7EFF]/5 transition-all bg-white"
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Query interpretation */}
-          {isDone && results?.query_interpretation && (
-            <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
-              <Cpu size={12} className="text-[#6B7EFF]" />
-              <span>ARIA interpreted: <span className="font-medium text-gray-700">{results.query_interpretation}</span></span>
-            </div>
-          )}
-        </div>
 
         {/* ── Pipeline ─────────────────────────────────────────────────── */}
         {(isRunning || isDone) && (
@@ -961,10 +961,15 @@ export default function ARIAPage() {
                                 </div>
                                 <div className="flex items-center gap-2 mt-0.5 text-gray-500">
                                   <span className="capitalize">{a.service_type}</span>
-                                  {a.expiry_estimate && a.expiry_estimate !== 'unknown' && (
-                                    <><span>·</span><span className="text-amber-600 font-medium">Expires ~{a.expiry_estimate}</span></>
+                                  {a.expiry_estimate && a.expiry_estimate !== 'unknown' && a.expiry_estimate !== 'unknown — no term data found' && (
+                                    <><span>·</span><span className="text-amber-600 font-semibold">📅 {a.expiry_estimate}</span></>
                                   )}
-                                  <span className="ml-auto text-[9px] opacity-60">{a.confidence} conf.</span>
+                                  <span className={`ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                                    a.confidence === 'confirmed' ? 'bg-yellow-100 text-yellow-700 border border-yellow-300' :
+                                    a.confidence === 'high'      ? 'bg-emerald-100 text-emerald-700' :
+                                    a.confidence === 'medium'    ? 'bg-blue-100 text-blue-600' :
+                                                                   'bg-gray-100 text-gray-500'
+                                  }`}>{a.confidence === 'confirmed' ? '✓ confirmed' : `${a.confidence} conf.`}</span>
                                 </div>
                                 {a.evidence && (
                                   <p className="mt-1 text-[9px] text-gray-400 italic">"{a.evidence}"</p>
