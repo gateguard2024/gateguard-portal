@@ -470,61 +470,6 @@ export default function ARIAPage() {
           </div>
         </div>
 
-        {/* ── Search bar ──────────────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
-          <div className="flex gap-3">
-            <div
-              className={cn(
-                "flex-1 flex items-center gap-3 px-4 rounded-xl border bg-gray-50 transition-all",
-                isRunning ? "border-[#6B7EFF]/40" : "border-gray-200 focus-within:border-[#6B7EFF]/60 focus-within:shadow-[0_0_0_3px_rgba(107,126,255,0.1)]"
-              )}
-            >
-              <Cpu size={18} className={cn("shrink-0 transition-colors", isRunning ? "text-[#6B7EFF] animate-pulse" : "text-gray-400")} />
-              <input
-                ref={inputRef}
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && !isRunning && runARIA()}
-                placeholder="Describe your target — property name, area, management company, or pain point..."
-                className="flex-1 bg-transparent py-3 text-sm text-gray-800 placeholder:text-gray-400 outline-none"
-                disabled={isRunning}
-              />
-              {isRunning && <Loader2 size={15} className="text-[#6B7EFF] animate-spin shrink-0" />}
-            </div>
-            <button
-              onClick={runARIA}
-              disabled={isRunning || !query.trim()}
-              className="px-6 py-3 rounded-xl text-white font-semibold text-sm flex items-center gap-2 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-              style={{
-                background: isRunning ? "#9CA3AF" : "linear-gradient(135deg, #6B7EFF 0%, #3B4FCC 100%)",
-                boxShadow: isRunning ? "none" : "0 4px 14px rgba(107,126,255,0.35)",
-              }}
-            >
-              {isRunning ? <><Loader2 size={15} className="animate-spin" /> Researching...</> : <><Zap size={15} /> Launch ARIA</>}
-            </button>
-          </div>
-
-          {!isRunning && !isDone && (
-            <div className="mt-3">
-              <div className="flex flex-wrap gap-2">
-                {EXAMPLE_QUERIES.map((q, i) => (
-                  <button key={i} onClick={() => { setQuery(q); inputRef.current?.focus(); }}
-                    className="text-[11px] px-3 py-1 rounded-full border border-gray-200 text-gray-500 hover:border-[#6B7EFF]/50 hover:text-[#6B7EFF] hover:bg-[#6B7EFF]/5 transition-all bg-white">
-                    {q}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {isDone && results?.query_interpretation && (
-            <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
-              <Cpu size={12} className="text-[#6B7EFF]" />
-              <span>ARIA interpreted: <span className="font-medium text-gray-700">{results.query_interpretation}</span></span>
-            </div>
-          )}
-        </div>
-
         {/* ── Usage strip ─────────────────────────────────────────────── */}
         {usageStats && (
           <div className="bg-white rounded-xl border border-gray-100 px-4 py-2.5 flex items-center gap-6 flex-wrap">
