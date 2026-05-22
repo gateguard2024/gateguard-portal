@@ -7,7 +7,7 @@ import {
   FileText, Send, CheckCircle2, XCircle, Clock, Eye,
   Copy, ExternalLink, Plus, Trash2, Loader2, ChevronLeft,
   Check, AlertTriangle, Users, Building2, ChevronDown,
-  Search, Hash, Layers, X, Download,
+  Search, Hash, Layers, X, Download, Mail,
 } from 'lucide-react';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { Edit2, ArrowUpRight, DollarSign, Package, SlidersHorizontal, Tag, FileDown, LinkIcon, ClipboardList, Unlink } = require('lucide-react') as any;
@@ -560,6 +560,13 @@ export default function QuoteDetailPage() {
   const [rampExpanded,    setRampExpanded]   = useState<boolean>(false);
   const [savingPlan,      setSavingPlan]     = useState<boolean>(false);
 
+  // Draft Email state
+  const [showEmailDraft,  setShowEmailDraft] = useState<boolean>(false);
+  const [emailSubject,    setEmailSubject]   = useState<string>('');
+  const [emailBody,       setEmailBody]      = useState<string>('');
+  const [generatingEmail, setGeneratingEmail] = useState<boolean>(false);
+  const [emailCopied,     setEmailCopied]    = useState<boolean>(false);
+
   // Notes & SOW state
   const [notes,           setNotes]          = useState<string>('');
   const [savingNotes,     setSavingNotes]    = useState<boolean>(false);
@@ -769,9 +776,38 @@ export default function QuoteDetailPage() {
   }
 
   function copyApprovalLink() {
-    navigator.clipboard.writeText(`${window.location.origin}/quotes/${id}/approve`);
+    // Copy the proposal URL — this is the client-facing branded proposal page
+    navigator.clipboard.writeText(`${window.location.origin}/quotes/${id}/proposal`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function openDraftEmail() {
+    setShowEmailDraft(true);
+    if (emailSubject) return; // already generated
+    setGeneratingEmail(true);
+    try {
+      const proposalUrl = `${window.location.origin}/quotes/${id}/proposal`;
+      const res  = await fetch(`/api/quotes/${id}/draft-email`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ proposalUrl }),
+      });
+      const json = await res.json();
+      if (json.subject) setEmailSubject(json.subject);
+      if (json.body)    setEmailBody(json.body);
+    } catch {
+      setEmailBody('Failed to generate email draft. Please try again.');
+    } finally {
+      setGeneratingEmail(false);
+    }
+  }
+
+  function copyEmailToClipboard() {
+    const full = `Subject: ${emailSubject}\n\n${emailBody}`;
+    navigator.clipboard.writeText(full);
+    setEmailCopied(true);
+    setTimeout(() => setEmailCopied(false), 2500);
   }
 
   // ── Derived state ──────────────────────────────────────────────────────────
@@ -914,18 +950,11 @@ export default function QuoteDetailPage() {
             </Link>
           )}
           <Link
-            href={`/quotes/${id}/approve`}
-            target="_blank"
-            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 text-sm text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            <Eye size={13} /> Preview
-          </Link>
-          <Link
             href={`/quotes/${id}/proposal`}
             target="_blank"
             className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 text-sm text-gray-600 rounded-lg hover:bg-gray-50 hover:text-[#6B7EFF] hover:border-blue-200 transition-colors"
           >
-            <FileText size={13} /> Proposal
+            <Eye size={13} /> Preview
           </Link>
           <button
             onClick={copyApprovalLink}
@@ -935,10 +964,16 @@ export default function QuoteDetailPage() {
             {copied ? 'Copied!' : 'Copy Link'}
           </button>
           <button
-            onClick={() => window.open(`/quotes/${id}/approve?print=1`, '_blank')}
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-border text-sm rounded-lg hover:bg-muted text-foreground transition-colors"
+            onClick={() => window.open(`/quotes/${id}/proposal?print=1`, '_blank')}
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-sm rounded-lg hover:bg-gray-50 text-gray-600 transition-colors"
           >
             <FileDown size={13} /> Download PDF
+          </button>
+          <button
+            onClick={openDraftEmail}
+            className="flex items-center gap-1.5 px-3 py-2 bg-[#6B7EFF] text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+          >
+            <Mail size={13} /> Draft Email
           </button>
         </div>
       </div>
@@ -1329,26 +1364,32 @@ export default function QuoteDetailPage() {
             )}
           </div>
 
-          {/* Approval link */}
+          {/* Proposal link */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-3">
-            <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wider">Client Approval</h2>
-            <p className="text-xs text-gray-500">Share with the client to let them review and approve.</p>
+            <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wider">Client Proposal</h2>
+            <p className="text-xs text-gray-500">Share this link with the client to review, accept, or decline.</p>
             <div className="flex gap-2 flex-wrap">
               <button
                 onClick={copyApprovalLink}
                 className="flex items-center gap-1.5 text-xs border border-[#6B7EFF]/30 text-[#6B7EFF] rounded-lg px-3 py-1.5 hover:bg-blue-50 transition-colors"
               >
                 {copied ? <Check size={11} /> : <Copy size={11} />}
-                {copied ? 'Copied!' : 'Copy Link'}
+                {copied ? 'Copied!' : 'Copy Proposal Link'}
               </button>
               <Link
-                href={`/quotes/${id}/approve`}
+                href={`/quotes/${id}/proposal`}
                 target="_blank"
                 className="flex items-center gap-1.5 text-xs border border-gray-200 text-gray-600 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors"
               >
-                <ExternalLink size={11} /> Preview
+                <ExternalLink size={11} /> Open
               </Link>
             </div>
+            <button
+              onClick={openDraftEmail}
+              className="w-full flex items-center justify-center gap-1.5 text-xs bg-[#6B7EFF] text-white rounded-lg px-3 py-2 hover:bg-blue-700 transition-colors font-medium"
+            >
+              <Mail size={11} /> Draft Email to Client
+            </button>
           </div>
 
           {/* Notes & Scope of Work */}
@@ -1457,6 +1498,96 @@ export default function QuoteDetailPage() {
           onSaved={onItemSaved}
           onClose={() => { setShowAddItem(false); setEditingItemId(null); }}
         />
+      )}
+
+      {/* Draft Email slide-over */}
+      {showEmailDraft && (
+        <div className="fixed inset-0 z-50 flex">
+          <div className="flex-1 bg-black/30" onClick={() => setShowEmailDraft(false)} />
+          <div className="w-full max-w-xl bg-white shadow-2xl flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                  <Mail size={14} className="text-[#6B7EFF]" />
+                  Proposal Email Draft
+                </h2>
+                <p className="text-xs text-gray-400 mt-0.5">AI-generated · edit before sending</p>
+              </div>
+              <button onClick={() => setShowEmailDraft(false)} className="p-1 rounded hover:bg-gray-100">
+                <X size={15} className="text-gray-500" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {generatingEmail ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-3">
+                  <Loader2 size={22} className="animate-spin text-[#6B7EFF]" />
+                  <p className="text-sm text-gray-500">Drafting your email…</p>
+                </div>
+              ) : (
+                <>
+                  {/* Subject */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Subject Line</label>
+                    <input
+                      value={emailSubject}
+                      onChange={e => setEmailSubject(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
+                    />
+                  </div>
+
+                  {/* Body */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Email Body</label>
+                    <textarea
+                      value={emailBody}
+                      onChange={e => setEmailBody(e.target.value)}
+                      rows={14}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] resize-none font-mono text-xs leading-relaxed"
+                    />
+                  </div>
+
+                  {/* Proposal link reminder */}
+                  <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                    <ExternalLink size={11} className="text-[#6B7EFF] shrink-0" />
+                    <p className="text-xs text-blue-700">
+                      Proposal link:{' '}
+                      <span className="font-mono text-[10px]">
+                        {typeof window !== 'undefined' ? window.location.origin : ''}/quotes/{id}/proposal
+                      </span>
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {!generatingEmail && (
+              <div className="px-5 py-4 border-t border-gray-100 flex gap-2">
+                <button
+                  onClick={copyEmailToClipboard}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 bg-[#6B7EFF] text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  {emailCopied ? <Check size={13} /> : <Copy size={13} />}
+                  {emailCopied ? 'Copied to clipboard!' : 'Copy Email'}
+                </button>
+                <button
+                  onClick={() => {
+                    setEmailSubject('');
+                    setEmailBody('');
+                    openDraftEmail();
+                  }}
+                  className="px-3 py-2 border border-gray-200 text-xs text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+                  title="Regenerate"
+                >
+                  ↺ Regenerate
+                </button>
+                <button onClick={() => setShowEmailDraft(false)} className="px-3 py-2 border border-gray-200 text-sm text-gray-600 rounded-lg hover:bg-gray-50">
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

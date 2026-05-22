@@ -236,3 +236,26 @@ export function getValidUntilDate(daysFromNow = 30): string {
   d.setDate(d.getDate() + daysFromNow);
   return d.toISOString().split('T')[0];
 }
+
+// ── Ramp-up helpers ────────────────────────────────────────────────────────
+
+export interface RampRow { month: number; pct: number; amount: number }
+
+/**
+ * Build a month-by-month ramp-up schedule.
+ * Month 1 is always 100% (collected as deposit).
+ * Months 2 → fullMonth ramp from startPct to 100%.
+ */
+export function buildRampSchedule(
+  mrr: number,
+  startPct: number,
+  stepPct: number,
+  fullMonth: number,
+): RampRow[] {
+  const rows: RampRow[] = []
+  for (let m = 2; m <= fullMonth; m++) {
+    const pct = m === fullMonth ? 100 : Math.min(100, startPct + (m - 2) * stepPct)
+    rows.push({ month: m, pct, amount: mrr * (pct / 100) })
+  }
+  return rows
+}

@@ -18,10 +18,11 @@ export async function GET(
     .select(`
       id, quote_number, title, status, property_name, units,
       total_one_time, total_mrr, valid_until, accepted_at, sent_at, declined_at,
-      notes, share_token, org_id,
+      notes, share_token, org_id, opportunity_id, created_at,
       quote_mode, client_name, client_email, client_phone, property_address,
       cover_message, terms_text, tax_rate, discount_percent, deposit_percent,
       package_mode, selected_package, created_by_name, expiry_date,
+      payment_plan, ramp_up_start_pct, ramp_up_step_pct, ramp_up_full_month,
       quote_line_items (
         id, sort_order, category, description, qty, unit_price, unit, is_recurring,
         section_name, item_type, is_optional, is_included,
@@ -34,9 +35,32 @@ export async function GET(
   if (error || !quote) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   // Sort line items
-  const sortedItems = (quote.quote_line_items ?? []).sort(
+  const rawItems = (quote.quote_line_items ?? []).sort(
     (a: { sort_order: number }, b: { sort_order: number }) => a.sort_order - b.sort_order
   )
+
+  // Map to camelCase LineItem shape expected by the proposal page
+  const lineItems = rawItems.map((i: {
+    id: string; description: string; qty: number; unit_price: number;
+    is_recurring: boolean; section_name?: string; is_optional?: boolean;
+    is_included?: boolean; unit?: string; sku?: string; model_number?: string;
+    package_tier?: string; item_type?: string; notes?: string;
+  }) => ({
+    id:           i.id,
+    description:  i.description,
+    qty:          i.qty,
+    unitPrice:    i.unit_price,
+    total:        i.qty * i.unit_price,
+    recurring:    i.is_recurring,
+    section_name: i.section_name,
+    is_optional:  i.is_optional,
+    is_included:  i.is_included,
+    unit:         i.unit,
+    sku:          i.sku,
+    model_number: i.model_number,
+    package_tier: i.package_tier,
+    item_type:    i.item_type,
+  }))
 
   // Fetch org info for "Prepared by"
   let org_name: string | null = null
@@ -49,8 +73,13 @@ export async function GET(
     org_name = org?.name ?? null
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { quote_line_items: _raw, ...quoteRest } = quote as typeof quote & { quote_line_items: unknown[] }
+
   return NextResponse.json({
-    quote: { ...quote, quote_line_items: sortedItems, org_name },
+    quote:     { ...quoteRest, org_name },
+    lineItems,
+    org_name,
   })
 }
 
