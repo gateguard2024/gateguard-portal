@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { PortalShell } from "@/components/layout/PortalShell";
@@ -13,12 +13,15 @@ export const metadata: Metadata = {
   description: "The operating system for multifamily access and channel dealer networks.",
   icons: { icon: "/favicon.ico" },
   manifest: '/manifest.json',
-  themeColor: '#0B1728',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
     title: 'GG Tech',
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#0B1728',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

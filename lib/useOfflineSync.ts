@@ -19,9 +19,9 @@ interface OfflineSyncState {
  *  - triggerSync    — manually request a sync flush (call on reconnect)
  */
 export function useOfflineSync(): OfflineSyncState & { triggerSync: () => void } {
-  const [isOnline, setIsOnline] = useState<boolean>(
-    typeof navigator !== 'undefined' ? navigator.onLine : true
-  );
+  // Always initialise to true on both server and client to avoid hydration mismatch.
+  // The real value is synced in useEffect (client-only).
+  const [isOnline, setIsOnline] = useState<boolean>(true);
   const [queueLength, setQueueLength] = useState<number>(0);
 
   // Ask the service worker for the current queue length
@@ -38,6 +38,9 @@ export function useOfflineSync(): OfflineSyncState & { triggerSync: () => void }
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+
+    // Sync real online status now that we're on the client
+    setIsOnline(navigator.onLine);
 
     // Listen to SW messages (QUEUE_LENGTH updates)
     const onSWMessage = (event: MessageEvent) => {
