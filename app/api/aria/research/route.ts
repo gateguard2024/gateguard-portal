@@ -229,6 +229,92 @@ function formatFCCDataForPrompt(providers: FCCProvider[], location: string): str
   return lines.join('\n')
 }
 
+// ─── Detection persistence ───────────────────────────────────────────────
+/**
+ * After ARIA returns structured results, persist any confirmed/high-confidence
+ * bulk_agreements to mdu_provider_detections so they're cached for future lookups.
+ *
+ * Matches ARIA's provider names against mdu_providers.name (case-insensitive substring).
+ * Only writes rows with confidence "high" or "confirmed" to avoid polluting the DB with guesses.
+ */
+async function persistProviderDetections(
+  prospects: any[],
+  queryText: string,
+): Promise<void> {
+  try {
+    // Fetch all provider name→id mappings in one query
+    const { data: allProviders } = await supabase
+      .from('mdu_providers')
+      .select('id, name, slug, provider_type')
+      .eq('active', true)
+    if (!allProviders || allProviders.length === 0) return
+
+    const providerIndex = allProviders.map((p: any) => ({
+      id: p.id as string,
+      name: (p.name as string).toLowerCase(),
+      slug: p.slug as string,
+    }))
+
+    const detectionsToInsert: Record<string, unknown>[] = []
+
+    for (const prospect of prospects) {
+      const propertyName    = prospect?.property?.name ?? ''
+      const propertyAddress = prospect?.property?.address ?? ''
+      const bulkAgreements: any[] = prospect?.property?.bulk_agreements ?? []
+
+      for (const agreement of bulkAgreements) {
+        const rawConfidence = agreement.confidence ?? 'low'
+        // Only persist high-quality detections
+        if (!['high', 'confirmed', 'medium-high'].includes(rawConfidence)) continue
+
+        const agreementProvider = (agreement.provider ?? '').toLowerCase()
+        if (!agreementProvider) continue
+
+        // Find matching provider in our DB (substring match both ways)
+        const matchedProvider = providerIndex.find(
+          p => p.name.includes(agreementProvider) || agreementProvider.includes(p.name)
+        )
+        if (!matchedProvider) continue
+
+        // Map ARIA confidence to our DB enum
+        const dbConfidence =
+          rawConfidence === 'confirmed' ? 'confirmed' :
+          rawConfidence === 'high'      ? 'high' :
+          rawConfidence === 'medium-high' ? 'high' : 'medium'
+
+        detectionsToInsert.push({
+          provider_id:      matchedProvider.id,
+          property_name:    propertyName || null,
+          property_address: propertyAddress || null,
+          confidence:       dbConfidence,
+          source_type:      'aria',
+          source_snippet:   agreement.expiry_estimate
+            ? `service_type=${agreement.service_type}; agreement_type=${agreement.agreement_type}; expiry_estimate=${agreement.expiry_estimate}`
+            : `service_type=${agreement.service_type}; agreement_type=${agreement.agreement_type}`,
+          contract_end_year: (() => {
+            // Try to extract a year from expiry_estimate (e.g. "Q2 2027", "~2026", "2028")
+            const match = (agreement.expiry_estimate ?? '').match(/20\d{2}/)
+            return match ? parseInt(match[0], 10) : null
+          })(),
+          verified_by: 'aria',
+        })
+      }
+    }
+
+    if (detectionsToInsert.length === 0) return
+
+    // Upsert — on conflict (same provider_id + property_name) update the confidence if it improved
+    await supabase
+      .from('mdu_provider_detections')
+      .upsert(detectionsToInsert, {
+        onConflict: 'provider_id,property_name',
+        ignoreDuplicates: false,
+      })
+  } catch {
+    // Completely non-blocking — detection persistence must never affect the response
+  }
+}
+
 // ─── Tool schema ──────────────────────────────────────────────────────────
 
 // Tool schema — forces Claude to return structured data via tool_use, eliminating
@@ -420,6 +506,9 @@ export async function POST(req: NextRequest) {
     let fccProvidersForUI: string[] = []
     let existingOppNames: string[] = []
     let tavilyContextBlock = ''
+    // MDU provider reference data (populated from mdu_providers table)
+    let mduProviderSlugs: Array<{ name: string; slug: string; property_page_pattern: string | null; operator_page_pattern: string | null; provider_type: string; notes: string | null }> = []
+    let cachedDetectionsBlock = ''
 
     const fccPromise = (async () => {
       if (!locationHint) return
@@ -449,7 +538,48 @@ export async function POST(req: NextRequest) {
       } catch { /* non-blocking */ }
     })()
 
-    // Tavily OSINT searches — 9 parallel sources, non-blocking if no API key
+    // ── MDU provider reference data ──
+    // Fetch providers with URL patterns so we can generate targeted searches.
+    // Also check for any cached detections for this query (property name match).
+    const mduProviderPromise = (async () => {
+      try {
+        const { data: providers } = await supabase
+          .from('mdu_providers')
+          .select('name, slug, provider_type, property_page_pattern, operator_page_pattern, notes')
+          .eq('active', true)
+          .or('property_page_pattern.not.is.null,operator_page_pattern.not.is.null')
+        if (providers && providers.length > 0) {
+          mduProviderSlugs = providers
+        }
+
+        // Pull any existing detections for the search terms (exact or fuzzy property name match)
+        if (searchTerms.length > 3) {
+          const { data: detections } = await supabase
+            .from('mdu_provider_detections')
+            .select(`
+              confidence, source_type, source_snippet, contract_end_year, verified_by,
+              mdu_providers ( name, provider_type )
+            `)
+            .ilike('property_name', `%${searchTerms}%`)
+            .in('confidence', ['confirmed', 'high', 'medium'])
+            .limit(10)
+
+          if (detections && detections.length > 0) {
+            const detLines = detections.map((d: any) => {
+              const prov = d.mdu_providers as { name: string; provider_type: string } | null
+              const provName = prov?.name ?? 'Unknown provider'
+              const provType = prov?.provider_type ?? 'isp'
+              const snippet = d.source_snippet ? ` — "${d.source_snippet}"` : ''
+              const expiry  = d.contract_end_year ? ` (contract est. ends ~${d.contract_end_year})` : ''
+              return `• ${provName} (${provType}): ${d.confidence} confidence [${d.source_type}]${expiry}${snippet}`
+            })
+            cachedDetectionsBlock = `\n\nGATEGUARD CACHED PROVIDER DETECTIONS for "${searchTerms}":\n(Previously verified by ARIA — treat as high-confidence prior evidence)\n${detLines.join('\n')}\n`
+          }
+        }
+      } catch { /* non-blocking */ }
+    })()
+
+    // Tavily OSINT searches — 9 parallel sources + provider slug pages, non-blocking if no API key
     const tavilyPromise = (async () => {
       if (!process.env.TAVILY_API_KEY) return
       const loc = locationHint || ''
@@ -520,6 +650,36 @@ export async function POST(req: NextRequest) {
           4, 'forced-service'),
       ])
 
+      // 10. Provider slug page searches — check known MDU ISPs' property/operator pages
+      // e.g. gigstreem.com/[property-slug] or pavlovmedia.com/[property-slug]
+      // These pages are created by the ISP when they sign a bulk deal — highest confidence confirmation
+      const propertySlug = terms.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+      const providerSlugResults: TavilyResult[] = []
+      if (mduProviderSlugs.length > 0) {
+        const slugSearches = mduProviderSlugs
+          .filter(p => p.property_page_pattern || p.operator_page_pattern)
+          .slice(0, 8) // cap at 8 to avoid burning Tavily credits
+          .map(p => {
+            const domain = (p.property_page_pattern || p.operator_page_pattern || '')
+              .replace(/\{.*?\}/g, '') // strip {property} / {operator} template tokens
+              .replace(/\/$/, '')
+            if (!domain) return null
+            // Extract just the domain for site: search
+            const domainOnly = domain.replace(/^https?:\/\//, '').split('/')[0]
+            return tavilySearch(
+              `"${terms}" site:${domainOnly}`,
+              2,
+              'provider-slug'
+            )
+          })
+          .filter(Boolean)
+
+        const slugResponses = await Promise.allSettled(slugSearches as Promise<TavilyResult[]>[])
+        for (const res of slugResponses) {
+          if (res.status === 'fulfilled') providerSlugResults.push(...res.value)
+        }
+      }
+
       const allResults = [
         ...listingSites,
         ...socialSignals,
@@ -530,11 +690,13 @@ export async function POST(req: NextRequest) {
         ...linkedinMduReps,
         ...locatorSites,
         ...forcedService,
+        ...providerSlugResults,
       ]
         .filter(r => r.score > 0.20)
         .sort((a, b) => {
           // Boost highest-signal sources: county deed, commercial RE OM, HOA/RFP docs
           const boostMap: Record<string, number> = {
+            'provider-slug':  0.40, // ISP's own property page = highest confidence
             'county-deed':    0.35,
             'commercial-re':  0.30,
             'hoa-rfp':        0.25,
@@ -554,6 +716,7 @@ export async function POST(req: NextRequest) {
       if (allResults.length === 0) return
 
       const sourceLabels: Record<string, string> = {
+        'provider-slug':  'PROVIDER-SLUG-PAGE',
         'listing-site':   'LISTING-SITE',
         social:           'REDDIT/REVIEW',
         'county-deed':    'COUNTY-DEED',
@@ -570,6 +733,7 @@ export async function POST(req: NextRequest) {
 ${allResults.map((r) => `[${sourceLabels[r.source ?? 'web'] ?? 'WEB'}] ${r.title}\nURL: ${r.url}\n${r.content.slice(0, 450)}`).join('\n\n---\n\n')}
 
 SIGNAL EXTRACTION RULES (apply in this priority order):
+0. [PROVIDER-SLUG-PAGE] ISP's own property or operator portal page for this property → confidence="confirmed", agreement_type="bulk" — this is the highest-confidence source possible
 1. [COUNTY-DEED] names ISP + "memorandum/easement/agreement" + dates → confidence="high", extract expiry_estimate from term length
 2. [OFFERING-MEMO] "ancillary income" line item names provider + $ amount + expiry → confidence="high", this is the 99% accuracy source
 3. [HOA-MINUTES/RFP] board minutes or RFP mentions contract renewal/expiry → confidence="high" for timing, "medium" if provider unclear
@@ -584,10 +748,27 @@ SIGNAL EXTRACTION RULES (apply in this priority order):
 12. If NO web evidence found above → bulk_agreements = [] (never infer from market patterns alone)`
     })()
 
-    await Promise.allSettled([fccPromise, oppPromise, tavilyPromise])
+    await Promise.allSettled([fccPromise, oppPromise, tavilyPromise, mduProviderPromise])
 
     const existingNamesBlock = existingOppNames.length > 0
       ? `\n\nEXCLUSION LIST — these properties are already active in our CRM pipeline. Do NOT suggest any of these as prospects:\n${existingOppNames.map(n => `- ${n}`).join('\n')}\n`
+      : ''
+
+    // Build MDU provider context for Claude — list providers with URL patterns so it knows what to look for
+    const mduProviderContextBlock = mduProviderSlugs.length > 0
+      ? `\n\nKNOWN MDU PROVIDER DATABASE (GateGuard internal — use to cross-reference Tavily results):\n` +
+        `The following ISPs/video providers have MDU bulk programs. If web results reference any of these, give them higher confidence.\n` +
+        mduProviderSlugs
+          .map(p => {
+            const urlNote = p.property_page_pattern
+              ? ` | Property page: ${p.property_page_pattern}`
+              : p.operator_page_pattern
+              ? ` | Operator page: ${p.operator_page_pattern}`
+              : ''
+            return `• ${p.name} (${p.provider_type})${urlNote}`
+          })
+          .join('\n') +
+        `\n[PROVIDER-SLUG-PAGE] source type = a result from one of these ISPs' own property/operator pages — this is CONFIRMATION-LEVEL evidence (treat as confidence="high").`
       : ''
 
     // ── Step 3: Build FCC context block for Claude ──
@@ -688,7 +869,7 @@ EMAIL ANGLE RULES — PROPTECH:
       messages: [{
         role: 'user',
         content: `ARIA research query: "${query.trim()}"
-${existingNamesBlock}${fccContextBlock}${tavilyContextBlock}
+${existingNamesBlock}${cachedDetectionsBlock}${mduProviderContextBlock}${fccContextBlock}${tavilyContextBlock}
 GateGuard offerings to weave into emails where relevant:
 - Gate operators, access control (Brivo), intercoms, cameras — full stack install
 - Visitor management: GateCard platform — resident app, mobile access, delivery management
@@ -746,6 +927,9 @@ Call the aria_research_result tool with your findings now.`
     } catch {
       // Fire-and-forget — don't block the response
     }
+
+    // ── Persist provider detections back to mdu_provider_detections (non-blocking) ──
+    void persistProviderDetections(data.prospects ?? [], query.trim())
 
     return NextResponse.json({ ...data, savedSearchId, fccVerified: fccProvidersForUI.length > 0, webIntelligence: tavilyContextBlock.length > 100 })
 

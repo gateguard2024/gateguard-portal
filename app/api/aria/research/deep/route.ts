@@ -379,6 +379,46 @@ export async function POST(req: NextRequest) {
     const location = [city, state].filter(Boolean).join(', ') || address || ''
     const mgmt = management_company || ''
 
+    // ── Prefetch MDU provider DB + cached detections (parallel, non-blocking) ──
+    let mduProviderSlugsDeep: Array<{ name: string; slug: string; property_page_pattern: string | null }> = []
+    let cachedDetectionsBlockDeep = ''
+
+    await Promise.allSettled([
+      (async () => {
+        try {
+          const { data: providers } = await supabaseDeep
+            .from('mdu_providers')
+            .select('name, slug, property_page_pattern, operator_page_pattern')
+            .eq('active', true)
+            .or('property_page_pattern.not.is.null,operator_page_pattern.not.is.null')
+          if (providers) mduProviderSlugsDeep = providers as any[]
+        } catch { /* non-blocking */ }
+      })(),
+      (async () => {
+        try {
+          const { data: detections } = await supabaseDeep
+            .from('mdu_provider_detections')
+            .select(`
+              confidence, source_type, source_snippet, contract_end_year, verified_by,
+              mdu_providers ( name, provider_type )
+            `)
+            .ilike('property_name', `%${property_name}%`)
+            .in('confidence', ['confirmed', 'high', 'medium'])
+            .limit(10)
+
+          if (detections && detections.length > 0) {
+            const lines = detections.map((d: any) => {
+              const prov = d.mdu_providers as { name: string; provider_type: string } | null
+              const expiry = d.contract_end_year ? ` (contract est. ends ~${d.contract_end_year})` : ''
+              const snippet = d.source_snippet ? ` — "${d.source_snippet}"` : ''
+              return `• ${prov?.name ?? 'Unknown'} (${prov?.provider_type ?? 'isp'}): ${d.confidence} [${d.source_type}]${expiry}${snippet}`
+            })
+            cachedDetectionsBlockDeep = `\n\nGATEGUARD CACHED PROVIDER DETECTIONS for "${property_name}":\n${lines.join('\n')}\n`
+          }
+        } catch { /* non-blocking */ }
+      })(),
+    ])
+
     // ── All intelligence sources in parallel ────────────────────────────
     // Group A: Tavily web searches (10)
     // Group B: EDGAR SEC filings (direct API, free)
@@ -398,6 +438,8 @@ export async function POST(req: NextRequest) {
       mgmtProptechResults,
       localIspResults,
       ownershipResults,
+      // Group A+ — Provider slug pages (MDU ISP property portals)
+      providerSlugResultsDeep,
       // Group B — EDGAR SEC
       edgarResults,
       // Group C — PUC dockets
@@ -441,6 +483,28 @@ export async function POST(req: NextRequest) {
       // 10. Ownership + asset management
       tavilySearch(`"${property_name}" ${location} "asset manager" OR "portfolio manager" OR "ownership" OR "acquired" OR "owner" OR "investment" multifamily`, 4, 'web'),
 
+      // Group A+: Provider slug pages — check known MDU ISP property/operator portals
+      // e.g. gigstreem.com/amli-marina-del-rey or pavlovmedia.com/property-name
+      // Run the top 6 providers with URL patterns in parallel
+      (async () => {
+        if (!process.env.TAVILY_API_KEY || mduProviderSlugsDeep.length === 0) return [] as TavilyResult[]
+        const propSlug = property_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+        const slugSearches = mduProviderSlugsDeep
+          .filter((p: any) => p.property_page_pattern || p.operator_page_pattern)
+          .slice(0, 6)
+          .map((p: any) => {
+            const domain = ((p.property_page_pattern || p.operator_page_pattern || '') as string)
+              .replace(/\{.*?\}/g, '').replace(/\/$/, '')
+            const domainOnly = domain.replace(/^https?:\/\//, '').split('/')[0]
+            if (!domainOnly) return Promise.resolve([] as TavilyResult[])
+            return tavilySearch(`"${property_name}" site:${domainOnly}`, 2, 'provider-slug')
+          })
+        const results = await Promise.allSettled(slugSearches)
+        return results
+          .filter((r): r is PromiseFulfilledResult<TavilyResult[]> => r.status === 'fulfilled')
+          .flatMap(r => r.value)
+      })(),
+
       // Group B: SEC EDGAR full-text search (direct API — primary source)
       searchEdgar(property_name, mgmt),
 
@@ -460,6 +524,7 @@ export async function POST(req: NextRequest) {
       ...ispResults, ...bulkResults, ...mgmtResults, ...redditResults,
       ...gateResults, ...proptechResults, ...residentTechResults,
       ...mgmtProptechResults, ...localIspResults, ...ownershipResults,
+      ...(Array.isArray(providerSlugResultsDeep) ? providerSlugResultsDeep : []),
       ...pucResults, ...permitResults, ...ispPressResults,
     ]
 
@@ -483,9 +548,12 @@ export async function POST(req: NextRequest) {
         return r.score > 0.25
       })
       .sort((a, b) => {
-        // EDGAR, PUC, permit sources rank first regardless of Tavily score
-        const aBoost = ['EDGAR','PUC','CityPermit','ISP-Press'].includes(a.source ?? '') ? 0.3 : 0
-        const bBoost = ['EDGAR','PUC','CityPermit','ISP-Press'].includes(b.source ?? '') ? 0.3 : 0
+        // provider-slug, EDGAR, PUC, permit sources rank first regardless of Tavily score
+        const deepBoostSources: Record<string, number> = {
+          'provider-slug': 0.4, EDGAR: 0.3, PUC: 0.3, CityPermit: 0.3, 'ISP-Press': 0.25,
+        }
+        const aBoost = deepBoostSources[a.source ?? ''] ?? 0
+        const bBoost = deepBoostSources[b.source ?? ''] ?? 0
         return (b.score + bBoost) - (a.score + aBoost)
       })
       .slice(0, 20) // top 20 — more sources = more accurate synthesis
@@ -557,13 +625,13 @@ permit_signal: set true if ANY city permit or PUC source confirmed ISP infrastru
 Location: ${location}
 Management Company: ${mgmt || 'unknown'}
 ${sourcesSummary}
-
-Intelligence excerpts (${uniqueResults.length} sources across EDGAR, PUC, city permits, ISP press releases, and web):
+${cachedDetectionsBlockDeep}
+Intelligence excerpts (${uniqueResults.length} sources across EDGAR, PUC, city permits, ISP press releases, provider slug pages, and web):
 ${excerptBlock}
 
 Extract all intelligence and call the aria_deep_intel_result tool.
 
-CRITICAL REMINDER: Return bulk_agreements = [] if no property-specific evidence exists in these sources. Never infer from market patterns. Prioritize local/regional ISP names from listing sites over national carrier assumptions. EDGAR sources override all other confidence levels.`,
+CRITICAL REMINDER: Return bulk_agreements = [] if no property-specific evidence exists in these sources. Never infer from market patterns. Prioritize local/regional ISP names from listing sites over national carrier assumptions. EDGAR sources override all other confidence levels. [PROVIDER-SLUG-PAGE] source = ISP's own property portal page — treat as confirmed evidence (highest confidence).`,
       }],
     })
 
@@ -607,6 +675,48 @@ CRITICAL REMINDER: Return bulk_agreements = [] if no property-specific evidence 
         })
       } catch { /* non-blocking */ }
     })()
+
+    // ── Persist provider detections (non-blocking) ──
+    const deepAgreements: any[] = intel.bulk_agreements ?? []
+    if (deepAgreements.length > 0) {
+      void (async () => {
+        try {
+          const { data: allProviders } = await supabaseDeep
+            .from('mdu_providers')
+            .select('id, name')
+            .eq('active', true)
+          if (!allProviders) return
+
+          const rows = deepAgreements
+            .filter(a => ['high', 'confirmed'].includes(a.confidence ?? ''))
+            .map((a: any) => {
+              const provName = (a.provider ?? '').toLowerCase()
+              const matched = (allProviders as any[]).find(
+                (p: any) => (p.name as string).toLowerCase().includes(provName) || provName.includes((p.name as string).toLowerCase())
+              )
+              if (!matched) return null
+              const yearMatch = (a.expiry_estimate ?? '').match(/20\d{2}/)
+              return {
+                provider_id:      matched.id,
+                property_name:    property_name || null,
+                property_address: address || null,
+                confidence:       a.confidence === 'confirmed' ? 'confirmed' : 'high',
+                source_type:      a.evidence_source ?? 'aria',
+                source_snippet:   a.evidence ? (a.evidence as string).slice(0, 250) : null,
+                contract_end_year: yearMatch ? parseInt(yearMatch[0], 10) : null,
+                verified_by:      'aria',
+              }
+            })
+            .filter(Boolean)
+
+          if (rows.length > 0) {
+            await supabaseDeep
+              .from('mdu_provider_detections')
+              .upsert(rows, { onConflict: 'provider_id,property_name', ignoreDuplicates: false })
+          }
+        } catch { /* non-blocking */ }
+      })()
+    }
 
     return NextResponse.json({ ...intel, sources, intelligence_sources: intelligenceSources })
 

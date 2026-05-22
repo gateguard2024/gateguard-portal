@@ -656,9 +656,9 @@ export default function NewQuotePage() {
         setMeta(m => ({
           ...m,
           opportunity_id:   prefilledOpportunityId,
-          client_name:      primaryContact?.name  ?? m.client_name,
-          client_email:     primaryContact?.email ?? m.client_email,
-          client_phone:     primaryContact?.phone ?? m.client_phone,
+          client_name:      primaryContact?.name  ?? opp.site_contact_name  ?? m.client_name,
+          client_email:     primaryContact?.email ?? opp.site_contact_email ?? m.client_email,
+          client_phone:     primaryContact?.phone ?? opp.site_contact_phone ?? m.client_phone,
           property_name:    opp.account_name      ?? m.property_name,
           property_address: [opp.property_address, opp.property_city, opp.property_state, opp.property_zip].filter(Boolean).join(', ') || m.property_address,
         }))
@@ -670,9 +670,9 @@ export default function NewQuotePage() {
           state:        opp.property_state   ?? p.state,
           zip:          opp.property_zip     ?? p.zip,
           units:        opp.units            ?? p.units,
-          contactName:  primaryContact?.name  ?? p.contactName,
-          contactEmail: primaryContact?.email ?? p.contactEmail,
-          contactPhone: primaryContact?.phone ?? p.contactPhone,
+          contactName:  primaryContact?.name  ?? opp.site_contact_name  ?? p.contactName,
+          contactEmail: primaryContact?.email ?? opp.site_contact_email ?? p.contactEmail,
+          contactPhone: primaryContact?.phone ?? opp.site_contact_phone ?? p.contactPhone,
         }))
       })
       .catch(() => {})
@@ -735,19 +735,22 @@ export default function NewQuotePage() {
           survey_id:        surveySourceId || null,
         }),
       });
-      if (!res.ok) throw new Error('Failed to create quote');
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(errBody.error ?? `HTTP ${res.status}`);
+      }
       const { quote } = await res.json();
 
       // Bulk-insert line items
-      for (const item of liItems) {
+      await Promise.all(liItems.map(item => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { _id, ...rest } = item;
-        await fetch(`/api/quotes/${quote.id}/items`, {
+        return fetch(`/api/quotes/${quote.id}/items`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(rest),
         });
-      }
+      }));
 
       // Write contact back to opportunity (fire-and-forget)
       if (meta.opportunity_id && property.contactName) {
@@ -766,8 +769,11 @@ export default function NewQuotePage() {
       }
 
       router.push(`/quotes/${quote.id}`);
-    } catch {
+    } catch (err: unknown) {
       setLiSaving(false);
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      console.error('[createLineItemQuote]', err);
+      alert(`Quote could not be saved: ${msg}\n\nCheck that you are logged in and try again.`);
     }
   }
 
@@ -795,7 +801,10 @@ export default function NewQuotePage() {
           opportunity_id:   prefilledOpportunityId || null,
         }),
       });
-      if (!res.ok) throw new Error('Failed to create quote');
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(errBody.error ?? `HTTP ${res.status}`);
+      }
       const { quote } = await res.json();
 
       // Convert calculated line items to API records
@@ -834,8 +843,11 @@ export default function NewQuotePage() {
       }
 
       router.push(`/quotes/${quote.id}`);
-    } catch {
+    } catch (err: unknown) {
       setWzSaving(false);
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      console.error('[createWizardQuote]', err);
+      alert(`Quote could not be saved: ${msg}\n\nCheck that you are logged in and try again.`);
     }
   }
 
@@ -1285,7 +1297,7 @@ export default function NewQuotePage() {
                       className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-brand-400" />
                   </Field>
                   <Field label="Email">
-                    <input type="email" value={meta.client_email} onChange={e => setM({ client_email: e.target.value })}
+                    <input type="text" inputMode="email" autoComplete="email" autoCorrect="off" autoCapitalize="none" spellCheck="false" value={meta.client_email} onChange={e => setM({ client_email: e.target.value })}
                       placeholder="jane@property.com"
                       className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-brand-400" />
                   </Field>

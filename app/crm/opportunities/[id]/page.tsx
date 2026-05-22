@@ -2593,7 +2593,7 @@ export default function OpportunityDetailPage() {
               </Field>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Contact Email">
-                  <input type="email" value={editForm.site_contact_email} onChange={e => setEditForm({...editForm, site_contact_email: e.target.value})} className={inputCls} placeholder="jane@example.com" />
+                  <input type="text" inputMode="email" autoComplete="email" autoCorrect="off" autoCapitalize="none" spellCheck={false} value={editForm.site_contact_email} onChange={e => setEditForm({...editForm, site_contact_email: e.target.value})} className={inputCls} placeholder="jane@example.com" />
                 </Field>
                 <Field label="Contact Phone">
                   <input type="tel" value={editForm.site_contact_phone} onChange={e => setEditForm({...editForm, site_contact_phone: e.target.value})} className={inputCls} placeholder="(404) 555-1234" />
@@ -2831,7 +2831,12 @@ function FieldRow({
           ) : (
             <input
               ref={inputRef as React.RefObject<HTMLInputElement>}
-              type={type}
+              type={type === "email" ? "text" : type}
+              inputMode={type === "email" ? "email" : undefined}
+              autoComplete={type === "email" ? "email" : undefined}
+              autoCorrect={type === "email" ? "off" : undefined}
+              autoCapitalize={type === "email" ? "none" : undefined}
+              spellCheck={type === "email" ? false : undefined}
               value={draft}
               onChange={e => setDraft(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") cancel(); }}
