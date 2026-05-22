@@ -595,6 +595,7 @@ export default function OpportunityDetailPage() {
         address: data.property_address ?? f.address,
         city:    data.property_city    ?? f.city,
         state:   data.property_state   ?? f.state,
+        zip:     data.property_zip     ?? f.zip,
         units: data.units ? String(data.units) : f.units,
         pm_name:  data.site_contact_name  ?? f.pm_name,
         pm_email: data.site_contact_email ?? f.pm_email,
