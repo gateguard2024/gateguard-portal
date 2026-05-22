@@ -1041,6 +1041,7 @@ export async function POST(req: NextRequest) {
         contractDorkExhibit, // 25. Google Dork: "Exhibit A" master communications agreement PDFs with dates
         contractDorkFiltered,// 26. Google Dork: executed MDU agreements for major mgmt cos — no templates
         countyRecorderIndex, // 27. Nationwide county recorder / real estate index — telecom easements on title
+        dmHierarchy,         // 28. Direct hierarchy lookup — regional VP + asset manager by mgmt co + region
       ] = await Promise.all([
 
         // 1. Listing sites — most reliable for confirming "internet included" + exact provider
@@ -1259,6 +1260,16 @@ export async function POST(req: NextRequest) {
         tavilySearch(
           `("telecommunications easement" OR "right of entry" OR "cable television franchise" OR "broadband easement" OR "fiber optic easement" OR "telecom license agreement") ("${terms}" OR "${mgmtTarget}") ${loc} grantee (Comcast OR Xfinity OR Spectrum OR Charter OR Cox OR "AT&T" OR Hotwire OR Gigstreem OR Gigastream OR "Pavlov Media" OR "Spot On Networks" OR Wyyerd OR Boingo OR WideOpenWest OR Metronet OR Vyve OR Brightspeed OR Ting OR Consolidated OR "Google Fiber" OR Lumen OR CenturyLink) site:gsccca.org OR site:myfloridacounty.com OR site:acris.nyc.gov OR site:propertyshark.com OR "county recorder" OR "deed of easement" OR "instrument number"`,
           5, 'county-deed'),
+
+        // 28. DECISION MAKER HIERARCHY — Dedicated regional VP + asset manager search.
+        // This search targets the specific management company + region to surface the full 3-tier DM chain:
+        // owner → asset manager → regional VP. These titles appear in LinkedIn, Bisnow, NMHC profiles,
+        // multifamily executive coverage, and investor relations pages.
+        // Primary goal: find real names for all 3 DM tiers so Claude can populate decision_maker_chain[].
+        // Secondary goal: collect personalization hooks (recent posts, speaking appearances, announcements).
+        tavilySearch(
+          `"${mgmtTarget}" ("regional vice president" OR "regional VP" OR "VP of operations" OR "regional director" OR "regional manager" OR "asset manager" OR "director of asset management" OR "VP asset management" OR "portfolio manager" OR "managing director" OR "chief investment officer" OR "principal" OR "general partner") "${loc || 'multifamily'}" site:linkedin.com OR site:bisnow.com OR site:nmhc.org OR site:multifamilyexecutive.com OR site:multifamilydive.com OR site:globest.com OR site:prnewswire.com`,
+          5, 'dm-hierarchy'),
       ])
 
       // Provider slug page searches — apply the Gigstreem/AMLI loci to EVERY provider in mdu_providers.
@@ -1332,6 +1343,7 @@ export async function POST(req: NextRequest) {
         ...contractDorkExhibit,
         ...contractDorkFiltered,
         ...countyRecorderIndex,
+        ...dmHierarchy,
       ]
         .filter(r => r.score > 0.20)
         .sort((a, b) => {
@@ -1343,6 +1355,7 @@ export async function POST(req: NextRequest) {
             'ucc-filing':         0.36, // UCC-1 = legal filing with exact deal start date + D&B number
             'commercial-re':      0.30,
             'dm-social':          0.30, // DM social posts → email personalization hooks
+            'dm-hierarchy':       0.35, // Direct DM hierarchy lookup — regional VP + asset manager names
             'city-permit':        0.28,
             'proptech-pain':      0.27, // Hardware pain = direct purchase trigger (gate, camera, package)
             'acquisition':        0.26, // New ownership = open vendor relationship window
@@ -1386,6 +1399,7 @@ export async function POST(req: NextRequest) {
         'isp-press-release':  'ISP-PRESS-RELEASE',
         'historical-listing': 'HISTORICAL-LISTING',
         'dm-social':          'DM-SOCIAL',
+        'dm-hierarchy':       'DM-HIERARCHY',
         'proptech-pain':      'PROPTECH-PAIN',
         'acquisition':        'ACQUISITION',
         'tech-stack':         'TECH-STACK',
@@ -1395,7 +1409,7 @@ export async function POST(req: NextRequest) {
         web:              'WEB',
       }
 
-      tavilyContextBlock = `\n\nWEB INTELLIGENCE — Live OSINT (27 sources — executed contract PDFs, county recorder easements, ISP/video contracts, decision maker intel, proptech pain, acquisition timing, tech stack, UCC filings, D&B):
+      tavilyContextBlock = `\n\nWEB INTELLIGENCE — Live OSINT (28 sources — executed contract PDFs, county recorder easements, ISP/video contracts, decision maker hierarchy, proptech pain, acquisition timing, tech stack, UCC filings, D&B):
 ${allResults.map((r) => `[${sourceLabels[r.source ?? 'web'] ?? 'WEB'}] ${r.title}\nURL: ${r.url}\n${r.content.slice(0, 800)}`).join('\n\n---\n\n')}
 
 SIGNAL EXTRACTION RULES (apply in this priority order):
@@ -1522,6 +1536,13 @@ SEC EDGAR FILING DATA (if provided above):
   - REIT management team: the people named in 10-K "Management" section or Bisnow deal coverage are the asset managers and decision makers — add them to decision_maker_chain
   - COMBINED: Wayback CDX + SEC-EDGAR corroborating same ISP + same date range → upgrade to confidence="confirmed"
 
+24. [DM-HIERARCHY] Dedicated regional VP + asset manager search results:
+  - Extract: name, title, company, LinkedIn URL (if available) for each person found at any tier
+  - For each result: map to the correct tier — regional_manager, asset_manager, or owner
+  - Add any posts, announcements, or speaking appearances as dm_hooks[] entries (format: "Posted about...", "Spoke at...", "Announced...")
+  - Populate decision_maker_chain[] with ALL real names found — this is the primary source for the full 3-tier DM chain
+  - If a result page includes their email format or company email domain, include in top_email_format
+
 If NO web evidence found above → bulk_agreements = [] (never infer from market patterns alone)`
     })()
 
@@ -1589,8 +1610,12 @@ The correct decision maker chain from most to least powerful:
 2. ASSET MANAGER — The person at the investment firm/owner who controls capex budget day-to-day. Title: "Asset Manager", "VP Asset Management", "Director of Asset Management", "Portfolio Manager". Set role_type="asset_manager". This is the FIRST EMAIL TARGET.
 3. REGIONAL MANAGER / VP — Oversees 5–20+ properties for the management company. Can approve vendor changes and flag to owners. Title: "Regional Manager", "Regional VP", "Vice President of Operations", "Director of Properties". Set role_type="regional_manager".
 
+PRIOR FINDINGS RULE (non-negotiable):
+If the user message contains a "GATEGUARD CONTRACT FINDINGS DATABASE" block, those entries were confirmed by prior ARIA research on this same property. They are NOT suggestions — they are previously confirmed evidence. You MUST include every entry from that block in bulk_agreements[] at its recorded confidence level. Do NOT discard, omit, or downgrade prior findings because today's web searches returned sparse results. Prior findings survive new searches. If today's searches corroborate them, upgrade confidence. If today's searches are silent, keep the prior finding at its original confidence level unchanged.
+
 DECISION MAKER RESEARCH RULES — ALWAYS POPULATE ALL 3 TIERS:
 - decision_maker_chain MUST include entries for all 3 tiers: owner, asset_manager, regional_manager. If you can't confirm a real name for a tier, use "Unknown [Title] — [Company]" as the name but still include the tier.
+- [DM-HIERARCHY] search results (source #28) are specifically targeted at the management company + region to find real names for each tier. Always use these results first when populating decision_maker_chain[].
 - For the owner tier: check the property's ownership entity from county records or OM. PE firms (Blackstone, Starwood, KKR, JBG Smith, Morgan Properties) have asset managers whose names appear in Bisnow and LinkedIn.
 - For the asset manager tier: this is who sends the wire and signs the contract. Their name often appears in SEC filings, Bisnow deal announcements, and REIT investor presentations.
 - For the regional manager tier: look for LinkedIn profiles with "Regional Manager" or "Regional VP" + the management company name + the city/state.
@@ -1706,7 +1731,9 @@ Set scout_brief.contract_window_urgency based on expiry timing:
         role: 'user',
         content: `ARIA research query: "${query.trim()}"
 ${existingNamesBlock}${priorFindings}${cachedDetectionsBlock}${mduProviderContextBlock}${fccContextBlock}${waybackBlock}${edgarBlock}${tavilyContextBlock}
-GateGuard offerings to weave into emails where relevant:
+${priorFindings ? `⚠ PRIOR FINDINGS MANDATE (CRITICAL — READ BEFORE CALLING THE TOOL):
+The GATEGUARD CONTRACT FINDINGS DATABASE block above contains entries confirmed by prior ARIA searches on this exact property. These ARE confirmed evidence from prior research. You MUST include ALL of those entries in bulk_agreements[] regardless of what today's web searches returned. A new search returning sparse results does NOT erase prior confirmed findings — it means the prior evidence still stands. Never discard, downgrade, or omit prior GateGuard contract findings. If today's searches corroborate them, upgrade confidence. If today's searches are silent, keep prior findings at their original confidence level.
+` : ''}GateGuard offerings to weave into emails where relevant:
 - Gate operators, access control (Brivo), intercoms, cameras — full stack install
 - Visitor management: GateCard platform — resident app, mobile access, delivery management
 - DirecTV/AT&T MDU bulk TV + internet for whole building (ATLAS bundle)

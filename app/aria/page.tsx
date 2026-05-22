@@ -106,9 +106,34 @@ interface ScoutBrief {
   key_data_points: string[];
 }
 
+interface DecisionMakerChainItem {
+  name: string;
+  title: string;
+  company: string;
+  role_type: 'owner' | 'asset_manager' | 'regional_manager' | 'property_manager' | 'unknown';
+  linkedin_slug?: string;
+  email: string;
+  top_email_format: string;
+  phone?: string;
+  notes?: string;
+  dm_hooks?: string[];
+}
+
+interface Ownership {
+  owner_entity: string;
+  owner_type: string;
+  portfolio_size?: string;
+  acquisition_year?: string;
+  hold_period?: string;
+  capex_signal?: string;
+  dnb_duns?: string;
+}
+
 interface Prospect {
   property: Property;
   decision_maker: DecisionMaker;
+  decision_maker_chain?: DecisionMakerChainItem[];
+  ownership?: Ownership;
   pain_signals: PainSignal[];
   profile: Profile;
   scout_brief: ScoutBrief;
@@ -147,7 +172,7 @@ const PHASES = [
   },
   {
     id: 5, name: "Intel Synthesis", icon: Star,
-    sources: ["27 OSINT Sources", "Contract DB", "SEC EDGAR"],
+    sources: ["28 OSINT Sources", "Contract DB", "SEC EDGAR"],
     detail: "Cross-referencing all intelligence layers, building SCOUT handoff packet",
   },
 ];
@@ -202,6 +227,8 @@ const SOURCE_DISPLAY: Record<string, string> = {
   'FORCED-SERVICE':  'Resident Complaint',
   'web':             'ARIA Verified',
   'WEB':             'ARIA Verified',
+  'dm-hierarchy':    'DM Hierarchy',
+  'DM-HIERARCHY':    'DM Hierarchy',
 };
 function displaySource(raw: string | undefined): string {
   if (!raw) return 'ARIA Verified';
@@ -462,7 +489,7 @@ export default function ARIAPage() {
                 <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: "#6B7EFF" }} />
               </span>
             </div>
-            <p className="text-xs text-gray-400 mt-0.5">Researches properties · Discovers decision makers · Mines intent signals · Generates hyper-personalized campaigns</p>
+            <p className="text-xs text-gray-400 mt-0.5">Researches properties · Maps decision maker hierarchy · Mines intent signals · Builds SCOUT handoff packets</p>
           </div>
         </div>
 
@@ -897,6 +924,15 @@ export default function ARIAPage() {
                         <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Owner Entity</p>
                         <p className="text-[11px] text-gray-500 mt-0.5">{prospect.property.owner_entity}</p>
                       </div>
+                      {prospect.ownership?.dnb_duns && prospect.ownership.dnb_duns !== 'unknown' && (
+                        <div>
+                          <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">D&amp;B DUNS</p>
+                          <p className="font-mono text-[10px] text-gray-600 mt-0.5 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                            {prospect.ownership.dnb_duns}
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     {/* Connectivity Intel — FCC baseline + Tavily Web Intel */}
@@ -1124,6 +1160,85 @@ export default function ARIAPage() {
                       <ExternalLink size={10} /> View LinkedIn Profile
                     </a>
                   </div>
+
+                  {/* Decision Maker Chain */}
+                  {prospect.decision_maker_chain && prospect.decision_maker_chain.length > 0 && (
+                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Users size={13} style={{ color: "#6B7EFF" }} />
+                        <span className="text-[10px] font-bold tracking-widest uppercase" style={{ color: "#6B7EFF" }}>
+                          DM Hierarchy
+                        </span>
+                        <span className="ml-auto text-[10px] text-gray-400">{prospect.decision_maker_chain.length} contacts</span>
+                      </div>
+
+                      <div className="space-y-3">
+                        {prospect.decision_maker_chain.map((dm, idx) => {
+                          const roleMeta: Record<string, { label: string; bg: string; text: string; border: string }> = {
+                            owner:            { label: 'Owner / PE',      bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
+                            asset_manager:    { label: 'Asset Manager',   bg: 'bg-[#6B7EFF]/8', text: 'text-[#6B7EFF]', border: 'border-[#6B7EFF]/25' },
+                            regional_manager: { label: 'Regional VP',     bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
+                            property_manager: { label: 'Property Mgr',   bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-200' },
+                            unknown:          { label: 'Contact',         bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-200' },
+                          };
+                          const meta = roleMeta[dm.role_type] ?? roleMeta.unknown;
+                          return (
+                            <div key={idx} className={`rounded-xl border p-3 ${meta.bg} ${meta.border}`}>
+                              <div className="flex items-start gap-2">
+                                <div
+                                  className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-bold text-[10px] shrink-0"
+                                  style={{ background: dm.role_type === 'owner' ? 'linear-gradient(135deg, #7C3AED, #5B21B6)' : dm.role_type === 'asset_manager' ? 'linear-gradient(135deg, #6B7EFF, #3B4FCC)' : 'linear-gradient(135deg, #10B981, #059669)' }}
+                                >
+                                  {dm.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <p className="text-xs font-bold text-gray-900 truncate">{dm.name}</p>
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${meta.bg} ${meta.text} border ${meta.border}`}>
+                                      {meta.label}
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-gray-500 mt-0.5 truncate">{dm.title}</p>
+                                  <p className="text-[9px] text-gray-400 truncate">{dm.company}</p>
+                                </div>
+                              </div>
+
+                              {/* Email format */}
+                              {(dm.top_email_format || dm.email) && (
+                                <div className="mt-2 pt-2 border-t border-gray-200/60">
+                                  <p className="font-mono text-[9px] text-gray-500 break-all leading-relaxed">
+                                    {dm.top_email_format || dm.email}
+                                  </p>
+                                </div>
+                              )}
+
+                              {/* DM hooks */}
+                              {dm.dm_hooks && dm.dm_hooks.length > 0 && dm.dm_hooks[0] !== 'no recent social activity found' && (
+                                <div className="mt-2 space-y-1">
+                                  {dm.dm_hooks.slice(0, 2).map((hook, hi) => (
+                                    <p key={hi} className="text-[9px] text-gray-500 italic leading-relaxed">
+                                      <span className={`font-bold not-italic mr-1 ${meta.text}`}>→</span>{hook}
+                                    </p>
+                                  ))}
+                                </div>
+                              )}
+
+                              {dm.linkedin_slug && (
+                                <a
+                                  href={`https://linkedin.com/in/${dm.linkedin_slug}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={`mt-1.5 flex items-center gap-1 text-[9px] font-medium ${meta.text}`}
+                                >
+                                  <ExternalLink size={8} /> LinkedIn
+                                </a>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* AI Profile */}
                   <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
