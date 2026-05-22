@@ -148,6 +148,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Company Setup",   href: "/onboarding",              icon: Building2,  description: "Company info, logo, integrations" },
       { label: "Subscription",    href: "/settings/subscription",   icon: CreditCard, description: "Plan, add-ons, billing" },
+      { label: "Cost Tracking",   href: "/admin/costs",             icon: BarChart3Icon, description: "Infra costs, unit economics, dealer P&L" },
       { label: "Organizations",   href: "/admin",                   icon: Network,    description: "5-tier org hierarchy" },
       { label: "User Management", href: "/admin/users",             icon: UserCog,    description: "Roles and access control" },
       { label: "Notifications",   href: "/communications",          icon: Headphones, description: "Alerts and notification preferences" },

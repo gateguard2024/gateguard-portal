@@ -15,6 +15,7 @@ import { ThemeProvider } from 'next-themes'
 import { Sidebar }          from '@/components/layout/Sidebar'
 import { AddToL10Button }   from '@/components/layout/AddToL10Button'
 import { NexusAssistant }   from '@/components/layout/NexusAssistant'
+import { MobileNav }        from '@/components/layout/MobileNav'
 
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -38,14 +39,29 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     <ThemeProvider attribute="class" defaultTheme="light" forcedTheme="light" disableTransitionOnChange>
       <div className="flex h-screen overflow-hidden relative">
         <div className="gate-bg-layer" aria-hidden="true" />
-        <Sidebar />
-        <main className="flex-1 flex flex-col ml-64 overflow-y-auto min-w-0 transition-all duration-200 relative z-10">
+
+        {/* Sidebar — hidden on mobile, always visible md+ */}
+        <div className="hidden md:block flex-shrink-0">
+          <Sidebar />
+        </div>
+
+        {/* Main content — full width on mobile, offset by sidebar on md+ */}
+        <main className="flex-1 flex flex-col md:ml-0 overflow-y-auto min-w-0 transition-all duration-200 relative z-10 pb-16 md:pb-0">
           {children}
         </main>
-        {/* Ambient EOS L10 button — floats on every portal page */}
-        <AddToL10Button />
-        {/* NEXUS Personal AI Assistant — bottom-right on every portal page */}
-        <NexusAssistant />
+
+        {/* Ambient EOS L10 button — floats on every portal page (desktop only) */}
+        <div className="hidden md:block">
+          <AddToL10Button />
+        </div>
+
+        {/* NEXUS Personal AI Assistant — bottom-right on every portal page (desktop only for now) */}
+        <div className="hidden md:block">
+          <NexusAssistant />
+        </div>
+
+        {/* Mobile bottom tab bar — only shown on mobile */}
+        <MobileNav />
       </div>
     </ThemeProvider>
   )

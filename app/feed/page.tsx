@@ -394,10 +394,10 @@ export default function FeedPage() {
         )}
 
         {/* ── Two-column layout ── */}
-        <div className="flex gap-6 items-start">
+        <div className="flex flex-col md:flex-row gap-6 items-start">
 
           {/* ── Feed column ── */}
-          <div className="flex-1 min-w-0 space-y-4">
+          <div className="flex-1 min-w-0 space-y-4 w-full">
             {/* Filter tabs */}
             <div className="flex items-center gap-1 bg-white border border-border rounded-xl p-1">
               {FILTER_TABS.map(tab => (
@@ -429,7 +429,7 @@ export default function FeedPage() {
           </div>
 
           {/* ── Right sidebar ── */}
-          <div className="w-72 flex-shrink-0 space-y-4">
+          <div className="w-full md:w-72 flex-shrink-0 space-y-4">
 
             {/* Leaderboard */}
             <div className="bg-white border border-border rounded-xl p-4">
