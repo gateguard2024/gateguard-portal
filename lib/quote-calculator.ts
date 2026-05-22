@@ -178,7 +178,7 @@ export function calculateLineItems(survey: SiteSurvey, property: QuoteProperty):
   return items;
 }
 
-export function calculateTotals(lineItems: QuoteLineItem[], property: QuoteProperty, discountPercent = 0, depositPercent = 50, discountMode: 'percent' | 'amount' = 'percent', discountAmount = 0, mrrDiscount = 0, mrrDiscountMode: 'percent' | 'amount' = 'percent'): QuoteTotals {
+export function calculateTotals(lineItems: QuoteLineItem[], property: QuoteProperty, discountPercent = 0, depositPercent = 50, discountMode: 'percent' | 'amount' = 'percent', discountAmount = 0, mrrDiscount = 0, mrrDiscountMode: 'percent' | 'amount' = 'percent', rampUp = false): QuoteTotals {
   const setupTotal = lineItems
     .filter(i => !i.recurring)
     .reduce((sum, i) => sum + i.total, 0);
@@ -206,10 +206,13 @@ export function calculateTotals(lineItems: QuoteLineItem[], property: QuotePrope
   const yearOneTotal   = discountedSetupTotal + (monthlyTotal * 12);
   const contractValue  = discountedSetupTotal + (monthlyTotal * contractMonths);
 
-  // Deposit = depositPercent% of discounted setup + 1st month; balance = remainder + 1st month
-  const depositFraction = Math.min(Math.max(depositPercent, 0), 100) / 100;
-  const depositDue      = discountedSetupTotal * depositFraction + monthlyTotal;
-  const goLivePayment   = discountedSetupTotal * (1 - depositFraction) + monthlyTotal;
+  // Deposit formula:
+  //   No ramp-up:  (setup + monthly) / 2  — equal split, one month collected each side
+  //   With ramp-up: setup/2 + monthly     — first & last month at go-live; balance = same
+  const depositDue    = rampUp
+    ? discountedSetupTotal / 2 + monthlyTotal
+    : (discountedSetupTotal + monthlyTotal) / 2;
+  const goLivePayment = depositDue; // always symmetric
 
   const units     = property.units || 0;
   const dealerMRR = Math.min(units * PRICING.monthly.dealerOverrideMax, monthlyTotal * 0.25);

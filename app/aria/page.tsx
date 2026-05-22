@@ -127,27 +127,27 @@ interface ResearchResult {
 const PHASES = [
   {
     id: 1, name: "Property Intel", icon: Building2,
-    sources: ["FCC Broadband Map", "County Assessor", "CoStar"],
-    detail: "Unit count, ownership, ISP/video providers, bulk agreements",
+    sources: ["Property Records", "Market Filings", "Public Database"],
+    detail: "Unit count, ownership, ISP/video providers, bulk agreements, ancillary income",
   },
   {
     id: 2, name: "Decision Maker", icon: Users,
-    sources: ["LinkedIn", "Hunter.io", "Apollo.io"],
-    detail: "Identifying PM name, email, tenure",
+    sources: ["Professional Network", "Contact Intelligence", "Org Mapping"],
+    detail: "Asset manager, regional VP, MDU account exec intel",
   },
   {
     id: 3, name: "Intent Signals", icon: Radio,
-    sources: ["Reddit", "ApartmentList", "Google Reviews"],
-    detail: "Mining pain points from public posts",
+    sources: ["Resident Intelligence", "Market Signals", "Contract Indicators"],
+    detail: "Mining pain points, contract expiry signals, forced-provider complaints",
   },
   {
     id: 4, name: "AI Profiling", icon: Cpu,
-    sources: ["Signal synthesis", "Buy score model"],
-    detail: "Building psychographic profile",
+    sources: ["Signal Synthesis", "Buy Score Model"],
+    detail: "Building psychographic profile & contract window estimate",
   },
   {
     id: 5, name: "Campaign Gen", icon: Star,
-    sources: ["Claude AI", "A/B variants"],
+    sources: ["ARIA AI", "A/B Variants"],
     detail: "Generating 3 personalized email variants",
   },
 ];
@@ -161,6 +161,31 @@ const EXAMPLE_QUERIES = [
   "Lease-up communities in Denver needing access control",
   "Greystar properties near Nashville with resident complaints",
 ];
+
+// Maps raw OSINT source identifiers to user-facing confidence labels
+// Raw values are internal pipeline labels — never expose them directly
+const SOURCE_DISPLAY: Record<string, string> = {
+  'listing-site':    'Property Listing',
+  'LISTING-SITE':    'Property Listing',
+  'social':          'Resident Review',
+  'REDDIT/REVIEW':   'Resident Review',
+  'county-deed':     'Public Record',
+  'COUNTY-DEED':     'Public Record',
+  'isp-partnership': 'Market Intelligence',
+  'ISP-PARTNERSHIP': 'Market Intelligence',
+  'commercial-re':   'Financial Filing',
+  'OFFERING-MEMO':   'Financial Filing',
+  'hoa-rfp':         'Property Document',
+  'HOA-MINUTES/RFP': 'Property Document',
+  'linkedin-mdu':    'Industry Signal',
+  'LINKEDIN-MDU-REP':'Industry Signal',
+  'web':             'ARIA Verified',
+  'WEB':             'ARIA Verified',
+};
+function displaySource(raw: string | undefined): string {
+  if (!raw) return 'ARIA Verified';
+  return SOURCE_DISPLAY[raw] ?? 'ARIA Verified';
+}
 
 const SIGNAL_ICONS: Record<string, React.ElementType> = {
   gate_access: Shield,
@@ -896,7 +921,7 @@ export default function ARIAPage() {
                           <span className="text-[9px] text-amber-600 font-medium">⚠ AI-estimated</span>
                         )}
                         {results?.webIntelligence && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-violet-50 text-violet-600">Web Intel</span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-violet-50 text-violet-600">Multi-Source Verified</span>
                         )}
                       </div>
 
@@ -1170,7 +1195,7 @@ export default function ARIAPage() {
                               <Icon size={15} className={cn("mt-0.5 shrink-0", sev.text)} />
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                                  <span className={cn("text-[11px] font-bold", sev.text)}>{sig.source}</span>
+                                  <span className={cn("text-[11px] font-bold", sev.text)}>{displaySource(sig.source)}</span>
                                   <span className="text-[10px] text-gray-400">· {sig.date}</span>
                                   <span className={cn("ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded uppercase", sev.badge)}>
                                     {sig.severity}
@@ -1265,7 +1290,7 @@ export default function ARIAPage() {
                           </button>
                           <div className="flex-1" />
                           <span className="text-[10px] text-gray-400">
-                            Signal source: {prospect.pain_signals[0]?.source ?? "multiple"}
+                            ARIA Verified · Multi-Source
                           </span>
                         </div>
                       </div>

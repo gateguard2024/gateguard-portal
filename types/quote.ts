@@ -175,7 +175,7 @@ export const PRICING = {
   monthly: {
     perUnit: 10.00,
     minimum: 1200.00,
-    dealerOverrideMax: 2.50,
+    dealerOverrideMax: 5.00,
   },
 
   // Tier 1 (Mobile Pass) — per entry point, uniform rate regardless of hardware type

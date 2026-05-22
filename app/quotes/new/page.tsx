@@ -579,6 +579,9 @@ export default function NewQuotePage() {
   const [property, setProperty]   = useState<QuoteProperty>(defaultProperty);
   const [survey, setSurvey]       = useState<SiteSurvey>(defaultSurvey);
   const [wzSaving, setWzSaving]   = useState(false);
+  const [draftQuoteId, setDraftQuoteId] = useState<string | null>(null);
+  const [draftSaving, setDraftSaving]   = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<Date | null>(null);
 
   // ── Survey import state ──────────────────────────────────────────────────────
   const [surveyList, setSurveyList]               = useState<SurveyRecord[]>([]);
@@ -676,7 +679,7 @@ export default function NewQuotePage() {
     setProperty(p => ({ ...p, [key]: key === 'units' ? parseInt(val) || 0 : val }));
 
   const lineItems = calculateLineItems(survey, property);
-  const totals    = calculateTotals(lineItems, property, meta.discount_percent, meta.deposit_percent || 50, meta.discount_mode, meta.discount_amount, meta.mrr_discount, meta.mrr_discount_mode);
+  const totals    = calculateTotals(lineItems, property, meta.discount_percent, meta.deposit_percent || 50, meta.discount_mode, meta.discount_amount, meta.mrr_discount, meta.mrr_discount_mode, meta.rampUp ?? false);
 
   const setNet = (key: keyof NetworkSurvey, patch: Partial<{ qty: number; billing: BillingMode }>) =>
     setSurvey(s => ({ ...s, network: { ...s.network, [key]: { ...s.network[key], ...patch } } }));
@@ -904,6 +907,54 @@ export default function NewQuotePage() {
       setSurveyImportError(e instanceof Error ? e.message : 'Failed to load survey');
     } finally {
       setSurveyImporting(false);
+    }
+  }
+
+  /* ── Save Draft (wizard mode — non-navigating save) ──────────────────────── */
+  async function saveDraft() {
+    setDraftSaving(true);
+    try {
+      const body = {
+        title:            property.name || 'Draft Quote',
+        quote_mode:       'wizard',
+        status:           'draft',
+        client_name:      property.contactName || null,
+        client_email:     property.contactEmail || null,
+        client_phone:     property.contactPhone || null,
+        property_name:    property.name || null,
+        property_address: [property.address, property.city, property.state, property.zip].filter(Boolean).join(', ') || null,
+        units:            property.units,
+        total_one_time:   totals.setupTotal,
+        total_mrr:        totals.monthlyTotal,
+        dealer_mrr:       totals.dealerMRR,
+        client_org_id:    prefilledClientOrgId  || null,
+        opportunity_id:   prefilledOpportunityId || meta.opportunity_id || null,
+      };
+
+      let res: Response;
+      if (draftQuoteId) {
+        // Update existing draft
+        res = await fetch(`/api/quotes/${draftQuoteId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+      } else {
+        // Create new draft
+        res = await fetch('/api/quotes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (res.ok) {
+          const { quote } = await res.json();
+          setDraftQuoteId(quote.id);
+        }
+      }
+
+      if (res.ok) setDraftSavedAt(new Date());
+    } finally {
+      setDraftSaving(false);
     }
   }
 
@@ -1374,18 +1425,63 @@ export default function NewQuotePage() {
             className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium text-foreground hover:bg-card transition-colors">
             <ChevronLeft className="w-4 h-4" /> Back
           </button>
-          {liStep < 3 ? (
-            <button onClick={() => setLiStep(s => s + 1)}
-              disabled={liStep === 1 && !meta.property_name.trim()}
-              className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold bg-brand-400 hover:bg-brand-500 text-navy disabled:opacity-40 disabled:cursor-not-allowed transition-colors gg-glow">
-              Continue <ChevronRight className="w-4 h-4" />
-            </button>
-          ) : (
-            <button onClick={createLineItemQuote} disabled={liSaving}
-              className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold bg-brand-400 hover:bg-brand-500 text-navy disabled:opacity-40 transition-colors gg-glow">
-              {liSaving ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating…</> : <><Check className="w-4 h-4" /> Create Quote</>}
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {/* Save Draft in line-item builder */}
+            {meta.property_name.trim() && liStep >= 2 && (
+              <div className="flex items-center gap-2">
+                {draftSavedAt && (
+                  <span className="text-xs text-muted-foreground">
+                    Saved {draftSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+                <button type="button"
+                  onClick={async () => {
+                    setDraftSaving(true);
+                    try {
+                      const body = {
+                        title:            meta.title || `Quote — ${meta.property_name}`,
+                        quote_mode:       'line_item',
+                        status:           'draft',
+                        client_name:      meta.client_name  || null,
+                        client_email:     meta.client_email || null,
+                        client_phone:     meta.client_phone || null,
+                        property_name:    meta.property_name || null,
+                        property_address: meta.property_address || null,
+                        total_one_time:   liItems.filter(i => !i.is_recurring).reduce((s, i) => s + i.qty * i.unit_price, 0),
+                        total_mrr:        liMrr,
+                        opportunity_id:   meta.opportunity_id || null,
+                        survey_id:        surveySourceId || null,
+                      };
+                      let savedId = draftQuoteId;
+                      if (savedId) {
+                        await fetch(`/api/quotes/${savedId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                      } else {
+                        const r = await fetch('/api/quotes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                        if (r.ok) { const { quote } = await r.json(); savedId = quote.id; setDraftQuoteId(quote.id); }
+                      }
+                      setDraftSavedAt(new Date());
+                    } finally { setDraftSaving(false); }
+                  }}
+                  disabled={draftSaving}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-card transition-colors disabled:opacity-40">
+                  {draftSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                  {draftSaving ? 'Saving…' : 'Save Draft'}
+                </button>
+              </div>
+            )}
+            {liStep < 3 ? (
+              <button onClick={() => setLiStep(s => s + 1)}
+                disabled={liStep === 1 && !meta.property_name.trim()}
+                className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold bg-brand-400 hover:bg-brand-500 text-navy disabled:opacity-40 disabled:cursor-not-allowed transition-colors gg-glow">
+                Continue <ChevronRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <button onClick={createLineItemQuote} disabled={liSaving}
+                className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold bg-brand-400 hover:bg-brand-500 text-navy disabled:opacity-40 transition-colors gg-glow">
+                {liSaving ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating…</> : <><Check className="w-4 h-4" /> Create Quote</>}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -1838,20 +1934,18 @@ export default function NewQuotePage() {
                 <span className="text-sm font-bold text-emerald-400">−{formatCurrency(totals.discountSavings)}</span>
               </div>
             )}
-            <div className="flex items-center justify-between gap-4 pt-1">
+            <div className="flex items-center justify-between gap-4 pt-1 bg-background/60 rounded-lg px-3 py-2.5">
               <div>
-                <p className="text-sm text-foreground">Deposit %</p>
-                <p className="text-xs text-muted-foreground">Percent of setup fee due at signing</p>
+                <p className="text-sm text-foreground">Deposit Formula</p>
+                <p className="text-xs text-muted-foreground">
+                  {meta.rampUp
+                    ? 'With ramp-up: (setup ÷ 2) + 1 month — first & last month at go-live'
+                    : 'No ramp-up: (setup + 1 month) ÷ 2 — equal split at each milestone'}
+                </p>
               </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number" min="0" max="100" step="5"
-                  value={meta.deposit_percent || ''}
-                  onChange={e => setMeta(m => ({ ...m, deposit_percent: Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)) }))}
-                  placeholder="50"
-                  className="w-20 px-2 py-1.5 bg-background border border-border rounded text-sm text-right text-foreground focus:outline-none focus:ring-1 focus:ring-brand-400 tabular-nums"
-                />
-                <span className="text-sm text-muted-foreground">%</span>
+              <div className="shrink-0 text-right">
+                <p className="text-sm font-semibold text-amber-400">{formatCurrency(totals.depositDue)}</p>
+                <p className="text-xs text-muted-foreground">each side</p>
               </div>
             </div>
 
@@ -1933,8 +2027,8 @@ export default function NewQuotePage() {
             <p className="text-xs text-muted-foreground uppercase tracking-wide">GateGuard Direct Monthly</p>
             {totals.mrrDiscountSavings > 0 ? (
               <>
-                <p className="text-sm text-muted-foreground line-through mt-1">{formatCurrency(totals.monthlyTotal)}/mo</p>
-                <p className="text-xl font-bold text-brand-400">{formatCurrency(totals.monthlyTotal - totals.mrrDiscountSavings)}/mo</p>
+                <p className="text-sm text-muted-foreground line-through mt-1">{formatCurrency(totals.monthlyTotal + totals.mrrDiscountSavings)}/mo</p>
+                <p className="text-xl font-bold text-brand-400">{formatCurrency(totals.monthlyTotal)}/mo</p>
                 <p className="text-xs text-emerald-500 font-medium">−{formatCurrency(totals.mrrDiscountSavings)}/mo savings</p>
               </>
             ) : (
@@ -1947,16 +2041,20 @@ export default function NewQuotePage() {
 
           {/* Deposit at Signing */}
           <div className="bg-card border border-border rounded-xl p-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Deposit at Signing ({meta.deposit_percent || 50}%)</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Deposit at Signing</p>
             <p className="text-xl font-bold text-amber-400 mt-1">{formatCurrency(totals.depositDue)}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{meta.deposit_percent || 50}% setup + 1st month</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {meta.rampUp ? 'Setup ÷ 2 + 1st month' : '(Setup + monthly) ÷ 2'}
+            </p>
           </div>
 
           {/* Balance at Launch */}
           <div className="bg-card border border-border rounded-xl p-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Balance at Launch</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Balance at Go-Live</p>
             <p className="text-xl font-bold text-blue-400 mt-1">{formatCurrency(totals.goLivePayment)}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{100 - (meta.deposit_percent || 50)}% setup + 1st month</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {meta.rampUp ? 'Setup ÷ 2 + last month' : '(Setup + monthly) ÷ 2'}
+            </p>
           </div>
 
           {/* Contract Value */}
@@ -1970,7 +2068,7 @@ export default function NewQuotePage() {
           <div className="bg-card border border-border rounded-xl p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Dealer Override MRR</p>
             <p className="text-xl font-bold text-violet-400 mt-1">{formatCurrency(totals.dealerMRR)}/mo</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Up to $2.50/unit/mo</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Up to $5.00/unit/mo</p>
           </div>
         </div>
 
@@ -2072,17 +2170,34 @@ export default function NewQuotePage() {
           className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium text-foreground hover:bg-card transition-colors">
           <ChevronLeft className="w-4 h-4" /> Back
         </button>
-        {step < 4 ? (
-          <button type="button" onClick={() => setStep(s => s + 1)} disabled={!canProceed}
-            className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${canProceed ? 'bg-brand-400 hover:bg-brand-500 text-navy gg-glow' : 'bg-border text-muted-foreground cursor-not-allowed'}`}>
-            Continue <ChevronRight className="w-4 h-4" />
-          </button>
-        ) : (
-          <button type="button" onClick={createWizardQuote} disabled={wzSaving}
-            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-brand-400 hover:bg-brand-500 text-navy text-sm font-semibold transition-colors gg-glow">
-            {wzSaving ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating…</> : <><FileText className="w-4 h-4" /> Create Quote</>}
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {/* Save Draft — available after property name is set */}
+          {property.name.trim() && (
+            <div className="flex items-center gap-2">
+              {draftSavedAt && (
+                <span className="text-xs text-muted-foreground">
+                  Saved {draftSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+              <button type="button" onClick={saveDraft} disabled={draftSaving}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-card transition-colors disabled:opacity-40">
+                {draftSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                {draftSaving ? 'Saving…' : 'Save Draft'}
+              </button>
+            </div>
+          )}
+          {step < 4 ? (
+            <button type="button" onClick={() => setStep(s => s + 1)} disabled={!canProceed}
+              className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${canProceed ? 'bg-brand-400 hover:bg-brand-500 text-navy gg-glow' : 'bg-border text-muted-foreground cursor-not-allowed'}`}>
+              Continue <ChevronRight className="w-4 h-4" />
+            </button>
+          ) : (
+            <button type="button" onClick={createWizardQuote} disabled={wzSaving}
+              className="flex items-center gap-2 px-5 py-2 rounded-lg bg-brand-400 hover:bg-brand-500 text-navy text-sm font-semibold transition-colors gg-glow">
+              {wzSaving ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating…</> : <><Check className="w-4 h-4" /> Create Quote</>}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
