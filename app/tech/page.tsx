@@ -18,7 +18,7 @@ import { CableGuide }   from '@/components/tech/CableGuide'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type StepType = 'question' | 'action' | 'measure' | 'select' | 'photo' | 'resolved' | 'escalate'
-type Screen   = 'pin' | 'home' | 'choice' | 'symptom' | 'diag' | 'wiring' | 'cable' | 'install' | 'survey' | 'survey_add' | 'survey_transcript' | 'training' | 'training_course'
+type Screen   = 'pin' | 'home' | 'choice' | 'symptom' | 'diag' | 'wiring' | 'cable' | 'install' | 'survey' | 'survey_add' | 'survey_transcript' | 'training' | 'training_course' | 'netscout'
 
 // ─── Site Survey Types ────────────────────────────────────────────────────────
 interface SurveyDevice {
@@ -554,6 +554,17 @@ function TechTool() {
   const [plaudStatus,          setPlaudStatus]          = useState<string | null>(null)
   const plaudFileRef = useRef<HTMLInputElement>(null)
 
+  // NETSCOUT state
+  const [netscoutRunning,  setNetscoutRunning]  = useState(false)
+  const [netscoutData,     setNetscoutData]     = useState<{
+    timestamp: string
+    probes: Array<{ label: string; url: string; status: 'ok' | 'slow' | 'fail'; latency_ms: number | null; http_code?: number; error?: string }>
+    unifi_clients: Array<{ mac: string; hostname: string | null; name: string | null; ip: string | null; is_wired: boolean; rssi?: number | null; signal?: number | null; essid?: string | null }>
+    unifi_error: string | null
+    unifi_count: number
+  } | null>(null)
+  const [netscoutError,    setNetscoutError]    = useState<string | null>(null)
+
   // Demo / install mode state
   const [prevScreen,      setPrevScreen]     = useState<Screen | null>(null)
   const [wiringInitMapId, setWiringInitMapId] = useState<string | null>(null)
@@ -973,38 +984,46 @@ function TechTool() {
         {/* ── Bottom navigation bar ── */}
         <div style={S.legendStrip}>
           {/* DIAGNOSE — currently active */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: `2.5px solid ${C.blue}` }}>
-            <span style={{ fontSize: 20 }}>🔍</span>
-            <span style={{ fontFamily: MONO, fontSize: 8, fontWeight: 700, color: C.blue, letterSpacing: '0.08em' }}>DIAGNOSE</span>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '8px 0', borderTop: `2.5px solid ${C.blue}` }}>
+            <span style={{ fontSize: 18 }}>🔍</span>
+            <span style={{ fontFamily: MONO, fontSize: 7, fontWeight: 700, color: C.blue, letterSpacing: '0.06em' }}>DIAGNOSE</span>
           </div>
           {/* WIRING */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent' }}>
-            <span style={{ fontSize: 20 }}>⚡</span>
-            <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.08em' }}>WIRING</span>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '8px 0', borderTop: '2.5px solid transparent' }}>
+            <span style={{ fontSize: 18 }}>⚡</span>
+            <span style={{ fontFamily: MONO, fontSize: 7, color: C.textMuted, letterSpacing: '0.06em' }}>WIRING</span>
           </div>
-          {/* CABLE — opens cable guide */}
+          {/* CABLE */}
           <button
             onClick={() => setScreen('cable')}
-            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '8px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}
           >
-            <span style={{ fontSize: 20 }}>🔌</span>
-            <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.08em' }}>CABLE</span>
+            <span style={{ fontSize: 18 }}>🔌</span>
+            <span style={{ fontFamily: MONO, fontSize: 7, color: C.textMuted, letterSpacing: '0.06em' }}>CABLE</span>
           </button>
           {/* SURVEY */}
           <button
             onClick={() => { setSurveyProposal(null); setScreen('survey') }}
-            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '8px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}
           >
-            <span style={{ fontSize: 20 }}>📍</span>
-            <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.08em' }}>SURVEY</span>
+            <span style={{ fontSize: 18 }}>📍</span>
+            <span style={{ fontFamily: MONO, fontSize: 7, color: C.textMuted, letterSpacing: '0.06em' }}>SURVEY</span>
+          </button>
+          {/* NETSCOUT */}
+          <button
+            onClick={() => setScreen('netscout')}
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '8px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}
+          >
+            <span style={{ fontSize: 18 }}>📡</span>
+            <span style={{ fontFamily: MONO, fontSize: 7, color: C.textMuted, letterSpacing: '0.06em' }}>NETSCOUT</span>
           </button>
           {/* TRAIN */}
           <button
             onClick={() => setScreen('training')}
-            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '8px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}
           >
-            <span style={{ fontSize: 20 }}>🎓</span>
-            <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.08em' }}>TRAIN</span>
+            <span style={{ fontSize: 18 }}>🎓</span>
+            <span style={{ fontFamily: MONO, fontSize: 7, color: C.textMuted, letterSpacing: '0.06em' }}>TRAIN</span>
           </button>
         </div>
       </div>
@@ -3098,6 +3117,260 @@ function TechTool() {
             ← BACK TO COURSES
           </button>
 
+        </div>
+      </div>
+    )
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SCREEN: NETSCOUT — connectivity probe + network scanner
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (screen === 'netscout') {
+    const runScan = async () => {
+      setNetscoutRunning(true)
+      setNetscoutError(null)
+      try {
+        const res = await fetch('/api/tech/netscout', {
+          headers: { 'x-tech-code': techCode },
+        })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json()
+        setNetscoutData(data)
+      } catch (e) {
+        setNetscoutError(e instanceof Error ? e.message : 'Scan failed')
+      } finally {
+        setNetscoutRunning(false)
+      }
+    }
+
+    const statusColor = (s: string) =>
+      s === 'ok' ? C.green : s === 'slow' ? C.amber : C.red
+
+    const statusIcon = (s: string) =>
+      s === 'ok' ? '✓' : s === 'slow' ? '⚠' : '✗'
+
+    // Browser connection info
+    const conn = typeof navigator !== 'undefined' && 'connection' in navigator
+      ? (navigator as unknown as { connection: { effectiveType?: string; downlink?: number; rtt?: number; type?: string } }).connection
+      : null
+
+    return (
+      <div style={S.shell}>
+        {/* Top bar */}
+        <div style={S.topBar}>
+          <button style={S.iconBtn} onClick={() => setScreen('home')}>←</button>
+          <div style={{ flex: 1 }}>
+            <div style={S.topBarTitle}>📡 NETSCOUT</div>
+            <div style={S.topBarSub}>CONNECTIVITY · NETWORK · CLIENTS</div>
+          </div>
+          <div style={{ ...S.statusPill, color: netscoutData ? C.green : C.textMuted }}>
+            {netscoutData ? '● SCANNED' : '○ READY'}
+          </div>
+        </div>
+
+        {/* Content */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+
+          {/* Device connection info */}
+          {conn != null && (() => {
+            const c = conn!
+            return (
+              <div style={{ background: C.bgCard, borderRadius: 12, border: `1px solid ${C.border}`, padding: '14px 16px', marginBottom: 12 }}>
+                <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.16em', marginBottom: 10 }}>📶 THIS DEVICE</div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  {c.effectiveType && (
+                    <div style={{ background: C.bgInput, borderRadius: 8, padding: '8px 12px', textAlign: 'center' }}>
+                      <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.blue }}>{c.effectiveType!.toUpperCase()}</div>
+                      <div style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.1em', marginTop: 2 }}>SIGNAL</div>
+                    </div>
+                  )}
+                  {c.downlink !== undefined && (
+                    <div style={{ background: C.bgInput, borderRadius: 8, padding: '8px 12px', textAlign: 'center' }}>
+                      <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.textPrimary }}>{c.downlink} Mbps</div>
+                      <div style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.1em', marginTop: 2 }}>DOWNLINK</div>
+                    </div>
+                  )}
+                  {c.rtt !== undefined && (
+                    <div style={{ background: C.bgInput, borderRadius: 8, padding: '8px 12px', textAlign: 'center' }}>
+                      <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: (c.rtt ?? 0) > 200 ? C.amber : C.green }}>{c.rtt}ms</div>
+                      <div style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.1em', marginTop: 2 }}>RTT</div>
+                    </div>
+                  )}
+                  {c.type && (
+                    <div style={{ background: C.bgInput, borderRadius: 8, padding: '8px 12px', textAlign: 'center' }}>
+                      <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.textPrimary }}>{c.type!.toUpperCase()}</div>
+                      <div style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.1em', marginTop: 2 }}>TYPE</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Scan button */}
+          <button
+            style={{ ...S.primaryBtn, marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
+            onClick={runScan}
+            disabled={netscoutRunning}
+          >
+            {netscoutRunning
+              ? <><span style={S.spinner} />SCANNING…</>
+              : <>{netscoutData ? '↺ RE-SCAN' : '⚡ RUN NETWORK SCAN'}</>
+            }
+          </button>
+
+          {netscoutError && (
+            <div style={{ background: 'rgba(248,113,113,0.08)', border: `1px solid rgba(248,113,113,0.28)`, borderRadius: 10, padding: '12px 14px', marginBottom: 12, fontFamily: MONO, fontSize: 11, color: C.red, letterSpacing: '0.06em' }}>
+              ✗ {netscoutError}
+            </div>
+          )}
+
+          {/* Probe results */}
+          {netscoutData != null && (() => {
+            const nd = netscoutData!
+            return (
+            <>
+              <div style={{ background: C.bgCard, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden', marginBottom: 12 }}>
+                <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.16em', padding: '10px 14px', borderBottom: `1px solid ${C.border}`, background: C.bgInput }}>
+                  🌐 ENDPOINT CONNECTIVITY
+                  <span style={{ float: 'right', color: C.textMuted }}>
+                    {new Date(nd.timestamp).toLocaleTimeString()}
+                  </span>
+                </div>
+                {nd.probes.map((p, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '12px 14px', borderBottom: i < nd.probes.length - 1 ? `1px solid ${C.border}` : 'none', gap: 12 }}>
+                    <div style={{ width: 28, height: 28, borderRadius: 8, background: `${statusColor(p.status)}18`, border: `1px solid ${statusColor(p.status)}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 13, fontWeight: 700, color: statusColor(p.status), flexShrink: 0 }}>
+                      {statusIcon(p.status)}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, color: C.textPrimary, letterSpacing: '0.04em' }}>{p.label}</div>
+                      {p.error && <div style={{ fontFamily: MONO, fontSize: 9, color: C.red, letterSpacing: '0.06em', marginTop: 2 }}>{p.error}</div>}
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, color: statusColor(p.status) }}>
+                        {p.status.toUpperCase()}
+                      </div>
+                      <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, marginTop: 1 }}>
+                        {p.latency_ms !== null ? `${p.latency_ms}ms` : '—'}
+                        {p.http_code ? ` · ${p.http_code}` : ''}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Summary chips */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                {(['ok', 'slow', 'fail'] as const).map(s => {
+                  const count = nd.probes.filter(p => p.status === s).length
+                  if (count === 0) return null
+                  return (
+                    <div key={s} style={{ background: `${statusColor(s)}14`, border: `1px solid ${statusColor(s)}40`, borderRadius: 8, padding: '6px 12px', fontFamily: MONO, fontSize: 10, color: statusColor(s), fontWeight: 700, letterSpacing: '0.08em' }}>
+                      {statusIcon(s)} {count} {s.toUpperCase()}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* UniFi clients */}
+              {nd.unifi_count > 0 && (
+                <div style={{ background: C.bgCard, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden', marginBottom: 12 }}>
+                  <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.16em', padding: '10px 14px', borderBottom: `1px solid ${C.border}`, background: C.bgInput }}>
+                    🔌 UNIFI CLIENTS ({nd.unifi_count})
+                  </div>
+                  {nd.unifi_clients.slice(0, 20).map((c, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', borderBottom: i < Math.min(nd.unifi_clients.length, 20) - 1 ? `1px solid ${C.border}` : 'none', gap: 10 }}>
+                      <div style={{ width: 24, height: 24, borderRadius: 6, background: c.is_wired ? 'rgba(16,185,129,0.12)' : 'rgba(107,126,255,0.12)', border: `1px solid ${c.is_wired ? 'rgba(16,185,129,0.30)' : 'rgba(107,126,255,0.30)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>
+                        {c.is_wired ? '🔌' : '📶'}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, color: C.textPrimary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {c.hostname ?? c.name ?? c.mac}
+                        </div>
+                        <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.04em' }}>
+                          {c.ip ?? '—'}{c.essid ? ` · ${c.essid}` : ''}
+                        </div>
+                      </div>
+                      {c.signal !== null && c.signal !== undefined && !c.is_wired && (
+                        <div style={{ fontFamily: MONO, fontSize: 10, color: c.signal > -65 ? C.green : c.signal > -80 ? C.amber : C.red, fontWeight: 700, flexShrink: 0 }}>
+                          {c.signal}dBm
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {nd.unifi_count > 20 && (
+                    <div style={{ padding: '10px 14px', fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.1em', textAlign: 'center' }}>
+                      +{nd.unifi_count - 20} more clients
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {nd.unifi_error && (
+                <div style={{ background: C.bgInput, borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontFamily: MONO, fontSize: 10, color: C.textMuted, letterSpacing: '0.06em' }}>
+                  ℹ UniFi: {nd.unifi_error} — no org UniFi credentials configured
+                </div>
+              )}
+
+              {/* Tips */}
+              <div style={{ background: C.bgCard, borderRadius: 12, border: `1px solid ${C.border}`, padding: '14px 16px', marginBottom: 24 }}>
+                <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.16em', marginBottom: 10 }}>💡 FIELD TIPS</div>
+                {[
+                  { label: 'Brivo offline?', tip: 'Check auth.brivo.com probe. If fail: site internet issue, not a Brivo outage.' },
+                  { label: 'Portal slow?', tip: 'RTT >3s = poor cellular. Move closer to window or switch to WiFi.' },
+                  { label: 'All probes fail?', tip: 'Total connectivity loss. Check cellular data on, airplane mode off.' },
+                  { label: 'UniFi not showing?', tip: 'Org needs UniFi host + API key configured in dealer settings.' },
+                ].map((t, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 10, marginBottom: i < 3 ? 8 : 0 }}>
+                    <div style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: C.blue, flexShrink: 0, minWidth: 120 }}>{t.label}</div>
+                    <div style={{ fontFamily: SANS, fontSize: 12, color: C.textSecondary, lineHeight: 1.5 }}>{t.tip}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+            )
+          })()}
+
+          {/* Empty state before first scan */}
+          {!netscoutData && !netscoutRunning && (
+            <div style={{ textAlign: 'center', padding: '32px 16px' }}>
+              <div style={{ fontSize: 48, marginBottom: 12 }}>📡</div>
+              <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, color: C.textPrimary, letterSpacing: '0.04em', marginBottom: 8 }}>NETWORK SCANNER</div>
+              <div style={{ fontSize: 13, color: C.textSecondary, lineHeight: 1.6, maxWidth: 280, margin: '0 auto' }}>
+                Probe GateGuard endpoints, Brivo, Eagle Eye, and pull connected UniFi clients from the property controller.
+              </div>
+            </div>
+          )}
+
+        </div>
+
+        {/* Bottom nav */}
+        <div style={S.legendStrip}>
+          <button onClick={() => setScreen('home')} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '8px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}>
+            <span style={{ fontSize: 18 }}>🔍</span>
+            <span style={{ fontFamily: MONO, fontSize: 7, color: C.textMuted, letterSpacing: '0.06em' }}>DIAGNOSE</span>
+          </button>
+          <button onClick={() => setScreen('wiring')} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '8px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}>
+            <span style={{ fontSize: 18 }}>⚡</span>
+            <span style={{ fontFamily: MONO, fontSize: 7, color: C.textMuted, letterSpacing: '0.06em' }}>WIRING</span>
+          </button>
+          <button onClick={() => setScreen('cable')} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '8px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}>
+            <span style={{ fontSize: 18 }}>🔌</span>
+            <span style={{ fontFamily: MONO, fontSize: 7, color: C.textMuted, letterSpacing: '0.06em' }}>CABLE</span>
+          </button>
+          <button onClick={() => { setSurveyProposal(null); setScreen('survey') }} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '8px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}>
+            <span style={{ fontSize: 18 }}>📍</span>
+            <span style={{ fontFamily: MONO, fontSize: 7, color: C.textMuted, letterSpacing: '0.06em' }}>SURVEY</span>
+          </button>
+          {/* NETSCOUT — active */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '8px 0', borderTop: `2.5px solid ${C.blue}` }}>
+            <span style={{ fontSize: 18 }}>📡</span>
+            <span style={{ fontFamily: MONO, fontSize: 7, fontWeight: 700, color: C.blue, letterSpacing: '0.06em' }}>NETSCOUT</span>
+          </div>
+          <button onClick={() => setScreen('training')} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '8px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}>
+            <span style={{ fontSize: 18 }}>🎓</span>
+            <span style={{ fontFamily: MONO, fontSize: 7, color: C.textMuted, letterSpacing: '0.06em' }}>TRAIN</span>
+          </button>
         </div>
       </div>
     )

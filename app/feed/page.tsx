@@ -4,10 +4,10 @@ import { useState } from "react";
 import {
   Zap, Star, Users, ChevronRight, Plus, X, Check,
   Clock, Filter, MoreHorizontal, ArrowRight, TrendingUp,
-  Activity, Bell, MessageSquare, Bookmark,
+  Activity, Bell, MessageSquare,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Medal, Sparkles, Crown, Target, Rocket, ThumbsUp, Flame, Trophy, Award, Share2 } = require("lucide-react") as any;
+const { Bookmark, Medal, Sparkles, Crown, Target, Rocket, ThumbsUp, Flame, Trophy, Award, Share2 } = require("lucide-react") as any;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { notifyWOEvent, type WOEvent } from '@/lib/email'
+import { notifyWOSMS, type SMSEvent } from '@/lib/sms'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,6 +10,17 @@ const supabase = createClient(
 
 // Status → email event mapping
 const STATUS_EVENT: Record<string, WOEvent | null> = {
+  scheduled:   'scheduled',
+  in_route:    'in_route',
+  on_site:     'on_site',
+  completed:   'completed',
+  open:        null,
+  in_progress: null,
+  cancelled:   null,
+}
+
+// Status → SMS event mapping (subset — not every status triggers SMS)
+const SMS_EVENT: Record<string, SMSEvent | null> = {
   scheduled:   'scheduled',
   in_route:    'in_route',
   on_site:     'on_site',
@@ -169,6 +181,39 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       scheduled_date:  data.scheduled_date ?? undefined,
       tech_eta:        data.tech_eta ?? undefined,
     }).catch(console.error)
+  }
+
+  // ── SMS notification ──────────────────────────────────────────────────────
+  // Pull PM phone from site — fire SMS in parallel with email
+  const smsEvent = statusChanged ? SMS_EVENT[body.status] : null
+  if (sendNotifications && smsEvent && currentSiteId) {
+    void (async () => {
+      try {
+        const { data: siteRow } = await supabase
+          .from('sites')
+          .select('pm_phone, primary_contact_phone, pm_name, name')
+          .eq('id', currentSiteId)
+          .single()
+        const sr = siteRow as Record<string, unknown> | null
+        const phone = (sr?.pm_phone ?? sr?.primary_contact_phone) as string | null
+        if (phone) {
+          await notifyWOSMS({
+            event:          smsEvent,
+            to:             phone,
+            wo_number:      data.wo_number,
+            title:          data.title,
+            customer_name:  data.customer_name,
+            tech_name:      data.assignee_name ?? undefined,
+            scheduled_date: data.scheduled_date ?? undefined,
+            tech_eta:       data.tech_eta ?? undefined,
+            property_name:  sr?.name as string | undefined,
+            review_url:     smsEvent === 'completed'
+              ? `https://g.page/r/gateguard/review`
+              : undefined,
+          })
+        }
+      } catch (_) { /* non-fatal */ }
+    })()
   }
 
   return NextResponse.json({ work_order: data })
