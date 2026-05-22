@@ -228,6 +228,35 @@ function extractMgmtCoSlug(query: string): string | null {
 }
 
 /**
+ * Derive a searchable domain for an MDU provider.
+ *
+ * Priority order:
+ *   1. Extract from property_page_pattern / operator_page_pattern URL template
+ *      (e.g. "https://gigstreem.com/{property}" → "gigstreem.com")
+ *   2. Fallback: slug.com — works for simple slugs without hyphens (gigstreem, wyyerd, boingo, hotwire)
+ *   3. Returns null when neither works (hyphenated slugs like "spot-on-networks" have no reliable .com guess)
+ *
+ * This is what enables the "same loci as Gigstreem" approach for every provider:
+ *   `"${property}" site:${deriveDomain(p)}`  → property-specific pages
+ *   `"${mgmtCoSlug}" site:${deriveDomain(p)}` → portfolio-level management company pages
+ */
+function deriveDomain(p: { slug: string; property_page_pattern: string | null; operator_page_pattern: string | null }): string | null {
+  const urlTemplate = p.property_page_pattern || p.operator_page_pattern
+  if (urlTemplate) {
+    return urlTemplate
+      .replace(/\{.*?\}/g, '')
+      .replace(/\/$/, '')
+      .replace(/^https?:\/\//, '')
+      .split('/')[0]
+  }
+  // Slug-to-domain fallback: only safe for single-word slugs (no hyphens = no ambiguity)
+  if (!p.slug.includes('-') && p.slug.length > 3 && p.slug.length < 30) {
+    return `${p.slug}.com`
+  }
+  return null
+}
+
+/**
  * Extract the best search term from a query.
  *
  * CRITICAL: Always preserve the specific property name + location context.
@@ -651,7 +680,10 @@ export async function POST(req: NextRequest) {
           .from('mdu_providers')
           .select('name, slug, provider_type, property_page_pattern, operator_page_pattern, notes')
           .eq('active', true)
-          .or('property_page_pattern.not.is.null,operator_page_pattern.not.is.null')
+          // Fetch ALL active providers — ISPs and video providers alike.
+          // deriveDomain() will resolve a searchable domain for each, either from their
+          // URL pattern or from a slug-based fallback. Providers with no resolvable domain
+          // are silently skipped in the search loop below.
         if (providers && providers.length > 0) {
           mduProviderSlugs = providers
         }
@@ -806,36 +838,37 @@ export async function POST(req: NextRequest) {
           3, 'historical-listing'),
       ])
 
-      // 10. Provider slug page searches — check known MDU ISPs' property/operator pages
-      // e.g. gigstreem.com/[property-slug] or pavlovmedia.com/[property-slug]
-      // These pages are created by the ISP when they sign a bulk deal — highest confidence confirmation
+      // Provider slug page searches — apply the Gigstreem/AMLI loci to EVERY provider in mdu_providers.
       //
-      // AMLI MARINA DEL REY DISCOVERY (May 2026):
-      // ISPs also create MANAGEMENT COMPANY portfolio pages: gigstreem.com/amli/ serves ALL AMLI properties.
-      // The winning search was `"AMLI Marina Del Rey" "gigstreem"` → returned gigstreem.com/amli/.
-      // So we run TWO searches per ISP domain: one with the full property name AND one with just the mgmt co slug.
-      const propertySlug = terms.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+      // METHODOLOGY (confirmed via AMLI Marina Del Rey investigation, May 2026):
+      // ISPs and video providers with portfolio-level MDU deals create BOTH property-specific pages
+      // AND management company landing pages on their own domains:
+      //   gigstreem.com/amli/         → all AMLI properties
+      //   hotwire.com/multifamily/    → their MDU portfolio
+      //   boingo.com/multifamily/     → Boingo MDU partners
+      //
+      // TWO searches per provider per query:
+      //   Search A: `"${propertyTerms}" site:${domain}` → property-specific pages
+      //   Search B: `"${mgmtCoSlug}" site:${domain}`   → portfolio/management-company pages
+      //
+      // Both ISPs and video providers are searched — the database is the sole source of truth.
+      // No hardcoded domain lists — all domains are derived from mdu_providers via deriveDomain().
       const mgmtCoSlug = extractMgmtCoSlug(query) // e.g. "AMLI" → "amli", "Greystar" → "greystar"
       const providerSlugResults: TavilyResult[] = []
+
       if (mduProviderSlugs.length > 0) {
         const slugSearches: Array<Promise<TavilyResult[]>> = []
 
-        const providersToSearch = mduProviderSlugs
-          .filter(p => p.property_page_pattern || p.operator_page_pattern)
-          .slice(0, 8) // cap at 8 to avoid burning Tavily credits
+        for (const p of mduProviderSlugs) {
+          const domainOnly = deriveDomain(p)
+          if (!domainOnly) continue // skip providers with no resolvable domain
 
-        for (const p of providersToSearch) {
-          const domain = (p.property_page_pattern || p.operator_page_pattern || '')
-            .replace(/\{.*?\}/g, '') // strip {property} / {operator} template tokens
-            .replace(/\/$/, '')
-          if (!domain) continue
-          const domainOnly = domain.replace(/^https?:\/\//, '').split('/')[0]
-
-          // Search 1: full property name on ISP domain (finds property-specific pages)
+          // Search A: full property name on this provider's domain (finds property-specific pages)
           slugSearches.push(tavilySearch(`"${terms}" site:${domainOnly}`, 2, 'provider-slug'))
 
-          // Search 2: management company name on ISP domain (finds portfolio-level partnership pages)
-          // CRITICAL: This is how we found gigstreem.com/amli/ for AMLI Marina Del Rey
+          // Search B: management company slug on this provider's domain (finds portfolio-level pages)
+          // This is the KEY loci: gigstreem.com/amli/ was found via `"amli" site:gigstreem.com`
+          // Applies identically to every ISP and video provider in the database
           if (mgmtCoSlug && mgmtCoSlug.length > 2) {
             slugSearches.push(tavilySearch(`"${mgmtCoSlug}" site:${domainOnly}`, 2, 'provider-slug'))
           }
@@ -845,20 +878,6 @@ export async function POST(req: NextRequest) {
         for (const res of slugResponses) {
           if (res.status === 'fulfilled') providerSlugResults.push(...res.value)
         }
-      }
-
-      // Also run a direct ISP-name search for major MDU ISPs not yet in the mdu_providers table
-      // These are the ISPs most likely to have portfolio-level management company pages
-      // Using both correct spellings and common typos since both appear in indexed content
-      const directIspSearches = await Promise.all([
-        tavilySearch(`"${terms}" OR "${mgmtCoSlug ?? terms}" site:gigstreem.com`, 2, 'provider-slug'),
-        tavilySearch(`"${terms}" OR "${mgmtCoSlug ?? terms}" site:hotwire.com`, 2, 'provider-slug'),
-        tavilySearch(`"${terms}" site:pavlovmedia.com`, 2, 'provider-slug'),
-        tavilySearch(`"${terms}" site:spotonnetworks.com`, 2, 'provider-slug'),
-        tavilySearch(`"${terms}" OR "${mgmtCoSlug ?? terms}" site:boingo.com`, 2, 'provider-slug'),
-      ])
-      for (const results of directIspSearches) {
-        providerSlugResults.push(...results)
       }
 
       const allResults = [
