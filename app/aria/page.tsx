@@ -542,7 +542,7 @@ export default function ARIAPage() {
                           <>
                             <span className="text-[10px] text-gray-300">·</span>
                             <span className="text-[10px] text-gray-400 truncate max-w-[200px]">
-                              {prospects.slice(0, 2).map((p: Prospect) => p.property.name).join(', ')}{prospects.length > 2 ? ` +${prospects.length - 2}` : ''}
+                              {prospects.slice(0, 2).map((p: any) => p.property.name).join(', ')}{prospects.length > 2 ? ` +${prospects.length - 2}` : ''}
                             </span>
                           </>
                         )}
