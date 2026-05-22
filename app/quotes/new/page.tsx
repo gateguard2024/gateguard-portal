@@ -81,6 +81,37 @@ interface NewLineItem {
 
 interface Product { id: string; name: string; sku?: string; model_number?: string; image_url?: string; unit_price?: number; }
 
+/* ─── Service Catalog (inline mirror of migration 070 seed) ─────────────────── */
+interface CatalogService {
+  id: string; name: string; provider: string;
+  category: string; description: string; emoji: string; color: string;
+  billing_type: 'per_unit' | 'per_property' | 'flat_fee' | 'per_camera' | 'per_device';
+  base_price: number; unit_label: string;
+  dealer_commission_pct: number; gg_commission_pct: number;
+  notes?: string;
+}
+const SVC_CATALOG: CatalogService[] = [
+  { id:'tv-1',   name:'DIRECTV STREAM Bulk',       provider:'AT&T DIRECTV',      category:'TV',              emoji:'📺', color:'#00A8E0', billing_type:'per_unit',     base_price:12,    unit_label:'unit',     dealer_commission_pct:12, gg_commission_pct:3,  description:'Bulk MDU video — 190+ channels, 4K HDR, no dish.' },
+  { id:'tv-2',   name:'Spectrum TV Select',         provider:'Spectrum Enterprise',category:'TV',              emoji:'📡', color:'#0099D9', billing_type:'per_unit',     base_price:11,    unit_label:'unit',     dealer_commission_pct:8,  gg_commission_pct:2.5,description:'Charter/Spectrum bulk TV MDU rate card.' },
+  { id:'isp-1',  name:'AT&T Fiber Bulk MDU',        provider:'AT&T',              category:'Internet',         emoji:'🌐', color:'#00A8E0', billing_type:'per_unit',     base_price:18,    unit_label:'unit',     dealer_commission_pct:10, gg_commission_pct:3,  description:'Gigabit fiber internet for MDU. Included-in-rent option.' },
+  { id:'isp-2',  name:'Comcast Business MDU',       provider:'Comcast/Xfinity',   category:'Internet',         emoji:'📶', color:'#E1251B', billing_type:'per_unit',     base_price:15,    unit_label:'unit',     dealer_commission_pct:8,  gg_commission_pct:2.5,description:'Xfinity bulk internet — up to 1.2 Gbps, included-in-rent.' },
+  { id:'isp-3',  name:'Starlink for MDU',           provider:'SpaceX Starlink',   category:'Internet',         emoji:'🚀', color:'#FF5733', billing_type:'per_property', base_price:500,   unit_label:'property', dealer_commission_pct:5,  gg_commission_pct:2,  description:'Satellite broadband for rural/suburban properties.' },
+  { id:'vm-1',   name:'Video Monitoring — Remote',  provider:'Keystone Security', category:'Video Monitoring', emoji:'👁️', color:'#7C3AED', billing_type:'per_property', base_price:395,   unit_label:'property', dealer_commission_pct:15, gg_commission_pct:5,  description:'24/7 live monitoring with human response + deterrence alerts.' },
+  { id:'vm-2',   name:'Video Monitoring — AI',      provider:'Envision AI',       category:'Video Monitoring', emoji:'🤖', color:'#6B7EFF', billing_type:'per_camera',   base_price:18,    unit_label:'camera',   dealer_commission_pct:12, gg_commission_pct:4,  description:'AI analytics — loitering detection, LPR, crowd alerts.' },
+  { id:'pl-1',   name:'Package Lockers — Standard', provider:'Luxer One',         category:'Package Lockers',  emoji:'📦', color:'#FF6B35', billing_type:'flat_fee',     base_price:149,   unit_label:'property', dealer_commission_pct:20, gg_commission_pct:5,  description:'Smart locker system — PIN/app notification on delivery.' },
+  { id:'pl-2',   name:'Amazon Hub Apartment',       provider:'Amazon',            category:'Package Lockers',  emoji:'📬', color:'#FF9900', billing_type:'flat_fee',     base_price:0,     unit_label:'property', dealer_commission_pct:0,  gg_commission_pct:2,  description:'Amazon-branded locker. Amazon covers hardware cost.' },
+  { id:'ac-1',   name:'GateGuard Access + Gate Plan',provider:'GateGuard',        category:'Access Control',   emoji:'🔑', color:'#6B7EFF', billing_type:'per_unit',     base_price:5,     unit_label:'unit',     dealer_commission_pct:0,  gg_commission_pct:100,description:'GateGuard core plan — gate operators, Brivo, mobile credentials.' },
+  { id:'ac-2',   name:'Brivo Cloud Access Control', provider:'Brivo',             category:'Access Control',   emoji:'🚪', color:'#0069C0', billing_type:'per_unit',     base_price:3,     unit_label:'door',     dealer_commission_pct:8,  gg_commission_pct:2,  description:'Brivo ACS cloud subscription — $3/door/month.' },
+  { id:'sl-1',   name:'Yale Smart Locks — Z-wave',  provider:'Yale',              category:'Smart Locks',      emoji:'🔐', color:'#003DA5', billing_type:'flat_fee',     base_price:12,    unit_label:'door',     dealer_commission_pct:18, gg_commission_pct:4,  description:'Z-wave smart deadbolts with cloud management + Brivo integration.' },
+  { id:'sl-2',   name:'Schlage Encode Plus',        provider:'Schlage',           category:'Smart Locks',      emoji:'🗝️', color:'#1C3D5A', billing_type:'flat_fee',     base_price:10,    unit_label:'door',     dealer_commission_pct:15, gg_commission_pct:3.5,description:'Apple Home Key + WiFi deadbolt. Best for Apple ecosystem.' },
+  { id:'sec-1',  name:'ADT Commercial Security',    provider:'ADT',               category:'Security',         emoji:'🛡️', color:'#0066FF', billing_type:'per_property', base_price:89,    unit_label:'property', dealer_commission_pct:12, gg_commission_pct:3,  description:'Intrusion, fire alarm, and video integration with central station.' },
+  { id:'sec-2',  name:'Verkada Access + Security',  provider:'Verkada',           category:'Security',         emoji:'📷', color:'#1A1A2E', billing_type:'per_device',   base_price:20,    unit_label:'device',   dealer_commission_pct:10, gg_commission_pct:3,  description:'Cloud-managed cameras, access control, and alarms — one platform.' },
+  { id:'net-1',  name:'GateGuard Network Mgmt',     provider:'GateGuard',         category:'Network Mgmt',     emoji:'🌐', color:'#6B7EFF', billing_type:'per_property', base_price:199,   unit_label:'property', dealer_commission_pct:0,  gg_commission_pct:80, description:'Managed UniFi network — health monitoring, firmware, 4-hr SLA.' },
+  { id:'net-2',  name:'Comcast Business Ethernet',  provider:'Comcast Business',  category:'Network Mgmt',     emoji:'🔌', color:'#E1251B', billing_type:'per_property', base_price:299,   unit_label:'property', dealer_commission_pct:8,  gg_commission_pct:2,  description:'Dedicated fiber Ethernet — 99.9% SLA, static IP, 24/7 NOC.' },
+  { id:'en-1',   name:'Solstice Energy Sharing',    provider:'Solstice Power',    category:'Energy',           emoji:'☀️', color:'#F59E0B', billing_type:'per_unit',     base_price:2,     unit_label:'unit',     dealer_commission_pct:8,  gg_commission_pct:2,  description:'Community solar — residents get 10–15% off electricity.' },
+];
+const SVC_CATEGORIES = ['All','TV','Internet','Video Monitoring','Package Lockers','Access Control','Smart Locks','Security','Network Mgmt','Energy'];
+
 /* ─── Constants ──────────────────────────────────────────────────────────────── */
 const WIZARD_STEPS = [
   { id: 1, label: 'Property',    icon: Building2 },
@@ -245,6 +276,138 @@ function DualCounter({ working, nonWorking, onWorking, onNonWorking, workingPric
         <span className="text-xs text-amber-400 w-24">⚠ Non-Working</span>
         <Counter value={nonWorking} onChange={onNonWorking} />
         <span className="text-xs text-muted-foreground">{nonWorkingPrice}</span>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Service Picker Panel ────────────────────────────────────────────────────── */
+function ServicePickerPanel({
+  onAdd, onClose, units,
+}: {
+  onAdd: (item: NewLineItem) => void;
+  onClose: () => void;
+  units: number;
+}) {
+  const [cat, setCat] = useState('All');
+  const [q,   setQ]   = useState('');
+
+  const filtered = SVC_CATALOG.filter(s =>
+    (cat === 'All' || s.category === cat) &&
+    (!q.trim() || s.name.toLowerCase().includes(q.toLowerCase()) || s.provider.toLowerCase().includes(q.toLowerCase()))
+  );
+
+  function addService(svc: CatalogService) {
+    const qty = svc.billing_type === 'per_unit' ? (units || 1) : 1;
+    const note = svc.dealer_commission_pct > 0
+      ? `Dealer earns ${svc.dealer_commission_pct}% commission (~$${((svc.base_price * qty * svc.dealer_commission_pct) / 100).toFixed(0)}/mo). Provider: ${svc.provider}.`
+      : `GateGuard platform fee. Provider: ${svc.provider}.`;
+    const item: NewLineItem = {
+      _id:          `svc_${Date.now()}`,
+      description:  svc.name,
+      qty,
+      unit_price:   svc.base_price,
+      unit:         svc.unit_label,
+      is_recurring: true,
+      section_name: 'Recurring Services',
+      item_type:    'service',
+      is_optional:  false,
+      category:     svc.category,
+      notes:        note,
+      product_id:   null,
+      image_url:    null,
+      model_number: null,
+      sku:          svc.id,
+      package_tier: null,
+    };
+    onAdd(item);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex">
+      {/* Backdrop */}
+      <div className="flex-1 bg-black/40" onClick={onClose} />
+      {/* Panel */}
+      <div className="w-full max-w-lg bg-card border-l border-border flex flex-col shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Browse Service Catalog</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Add recurring revenue services to this quote</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded hover:bg-background text-muted-foreground hover:text-foreground transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="px-4 pt-3 pb-2 shrink-0">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search services…"
+              className="w-full pl-8 pr-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-brand-400" />
+          </div>
+        </div>
+
+        {/* Category tabs */}
+        <div className="px-4 pb-2 shrink-0">
+          <div className="flex gap-1 overflow-x-auto scrollbar-none pb-1">
+            {SVC_CATEGORIES.map(c => (
+              <button key={c} onClick={() => setCat(c)}
+                className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${cat === c ? 'bg-brand-400 text-navy' : 'bg-background border border-border text-muted-foreground hover:text-foreground'}`}>
+                {c}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Service list */}
+        <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
+          {filtered.length === 0 ? (
+            <div className="text-center py-10 text-muted-foreground">
+              <p className="text-sm">No services match your search.</p>
+            </div>
+          ) : filtered.map(svc => {
+            const mrrEst = svc.billing_type === 'per_unit' ? svc.base_price * (units || 1) : svc.base_price;
+            const commEst = mrrEst * svc.dealer_commission_pct / 100;
+            return (
+              <div key={svc.id} className="group flex items-start gap-3 p-3 bg-background border border-border rounded-xl hover:border-brand-400/40 transition-colors">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0 mt-0.5" style={{ background: `${svc.color}20` }}>
+                  {svc.emoji}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium text-foreground leading-tight">{svc.name}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{svc.provider} · {svc.category}</p>
+                    </div>
+                    <button onClick={() => addService(svc)}
+                      className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand-400 hover:bg-brand-500 text-navy text-xs font-semibold transition-colors gg-glow">
+                      <Plus className="w-3 h-3" /> Add
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{svc.description}</p>
+                  <div className="flex items-center gap-3 mt-2">
+                    <span className="text-xs font-semibold text-foreground">
+                      ${svc.base_price}/{svc.unit_label}
+                      {svc.billing_type === 'per_unit' && units > 0 && <span className="text-muted-foreground font-normal"> · ${mrrEst}/mo est.</span>}
+                    </span>
+                    {svc.dealer_commission_pct > 0 && (
+                      <span className="text-xs text-emerald-400 font-medium">
+                        ~${commEst.toFixed(0)}/mo dealer commission
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3 border-t border-border shrink-0">
+          <p className="text-xs text-muted-foreground">Services are added as recurring line items. Commission estimates based on {units || 1} unit{units !== 1 ? 's' : ''}.</p>
+        </div>
       </div>
     </div>
   );
@@ -582,9 +745,10 @@ function NewQuotePage() {
   const [liStep, setLiStep]   = useState(1);
   const [meta, setMeta]       = useState<QuoteMeta>(defaultMeta);
   const [liItems, setLiItems] = useState<NewLineItem[]>([]);
-  const [showForm, setShowForm]   = useState(false);
-  const [editing, setEditing]     = useState<NewLineItem | null>(null);
-  const [liSaving, setLiSaving]   = useState(false);
+  const [showForm, setShowForm]         = useState(false);
+  const [showServicePicker, setShowServicePicker] = useState(false);
+  const [editing, setEditing]           = useState<NewLineItem | null>(null);
+  const [liSaving, setLiSaving]         = useState(false);
 
   // ── Survey wizard state ─────────────────────────────────────────────────────
   const [step, setStep]           = useState(1);
@@ -1234,6 +1398,14 @@ function NewQuotePage() {
           />
         )}
 
+        {showServicePicker && (
+          <ServicePickerPanel
+            units={property.units || 0}
+            onAdd={item => { setLiItems(prev => [...prev, item]); }}
+            onClose={() => setShowServicePicker(false)}
+          />
+        )}
+
         {/* Header */}
         <div className="flex items-center gap-3">
           <button onClick={() => setAppMode('pick')} className="p-2 rounded-lg hover:bg-card text-muted-foreground hover:text-foreground transition-colors">
@@ -1349,10 +1521,16 @@ function NewQuotePage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">{liItems.length} item{liItems.length !== 1 ? 's' : ''} · {formatCurrency(liSubtotal)} subtotal</p>
-                <button onClick={() => { setEditing(null); setShowForm(true); }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-400 hover:bg-brand-500 text-navy text-xs font-semibold transition-colors gg-glow">
-                  <Plus className="w-3.5 h-3.5" /> Add Item
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setShowServicePicker(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-400/40 text-brand-400 hover:bg-brand-400/5 text-xs font-semibold transition-colors">
+                    🏪 Browse Services
+                  </button>
+                  <button onClick={() => { setEditing(null); setShowForm(true); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-400 hover:bg-brand-500 text-navy text-xs font-semibold transition-colors gg-glow">
+                    <Plus className="w-3.5 h-3.5" /> Add Item
+                  </button>
+                </div>
               </div>
 
               {liItems.length === 0 ? (
@@ -1803,10 +1981,16 @@ function NewQuotePage() {
           <div className="pt-4 border-t border-border">
             <div className="flex items-center justify-between mb-3">
               <div><p className="text-sm text-foreground">Custom Line Items</p><p className="text-xs text-muted-foreground">Missing equipment, special materials</p></div>
-              <button type="button" onClick={addCustomItem}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-400/30 text-brand-400 hover:bg-brand-400/5 text-xs font-medium transition-colors">
-                <Plus className="w-3.5 h-3.5" /> Add Item
-              </button>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => setShowServicePicker(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-400/40 text-brand-400 hover:bg-brand-400/5 text-xs font-medium transition-colors">
+                  🏪 Browse Services
+                </button>
+                <button type="button" onClick={addCustomItem}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-400/30 text-brand-400 hover:bg-brand-400/5 text-xs font-medium transition-colors">
+                  <Plus className="w-3.5 h-3.5" /> Add Item
+                </button>
+              </div>
             </div>
             <div className="space-y-3">
               {survey.addOns.customItems.map((item) => (
@@ -2172,6 +2356,14 @@ function NewQuotePage() {
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
+      {showServicePicker && (
+        <ServicePickerPanel
+          units={property.units || 0}
+          onAdd={item => { setLiItems(prev => [...prev, item]); }}
+          onClose={() => setShowServicePicker(false)}
+        />
+      )}
+
       <div className="flex items-center gap-3">
         <button onClick={() => setAppMode('pick')} className="p-2 rounded-lg hover:bg-card text-muted-foreground hover:text-foreground transition-colors">
           <ChevronLeft className="w-4 h-4" />

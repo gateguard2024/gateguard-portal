@@ -538,6 +538,136 @@ function ItemRow({ item, onEdit, onDelete, onToggle, deleting }: ItemRowProps) {
   );
 }
 
+// ── Inline Service Catalog ─────────────────────────────────────────────────────
+interface SvcItem { id:string; name:string; provider:string; category:string; description?:string; emoji:string; color:string; billing_type:string; base_price:number; unit_label:string; dealer_commission_pct:number; }
+const SVC_DATA: SvcItem[] = [
+  { id:'tv-1',  name:'DIRECTV STREAM Bulk',        provider:'AT&T DIRECTV',      category:'TV',              emoji:'📺', color:'#00A8E0', billing_type:'per_unit',     base_price:12,  unit_label:'unit',     dealer_commission_pct:12 },
+  { id:'tv-2',  name:'Spectrum TV Select',          provider:'Spectrum',          category:'TV',              emoji:'📡', color:'#0099D9', billing_type:'per_unit',     base_price:11,  unit_label:'unit',     dealer_commission_pct:8 },
+  { id:'isp-1', name:'AT&T Fiber Bulk MDU',         provider:'AT&T',              category:'Internet',        emoji:'🌐', color:'#00A8E0', billing_type:'per_unit',     base_price:18,  unit_label:'unit',     dealer_commission_pct:10 },
+  { id:'isp-2', name:'Comcast Business MDU',        provider:'Comcast/Xfinity',   category:'Internet',        emoji:'📶', color:'#E1251B', billing_type:'per_unit',     base_price:15,  unit_label:'unit',     dealer_commission_pct:8 },
+  { id:'isp-3', name:'Starlink for MDU',            provider:'SpaceX Starlink',   category:'Internet',        emoji:'🚀', color:'#FF5733', billing_type:'per_property', base_price:500, unit_label:'property', dealer_commission_pct:5 },
+  { id:'vm-1',  name:'Video Monitoring — Remote',   provider:'Keystone Security', category:'Video Monitoring',emoji:'👁️', color:'#7C3AED', billing_type:'per_property', base_price:395, unit_label:'property', dealer_commission_pct:15 },
+  { id:'vm-2',  name:'Video Monitoring — AI',       provider:'Envision AI',       category:'Video Monitoring',emoji:'🤖', color:'#6B7EFF', billing_type:'per_camera',   base_price:18,  unit_label:'camera',   dealer_commission_pct:12 },
+  { id:'pl-1',  name:'Package Lockers — Standard',  provider:'Luxer One',         category:'Package Lockers', emoji:'📦', color:'#FF6B35', billing_type:'flat_fee',     base_price:149, unit_label:'property', dealer_commission_pct:20 },
+  { id:'pl-2',  name:'Amazon Hub Apartment',        provider:'Amazon',            category:'Package Lockers', emoji:'📬', color:'#FF9900', billing_type:'flat_fee',     base_price:0,   unit_label:'property', dealer_commission_pct:0 },
+  { id:'ac-1',  name:'GateGuard Access + Gate Plan',provider:'GateGuard',         category:'Access Control',  emoji:'🔑', color:'#6B7EFF', billing_type:'per_unit',     base_price:5,   unit_label:'unit',     dealer_commission_pct:0 },
+  { id:'ac-2',  name:'Brivo Cloud Access Control',  provider:'Brivo',             category:'Access Control',  emoji:'🚪', color:'#0069C0', billing_type:'per_unit',     base_price:3,   unit_label:'door',     dealer_commission_pct:8 },
+  { id:'sl-1',  name:'Yale Smart Locks — Z-wave',   provider:'Yale',              category:'Smart Locks',     emoji:'🔐', color:'#003DA5', billing_type:'flat_fee',     base_price:12,  unit_label:'door',     dealer_commission_pct:18 },
+  { id:'sl-2',  name:'Schlage Encode Plus',         provider:'Schlage',           category:'Smart Locks',     emoji:'🗝️', color:'#1C3D5A', billing_type:'flat_fee',     base_price:10,  unit_label:'door',     dealer_commission_pct:15 },
+  { id:'sec-1', name:'ADT Commercial Security',     provider:'ADT',               category:'Security',        emoji:'🛡️', color:'#0066FF', billing_type:'per_property', base_price:89,  unit_label:'property', dealer_commission_pct:12 },
+  { id:'sec-2', name:'Verkada Access + Security',   provider:'Verkada',           category:'Security',        emoji:'📷', color:'#1A1A2E', billing_type:'per_device',   base_price:20,  unit_label:'device',   dealer_commission_pct:10 },
+  { id:'net-1', name:'GateGuard Network Mgmt',      provider:'GateGuard',         category:'Network Mgmt',    emoji:'🌐', color:'#6B7EFF', billing_type:'per_property', base_price:199, unit_label:'property', dealer_commission_pct:0 },
+  { id:'net-2', name:'Comcast Business Ethernet',   provider:'Comcast Business',  category:'Network Mgmt',    emoji:'🔌', color:'#E1251B', billing_type:'per_property', base_price:299, unit_label:'property', dealer_commission_pct:8 },
+  { id:'en-1',  name:'Solstice Energy Sharing',     provider:'Solstice Power',    category:'Energy',          emoji:'☀️', color:'#F59E0B', billing_type:'per_unit',     base_price:2,   unit_label:'unit',     dealer_commission_pct:8 },
+];
+const SVC_CATS = ['All','TV','Internet','Video Monitoring','Package Lockers','Access Control','Smart Locks','Security','Network Mgmt','Energy'];
+
+function SvcPickerPanel({ quoteId, units, onAdded, onClose }: { quoteId:string; units:number; onAdded:(item:LineItem)=>void; onClose:()=>void }) {
+  const [cat,   setCat]   = useState('All');
+  const [q,     setQ]     = useState('');
+  const [adding, setAdding] = useState<string|null>(null);
+
+  const filtered = SVC_DATA.filter(s =>
+    (cat === 'All' || s.category === cat) &&
+    (!q.trim() || s.name.toLowerCase().includes(q.toLowerCase()) || s.provider.toLowerCase().includes(q.toLowerCase()))
+  );
+
+  async function addSvc(svc: SvcItem) {
+    setAdding(svc.id);
+    try {
+      const qty = svc.billing_type === 'per_unit' ? (units || 1) : 1;
+      const commNote = svc.dealer_commission_pct > 0
+        ? `Dealer earns ${svc.dealer_commission_pct}% (~$${((svc.base_price * qty * svc.dealer_commission_pct)/100).toFixed(0)}/mo). Provider: ${svc.provider}.`
+        : `GateGuard platform service. Provider: ${svc.provider}.`;
+      const res = await fetch(`/api/quotes/${quoteId}/items`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          description:  svc.name,
+          qty,
+          unit_price:   svc.base_price,
+          unit:         svc.unit_label,
+          is_recurring: true,
+          section_name: 'Recurring Services',
+          item_type:    'service',
+          is_optional:  false,
+          category:     svc.category,
+          notes:        commNote,
+          sku:          svc.id,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      onAdded(data.item);
+    } catch (e) { alert(e instanceof Error ? e.message : 'Failed to add service'); }
+    finally { setAdding(null); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex">
+      <div className="flex-1 bg-black/40" onClick={onClose} />
+      <div className="w-full max-w-lg bg-white border-l border-gray-200 flex flex-col shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Browse Service Catalog</p>
+            <p className="text-xs text-gray-500 mt-0.5">Add recurring revenue services to this quote</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 transition-colors"><X size={14} /></button>
+        </div>
+        <div className="px-4 pt-3 pb-2">
+          <div className="relative">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search services…"
+              className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]" />
+          </div>
+        </div>
+        <div className="px-4 pb-2">
+          <div className="flex gap-1 overflow-x-auto pb-1">
+            {SVC_CATS.map(c => (
+              <button key={c} onClick={()=>setCat(c)}
+                className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${cat===c ? 'bg-[#6B7EFF] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                {c}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
+          {filtered.map(svc => {
+            const qty = svc.billing_type === 'per_unit' ? (units||1) : 1;
+            const mrrEst = svc.base_price * qty;
+            const commEst = mrrEst * svc.dealer_commission_pct / 100;
+            const isAdding = adding === svc.id;
+            return (
+              <div key={svc.id} className="flex items-start gap-3 p-3 bg-gray-50 border border-gray-200 rounded-xl hover:border-[#6B7EFF]/40 transition-colors">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{background:`${svc.color}20`}}>{svc.emoji}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 leading-tight">{svc.name}</p>
+                      <p className="text-xs text-gray-500">{svc.provider} · {svc.category}</p>
+                    </div>
+                    <button onClick={()=>addSvc(svc)} disabled={isAdding}
+                      className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#6B7EFF] hover:bg-[#5a6de0] text-white text-xs font-semibold transition-colors disabled:opacity-60">
+                      {isAdding ? <Loader2 size={10} className="animate-spin"/> : <Plus size={10}/>} Add
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1.5">
+                    <span className="text-xs font-semibold text-gray-700">${svc.base_price}/{svc.unit_label}</span>
+                    {svc.dealer_commission_pct > 0 && <span className="text-xs text-emerald-600 font-medium">~${commEst.toFixed(0)}/mo commission</span>}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="px-5 py-3 border-t border-gray-100">
+          <p className="text-xs text-gray-400">Added as recurring line items · Section: Recurring Services · Estimates based on {units||1} unit{units!==1?'s':''}.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function QuoteDetailPage() {
@@ -573,6 +703,7 @@ export default function QuoteDetailPage() {
   const [surveys,         setSurveys]        = useState<SurveyOption[]>([]);
   const [showSurveyPicker, setShowSurveyPicker] = useState<boolean>(false);
   const [linkedSurvey,    setLinkedSurvey]   = useState<SurveyOption | null>(null);
+  const [showSvcPicker,   setShowSvcPicker]  = useState<boolean>(false);
 
   const fetchQuote = useCallback(async () => {
     setLoading(true); setError(null);
@@ -1051,12 +1182,20 @@ export default function QuoteDetailPage() {
                 <h2 className="text-sm font-semibold text-gray-900">Line Items</h2>
                 <span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium">{items.length}</span>
               </div>
-              <button
-                onClick={() => { setEditingItemId(null); setShowAddItem(true); }}
-                className="flex items-center gap-1.5 text-xs text-[#6B7EFF] font-medium hover:text-blue-700 transition-colors"
-              >
-                <Plus size={12} /> Add Item
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowSvcPicker(true)}
+                  className="flex items-center gap-1 text-xs text-gray-500 hover:text-[#6B7EFF] font-medium transition-colors border border-gray-200 rounded-lg px-2.5 py-1 hover:border-[#6B7EFF]/40"
+                >
+                  🏪 Browse Services
+                </button>
+                <button
+                  onClick={() => { setEditingItemId(null); setShowAddItem(true); }}
+                  className="flex items-center gap-1.5 text-xs text-[#6B7EFF] font-medium hover:text-blue-700 transition-colors"
+                >
+                  <Plus size={12} /> Add Item
+                </button>
+              </div>
             </div>
 
             {items.length === 0 ? (
@@ -1489,6 +1628,16 @@ export default function QuoteDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Service picker panel */}
+      {showSvcPicker && (
+        <SvcPickerPanel
+          quoteId={id}
+          units={quote?.units ?? 1}
+          onAdded={item => { onItemSaved(item); }}
+          onClose={() => setShowSvcPicker(false)}
+        />
+      )}
 
       {/* Slide-over for adding/editing items */}
       {showAddItem && (
