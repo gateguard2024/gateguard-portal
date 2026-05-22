@@ -612,14 +612,27 @@ export default function QuoteDetailPage() {
     if (!quote) return;
     setActioning(status);
     try {
-      const res  = await fetch(`/api/quotes/${id}`, {
-        method:  'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ status }),
+      // 'sent' uses the dedicated send endpoint which emails the client + CCs rfeldman@gateguard.co
+      const endpoint = status === 'sent'
+        ? `/api/quotes/${id}/send`
+        : `/api/quotes/${id}`;
+      const body     = status === 'sent'
+        ? undefined
+        : JSON.stringify({ status });
+      const res = await fetch(endpoint, {
+        method:  'POST',
+        headers: status === 'sent' ? {} : { 'Content-Type': 'application/json' },
+        body,
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       setQuote(q => q ? { ...q, ...data.quote } : q);
+      // Show email confirmation toast for 'sent'
+      if (status === 'sent' && data.email_sent) {
+        alert(`✓ Quote sent! Email delivered to ${data.email_to} (CC: ${data.email_cc})`);
+      } else if (status === 'sent' && !data.email_sent && data.email_to) {
+        alert(`Quote marked sent, but email failed: ${data.email_error}`);
+      }
     } catch (e) { alert(e instanceof Error ? e.message : 'Action failed'); }
     finally { setActioning(null); }
   }

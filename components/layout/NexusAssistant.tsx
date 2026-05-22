@@ -122,6 +122,14 @@ export function NexusAssistant() {
       if (data.overdue_todos > 0) newAlerts.push({ type: 'todo', label: `${data.overdue_todos} overdue To-Do${data.overdue_todos > 1 ? 's' : ''}`, count: data.overdue_todos, href: '/todos', icon: 'todo' })
       if (data.expiring_quotes > 0) newAlerts.push({ type: 'quote', label: `${data.expiring_quotes} quote${data.expiring_quotes > 1 ? 's' : ''} expiring soon`, count: data.expiring_quotes, href: '/quotes', icon: 'quote' })
       if (data.open_wos > 0) newAlerts.push({ type: 'wo', label: `${data.open_wos} open work order${data.open_wos > 1 ? 's' : ''}`, count: data.open_wos, href: '/maintenance', icon: 'wo' })
+      // SCOUT: leads that opened the outreach email — highest priority signal
+      if (data.scout_opened > 0) {
+        const lead = data.scout_opened_leads?.[0]
+        const label = data.scout_opened === 1 && lead
+          ? `🎯 ${lead.property_name} opened your SCOUT email — time to call`
+          : `🎯 ${data.scout_opened} leads opened your SCOUT emails — follow up now`
+        newAlerts.unshift({ type: 'scout', label, count: data.scout_opened, href: '/crm/leads?stage=new&scout_status=opened', icon: 'scout' })
+      }
       setAlerts(newAlerts)
       if (newAlerts.length > 0) setUnreadCount(newAlerts.length)
     } catch { /* silent */ }

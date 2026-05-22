@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
         // Increment open count, set first open time if not already set, upgrade status
         const { data: existing } = await supabase
           .from('campaign_sends')
-          .select('open_count, opened_at')
+          .select('open_count, opened_at, show_lead_id, campaign_name')
           .eq('resend_message_id', messageId)
           .single()
 
@@ -71,11 +71,31 @@ export async function POST(req: NextRequest) {
           await supabase
             .from('campaign_sends')
             .update({
-              status:     'opened',                        // ← must be set so badge priority works
-              opened_at:  existing.opened_at ?? now,       // only set first open
+              status:     'opened',
+              opened_at:  existing.opened_at ?? now,
               open_count: (existing.open_count ?? 0) + 1,
             })
             .eq('resend_message_id', messageId)
+
+          // ── SCOUT: update lead scout_status so NEXUS can alert the rep ──
+          if (existing.show_lead_id && existing.campaign_name === 'scout_aria') {
+            const { data: lead } = await supabase
+              .from('show_leads')
+              .select('scout_opened_at')
+              .eq('id', existing.show_lead_id)
+              .single()
+
+            // Only set scout_opened_at on first open
+            if (lead && !lead.scout_opened_at) {
+              await supabase
+                .from('show_leads')
+                .update({
+                  scout_status:    'opened',
+                  scout_opened_at: now,
+                })
+                .eq('id', existing.show_lead_id)
+            }
+          }
         }
         break
       }

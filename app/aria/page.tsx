@@ -37,6 +37,20 @@ interface BulkAgreement {
   confidence: 'high' | 'medium' | 'low';
 }
 
+interface PropTech {
+  gate_operators?: string[];
+  access_control?: string[];
+  intercoms?: string[];
+  cameras?: string[];
+  smart_locks?: string[];
+  resident_apps?: string[];
+  package_solutions?: string[];
+  tech_generation?: 'legacy' | 'modern' | 'hybrid';
+  sara_signals?: boolean;
+  replacement_window?: string;
+  displacement_targets?: string[];
+}
+
 interface Property {
   name: string;
   address: string;
@@ -50,6 +64,7 @@ interface Property {
   isp_providers?: string[];
   video_providers?: string[];
   bulk_agreements?: BulkAgreement[];
+  proptech?: PropTech;
   _fcc_verified?: boolean;
   _fcc_providers?: string[];
 }
@@ -117,6 +132,7 @@ interface DeepIntelResult {
   isp_providers: string[];
   video_providers: string[];
   bulk_agreements: BulkAgreement[];
+  proptech?: PropTech;
   key_finding: string;
   confidence: 'high' | 'medium' | 'low';
   atlas_opportunity?: boolean;
@@ -263,7 +279,9 @@ export default function ARIAPage() {
   const [savedSearches, setSavedSearches]   = useState<SavedSearch[]>([]);
   const [importing, setImporting]           = useState<string | null>(null); // id being imported
   const [importResult, setImportResult]     = useState<Record<string, { created: number; skipped: number }>>({});
-  const [showHistory, setShowHistory]       = useState(false);
+  const [showHistory, setShowHistory]       = useState(true);
+  const [scoutLoading, setScoutLoading]     = useState<string | null>(null); // search id being scouted
+  const [scoutResult, setScoutResult]       = useState<Record<string, { sent: number; skipped: number; errors: number }>>({});
   const [deepLoading, setDeepLoading]       = useState(false);
   const [deepIntel, setDeepIntel]           = useState<DeepIntelResult | null>(null);
   const [deepError, setDeepError]           = useState<string | null>(null);
@@ -375,6 +393,46 @@ export default function ARIAPage() {
     }
   }
 
+  async function launchScout(searchId: string) {
+    setScoutLoading(searchId);
+    try {
+      // Step 1: get imported lead ids from this search (re-import returns lead_ids even for existing)
+      const importRes = await fetch(`/api/aria/searches/${searchId}/import`, { method: 'POST' });
+      const importData = await importRes.json();
+      const leadIds = importData.lead_ids ?? [];
+      if (leadIds.length === 0) throw new Error('No leads found for this search');
+
+      // Step 2: launch SCOUT for those leads
+      const scoutRes = await fetch('/api/aria/scout/launch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lead_ids: leadIds }),
+      });
+      const scoutData = await scoutRes.json();
+      if (scoutData.error) throw new Error(scoutData.error);
+      setScoutResult(prev => ({ ...prev, [searchId]: { sent: scoutData.sent, skipped: scoutData.skipped, errors: scoutData.errors } }));
+    } catch (e: any) {
+      setScoutResult(prev => ({ ...prev, [searchId]: { sent: -1, skipped: 0, errors: 1 } }));
+    } finally {
+      setScoutLoading(null);
+    }
+  }
+
+  function restoreSearch(s: SavedSearch) {
+    const prospects = s.results?.prospects ?? [];
+    if (prospects.length === 0) return;
+    setResults(s.results as any);
+    setQuery(s.query);
+    setPhase(6);
+    setSavedSearchId(s.id);
+    setSelectedProspect(0);
+    setSelectedEmail(0);
+    setDeepIntel(null);
+    setDeepError(null);
+    // Scroll to results
+    setTimeout(() => window.scrollTo({ top: 400, behavior: 'smooth' }), 100);
+  }
+
   function copyEmail(subject: string, body: string) {
     navigator.clipboard.writeText(`Subject: ${subject}\n\n${body}`);
     setCopied(true);
@@ -435,6 +493,136 @@ export default function ARIAPage() {
             ))}
           </div>
         </div>
+
+        {/* ── Recent ARIA Searches ────────────────────────────────────── */}
+        {savedSearches.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2.5">
+                <Clock size={14} className="text-[#6B7EFF]" />
+                <span className="text-sm font-semibold text-gray-800">Recent ARIA Searches</span>
+                <span className="text-[10px] font-bold bg-[#EEF0FF] text-[#6B7EFF] px-2 py-0.5 rounded-full">
+                  {savedSearches.length} saved · 30 days
+                </span>
+              </div>
+            </div>
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {savedSearches.map(s => {
+                const res = importResult[s.id];
+                const alreadyImported = s.imported_count > 0 || (res?.created ?? 0) > 0;
+                const prospects = s.results?.prospects ?? [];
+                const expDays = daysUntil(s.expires_at);
+                const scoutRes = scoutResult[s.id];
+                return (
+                  <div key={s.id} className="border border-gray-100 rounded-xl p-4 flex flex-col gap-3 hover:border-[#6B7EFF]/30 hover:shadow-sm transition-all bg-gray-50/40">
+                    {/* Query text */}
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800 line-clamp-2 leading-snug">{s.query}</p>
+                      {s.query_interpretation && (
+                        <p className="text-[11px] text-gray-400 mt-0.5 truncate">{s.query_interpretation}</p>
+                      )}
+                    </div>
+
+                    {/* Meta row */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] text-gray-400">{formatAge(s.created_at)}</span>
+                      <span className="text-[10px] text-gray-300">·</span>
+                      <span className="text-[10px] text-gray-500 font-medium">{prospects.length} prospect{prospects.length !== 1 ? 's' : ''}</span>
+                      {alreadyImported && (
+                        <>
+                          <span className="text-[10px] text-gray-300">·</span>
+                          <span className="text-[10px] text-emerald-600 font-medium">
+                            {s.imported_count > 0 ? s.imported_count : (res?.created ?? 0)} imported
+                          </span>
+                        </>
+                      )}
+                      <span className="text-[10px] text-gray-300">·</span>
+                      <span className={cn("text-[10px] font-medium", expDays <= 3 ? "text-amber-500" : "text-gray-400")}>
+                        {expDays <= 3 ? `⚠ expires in ${expDays}d` : `expires in ${expDays}d`}
+                      </span>
+                    </div>
+
+                    {/* Property name chips */}
+                    {prospects.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {prospects.slice(0, 3).map((p, i) => (
+                          <span key={i} className="text-[10px] bg-white border border-gray-200 text-gray-600 px-1.5 py-0.5 rounded">
+                            {p.property.name}
+                          </span>
+                        ))}
+                        {prospects.length > 3 && (
+                          <span className="text-[10px] text-gray-400 px-1.5 py-0.5">+{prospects.length - 3} more</span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-2 flex-wrap pt-1">
+                      {/* Restore button — always shown if there are prospects */}
+                      {prospects.length > 0 && (
+                        <button
+                          onClick={() => restoreSearch(s)}
+                          className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg font-semibold border border-gray-200 bg-white text-gray-600 hover:border-[#6B7EFF]/50 hover:text-[#6B7EFF] transition-all"
+                        >
+                          ▶ View Results
+                        </button>
+                      )}
+
+                      {/* Import button */}
+                      {res ? (
+                        <span className={cn(
+                          "text-[11px] px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1",
+                          res.created >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+                        )}>
+                          {res.created >= 0 ? <><Check size={10} /> {res.created} imported</> : "Error"}
+                        </span>
+                      ) : alreadyImported ? (
+                        <span className="text-[11px] px-3 py-1.5 rounded-lg font-semibold bg-emerald-50 text-emerald-700 flex items-center gap-1">
+                          <Check size={10} /> {s.imported_count} imported
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => importSearch(s.id)}
+                          disabled={importing === s.id}
+                          className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg text-white font-semibold transition-all shadow-sm disabled:opacity-60"
+                          style={{ background: "linear-gradient(135deg, #6B7EFF 0%, #3B4FCC 100%)" }}
+                        >
+                          {importing === s.id
+                            ? <><Loader2 size={10} className="animate-spin" /> Importing…</>
+                            : <><Download size={10} /> Import to Leads</>}
+                        </button>
+                      )}
+
+                      {/* SCOUT launch button — only if leads are imported and SCOUT not yet launched */}
+                      {alreadyImported && !scoutRes && (
+                        <button
+                          onClick={() => launchScout(s.id)}
+                          disabled={scoutLoading === s.id}
+                          className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg text-white font-semibold transition-all shadow-sm disabled:opacity-60"
+                          style={{ background: "linear-gradient(135deg, #10B981 0%, #059669 100%)" }}
+                        >
+                          {scoutLoading === s.id
+                            ? <><Loader2 size={10} className="animate-spin" /> Launching…</>
+                            : <><Zap size={10} /> Launch SCOUT</>}
+                        </button>
+                      )}
+
+                      {/* SCOUT result */}
+                      {scoutRes && (
+                        <span className={cn(
+                          "text-[11px] px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1",
+                          scoutRes.sent >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+                        )}>
+                          {scoutRes.sent >= 0 ? <><Check size={10} /> {scoutRes.sent} sent</> : "SCOUT failed"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ── Search ──────────────────────────────────────────────────── */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
@@ -887,6 +1075,80 @@ export default function ARIAPage() {
                     </div>
                   </div>
 
+                  {/* PropTech Stack Card */}
+                  {(() => {
+                    const pt: PropTech = { ...(prospect.property.proptech ?? {}), ...(deepIntel?.proptech ?? {}) };
+                    const hasAnyData = [pt.gate_operators, pt.access_control, pt.intercoms, pt.cameras, pt.smart_locks, pt.resident_apps, pt.package_solutions].some(a => a?.length);
+                    if (!hasAnyData && !pt.tech_generation && !pt.sara_signals) return null;
+
+                    const genColors: Record<string, string> = {
+                      legacy: 'bg-red-100 text-red-700',
+                      modern: 'bg-emerald-100 text-emerald-700',
+                      hybrid: 'bg-amber-100 text-amber-700',
+                    };
+
+                    const categories: { label: string; emoji: string; key: keyof PropTech; chipClass: string }[] = [
+                      { label: 'Gates',          emoji: '🚧', key: 'gate_operators',    chipClass: 'bg-orange-50 text-orange-700 border-orange-200' },
+                      { label: 'Access Control', emoji: '🔑', key: 'access_control',    chipClass: 'bg-blue-50 text-blue-700 border-blue-200' },
+                      { label: 'Intercoms',      emoji: '📟', key: 'intercoms',         chipClass: 'bg-violet-50 text-violet-700 border-violet-200' },
+                      { label: 'Cameras',        emoji: '📷', key: 'cameras',           chipClass: 'bg-slate-50 text-slate-700 border-slate-200' },
+                      { label: 'Smart Locks',    emoji: '🔒', key: 'smart_locks',       chipClass: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                      { label: 'Resident App',   emoji: '📱', key: 'resident_apps',     chipClass: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+                      { label: 'Packages',       emoji: '📦', key: 'package_solutions', chipClass: 'bg-amber-50 text-amber-700 border-amber-200' },
+                    ];
+
+                    return (
+                      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                        <div className="flex items-center gap-2 mb-4">
+                          <Cpu size={13} style={{ color: '#7C3AED' }} />
+                          <span className="text-[10px] font-bold tracking-widest uppercase text-violet-700">PropTech Stack</span>
+                          <div className="flex-1" />
+                          {pt.sara_signals ? (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">🎯 SARA Signal</span>
+                          ) : pt.tech_generation ? (
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full capitalize ${genColors[pt.tech_generation] ?? 'bg-gray-100 text-gray-600'}`}>
+                              {pt.tech_generation}
+                            </span>
+                          ) : null}
+                        </div>
+
+                        <div className="space-y-2">
+                          {categories.map(cat => {
+                            const items = pt[cat.key] as string[] | undefined;
+                            if (!items?.length) return null;
+                            return (
+                              <div key={cat.key}>
+                                <p className="text-[9px] text-gray-400 mb-1">{cat.emoji} {cat.label}</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {items.map((item: string) => (
+                                    <span key={item} className={`text-[10px] px-1.5 py-0.5 rounded font-medium border ${cat.chipClass}`}>{item}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {pt.replacement_window && (
+                          <div className="mt-3 rounded-lg px-2.5 py-2 bg-amber-50 border border-amber-200">
+                            <p className="text-[10px] text-amber-800">Replacement window: {pt.replacement_window}</p>
+                          </div>
+                        )}
+
+                        {pt.displacement_targets && pt.displacement_targets.length > 0 && (
+                          <div className="mt-3 rounded-lg px-2.5 py-2 border border-red-200 bg-red-50">
+                            <p className="text-[9px] font-bold uppercase tracking-widest text-red-600 mb-1.5">GateGuard can replace:</p>
+                            <div className="flex flex-wrap gap-1">
+                              {pt.displacement_targets.map((t: string) => (
+                                <span key={t} className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-red-100 text-red-700 border border-red-200">{t}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   {/* Decision Maker Card */}
                   <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
                     <div className="flex items-center gap-2 mb-4">
@@ -1149,97 +1411,34 @@ export default function ARIAPage() {
                     : <>Import failed</>}
                 </span>
               )}
+              {savedSearchId && (importResult[savedSearchId]?.created ?? 0) > 0 && !scoutResult[savedSearchId] && (
+                <button
+                  onClick={() => launchScout(savedSearchId)}
+                  disabled={scoutLoading === savedSearchId}
+                  className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-xl text-white font-semibold transition-all shadow-sm disabled:opacity-60"
+                  style={{ background: "linear-gradient(135deg, #10B981 0%, #059669 100%)" }}
+                >
+                  {scoutLoading === savedSearchId
+                    ? <><Loader2 size={13} className="animate-spin" /> Launching SCOUT…</>
+                    : <><Zap size={13} /> Launch SCOUT Campaign</>}
+                </button>
+              )}
+              {savedSearchId && scoutResult[savedSearchId] && (
+                <span className={cn(
+                  "flex items-center gap-1.5 text-sm px-4 py-2 rounded-xl font-semibold",
+                  scoutResult[savedSearchId].sent >= 0
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                    : "bg-red-50 text-red-700 border border-red-200"
+                )}>
+                  {scoutResult[savedSearchId].sent >= 0
+                    ? <><Check size={13} /> SCOUT launched · {scoutResult[savedSearchId].sent} emails sent</>
+                    : <>SCOUT failed</>}
+                </span>
+              )}
             </div>
           </div>
         )}
 
-        {/* ── Search History ───────────────────────────────────────────── */}
-        {savedSearches.length > 0 && (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <button
-              onClick={() => setShowHistory(h => !h)}
-              className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
-            >
-              <div className="flex items-center gap-2.5">
-                <Clock size={14} className="text-[#6B7EFF]" />
-                <span className="text-sm font-semibold text-gray-800">Search History</span>
-                <span className="text-[10px] font-bold bg-[#EEF0FF] text-[#6B7EFF] px-2 py-0.5 rounded-full">
-                  {savedSearches.length} saved · 30 days
-                </span>
-              </div>
-              <ChevronRight size={14} className={cn("text-gray-400 transition-transform", showHistory && "rotate-90")} />
-            </button>
-
-            {showHistory && (
-              <div className="border-t border-gray-100 divide-y divide-gray-50">
-                {savedSearches.map(s => {
-                  const res = importResult[s.id];
-                  const alreadyImported = s.imported_count > 0;
-                  const prospects = s.results?.prospects ?? [];
-                  return (
-                    <div key={s.id} className="px-5 py-3.5 flex items-start gap-4 hover:bg-gray-50/50 transition-colors">
-                      {/* Query + meta */}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-800 truncate">{s.query}</p>
-                        {s.query_interpretation && (
-                          <p className="text-[11px] text-gray-400 truncate mt-0.5">{s.query_interpretation}</p>
-                        )}
-                        <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                          <span className="text-[10px] text-gray-400">{formatAge(s.created_at)}</span>
-                          <span className="text-[10px] text-gray-300">·</span>
-                          <span className="text-[10px] text-gray-400">{prospects.length} prospect{prospects.length !== 1 ? 's' : ''}</span>
-                          {alreadyImported && (
-                            <>
-                              <span className="text-[10px] text-gray-300">·</span>
-                              <span className="text-[10px] text-emerald-600 font-medium">{s.imported_count} lead{s.imported_count !== 1 ? 's' : ''} imported</span>
-                            </>
-                          )}
-                          <span className="text-[10px] text-gray-300">·</span>
-                          <span className={cn("text-[10px] font-medium", daysUntil(s.expires_at) <= 3 ? "text-amber-500" : "text-gray-400")}>
-                            expires in {daysUntil(s.expires_at)}d
-                          </span>
-                        </div>
-                        {/* Top prospect names */}
-                        {prospects.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1.5">
-                            {prospects.slice(0, 3).map((p, i) => (
-                              <span key={i} className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
-                                {p.property.name}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Actions */}
-                      <div className="flex items-center gap-2 shrink-0">
-                        {res ? (
-                          <span className={cn(
-                            "text-[11px] px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1",
-                            res.created >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
-                          )}>
-                            {res.created >= 0 ? <><Check size={10} /> {res.created} imported</> : "Error"}
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => importSearch(s.id)}
-                            disabled={importing === s.id}
-                            className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg text-white font-semibold transition-all shadow-sm disabled:opacity-60"
-                            style={{ background: "linear-gradient(135deg, #6B7EFF 0%, #3B4FCC 100%)" }}
-                          >
-                            {importing === s.id
-                              ? <><Loader2 size={10} className="animate-spin" /> Importing…</>
-                              : <><Download size={10} /> Import to Leads</>}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Animation keyframes */}

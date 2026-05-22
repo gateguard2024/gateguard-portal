@@ -134,6 +134,10 @@ function extractLocationHint(query: string): string | null {
 /**
  * Format FCC provider list into a human-readable block for Claude's prompt.
  * Groups by technology type so Claude can identify cable-only markets (higher bulk deal risk).
+ *
+ * CRITICAL: FCC data = "ISP is licensed/capable of serving this area."
+ * It does NOT indicate that any ISP has a bulk, MDU, or exclusive deal with a specific property.
+ * Local/regional ISPs that don't appear in Claude's training data may still be the bulk provider.
  */
 function formatFCCDataForPrompt(providers: FCCProvider[], location: string): string {
   if (providers.length === 0) return ''
@@ -152,27 +156,34 @@ function formatFCCDataForPrompt(providers: FCCProvider[], location: string): str
   }
 
   const lines = [
-    `FCC BROADBAND MAP DATA — Verified ISP coverage at/near ${location}:`,
-    `(Source: FCC Form 477 / Broadband Map API — authoritative data, updated biannually)`,
+    `FCC BROADBAND MAP DATA — ISPs licensed to serve the area near ${location}:`,
+    `(Source: FCC Form 477 / Broadband Map API, updated biannually)`,
+    `⚠ CRITICAL DISTINCTION: This data means each ISP CAN serve this area. It does NOT mean any ISP has`,
+    `  a bulk/MDU/exclusive deal with any specific property. Local or regional ISPs not on this list`,
+    `  may still be the actual bulk provider. Use only for isp_providers[] availability — NEVER infer`,
+    `  bulk_agreements[] from FCC data alone.`,
   ]
   for (const [tech, names] of Object.entries(byTech)) {
     lines.push(`  ${tech}: ${names.join(', ')}`)
   }
 
-  // Flag cable-only markets (higher MDU bulk deal probability)
+  // Flag cable-only markets — increases probability but does NOT confirm a bulk deal
   const hasFiber = !!byTech['Fiber']?.length
   const hasCable = !!byTech['Cable']?.length
   const hasOnlyCable = hasCable && !hasFiber
   if (hasOnlyCable) {
-    lines.push(`  ⚠ CABLE-ONLY MARKET: No fiber ISP detected. High probability of Comcast/Spectrum exclusive bulk deal.`)
+    lines.push(`  ⚠ CABLE-ONLY MARKET: No fiber ISP licensed in area. When combined with OTHER evidence (resident reviews,`)
+    lines.push(`    listing sites, management company statements), cable exclusivity is more plausible — but FCC data`)
+    lines.push(`    alone is NOT sufficient to set bulk_agreements[]. Set confidence="low" without corroborating text.`)
   } else if (hasFiber && hasCable) {
-    lines.push(`  FIBER + CABLE MARKET: Competition present — bulk agreements less likely to be exclusive.`)
+    lines.push(`  FIBER + CABLE MARKET: Multiple ISP types present. A local/regional fiber ISP may have an MDU deal`)
+    lines.push(`  even if not the largest national carrier. Do not assume the biggest-name ISP has the bulk deal.`)
   }
 
   // Flag DirecTV / AT&T presence (ATLAS pitch opportunity)
   const allNames = providers.map(p => (p.brand_name + ' ' + p.holding_company).toLowerCase())
   if (allNames.some(n => n.includes('at&t') || n.includes('directv') || n.includes('att '))) {
-    lines.push(`  AT&T / DirecTV service confirmed in this market — ATLAS bundle pitch applicable.`)
+    lines.push(`  AT&T / DirecTV licensed in this market — ATLAS bundle pitch may apply if confirmed at property.`)
   }
 
   return lines.join('\n')
@@ -199,7 +210,7 @@ const ariaResearchTool: Anthropic.Tool = {
           properties: {
             property: {
               type: 'object',
-              required: ['name', 'address', 'units', 'year_built', 'management_company', 'owner_entity', 'property_type', 'class', 'occupancy', 'isp_providers', 'video_providers', 'bulk_agreements'],
+              required: ['name', 'address', 'units', 'year_built', 'management_company', 'owner_entity', 'property_type', 'class', 'occupancy', 'isp_providers', 'video_providers', 'bulk_agreements', 'proptech'],
               properties: {
                 name:               { type: 'string' },
                 address:            { type: 'string' },
@@ -235,20 +246,71 @@ const ariaResearchTool: Anthropic.Tool = {
                     },
                   },
                 },
+                proptech: {
+                  type: 'object',
+                  description: 'Current property technology stack — gates, access control, cameras, smart locks, resident apps',
+                  required: ['gate_operators','access_control','intercoms','cameras','smart_locks','resident_apps','package_solutions','tech_generation','sara_signals','displacement_targets'],
+                  properties: {
+                    gate_operators:     { type: 'array', items: { type: 'string' }, description: 'Gate operator brands (LiftMaster, DoorKing, Viking, Linear, FAAC, BFT, LiftMaster SL3000, etc.)' },
+                    access_control:     { type: 'array', items: { type: 'string' }, description: 'Access control platforms (Brivo, HID, Lenel, Openpath, PDK, Genetec, Allegion, etc.)' },
+                    intercoms:          { type: 'array', items: { type: 'string' }, description: 'Intercom/video entry systems (ButterflyMX, 2N, DoorKing, Aiphone, Doorbird, Verkada, etc.)' },
+                    cameras:            { type: 'array', items: { type: 'string' }, description: 'Camera/CCTV vendors (Axis, Hanwha, Eagle Eye, Avigilon, Hikvision, Milestone, Verkada, etc.)' },
+                    smart_locks:        { type: 'array', items: { type: 'string' }, description: 'Smart lock brands (Schlage, Yale, August, Latch, Kisi, Allegion, etc.)' },
+                    resident_apps:      { type: 'array', items: { type: 'string' }, description: 'Resident-facing apps (SmartRent, Latch, ButterflyMX, Brivo Mobile, Openpath, etc.)' },
+                    package_solutions:  { type: 'array', items: { type: 'string' }, description: 'Package/delivery solutions (Package Concierge, Luxer One, Parcel Pending, Amazon Hub, etc.)' },
+                    tech_generation:    { type: 'string', enum: ['legacy','modern','hybrid'], description: 'Overall tech generation assessment' },
+                    sara_signals:       { type: 'boolean', description: 'Evidence this property/mgmt co uses SARA Plus / AT&T indirect channel' },
+                    replacement_window: { type: 'string', description: 'When is major hardware refresh likely due? e.g. "2025-2026", "overdue", "3-5 years"' },
+                    displacement_targets: { type: 'array', items: { type: 'string' }, description: 'Specific systems GateGuard can displace or integrate with at this property' },
+                  },
+                },
               },
             },
             decision_maker: {
               type: 'object',
-              required: ['name', 'title', 'company', 'linkedin_slug', 'email', 'email_confidence', 'phone', 'tenure_years'],
+              required: ['name', 'title', 'company', 'role_type', 'linkedin_slug', 'email', 'email_confidence', 'phone', 'tenure_years'],
               properties: {
                 name:             { type: 'string' },
                 title:            { type: 'string' },
                 company:          { type: 'string' },
+                role_type:        { type: 'string', enum: ['asset_manager','regional_manager','property_manager','owner','unknown'], description: 'Hierarchy role — asset_manager is highest priority target' },
                 linkedin_slug:    { type: 'string' },
                 email:            { type: 'string' },
                 email_confidence: { type: 'number' },
                 phone:            { type: 'string' },
                 tenure_years:     { type: 'number' },
+              },
+            },
+            decision_maker_chain: {
+              type: 'array',
+              description: 'Full chain of decision makers from owner/asset manager down to property manager. Most powerful listed first.',
+              items: {
+                type: 'object',
+                required: ['name', 'title', 'company', 'role_type', 'email', 'email_confidence'],
+                properties: {
+                  name:             { type: 'string' },
+                  title:            { type: 'string' },
+                  company:          { type: 'string' },
+                  role_type:        { type: 'string', enum: ['owner','asset_manager','regional_manager','property_manager','unknown'] },
+                  linkedin_slug:    { type: 'string', description: 'LinkedIn profile slug or empty string' },
+                  email:            { type: 'string' },
+                  email_confidence: { type: 'number', description: '0.0–1.0' },
+                  phone:            { type: 'string' },
+                  notes:            { type: 'string', description: 'Why this person matters (e.g. "controls capex for 12-property portfolio")' },
+                },
+              },
+            },
+            ownership: {
+              type: 'object',
+              description: 'Property ownership and investment structure — who actually controls capex',
+              required: ['owner_entity', 'owner_type', 'portfolio_size', 'acquisition_year'],
+              properties: {
+                owner_entity:    { type: 'string', description: 'Legal owner name (e.g. "Blackstone Real Estate", "Morgan Properties", "Smith Family Trust")' },
+                owner_type:      { type: 'string', enum: ['private_equity', 'reit', 'family_office', 'individual', 'management_company_owned', 'unknown'] },
+                portfolio_size:  { type: 'string', description: 'Approx units owned by this entity if known (e.g. "12,000 units across Southeast")' },
+                acquisition_year: { type: 'string', description: 'Year owner acquired this property if known, or "unknown"' },
+                hold_period:     { type: 'string', description: 'Expected hold period / disposition timeline if known' },
+                capex_signal:    { type: 'string', description: 'Any evidence of recent or planned capital investment (renovation, refinancing, acquisition)' },
               },
             },
             pain_signals: {
@@ -293,6 +355,7 @@ const ariaResearchTool: Anthropic.Tool = {
             },
             generic_reply_rate: { type: 'number' },
           },
+          required: ['property', 'decision_maker', 'decision_maker_chain', 'ownership', 'pain_signals', 'profile', 'email_variants', 'generic_reply_rate'],
         },
       },
     },
@@ -358,8 +421,8 @@ export async function POST(req: NextRequest) {
 
     // ── Step 3: Build FCC context block for Claude ──
     const fccContextBlock = fccBlock
-      ? `\n\n${fccBlock}\n\nIMPORTANT: The FCC data above is AUTHORITATIVE. Populate isp_providers[] ONLY with ISPs from this list. Do NOT invent ISPs not present in FCC data. You may add video_providers beyond what FCC lists (FCC 477 covers internet, not video). Infer bulk_agreements from the FCC provider concentration + property class.\n`
-      : `\n\nNOTE: FCC broadband data unavailable for this query (no location resolved). Use your best knowledge of typical ISP coverage in the target market.\n`
+      ? `\n\n${fccBlock}\n\nIMPORTANT — FCC DATA USAGE RULES:\n1. Use FCC data for isp_providers[] (which ISPs cover this area). Do NOT invent ISPs not in this list.\n2. FCC data does NOT tell you which ISP has a bulk/MDU/exclusive deal with a specific property.\n3. Do NOT populate bulk_agreements[] based on FCC data alone.\n4. bulk_agreements[] requires explicit evidence: listing description, resident review, management company statement, or property website saying "internet included" or naming a specific provider.\n5. A local or regional ISP NOT on the FCC list could be the actual bulk provider (they may serve the property under a private MDU contract without FCC 477 coverage filing).\n6. Set confidence="low" on any bulk agreement inferred from FCC data + property class alone. "medium" requires one corroborating source. "high" requires explicit text evidence.\n`
+      : `\n\nNOTE: FCC broadband data unavailable for this query (no location resolved). Use your best knowledge of typical ISP coverage in the target market. Apply strict confidence rules for bulk_agreements[].\n`
 
     const message = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
@@ -386,21 +449,57 @@ QUALITY STANDARDS:
 - Buy scores: realistic range 6.5–9.2
 - Email body format: "Hi [name], [pain signal reference + property name]. [GateGuard solution]. [specific metric]. [soft CTA]. Best, Russel Feldman | GateGuard"
 
-ISP & VIDEO PROVIDER RESEARCH (required for every prospect):
-- If FCC broadband data is provided below, use ONLY those ISPs for isp_providers[]. This is verified government data, not inference.
-- For video_providers: FCC 477 does not cover video. Research which video/TV providers serve the property (DirecTV, Comcast, Spectrum, Dish, Fubo, etc.)
-- For bulk_agreements: estimate based on:
-  * Cable-only markets → high probability of Comcast/Spectrum exclusive MDU deal
-  * Fiber available → competition reduces exclusivity risk, but bulk/preferred deals still common
-  * Property built/renovated 2015–2021 + cable-only market → bulk deal likely expiring 2025–2028
-  * AT&T Fiber in market → possible competing bulk deal; also ATLAS bundle opportunity
-  * DirecTV (AT&T) MDU agreements expiring = HOT lead for ATLAS bundle pitch
-- Set confidence accurately: "high" only if property/market context strongly implies a deal
+DECISION MAKER HIERARCHY (critical — target the right person):
+GateGuard sells access control capex. Decisions are made by ASSET MANAGERS and OWNERS, not property managers.
+The correct decision maker chain from most to least powerful:
+1. ASSET MANAGER — The person at the investment firm/owner who controls capex budget. Title: "Asset Manager", "VP Asset Management", "Director of Asset Management", "Portfolio Manager". This is the FIRST EMAIL TARGET.
+2. REGIONAL MANAGER / VP — Oversees 5–20+ properties for a management company. Can approve vendor changes. Title: "Regional Manager", "Regional Property Manager", "Vice President of Operations", "Director of Properties".
+3. PROPERTY MANAGER — Day-to-day manager of a single property. Can flag issues and recommend vendors but rarely approves capex alone. Title: "Property Manager", "Community Manager", "General Manager".
 
-EMAIL ANGLE RULE — ISP/VIDEO INTEL:
-- If a bulk agreement expiry is within 18 months → use "contract_window" email angle referencing the transition
-- If property is on Comcast/Spectrum exclusively but AT&T Fiber is in the FCC data → use "upgrade path" angle
-- If no video provider found or DirecTV explicitly mentioned → use ATLAS MDU pitch angle`,
+DECISION MAKER RESEARCH RULES:
+- For decision_maker: prioritize the ASSET MANAGER (ownership side) if you can identify them. If the property is owned by a REIT, private equity firm, or family office, look for the VP/Director of Asset Management or Portfolio Manager at the owner entity.
+- If the management company is the target: identify the REGIONAL MANAGER, not the on-site property manager.
+- Management companies to know: Greystar (regional VPs on LinkedIn), Equity Residential (asset management team), MAA, AvalonBay (asset managers), Aimco, Cortland, Lincoln Property Company, RPM Living, Bozzuto.
+- Private equity/REIT owners: Morgan Properties, Blackstone, Starwood, Brookfield, KKR, JBG Smith — their asset managers control capex.
+- email field: for asset managers, format is typically firstname.lastname@[ownerfirm].com or firstname@[managementco].com
+- email_confidence: 0.95 for confirmed LinkedIn/company site, 0.70 for format-inferred, 0.50 for guessed
+
+BULK AGREEMENT RESEARCH (CRITICAL ACCURACY RULES — READ CAREFULLY):
+⚠ FCC BROADBAND DATA = ISP AREA COVERAGE ONLY. Never use FCC data to infer a bulk/MDU deal.
+- bulk_agreements[] must have explicit evidence. Required sources: apartment listing descriptions ("internet included"), resident reviews ("only option is Spectrum"), property website, management company statement.
+- Local/regional ISPs (e.g. Gigastream, Sonic, Hotwire, WideOpenWest, Vyve, IgLou, Blue Ridge) frequently have MDU deals with properties even when not the area's dominant ISP. Do NOT ignore these.
+- Do NOT default to Spectrum/Comcast/AT&T as the bulk provider just because they are the dominant carrier in the area. The actual bulk provider may be a local ISP you have less training data on.
+- If you cannot identify a specific bulk provider from evidence, set bulk_agreements = [] (empty). It is better to return no bulk agreement than to guess incorrectly.
+- confidence levels:
+  * "high" = source TEXT explicitly says "internet included", "exclusive", "bulk deal", or names a specific provider as the building's only/preferred option
+  * "medium" = source implies it with phrases like "everyone here uses X", "building deal", "can't use any other ISP"
+  * "low" = inferred from market patterns alone with no property-specific evidence
+- When in doubt about the bulk provider: SET confidence="low" AND note in expiry_estimate: "unconfirmed — use Deep Intel for verification"
+
+ISP & VIDEO PROVIDER RESEARCH:
+- If FCC broadband data is provided below, use ONLY those ISPs for isp_providers[]. This is verified government data, not inference.
+- For video_providers: FCC 477 does not cover video. Research which video/TV providers serve the property.
+- EMAIL ANGLE RULE — ISP/VIDEO INTEL:
+  * If a bulk agreement expiry is within 18 months → use "contract_window" email angle
+  * If property is on Comcast/Spectrum exclusively but AT&T Fiber is in the FCC data → use "upgrade path" angle
+  * If DirecTV explicitly mentioned → use ATLAS MDU pitch angle
+
+PROPTECH STACK RESEARCH (required for every prospect):
+- Gate operators: identify current gate brand from job listings, resident complaints ("the LiftMaster broke again"), permit filings, management company vendor standards. DoorKing = highest SARA Bridge signal.
+- Access control: look for Brivo, HID, Openpath, PDK, Lenel, Genetec. Management companies standardize — Greystar often uses Brivo, Equity uses Openpath, MAA uses various.
+- Intercoms: ButterflyMX = modern competitor. 2N, Aiphone, DoorKing audio = legacy. No video intercom = GateGuard install opportunity.
+- Cameras: Eagle Eye = direct integration available. Verkada, Avigilon = potential displacement. Analog/DVR = upgrade opportunity.
+- Smart locks: Latch = direct competitor. Schlage/Yale legacy = GateCard integration opportunity. No smart lock = new install.
+- Resident apps: SmartRent and Latch are competitors. No resident app = GateCard virgin territory.
+- tech_generation: 'legacy' if gates/intercoms are >7 years, analog cameras, no resident app. 'modern' if ButterflyMX/Latch/SmartRent present, IP cameras, cloud access. 'hybrid' = mix.
+- sara_signals: true if management company or property is known to be in AT&T indirect channel, or if DoorKing gates + DirecTV is present.
+
+EMAIL ANGLE RULES — PROPTECH:
+- sara_signals=true → SARA Bridge migration angle: "Your team is already in the AT&T ecosystem..."
+- tech_generation='legacy' → urgency: "Residents are choosing communities based on tech. Here's the gap."
+- ButterflyMX or Latch detected → competitive displacement angle
+- No resident_apps → GateCard intro angle
+- Asset manager is target → focus on NOI impact, liability reduction, resident retention metrics — not tech features`,
 
       messages: [{
         role: 'user',

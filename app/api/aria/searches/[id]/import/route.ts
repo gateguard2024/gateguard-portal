@@ -45,6 +45,12 @@ export async function POST(
           property_type: string; management_company: string;
           isp_providers?: string[]; video_providers?: string[];
           bulk_agreements?: Array<{ provider: string; service_type: string; agreement_type: string; expiry_estimate: string }>;
+          proptech?: {
+            gate_operators?: string[]; access_control?: string[]; intercoms?: string[];
+            cameras?: string[]; smart_locks?: string[]; resident_apps?: string[];
+            package_solutions?: string[]; tech_generation?: string; sara_signals?: boolean;
+            replacement_window?: string; displacement_targets?: string[];
+          };
         };
         decision_maker: {
           name: string; title: string; email: string; phone: string;
@@ -54,6 +60,11 @@ export async function POST(
           buy_score: number; urgency: string; primary_concern: string;
           current_vendor: string; contract_window: string;
         };
+        email_variants?: Array<{
+          angle: string; subject: string; body: string;
+          predicted_reply_rate: number; tone: string;
+        }>;
+        generic_reply_rate?: number;
       }>;
     }
 
@@ -122,6 +133,40 @@ export async function POST(
           contact_title: p.decision_maker.title ?? null,
           units:         p.property.units ?? null,
           notes:         noteParts,
+          property_intel: {
+            // Connectivity
+            isp_providers:   p.property.isp_providers ?? [],
+            video_providers: p.property.video_providers ?? [],
+            bulk_agreements: p.property.bulk_agreements ?? [],
+            // PropTech
+            gate_operators:      p.property.proptech?.gate_operators ?? [],
+            access_control:      p.property.proptech?.access_control ?? [],
+            intercoms:           p.property.proptech?.intercoms ?? [],
+            cameras:             p.property.proptech?.cameras ?? [],
+            smart_locks:         p.property.proptech?.smart_locks ?? [],
+            resident_apps:       p.property.proptech?.resident_apps ?? [],
+            package_solutions:   p.property.proptech?.package_solutions ?? [],
+            tech_generation:     p.property.proptech?.tech_generation ?? 'unknown',
+            sara_signals:        p.property.proptech?.sara_signals ?? false,
+            replacement_window:  p.property.proptech?.replacement_window ?? null,
+            displacement_targets: p.property.proptech?.displacement_targets ?? [],
+            // ARIA email variants — stored so SCOUT can send without re-running ARIA
+            email_variants:      p.email_variants ?? [],
+            generic_reply_rate:  p.generic_reply_rate ?? 2,
+            // Profile intel for SCOUT personalization
+            buy_score:          p.profile.buy_score,
+            urgency:            p.profile.urgency,
+            primary_concern:    p.profile.primary_concern,
+            current_vendor:     p.profile.current_vendor ?? null,
+            contract_window:    p.profile.contract_window ?? null,
+            // Metadata
+            source:       'aria',
+            generated_at: new Date().toISOString(),
+          },
+          property_intel_updated_at: new Date().toISOString(),
+          property_intel_source: 'aria',
+          scout_status: 'queued',
+          scout_enrolled_at: new Date().toISOString(),
         }
       })
 
