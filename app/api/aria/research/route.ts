@@ -135,10 +135,17 @@ async function fetchFCCBroadband(lat: number, lng: number): Promise<FCCProvider[
  * Returns the best location string to geocode, or null if no location detected.
  */
 function extractLocationHint(query: string): string | null {
-  // City/state patterns: "in Atlanta", "Dallas TX", "Phoenix, Arizona"
-  const cityStateRe = /(?:in|at|near|around)?\s*([A-Z][a-zA-Z\s]+(?:,\s*[A-Z]{2}|,\s*[A-Za-z]+))/
+  // City/state patterns: "in Atlanta", "Dallas TX", "Phoenix, Arizona", "in nashville", "chicago il"
+  // Case-insensitive, also catches bare "City, ST" or "City ST" at end of string
+  const cityStateRe = /(?:in|at|near|around|,)?\s*([A-Za-z][a-zA-Z\s]+(?:,\s*[A-Z]{2}|,\s*[A-Za-z]+|\s+[A-Z]{2}))/i
   const m = query.match(cityStateRe)
-  if (m) return m[1].trim()
+  if (m) {
+    const candidate = m[1].trim()
+    // Skip if it looks like a property name (too long or contains "at", "the", etc.)
+    if (candidate.length <= 40 && !/\b(at|the|of|by|and|for)\b/i.test(candidate.split(',')[0]?.trim() || '')) {
+      return candidate
+    }
+  }
 
   // ZIP code
   const zipRe = /\b(\d{5}(?:-\d{4})?)\b/
@@ -162,13 +169,52 @@ function extractLocationHint(query: string): string | null {
 
 const KNOWN_MGMT_COS = ['greystar','lincoln property','bozzuto','maa','aimco','cortland','equity residential','avalon','avalonbay','camden','national','rpm living','cardinal group','grayco','windsor']
 
+/**
+ * Extract the best search term from a query.
+ *
+ * CRITICAL: Always preserve the specific property name + location context.
+ * The old implementation returned ONLY the management company name (e.g. "Cortland")
+ * when the query contained a known company — stripping all property-specific context
+ * and making all 9 Tavily searches uselessly generic.
+ *
+ * New logic:
+ * - If the query looks like a specific property (contains "at", "the", apartment brand words,
+ *   or a city name after the company name), return the full query trimmed to 80 chars.
+ * - If the query is purely a management company name with no property specifics,
+ *   use the company name as the terms (original behavior was correct in that case).
+ * - The management company detection is now ADDITIVE context, not a replacement.
+ */
 function extractSearchTerms(query: string): string {
-  const q = query.toLowerCase()
+  const q = query.toLowerCase().trim()
+  const trimmed = query.trim()
+
+  // Detect if any known management company is in the query
+  let matchedCo: string | null = null
   for (const co of KNOWN_MGMT_COS) {
-    if (q.includes(co)) return co.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
+    if (q.includes(co)) { matchedCo = co; break }
   }
-  // Return first 60 chars of the query as fallback
-  return query.trim().slice(0, 60)
+
+  if (matchedCo) {
+    // Check if there's specific property context beyond just the company name
+    // Indicators: "at [Name]", "the [Name]", a city, specific property brand words
+    const hasPropertyContext = (
+      q.includes(' at ')     ||  // "Cortland at The Peake"
+      q.includes(' the ')    ||  // "Greystar The Reserve"
+      /\d/.test(q)           ||  // address with numbers
+      q.length > matchedCo.length + 12  // significantly more text than just the company name
+    )
+
+    if (hasPropertyContext) {
+      // Return the full query — it's a specific property search, don't strip context
+      return trimmed.slice(0, 80)
+    } else {
+      // Query is just the management company name — use it as-is
+      return matchedCo.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
+    }
+  }
+
+  // No known company — return first 80 chars (was 60, expanded for better specificity)
+  return trimmed.slice(0, 80)
 }
 
 /**
@@ -449,7 +495,7 @@ const ariaResearchTool: Anthropic.Tool = {
                   date:        { type: 'string' },
                   signal_type: { type: 'string' },
                   quote:       { type: 'string' },
-                  severity:    { type: 'number' },
+                  severity:    { type: 'string', enum: ['high', 'medium', 'low'] },
                 },
               },
             },
@@ -458,7 +504,7 @@ const ariaResearchTool: Anthropic.Tool = {
               required: ['buy_score', 'urgency', 'primary_concern', 'current_vendor', 'contract_window', 'communication_style'],
               properties: {
                 buy_score:           { type: 'number' },
-                urgency:             { type: 'string', enum: ['high', 'medium', 'low'] },
+                urgency:             { type: 'string', enum: ['critical', 'high', 'medium', 'low'] },
                 primary_concern:     { type: 'string' },
                 current_vendor:      { type: 'string' },
                 contract_window:     { type: 'string' },
@@ -595,6 +641,10 @@ export async function POST(req: NextRequest) {
         linkedinMduReps,     // 7. LinkedIn MDU account executive win posts + americantv.com
         locatorSites,        // 8. Third-party locator sites — fee breakdowns exposing bundled charges
         forcedService,       // 9. Explicit forced-service resident complaints
+        jobPostings,         // 10. Job listings for community managers listing telecom systems they manage
+        reitEarnings,        // 11. REIT earnings calls + investor docs — portfolio-wide MDU rollout announcements
+        cityPermits,         // 12. City low-voltage / telecom permits — ISPs pull permits when installing bulk
+        communitySocial,     // 13. Property Facebook/Instagram/Nextdoor pages — official ISP partnership announcements
       ] = await Promise.all([
 
         // 1. Listing sites — most reliable for confirming "internet included" + exact provider
@@ -609,7 +659,7 @@ export async function POST(req: NextRequest) {
 
         // 3. County deed / easement records — ISPs record MDU agreements against property title
         tavilySearch(
-          `${loc} apartment MDU broadband "memorandum of agreement" OR "right of entry" OR "easement" OR "bulk service agreement" OR "exclusive marketing agreement" internet provider county deed recorder DirecTV OR Charter OR Comcast OR Spectrum OR AT&T OR Gigastream`,
+          `"${terms}" ${loc} apartment MDU broadband "memorandum of agreement" OR "right of entry" OR "easement" OR "bulk service agreement" OR "exclusive marketing agreement" internet provider county deed recorder DirecTV OR Charter OR Comcast OR Spectrum OR AT&T OR Gigastream`,
           3, 'county-deed'),
 
         // 4. ISP/PCO partnership announcements — Private Cable Operators (World Cinema, KruseCom, WhiteSky)
@@ -648,6 +698,34 @@ export async function POST(req: NextRequest) {
         tavilySearch(
           `"${terms}" ${loc} ("forced to use" OR "have to use" OR "only option" OR "can't switch" OR "required to pay for" OR "no choice" OR "stuck with" OR "mandatory" OR "can't cancel") ("DirecTV" OR "Spectrum" OR "Comcast" OR "AT&T" OR "internet" OR "cable" OR "Gigastream" OR "DISH") -site:cortland.com -site:apartments.com -site:cortlandliving.com`,
           4, 'forced-service'),
+
+        // 10. Job postings for property staff — community managers list specific telecom systems they manage
+        // "Responsible for coordinating with our bulk Wi-Fi partner, WhiteSky, and managing resident onboarding"
+        // LinkedIn/Indeed/ZipRecruiter job descriptions are public and reveal the vendor inside the building
+        tavilySearch(
+          `"${terms}" OR "${loc}" "community manager" OR "property manager" OR "maintenance supervisor" "manage" OR "coordinate" "bulk internet" OR "managed WiFi" OR "DirecTV" OR "Spectrum" OR "bulk cable" OR "telecom" OR "WhiteSky" OR "Boingo" OR "Gigastream" site:linkedin.com OR site:indeed.com OR site:ziprecruiter.com OR site:glassdoor.com`,
+          3, 'job-posting'),
+
+        // 11. REIT earnings calls + investor materials — executives brag about portfolio-wide MDU rollouts
+        // "We've completed a portfolio-wide managed WiFi rollout with Boingo across 40 communities"
+        // Seeking Alpha, investor relations pages, SEC 8-K filings
+        tavilySearch(
+          `${loc} multifamily REIT "managed WiFi" OR "bulk internet" OR "community internet" OR "portfolio-wide" OR "bulk broadband" rollout OR "agreement" OR "partner" Spectrum OR Comcast OR DirecTV OR Boingo OR Hotwire OR "Gigastream" OR "WhiteSky" site:seekingalpha.com OR site:sec.gov OR "earnings call" OR "investor presentation"`,
+          3, 'reit-earnings'),
+
+        // 12. City low-voltage / telecom permits — ISPs pull permits when installing bulk infrastructure
+        // Accela, Clariti, eCityGov public permit portals indexed by Google
+        // "Low voltage", "CATV", "fiber installation", "telecommunications" permit at multifamily address
+        tavilySearch(
+          `"${terms}" ${loc} permit "low voltage" OR "CATV" OR "fiber" OR "telecommunications" OR "structured wiring" OR "bulk cable" multifamily OR apartment Comcast OR Spectrum OR DirecTV OR AT&T OR Gigastream OR "managed WiFi" Accela OR permit`,
+          3, 'city-permit'),
+
+        // 13. Community social media pages — property Facebook/Instagram/Nextdoor accounts announce new ISP deals
+        // "We're thrilled to announce our new internet partnership with Gigastream!"
+        // Management cos post these on official community pages; Nextdoor admins post on behalf of the property
+        tavilySearch(
+          `"${terms}" ${loc} "excited to announce" OR "thrilled to announce" OR "new internet" OR "new WiFi" OR "new partnership" OR "now offering" OR "bulk internet" OR "community WiFi" OR "included internet" "DirecTV" OR "Spectrum" OR "Comcast" OR "AT&T" OR "Gigastream" OR "Hotwire" OR "Boingo" OR "WhiteSky" site:facebook.com OR site:nextdoor.com OR site:instagram.com OR site:twitter.com OR site:x.com`,
+          3, 'community-social'),
       ])
 
       // 10. Provider slug page searches — check known MDU ISPs' property/operator pages
@@ -691,6 +769,10 @@ export async function POST(req: NextRequest) {
         ...locatorSites,
         ...forcedService,
         ...providerSlugResults,
+        ...jobPostings,
+        ...reitEarnings,
+        ...cityPermits,
+        ...communitySocial,
       ]
         .filter(r => r.score > 0.20)
         .sort((a, b) => {
@@ -699,9 +781,13 @@ export async function POST(req: NextRequest) {
             'provider-slug':  0.40, // ISP's own property page = highest confidence
             'county-deed':    0.35,
             'commercial-re':  0.30,
+            'city-permit':    0.28, // Low-voltage permits = ISP installing infrastructure at address
             'hoa-rfp':        0.25,
+            'reit-earnings':  0.25, // Portfolio-wide announcements name exact vendors
             'listing-site':   0.20,
             'locator-site':   0.22,
+            'job-posting':    0.20, // Community manager job descriptions name the systems they manage
+            'community-social': 0.22, // Official property social media announcing ISP partnerships
             'forced-service': 0.18,
             'linkedin-mdu':   0.15,
             'isp-partnership':0.10,
@@ -711,7 +797,7 @@ export async function POST(req: NextRequest) {
           const bBoost = boostMap[b.source ?? ''] ?? 0
           return (b.score + bBoost) - (a.score + aBoost)
         })
-        .slice(0, 15)
+        .slice(0, 20)
 
       if (allResults.length === 0) return
 
@@ -726,26 +812,36 @@ export async function POST(req: NextRequest) {
         'linkedin-mdu':   'LINKEDIN-MDU-REP',
         'locator-site':   'LOCATOR-REVIEW',
         'forced-service': 'FORCED-SERVICE',
+        'job-posting':    'JOB-POSTING',
+        'reit-earnings':  'REIT-EARNINGS',
+        'city-permit':    'CITY-PERMIT',
+        'community-social': 'COMMUNITY-SOCIAL',
         web:              'WEB',
       }
 
       tavilyContextBlock = `\n\nWEB INTELLIGENCE — Live OSINT (9 sources, use as primary evidence for bulk_agreements[] and isp_providers[]):
-${allResults.map((r) => `[${sourceLabels[r.source ?? 'web'] ?? 'WEB'}] ${r.title}\nURL: ${r.url}\n${r.content.slice(0, 450)}`).join('\n\n---\n\n')}
+${allResults.map((r) => `[${sourceLabels[r.source ?? 'web'] ?? 'WEB'}] ${r.title}\nURL: ${r.url}\n${r.content.slice(0, 800)}`).join('\n\n---\n\n')}
 
 SIGNAL EXTRACTION RULES (apply in this priority order):
 0. [PROVIDER-SLUG-PAGE] ISP's own property or operator portal page for this property → confidence="confirmed", agreement_type="bulk" — this is the highest-confidence source possible
 1. [COUNTY-DEED] names ISP + "memorandum/easement/agreement" + dates → confidence="high", extract expiry_estimate from term length
 2. [OFFERING-MEMO] "ancillary income" line item names provider + $ amount + expiry → confidence="high", this is the 99% accuracy source
-3. [HOA-MINUTES/RFP] board minutes or RFP mentions contract renewal/expiry → confidence="high" for timing, "medium" if provider unclear
-4. [LINKEDIN-MDU-REP] sales rep post: "secured 10-year agreement with [Property]" → confidence="medium-high", calculate expiry from post year + term
-5. [LISTING-SITE] "internet by [ISP]" or "bulk internet included" → confidence="medium"
-6. [LOCATOR-REVIEW] third-party locator site (TacoStreetLocating, Dwellsy, etc.) shows move-in fee breakdown with "internet fee: $X/mo [ISP]" or "required DirecTV: $Y/mo" → confidence="medium-high" — these are highly reliable because locators list actual move-in costs residents must pay
-7. [FORCED-SERVICE] resident explicitly says "forced to use [ISP]", "can't switch", "only option", "stuck with [ISP]" on Google Maps/Yelp/Reddit → agreement_type="exclusive", confidence="medium"
-8. [REDDIT/REVIEW] "only option is [ISP]" or "can't use anyone else" → agreement_type="exclusive", confidence="medium"
-9. [ISP-PARTNERSHIP] PCO (World Cinema/KruseCom/WhiteSky) case study → confidence="medium" for DISH/DirecTV provider
-10. Local/regional ISPs (Gigastream, Sonic, Hotwire, WideOpenWest, Vyve, Metronet, Brightspeed, Ting, Consolidated) → TRUST over national carrier — they often ARE the MDU bulk provider
-11. americantv.com listing for DirecTV/DISH dealer serving this area → use as supporting evidence for video_providers[]
-12. If NO web evidence found above → bulk_agreements = [] (never infer from market patterns alone)`
+3. [CITY-PERMIT] low-voltage or telecom permit pulled at this property's address naming an ISP → confidence="high" — ISPs only pull permits when they're actively installing infrastructure at the building
+4. [HOA-MINUTES/RFP] board minutes or RFP mentions contract renewal/expiry → confidence="high" for timing, "medium" if provider unclear
+5. [REIT-EARNINGS] REIT CEO/CFO names a portfolio-wide rollout in earnings call or investor filing → confidence="high" for the named provider, especially if this property is in that portfolio
+6. [LINKEDIN-MDU-REP] sales rep post: "secured 10-year agreement with [Property]" → confidence="medium-high", calculate expiry from post year + term
+7. [JOB-POSTING] property manager job description lists specific telecom systems as required knowledge → confidence="medium-high" — employers list the actual systems their staff must manage (they wouldn't list Boingo if they didn't have Boingo)
+8. [LISTING-SITE] "internet by [ISP]" or "bulk internet included" → confidence="medium"
+9. [LOCATOR-REVIEW] third-party locator site (TacoStreetLocating, Dwellsy, etc.) shows move-in fee breakdown with "internet fee: $X/mo [ISP]" or "required DirecTV: $Y/mo" → confidence="medium-high" — these are highly reliable because locators list actual move-in costs residents must pay
+10. [FORCED-SERVICE] resident explicitly says "forced to use [ISP]", "can't switch", "only option", "stuck with [ISP]" on Google Maps/Yelp/Reddit → agreement_type="exclusive", confidence="medium"
+11. [REDDIT/REVIEW] "only option is [ISP]" or "can't use anyone else" → agreement_type="exclusive", confidence="medium"
+12. [ISP-PARTNERSHIP] PCO (World Cinema/KruseCom/WhiteSky) case study → confidence="medium" for DISH/DirecTV provider
+13. Local/regional ISPs (Gigastream, Sonic, Hotwire, WideOpenWest, Vyve, Metronet, Brightspeed, Ting, Consolidated) → TRUST over national carrier — they often ARE the MDU bulk provider
+14. [COMMUNITY-SOCIAL] property's official Facebook/Instagram/Nextdoor page announces "new internet partnership with [ISP]" or "we now offer bulk internet through [ISP]" → confidence="high" — this is the management company speaking officially, not a resident complaint
+15. americantv.com listing for DirecTV/DISH dealer serving this area → use as supporting evidence for video_providers[]
+16. TRIANGULATION RULE: If you find evidence from 2 of these 3 categories — (Legal/Financial: COUNTY-DEED, OFFERING-MEMO, CITY-PERMIT, REIT-EARNINGS) + (Infrastructure: PROVIDER-SLUG-PAGE, FCC monopoly) + (Human: FORCED-SERVICE, REDDIT/REVIEW, JOB-POSTING, LOCATOR-REVIEW, COMMUNITY-SOCIAL) — upgrade confidence to "high". If you find all 3, set confidence="confirmed".
+17. FCC MONOPOLY SIGNAL: If FCC data shows only 1 ISP with fiber infrastructure at this address (no competing fiber providers), this is strong corroborating evidence for an exclusive bulk arrangement with that provider. Note this in your analysis.
+18. If NO web evidence found above → bulk_agreements = [] (never infer from market patterns alone)`
     })()
 
     await Promise.allSettled([fccPromise, oppPromise, tavilyPromise, mduProviderPromise])
@@ -777,8 +873,8 @@ SIGNAL EXTRACTION RULES (apply in this priority order):
       : `\n\nNOTE: FCC broadband data unavailable for this query (no location resolved). Use your best knowledge of typical ISP coverage in the target market. Apply strict confidence rules for bulk_agreements[].\n`
 
     const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 4096,
+      model: 'claude-sonnet-4-6',
+      max_tokens: 6000,
       tools: [ariaResearchTool],
       tool_choice: { type: 'tool', name: 'aria_research_result' },
       system: `You are ARIA, GateGuard's AI marketing intelligence engine for multifamily property sales.
