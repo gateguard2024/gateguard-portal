@@ -52,7 +52,22 @@ export async function POST(
     )
   }
 
-  const org_id = user.isCorporate ? (survey.org_id ?? null) : (scope.own_id ?? null)
+  // Resolve org_id — quotes.org_id is NOT NULL; corporate users may have null org_id in Clerk
+  let org_id: string | null = user.isCorporate ? (survey.org_id ?? scope.own_id ?? null) : (scope.own_id ?? null)
+
+  if (!org_id) {
+    const { data: corpOrg } = await supabase
+      .from('organizations')
+      .select('id')
+      .eq('org_tier', 'corporate')
+      .limit(1)
+      .single()
+    org_id = corpOrg?.id ?? null
+  }
+
+  if (!org_id) {
+    return NextResponse.json({ error: 'Could not resolve org_id for this user.' }, { status: 400 })
+  }
 
   // Optional overrides from request body
   const body = await req.json().catch(() => ({}))

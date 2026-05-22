@@ -77,7 +77,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'title is required' }, { status: 400 })
   }
 
-  const org_id = user.isCorporate ? (body.org_id ?? null) : (user.org_id ?? null)
+  // Resolve org_id — quotes.org_id is NOT NULL so we must always have a valid UUID.
+  // Corporate users often have org_id=null in Clerk metadata (GateGuard itself was never
+  // "onboarded" the way dealers are). Fall back to the corporate org row in Supabase.
+  let org_id: string | null = user.isCorporate ? (body.org_id ?? user.org_id ?? null) : (user.org_id ?? null)
+
+  if (!org_id) {
+    // Last resort: look up the corporate org row (org_tier = 'corporate')
+    const { data: corpOrg } = await supabase
+      .from('organizations')
+      .select('id')
+      .eq('org_tier', 'corporate')
+      .limit(1)
+      .single()
+    org_id = corpOrg?.id ?? null
+  }
+
+  if (!org_id) {
+    return NextResponse.json({ error: 'Could not resolve org_id — make sure your account has an organization assigned.' }, { status: 400 })
+  }
 
   // Auto-generate quote_number: GG-YYYY-NNNN
   const year = new Date().getFullYear()
