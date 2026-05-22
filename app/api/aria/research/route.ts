@@ -19,9 +19,25 @@
  *      - LinkedIn MDU account executive win posts
  *      - Third-party locator sites (fee breakdowns exposing bundled service charges)
  *      - Forced-service resident complaints (exclusive provider signals)
+ *      - Job postings listing telecom systems community managers must manage
+ *      - REIT earnings calls announcing portfolio-wide MDU rollouts
+ *      - City low-voltage/telecom permits (Accela) — ISPs pull permits when installing bulk
+ *      - Community social media (Facebook/Instagram/Nextdoor) — property announces new ISP deal
+ *      - ISP press releases naming property + contract term → exact expiry calculation
+ *      - Historical listing snapshots — provider switches reveal expired contracts
+ *      - ISP portfolio-level management company pages (gigstreem.com/amli/, etc.)
  *   5. Inject FCC + Tavily web intelligence as hard facts into ARIA's prompt
  *
- * Accuracy targets (with all 9 sources):
+ * KEY METHODOLOGY DISCOVERY (AMLI Marina Del Rey, May 2026):
+ *   ISPs with portfolio-level deals create dedicated management company pages:
+ *     gigstreem.com/amli/ — serves ALL AMLI residential properties
+ *   The official AMLI amenities page says "Bulk Wi-Fi" but omits the ISP name.
+ *   The ISP name surfaces in: (1) ISP's management-co page, (2) resident reviews,
+ *   (3) locator fee breakdowns, (4) job postings for community managers.
+ *   Search pattern: `"[PROPERTY NAME]" "[ISP]"` OR `"[MGMT-CO-SLUG]" site:[isp-domain].com`
+ *   Both spellings matter: Gigstreem (correct) and Gigastream (common typo) both appear in indexed content.
+ *
+ * Accuracy targets (with all 15 sources + provider slug + mgmt-co slug searches):
  *   - ISP availability: ~95% (FCC 477 data, updated twice yearly)
  *   - Video provider: ~85% (FCC + americantv.com + PCO sites + locator reviews)
  *   - Bulk/exclusive agreements: ~93%+ when OM or county deed found; locator/complaint sites add coverage
@@ -167,7 +183,49 @@ function extractLocationHint(query: string): string | null {
   return null
 }
 
-const KNOWN_MGMT_COS = ['greystar','lincoln property','bozzuto','maa','aimco','cortland','equity residential','avalon','avalonbay','camden','national','rpm living','cardinal group','grayco','windsor']
+const KNOWN_MGMT_COS = ['greystar','lincoln property','bozzuto','maa','aimco','cortland','equity residential','avalon','avalonbay','camden','national','rpm living','cardinal group','grayco','windsor','amli','nrp group','alliance residential','morgan properties','essex property','udr','independence realty','nvr','invitation homes','progress residential','mynd','tricon']
+
+/**
+ * Extract the management company name/slug from a query for use in ISP portfolio-page searches.
+ *
+ * DISCOVERY (AMLI Marina Del Rey investigation, May 2026):
+ * ISPs with portfolio-level MDU deals create dedicated management company pages:
+ *   gigstreem.com/amli/ → serves ALL AMLI properties
+ *   gigstreem.com/greystar/ → serves ALL Greystar properties
+ * Searching `"AMLI Marina Del Rey" site:gigstreem.com` finds these pages because the mgmt co name
+ * appears on the page even when the specific property name doesn't.
+ *
+ * Returns the short slug (e.g. "amli", "greystar") when a known mgmt co is detected.
+ */
+function extractMgmtCoSlug(query: string): string | null {
+  const q = query.toLowerCase()
+  const slugMap: Record<string, string> = {
+    'amli': 'amli',
+    'greystar': 'greystar',
+    'lincoln property': 'lincoln',
+    'bozzuto': 'bozzuto',
+    'maa': 'maa',
+    'aimco': 'aimco',
+    'cortland': 'cortland',
+    'equity residential': 'equity-residential',
+    'avalonbay': 'avalonbay',
+    'avalon': 'avalon',
+    'camden': 'camden',
+    'rpm living': 'rpm-living',
+    'cardinal group': 'cardinal-group',
+    'udr': 'udr',
+    'essex property': 'essex',
+    'nrp group': 'nrp',
+    'alliance residential': 'alliance',
+    'morgan properties': 'morgan',
+    'independence realty': 'independence-realty',
+    'tricon': 'tricon',
+  }
+  for (const [name, slug] of Object.entries(slugMap)) {
+    if (q.includes(name)) return slug
+  }
+  return null
+}
 
 /**
  * Extract the best search term from a query.
@@ -650,24 +708,26 @@ export async function POST(req: NextRequest) {
       ] = await Promise.all([
 
         // 1. Listing sites — most reliable for confirming "internet included" + exact provider
+        // NOTE: Include both "Gigstreem" (correct) and "Gigastream" (common typo) — both appear in wild
         tavilySearch(
-          `"${terms}" ${loc} "internet included" OR "bulk internet" OR "fiber included" OR "internet by" OR "Comcast included" OR "Spectrum included" OR "AT&T included" OR "DirecTV included" OR "DISH included" site:apartments.com OR site:apartmentlist.com OR site:rent.com OR site:zillow.com OR site:apartmentratings.com OR site:americantv.com`,
+          `"${terms}" ${loc} "internet included" OR "bulk internet" OR "fiber included" OR "internet by" OR "Comcast included" OR "Spectrum included" OR "AT&T included" OR "DirecTV included" OR "DISH included" OR "Gigstreem included" OR "Gigastream included" OR "Hotwire included" OR "Boingo included" site:apartments.com OR site:apartmentlist.com OR site:rent.com OR site:zillow.com OR site:apartmentratings.com OR site:americantv.com`,
           4, 'listing-site'),
 
         // 2. Reddit/reviews — "only option" + forced-provider language = exclusive bulk deal
         tavilySearch(
-          `"${terms}" ${loc} internet "only option" OR "can't use another" OR "forced to use" OR "included in rent" OR "only ISP" OR "building internet" OR "DirecTV bulk" OR "DISH bulk" OR "Spectrum bulk" site:reddit.com OR site:apartmentratings.com OR site:yelp.com OR site:google.com/maps`,
+          `"${terms}" ${loc} internet "only option" OR "can't use another" OR "forced to use" OR "included in rent" OR "only ISP" OR "building internet" OR "DirecTV bulk" OR "DISH bulk" OR "Spectrum bulk" OR "Gigstreem" OR "Gigastream" OR "Hotwire" OR "bulk wifi" OR "community wifi" site:reddit.com OR site:apartmentratings.com OR site:yelp.com OR site:google.com/maps`,
           5, 'social'),
 
         // 3. County deed / easement records — ISPs record MDU agreements against property title
+        // Use both correct (Gigstreem) and common typo (Gigastream) spellings
         tavilySearch(
-          `"${terms}" ${loc} apartment MDU broadband "memorandum of agreement" OR "right of entry" OR "easement" OR "bulk service agreement" OR "exclusive marketing agreement" internet provider county deed recorder DirecTV OR Charter OR Comcast OR Spectrum OR AT&T OR Gigastream`,
+          `"${terms}" ${loc} apartment MDU broadband "memorandum of agreement" OR "right of entry" OR "easement" OR "bulk service agreement" OR "exclusive marketing agreement" internet provider county deed recorder DirecTV OR Charter OR Comcast OR Spectrum OR AT&T OR Gigstreem OR Gigastream OR Hotwire OR "Pavlov Media" OR "WideOpenWest"`,
           3, 'county-deed'),
 
         // 4. ISP/PCO partnership announcements — Private Cable Operators (World Cinema, KruseCom, WhiteSky)
         // These PCOs install DirecTV/DISH bulk into buildings and list their portfolios as case studies
         tavilySearch(
-          `"${terms}" OR "${loc}" multifamily MDU "exclusive agreement" OR "bulk broadband" OR "community internet" OR "preferred provider" OR "agreement expires" OR "World Cinema" OR "KruseCom" OR "WhiteSky" OR "bulk video" DirecTV OR DISH OR Charter OR Comcast`,
+          `"${terms}" OR "${loc}" multifamily MDU "exclusive agreement" OR "bulk broadband" OR "community internet" OR "preferred provider" OR "agreement expires" OR "World Cinema" OR "KruseCom" OR "WhiteSky" OR "bulk video" OR "Gigstreem" OR "Gigastream" OR "Spot On Networks" OR "Wyyerd" DirecTV OR DISH OR Charter OR Comcast`,
           3, 'isp-partnership'),
 
         // 5. Commercial Real Estate Offering Memoranda — "Ancillary Income" section lists bulk provider + $ + expiry
@@ -685,7 +745,7 @@ export async function POST(req: NextRequest) {
         // 7. LinkedIn MDU sales rep win posts + americantv.com DirecTV dealer directory
         // MDU AEs post their wins: "excited to announce 10-year managed WiFi at [Property]!"
         tavilySearch(
-          `"MDU account executive" OR "connected communities" OR "MDU sales" ${loc} "secured" OR "awarded" OR "signed" OR "agreement" apartment OR multifamily DirecTV OR Charter OR Comcast OR Gigastream OR "Hotwire" OR "Spectrum" site:linkedin.com OR site:americantv.com`,
+          `"MDU account executive" OR "connected communities" OR "MDU sales" OR "multifamily internet" ${loc} "secured" OR "awarded" OR "signed" OR "agreement" apartment OR multifamily DirecTV OR Charter OR Comcast OR Gigstreem OR Gigastream OR "Hotwire" OR "Spectrum" OR "Pavlov Media" OR "Spot On Networks" site:linkedin.com OR site:americantv.com`,
           3, 'linkedin-mdu'),
 
         // 8. Third-party locator sites — fee breakdowns reveal bundled service charges
@@ -698,21 +758,21 @@ export async function POST(req: NextRequest) {
         // 9. Forced-service explicit resident complaints — strongest exclusive-provider signal
         // "I can't switch" / "only option" complaints on Google Maps, Yelp, Reddit NOT on official site
         tavilySearch(
-          `"${terms}" ${loc} ("forced to use" OR "have to use" OR "only option" OR "can't switch" OR "required to pay for" OR "no choice" OR "stuck with" OR "mandatory" OR "can't cancel") ("DirecTV" OR "Spectrum" OR "Comcast" OR "AT&T" OR "internet" OR "cable" OR "Gigastream" OR "DISH") -site:cortland.com -site:apartments.com -site:cortlandliving.com`,
+          `"${terms}" ${loc} ("forced to use" OR "have to use" OR "only option" OR "can't switch" OR "required to pay for" OR "no choice" OR "stuck with" OR "mandatory" OR "can't cancel") ("DirecTV" OR "Spectrum" OR "Comcast" OR "AT&T" OR "internet" OR "cable" OR "Gigstreem" OR "Gigastream" OR "DISH" OR "Hotwire" OR "Boingo") -site:cortland.com -site:apartments.com -site:cortlandliving.com`,
           4, 'forced-service'),
 
         // 10. Job postings for property staff — community managers list specific telecom systems they manage
         // "Responsible for coordinating with our bulk Wi-Fi partner, WhiteSky, and managing resident onboarding"
         // LinkedIn/Indeed/ZipRecruiter job descriptions are public and reveal the vendor inside the building
         tavilySearch(
-          `"${terms}" OR "${loc}" "community manager" OR "property manager" OR "maintenance supervisor" "manage" OR "coordinate" "bulk internet" OR "managed WiFi" OR "DirecTV" OR "Spectrum" OR "bulk cable" OR "telecom" OR "WhiteSky" OR "Boingo" OR "Gigastream" site:linkedin.com OR site:indeed.com OR site:ziprecruiter.com OR site:glassdoor.com`,
+          `"${terms}" OR "${loc}" "community manager" OR "property manager" OR "maintenance supervisor" "manage" OR "coordinate" "bulk internet" OR "managed WiFi" OR "DirecTV" OR "Spectrum" OR "bulk cable" OR "telecom" OR "WhiteSky" OR "Boingo" OR "Gigstreem" OR "Gigastream" OR "Hotwire" OR "Spot On Networks" OR "Wyyerd" site:linkedin.com OR site:indeed.com OR site:ziprecruiter.com OR site:glassdoor.com`,
           3, 'job-posting'),
 
         // 11. REIT earnings calls + investor materials — executives brag about portfolio-wide MDU rollouts
         // "We've completed a portfolio-wide managed WiFi rollout with Boingo across 40 communities"
         // Seeking Alpha, investor relations pages, SEC 8-K filings
         tavilySearch(
-          `${loc} multifamily REIT "managed WiFi" OR "bulk internet" OR "community internet" OR "portfolio-wide" OR "bulk broadband" rollout OR "agreement" OR "partner" Spectrum OR Comcast OR DirecTV OR Boingo OR Hotwire OR "Gigastream" OR "WhiteSky" site:seekingalpha.com OR site:sec.gov OR "earnings call" OR "investor presentation"`,
+          `${loc} multifamily REIT "managed WiFi" OR "bulk internet" OR "community internet" OR "portfolio-wide" OR "bulk broadband" rollout OR "agreement" OR "partner" Spectrum OR Comcast OR DirecTV OR Boingo OR Hotwire OR "Gigstreem" OR "Gigastream" OR "WhiteSky" OR "Spot On Networks" site:seekingalpha.com OR site:sec.gov OR "earnings call" OR "investor presentation"`,
           3, 'reit-earnings'),
 
         // 12. City low-voltage / telecom permits — ISPs pull permits when installing bulk infrastructure
@@ -723,10 +783,10 @@ export async function POST(req: NextRequest) {
           3, 'city-permit'),
 
         // 13. Community social media pages — property Facebook/Instagram/Nextdoor accounts announce new ISP deals
-        // "We're thrilled to announce our new internet partnership with Gigastream!"
+        // "We're thrilled to announce our new internet partnership with Gigstreem!"
         // Management cos post these on official community pages; Nextdoor admins post on behalf of the property
         tavilySearch(
-          `"${terms}" ${loc} "excited to announce" OR "thrilled to announce" OR "new internet" OR "new WiFi" OR "new partnership" OR "now offering" OR "bulk internet" OR "community WiFi" OR "included internet" "DirecTV" OR "Spectrum" OR "Comcast" OR "AT&T" OR "Gigastream" OR "Hotwire" OR "Boingo" OR "WhiteSky" site:facebook.com OR site:nextdoor.com OR site:instagram.com OR site:twitter.com OR site:x.com`,
+          `"${terms}" ${loc} "excited to announce" OR "thrilled to announce" OR "new internet" OR "new WiFi" OR "new partnership" OR "now offering" OR "bulk internet" OR "community WiFi" OR "included internet" "DirecTV" OR "Spectrum" OR "Comcast" OR "AT&T" OR "Gigstreem" OR "Gigastream" OR "Hotwire" OR "Boingo" OR "WhiteSky" OR "Wyyerd" site:facebook.com OR site:nextdoor.com OR site:instagram.com OR site:twitter.com OR site:x.com`,
           3, 'community-social'),
 
         // 14. ISP press releases with contract term details — ISPs issue press releases naming the property + deal term
@@ -734,7 +794,7 @@ export async function POST(req: NextRequest) {
         // PR Newswire, BusinessWire, Globe Newswire, and ISP newsrooms index these publicly
         // GOLD MINE for contract expiry: post date + stated term = exact expiry year
         tavilySearch(
-          `"${terms}" OR "${loc}" "signed" OR "agreement" OR "partnership" OR "contract" "year" "managed WiFi" OR "bulk internet" OR "bulk broadband" OR "community internet" OR "MDU" OR "multi-family" Hotwire OR Spectrum OR Comcast OR "World Cinema" OR Gigastream OR Boingo OR "Pavlov Media" OR "Bsquared" OR "WhiteSky" OR "KruseCom" site:prnewswire.com OR site:businesswire.com OR site:globenewswire.com OR site:accesswire.com`,
+          `"${terms}" OR "${loc}" "signed" OR "agreement" OR "partnership" OR "contract" "year" "managed WiFi" OR "bulk internet" OR "bulk broadband" OR "community internet" OR "MDU" OR "multi-family" Hotwire OR Spectrum OR Comcast OR "World Cinema" OR Gigstreem OR Gigastream OR Boingo OR "Pavlov Media" OR "Bsquared" OR "WhiteSky" OR "KruseCom" OR "Spot On Networks" OR "Wyyerd" site:prnewswire.com OR site:businesswire.com OR site:globenewswire.com OR site:accesswire.com`,
           3, 'isp-press-release'),
 
         // 15. Historical listing snapshots — detect provider SWITCHES (old listing shows Comcast, new shows Spectrum = Comcast contract expired)
@@ -749,31 +809,56 @@ export async function POST(req: NextRequest) {
       // 10. Provider slug page searches — check known MDU ISPs' property/operator pages
       // e.g. gigstreem.com/[property-slug] or pavlovmedia.com/[property-slug]
       // These pages are created by the ISP when they sign a bulk deal — highest confidence confirmation
+      //
+      // AMLI MARINA DEL REY DISCOVERY (May 2026):
+      // ISPs also create MANAGEMENT COMPANY portfolio pages: gigstreem.com/amli/ serves ALL AMLI properties.
+      // The winning search was `"AMLI Marina Del Rey" "gigstreem"` → returned gigstreem.com/amli/.
+      // So we run TWO searches per ISP domain: one with the full property name AND one with just the mgmt co slug.
       const propertySlug = terms.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+      const mgmtCoSlug = extractMgmtCoSlug(query) // e.g. "AMLI" → "amli", "Greystar" → "greystar"
       const providerSlugResults: TavilyResult[] = []
       if (mduProviderSlugs.length > 0) {
-        const slugSearches = mduProviderSlugs
+        const slugSearches: Array<Promise<TavilyResult[]>> = []
+
+        const providersToSearch = mduProviderSlugs
           .filter(p => p.property_page_pattern || p.operator_page_pattern)
           .slice(0, 8) // cap at 8 to avoid burning Tavily credits
-          .map(p => {
-            const domain = (p.property_page_pattern || p.operator_page_pattern || '')
-              .replace(/\{.*?\}/g, '') // strip {property} / {operator} template tokens
-              .replace(/\/$/, '')
-            if (!domain) return null
-            // Extract just the domain for site: search
-            const domainOnly = domain.replace(/^https?:\/\//, '').split('/')[0]
-            return tavilySearch(
-              `"${terms}" site:${domainOnly}`,
-              2,
-              'provider-slug'
-            )
-          })
-          .filter(Boolean)
 
-        const slugResponses = await Promise.allSettled(slugSearches as Promise<TavilyResult[]>[])
+        for (const p of providersToSearch) {
+          const domain = (p.property_page_pattern || p.operator_page_pattern || '')
+            .replace(/\{.*?\}/g, '') // strip {property} / {operator} template tokens
+            .replace(/\/$/, '')
+          if (!domain) continue
+          const domainOnly = domain.replace(/^https?:\/\//, '').split('/')[0]
+
+          // Search 1: full property name on ISP domain (finds property-specific pages)
+          slugSearches.push(tavilySearch(`"${terms}" site:${domainOnly}`, 2, 'provider-slug'))
+
+          // Search 2: management company name on ISP domain (finds portfolio-level partnership pages)
+          // CRITICAL: This is how we found gigstreem.com/amli/ for AMLI Marina Del Rey
+          if (mgmtCoSlug && mgmtCoSlug.length > 2) {
+            slugSearches.push(tavilySearch(`"${mgmtCoSlug}" site:${domainOnly}`, 2, 'provider-slug'))
+          }
+        }
+
+        const slugResponses = await Promise.allSettled(slugSearches)
         for (const res of slugResponses) {
           if (res.status === 'fulfilled') providerSlugResults.push(...res.value)
         }
+      }
+
+      // Also run a direct ISP-name search for major MDU ISPs not yet in the mdu_providers table
+      // These are the ISPs most likely to have portfolio-level management company pages
+      // Using both correct spellings and common typos since both appear in indexed content
+      const directIspSearches = await Promise.all([
+        tavilySearch(`"${terms}" OR "${mgmtCoSlug ?? terms}" site:gigstreem.com`, 2, 'provider-slug'),
+        tavilySearch(`"${terms}" OR "${mgmtCoSlug ?? terms}" site:hotwire.com`, 2, 'provider-slug'),
+        tavilySearch(`"${terms}" site:pavlovmedia.com`, 2, 'provider-slug'),
+        tavilySearch(`"${terms}" site:spotonnetworks.com`, 2, 'provider-slug'),
+        tavilySearch(`"${terms}" OR "${mgmtCoSlug ?? terms}" site:boingo.com`, 2, 'provider-slug'),
+      ])
+      for (const results of directIspSearches) {
+        providerSlugResults.push(...results)
       }
 
       const allResults = [
@@ -975,7 +1060,8 @@ BULK AGREEMENT RESEARCH (CRITICAL ACCURACY RULES — READ CAREFULLY):
   6b. [FORCED-SERVICE] resident complaint on Google/Yelp/Reddit (not official property site) explicitly says "forced to use [ISP]", "can't switch", "stuck with [ISP]" → agreement_type="exclusive", confidence="medium-high" — unsolicited complaints are strong exclusive-provider signals
   7. [ISP-PARTNERSHIP] PCO (World Cinema/KruseCom/WhiteSky) case study names building → confidence="medium"
 - WEB INTELLIGENCE (provided below with source labels): ALWAYS higher priority than FCC data or pattern inference.
-- Local/regional ISPs (Gigastream, Sonic, Hotwire, WideOpenWest, Vyve, Metronet, IgLou, Blue Ridge) frequently have MDU exclusive deals. Trust these when mentioned even once.
+- Local/regional ISPs (Gigstreem [NOTE: "Gigastream" is a common misspelling of Gigstreem — treat as same ISP], Sonic, Hotwire, WideOpenWest, Vyve, Metronet, IgLou, Blue Ridge, Spot On Networks, Wyyerd, Pavlov Media, Bsquared) frequently have MDU exclusive deals. Trust these when mentioned even once.
+- MANAGEMENT COMPANY PORTFOLIO PAGES: If a [PROVIDER-SLUG-PAGE] source is from [isp-domain].com/[management-company-slug]/ (e.g. gigstreem.com/amli/), this confirms the ISP has a PORTFOLIO-LEVEL deal with the management company — treat as confidence="high" for ANY property in that management company's portfolio. Key discovery: official property amenities pages say "Bulk Wi-Fi" but omit the ISP name; the ISP name surfaces on the ISP's own mgmt-co page.
 - americantv.com lists DirecTV MDU dealers who serve specific markets — if a dealer is listed as active in a city, treat as supporting evidence for DirecTV/AT&T video presence.
 - Private Cable Operators (World Cinema, KruseCom, WhiteSky, Encompass) install DISH/DirecTV bulk. If their case studies mention a building → strong DISH/DirecTV signal.
 - Do NOT default to Spectrum/Comcast/AT&T just because they're the largest carrier. The actual MDU provider could be a local ISP.
