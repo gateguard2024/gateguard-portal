@@ -355,7 +355,6 @@ const ariaResearchTool: Anthropic.Tool = {
             },
             generic_reply_rate: { type: 'number' },
           },
-          required: ['property', 'decision_maker', 'decision_maker_chain', 'ownership', 'pain_signals', 'profile', 'email_variants', 'generic_reply_rate'],
         },
       },
     },
@@ -547,6 +546,10 @@ Call the aria_research_result tool with your findings now.`
         .from('aria_searches')
         .insert({
           org_id,
+          user_id:    user?.id ?? null,
+          user_name:  user ? user.name || user.email || null : null,
+          user_email: user?.email ?? null,
+          search_type: 'base',
           query: query.trim(),
           query_interpretation: data.query_interpretation ?? null,
           results: data,

@@ -136,7 +136,32 @@ interface DeepIntelResult {
   key_finding: string;
   confidence: 'high' | 'medium' | 'low';
   atlas_opportunity?: boolean;
+  edgar_signal?: boolean;
+  permit_signal?: boolean;
   sources: DeepIntelSource[];
+  intelligence_sources?: {
+    edgar: boolean;
+    puc: boolean;
+    permits: boolean;
+    isp_press: boolean;
+    listing_sites: boolean;
+  };
+  ownership?: {
+    owner_entity?: string;
+    owner_type?: string;
+    portfolio_size?: string;
+    acquisition_year?: string;
+    capex_signal?: string;
+    sec_filing_ref?: string;
+    asset_manager?: {
+      name?: string;
+      title?: string;
+      company?: string;
+      linkedin_slug?: string;
+      email?: string;
+      email_confidence?: number;
+    };
+  };
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -285,13 +310,23 @@ export default function ARIAPage() {
   const [deepLoading, setDeepLoading]       = useState(false);
   const [deepIntel, setDeepIntel]           = useState<DeepIntelResult | null>(null);
   const [deepError, setDeepError]           = useState<string | null>(null);
+  const [usageStats, setUsageStats]         = useState<{
+    my_searches: { total: number; base: number; deep: number; this_week: number; this_month: number };
+    my_org:      { org_name: string | null; total: number; this_month: number; top_users: { user_name: string; count: number }[] };
+    hierarchy:   { org_id: string; org_name: string; org_tier: string; own_count: number; child_count: number; total_count: number; depth: number }[];
+    corporate_total: number;
+  } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Load saved searches on mount
+  // Load saved searches + usage stats on mount
   useEffect(() => {
     fetch('/api/aria/searches')
       .then(r => r.ok ? r.json() : { searches: [] })
       .then(d => setSavedSearches(d.searches ?? []))
+      .catch(() => {});
+    fetch('/api/aria/usage')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && !d.error) setUsageStats(d); })
       .catch(() => {});
   }, []);
 
@@ -479,20 +514,125 @@ export default function ARIAPage() {
             </div>
           </div>
 
-          {/* Stats strip */}
-          <div className="flex gap-8 shrink-0">
-            {[
-              { label: "Targets Enriched", value: "1,847", icon: Building2 },
-              { label: "Campaigns Sent",   value: "312",   icon: Mail      },
-              { label: "Avg Reply Rate",   value: "21.4%", icon: TrendingUp },
-            ].map(({ label, value }) => (
-              <div key={label} className="text-center">
-                <p className="text-lg font-bold text-gray-900 tabular-nums">{value}</p>
-                <p className="text-[11px] text-gray-400">{label}</p>
-              </div>
-            ))}
+          {/* Stats strip — live usage */}
+          <div className="flex gap-6 shrink-0">
+            <div className="text-center">
+              <p className="text-lg font-bold text-gray-900 tabular-nums">
+                {usageStats ? usageStats.my_searches.total : '—'}
+              </p>
+              <p className="text-[11px] text-gray-400">My Searches</p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-bold text-gray-900 tabular-nums">
+                {usageStats ? usageStats.my_org.total : '—'}
+              </p>
+              <p className="text-[11px] text-gray-400">{usageStats?.my_org.org_name ?? 'My Org'}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-bold text-[#6B7EFF] tabular-nums">
+                {usageStats ? usageStats.corporate_total : '—'}
+              </p>
+              <p className="text-[11px] text-gray-400">Network Total</p>
+            </div>
           </div>
         </div>
+
+        {/* ── ARIA Usage Panel ────────────────────────────────────────── */}
+        {usageStats && (usageStats.my_searches.total > 0 || usageStats.hierarchy.length > 0) && (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <TrendingUp size={13} className="text-[#6B7EFF]" />
+                <span className="text-sm font-semibold text-gray-800">ARIA Usage</span>
+                <span className="text-[10px] font-bold bg-[#EEF0FF] text-[#6B7EFF] px-2 py-0.5 rounded-full">
+                  {usageStats.corporate_total} total searches
+                </span>
+              </div>
+              <span className="text-[11px] text-gray-400">Rolls up through org hierarchy</span>
+            </div>
+            <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* My stats */}
+              <div className="rounded-xl bg-[#F8FAFC] border border-gray-100 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">My Activity</p>
+                <div className="space-y-1.5">
+                  {[
+                    { label: 'Total searches', value: usageStats.my_searches.total },
+                    { label: 'Base searches',  value: usageStats.my_searches.base },
+                    { label: 'Deep intel',     value: usageStats.my_searches.deep },
+                    { label: 'This week',      value: usageStats.my_searches.this_week },
+                    { label: 'This month',     value: usageStats.my_searches.this_month },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="flex items-center justify-between">
+                      <span className="text-[11px] text-gray-500">{label}</span>
+                      <span className="text-[12px] font-bold text-gray-800 tabular-nums">{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Org stats + top users */}
+              <div className="rounded-xl bg-[#F8FAFC] border border-gray-100 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">
+                  {usageStats.my_org.org_name ?? 'My Organization'}
+                </p>
+                <div className="space-y-1.5 mb-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-gray-500">Total searches</span>
+                    <span className="text-[12px] font-bold text-gray-800 tabular-nums">{usageStats.my_org.total}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-gray-500">This month</span>
+                    <span className="text-[12px] font-bold text-gray-800 tabular-nums">{usageStats.my_org.this_month}</span>
+                  </div>
+                </div>
+                {usageStats.my_org.top_users.length > 0 && (
+                  <>
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Top Users</p>
+                    <div className="space-y-1">
+                      {usageStats.my_org.top_users.map((u, i) => (
+                        <div key={i} className="flex items-center justify-between">
+                          <span className="text-[11px] text-gray-600 truncate max-w-[120px]">{u.user_name}</span>
+                          <span className="text-[11px] font-bold text-[#6B7EFF] tabular-nums">{u.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Hierarchy rollup */}
+              <div className="rounded-xl bg-[#F8FAFC] border border-gray-100 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Network Rollup</p>
+                {usageStats.hierarchy.length === 0 ? (
+                  <p className="text-[11px] text-gray-400">No hierarchy data</p>
+                ) : (
+                  <div className="space-y-2">
+                    {usageStats.hierarchy.map(h => (
+                      <div key={h.org_id} style={{ paddingLeft: `${h.depth * 10}px` }}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <div className="w-1 h-1 rounded-full bg-gray-300 shrink-0" />
+                            <span className="text-[11px] text-gray-700 truncate max-w-[110px]">{h.org_name}</span>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span className="text-[11px] font-bold text-[#6B7EFF] tabular-nums">{h.total_count}</span>
+                            {h.child_count > 0 && (
+                              <span className="text-[9px] text-gray-400">({h.own_count}+{h.child_count})</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="pt-1.5 mt-1.5 border-t border-gray-200 flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-gray-700">Network Total</span>
+                      <span className="text-[13px] font-bold text-[#6B7EFF] tabular-nums">{usageStats.corporate_total}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Recent ARIA Searches ────────────────────────────────────── */}
         {savedSearches.length > 0 && (
@@ -1052,23 +1192,119 @@ export default function ARIAPage() {
                         );
                       })()}
 
-                      {/* Tavily sources */}
+                      {/* Intelligence source badges — show which premium sources fired */}
+                      {deepIntel?.intelligence_sources && (
+                        <div className="pt-1.5 border-t border-gray-100">
+                          <p className="text-[9px] text-gray-400 mb-1.5 uppercase font-bold tracking-widest">Intelligence Sources</p>
+                          <div className="flex flex-wrap gap-1">
+                            {deepIntel.intelligence_sources.edgar && (
+                              <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-700">
+                                📋 SEC EDGAR
+                              </span>
+                            )}
+                            {deepIntel.intelligence_sources.puc && (
+                              <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-50 border border-purple-200 text-purple-700">
+                                🏛 State PUC
+                              </span>
+                            )}
+                            {deepIntel.intelligence_sources.permits && (
+                              <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange-50 border border-orange-200 text-orange-700">
+                                🔨 City Permits
+                              </span>
+                            )}
+                            {deepIntel.intelligence_sources.isp_press && (
+                              <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-cyan-50 border border-cyan-200 text-cyan-700">
+                                📡 ISP Press
+                              </span>
+                            )}
+                            {deepIntel.intelligence_sources.listing_sites && (
+                              <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-700">
+                                🏠 Listing Sites
+                              </span>
+                            )}
+                            <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-50 border border-gray-200 text-gray-600">
+                              🌐 Web Search
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Ownership / Asset Manager card — appears when Deep Intel finds ownership data */}
+                      {deepIntel?.ownership?.owner_entity && deepIntel.ownership.owner_entity !== 'Unknown' && (
+                        <div className="pt-2 border-t border-gray-100">
+                          <div className="flex items-center gap-1 mb-1.5">
+                            <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Ownership Intel</p>
+                            {deepIntel.edgar_signal && (
+                              <span className="text-[8px] font-bold px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200">SEC VERIFIED</span>
+                            )}
+                          </div>
+                          <div className="rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-2 space-y-1.5">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <p className="text-[11px] font-bold text-slate-800">{deepIntel.ownership.owner_entity}</p>
+                                {deepIntel.ownership.owner_type && deepIntel.ownership.owner_type !== 'unknown' && (
+                                  <p className="text-[9px] text-slate-500 capitalize mt-0.5">{deepIntel.ownership.owner_type.replace(/_/g, ' ')}</p>
+                                )}
+                              </div>
+                              {deepIntel.ownership.portfolio_size && (
+                                <span className="text-[9px] text-slate-500 shrink-0">{deepIntel.ownership.portfolio_size}</span>
+                              )}
+                            </div>
+                            {deepIntel.ownership.capex_signal && (
+                              <div className="flex items-start gap-1">
+                                <span className="text-amber-500 text-[10px]">⚡</span>
+                                <p className="text-[9px] text-amber-700">{deepIntel.ownership.capex_signal}</p>
+                              </div>
+                            )}
+                            {deepIntel.ownership.asset_manager?.name && (
+                              <div className="pt-1.5 border-t border-slate-200">
+                                <p className="text-[9px] font-bold text-[#6B7EFF] uppercase tracking-widest mb-0.5">📞 Call This Person</p>
+                                <p className="text-[11px] font-semibold text-slate-800">{deepIntel.ownership.asset_manager.name}</p>
+                                <p className="text-[10px] text-slate-500">{deepIntel.ownership.asset_manager.title} · {deepIntel.ownership.asset_manager.company}</p>
+                                {deepIntel.ownership.asset_manager.email && (
+                                  <p className="text-[9px] text-[#6B7EFF] mt-0.5 font-mono">{deepIntel.ownership.asset_manager.email}
+                                    {deepIntel.ownership.asset_manager.email_confidence && (
+                                      <span className="ml-1 text-gray-400">({Math.round((deepIntel.ownership.asset_manager.email_confidence ?? 0) * 100)}% conf)</span>
+                                    )}
+                                  </p>
+                                )}
+                                {deepIntel.ownership.sec_filing_ref && (
+                                  <p className="text-[8px] text-gray-400 mt-0.5 italic">Source: {deepIntel.ownership.sec_filing_ref}</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Sources list */}
                       {deepIntel?.sources && deepIntel.sources.length > 0 && (
                         <div className="pt-1.5 border-t border-gray-100">
                           <p className="text-[9px] text-gray-400 mb-1.5">Sources</p>
                           <div className="space-y-1">
-                            {deepIntel.sources.slice(0, 4).map((s, i) => (
-                              <a
-                                key={i}
-                                href={s.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-start gap-1.5 group"
-                              >
-                                <ExternalLink size={8} className="text-gray-300 group-hover:text-[#6B7EFF] mt-0.5 shrink-0" />
-                                <span className="text-[9px] text-gray-400 group-hover:text-[#6B7EFF] truncate leading-tight">{s.title}</span>
-                              </a>
-                            ))}
+                            {deepIntel.sources.slice(0, 5).map((s, i) => {
+                              const sourceType = (s as any).type as string | undefined
+                              const typeBadge: Record<string, string> = {
+                                EDGAR: 'text-blue-600', PUC: 'text-purple-600',
+                                CityPermit: 'text-orange-600', 'ISP-Press': 'text-cyan-600',
+                                'listing-site': 'text-emerald-600',
+                              }
+                              return (
+                                <a
+                                  key={i}
+                                  href={s.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-start gap-1.5 group"
+                                >
+                                  <ExternalLink size={8} className={`${typeBadge[sourceType ?? ''] ?? 'text-gray-300'} group-hover:text-[#6B7EFF] mt-0.5 shrink-0`} />
+                                  <span className="text-[9px] text-gray-400 group-hover:text-[#6B7EFF] truncate leading-tight">{s.title}</span>
+                                  {sourceType && typeBadge[sourceType] && (
+                                    <span className={`text-[8px] font-bold shrink-0 ${typeBadge[sourceType]}`}>{sourceType}</span>
+                                  )}
+                                </a>
+                              )
+                            })}
                           </div>
                         </div>
                       )}

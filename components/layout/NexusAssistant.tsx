@@ -15,11 +15,11 @@ interface Message {
 }
 
 interface Alert {
-  type: 'todo' | 'quote' | 'wo'
+  type: 'todo' | 'quote' | 'wo' | 'scout'
   label: string
   count: number
   href: string
-  icon: 'todo' | 'quote' | 'wo'
+  icon: 'todo' | 'quote' | 'wo' | 'scout'
 }
 
 // ─── Quick prompt chips ──────────────────────────────────────────────────────
