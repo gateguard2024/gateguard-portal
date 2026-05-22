@@ -10,12 +10,12 @@ import {
   Globe, ClipboardList, Headphones, FileCheck,
   Megaphone, Map, BookOpen, Tv, Zap,
   Layers, Server, UserCheck, ShieldCheck, Star,
-  GraduationCap, Crosshair,
+  GraduationCap, Crosshair, Activity,
   User, RefreshCw, Wrench as TechIcon,
   ClipboardCheck, Building2, DollarSign,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, Tv: Satellite } = require("lucide-react") as any;
+const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, Tv: Satellite, Flame, Hash } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useUser, useClerk, useSession } from "@clerk/nextjs";
@@ -63,6 +63,8 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Customers",        href: "/customers", icon: Users,          description: "All customer accounts" },
       { label: "Quotes",           href: "/quotes",    icon: FileText,       description: "Proposals and approvals" },
       { label: "Operating System", href: "/eos",       icon: Layers,         description: "EOS — Rocks, Scorecard, L10" },
+      { label: "The Feed",         href: "/feed",      icon: Flame,          description: "Team wins, challenges, leaderboard", badge: "New" },
+      { label: "Messages",         href: "/communications", icon: Hash,      description: "Team messaging — channels + DMs", badge: "Soon" },
       { label: "Events",           href: "/events",    icon: Calendar,       description: "Property events and milestones" },
       { label: "Incidents",        href: "/incidents", icon: AlertOctagon,   description: "Gate failures, security events" },
       { label: "Analytics",        href: "/analytics", icon: BarChart3Icon,  description: "MRR trends, property health" },
@@ -144,11 +146,12 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Settings",
     icon: Settings,
     items: [
-      { label: "Company Setup",   href: "/onboarding",     icon: Building2,  description: "Company info, logo, integrations" },
-      { label: "Organizations",   href: "/admin",          icon: Network,    description: "5-tier org hierarchy" },
-      { label: "User Management", href: "/admin/users",    icon: UserCog,    description: "Roles and access control" },
-      { label: "Communications",  href: "/communications", icon: Headphones, description: "Messaging and notifications" },
-      { label: "Customer Portal", href: "/portal",         icon: Globe,      description: "Property manager view" },
+      { label: "Company Setup",   href: "/onboarding",              icon: Building2,  description: "Company info, logo, integrations" },
+      { label: "Subscription",    href: "/settings/subscription",   icon: CreditCard, description: "Plan, add-ons, billing" },
+      { label: "Organizations",   href: "/admin",                   icon: Network,    description: "5-tier org hierarchy" },
+      { label: "User Management", href: "/admin/users",             icon: UserCog,    description: "Roles and access control" },
+      { label: "Notifications",   href: "/communications",          icon: Headphones, description: "Alerts and notification preferences" },
+      { label: "Customer Portal", href: "/portal",                  icon: Globe,      description: "Property manager view" },
     ],
   },
 ];
