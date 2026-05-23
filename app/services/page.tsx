@@ -121,207 +121,232 @@ export default function ServicesPage() {
   }, [category, search])
 
   const featured = CATALOG.filter(s => s.is_featured)
-
-  // Summary stats
   const enrolledServices = CATALOG.filter(s => enrolled.has(s.id))
   const totalMRR = enrolledServices.reduce((sum, s) => sum + mrrEstimate(s, calcUnits), 0)
 
+  function toggleEnroll(id: string) {
+    setEnrolled(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+
   return (
-    <div className="min-h-screen bg-[#F8FAFC]">
-      <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className="flex h-screen bg-[#F8FAFC] overflow-hidden">
 
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 rounded-xl bg-brand-50 border border-brand-200 flex items-center justify-center">
-                  <ShoppingBag className="w-5 h-5 text-brand-500" />
-                </div>
-                <h1 className="text-2xl font-bold text-gray-900">Service Marketplace</h1>
-                <span className="text-xs font-semibold bg-brand-100 text-brand-700 px-2.5 py-1 rounded-full border border-brand-200">
-                  {CATALOG.length} Services
-                </span>
-              </div>
-              <p className="text-sm text-gray-500 max-w-xl">
-                Bundle recurring services into every property quote. TV, internet, video monitoring, smart locks, and more — all tracked in GateGuard with your commission built in.
-              </p>
-            </div>
+      {/* ── Left rail ──────────────────────────────────────────────────────── */}
+      <aside className="w-56 shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
 
-            {/* MRR estimator summary */}
-            <div className="bg-white border border-border rounded-xl p-4 min-w-[260px]">
-              <div className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">MRR ESTIMATOR</div>
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-sm text-gray-500">Units per property:</span>
-                <input
-                  type="number"
-                  value={calcUnits}
-                  onChange={e => setCalcUnits(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-20 h-8 border border-border rounded-lg px-2 text-sm font-mono text-center"
-                />
-              </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-bold text-brand-500">${totalMRR.toFixed(0)}</span>
-                <span className="text-sm text-gray-400">/mo dealer commission</span>
-              </div>
-              <div className="text-xs text-gray-400 mt-1">from {enrolled.size} enrolled services × {calcUnits} units</div>
+        {/* Page title */}
+        <div className="px-5 pt-6 pb-4 border-b border-gray-100">
+          <div className="flex items-center gap-2.5 mb-1">
+            <div className="w-8 h-8 rounded-lg bg-brand-50 border border-brand-100 flex items-center justify-center text-base">
+              🏪
             </div>
+            <span className="text-sm font-bold text-gray-900">Marketplace</span>
           </div>
+          <p className="text-[11px] text-gray-400 leading-relaxed">
+            Bundle recurring services into every property quote.
+          </p>
         </div>
 
-        {/* Featured strip */}
-        {category === 'all' && !search && (
-          <div className="mb-8">
-            <div className="flex items-center gap-2 mb-3">
-              <Star className="w-4 h-4 text-amber-500" />
-              <span className="text-sm font-semibold text-gray-700">Featured — Highest Earning</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {featured.map(s => (
-                <button
-                  key={s.id}
-                  onClick={() => setDetail(s)}
-                  className="text-left bg-white border border-border rounded-xl p-4 hover:border-brand-300 hover:shadow-sm transition-all group"
-                >
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl border" style={{ background: `${s.provider_color}14`, borderColor: `${s.provider_color}30` }}>
-                      {s.logo_emoji}
-                    </div>
-                    <div>
-                      <div className="text-xs font-semibold text-gray-900 leading-tight">{s.name}</div>
-                      <div className="text-xs text-gray-400">{s.provider}</div>
-                    </div>
-                  </div>
-                  <div className="text-lg font-bold" style={{ color: s.provider_color }}>{formatPrice(s)}</div>
-                  <div className="text-xs text-emerald-600 font-semibold mt-1">
-                    {s.dealer_commission_pct > 0 ? `${s.dealer_commission_pct}% dealer commission` : 'Install margin'}
-                  </div>
-                  {enrolled.has(s.id) && (
-                    <div className="flex items-center gap-1 mt-2 text-xs text-emerald-600 font-semibold">
-                      <CheckCircle2 className="w-3 h-3" /> Enrolled
-                    </div>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Category nav */}
+        <nav className="p-3 flex-1">
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 mb-2">Categories</div>
+          {CATEGORIES.map(c => {
+            const count = c.id === 'all' ? CATALOG.length : CATALOG.filter(s => s.category === c.id).length
+            return (
+              <button
+                key={c.id}
+                onClick={() => setCategory(c.id)}
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-sm mb-0.5 transition-all
+                  ${category === c.id
+                    ? 'bg-brand-50 text-brand-700 font-semibold'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+              >
+                <span className="text-base leading-none w-5 text-center">{c.emoji}</span>
+                <span className="flex-1 text-[13px]">{c.label}</span>
+                <span className={`text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded-full
+                  ${category === c.id ? 'bg-brand-100 text-brand-600' : 'bg-gray-100 text-gray-400'}`}>
+                  {count}
+                </span>
+              </button>
+            )
+          })}
+        </nav>
 
-        {/* Search + category filter */}
-        <div className="flex flex-col sm:flex-row gap-3 mb-6">
-          <div className="relative flex-1">
+        {/* MRR estimator */}
+        <div className="p-4 border-t border-gray-100 bg-gray-50">
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">MRR Estimator</div>
+          <div className="mb-3">
+            <label className="text-[11px] text-gray-500 block mb-1">Units per property</label>
+            <input
+              type="number"
+              value={calcUnits}
+              onChange={e => setCalcUnits(Math.max(1, parseInt(e.target.value) || 1))}
+              className="w-full h-8 border border-gray-200 rounded-lg px-2 text-sm font-mono text-center bg-white focus:outline-none focus:ring-1 focus:ring-brand-400"
+            />
+          </div>
+          <div className="bg-white rounded-xl p-3 border border-gray-200">
+            <div className="text-xl font-bold text-brand-600">${totalMRR.toFixed(0)}<span className="text-xs font-normal text-gray-400">/mo</span></div>
+            <div className="text-[10px] text-gray-400 mt-0.5">{enrolled.size} services enrolled</div>
+          </div>
+          {enrolled.size > 0 && (
+            <div className="mt-2 text-[10px] text-emerald-600 font-semibold text-center">
+              ${(totalMRR * 12).toFixed(0)}/yr dealer commission
+            </div>
+          )}
+        </div>
+      </aside>
+
+      {/* ── Main content ────────────────────────────────────────────────────── */}
+      <main className="flex-1 flex flex-col overflow-hidden">
+
+        {/* Top bar */}
+        <div className="bg-white border-b border-gray-200 px-8 py-4 flex items-center gap-4 shrink-0">
+          <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search services, providers…"
-              className="w-full h-9 pl-9 pr-4 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-200"
+              placeholder="Search services or providers…"
+              className="w-full h-9 pl-9 pr-4 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-200 transition-colors"
             />
             {search && (
               <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                <X className="w-4 h-4" />
+                <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
-          <div className="flex gap-2 flex-wrap">
-            {CATEGORIES.map(c => (
-              <button
-                key={c.id}
-                onClick={() => setCategory(c.id)}
-                className={`h-9 px-3 rounded-lg text-xs font-semibold border transition-colors whitespace-nowrap
-                  ${category === c.id
-                    ? 'bg-brand-600 border-brand-600 text-white'
-                    : 'bg-white border-border text-gray-600 hover:border-brand-300'
-                  }`}
-              >
-                {c.emoji} {c.label}
-              </button>
+
+          <div className="text-xs text-gray-400">
+            <span className="font-semibold text-gray-700">{filtered.length}</span> service{filtered.length !== 1 ? 's' : ''}
+            {category !== 'all' && <span> in <span className="font-semibold text-gray-700">{CATEGORIES.find(c => c.id === category)?.label}</span></span>}
+          </div>
+
+          <div className="ml-auto flex items-center gap-2">
+            {enrolled.size > 0 && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-semibold text-emerald-700">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                {enrolled.size} enrolled
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto px-8 py-6">
+
+          {/* Featured strip — only when showing all */}
+          {category === 'all' && !search && (
+            <div className="mb-8">
+              <div className="flex items-center gap-2 mb-4">
+                <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
+                <span className="text-sm font-bold text-gray-800">Featured — Highest Earning</span>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {featured.map(s => (
+                  <button
+                    key={s.id}
+                    onClick={() => setDetail(s)}
+                    className="text-left bg-white border border-gray-200 rounded-xl p-5 hover:border-brand-300 hover:shadow-md transition-all group"
+                  >
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-11 h-11 rounded-xl flex items-center justify-center text-2xl border shrink-0"
+                        style={{ background: `${s.provider_color}12`, borderColor: `${s.provider_color}28` }}>
+                        {s.logo_emoji}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-gray-900 leading-tight truncate">{s.name}</div>
+                        <div className="text-[11px] text-gray-400 mt-0.5 truncate">{s.provider}</div>
+                      </div>
+                    </div>
+                    <div className="text-xl font-bold mb-1" style={{ color: s.provider_color }}>{formatPrice(s)}</div>
+                    <div className="text-xs text-emerald-600 font-semibold">
+                      {s.dealer_commission_pct > 0 ? `${s.dealer_commission_pct}% commission` : 'Install margin'}
+                    </div>
+                    {enrolled.has(s.id) && (
+                      <div className="flex items-center gap-1 mt-3 text-xs text-emerald-600 font-semibold">
+                        <CheckCircle2 className="w-3 h-3" /> Enrolled
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Service cards grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
+            {filtered.map(s => (
+              <ServiceCard
+                key={s.id}
+                service={s}
+                enrolled={enrolled.has(s.id)}
+                calcUnits={calcUnits}
+                onEnroll={() => toggleEnroll(s.id)}
+                onDetail={() => setDetail(s)}
+              />
             ))}
           </div>
-        </div>
 
-        {/* Results count */}
-        <div className="text-xs text-gray-400 mb-4 font-mono">
-          {filtered.length} service{filtered.length !== 1 ? 's' : ''} {category !== 'all' ? `in ${CATEGORIES.find(c => c.id === category)?.label}` : 'total'}
-          {search ? ` matching "${search}"` : ''}
-        </div>
-
-        {/* Service cards grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map(s => (
-            <ServiceCard
-              key={s.id}
-              service={s}
-              enrolled={enrolled.has(s.id)}
-              calcUnits={calcUnits}
-              onEnroll={() => setEnrolled(prev => {
-                const next = new Set(prev)
-                if (next.has(s.id)) next.delete(s.id); else next.add(s.id)
-                return next
-              })}
-              onDetail={() => setDetail(s)}
-            />
-          ))}
-        </div>
-
-        {filtered.length === 0 && (
-          <div className="text-center py-16 text-gray-400">
-            <div className="text-4xl mb-3">🔍</div>
-            <div className="font-semibold text-gray-600 mb-1">No services found</div>
-            <div className="text-sm">Try a different category or clear your search.</div>
-          </div>
-        )}
-
-        {/* Enrolled services summary */}
-        {enrolled.size > 0 && (
-          <div className="mt-12">
-            <div className="flex items-center gap-2 mb-4">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <span className="text-sm font-semibold text-gray-700">Your Enrolled Services ({enrolled.size})</span>
+          {filtered.length === 0 && (
+            <div className="text-center py-20 text-gray-400">
+              <div className="text-5xl mb-4">🔍</div>
+              <div className="font-semibold text-gray-600 mb-1">No services found</div>
+              <div className="text-sm">Try a different category or clear your search.</div>
             </div>
-            <div className="bg-white border border-border rounded-xl overflow-hidden">
+          )}
+
+          {/* Enrolled summary table */}
+          {enrolled.size > 0 && (
+            <div className="mt-10">
+              <div className="flex items-center gap-2 mb-4">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span className="text-sm font-bold text-gray-800">Your Enrolled Services ({enrolled.size})</span>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-border bg-gray-50">
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Service</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Provider</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Rate</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Commission</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Est. MRR</th>
+                  <tr className="border-b border-gray-100 bg-gray-50">
+                    <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Service</th>
+                    <th className="text-left px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Provider</th>
+                    <th className="text-right px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Rate</th>
+                    <th className="text-right px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Commission</th>
+                    <th className="text-right px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Est. MRR</th>
                   </tr>
                 </thead>
                 <tbody>
                   {enrolledServices.map((s, i) => (
-                    <tr key={s.id} className={i < enrolledServices.length - 1 ? 'border-b border-border' : ''}>
-                      <td className="px-4 py-3 font-medium text-gray-900">
-                        <span className="mr-2">{s.logo_emoji}</span>{s.name}
+                    <tr key={s.id} className={`hover:bg-gray-50 transition-colors ${i < enrolledServices.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                      <td className="px-5 py-4 font-semibold text-gray-900">
+                        <span className="mr-2 text-base">{s.logo_emoji}</span>{s.name}
                       </td>
-                      <td className="px-4 py-3 text-gray-500">{s.provider}</td>
-                      <td className="px-4 py-3 text-right font-mono text-gray-700">{formatPrice(s)}</td>
-                      <td className="px-4 py-3 text-right">
-                        <span className="text-xs font-semibold text-emerald-600">
+                      <td className="px-5 py-4 text-gray-500">{s.provider}</td>
+                      <td className="px-5 py-4 text-right font-mono text-gray-700">{formatPrice(s)}</td>
+                      <td className="px-5 py-4 text-right">
+                        <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
                           {s.dealer_commission_pct > 0 ? `${s.dealer_commission_pct}%` : 'Install margin'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right font-mono font-semibold text-brand-600">
+                      <td className="px-5 py-4 text-right font-mono font-bold text-brand-600">
                         ${mrrEstimate(s, calcUnits).toFixed(0)}/mo
                       </td>
                     </tr>
                   ))}
-                  <tr className="bg-brand-50 border-t border-brand-200">
-                    <td colSpan={4} className="px-4 py-3 text-sm font-bold text-brand-700">Total @ {calcUnits} units</td>
-                    <td className="px-4 py-3 text-right font-mono font-bold text-brand-700">${totalMRR.toFixed(0)}/mo</td>
+                  <tr className="bg-brand-50 border-t-2 border-brand-200">
+                    <td colSpan={4} className="px-5 py-4 text-sm font-bold text-brand-700">Total @ {calcUnits} units</td>
+                    <td className="px-5 py-4 text-right font-mono font-bold text-brand-700 text-base">${totalMRR.toFixed(0)}/mo</td>
                   </tr>
                 </tbody>
               </table>
             </div>
             <div className="mt-3 text-xs text-gray-400">
-              * Estimates based on {calcUnits} units per property. Actual MRR depends on enrolled property count and unit count per site.
+              * Estimates based on {calcUnits} units per property. Actual commission depends on enrolled property count.
             </div>
           </div>
         )}
 
-      </div>
+        </div>{/* end scrollable body */}
+      </main>{/* end main content */}
 
       {/* Detail slide-over */}
       {detail && (
@@ -343,6 +368,7 @@ export default function ServicesPage() {
 
 // ─── Service Card ─────────────────────────────────────────────────────────────
 
+
 function ServiceCard({ service: s, enrolled, calcUnits, onEnroll, onDetail }: {
   service:   Service
   enrolled:  boolean
@@ -353,61 +379,65 @@ function ServiceCard({ service: s, enrolled, calcUnits, onEnroll, onDetail }: {
   const estMRR = mrrEstimate(s, calcUnits)
 
   return (
-    <div className="bg-white border border-border rounded-xl p-5 hover:shadow-sm transition-shadow flex flex-col gap-3">
+    <div className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-md hover:border-brand-200 transition-all flex flex-col gap-4">
       {/* Top row */}
-      <div className="flex items-start gap-3">
-        <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl border shrink-0"
-          style={{ background: `${s.provider_color}12`, borderColor: `${s.provider_color}28` }}>
+      <div className="flex items-start gap-4">
+        <div className="w-14 h-14 rounded-xl flex items-center justify-center text-3xl border shrink-0"
+          style={{ background: `${s.provider_color}10`, borderColor: `${s.provider_color}25` }}>
           {s.logo_emoji}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-start gap-2">
+          <div className="flex items-start gap-2 mb-0.5">
             <div className="text-sm font-bold text-gray-900 leading-tight">{s.name}</div>
             {s.is_featured && (
-              <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0 mt-0.5" />
+              <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 shrink-0 mt-0.5" />
             )}
           </div>
-          <div className="text-xs text-gray-400 mt-0.5">{s.provider}</div>
+          <div className="text-xs text-gray-400 mb-1.5">{s.provider}</div>
           <CategoryBadge cat={s.category} />
         </div>
       </div>
 
       {/* Description */}
-      <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">{s.description}</p>
+      <p className="text-xs text-gray-500 leading-relaxed line-clamp-3">{s.description}</p>
 
       {/* Pricing row */}
-      <div className="flex items-end justify-between gap-2">
+      <div className="bg-gray-50 rounded-xl p-3.5 flex items-center justify-between gap-3">
         <div>
-          <div className="text-lg font-bold" style={{ color: s.provider_color }}>
+          <div className="text-xl font-bold" style={{ color: s.provider_color }}>
             {formatPrice(s)}
           </div>
-          <div className="text-xs text-gray-400 mt-0.5">
-            {s.contract_months}mo contract · min {s.min_units} {s.unit_label}{s.min_units !== 1 ? 's' : ''}
+          <div className="text-[11px] text-gray-400 mt-0.5">
+            {s.contract_months}mo · min {s.min_units} {s.unit_label}{s.min_units !== 1 ? 's' : ''}
           </div>
         </div>
         <div className="text-right">
           {s.dealer_commission_pct > 0 ? (
             <>
               <div className="text-sm font-bold text-emerald-600">{s.dealer_commission_pct}% commission</div>
-              <div className="text-xs text-gray-400">≈ ${estMRR.toFixed(0)}/mo @ {calcUnits}u</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">≈ ${estMRR.toFixed(0)}/mo @ {calcUnits} units</div>
             </>
           ) : (
-            <div className="text-xs font-semibold text-gray-500">Install margin</div>
+            <div className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded-lg">Install margin</div>
           )}
         </div>
       </div>
 
-      {/* Divider */}
-      <div className="border-t border-border" />
+      {s.requires_enrollment && !enrolled && (
+        <div className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2.5 flex items-start gap-2">
+          <Zap className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+          Requires provider enrollment before quoting
+        </div>
+      )}
 
       {/* Actions */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 mt-auto pt-1">
         <button
           onClick={onEnroll}
-          className={`flex-1 h-8 rounded-lg text-xs font-semibold border transition-colors
+          className={`flex-1 h-9 rounded-xl text-xs font-bold border transition-colors
             ${enrolled
               ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
-              : 'bg-brand-600 border-brand-600 text-white hover:bg-brand-700'
+              : 'bg-[#6B7EFF] border-[#6B7EFF] text-white hover:bg-[#5a6ee8]'
             }`}
         >
           {enrolled ? (
@@ -418,18 +448,11 @@ function ServiceCard({ service: s, enrolled, calcUnits, onEnroll, onDetail }: {
         </button>
         <button
           onClick={onDetail}
-          className="w-8 h-8 rounded-lg border border-border text-gray-400 hover:text-gray-700 hover:border-gray-300 flex items-center justify-center transition-colors"
+          className="w-9 h-9 rounded-xl border border-gray-200 text-gray-400 hover:text-gray-700 hover:border-gray-300 flex items-center justify-center transition-colors"
         >
           <Info className="w-4 h-4" />
         </button>
       </div>
-
-      {s.requires_enrollment && !enrolled && (
-        <div className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 flex items-start gap-2">
-          <Zap className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-          Requires provider enrollment to quote
-        </div>
-      )}
     </div>
   )
 }

@@ -15,7 +15,7 @@ import {
   ClipboardCheck, Building2, DollarSign,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, Tv: Satellite, Flame, Hash } = require("lucide-react") as any;
+const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, Tv: Satellite, Flame, Hash, Ruler, PenTool, MousePointer, FileSignature } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useUser, useClerk, useSession } from "@clerk/nextjs";
@@ -85,6 +85,18 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Site Survey",    href: "/survey",      icon: ClipboardCheck, description: "Site walk and proposal builder" },
       { label: "Documents",      href: "/documents",   icon: FolderOpen,     description: "Agreements, permits, manuals" },
       { label: "Reports",        href: "/reports",     icon: BarChart3Icon,  description: "Multi-site rollup" },
+    ],
+  },
+  {
+    key: "design",
+    label: "Design",
+    icon: Layers,
+    color: "#0891B2",
+    items: [
+      { label: "Floor Plans",   href: "/design/floor-plans", icon: FileText,      description: "Place devices on blueprints" },
+      { label: "System Design", href: "/design/system",      icon: Zap,           description: "I/O schematics + wiring" },
+      { label: "As-Builts",     href: "/design/as-builts",   icon: FileCheck,     description: "Auto-generate install docs" },
+      { label: "E-Sign",        href: "/design/esign",       icon: FileCheck,     description: "Legal document signatures" },
     ],
   },
   {
@@ -244,6 +256,7 @@ export function Sidebar() {
   const showCompliance   = isCorporate || isMasterDealer || isFullDealer || isServiceDealer;
   const showSecurity     = isCorporate || isMasterDealer || isFullDealer;
   const showIntelligence = isCorporate || isMasterDealer || isFullDealer || isMasterAgent;
+  const showDesign       = isCorporate || isMasterDealer || isFullDealer || isInstallContractor || isServiceDealer;
 
   const activeAgentCount = aiAgents.filter(a => a.active).length;
 
@@ -447,6 +460,7 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
         {NAV_SECTIONS.map(section => {
           // Section-level tier gates
+          if (section.key === "design"       && !showDesign)      return null;
           if (section.key === "security"     && !showSecurity)    return null;
           if (section.key === "dealer"       && !showNetwork)     return null;
           if (section.key === "intelligence" && !showIntelligence)return null;
