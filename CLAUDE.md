@@ -306,6 +306,25 @@ GateGuard is going live. Two parallel Vercel deployments must exist from this po
   - `GateMaintenanceSurvey.enabled` field kept for backwards compat but is now always `true`; no UI toggle.
   - PRICING NOTE (`types/quote.ts`): Gate Operator Service Plan is included (not a billable add-on). Physical Gate Coverage = $250/gate/month (optional add-on).
 
+- **Sprint 6 additions (May 22 2026) — Design Section + Service Marketplace:**
+- **Sidebar** — NEXUS primary brand mark (large, blue), "by GateGuard" subtitle confirmed. New **Design** section added between Field & Tech and Security with 4 items: Floor Plans, System Design, As-Builts, E-Sign. Permission: `showDesign` = corporate | master_dealer | full_dealer | install_contractor | service_dealer.
+- `/services` — **Service Marketplace** fully rebuilt: 22 services across 10 categories (TV, Internet, Video Monitoring, Package Lockers, Access Control, Smart Locks, Security, Network, Energy). Two-column layout: `w-56` left rail with vertical category nav (emoji + count badges) + MRR estimator widget anchored at bottom. Main area: search bar + featured strip + responsive card grid. Cards have `p-6` padding, pricing in gray inset block, enrollment toggle. Enrollment summary table at bottom. Migration 070 backs the DB schema (service_catalog, dealer_service_enrollments, site_service_subscriptions).
+- **Browse Services in quote builder**: `ServicePickerPanel` added to `/quotes/new` (both line-item and wizard modes) + `SvcPickerPanel` in `/quotes/[id]` (POSTs directly to API). Both panels have 18-service catalog, category tabs, search, MRR/commission estimates. Services drop in as recurring line items in "Recurring Services" section.
+- `/design/floor-plans` — **Bluebeam + System Surveyor + D-Tools hybrid**. Full interactive canvas tool with 3 modes: **Survey** (System Surveyor — place devices from 20-device library, set condition/action/notes), **Design** (D-Tools — click-to-connect devices, cable type/length/terminal form, SVG connection lines color-coded by cable type), **Markup** (Bluebeam — text annotations via SVG layer). Left dark navy panel: category-grouped device library (survey mode) / device list for connecting (design mode) / annotation tools (markup mode). Drag-to-reposition devices. BOM auto-generated from placed devices. Right panel: device properties form (survey) / wire schedule table (design). Connection form modal: cable type, length, from/to terminal. Export PDF + Share Link. 2 demo properties preloaded (Sunset Commons, Riverview Apts). New plan creation modal. Key data: `DEVICE_TYPES` (20 types across 7 categories), `DEMO_PLANS` with devices + connections.
+- `/design/system` — Wire schedule + I/O block diagram. Wire Schedule tab: table (From Device → Terminal → Cable → Length → Terminal → To Device). I/O Diagram tab: SVG auto-layout block diagram with device boxes + annotated connection arrows. BOM table at bottom.
+- `/design/as-builts` — GateGuard-branded as-built doc generator. Dark navy NEXUS header, property info table, 4 sections (Device Schedule, Wire Schedule, BOM, Site Notes), signature block. `window.print()` with `@media print` CSS.
+- `/design/esign` — E-sign management dashboard. Stats bar (pending/viewed/signed/total), document table with status badges (color + icon), Send Reminder / Copy Link / View actions, New Document slide-over form.
+- `/design/esign/sign/[token]` — Public signature page (no auth). Document summary card, 500×200 touch/mouse canvas, Clear + Sign & Complete buttons, legal disclaimer, signed confirmation state.
+- **Migration 070** — `service_catalog`, `dealer_service_enrollments`, `site_service_subscriptions` tables. RLS + service_role_all. 22 services seeded with ON CONFLICT DO NOTHING. Run on beta Supabase before enrollment persistence works.
+- **Migration 071** — `floor_plans`, `floor_plan_devices`, `floor_plan_connections`, `floor_plan_annotations`, `esign_documents` tables. RLS + service_role_all policies. Run on beta before design data persists.
+
+- **Critical Gaps Roadmap (May 22 2026)** — 34 professional apps audited across 10 categories. Sprint 6-10 roadmap established:
+  - **Sprint 6** (current): Design section (Floor Plans, E-Sign, As-Builts, System Design) ✅ built
+  - **Sprint 7**: Job Costing (actual vs. quoted P&L), AR Aging + Collections, Warranty/RMA, Live Parts Pricing (ADI Global API)
+  - **Sprint 8**: GPS Fleet Tracking (Samsara-tier), Route Optimization AI, COI Tracking, Review Management (Podium-replacement)
+  - **Sprint 9**: PMS Integrations (Yardi/AppFolio/RealPage), Permit Auto-Filing (ATLAS), Subcontractor Portal, Payroll Integration (Gusto/ADP)
+  - **Sprint 10**: System I/O Designer (D-Tools SI replacement, FORGE-powered), Digital Twin, CEU/License Tracking, Energy Intelligence
+
 ### Pending / Next Up
 - [x] Lead → Opportunity conversion flow (qualify button on lead detail) ✅ Sprint 4
 - [x] Territory Map (`/map`) — now live with Mapbox GL JS v3.3.0 ✅ Sprint 5
