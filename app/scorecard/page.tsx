@@ -84,6 +84,24 @@ function trendFromSparkline(values: number[]): number {
   return values[values.length - 1] - values[0];
 }
 
+// ─── Dealer Tier ──────────────────────────────────────────────────────────────
+
+function dealerTier(score: number): { label: string; color: string; bg: string; icon: string } {
+  if (score >= 95) return { label: 'Elite',      color: '#a855f7', bg: 'bg-purple-50',  icon: '💎' }
+  if (score >= 85) return { label: 'Certified',  color: '#10b981', bg: 'bg-emerald-50', icon: '🏅' }
+  if (score >= 75) return { label: 'Gold',       color: '#f59e0b', bg: 'bg-amber-50',   icon: '🥇' }
+  if (score >= 60) return { label: 'Silver',     color: '#64748b', bg: 'bg-slate-100',  icon: '🥈' }
+  return                  { label: 'Bronze',     color: '#b45309', bg: 'bg-orange-50',  icon: '🥉' }
+}
+
+function tierProgress(score: number): { current: string; next: string | null; pct: number; ptsToNext: number } {
+  if (score >= 95) return { current: 'Elite',     next: null,        pct: 100,                          ptsToNext: 0 }
+  if (score >= 85) return { current: 'Certified', next: 'Elite',     pct: ((score - 85) / 10) * 100,   ptsToNext: 95 - score }
+  if (score >= 75) return { current: 'Gold',      next: 'Certified', pct: ((score - 75) / 10) * 100,   ptsToNext: 85 - score }
+  if (score >= 60) return { current: 'Silver',    next: 'Gold',      pct: ((score - 60) / 15) * 100,   ptsToNext: 75 - score }
+  return                  { current: 'Bronze',    next: 'Silver',    pct: (score / 60) * 100,           ptsToNext: 60 - score }
+}
+
 // ─── Sparkline ────────────────────────────────────────────────────────────────
 
 function Sparkline({ values, color }: { values: number[]; color: string }) {
@@ -217,9 +235,31 @@ function ScorecardCard({ entry }: { entry: ScorecardEntry }) {
       <div className="pt-1 border-t border-border">
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-[11px] text-muted-foreground font-medium">Overall Score</span>
-          <span className={`text-[11px] font-bold ${scoreColor(entry.score)}`}>{entry.score}/100</span>
+          <div className="flex items-center gap-2">
+            {(() => {
+              const tier = dealerTier(entry.score)
+              return (
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${tier.bg}`} style={{ color: tier.color }}>
+                  {tier.icon} {tier.label}
+                </span>
+              )
+            })()}
+            <span className={`text-[11px] font-bold ${scoreColor(entry.score)}`}>{entry.score}/100</span>
+          </div>
         </div>
         <ProgressBar value={entry.score} color={scoreBg(entry.score)} />
+        {(() => {
+          const tp = tierProgress(entry.score)
+          if (!tp.next) return null
+          return (
+            <div className="mt-2 space-y-1">
+              <div className="w-full h-1 bg-border rounded-full overflow-hidden">
+                <div className="h-full rounded-full bg-brand-400/60 transition-all" style={{ width: `${tp.pct}%` }} />
+              </div>
+              <p className="text-[10px] text-muted-foreground/70">{tp.ptsToNext} pt{tp.ptsToNext !== 1 ? 's' : ''} to {tp.next}</p>
+            </div>
+          )
+        })()}
       </div>
     </div>
   );
@@ -265,6 +305,16 @@ function DealerSelfView({ entry }: { entry: ScorecardEntry }) {
         <p className={`text-7xl font-bold leading-none ${scoreColor(entry.score)}`}>{entry.score}</p>
         <p className="text-base text-muted-foreground">out of 100 · {quarter}</p>
 
+        {/* Dealer tier badge */}
+        {(() => {
+          const tier = dealerTier(entry.score)
+          return (
+            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold ${tier.bg}`} style={{ color: tier.color }}>
+              {tier.icon} {tier.label} Tier
+            </span>
+          )
+        })()}
+
         {entry.certified ? (
           <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold bg-brand-400/10 text-brand-400 border border-brand-400/20">
             <Award size={14} /> GateGuard Certified
@@ -280,6 +330,20 @@ function DealerSelfView({ entry }: { entry: ScorecardEntry }) {
             </div>
           </div>
         )}
+
+        {/* Tier progress bar */}
+        {(() => {
+          const tp = tierProgress(entry.score)
+          if (!tp.next) return null
+          return (
+            <div className="w-56 space-y-1">
+              <div className="w-full h-1 bg-border rounded-full overflow-hidden">
+                <div className="h-full rounded-full bg-brand-400/60 transition-all" style={{ width: `${tp.pct}%` }} />
+              </div>
+              <p className="text-[11px] text-muted-foreground">{tp.ptsToNext} pt{tp.ptsToNext !== 1 ? 's' : ''} to {tp.next}</p>
+            </div>
+          )
+        })()}
       </div>
 
       {/* Per-metric expandable sections */}
@@ -415,7 +479,17 @@ function LeaderboardTable({ entries }: { entries: ScorecardEntry[] }) {
                   </td>
                   <td className={tdCls}>
                     <div>
-                      <p className="font-medium text-foreground">{entry.name}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-medium text-foreground">{entry.name}</p>
+                        {(() => {
+                          const tier = dealerTier(entry.score)
+                          return (
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${tier.bg}`} style={{ color: tier.color }}>
+                              {tier.icon} {tier.label}
+                            </span>
+                          )
+                        })()}
+                      </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <TierBadge tier={entry.org_tier} />
                         {entry.location && <span className="text-[10px] text-muted-foreground">{entry.location}</span>}

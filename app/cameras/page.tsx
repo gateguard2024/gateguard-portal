@@ -1,31 +1,52 @@
+'use client';
+
+import Link from "next/link";
 import { TopBar } from "@/components/layout/TopBar";
 import { AISearch } from "@/components/ai/AISearch";
-import { Download, Search, Wifi, AlertTriangle } from "lucide-react";
+import { Download, Wifi, AlertTriangle, ExternalLink } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { Camera, Archive, Grid3X3 } = require("lucide-react") as any;
 
 const cameras = [
-  { name: "Leasing Entry",   account: "Stonegate Townhomes", status: "online",  feed: true,  time: "22:14:29" },
-  { name: "Leasing Rear Door", account: "Stonegate Townhomes", status: "online", feed: true, time: "22:14:29" },
-  { name: "Main Gate",       account: "Stonegate Townhomes", status: "online",  feed: true,  time: "22:14:29" },
-  { name: "Office Camera",   account: "Stonegate Townhomes", status: "online",  feed: true,  time: "22:14:29" },
-  { name: "Amenity Hall",    account: "Angel Oak",           status: "online",  feed: true,  time: "04:25:14" },
-  { name: "Back Door",       account: "Angel Oak",           status: "online",  feed: true,  time: "04:25:14" },
-  { name: "Business Center", account: "Angel Oak",           status: "online",  feed: true,  time: "04:25:14" },
-  { name: "Gym Camera",      account: "Angel Oak",           status: "online",  feed: true,  time: "04:28:37" },
-  { name: "Leasing Lobby",   account: "Angel Oak",           status: "online",  feed: true,  time: "04:28:37" },
-  { name: "Leasing Parking", account: "Angel Oak",           status: "online",  feed: true,  time: "04:28:37" },
-  { name: "Package Lockers", account: "Angel Oak",           status: "offline", feed: false, time: "" },
-  { name: "Pool",            account: "Angel Oak",           status: "online",  feed: true,  time: "04:28:37" },
+  { name: "Lobby",           account: "Stonegate Townhomes", status: "online",  feed: true,  time: "22:14:29", motion: "2 min ago"  },
+  { name: "Parking Lot A",   account: "Stonegate Townhomes", status: "online",  feed: true,  time: "22:14:29", motion: "8 min ago"  },
+  { name: "Gate Entry",      account: "Stonegate Townhomes", status: "online",  feed: true,  time: "22:14:29", motion: "Just now"   },
+  { name: "Mail Room",       account: "Stonegate Townhomes", status: "online",  feed: true,  time: "22:14:29", motion: "14 min ago" },
+  { name: "Pool Area",       account: "Angel Oak",           status: "online",  feed: true,  time: "04:25:14", motion: "1 min ago"  },
+  { name: "Gym",             account: "Angel Oak",           status: "online",  feed: true,  time: "04:25:14", motion: "5 min ago"  },
+  { name: "Leasing Lobby",   account: "Angel Oak",           status: "online",  feed: true,  time: "04:28:37", motion: "3 min ago"  },
+  { name: "Side Gate",       account: "Angel Oak",           status: "online",  feed: true,  time: "04:28:37", motion: "18 min ago" },
+  { name: "Business Center", account: "Angel Oak",           status: "online",  feed: true,  time: "04:25:14", motion: "31 min ago" },
+  { name: "Package Lockers", account: "Angel Oak",           status: "offline", feed: false, time: "",         motion: ""           },
+  { name: "Parking Lot B",   account: "Angel Oak",           status: "online",  feed: true,  time: "04:28:37", motion: "7 min ago"  },
+  { name: "Back Alley",      account: "Angel Oak",           status: "online",  feed: true,  time: "04:28:37", motion: "42 min ago" },
 ];
 
 const tabs = ["All Cameras", "Layouts", "Video Search", "Archive", "Downloads"];
 
+const connectActions = (
+  <Link
+    href="/admin"
+    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-colors"
+    style={{ background: "#6B7EFF" }}
+  >
+    <ExternalLink size={12} /> Connect Eagle Eye
+  </Link>
+);
+
 export default function CamerasPage() {
   return (
     <div className="flex flex-col min-h-full">
-      <TopBar title="Cameras" subtitle="EagleEye Networks Integration · 138 cameras across 10 accounts" />
+      <TopBar title="Cameras" subtitle="Eagle Eye Networks · 138 cameras across 10 accounts" actions={connectActions} />
       <div className="flex-1 p-6 space-y-5">
+
+        {/* Eagle Eye connection banner */}
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border text-sm"
+          style={{ background: "rgba(107,126,255,0.08)", borderColor: "rgba(107,126,255,0.25)", color: "#93c5fd" }}>
+          <Camera size={15} style={{ color: "#6B7EFF", flexShrink: 0 }} />
+          <span className="flex-1">Connect your Eagle Eye Networks account in <Link href="/admin" className="underline font-medium" style={{ color: "#6B7EFF" }}>Settings</Link> to enable live feeds. Showing demo data.</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: "rgba(107,126,255,0.15)", color: "#6B7EFF" }}>Demo</span>
+        </div>
 
         {/* Tabs */}
         <div className="flex items-center gap-1 bg-card border border-border rounded-xl p-1 w-fit">
@@ -89,10 +110,13 @@ export default function CamerasPage() {
               {/* Info */}
               <div className="p-2.5">
                 <div className="flex items-center gap-1.5">
-                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cam.status === "online" ? "status-online" : "status-offline"}`} />
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cam.status === "online" ? "bg-emerald-400" : "bg-red-500"}`} />
                   <p className="text-xs font-medium text-foreground truncate group-hover:text-brand-400 transition-colors">{cam.name}</p>
                 </div>
-                <p className="text-[10px] text-muted-foreground mt-0.5 ml-3 truncate">{cam.account}</p>
+                <div className="flex items-center justify-between mt-0.5 ml-3">
+                  <p className="text-[10px] text-muted-foreground truncate">{cam.account}</p>
+                  {cam.motion && <p className="text-[10px] text-muted-foreground shrink-0 ml-1">{cam.motion}</p>}
+                </div>
               </div>
             </div>
           ))}

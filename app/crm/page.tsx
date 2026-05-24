@@ -330,7 +330,7 @@ export default function CRMPage() {
   const openOpps = allRecords
     .filter((r) => r.stage !== "won" && r.stage !== "lost")
     .sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))
-    .slice(0, 8);
+    .slice(0, 10);
 
   // Suppress unused warning
   void timeAgo;
@@ -461,9 +461,9 @@ export default function CRMPage() {
         </div>
 
         {/* ROW 2 — Pipeline + Activity */}
-        <div className="grid grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           {/* My Pipeline */}
-          <div className="col-span-3 bg-white rounded-xl border border-border p-5">
+          <div className="bg-white rounded-xl border border-border p-5 flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-foreground">My Pipeline</h2>
               <div className="flex items-center gap-2">
@@ -528,7 +528,7 @@ export default function CRMPage() {
           </div>
 
           {/* Today's Activity */}
-          <div className="col-span-2 bg-white rounded-xl border border-border p-5">
+          <div className="bg-white rounded-xl border border-border p-5 flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <Calendar size={15} className="text-muted-foreground" />
@@ -593,9 +593,9 @@ export default function CRMPage() {
         </div>
 
         {/* ROW 3 — Open Opps + Show Leads */}
-        <div className="grid grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           {/* Open Opportunities Table */}
-          <div className="col-span-3 bg-white rounded-xl border border-border p-5">
+          <div className="bg-white rounded-xl border border-border p-5 flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-foreground">Open Opportunities</h2>
               <Link
@@ -645,7 +645,7 @@ export default function CRMPage() {
                         <td className="py-2.5 pr-3">
                           <Link
                             href={`/crm/opportunities/${opp.id}`}
-                            className="text-sm font-medium text-foreground hover:text-[#6B7EFF] transition-colors truncate block max-w-[180px]"
+                            className="text-sm font-medium text-foreground hover:text-[#6B7EFF] transition-colors truncate block max-w-[220px]"
                           >
                             {opp.name}
                           </Link>
@@ -683,7 +683,7 @@ export default function CRMPage() {
           </div>
 
           {/* My Leads */}
-          <div className="col-span-2 bg-white rounded-xl border border-border p-5">
+          <div className="bg-white rounded-xl border border-border p-5 flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <span className="relative flex h-2 w-2">
@@ -728,7 +728,7 @@ export default function CRMPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {leads.slice(0, 5).map((lead) => (
+                {leads.slice(0, 6).map((lead) => (
                   <Link
                     key={lead.id}
                     href={`/crm/leads/${lead.id}`}

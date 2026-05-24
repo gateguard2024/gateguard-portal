@@ -418,16 +418,19 @@ export default function NetworkPage() {
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Managed Network</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Network infrastructure monitoring and management.</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-slate-900">Managed Network</h1>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: "rgba(107,126,255,0.12)", color: "#6B7EFF" }}>Demo data · connect UniFi in Settings</span>
+          </div>
+          <p className="text-sm text-slate-500 mt-0.5">UniFi · Sites · Devices · Infrastructure monitoring</p>
         </div>
         <div className="flex items-center gap-2">
           <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-50 text-sm font-medium text-slate-700 transition-colors shadow-sm">
             <Map size={14} /> Network Diagram
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#2563EB] hover:bg-[#1d4ed8] text-white text-sm font-medium transition-colors shadow-sm shadow-blue-200">
-            <Plus size={15} /> Add Property
-          </button>
+          <a href="https://unifi.ui.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#2563EB] hover:bg-[#1d4ed8] text-white text-sm font-medium transition-colors shadow-sm shadow-blue-200">
+            <Globe size={14} /> View in UniFi
+          </a>
         </div>
       </div>
 

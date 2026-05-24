@@ -1014,6 +1014,15 @@ function ScheduleEditorModal({ tech, onClose, onSave }: {
   );
 }
 
+// ─── Tech Streak ──────────────────────────────────────────────────────────────
+
+/** Deterministic streak from tech id (demo until real streak data is wired) */
+function techStreak(techId: string): number {
+  let h = 0
+  for (let i = 0; i < techId.length; i++) h = (h * 31 + techId.charCodeAt(i)) & 0xffffffff
+  return Math.abs(h) % 13 // 0-12
+}
+
 function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete, onEditSchedule, hasLiveGPS }: {
   tech:            Tech;
   jobs:            Job[];
@@ -1064,6 +1073,12 @@ function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete, on
               <span className="relative shrink-0 flex h-2 w-2" title="Live GPS active">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+            )}
+            {techStreak(tech.id) > 0 && (
+              <span className="flex items-center gap-0.5 text-[11px] font-semibold" title={`${techStreak(tech.id)} consecutive on-time jobs`}>
+                <span>🔥</span>
+                <span style={{ color: '#f97316' }}>{techStreak(tech.id)}</span>
               </span>
             )}
           </div>

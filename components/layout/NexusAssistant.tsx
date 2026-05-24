@@ -89,6 +89,8 @@ export function NexusAssistant() {
   const [alertsLoaded, setAlertsLoaded] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [briefingDone, setBriefingDone] = useState(false)
+  const [wins, setWins] = useState<Array<{ id: string; type: string; title: string; description: string; time: string }>>([])
+  const [activeTab, setActiveTab] = useState<'chat' | 'wins'>('chat')
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const sessionKey = 'nexus_session_briefed'
@@ -137,7 +139,19 @@ export function NexusAssistant() {
 
   // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
-    if (enabled) loadAlerts()
+    if (enabled) {
+      loadAlerts()
+      // Also fetch wins in parallel
+      void (async () => {
+        try {
+          const res = await fetch('/api/assistant/wins')
+          if (res.ok) {
+            const data = await res.json() as { wins: typeof wins }
+            setWins(data.wins ?? [])
+          }
+        } catch { /* skip */ }
+      })()
+    }
   }, [enabled, loadAlerts])
 
   // Auto-scroll to bottom
@@ -288,93 +302,137 @@ export function NexusAssistant() {
             </div>
           )}
 
-          {/* Messages */}
-          <div
-            ref={scrollRef}
-            className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0"
-          >
-            {messages.length === 0 && !isLoading && (
-              <div className="text-center py-8">
-                <div className="w-12 h-12 rounded-full bg-[#6B7EFF]/10 flex items-center justify-center mx-auto mb-3">
-                  <Sparkles size={20} className="text-[#6B7EFF]" />
-                </div>
-                <p className="text-sm font-medium text-foreground">Ask me anything</p>
-                <p className="text-xs text-muted-foreground mt-1">I can look up quotes, work orders, leads, and more</p>
-              </div>
-            )}
-
-            {messages.map(msg => (
-              <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                {msg.role === 'assistant' && (
-                  <div className="w-5 h-5 rounded-full bg-[#6B7EFF] flex items-center justify-center shrink-0 mt-0.5 mr-2">
-                    <Sparkles size={10} className="text-white" />
-                  </div>
-                )}
-                <div
-                  className={
-                    msg.role === 'user'
-                      ? 'bg-[#6B7EFF] text-white text-[13px] px-3 py-2 rounded-2xl rounded-tr-sm max-w-[85%]'
-                      : 'bg-slate-50 border border-slate-100 px-3 py-2.5 rounded-2xl rounded-tl-sm max-w-[90%]'
-                  }
-                >
-                  {msg.role === 'user'
-                    ? <span className="text-[13px]">{msg.content}</span>
-                    : <AssistantMessage content={msg.content} />
-                  }
-                </div>
-              </div>
-            ))}
-
-            {isLoading && (
-              <div className="flex justify-start">
-                <div className="w-5 h-5 rounded-full bg-[#6B7EFF] flex items-center justify-center shrink-0 mt-0.5 mr-2">
-                  <Sparkles size={10} className="text-white" />
-                </div>
-                <div className="bg-slate-50 border border-slate-100 px-3 py-2.5 rounded-2xl rounded-tl-sm flex items-center gap-2">
-                  <Loader2 size={12} className="animate-spin text-[#6B7EFF]" />
-                  <span className="text-[12px] text-muted-foreground">Thinking…</span>
-                </div>
-              </div>
-            )}
+          {/* Tab bar */}
+          <div className="flex border-b border-slate-100 px-3 pt-2 shrink-0">
+            <button
+              onClick={() => setActiveTab('chat')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-t-lg transition-colors ${activeTab === 'chat' ? 'text-[#6B7EFF] border-b-2 border-[#6B7EFF]' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              Chat
+            </button>
+            <button
+              onClick={() => setActiveTab('wins')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-t-lg transition-colors flex items-center gap-1 ${activeTab === 'wins' ? 'text-[#6B7EFF] border-b-2 border-[#6B7EFF]' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              Wins
+              {wins.length > 0 && <span className="bg-emerald-100 text-emerald-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full">{wins.length}</span>}
+            </button>
           </div>
 
-          {/* Quick prompts */}
-          {messages.length <= 1 && (
-            <div className="shrink-0 px-3 pb-2 flex flex-wrap gap-1.5">
-              {QUICK_PROMPTS.map(p => (
-                <button
-                  key={p}
-                  onClick={() => sendMessage(p)}
-                  className="text-[11px] bg-slate-50 border border-border rounded-full px-2.5 py-1 hover:bg-[#6B7EFF]/5 hover:border-[#6B7EFF]/30 text-slate-600 hover:text-[#6B7EFF] transition-all"
-                >
-                  {p}
-                </button>
+          {/* Wins feed */}
+          {activeTab === 'wins' && (
+            <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 min-h-0">
+              {wins.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-2xl mb-2">🏆</p>
+                  <p className="text-xs text-slate-400">Wins will appear here — close a deal, earn a 5-star rating, or level up to see them.</p>
+                </div>
+              ) : wins.map(w => (
+                <div key={w.id} className="flex gap-2.5 p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-slate-700">{w.title}</p>
+                    <p className="text-[11px] text-slate-500 truncate">{w.description}</p>
+                  </div>
+                  <span className="text-[10px] text-slate-400 whitespace-nowrap mt-0.5 font-mono">
+                    {new Date(w.time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </span>
+                </div>
               ))}
             </div>
           )}
 
-          {/* Input */}
-          <div className="shrink-0 border-t border-border px-3 py-2.5 bg-white rounded-b-2xl">
-            <div className="flex items-center gap-2 bg-slate-50 border border-border rounded-xl px-3 py-2 focus-within:border-[#6B7EFF] focus-within:bg-white transition-all">
-              <input
-                ref={inputRef}
-                type="text"
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
-                placeholder="Ask NEXUS anything…"
-                className="flex-1 bg-transparent text-[13px] outline-none text-foreground placeholder:text-muted-foreground/60"
-                disabled={isLoading}
-              />
-              <button
-                onClick={() => sendMessage()}
-                disabled={!input.trim() || isLoading}
-                className="w-7 h-7 rounded-lg bg-[#6B7EFF] flex items-center justify-center disabled:opacity-40 hover:bg-[#5a6ee0] transition-colors shrink-0"
+          {/* Chat content (messages + prompts + input) */}
+          {activeTab === 'chat' && (
+            <>
+              {/* Messages */}
+              <div
+                ref={scrollRef}
+                className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0"
               >
-                <Send size={12} className="text-white" />
-              </button>
-            </div>
-          </div>
+                {messages.length === 0 && !isLoading && (
+                  <div className="text-center py-8">
+                    <div className="w-12 h-12 rounded-full bg-[#6B7EFF]/10 flex items-center justify-center mx-auto mb-3">
+                      <Sparkles size={20} className="text-[#6B7EFF]" />
+                    </div>
+                    <p className="text-sm font-medium text-foreground">Ask me anything</p>
+                    <p className="text-xs text-muted-foreground mt-1">I can look up quotes, work orders, leads, and more</p>
+                  </div>
+                )}
+
+                {messages.map(msg => (
+                  <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    {msg.role === 'assistant' && (
+                      <div className="w-5 h-5 rounded-full bg-[#6B7EFF] flex items-center justify-center shrink-0 mt-0.5 mr-2">
+                        <Sparkles size={10} className="text-white" />
+                      </div>
+                    )}
+                    <div
+                      className={
+                        msg.role === 'user'
+                          ? 'bg-[#6B7EFF] text-white text-[13px] px-3 py-2 rounded-2xl rounded-tr-sm max-w-[85%]'
+                          : 'bg-slate-50 border border-slate-100 px-3 py-2.5 rounded-2xl rounded-tl-sm max-w-[90%]'
+                      }
+                    >
+                      {msg.role === 'user'
+                        ? <span className="text-[13px]">{msg.content}</span>
+                        : <AssistantMessage content={msg.content} />
+                      }
+                    </div>
+                  </div>
+                ))}
+
+                {isLoading && (
+                  <div className="flex justify-start">
+                    <div className="w-5 h-5 rounded-full bg-[#6B7EFF] flex items-center justify-center shrink-0 mt-0.5 mr-2">
+                      <Sparkles size={10} className="text-white" />
+                    </div>
+                    <div className="bg-slate-50 border border-slate-100 px-3 py-2.5 rounded-2xl rounded-tl-sm flex items-center gap-2">
+                      <Loader2 size={12} className="animate-spin text-[#6B7EFF]" />
+                      <span className="text-[12px] text-muted-foreground">Thinking…</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Quick prompts */}
+              {messages.length <= 1 && (
+                <div className="shrink-0 px-3 pb-2 flex flex-wrap gap-1.5">
+                  {QUICK_PROMPTS.map(p => (
+                    <button
+                      key={p}
+                      onClick={() => sendMessage(p)}
+                      className="text-[11px] bg-slate-50 border border-border rounded-full px-2.5 py-1 hover:bg-[#6B7EFF]/5 hover:border-[#6B7EFF]/30 text-slate-600 hover:text-[#6B7EFF] transition-all"
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Input */}
+              <div className="shrink-0 border-t border-border px-3 py-2.5 bg-white rounded-b-2xl">
+                <div className="flex items-center gap-2 bg-slate-50 border border-border rounded-xl px-3 py-2 focus-within:border-[#6B7EFF] focus-within:bg-white transition-all">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
+                    placeholder="Ask NEXUS anything…"
+                    className="flex-1 bg-transparent text-[13px] outline-none text-foreground placeholder:text-muted-foreground/60"
+                    disabled={isLoading}
+                  />
+                  <button
+                    onClick={() => sendMessage()}
+                    disabled={!input.trim() || isLoading}
+                    className="w-7 h-7 rounded-lg bg-[#6B7EFF] flex items-center justify-center disabled:opacity-40 hover:bg-[#5a6ee0] transition-colors shrink-0"
+                  >
+                    <Send size={12} className="text-white" />
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 

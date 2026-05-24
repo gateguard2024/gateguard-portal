@@ -1,6 +1,9 @@
+'use client';
+
+import Link from "next/link";
 import { TopBar } from "@/components/layout/TopBar";
 import { AISearch } from "@/components/ai/AISearch";
-import { Shield, Users, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Shield, Users, CheckCircle2, XCircle, ExternalLink } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { DoorOpen, Cpu, BarChart3 } = require('lucide-react') as any;
 
@@ -24,11 +27,29 @@ const kpis = [
   { label: "Users Deleted",      value: "0",   icon: XCircle,   color: "text-muted-foreground", bg: "bg-muted/50"  },
 ];
 
+const connectActions = (
+  <Link
+    href="/admin"
+    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-colors"
+    style={{ background: "#6B7EFF" }}
+  >
+    <ExternalLink size={12} /> Connect Brivo
+  </Link>
+);
+
 export default function AccessPage() {
   return (
     <div className="flex flex-col min-h-full">
-      <TopBar title="Access Control" subtitle="Brivo Integration · Gate Guard, LLC — Dealer ID 2079739" />
+      <TopBar title="Access Control" subtitle="Brivo · Doors · Credentials · Access Logs" actions={connectActions} />
       <div className="flex-1 p-6 space-y-5">
+
+        {/* Brivo connection banner */}
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border text-sm"
+          style={{ background: "rgba(107,126,255,0.08)", borderColor: "rgba(107,126,255,0.25)", color: "#93c5fd" }}>
+          <Shield size={15} style={{ color: "#6B7EFF", flexShrink: 0 }} />
+          <span className="flex-1">Connect your Brivo account in <Link href="/admin" className="underline font-medium" style={{ color: "#6B7EFF" }}>Settings</Link> to sync live access events and credentials. Showing demo data.</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: "rgba(107,126,255,0.15)", color: "#6B7EFF" }}>Demo</span>
+        </div>
 
         {/* Tabs */}
         <div className="flex items-center gap-1 bg-card border border-border rounded-xl p-1 w-fit">

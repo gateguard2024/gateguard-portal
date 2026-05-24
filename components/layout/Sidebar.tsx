@@ -15,7 +15,7 @@ import {
   ClipboardCheck, Building2, DollarSign,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, Tv: Satellite, Flame, Hash, Ruler, PenTool, MousePointer, FileSignature, HardHat } = require("lucide-react") as any;
+const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, Tv: Satellite, Flame, Hash, Ruler, PenTool, MousePointer, FileSignature, HardHat, Trophy } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useUser, useClerk, useSession } from "@clerk/nextjs";
@@ -122,6 +122,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Compliance",       href: "/compliance",    icon: ShieldCheck,  description: "Permits, certs, expiry alerts" },
       { label: "Territory Map",    href: "/map",           icon: Map,          description: "Property pins by health status" },
       { label: "Scorecard",        href: "/scorecard",     icon: Star,         description: "Dealer performance metrics" },
+      { label: "Quests",           href: "/quests",        icon: Trophy,       description: "Time-boxed challenges and tier points", badge: "New" },
       { label: "Reviews",           href: "/reviews",      icon: Star,         description: "Post-WO ratings and Google reviews" },
       { label: "Training",         href: "/training",      icon: GraduationCap,description: "Courses and certifications" },
     ],
