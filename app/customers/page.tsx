@@ -154,7 +154,7 @@ export default function CustomersPage() {
   ];
 
   return (
-    <div className="flex flex-col min-h-full bg-[#A0AEBC]">
+    <div className="flex flex-col min-h-full">
       <TopBar
         title="Customers"
         subtitle={loading ? "Loading…" : `${total} accounts across all tiers`}

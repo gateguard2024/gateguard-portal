@@ -46,7 +46,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Main content — full width on mobile, offset by sidebar on md+ */}
-        <main className="flex-1 flex flex-col md:ml-0 overflow-y-auto min-w-0 transition-all duration-200 relative z-10 pb-16 md:pb-0">
+        <main className="portal-main flex-1 flex flex-col md:ml-0 overflow-y-auto min-w-0 transition-all duration-200 relative z-10 pb-16 md:pb-0">
           {children}
         </main>
 
