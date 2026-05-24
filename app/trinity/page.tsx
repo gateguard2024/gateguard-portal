@@ -33,108 +33,7 @@ type Stats = {
 
 type ScriptType = "intro" | "followup" | "win_back"
 
-// ─── Demo data (shown when table is empty) ────────────────────────────────────
-
-const DEMO_CALLS: TrinityCall[] = [
-  {
-    id: "demo-1",
-    direction: "outbound",
-    phone_number: "+14045550101",
-    contact_name: "Marcus Williams",
-    duration_seconds: 187,
-    sentiment: "interested",
-    outcome: "callback_requested",
-    ai_summary: "Property manager expressed interest in smart gate upgrade; requested callback with pricing next Thursday.",
-    recording_url: null,
-    lead_id: null,
-    created_at: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "demo-2",
-    direction: "inbound",
-    phone_number: "+17705550234",
-    contact_name: "Sandra Cho",
-    duration_seconds: 94,
-    sentiment: "positive",
-    outcome: "qualified",
-    ai_summary: "HOA board member calling about Brivo access control for 120-unit community; highly qualified, forwarded to sales.",
-    recording_url: null,
-    lead_id: null,
-    created_at: new Date(Date.now() - 47 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "demo-3",
-    direction: "outbound",
-    phone_number: "+14045550388",
-    contact_name: "James Thornton",
-    duration_seconds: 0,
-    sentiment: "neutral",
-    outcome: "voicemail",
-    ai_summary: "No answer — voicemail left with intro script.",
-    recording_url: null,
-    lead_id: null,
-    created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "demo-4",
-    direction: "outbound",
-    phone_number: "+14045550492",
-    contact_name: "Priya Nair",
-    duration_seconds: 312,
-    sentiment: "positive",
-    outcome: "qualified",
-    ai_summary: "Asset manager for 4-property portfolio; very interested in GateGuard dealer program and recurring revenue model.",
-    recording_url: null,
-    lead_id: null,
-    created_at: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "demo-5",
-    direction: "outbound",
-    phone_number: "+17705550577",
-    contact_name: "Derek Osei",
-    duration_seconds: 61,
-    sentiment: "not_interested",
-    outcome: "not_interested",
-    ai_summary: "Property under contract with existing vendor for 18 more months; no interest at this time.",
-    recording_url: null,
-    lead_id: null,
-    created_at: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "demo-6",
-    direction: "inbound",
-    phone_number: "+14045550681",
-    contact_name: "Angela Reyes",
-    duration_seconds: 228,
-    sentiment: "interested",
-    outcome: "callback_requested",
-    ai_summary: "Maintenance supervisor inquiring about tech support coverage for weekend gate failures; passed to dealer ops.",
-    recording_url: null,
-    lead_id: null,
-    created_at: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "demo-7",
-    direction: "outbound",
-    phone_number: "+14045550712",
-    contact_name: "Robert Kim",
-    duration_seconds: 0,
-    sentiment: "neutral",
-    outcome: "no_answer",
-    ai_summary: "No answer, no voicemail option available.",
-    recording_url: null,
-    lead_id: null,
-    created_at: new Date(Date.now() - 10 * 60 * 60 * 1000).toISOString(),
-  },
-]
-
-const DEMO_STATS: Stats = {
-  calls_today: 5,
-  calls_this_week: 23,
-  qualified: 8,
-  avg_duration: 141,
-}
+// No demo data — empty state shown when no real calls exist
 
 // ─── Default scripts ──────────────────────────────────────────────────────────
 
@@ -311,9 +210,8 @@ function InitiateCallModal({ onClose }: { onClose: () => void }) {
 
 export default function TrinityPage() {
   const [calls, setCalls] = useState<TrinityCall[]>([])
-  const [stats, setStats] = useState<Stats>(DEMO_STATS)
+  const [stats, setStats] = useState<Stats>({ calls_today: 0, calls_this_week: 0, qualified: 0, avg_duration: 0 })
   const [loading, setLoading] = useState(true)
-  const [isDemo, setIsDemo] = useState(false)
   const [showInitiate, setShowInitiate] = useState(false)
   const [expandedCall, setExpandedCall] = useState<string | null>(null)
   const [activeScript, setActiveScript] = useState<ScriptType>("intro")
@@ -329,25 +227,27 @@ export default function TrinityPage() {
       const res = await fetch("/api/trinity/calls")
       if (res.ok) {
         const data = await res.json()
-        if (data.calls && data.calls.length > 0) {
-          setCalls(data.calls)
-          setStats(data.stats)
-          setIsDemo(false)
-        } else {
-          // No real data — show demo
-          setCalls(DEMO_CALLS)
-          setStats(DEMO_STATS)
-          setIsDemo(true)
+        setCalls(data.calls ?? [])
+        if (data.stats) setStats(data.stats)
+        else {
+          // Compute stats from returned calls
+          const c = (data.calls ?? []) as TrinityCall[]
+          const today = new Date().toDateString()
+          const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+          const calls_today = c.filter(x => new Date(x.created_at).toDateString() === today).length
+          const calls_this_week = c.filter(x => new Date(x.created_at).getTime() > weekAgo).length
+          const qualified = c.filter(x => x.outcome === 'qualified').length
+          const withDuration = c.filter(x => x.duration_seconds > 0)
+          const avg_duration = withDuration.length
+            ? Math.round(withDuration.reduce((s, x) => s + x.duration_seconds, 0) / withDuration.length)
+            : 0
+          setStats({ calls_today, calls_this_week, qualified, avg_duration })
         }
       } else {
-        setCalls(DEMO_CALLS)
-        setStats(DEMO_STATS)
-        setIsDemo(true)
+        setCalls([])
       }
     } catch {
-      setCalls(DEMO_CALLS)
-      setStats(DEMO_STATS)
-      setIsDemo(true)
+      setCalls([])
     }
     setLoading(false)
   }, [])
@@ -403,13 +303,6 @@ export default function TrinityPage() {
             ACTIVE
           </span>
         </div>
-
-        {isDemo && (
-          <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase"
-            style={{ background: "#0B7285", color: "#fff", fontFamily: "'IBM Plex Mono', monospace" }}>
-            DEMO DATA
-          </span>
-        )}
 
         <div className="ml-auto flex items-center gap-2">
           <button

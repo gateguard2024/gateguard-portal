@@ -18,7 +18,7 @@ import { CableGuide }   from '@/components/tech/CableGuide'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type StepType = 'question' | 'action' | 'measure' | 'select' | 'photo' | 'resolved' | 'escalate'
-type Screen   = 'pin' | 'home' | 'choice' | 'symptom' | 'diag' | 'wiring' | 'cable' | 'install' | 'survey' | 'survey_add' | 'survey_transcript' | 'training' | 'training_course' | 'netscout'
+type Screen   = 'pin' | 'identity' | 'home' | 'choice' | 'symptom' | 'diag' | 'wiring' | 'cable' | 'install' | 'survey' | 'survey_add' | 'survey_transcript' | 'training' | 'training_course' | 'netscout'
 
 // ─── Site Survey Types ────────────────────────────────────────────────────────
 interface SurveyDevice {
@@ -565,6 +565,12 @@ function TechTool() {
   } | null>(null)
   const [netscoutError,    setNetscoutError]    = useState<string | null>(null)
 
+  // GPS / identity state
+  const [techId,     setTechId]     = useState<string | null>(null)
+  const [techName,   setTechName]   = useState<string | null>(null)
+  const [allTechs,   setAllTechs]   = useState<{ id: string; name: string; initials: string }[]>([])
+  const [gpsGranted, setGpsGranted] = useState(false)
+
   // Demo / install mode state
   const [prevScreen,      setPrevScreen]     = useState<Screen | null>(null)
   const [wiringInitMapId, setWiringInitMapId] = useState<string | null>(null)
@@ -574,10 +580,16 @@ function TechTool() {
   const bottomRef   = useRef<HTMLDivElement>(null)
   const photoRef    = useRef<HTMLInputElement>(null)
 
-  // ── On mount: check sessionStorage for saved code ─────────────────────────
+  // ── On mount: check sessionStorage for saved code + restore identity ────────
   useEffect(() => {
     const saved = sessionStorage.getItem('gg_tech_code')
     if (saved) { setTechCode(saved); setScreen('home') }
+    const savedTechId   = localStorage.getItem('gg_tech_id')
+    const savedTechName = localStorage.getItem('gg_tech_name')
+    if (savedTechId && savedTechName) {
+      setTechId(savedTechId)
+      setTechName(savedTechName)
+    }
   }, [])
 
   // ── Demo mode: install flow bypasses PIN (no API calls needed) ────────────
@@ -622,9 +634,39 @@ function TechTool() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [history, current, loading])
 
+  // ── GPS: ping every 10 minutes while tool is open and tech is identified ──
+  useEffect(() => {
+    if (!techId) return
+    pingGPS('ping')
+    const interval = setInterval(() => pingGPS('ping'), 10 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [techId]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Auth ──────────────────────────────────────────────────────────────────
   function apiHeaders(): HeadersInit {
     return { 'Content-Type': 'application/json', 'x-tech-code': techCode }
+  }
+
+  // ── GPS ping helper — fire-and-forget, never blocks UI ───────────────────
+  function pingGPS(eventType: string = 'ping', workOrderId?: string) {
+    if (!techId || !navigator.geolocation) return
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        fetch(`/api/dispatch/technicians/${techId}/location`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-tech-code': techCode },
+          body: JSON.stringify({
+            lat:          pos.coords.latitude,
+            lng:          pos.coords.longitude,
+            accuracy_m:   pos.coords.accuracy,
+            event_type:   eventType,
+            work_order_id: workOrderId ?? null,
+          }),
+        }).catch(() => {}) // fire and forget, never block UI
+      },
+      () => {}, // ignore errors silently
+      { timeout: 8000, maximumAge: 60000 }
+    )
   }
 
   async function submitCode() {
@@ -635,7 +677,17 @@ function TechTool() {
     if (res.ok) {
       const data = await res.json()
       sessionStorage.setItem('gg_tech_code', code)
-      setTechCode(code); setProducts(data.products ?? []); setScreen('home')
+      setTechCode(code); setProducts(data.products ?? [])
+      const savedTechId = localStorage.getItem('gg_tech_id')
+      if (savedTechId) {
+        setScreen('home')
+      } else {
+        // Fetch tech list and go to identity screen
+        fetch('/api/tech/identity', { headers: { 'x-tech-code': code } })
+          .then(r => r.json())
+          .then(d => { setAllTechs(d.technicians ?? []); setScreen('identity') })
+          .catch(() => setScreen('home')) // graceful fallback
+      }
     } else if (res.status === 401) {
       setCodeError(true); setCodeInput('')
     } else {
@@ -647,6 +699,7 @@ function TechTool() {
   async function startDiag() {
     if (!symptom.trim()) return
     setDiagError(null)
+    pingGPS('job_start')
     setScreen('diag'); await fetchStep([])
   }
 
@@ -825,6 +878,63 @@ function TechTool() {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // SCREEN: IDENTITY — tech self-identification for GPS tracking
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (screen === 'identity') {
+    return (
+      <div style={{ minHeight: '100dvh', background: '#0B1728', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 }}>
+        <div style={{ fontSize: 28 }}>👋</div>
+        <div style={{ color: '#fff', fontSize: 18, fontWeight: 700, fontFamily: 'IBM Plex Mono, monospace' }}>Who are you?</div>
+        <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, textAlign: 'center', fontFamily: 'IBM Plex Sans, system-ui, sans-serif', lineHeight: 1.5 }}>Select your name so dispatch can track your location</div>
+        <div style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {allTechs.map(t => (
+            <button
+              key={t.id}
+              onClick={() => {
+                localStorage.setItem('gg_tech_id', t.id)
+                localStorage.setItem('gg_tech_name', t.name)
+                setTechId(t.id)
+                setTechName(t.name)
+                setScreen('home')
+                // Request GPS permission immediately on selection
+                if (navigator.geolocation) {
+                  navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                      setGpsGranted(true)
+                      fetch(`/api/dispatch/technicians/${t.id}/location`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'x-tech-code': techCode },
+                        body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy_m: pos.coords.accuracy, event_type: 'ping' }),
+                      }).catch(() => {})
+                    },
+                    () => setGpsGranted(false),
+                    { timeout: 10000 }
+                  )
+                }
+              }}
+              style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '14px 18px', color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', fontFamily: 'IBM Plex Sans, system-ui, sans-serif' }}
+            >
+              <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#6B7EFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0, fontFamily: 'IBM Plex Mono, monospace' }}>
+                {t.initials}
+              </div>
+              <span>{t.name}</span>
+            </button>
+          ))}
+          {allTechs.length === 0 && (
+            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, textAlign: 'center', padding: 16, fontFamily: 'IBM Plex Sans, system-ui, sans-serif' }}>No techs found — contact your admin</div>
+          )}
+        </div>
+        <button
+          onClick={() => setScreen('home')}
+          style={{ marginTop: 8, color: 'rgba(255,255,255,0.4)', fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'IBM Plex Mono, monospace' }}
+        >
+          Skip for now
+        </button>
+      </div>
+    )
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // SCREEN: HOME — device picker
   // ═══════════════════════════════════════════════════════════════════════════
   if (screen === 'home') {
@@ -857,7 +967,19 @@ function TechTool() {
             <div style={S.topBarTitle}>GATEGUARD FIELD TOOL</div>
             <div style={S.topBarSub}>SELECT DEVICE</div>
           </div>
-          <div style={S.statusPill}>● ONLINE</div>
+          {techName ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, color: C.textOnDark, letterSpacing: '0.08em' }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: gpsGranted ? C.green : C.amber, display: 'inline-block', flexShrink: 0 }} />
+                <span style={{ maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{techName.split(' ')[0].toUpperCase()}</span>
+              </div>
+              <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 8, color: 'rgba(160,190,255,0.5)', letterSpacing: '0.06em' }}>
+                {gpsGranted ? '📍 GPS ON' : '📍 GPS —'}
+              </div>
+            </div>
+          ) : (
+            <div style={S.statusPill}>● ONLINE</div>
+          )}
         </div>
 
         {/* Search bar */}
@@ -1437,6 +1559,7 @@ function TechTool() {
     async function saveToPortal() {
       if (!surveyDevices.length) return
       setSavingToPortal(true)
+      pingGPS('on_site')
       try {
         const res = await fetch('/api/surveys', {
           method: 'POST',
@@ -2733,7 +2856,7 @@ function TechTool() {
                       <div style={{ display: 'flex', gap: 10 }}>
                         <button
                           style={{ flex: 1, padding: '14px 12px', borderRadius: 12, background: 'rgba(5,150,105,0.08)', border: `1px solid rgba(5,150,105,0.3)`, color: C.green, fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: '0.1em', cursor: 'pointer' }}
-                          onClick={() => setResolutionConfirmed('yes')}
+                          onClick={() => { setResolutionConfirmed('yes'); pingGPS('job_end') }}
                         >
                           ✓ YES
                         </button>

@@ -1,123 +1,84 @@
 'use client'
 
-import { useState } from 'react'
-import { Calendar, Plus, MapPin, Clock, Users, Building2, ChevronRight, Filter } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Calendar, Plus, MapPin, Clock, Users, Building2, ChevronRight } from 'lucide-react'
 
-const { Tag, CheckCircle } = require('lucide-react') as any
+const { Tag } = require('lucide-react') as any
 
 /* ─── Types ──────────────────────────────────────────────────── */
-type EventType = 'inspection' | 'training' | 'install' | 'dealer_event' | 'site_visit'
-type EventStatus = 'upcoming' | 'in_progress' | 'completed' | 'cancelled'
-type TabKey = 'all' | 'property' | 'dealer' | 'upcoming'
+type SiteEventType = string
+type SiteEventSeverity = string
+type TabKey = 'all' | 'info' | 'warning' | 'critical'
 
-interface GGEvent {
+interface SiteEvent {
   id: string
+  event_type: SiteEventType
   title: string
-  location: string
-  property?: string
-  date: string
-  time: string
-  type: EventType
-  status: EventStatus
-  attendees: number
-  org: string
+  description: string | null
+  severity: SiteEventSeverity
+  resolved: boolean
+  site_id: string | null
+  org_id: string | null
+  created_at: string
 }
-
-/* ─── Demo data ──────────────────────────────────────────────── */
-const DEMO_EVENTS: GGEvent[] = [
-  {
-    id: '1',
-    title: 'Annual Gate Inspection — East Ponce Village',
-    location: 'Atlanta, GA',
-    property: 'East Ponce Village',
-    date: 'May 28, 2026',
-    time: '9:00 AM',
-    type: 'inspection',
-    status: 'upcoming',
-    attendees: 3,
-    org: 'GateGuard Corporate',
-  },
-  {
-    id: '2',
-    title: 'UL 325 Compliance Training — Atlanta Dealers',
-    location: 'GateGuard HQ, Atlanta, GA',
-    date: 'Jun 4, 2026',
-    time: '10:00 AM',
-    type: 'training',
-    status: 'upcoming',
-    attendees: 12,
-    org: 'GateGuard Corporate',
-  },
-  {
-    id: '3',
-    title: 'New Install Kickoff — Stonegate Preserve',
-    location: 'Marietta, GA',
-    property: 'Stonegate Preserve',
-    date: 'Jun 7, 2026',
-    time: '8:00 AM',
-    type: 'install',
-    status: 'upcoming',
-    attendees: 4,
-    org: 'Apex Security Systems',
-  },
-  {
-    id: '4',
-    title: 'Dealer Q2 Review — Southeast Region',
-    location: 'Virtual (Zoom)',
-    date: 'Jun 12, 2026',
-    time: '2:00 PM',
-    type: 'dealer_event',
-    status: 'upcoming',
-    attendees: 18,
-    org: 'GateGuard Corporate',
-  },
-  {
-    id: '5',
-    title: 'Site Survey — The Canopy at Buckhead',
-    location: 'Buckhead, GA',
-    property: 'The Canopy at Buckhead',
-    date: 'May 22, 2026',
-    time: '11:00 AM',
-    type: 'site_visit',
-    status: 'completed',
-    attendees: 2,
-    org: 'ProAccess Dealers',
-  },
-]
 
 /* ─── Config ─────────────────────────────────────────────────── */
-const EVENT_TYPE_CONFIG: Record<EventType, { label: string; color: string; bg: string }> = {
-  inspection:   { label: 'Inspection',    color: 'text-amber-700',   bg: 'bg-amber-100'   },
-  training:     { label: 'Training',      color: 'text-violet-700',  bg: 'bg-violet-100'  },
-  install:      { label: 'Install',       color: 'text-sky-700',     bg: 'bg-sky-100'     },
-  dealer_event: { label: 'Dealer Event',  color: 'text-indigo-700',  bg: 'bg-indigo-100'  },
-  site_visit:   { label: 'Site Visit',    color: 'text-emerald-700', bg: 'bg-emerald-100' },
+const EVENT_TYPE_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  install:      { label: 'Install',      color: 'text-sky-700',     bg: 'bg-sky-100'     },
+  offline:      { label: 'Offline',      color: 'text-red-700',     bg: 'bg-red-100'     },
+  online:       { label: 'Online',       color: 'text-emerald-700', bg: 'bg-emerald-100' },
+  work_order:   { label: 'Work Order',   color: 'text-amber-700',   bg: 'bg-amber-100'   },
+  inspection:   { label: 'Inspection',   color: 'text-violet-700',  bg: 'bg-violet-100'  },
+  alert:        { label: 'Alert',        color: 'text-red-700',     bg: 'bg-red-100'     },
+  access:       { label: 'Access',       color: 'text-indigo-700',  bg: 'bg-indigo-100'  },
+  visitor:      { label: 'Visitor',      color: 'text-pink-700',    bg: 'bg-pink-100'    },
+  other:        { label: 'Other',        color: 'text-slate-700',   bg: 'bg-slate-100'   },
 }
 
-const STATUS_CONFIG: Record<EventStatus, { label: string; color: string; dot: string }> = {
-  upcoming:    { label: 'Upcoming',    color: 'text-blue-600',    dot: 'bg-blue-400'    },
-  in_progress: { label: 'In Progress', color: 'text-amber-600',   dot: 'bg-amber-400'   },
-  completed:   { label: 'Completed',   color: 'text-emerald-600', dot: 'bg-emerald-400' },
-  cancelled:   { label: 'Cancelled',   color: 'text-slate-400',   dot: 'bg-slate-300'   },
+const SEVERITY_CONFIG: Record<string, { dot: string; color: string; label: string }> = {
+  info:     { dot: 'bg-blue-400',    color: 'text-blue-600',    label: 'Info'     },
+  warning:  { dot: 'bg-amber-400',   color: 'text-amber-600',   label: 'Warning'  },
+  critical: { dot: 'bg-red-500',     color: 'text-red-600',     label: 'Critical' },
 }
 
 const TABS: Array<{ key: TabKey; label: string }> = [
-  { key: 'all',      label: 'All Events'     },
-  { key: 'property', label: 'Property Events'},
-  { key: 'dealer',   label: 'Dealer Events'  },
-  { key: 'upcoming', label: 'Upcoming'       },
+  { key: 'all',      label: 'All Events' },
+  { key: 'critical', label: 'Critical'   },
+  { key: 'warning',  label: 'Warnings'   },
+  { key: 'info',     label: 'Info'       },
 ]
+
+function timeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
 
 /* ─── Main page ──────────────────────────────────────────────── */
 export default function EventsPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('all')
+  const [events, setEvents]       = useState<SiteEvent[]>([])
+  const [loading, setLoading]     = useState(true)
 
-  const filtered = DEMO_EVENTS.filter(e => {
-    if (activeTab === 'property') return !!e.property
-    if (activeTab === 'dealer')   return e.type === 'dealer_event' || e.type === 'training'
-    if (activeTab === 'upcoming') return e.status === 'upcoming'
-    return true
+  useEffect(() => {
+    fetch('/api/events')
+      .then(r => r.json())
+      .then(d => setEvents(d.events ?? []))
+      .catch(() => setEvents([]))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const filtered = events.filter(e => {
+    if (activeTab === 'all') return true
+    return e.severity === activeTab
   })
+
+  const tabCount = (key: TabKey) =>
+    key === 'all' ? events.length : events.filter(e => e.severity === key).length
 
   return (
     <div className="p-6 max-w-screen-xl mx-auto space-y-6">
@@ -128,10 +89,9 @@ export default function EventsPage() {
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2.5">
             <Calendar size={24} className="text-brand-400" />
             Events
-            <span className="text-xs font-bold px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full">Beta</span>
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Property inspections, dealer training days, site installs, and team events
+            Property installs, offline alerts, inspections, and access events
           </p>
         </div>
         <button className="flex items-center gap-2 px-4 py-2 bg-brand-400 text-white rounded-lg text-sm font-semibold hover:bg-brand-500 transition-colors shrink-0">
@@ -141,49 +101,52 @@ export default function EventsPage() {
 
       {/* ── Tabs ──────────────────────────────────────────────── */}
       <div className="flex gap-0.5 border-b border-slate-200">
-        {TABS.map(tab => {
-          const count = DEMO_EVENTS.filter(e => {
-            if (tab.key === 'property') return !!e.property
-            if (tab.key === 'dealer')   return e.type === 'dealer_event' || e.type === 'training'
-            if (tab.key === 'upcoming') return e.status === 'upcoming'
-            return true
-          }).length
-          return (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
-                activeTab === tab.key
-                  ? 'border-brand-400 text-brand-400'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              {tab.label}
-              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center ${
-                activeTab === tab.key ? 'bg-brand-100 text-brand-600' : 'bg-slate-100 text-slate-500'
-              }`}>
-                {count}
-              </span>
-            </button>
-          )
-        })}
+        {TABS.map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
+              activeTab === tab.key
+                ? 'border-brand-400 text-brand-400'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            {tab.label}
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center ${
+              activeTab === tab.key ? 'bg-brand-100 text-brand-600' : 'bg-slate-100 text-slate-500'
+            }`}>
+              {tabCount(tab.key)}
+            </span>
+          </button>
+        ))}
       </div>
 
-      {/* ── Event cards ───────────────────────────────────────── */}
-      {filtered.length === 0 ? (
+      {/* ── Content ───────────────────────────────────────────── */}
+      {loading ? (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {[0, 1, 2].map(i => (
+            <div key={i} className="border border-border rounded-xl bg-card p-4 space-y-3">
+              <div className="h-5 bg-muted/50 rounded animate-pulse w-24" />
+              <div className="h-4 bg-muted/50 rounded animate-pulse w-full" />
+              <div className="h-3 bg-muted/50 rounded animate-pulse w-3/4" />
+            </div>
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-slate-400">
           <Calendar size={40} className="mb-4 opacity-25" />
-          <p className="font-semibold text-slate-600 text-lg">No events scheduled</p>
-          <p className="text-sm mt-1 text-slate-400">Events you create will appear here</p>
-          <button className="mt-4 flex items-center gap-2 px-4 py-2 bg-brand-400 text-white rounded-lg text-sm font-semibold hover:bg-brand-500 transition-colors">
-            <Plus size={14} /> New Event
-          </button>
+          <p className="font-semibold text-slate-600 text-lg">No events yet</p>
+          <p className="text-sm mt-1 text-slate-400">
+            {activeTab === 'all'
+              ? 'Events from your properties will appear here'
+              : `No ${activeTab} events at this time`}
+          </p>
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {filtered.map(event => {
-            const typeCfg   = EVENT_TYPE_CONFIG[event.type]
-            const statusCfg = STATUS_CONFIG[event.status]
+            const typeCfg   = EVENT_TYPE_CONFIG[event.event_type] ?? EVENT_TYPE_CONFIG.other
+            const sevCfg    = SEVERITY_CONFIG[event.severity]    ?? SEVERITY_CONFIG.info
             return (
               <div
                 key={event.id}
@@ -196,8 +159,8 @@ export default function EventsPage() {
                     {typeCfg.label}
                   </span>
                   <div className="flex items-center gap-1.5 text-xs">
-                    <div className={`w-1.5 h-1.5 rounded-full ${statusCfg.dot}`} />
-                    <span className={statusCfg.color}>{statusCfg.label}</span>
+                    <div className={`w-1.5 h-1.5 rounded-full ${sevCfg.dot}`} />
+                    <span className={sevCfg.color}>{sevCfg.label}</span>
                   </div>
                 </div>
 
@@ -206,31 +169,27 @@ export default function EventsPage() {
                   {event.title}
                 </h3>
 
+                {/* Description */}
+                {event.description && (
+                  <p className="text-xs text-slate-500 mb-2 line-clamp-2">{event.description}</p>
+                )}
+
                 {/* Meta */}
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                    <Calendar size={11} className="shrink-0 text-slate-400" />
-                    {event.date} · {event.time}
+                    <Clock size={11} className="shrink-0 text-slate-400" />
+                    {timeAgo(event.created_at)}
                   </div>
-                  <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                    <MapPin size={11} className="shrink-0 text-slate-400" />
-                    {event.location}
-                  </div>
-                  {event.property && (
-                    <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                      <Building2 size={11} className="shrink-0 text-slate-400" />
-                      {event.property}
+                  {event.resolved && (
+                    <div className="flex items-center gap-1.5 text-xs text-emerald-600">
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                      Resolved
                     </div>
                   )}
-                  <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                    <Users size={11} className="shrink-0 text-slate-400" />
-                    {event.attendees} attendee{event.attendees !== 1 ? 's' : ''}
-                  </div>
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100">
-                  <span className="text-[11px] text-slate-400">{event.org}</span>
+                <div className="flex items-center justify-end mt-4 pt-3 border-t border-slate-100">
                   <ChevronRight size={14} className="text-slate-300 group-hover:text-brand-400 transition-colors" />
                 </div>
               </div>

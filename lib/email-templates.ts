@@ -401,3 +401,74 @@ export function generateInvoiceEmail(params: InvoiceEmailParams): string {
   `
   return wrap(body)
 }
+
+/* ─── Template 8: Monthly Client Report ──────────────────────────────── */
+
+export interface MonthlyReportEmailSummary {
+  wosCompleted: number
+  openInvoices: number
+  permitsExpiring: number
+}
+
+export function monthlyReportEmail(
+  siteName: string,
+  month: string,
+  summary: MonthlyReportEmailSummary
+): string {
+  const { wosCompleted, openInvoices, permitsExpiring } = summary
+
+  const woBadge = wosCompleted > 0
+    ? `<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;">${wosCompleted} completed</span>`
+    : `<span style="background:#f1f5f9;color:#94a3b8;padding:2px 8px;border-radius:12px;font-size:11px;">None this month</span>`
+
+  const invBadge = openInvoices > 0
+    ? `<span style="background:#fef3c7;color:#b45309;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;">${openInvoices} open</span>`
+    : `<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:12px;font-size:11px;">All paid</span>`
+
+  const permitBadge = permitsExpiring > 0
+    ? `<span style="background:#fef3c7;color:#b45309;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;">${permitsExpiring} expiring soon</span>`
+    : `<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:12px;font-size:11px;">All current</span>`
+
+  const body = `
+    <h1 style="font-family:Arial,sans-serif;font-size:22px;font-weight:700;color:#0f172a;margin:0 0 8px;">
+      ${month} Property Report
+    </h1>
+    <p style="font-family:Arial,sans-serif;font-size:15px;color:#475569;line-height:1.7;margin:0 0 20px;">
+      Your GateGuard monthly report for <strong>${siteName}</strong> is attached.
+      Here's a quick summary of the highlights:
+    </p>
+
+    <table width="100%" cellpadding="0" cellspacing="0"
+           style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:24px;">
+      <tr style="background:#f8fafc;">
+        <td style="padding:14px 16px;border-bottom:1px solid #e2e8f0;">
+          <p style="font-family:Arial,sans-serif;font-size:12px;color:#94a3b8;margin:0 0 4px;letter-spacing:0.4px;text-transform:uppercase;">Service Visits</p>
+          <p style="font-family:Arial,sans-serif;font-size:14px;color:#1e293b;margin:0;">${woBadge}</p>
+        </td>
+      </tr>
+      <tr style="background:#f8fafc;">
+        <td style="padding:14px 16px;border-bottom:1px solid #e2e8f0;">
+          <p style="font-family:Arial,sans-serif;font-size:12px;color:#94a3b8;margin:0 0 4px;letter-spacing:0.4px;text-transform:uppercase;">Outstanding Invoices</p>
+          <p style="font-family:Arial,sans-serif;font-size:14px;color:#1e293b;margin:0;">${invBadge}</p>
+        </td>
+      </tr>
+      <tr style="background:#f8fafc;">
+        <td style="padding:14px 16px;">
+          <p style="font-family:Arial,sans-serif;font-size:12px;color:#94a3b8;margin:0 0 4px;letter-spacing:0.4px;text-transform:uppercase;">Permit Status</p>
+          <p style="font-family:Arial,sans-serif;font-size:14px;color:#1e293b;margin:0;">${permitBadge}</p>
+        </td>
+      </tr>
+    </table>
+
+    <p style="font-family:Arial,sans-serif;font-size:14px;color:#475569;line-height:1.7;margin:0 0 4px;">
+      Open the attached PDF for the full service log, asset inventory, compliance details, and billing summary.
+    </p>
+    ${ctaButton('View Property in Portal', 'https://portal.gateguard.co')}
+
+    <p style="font-family:Arial,sans-serif;font-size:12px;color:#94a3b8;line-height:1.6;margin:0;">
+      This report is generated automatically on the 1st of each month by GateGuard Nexus.
+      If you have questions, reply to this email and your GateGuard team will follow up.
+    </p>
+  `
+  return wrap(body)
+}

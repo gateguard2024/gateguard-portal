@@ -15,7 +15,7 @@ import {
   ClipboardCheck, Building2, DollarSign,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, Tv: Satellite, Flame, Hash, Ruler, PenTool, MousePointer, FileSignature } = require("lucide-react") as any;
+const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, Tv: Satellite, Flame, Hash, Ruler, PenTool, MousePointer, FileSignature, HardHat } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useUser, useClerk, useSession } from "@clerk/nextjs";
@@ -85,6 +85,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Site Survey",    href: "/survey",      icon: ClipboardCheck, description: "Site walk and proposal builder" },
       { label: "Documents",      href: "/documents",   icon: FolderOpen,     description: "Agreements, permits, manuals" },
       { label: "Reports",        href: "/reports",     icon: BarChart3Icon,  description: "Multi-site rollup" },
+      { label: "Subcontractor",  href: "/subcontractor", icon: HardHat,      description: "Subcontractor work orders and docs" },
     ],
   },
   {
@@ -467,6 +468,11 @@ export function Sidebar() {
           if (section.key === "intelligence" && !showIntelligence)return null;
           if (section.key === "money"        && !showFinancials)  return null;
           if (section.key === "settings"     && !showAdmin && !isCorporate && !isMasterDealer && !isFullDealer) return null;
+          // Install contractor: hide CRM-heavy and financial sections
+          if (isInstallContractor && section.key === "operations")  return null;
+          if (isInstallContractor && section.key === "dealer")      return null;
+          if (isInstallContractor && section.key === "intelligence") return null;
+          if (isInstallContractor && section.key === "money")       return null;
 
           const SectionIcon = section.icon;
           const isExpanded      = expandedSections.has(section.key);
@@ -552,6 +558,7 @@ export function Sidebar() {
                 <div className="mt-0.5 ml-3 pl-3 border-l border-white/8 space-y-0.5 pb-1">
                   {section.items.map(item => {
                     // Item-level tier gates
+                    if (item.href === "/subcontractor" && !isInstallContractor && !isCorporate) return null;
                     if (item.href === "/crm"           && !showCRM)        return null;
                     if (item.href === "/customers"     && !showOperations) return null;
                     if (item.href === "/quotes"        && !showQuotes)     return null;

@@ -9,7 +9,7 @@ import {
   RefreshCw, Send, Building2, Hash, MapPin, Check, FileText, Search,
 } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowLeft, Edit2, Timer, Tag, ClipboardList, PhoneCall, PhoneOutgoing, Navigation, DollarSign, TrendingDown } = require('lucide-react') as any
+const { ArrowLeft, Edit2, Timer, Tag, ClipboardList, PhoneCall, PhoneOutgoing, Navigation, DollarSign, TrendingDown, Camera, ZoomIn } = require('lucide-react') as any
 import { TopBar } from '@/components/layout/TopBar'
 import { QuickActions } from '@/components/shared/QuickActions'
 import { cn } from '@/lib/utils'
@@ -558,6 +558,66 @@ export default function WorkOrderDetailPage() {
   // All techs (for crew picker)
   const [allTechs, setAllTechs] = useState<{ id: string; name: string; initials: string; role: string }[]>([])
 
+  // Photos
+  interface WOPhoto { id: string; file_url: string; file_name: string | null; created_at: string }
+  const [photos, setPhotos]           = useState<WOPhoto[]>([])
+  const [photosLoading, setPhotosLoading] = useState(false)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [lightboxPhoto, setLightboxPhoto]   = useState<string | null>(null)
+  const photoInputRef = useRef<HTMLInputElement>(null)
+
+  const fetchPhotos = useCallback(async () => {
+    setPhotosLoading(true)
+    try {
+      const res = await fetch(`/api/maintenance/${id}/photos`)
+      if (res.ok) {
+        const d = await res.json()
+        setPhotos(d.photos ?? [])
+      }
+    } catch { /* non-blocking */ }
+    finally { setPhotosLoading(false) }
+  }, [id])
+
+  async function handlePhotoUpload(file: File) {
+    setUploadingPhoto(true)
+    try {
+      // Step 1: get signed upload URL
+      const urlRes = await fetch(`/api/maintenance/${id}/photo-upload-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name }),
+      })
+      if (!urlRes.ok) return
+      const { signedUrl, publicUrl } = await urlRes.json()
+
+      // Step 2: upload directly to Supabase Storage
+      await fetch(signedUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      })
+
+      // Step 3: save record to DB
+      await fetch(`/api/maintenance/${id}/photos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_url: publicUrl, file_name: file.name }),
+      })
+
+      await fetchPhotos()
+    } catch { /* non-blocking */ }
+    finally { setUploadingPhoto(false) }
+  }
+
+  async function handleDeletePhoto(photoId: string) {
+    setPhotos(prev => prev.filter(p => p.id !== photoId))
+    void (async () => {
+      try {
+        await fetch(`/api/maintenance/${id}/photos?photo_id=${photoId}`, { method: 'DELETE' })
+      } catch { /* non-blocking */ }
+    })()
+  }
+
   // Field Tickets
   const [fieldTickets, setFieldTickets]   = useState<FieldTicket[]>([])
   const [showNewFT, setShowNewFT]         = useState(false)
@@ -630,6 +690,7 @@ export default function WorkOrderDetailPage() {
   }, [id, router])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => { fetchPhotos() }, [fetchPhotos])
 
   // Load job costs when costs tab is active
   useEffect(() => {
@@ -1454,6 +1515,113 @@ export default function WorkOrderDetailPage() {
                       </button>
                     </div>
                   </div>
+
+                  {/* ── Photos ── */}
+                  <div className="bg-card border border-border rounded-xl overflow-hidden">
+                    <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
+                      <h3 className="text-sm font-semibold flex items-center gap-2">
+                        <Camera size={14} className="text-brand-400" />
+                        Photos
+                        {photos.length > 0 && (
+                          <span className="text-xs text-muted-foreground font-normal">({photos.length})</span>
+                        )}
+                      </h3>
+                      <button
+                        onClick={() => photoInputRef.current?.click()}
+                        disabled={uploadingPhoto}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-brand-400 hover:text-brand-500 transition-colors disabled:opacity-50"
+                      >
+                        <Plus size={13} />
+                        {uploadingPhoto ? 'Uploading…' : 'Add Photo'}
+                      </button>
+                      <input
+                        ref={photoInputRef}
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        onChange={e => {
+                          const f = e.target.files?.[0]
+                          if (f) { void handlePhotoUpload(f) }
+                          e.target.value = ''
+                        }}
+                      />
+                    </div>
+
+                    {photosLoading ? (
+                      <div className="p-5 grid grid-cols-3 gap-3">
+                        {[0, 1, 2].map(i => (
+                          <div key={i} className="aspect-square bg-muted/40 rounded-lg animate-pulse" />
+                        ))}
+                      </div>
+                    ) : photos.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-10 gap-3">
+                        <div className="w-10 h-10 rounded-full bg-muted/40 flex items-center justify-center">
+                          <Camera size={18} className="text-muted-foreground" />
+                        </div>
+                        <p className="text-sm text-muted-foreground">No photos yet</p>
+                        <button
+                          onClick={() => photoInputRef.current?.click()}
+                          className="text-xs font-semibold text-brand-400 hover:text-brand-500 transition-colors"
+                        >
+                          Add the first photo
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="p-5 grid grid-cols-3 sm:grid-cols-4 gap-3">
+                        {photos.map(photo => (
+                          <div key={photo.id} className="relative group aspect-square rounded-lg overflow-hidden bg-muted/30 border border-border">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={photo.file_url}
+                              alt={photo.file_name ?? 'Work order photo'}
+                              className="w-full h-full object-cover cursor-pointer group-hover:opacity-90 transition-opacity"
+                              onClick={() => setLightboxPhoto(photo.file_url)}
+                            />
+                            {/* Overlay actions */}
+                            <div className="absolute inset-0 flex items-start justify-between p-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => setLightboxPhoto(photo.file_url)}
+                                className="w-6 h-6 rounded bg-black/50 flex items-center justify-center text-white"
+                                title="View full size"
+                              >
+                                <ZoomIn size={11} />
+                              </button>
+                              <button
+                                onClick={() => handleDeletePhoto(photo.id)}
+                                className="w-6 h-6 rounded bg-black/50 flex items-center justify-center text-white hover:bg-red-500/80 transition-colors"
+                                title="Delete"
+                              >
+                                <X size={11} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Lightbox */}
+                  {lightboxPhoto && (
+                    <div
+                      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+                      onClick={() => setLightboxPhoto(null)}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={lightboxPhoto}
+                        alt="Work order photo"
+                        className="max-w-full max-h-full object-contain rounded-xl shadow-2xl"
+                        onClick={e => e.stopPropagation()}
+                      />
+                      <button
+                        onClick={() => setLightboxPhoto(null)}
+                        className="absolute top-4 right-4 w-9 h-9 rounded-full bg-black/50 flex items-center justify-center text-white hover:bg-black/70 transition-colors"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                  )}
 
                   {/* Sub-Work Orders */}
                   {subWOs.length > 0 && (

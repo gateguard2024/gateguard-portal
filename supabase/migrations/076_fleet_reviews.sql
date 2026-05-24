@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS tech_location_pings (
 CREATE INDEX IF NOT EXISTS idx_tech_location_tech ON tech_location_pings(technician_id, created_at DESC);
 
 -- COI (Certificate of Insurance) records
+-- status is NOT a generated column (CURRENT_DATE is non-immutable).
+-- Compute it at query time via the coi_records_with_status view below.
 CREATE TABLE IF NOT EXISTS coi_records (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          uuid REFERENCES organizations(id) ON DELETE CASCADE,
@@ -23,19 +25,22 @@ CREATE TABLE IF NOT EXISTS coi_records (
   effective_date  date,
   expiry_date     date NOT NULL,
   document_url    text,
-  status          text GENERATED ALWAYS AS (
-    CASE
-      WHEN expiry_date < CURRENT_DATE THEN 'expired'
-      WHEN expiry_date < CURRENT_DATE + INTERVAL '30 days' THEN 'expiring_soon'
-      ELSE 'active'
-    END
-  ) STORED,
   notes           text,
   created_at      timestamptz DEFAULT now(),
   updated_at      timestamptz DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_coi_org ON coi_records(org_id);
 CREATE INDEX IF NOT EXISTS idx_coi_expiry ON coi_records(expiry_date);
+
+-- Convenience view that computes status at query time
+CREATE OR REPLACE VIEW coi_records_with_status AS
+  SELECT *,
+    CASE
+      WHEN expiry_date < CURRENT_DATE THEN 'expired'
+      WHEN expiry_date < CURRENT_DATE + INTERVAL '30 days' THEN 'expiring_soon'
+      ELSE 'active'
+    END AS status
+  FROM coi_records;
 
 -- Post-WO reviews
 CREATE TABLE IF NOT EXISTS work_order_reviews (
@@ -58,6 +63,9 @@ CREATE TABLE IF NOT EXISTS work_order_reviews (
 ALTER TABLE tech_location_pings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE coi_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE work_order_reviews ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "service_role_all" ON tech_location_pings;
+DROP POLICY IF EXISTS "service_role_all" ON coi_records;
+DROP POLICY IF EXISTS "service_role_all" ON work_order_reviews;
 CREATE POLICY "service_role_all" ON tech_location_pings USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_all" ON coi_records USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_all" ON work_order_reviews USING (true) WITH CHECK (true);

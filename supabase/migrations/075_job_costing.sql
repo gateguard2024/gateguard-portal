@@ -52,6 +52,8 @@ ALTER TABLE job_costs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rma_records ENABLE ROW LEVEL SECURITY;
 
 -- service_role bypass
+DROP POLICY IF EXISTS "service_role_all" ON job_costs;
+DROP POLICY IF EXISTS "service_role_all" ON rma_records;
 CREATE POLICY "service_role_all" ON job_costs USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_all" ON rma_records USING (true) WITH CHECK (true);
 
