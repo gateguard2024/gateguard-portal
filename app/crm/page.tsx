@@ -336,7 +336,7 @@ export default function CRMPage() {
   void timeAgo;
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC]">
+    <div className="min-h-screen bg-[#C0C8CF]">
       <TopBar
         title="CRM"
         subtitle="Pipeline · Leads · Opportunities"
