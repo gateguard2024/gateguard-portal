@@ -317,6 +317,17 @@ GateGuard is going live. Two parallel Vercel deployments must exist from this po
 - `/design/esign/sign/[token]` — Public signature page (no auth). Document summary card, 500×200 touch/mouse canvas, Clear + Sign & Complete buttons, legal disclaimer, signed confirmation state.
 - **Migration 070** — `service_catalog`, `dealer_service_enrollments`, `site_service_subscriptions` tables. RLS + service_role_all. 22 services seeded with ON CONFLICT DO NOTHING. Run on beta Supabase before enrollment persistence works.
 - **Migration 071** — `floor_plans`, `floor_plan_devices`, `floor_plan_connections`, `floor_plan_annotations`, `esign_documents` tables. RLS + service_role_all policies. Run on beta before design data persists.
+- **Migration 078** — `tech_achievements`, `dealer_tier_points`, `quests`, `quest_progress`, `nexus_wins` tables. RLS + service_role_all. Backs gamification system (dealer tier progression, tech streaks, quest system, NEXUS Wins tab).
+- **Dark theme** — Warm graphite applied site-wide: portal-main gradient + TopBar dark styling.
+- **Gamification** — Dealer tier progression (Bronze→Silver→Gold→Certified→Elite) on /scorecard. Tech streak flames on /dispatch. NEXUS Wins tab. Quest system at /quests. LinkedIn cert sharing + confetti on /training.
+
+- **Sprint 7 additions (May 2026):**
+- EOS persistence — Rocks/Scorecard/Issues/To-Dos wired to Supabase via `/api/eos/*` routes. org_id fallback uses seeded corporate UUID `00000000-0000-0000-0000-000000000001`. Migration 010 (already exists).
+- Photo evidence on WOs — Photos section in WO detail (already fully built in migration 077). Migration 079 adds caption/taken_at columns.
+- NEXUS write actions — Create/complete To-Dos and Work Orders from chat. `/api/assistant/actions` route. Claude tool schema for `create_work_order`. Action chips in NEXUS panel. Confirmation chips on AI messages.
+- Subcontractor Portal — Admin page at `/subcontractors` (stats, table, SlideOver). Public PIN portal at `/subcontractors/portal`. API routes + no-auth public endpoint. Migration 080 (subcontractors + work_order_subcontractors tables).
+- IT Process Playbooks — `/playbooks` section for internal build and pre-launch checklists (pending).
+- **Migrations 079, 080** — wo_photos enrichment, subcontractors + work_order_subcontractors.
 
 - **Critical Gaps Roadmap (May 22 2026)** — 34 professional apps audited across 10 categories. Sprint 6-10 roadmap established:
   - **Sprint 6** (current): Design section (Floor Plans, E-Sign, As-Builts, System Design) ✅ built
@@ -344,6 +355,10 @@ GateGuard is going live. Two parallel Vercel deployments must exist from this po
 - [ ] Monthly client report auto-PDF
 - [ ] `/quotes/[id]/proposal` — customer-facing proposal view (styled read-only version of quote)
 - [ ] Site Survey photo capture per device (framework in place, needs UI hookup)
+- [ ] IT Process Playbooks (`/playbooks`) — build/pre-launch checklists tracker
+- [ ] Mass manual upload — batch import from manufacturer URLs (DoorKing, Viking, Brivo, Ubiquiti, LiftMaster)
+- [ ] Wire all demo/hardcoded data to live Supabase (#193)
+- [ ] Client portal at portal.gateguard.co/[site-slug] (#50)
 
 ### Permission layer (built May 2026, pending commit)
 `lib/current-user.ts` exposes `canViewWOs`, `canViewSites`, `canViewCRM`, `canViewCommissions`, `canViewNetwork`, `canViewDispatch`, `canViewSensitive`, `canViewFinancials` booleans computed from `org_tier` + `role`. `lib/org-scope.ts` `resolveOrgScope()` routes each tier to the correct Supabase filter. `components/layout/Sidebar.tsx` gates nav items by `org_tier` so each tier only sees their relevant sections.
@@ -631,10 +646,21 @@ Two recurring line item types per property:
 - `/access` — Brivo access control, credentials
 - `/network` — UniFi infrastructure, VLAN management
 
+### Design Suite
+- `/design/floor-plans` — Interactive canvas: Survey mode (place devices), Design mode (click-to-connect, cable type/length), Markup mode (text annotations). BOM auto-generated. Export PDF + Share Link.
+- `/design/system` — Wire schedule + I/O block diagram (SVG auto-layout)
+- `/design/as-builts` — GateGuard-branded as-built doc generator. 4 sections + signature block. window.print() export.
+- `/design/esign` — E-sign dashboard (stats, document table, status badges, New Document slide-over)
+- `/design/esign/sign/[token]` — Public signature page (no auth, touch/mouse canvas)
+
 ### Platform & Tools
 - `/kb` — AI diagnostic engine (vector search + Claude)
 - `/tech` — Field diagnostic tool v4 (see /tech section below)
 - `/trinity` — TRINITY voice AI dashboard: live call monitoring, call history, sentiment scores, outcome tracking. Dark two-tone UI matching /tech.
+- `/services` — Service Marketplace: 22 services, enrollment management, MRR estimator
+- `/subcontractors` — Subcontractor management (admin)
+- `/subcontractors/portal` — Public subcontractor portal (PIN auth, no Clerk)
+- `/quests` — Gamification quest system
 - `/portal` — Customer portal (property manager read-only)
 - `/survey` — Site survey tool (DVI enhancement planned)
 - `/onboarding` — Customer onboarding
