@@ -121,6 +121,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Compliance",       href: "/compliance",    icon: ShieldCheck,  description: "Permits, certs, expiry alerts" },
       { label: "Territory Map",    href: "/map",           icon: Map,          description: "Property pins by health status" },
       { label: "Scorecard",        href: "/scorecard",     icon: Star,         description: "Dealer performance metrics" },
+      { label: "Reviews",           href: "/reviews",      icon: Star,         description: "Post-WO ratings and Google reviews" },
       { label: "Training",         href: "/training",      icon: GraduationCap,description: "Courses and certifications" },
     ],
   },

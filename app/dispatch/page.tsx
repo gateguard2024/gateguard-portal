@@ -9,7 +9,7 @@ import {
   Calendar, ChevronLeft, ChevronRight, Phone, FileText, ExternalLink,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { List, Search } = require("lucide-react") as any;
+const { List, Search, Route } = require("lucide-react") as any;
 import { SkeletonRow } from '@/components/ui/SkeletonRow';
 import {
   DndContext,
@@ -1014,7 +1014,7 @@ function ScheduleEditorModal({ tech, onClose, onSave }: {
   );
 }
 
-function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete, onEditSchedule }: {
+function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete, onEditSchedule, hasLiveGPS }: {
   tech:            Tech;
   jobs:            Job[];
   onStatusChange:  (id: string, status: TechStatus) => void;
@@ -1022,6 +1022,7 @@ function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete, on
   canDelete:       boolean;
   onDelete:        (id: string) => void;
   onEditSchedule:  (tech: Tech) => void;
+  hasLiveGPS?:     boolean;
 }) {
   const conf = techStatusConfig[tech.status] ?? techStatusConfig['Offline'];
   const currentJob = jobs.find(j => j.id === tech.currentJobId);
@@ -1058,6 +1059,12 @@ function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete, on
             <p className="text-sm font-semibold text-slate-800 truncate">{tech.name}</p>
             {hasPortalAccess && (
               <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-emerald-400" title="Has portal access" />
+            )}
+            {hasLiveGPS && (
+              <span className="relative shrink-0 flex h-2 w-2" title="Live GPS active">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
             )}
           </div>
           <p className="text-[11px] text-slate-400">{tech.role}{isContractor ? ' · Contractor' : ''}</p>
@@ -1403,6 +1410,16 @@ export default function DispatchPage() {
   const [scheduleTech, setScheduleTech]   = useState<Tech | null>(null);
   const [activeJobId,  setActiveJobId]    = useState<string | null>(null);
   const [showMap,      setShowMap]        = useState(true);
+  const [fleetLocations, setFleetLocations] = useState<Array<{
+    tech_id: string; name: string; initials: string; status: string;
+    lat: number; lng: number; event_type: string; work_order_id: string | null;
+    wo_title: string | null; updated_at: string;
+  }>>([]);
+  const [optimizing,      setOptimizing]      = useState(false);
+  const [optimizeResults, setOptimizeResults] = useState<Array<{
+    wo_id: string; wo_title: string; assigned_tech_id: string;
+    assigned_tech_name: string; reason: string; estimated_drive_mins: number;
+  }> | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapRef = useRef<any>(null);
@@ -1443,19 +1460,26 @@ export default function DispatchPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // ── Fleet GPS polling (every 30 seconds) ──────────────────────────
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const res  = await fetch('/api/dispatch/fleet');
+        const json = await res.json();
+        if (json.fleet) setFleetLocations(json.fleet);
+      } catch { /* non-fatal */ }
+    };
+    void poll();
+    const interval = setInterval(() => { void poll(); }, 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
   // ── Mapbox map init ────────────────────────────────────────────────
   useEffect(() => {
     if (!showMap || !mapContainerRef.current) return;
 
-    // Demo tech locations — TODO: replace with real GPS from tech mobile app
-    const demoLocations: Record<string, [number, number]> = {
-      // keyed by tech name fragment for loose matching
-      default0: [-87.6298, 41.8781],   // Chicago
-      default1: [-104.9903, 39.7392],  // Denver
-      default2: [-118.2437, 34.0522],  // Los Angeles
-      default3: [-73.9857, 40.7484],   // New York
-      default4: [-95.3698, 29.7604],   // Houston
-    };
+    // GPS coordinates sourced from live fleet API (fleetLocations state)
+    // Falls back to a spread of demo coords when no live GPS exists
 
     const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
     if (!token) return;
@@ -1492,10 +1516,16 @@ export default function DispatchPage() {
       mapRef.current = map;
 
       map.on('load', () => {
-        // Add tech markers
+        // Add tech markers — use real GPS if available, else demo coords
+        const demoFallback: [number, number][] = [
+          [-87.6298, 41.8781], [-104.9903, 39.7392], [-118.2437, 34.0522],
+          [-73.9857, 40.7484], [-95.3698, 29.7604],
+        ];
         techs.forEach((tech, idx) => {
-          // TODO: replace with real GPS from tech mobile app
-          const coords = demoLocations[`default${idx % 5}`] ?? [-98.5795, 39.8283];
+          const gpsEntry = fleetLocations.find(f => f.tech_id === tech.id);
+          const coords: [number, number] = gpsEntry
+            ? [gpsEntry.lng, gpsEntry.lat]
+            : (demoFallback[idx % 5] ?? [-98.5795, 39.8283]);
           const dotColor = tech.status === 'Available' ? '#10b981'
             : tech.status === 'On Site'   ? '#3b82f6'
             : tech.status === 'Driving'   ? '#f59e0b'
@@ -1537,7 +1567,7 @@ export default function DispatchPage() {
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showMap, techs.length]);
+  }, [showMap, techs.length, fleetLocations.length]);
 
   const handleJobStatusChange = async (id: string, newStatus: JobStatus) => {
     // Map UI status → DB status
@@ -1817,6 +1847,25 @@ export default function DispatchPage() {
               Map
             </button>
           )}
+          {viewMode === "board" && (
+            <button
+              onClick={async () => {
+                setOptimizing(true);
+                setOptimizeResults(null);
+                try {
+                  const res  = await fetch('/api/dispatch/optimize', { method: 'POST' });
+                  const json = await res.json();
+                  setOptimizeResults(json.suggestions ?? []);
+                } catch { setOptimizeResults([]); }
+                finally { setOptimizing(false); }
+              }}
+              disabled={optimizing}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-60"
+            >
+              <Route size={15} />
+              {optimizing ? "Optimizing…" : "Optimize Routes"}
+            </button>
+          )}
           <button
             onClick={fetchData}
             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
@@ -1850,6 +1899,52 @@ export default function DispatchPage() {
           </div>
         ))}
       </div>
+
+      {/* Optimize Results Panel */}
+      {optimizeResults !== null && (
+        <div className="bg-white rounded-xl border border-emerald-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-emerald-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Route size={14} className="text-emerald-600" />
+              <h2 className="text-sm font-semibold text-slate-800">Route Optimization Suggestions</h2>
+              <span className="text-[10px] text-slate-400">{optimizeResults.length} suggestion{optimizeResults.length !== 1 ? "s" : ""}</span>
+            </div>
+            <button onClick={() => setOptimizeResults(null)} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600">
+              <X size={14} />
+            </button>
+          </div>
+          {optimizeResults.length === 0 ? (
+            <div className="px-5 py-6 text-center text-sm text-slate-400">
+              All jobs are already optimally assigned. No changes suggested.
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-50">
+              {optimizeResults.map((s, i) => (
+                <div key={i} className="px-5 py-3 flex items-start gap-4">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-800 truncate">{s.wo_title}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{s.reason}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-xs font-semibold text-emerald-600">{s.assigned_tech_name}</p>
+                    {s.estimated_drive_mins > 0 && (
+                      <p className="text-[10px] text-slate-400">~{s.estimated_drive_mins} min drive</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => {
+                      void handleAssignTech(s.wo_id, s.assigned_tech_id, s.assigned_tech_name);
+                    }}
+                    className="shrink-0 px-3 py-1.5 text-xs font-medium text-white bg-[#2563EB] rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Apply
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Main Content — Board or Calendar */}
       {viewMode === "calendar" ? (
@@ -1968,7 +2063,9 @@ export default function DispatchPage() {
                     <span className="text-[10px] text-slate-500">{s}</span>
                   </div>
                 ))}
-                <span className="ml-auto text-[10px] text-slate-400 italic">Demo coords — real GPS coming from tech mobile app</span>
+                <span className="ml-auto text-[10px] text-slate-400 italic">
+                  {fleetLocations.length > 0 ? "Live GPS — techs check in via the field tool" : "Demo coords — techs check in via the field tool"}
+                </span>
               </div>
             </div>
           )}
@@ -2075,6 +2172,7 @@ export default function DispatchPage() {
                     canDelete={canDeleteTech}
                     onDelete={handleDeleteTech}
                     onEditSchedule={t => setScheduleTech(t)}
+                    hasLiveGPS={fleetLocations.some(f => f.tech_id === tech.id && new Date(f.updated_at).getTime() > Date.now() - 15 * 60 * 1000)}
                   />
                 ))
               )}

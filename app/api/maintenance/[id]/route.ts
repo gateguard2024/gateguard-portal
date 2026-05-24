@@ -216,6 +216,42 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     })()
   }
 
+  // ── Post-WO review trigger ────────────────────────────────────────────────
+  // Fire review request SMS when WO is marked completed (non-blocking)
+  if (body.status === 'completed' && statusChanged) {
+    void (async () => {
+      try {
+        // Get PM phone from linked site if not already fetched
+        let contactPhone: string | null = null
+        let contactName:  string | null = null
+        if (currentSiteId) {
+          const { data: siteRow } = await supabase
+            .from('sites')
+            .select('pm_phone, primary_contact_phone, pm_name')
+            .eq('id', currentSiteId)
+            .single()
+          const sr = siteRow as Record<string, unknown> | null
+          contactPhone = (sr?.pm_phone ?? sr?.primary_contact_phone) as string | null
+          contactName  = sr?.pm_name as string | null
+        }
+
+        await fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/api/reviews/send`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+            work_order_id:  params.id,
+            org_id:         (current as Record<string, unknown> | null)?.org_id ?? null,
+            technician_id:  data.assignee_id ?? null,
+            reviewer_name:  contactName,
+            reviewer_phone: contactPhone,
+            wo_number:      data.wo_number,
+            property_name:  data.customer_name,
+          }),
+        })
+      } catch (_) { /* non-fatal */ }
+    })()
+  }
+
   return NextResponse.json({ work_order: data })
 }
 

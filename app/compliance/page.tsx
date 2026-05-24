@@ -57,6 +57,24 @@ interface Site {
   state: string | null;
 }
 
+type COIStatus = "active" | "expiring_soon" | "expired";
+
+interface COIRecord {
+  id: string;
+  org_id: string | null;
+  org_name: string | null;
+  policy_number: string | null;
+  insurer_name: string | null;
+  coverage_type: string | null;
+  coverage_amount: number | null;
+  effective_date: string | null;
+  expiry_date: string;
+  document_url: string | null;
+  status: COIStatus;
+  notes: string | null;
+  created_at: string;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const PERMIT_TYPE_LABELS: Record<string, string> = {
@@ -87,6 +105,23 @@ function StatusBadge({ status }: { status: ComplianceStatus }) {
     return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-400/10 text-amber-400">Expiring Soon</span>;
   return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-400/10 text-red-400">Expired</span>;
 }
+
+function COIStatusBadge({ status }: { status: COIStatus }) {
+  if (status === "active")
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-400/10 text-emerald-400">Active</span>;
+  if (status === "expiring_soon")
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-400/10 text-amber-400">Expiring Soon</span>;
+  return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-400/10 text-red-400">Expired</span>;
+}
+
+const COVERAGE_TYPE_LABELS: Record<string, string> = {
+  general_liability: "General Liability",
+  workers_comp:      "Workers Comp",
+  auto:              "Auto",
+  umbrella:          "Umbrella",
+  professional:      "Professional Liability",
+  other:             "Other",
+};
 
 function DaysCell({ days, status }: { days: number | null; status: ComplianceStatus }) {
   if (!days && days !== 0) return <span className="text-muted-foreground">—</span>;
@@ -529,6 +564,34 @@ export default function CompliancePage() {
   const [selectedPermit, setSelectedPermit] = useState<Permit | null>(null);
   const [siteFilter,    setSiteFilter]    = useState<string>("all");
 
+  // COI state
+  const [cois,         setCois]         = useState<COIRecord[]>([]);
+  const [coisLoading,  setCoisLoading]  = useState(true);
+  const [showNewCOI,   setShowNewCOI]   = useState(false);
+  const [selectedCOI,  setSelectedCOI]  = useState<COIRecord | null>(null);
+  const [coiForm,      setCoiForm]      = useState({
+    org_id:          "",
+    coverage_type:   "general_liability",
+    insurer_name:    "",
+    policy_number:   "",
+    coverage_amount: "",
+    effective_date:  "",
+    expiry_date:     "",
+    document_url:    "",
+    notes:           "",
+  });
+  const [coiSaving,    setCoiSaving]    = useState(false);
+
+  const loadCOIs = useCallback(async () => {
+    setCoisLoading(true);
+    try {
+      const res  = await fetch("/api/compliance/coi");
+      const json = await res.json() as { cois?: COIRecord[] };
+      setCois(json.cois ?? []);
+    } catch (e) { console.error(e); }
+    finally { setCoisLoading(false); }
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -553,8 +616,14 @@ export default function CompliancePage() {
   }, [siteFilter]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void loadCOIs(); }, [loadCOIs]);
 
   const expiredCount   = permits.filter(p => p.status === "expired").length;
+
+  // COI stats
+  const coiActiveCount   = cois.filter(c => c.status === "active").length;
+  const coiExpiring      = cois.filter(c => c.status === "expiring_soon").length;
+  const coiExpired       = cois.filter(c => c.status === "expired").length;
   const expiringCount  = permits.filter(p => p.status === "expiring_soon").length;
   const compliantCount = permits.filter(p => p.status === "compliant" || p.status === "no_expiry").length;
 
@@ -687,6 +756,267 @@ export default function CompliancePage() {
         </div>
 
       </div>
+
+      {/* COI Section */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border flex-wrap">
+          <ShieldCheck size={15} className="text-brand-400" />
+          <h2 className="text-sm font-semibold">Insurance Certificates (COI)</h2>
+          {!coisLoading && cois.length > 0 && (
+            <span className="text-[10px] text-muted-foreground">{cois.length} records</span>
+          )}
+          <button
+            onClick={() => setShowNewCOI(v => !v)}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-400 text-white text-xs font-semibold hover:bg-brand-500 transition-colors"
+          >
+            <Plus size={12} />
+            Add COI
+          </button>
+        </div>
+
+        {/* COI Summary Stats */}
+        <div className="grid grid-cols-4 gap-0 border-b border-border">
+          {[
+            { label: "Total COIs",    value: cois.length,    icon: <FileText size={14} className="text-brand-400" />,        bg: "bg-brand-400/10" },
+            { label: "Active",        value: coiActiveCount, icon: <ShieldCheck size={14} className="text-emerald-400" />,    bg: "bg-emerald-400/10" },
+            { label: "Expiring Soon", value: coiExpiring,    icon: <AlertTriangle size={14} className="text-amber-400" />,   bg: "bg-amber-400/10" },
+            { label: "Expired",       value: coiExpired,     icon: <XCircle size={14} className="text-red-400" />,           bg: "bg-red-400/10" },
+          ].map(s => (
+            <div key={s.label} className="flex items-center gap-2 px-4 py-3">
+              <div className={`p-1.5 rounded-md ${s.bg}`}>{s.icon}</div>
+              <div>
+                <p className="text-base font-bold text-foreground">{coisLoading ? "—" : s.value}</p>
+                <p className="text-[10px] text-muted-foreground">{s.label}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Add COI Form */}
+        {showNewCOI && (
+          <div className="p-4 border-b border-border bg-muted/20">
+            <p className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wide">New Certificate of Insurance</p>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Coverage Type *</label>
+                <select
+                  value={coiForm.coverage_type}
+                  onChange={e => setCoiForm(f => ({ ...f, coverage_type: e.target.value }))}
+                  className={inputClass()}
+                >
+                  {Object.entries(COVERAGE_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Insurer</label>
+                <input value={coiForm.insurer_name} onChange={e => setCoiForm(f => ({ ...f, insurer_name: e.target.value }))}
+                  className={inputClass()} placeholder="Hiscox, Travelers…" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Policy #</label>
+                <input value={coiForm.policy_number} onChange={e => setCoiForm(f => ({ ...f, policy_number: e.target.value }))}
+                  className={inputClass()} placeholder="POL-12345" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Coverage Amount ($)</label>
+                <input type="number" value={coiForm.coverage_amount} onChange={e => setCoiForm(f => ({ ...f, coverage_amount: e.target.value }))}
+                  className={inputClass()} placeholder="1000000" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Effective Date</label>
+                <input type="date" value={coiForm.effective_date} onChange={e => setCoiForm(f => ({ ...f, effective_date: e.target.value }))}
+                  className={inputClass()} />
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Expiry Date *</label>
+                <input type="date" value={coiForm.expiry_date} onChange={e => setCoiForm(f => ({ ...f, expiry_date: e.target.value }))}
+                  className={inputClass()} />
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Document URL</label>
+                <input value={coiForm.document_url} onChange={e => setCoiForm(f => ({ ...f, document_url: e.target.value }))}
+                  className={inputClass()} placeholder="https://…" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Notes</label>
+                <input value={coiForm.notes} onChange={e => setCoiForm(f => ({ ...f, notes: e.target.value }))}
+                  className={inputClass()} placeholder="Additional details…" />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={async () => {
+                  if (!coiForm.expiry_date) return;
+                  setCoiSaving(true);
+                  try {
+                    await fetch("/api/compliance/coi", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        ...coiForm,
+                        coverage_amount: coiForm.coverage_amount ? Number(coiForm.coverage_amount) : null,
+                        effective_date: coiForm.effective_date || null,
+                        document_url:  coiForm.document_url || null,
+                        notes:         coiForm.notes || null,
+                      }),
+                    });
+                    setShowNewCOI(false);
+                    setCoiForm({ org_id: "", coverage_type: "general_liability", insurer_name: "", policy_number: "", coverage_amount: "", effective_date: "", expiry_date: "", document_url: "", notes: "" });
+                    void loadCOIs();
+                  } catch (e) { console.error(e); }
+                  finally { setCoiSaving(false); }
+                }}
+                disabled={coiSaving || !coiForm.expiry_date}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand-400 text-white text-sm font-semibold hover:bg-brand-500 transition-colors disabled:opacity-50"
+              >
+                {coiSaving ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                Save COI
+              </button>
+              <button onClick={() => setShowNewCOI(false)}
+                className="px-4 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:bg-accent/30 transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* COI Table */}
+        <DataTable<COIRecord>
+          columns={[
+            {
+              key: "org_name",
+              label: "Organization",
+              sortable: true,
+              render: (_, row) => row.org_name
+                ? <span className="font-medium text-foreground whitespace-nowrap">{row.org_name}</span>
+                : <span className="text-muted-foreground italic">My Org</span>,
+            },
+            {
+              key: "coverage_type",
+              label: "Coverage Type",
+              render: (_, row) => (
+                <span className="text-muted-foreground whitespace-nowrap">
+                  {COVERAGE_TYPE_LABELS[row.coverage_type ?? ""] ?? row.coverage_type ?? "—"}
+                </span>
+              ),
+            },
+            {
+              key: "insurer_name",
+              label: "Insurer",
+              render: (_, row) => row.insurer_name
+                ? <span className="text-muted-foreground">{row.insurer_name}</span>
+                : <span className="text-border">—</span>,
+            },
+            {
+              key: "policy_number",
+              label: "Policy #",
+              sortable: true,
+              render: (_, row) => row.policy_number
+                ? <span className="text-muted-foreground font-mono">{row.policy_number}</span>
+                : <span className="text-border">—</span>,
+            },
+            {
+              key: "expiry_date",
+              label: "Expires",
+              sortable: true,
+              render: (_, row) => <span className="text-muted-foreground whitespace-nowrap">{fmtDate(row.expiry_date)}</span>,
+            },
+            {
+              key: "status",
+              label: "Status",
+              render: (_, row) => <COIStatusBadge status={row.status} />,
+            },
+            {
+              key: "document_url",
+              label: "Doc",
+              render: (_, row) => row.document_url
+                ? (
+                    <a href={row.document_url} target="_blank" rel="noopener noreferrer"
+                       className="inline-flex items-center gap-1 text-xs text-brand-400 hover:underline">
+                      <Eye size={11} /> View
+                    </a>
+                  )
+                : <span className="text-border text-xs">—</span>,
+            },
+          ]}
+          data={cois}
+          rowKey="id"
+          loading={coisLoading}
+          skeletonRows={3}
+          onRowClick={row => setSelectedCOI(row)}
+          emptyState={
+            <EmptyState
+              icon={<ShieldCheck size={32} className="text-muted-foreground" />}
+              title="No COI records"
+              description="Click Add COI to track certificates of insurance"
+            />
+          }
+        />
+      </div>
+
+      {/* COI Detail/Edit SlideOver */}
+      {selectedCOI && (
+        <SlideOver
+          open
+          onClose={() => setSelectedCOI(null)}
+          title={COVERAGE_TYPE_LABELS[selectedCOI.coverage_type ?? ""] ?? "COI"}
+          subtitle={selectedCOI.insurer_name ?? "No insurer specified"}
+          footer={
+            <div className="flex justify-between items-center">
+              <COIStatusBadge status={selectedCOI.status} />
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    if (!confirm("Delete this COI record?")) return;
+                    await fetch(`/api/compliance/coi/${selectedCOI.id}`, { method: "DELETE" });
+                    setSelectedCOI(null);
+                    void loadCOIs();
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-red-200 text-red-500 text-sm hover:bg-red-50 transition-colors"
+                >
+                  <Trash2Icon size={13} /> Delete
+                </button>
+                {selectedCOI.document_url && (
+                  <a
+                    href={selectedCOI.document_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:bg-accent/30 transition-colors"
+                  >
+                    <Eye size={13} /> View Doc
+                  </a>
+                )}
+              </div>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+              {(
+                [
+                  ["Coverage Type",   COVERAGE_TYPE_LABELS[selectedCOI.coverage_type ?? ""] ?? selectedCOI.coverage_type ?? "—"],
+                  ["Insurer",         selectedCOI.insurer_name ?? "—"],
+                  ["Policy #",        selectedCOI.policy_number ?? "—"],
+                  ["Coverage Amount", selectedCOI.coverage_amount ? `$${Number(selectedCOI.coverage_amount).toLocaleString()}` : "—"],
+                  ["Effective Date",  fmtDate(selectedCOI.effective_date)],
+                  ["Expiry Date",     fmtDate(selectedCOI.expiry_date)],
+                ] as [string, string][]
+              ).map(([label, val]) => (
+                <div key={label}>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
+                  <p className="text-sm text-foreground py-1.5">{val}</p>
+                </div>
+              ))}
+              {selectedCOI.notes && (
+                <div className="col-span-2">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Notes</p>
+                  <p className="text-sm text-foreground py-1.5">{selectedCOI.notes}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </SlideOver>
+      )}
 
       {/* Permit Detail SlideOver */}
       {selectedPermit && (
