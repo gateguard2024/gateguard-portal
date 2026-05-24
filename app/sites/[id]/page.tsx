@@ -249,7 +249,7 @@ function formatDateTime(iso: string | null) {
 }
 
 /* ─── Main page ──────────────────────────────────────── */
-type Tab = 'overview' | 'assets' | 'events' | 'work_orders' | 'requests' | 'pm_schedules' | 'opportunities' | 'quotes'
+type Tab = 'overview' | 'assets' | 'events' | 'work_orders' | 'requests' | 'pm_schedules' | 'opportunities' | 'quotes' | 'warranty'
 
 interface SiteOpportunity {
   id: string
@@ -291,6 +291,34 @@ interface WORequest {
   created_at: string
 }
 
+interface AssetWithWarranty extends Asset {
+  warranty_months?: number | null
+  warranty_expires_at?: string | null
+  warranty_provider?: string | null
+  warranty_notes?: string | null
+  rma_status?: string | null
+  rma_ticket_number?: string | null
+  rma_initiated_at?: string | null
+  rma_resolved_at?: string | null
+  rma_notes?: string | null
+}
+
+interface RMARecord {
+  id: string
+  site_asset_id: string
+  work_order_id?: string | null
+  status: 'pending' | 'shipped' | 'received' | 'resolved' | 'denied'
+  ticket_number?: string | null
+  reason?: string | null
+  resolution?: string | null
+  initiated_at?: string | null
+  shipped_at?: string | null
+  received_at?: string | null
+  resolved_at?: string | null
+  notes?: string | null
+  asset_name?: string
+}
+
 export default function SiteDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
@@ -318,6 +346,15 @@ export default function SiteDetailPage() {
   })
   const [assigningField, setAssigningField] = useState<string | null>(null)
   const [assignSaving, setAssignSaving] = useState(false)
+
+  // Warranty / RMA state
+  const [rmaRecords, setRmaRecords]         = useState<RMARecord[]>([])
+  const [rmaLoading, setRmaLoading]         = useState(false)
+  const [rmaLoaded, setRmaLoaded]           = useState(false)
+  const [editRma, setEditRma]               = useState<RMARecord | null>(null)
+  const [rmaSlideOpen, setRmaSlideOpen]     = useState(false)
+  const [rmaForm, setRmaForm]               = useState({ status: 'pending', ticket_number: '', notes: '' })
+  const [rmaSaving, setRmaSaving]           = useState(false)
 
   // PM Schedule form state
   const [showPMForm, setShowPMForm] = useState(false)
@@ -529,6 +566,9 @@ export default function SiteDetailPage() {
 
   const newRequests = requests.filter(r => r.status === 'new').length
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { ShieldCheck } = require('lucide-react') as any
+
   const TABS: { id: Tab; label: string; icon: any; count?: number; badge?: number }[] = [
     { id: 'overview',      label: 'Overview',      icon: Building2 },
     { id: 'assets',        label: 'Equipment',     icon: Package,       count: assets.length },
@@ -538,6 +578,7 @@ export default function SiteDetailPage() {
     { id: 'pm_schedules',  label: 'PM Schedules',  icon: RefreshCw,     count: pmSchedules.length },
     { id: 'opportunities', label: 'Opportunities', icon: FileText,      count: siteOpps.length },
     { id: 'quotes',        label: 'Quotes',        icon: FileText,      count: siteQuotes.length },
+    { id: 'warranty',      label: 'Warranty & RMA', icon: ShieldCheck },
   ]
 
   return (
@@ -1388,6 +1429,297 @@ export default function SiteDetailPage() {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Tab: Warranty & RMA ────────────────────────────────────── */}
+      {tab === 'warranty' && (
+        <div className="space-y-6">
+          {/* Expiring Soon */}
+          {(() => {
+            const today = new Date()
+            today.setHours(0, 0, 0, 0)
+            const expiringSoon = (assets as AssetWithWarranty[]).filter(a => {
+              if (!a.warranty_expires_at) return false
+              const exp = new Date(a.warranty_expires_at + 'T00:00:00')
+              const days = Math.floor((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+              return days >= 0 && days <= 90
+            }).sort((a, b) => {
+              const da = new Date((a as AssetWithWarranty).warranty_expires_at! + 'T00:00:00').getTime()
+              const db = new Date((b as AssetWithWarranty).warranty_expires_at! + 'T00:00:00').getTime()
+              return da - db
+            })
+
+            if (expiringSoon.length === 0) return null
+            return (
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                  <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
+                  Expiring Within 90 Days ({expiringSoon.length})
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {expiringSoon.map(a => {
+                    const wa = a as AssetWithWarranty
+                    const exp = new Date(wa.warranty_expires_at! + 'T00:00:00')
+                    const days = Math.floor((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+                    return (
+                      <div key={a.id} className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                        <p className="font-medium text-slate-800 text-sm">{a.product_name}</p>
+                        {a.product_sku && <p className="text-xs text-slate-400">{a.product_sku}</p>}
+                        <p className="text-xs text-amber-700 mt-2 font-semibold">
+                          Expires in {days} day{days !== 1 ? 's' : ''}
+                        </p>
+                        {wa.warranty_provider && (
+                          <p className="text-xs text-slate-500 mt-0.5">{wa.warranty_provider}</p>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* All Assets warranty grid */}
+          <div>
+            <h3 className="text-sm font-semibold text-slate-800 mb-3">All Equipment — Warranty Status</h3>
+            {assets.length === 0 ? (
+              <div className="text-center py-10 text-slate-400 text-sm">No equipment on this site yet.</div>
+            ) : (
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 border-b border-slate-100">
+                    <tr>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Asset</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Serial #</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Warranty Expires</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Provider</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">RMA Status</th>
+                      <th className="px-4 py-2.5" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {(assets as AssetWithWarranty[]).map(a => {
+                      const rmaStatus = a.rma_status ?? 'none'
+                      return (
+                        <tr key={a.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-slate-800">{a.product_name}</p>
+                            {a.product_category && <p className="text-xs text-slate-400">{a.product_category}</p>}
+                          </td>
+                          <td className="px-4 py-3 text-xs font-mono text-slate-500">{a.serial_number ?? '—'}</td>
+                          <td className="px-4 py-3 text-xs text-slate-600">
+                            {a.warranty_expires_at ? formatDate(a.warranty_expires_at) : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-500">{a.warranty_provider ?? '—'}</td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize
+                              ${rmaStatus === 'pending'  ? 'bg-amber-100 text-amber-700' :
+                                rmaStatus === 'shipped'  ? 'bg-blue-100 text-blue-700' :
+                                rmaStatus === 'received' ? 'bg-purple-100 text-purple-700' :
+                                rmaStatus === 'resolved' ? 'bg-emerald-100 text-emerald-700' :
+                                'bg-slate-100 text-slate-400'}`}
+                            >
+                              {rmaStatus === 'none' ? 'No RMA' : rmaStatus}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {rmaStatus !== 'none' && rmaStatus !== 'resolved' && (
+                              <button
+                                onClick={() => {
+                                  setEditRma({
+                                    id: a.rma_ticket_number ?? a.id,
+                                    site_asset_id: a.id,
+                                    status: rmaStatus as RMARecord['status'],
+                                    ticket_number: a.rma_ticket_number ?? '',
+                                    notes: a.rma_notes ?? '',
+                                    asset_name: a.product_name,
+                                  })
+                                  setRmaForm({
+                                    status: rmaStatus,
+                                    ticket_number: a.rma_ticket_number ?? '',
+                                    notes: a.rma_notes ?? '',
+                                  })
+                                  setRmaSlideOpen(true)
+                                }}
+                                className="text-xs text-brand-400 hover:text-brand-500 font-medium"
+                              >
+                                Update
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Active RMAs section — pulled from asset rma_status fields */}
+          {(() => {
+            const activeRMAs = (assets as AssetWithWarranty[]).filter(a =>
+              a.rma_status && !['none', 'resolved', 'denied'].includes(a.rma_status)
+            )
+            if (activeRMAs.length === 0) return (
+              <div className="text-center py-8 text-slate-400">
+                <Shield size={24} className="mx-auto mb-2 text-slate-300" />
+                <p className="text-sm">No active RMAs</p>
+                <p className="text-xs mt-1">RMA records appear here when equipment status is set to pending, shipped, or received</p>
+              </div>
+            )
+            return (
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 mb-3">Active RMAs ({activeRMAs.length})</h3>
+                <div className="space-y-3">
+                  {activeRMAs.map(a => {
+                    const rmaStatus = a.rma_status ?? 'pending'
+                    return (
+                      <div key={a.id} className="bg-white border border-slate-200 rounded-xl p-4 flex items-start justify-between gap-4">
+                        <div>
+                          <p className="font-medium text-slate-800 text-sm">{a.product_name}</p>
+                          {a.rma_ticket_number && (
+                            <p className="text-xs font-mono text-slate-400 mt-0.5">Ticket: {a.rma_ticket_number}</p>
+                          )}
+                          {a.rma_initiated_at && (
+                            <p className="text-xs text-slate-400 mt-0.5">Initiated: {formatDate(a.rma_initiated_at)}</p>
+                          )}
+                          {a.rma_notes && (
+                            <p className="text-xs text-slate-500 mt-1">{a.rma_notes}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold capitalize
+                            ${rmaStatus === 'pending'  ? 'bg-amber-100 text-amber-700' :
+                              rmaStatus === 'shipped'  ? 'bg-blue-100 text-blue-700' :
+                              rmaStatus === 'received' ? 'bg-purple-100 text-purple-700' :
+                              'bg-slate-100 text-slate-400'}`}
+                          >
+                            {rmaStatus}
+                          </span>
+                          <button
+                            onClick={() => {
+                              setEditRma({
+                                id: a.rma_ticket_number ?? a.id,
+                                site_asset_id: a.id,
+                                status: rmaStatus as RMARecord['status'],
+                                ticket_number: a.rma_ticket_number ?? '',
+                                notes: a.rma_notes ?? '',
+                                asset_name: a.product_name,
+                              })
+                              setRmaForm({
+                                status: rmaStatus,
+                                ticket_number: a.rma_ticket_number ?? '',
+                                notes: a.rma_notes ?? '',
+                              })
+                              setRmaSlideOpen(true)
+                            }}
+                            className="text-xs font-medium text-brand-400 hover:text-brand-500 border border-brand-200 px-3 py-1.5 rounded-lg hover:bg-brand-50 transition-colors"
+                          >
+                            Update
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
+        </div>
+      )}
+
+      {/* RMA Update SlideOver */}
+      {rmaSlideOpen && editRma && (
+        <div className="fixed inset-0 z-50 flex">
+          <div className="flex-1 bg-black/40" onClick={() => setRmaSlideOpen(false)} />
+          <div className="w-full max-w-md bg-white shadow-2xl flex flex-col h-full">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-slate-900">Update RMA</h2>
+                <p className="text-xs text-slate-400 mt-0.5">{editRma.asset_name}</p>
+              </div>
+              <button onClick={() => setRmaSlideOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="flex-1 p-6 space-y-4 overflow-y-auto">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Status</label>
+                <select
+                  value={rmaForm.status}
+                  onChange={e => setRmaForm(f => ({ ...f, status: e.target.value }))}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="shipped">Shipped</option>
+                  <option value="received">Received</option>
+                  <option value="resolved">Resolved</option>
+                  <option value="denied">Denied</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Ticket Number</label>
+                <input
+                  value={rmaForm.ticket_number}
+                  onChange={e => setRmaForm(f => ({ ...f, ticket_number: e.target.value }))}
+                  placeholder="RMA-12345"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Notes</label>
+                <textarea
+                  value={rmaForm.notes}
+                  onChange={e => setRmaForm(f => ({ ...f, notes: e.target.value }))}
+                  placeholder="RMA notes, tracking number, resolution details…"
+                  rows={4}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none"
+                />
+              </div>
+            </div>
+            <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex gap-3 justify-end">
+              <button
+                onClick={() => setRmaSlideOpen(false)}
+                className="px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={rmaSaving}
+                onClick={async () => {
+                  setRmaSaving(true)
+                  try {
+                    await fetch(`/api/sites/${id}/assets`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        asset_id:          editRma.site_asset_id,
+                        rma_status:        rmaForm.status,
+                        rma_ticket_number: rmaForm.ticket_number || null,
+                        rma_notes:         rmaForm.notes || null,
+                      }),
+                    })
+                    // Optimistically update local assets state
+                    setAssets(prev => prev.map(a => {
+                      if (a.id !== editRma.site_asset_id) return a
+                      return {
+                        ...a,
+                        rma_status:        rmaForm.status,
+                        rma_ticket_number: rmaForm.ticket_number || null,
+                        rma_notes:         rmaForm.notes || null,
+                      } as AssetWithWarranty
+                    }))
+                    setRmaSlideOpen(false)
+                  } finally { setRmaSaving(false) }
+                }}
+                className="px-5 py-2 text-sm bg-brand-400 text-white rounded-lg hover:bg-brand-500 disabled:opacity-50"
+              >
+                {rmaSaving ? 'Saving…' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

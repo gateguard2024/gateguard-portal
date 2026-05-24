@@ -9,7 +9,7 @@ import {
   RefreshCw, Send, Building2, Hash, MapPin, Check, FileText, Search,
 } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowLeft, Edit2, Timer, Tag, ClipboardList, PhoneCall, PhoneOutgoing, Navigation } = require('lucide-react') as any
+const { ArrowLeft, Edit2, Timer, Tag, ClipboardList, PhoneCall, PhoneOutgoing, Navigation, DollarSign, TrendingDown } = require('lucide-react') as any
 import { TopBar } from '@/components/layout/TopBar'
 import { QuickActions } from '@/components/shared/QuickActions'
 import { cn } from '@/lib/utils'
@@ -537,7 +537,14 @@ export default function WorkOrderDetailPage() {
   const [selectedInvItem, setSelectedInvItem] = useState<InventorySearchResult | null>(null)
 
   // Active tab
-  const [tab, setTab] = useState<'details' | 'comments' | 'parts' | 'field_tickets' | 'time' | 'crew' | 'schedule' | 'calls'>('details')
+  const [tab, setTab] = useState<'details' | 'comments' | 'parts' | 'field_tickets' | 'time' | 'crew' | 'schedule' | 'calls' | 'costs'>('details')
+
+  // Job Costs state
+  const [jobCosts, setJobCosts] = useState<{ costs: any[]; summary: any }>({ costs: [], summary: null })
+  const [costsLoading, setCostsLoading] = useState(false)
+  const [showAddCost, setShowAddCost] = useState(false)
+  const [costForm, setCostForm] = useState({ cost_type: 'labor', description: '', quantity: '1', unit_cost: '' })
+  const [addingCost, setAddingCost] = useState(false)
 
   // Template email slide-over
   const [emailSlideOpen, setEmailSlideOpen] = useState(false)
@@ -623,6 +630,16 @@ export default function WorkOrderDetailPage() {
   }, [id, router])
 
   useEffect(() => { load() }, [load])
+
+  // Load job costs when costs tab is active
+  useEffect(() => {
+    if (tab !== 'costs' || !wo) return
+    setCostsLoading(true)
+    fetch(`/api/job-costs/${wo.id}`)
+      .then(r => r.json())
+      .then(d => setJobCosts(d))
+      .finally(() => setCostsLoading(false))
+  }, [tab, wo])
 
   // ── Status quick-change ──────────────────────────────────────────
 
@@ -1230,6 +1247,7 @@ export default function WorkOrderDetailPage() {
                   { key: 'time',          label: `Time (${totalMins > 0 ? Math.floor(totalMins / 60) + 'h ' + (totalMins % 60) + 'm' : timeEntries.length})`, icon: Clock },
                   { key: 'comments',      label: `Comments (${comments.length})`,          icon: MessageSquare },
                   { key: 'parts',         label: `Parts (${partsUsed.length})`,            icon: Package       },
+                  { key: 'costs',         label: 'Job Costs',                              icon: DollarSign    },
                 ] as const).map(t => {
                   const Icon = t.icon
                   return (
@@ -1895,6 +1913,248 @@ export default function WorkOrderDetailPage() {
                       </div>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* ── Job Costs tab ── */}
+              {tab === 'costs' && wo && (
+                <div className="space-y-5">
+                  {costsLoading ? (
+                    <div className="flex items-center justify-center py-16">
+                      <div className="animate-spin w-6 h-6 border-2 border-brand-400 border-t-transparent rounded-full" />
+                    </div>
+                  ) : (
+                    <>
+                      {/* Stat cards */}
+                      {jobCosts.summary && (
+                        <div className="grid grid-cols-4 gap-3">
+                          {[
+                            {
+                              label: 'Quoted Total',
+                              value: jobCosts.summary.quoted_total > 0
+                                ? `$${jobCosts.summary.quoted_total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                : '—',
+                              color: 'text-muted-foreground',
+                              bg: 'bg-muted/40',
+                            },
+                            {
+                              label: 'Actual Cost',
+                              value: `$${jobCosts.summary.actual_total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                              color: jobCosts.summary.status === 'over_budget' ? 'text-red-400' : 'text-foreground',
+                              bg: jobCosts.summary.status === 'over_budget' ? 'bg-red-500/10' : 'bg-card',
+                            },
+                            {
+                              label: 'Margin $',
+                              value: `$${Math.abs(jobCosts.summary.margin_dollars).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                              color: jobCosts.summary.margin_dollars >= 0 ? 'text-emerald-400' : 'text-red-400',
+                              bg: jobCosts.summary.margin_dollars >= 0 ? 'bg-emerald-500/10' : 'bg-red-500/10',
+                              prefix: jobCosts.summary.margin_dollars >= 0 ? '+' : '-',
+                            },
+                            {
+                              label: 'Margin %',
+                              value: `${Math.abs(jobCosts.summary.margin_percent).toFixed(1)}%`,
+                              color: jobCosts.summary.margin_percent >= 0 ? 'text-emerald-400' : 'text-red-400',
+                              bg: jobCosts.summary.margin_percent >= 0 ? 'bg-emerald-500/10' : 'bg-red-500/10',
+                              bar: true,
+                              barPct: Math.min(Math.abs(jobCosts.summary.margin_percent), 100),
+                              barColor: jobCosts.summary.margin_percent >= 0 ? 'bg-emerald-400' : 'bg-red-400',
+                            },
+                          ].map(card => (
+                            <div key={card.label} className={`${card.bg} border border-border rounded-xl p-4`}>
+                              <p className="text-xs text-muted-foreground mb-1">{card.label}</p>
+                              <p className={`text-lg font-bold ${card.color}`}>
+                                {(card as any).prefix ?? ''}{card.value}
+                              </p>
+                              {(card as any).bar && (
+                                <div className="mt-2 w-full bg-muted rounded-full h-1.5">
+                                  <div
+                                    className={`h-1.5 rounded-full ${(card as any).barColor}`}
+                                    style={{ width: `${(card as any).barPct}%` }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Budget vs Actual bars */}
+                      {jobCosts.summary && (
+                        <div className="bg-card border border-border rounded-xl p-5">
+                          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">Budget vs Actual</h3>
+                          <div className="space-y-4">
+                            {[
+                              { label: 'Labor', actual: jobCosts.summary.actual_labor },
+                              { label: 'Parts', actual: jobCosts.summary.actual_parts },
+                              { label: 'Other', actual: jobCosts.summary.actual_other },
+                            ].map(row => {
+                              const maxVal = Math.max(jobCosts.summary.quoted_total, jobCosts.summary.actual_total, 1)
+                              const actualPct = Math.min((row.actual / maxVal) * 100, 100)
+                              return (
+                                <div key={row.label}>
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <span className="text-xs font-medium text-foreground">{row.label}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      ${row.actual.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                  </div>
+                                  <div className="w-full bg-muted rounded-full h-2">
+                                    <div
+                                      className="h-2 rounded-full bg-brand-400"
+                                      style={{ width: `${actualPct}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Cost entries table */}
+                      <div className="bg-card border border-border rounded-xl overflow-hidden">
+                        <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
+                          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cost Entries</h3>
+                        </div>
+
+                        {jobCosts.costs.length === 0 ? (
+                          <div className="text-center py-12 text-muted-foreground">
+                            <DollarSign size={24} className="mx-auto mb-3 opacity-30" />
+                            <p className="text-sm">No cost entries yet</p>
+                            <p className="text-xs mt-1">Add entries manually or log time &amp; parts</p>
+                          </div>
+                        ) : (
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-border">
+                                <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Type</th>
+                                <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Description</th>
+                                <th className="text-right px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Qty</th>
+                                <th className="text-right px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Unit Cost</th>
+                                <th className="text-right px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total</th>
+                                <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Source</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {jobCosts.costs.map((c: any) => (
+                                <tr key={c.id} className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors">
+                                  <td className="px-5 py-3">
+                                    <span className="capitalize text-xs font-medium text-foreground">{c.cost_type}</span>
+                                  </td>
+                                  <td className="px-5 py-3 text-muted-foreground text-xs">{c.description ?? '—'}</td>
+                                  <td className="px-5 py-3 text-right text-xs">{c.quantity}</td>
+                                  <td className="px-5 py-3 text-right text-xs">
+                                    ${(c.unit_cost ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="px-5 py-3 text-right font-semibold text-xs">
+                                    ${(c.total_cost ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="px-5 py-3">
+                                    <span className={cn(
+                                      'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium',
+                                      c.source === 'manual'      ? 'bg-blue-500/10 text-blue-400' :
+                                      c.source === 'time_entry'  ? 'bg-amber-500/10 text-amber-400' :
+                                      c.source === 'parts_used'  ? 'bg-emerald-500/10 text-emerald-400' :
+                                      'bg-muted text-muted-foreground'
+                                    )}>
+                                      {c.source === 'time_entry' ? 'auto (time)' :
+                                       c.source === 'parts_used' ? 'auto (parts)' :
+                                       c.source ?? 'manual'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+
+                        {/* Add manual entry */}
+                        {showAddCost ? (
+                          <div className="px-5 py-4 border-t border-border space-y-3">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Add Manual Entry</p>
+                            <div className="grid grid-cols-4 gap-3">
+                              <select
+                                value={costForm.cost_type}
+                                onChange={e => setCostForm(f => ({ ...f, cost_type: e.target.value }))}
+                                className="h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500"
+                              >
+                                {['labor','parts','subcontractor','travel','overhead','other'].map(t => (
+                                  <option key={t} value={t} className="capitalize">{t}</option>
+                                ))}
+                              </select>
+                              <input
+                                value={costForm.description}
+                                onChange={e => setCostForm(f => ({ ...f, description: e.target.value }))}
+                                placeholder="Description"
+                                className="col-span-1 h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500"
+                              />
+                              <input
+                                value={costForm.quantity}
+                                onChange={e => setCostForm(f => ({ ...f, quantity: e.target.value }))}
+                                placeholder="Qty"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                className="h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500"
+                              />
+                              <input
+                                value={costForm.unit_cost}
+                                onChange={e => setCostForm(f => ({ ...f, unit_cost: e.target.value }))}
+                                placeholder="Unit cost ($)"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                className="h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500"
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => { setShowAddCost(false); setCostForm({ cost_type: 'labor', description: '', quantity: '1', unit_cost: '' }) }}
+                                className="px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-muted transition-colors"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                disabled={addingCost || !costForm.unit_cost}
+                                onClick={async () => {
+                                  setAddingCost(true)
+                                  try {
+                                    await fetch(`/api/job-costs/${wo.id}`, {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({
+                                        cost_type: costForm.cost_type,
+                                        description: costForm.description || null,
+                                        quantity: parseFloat(costForm.quantity) || 1,
+                                        unit_cost: parseFloat(costForm.unit_cost) || 0,
+                                      }),
+                                    })
+                                    setShowAddCost(false)
+                                    setCostForm({ cost_type: 'labor', description: '', quantity: '1', unit_cost: '' })
+                                    // Reload
+                                    setCostsLoading(true)
+                                    fetch(`/api/job-costs/${wo.id}`).then(r => r.json()).then(d => setJobCosts(d)).finally(() => setCostsLoading(false))
+                                  } finally { setAddingCost(false) }
+                                }}
+                                className="px-3 py-1.5 text-sm bg-brand-500 hover:bg-brand-600 text-white rounded-lg disabled:opacity-40 transition-colors"
+                              >
+                                {addingCost ? 'Adding…' : 'Add Entry'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="px-5 py-3 border-t border-border">
+                            <button
+                              onClick={() => setShowAddCost(true)}
+                              className="flex items-center gap-1.5 text-sm text-brand-400 hover:text-brand-500 transition-colors"
+                            >
+                              <Plus size={14} /> Add Manual Entry
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 

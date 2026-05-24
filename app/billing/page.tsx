@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { TopBar } from '@/components/layout/TopBar'
 import { DataTable, Column } from '@/components/ui/DataTable'
 import { SlideOver } from '@/components/ui/SlideOver'
@@ -551,6 +551,62 @@ export default function BillingPage() {
   // (filter is applied server-side, but we also need to handle display)
   const displayedInvoices = invoices
 
+  // ── AR Aging ────────────────────────────────────────────────────────────────
+  const [agingOpen, setAgingOpen] = useState(true)
+  const [reminderLoading, setReminderLoading] = useState<Record<string, boolean>>({})
+
+  const arAging = useMemo(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const active = invoices.filter(i => !['paid', 'void'].includes(i.status))
+
+    function daysPast(dueDate: string | null): number {
+      if (!dueDate) return 0
+      const d = new Date(dueDate + 'T00:00:00')
+      return Math.floor((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24))
+    }
+
+    const current    = active.filter(i => daysPast(i.due_date) <= 0)
+    const bucket30   = active.filter(i => { const d = daysPast(i.due_date); return d >= 1 && d <= 30 })
+    const bucket60   = active.filter(i => { const d = daysPast(i.due_date); return d >= 31 && d <= 60 })
+    const bucket90   = active.filter(i => daysPast(i.due_date) >= 61)
+
+    const sum = (arr: Invoice[]) => arr.reduce((s, i) => s + (i.balance_due ?? i.total ?? 0), 0)
+
+    const overdue = active.filter(i => daysPast(i.due_date) >= 1)
+    const top5Overdue = [...overdue]
+      .sort((a, b) => daysPast(b.due_date) - daysPast(a.due_date))
+      .slice(0, 5)
+      .map(i => ({ ...i, days_overdue: daysPast(i.due_date) }))
+
+    return {
+      current:    { invoices: current,  total: sum(current)  },
+      bucket30:   { invoices: bucket30, total: sum(bucket30) },
+      bucket60:   { invoices: bucket60, total: sum(bucket60) },
+      bucket90:   { invoices: bucket90, total: sum(bucket90) },
+      totalOverdue: sum(overdue),
+      top5Overdue,
+    }
+  }, [invoices])
+
+  async function sendReminder(inv: Invoice & { days_overdue?: number }) {
+    setReminderLoading(p => ({ ...p, [inv.id]: true }))
+    try {
+      await fetch('/api/billing/send-reminder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoice_id:     inv.id,
+          invoice_number: inv.invoice_number,
+          client_name:    inv.client_name ?? inv.site_name,
+          amount:         inv.balance_due ?? inv.total,
+        }),
+      })
+    } finally {
+      setReminderLoading(p => ({ ...p, [inv.id]: false }))
+    }
+  }
+
   return (
     <div className="flex flex-col min-h-full">
       <TopBar
@@ -589,6 +645,94 @@ export default function BillingPage() {
               </div>
             )
           })}
+        </div>
+
+        {/* ── AR Aging Panel ── */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <button
+            onClick={() => setAgingOpen(o => !o)}
+            className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-muted/30 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-semibold text-foreground">AR Aging</span>
+              {arAging.totalOverdue > 0 && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/10 text-red-400">
+                  {fmt(arAging.totalOverdue)} overdue
+                </span>
+              )}
+            </div>
+            <ChevronDown
+              size={16}
+              className={`text-muted-foreground transition-transform ${agingOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+
+          {agingOpen && (
+            <div className="border-t border-border">
+              {/* Aging buckets */}
+              <div className="grid grid-cols-4 gap-0 divide-x divide-border">
+                {[
+                  { label: 'Current (0–30)',  data: arAging.current,  color: 'text-foreground',   bg: '' },
+                  { label: '31–60 Days',      data: arAging.bucket30, color: 'text-amber-400',    bg: 'bg-amber-500/5' },
+                  { label: '61–90 Days',      data: arAging.bucket60, color: 'text-orange-400',   bg: 'bg-orange-500/5' },
+                  { label: '90+ Days',        data: arAging.bucket90, color: 'text-red-400',      bg: 'bg-red-500/5' },
+                ].map(bucket => (
+                  <div key={bucket.label} className={`px-5 py-4 ${bucket.bg}`}>
+                    <p className="text-xs text-muted-foreground mb-1">{bucket.label}</p>
+                    <p className={`text-lg font-bold ${bucket.color}`}>{fmt(bucket.data.total)}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {bucket.data.invoices.length} inv{bucket.data.invoices.length !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Top 5 most overdue */}
+              {arAging.top5Overdue.length > 0 && (
+                <div className="border-t border-border">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Invoice #</th>
+                        <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Client</th>
+                        <th className="text-right px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Amount</th>
+                        <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Due Date</th>
+                        <th className="text-right px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Days Overdue</th>
+                        <th className="px-5 py-2.5" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {arAging.top5Overdue.map(inv => (
+                        <tr key={inv.id} className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors">
+                          <td className="px-5 py-3">
+                            <span className="font-mono text-[#6B7EFF] text-xs">{inv.invoice_number}</span>
+                          </td>
+                          <td className="px-5 py-3 text-sm text-foreground">{inv.client_name ?? inv.site_name ?? '—'}</td>
+                          <td className="px-5 py-3 text-right font-semibold text-sm">{fmt(inv.balance_due ?? inv.total)}</td>
+                          <td className="px-5 py-3 text-xs text-muted-foreground">{fmtDate(inv.due_date)}</td>
+                          <td className="px-5 py-3 text-right">
+                            <span className={`text-xs font-semibold ${(inv as any).days_overdue >= 90 ? 'text-red-400' : (inv as any).days_overdue >= 61 ? 'text-orange-400' : 'text-amber-400'}`}>
+                              {(inv as any).days_overdue}d
+                            </span>
+                          </td>
+                          <td className="px-5 py-3 text-right">
+                            <button
+                              onClick={() => sendReminder(inv as any)}
+                              disabled={reminderLoading[inv.id]}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border border-border hover:bg-muted transition-colors disabled:opacity-50"
+                            >
+                              <Send size={11} />
+                              {reminderLoading[inv.id] ? 'Sending…' : 'Send Reminder'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ── Tabs ── */}
