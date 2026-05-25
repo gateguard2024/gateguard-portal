@@ -1164,57 +1164,127 @@ const PIPELINE_STAGES: PipelineStage[] = [
   { key: "lost",          label: "Lost",            bg: "bg-red-100",     text: "text-red-600" },
 ];
 
-function PipelineFlowBar({ opportunities }: { opportunities: Opportunity[] }) {
+// Stage fill colors for the chevron funnel
+const STAGE_COLORS: Record<string, { fill: string; text: string; border: string; glow: string }> = {
+  meet_present:  { fill: "#EEF2FF", text: "#4F46E5", border: "#C7D2FE", glow: "rgba(99,102,241,0.15)" },
+  survey_request:{ fill: "#F5F3FF", text: "#7C3AED", border: "#DDD6FE", glow: "rgba(124,58,237,0.15)" },
+  propose:       { fill: "#FFFBEB", text: "#D97706", border: "#FDE68A", glow: "rgba(217,119,6,0.15)" },
+  negotiate:     { fill: "#FFF7ED", text: "#EA580C", border: "#FED7AA", glow: "rgba(234,88,12,0.15)" },
+  won:           { fill: "#ECFDF5", text: "#059669", border: "#A7F3D0", glow: "rgba(5,150,105,0.2)" },
+  lost:          { fill: "#FFF1F2", text: "#E11D48", border: "#FECDD3", glow: "rgba(225,29,72,0.1)" },
+};
+
+function fmtVal(v: number) {
+  if (v >= 1_000_000) return `$${(v / 1e6).toFixed(1)}M`;
+  if (v >= 1_000)     return `$${(v / 1_000).toFixed(0)}K`;
+  if (v > 0)          return `$${v}`;
+  return "";
+}
+
+function PipelineFlowBar({ opportunities, onStageClick }: { opportunities: Opportunity[]; onStageClick?: (stage: string) => void }) {
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-  // Compute per-stage counts and totals
   const stageSummary = PIPELINE_STAGES.map((s) => {
     const records = opportunities.filter((o) => o.stage === s.key);
     const total = records.reduce((sum, o) => sum + (o.amount ?? 0), 0);
     return { ...s, count: records.length, total };
   });
 
-  // Momentum: any deal updated in the last 7 days moving forward (not lost/won from the start)
   const hasActivity = opportunities.some(
     (o) => o.stage !== "lost" && new Date(o.created_at) >= sevenDaysAgo
   );
 
+  const totalDeals = opportunities.filter(o => o.stage !== "lost").length || 1;
+
   return (
-    <div className="bg-white rounded-xl border border-border p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <TrendingUp size={14} className="text-muted-foreground" />
-        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Pipeline</span>
-        {hasActivity && (
-          <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">
-            <Zap size={10} className="text-emerald-500" />
-            Active
-          </span>
-        )}
+    <div className="bg-white rounded-xl border border-border p-4 mb-4">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <TrendingUp size={14} className="text-muted-foreground" />
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Pipeline Flow</span>
+          {hasActivity && (
+            <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+              <Zap size={9} />
+              Active this week
+            </span>
+          )}
+        </div>
+        <span className="text-xs text-muted-foreground">Click a stage to filter</span>
       </div>
-      <div className="flex items-center gap-1 overflow-x-auto pb-1">
-        {stageSummary.map((s, i) => (
-          <div key={s.key} className="flex items-center gap-1 flex-shrink-0">
-            <div
-              className={cn(
-                "flex flex-col items-center px-3 py-1.5 rounded-full text-xs font-medium transition-all",
-                s.count > 0
-                  ? (s.key === "won" ? "bg-emerald-500 text-white" : s.key === "lost" ? "bg-red-500 text-white" : `${s.bg} ${s.text}`)
-                  : "bg-slate-100 text-slate-400"
-              )}
-            >
-              <span className="font-semibold whitespace-nowrap">{s.label}</span>
-              <span className="font-mono text-[10px] opacity-80">
-                {s.count > 0
-                  ? `${s.count} · ${s.total >= 1_000_000 ? `$${(s.total / 1e6).toFixed(1)}M` : s.total >= 1_000 ? `$${(s.total / 1_000).toFixed(0)}K` : s.total > 0 ? `$${s.total}` : `${s.count}`}`
-                  : "0"}
-              </span>
+
+      {/* Chevron funnel */}
+      <div className="flex items-stretch gap-0 overflow-x-auto">
+        {stageSummary.map((s, i) => {
+          const colors = STAGE_COLORS[s.key];
+          const isEmpty = s.count === 0;
+          const isLast = i === stageSummary.length - 1;
+          const widthPct = s.key === "lost" ? 80 : Math.max(80, Math.round((s.count / totalDeals) * 160) + 60);
+
+          return (
+            <div key={s.key} className="flex items-stretch flex-shrink-0" style={{ minWidth: `${widthPct}px` }}>
+              {/* Stage card */}
+              <button
+                onClick={() => onStageClick?.(s.key)}
+                className="flex-1 relative flex flex-col justify-center items-center py-3 px-3 transition-all duration-150 group"
+                style={{
+                  background: isEmpty ? "#F8FAFC" : colors.fill,
+                  border: `1px solid ${isEmpty ? "#E2E8F0" : colors.border}`,
+                  borderRight: isLast ? undefined : "none",
+                  borderRadius: i === 0 ? "10px 0 0 10px" : isLast ? "0 10px 10px 0" : "0",
+                  boxShadow: isEmpty ? "none" : `inset 0 0 0 0 ${colors.glow}`,
+                  cursor: "pointer",
+                }}
+                onMouseEnter={e => {
+                  if (!isEmpty) (e.currentTarget as HTMLElement).style.boxShadow = `0 4px 16px ${colors.glow}, inset 0 0 0 0 transparent`;
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLElement).style.boxShadow = "none";
+                }}
+              >
+                {/* Count badge */}
+                <span
+                  className="text-2xl font-black leading-none mb-0.5"
+                  style={{ color: isEmpty ? "#CBD5E1" : colors.text }}
+                >
+                  {s.count}
+                </span>
+                {/* Label */}
+                <span
+                  className="text-[10px] font-semibold uppercase tracking-wide leading-tight text-center whitespace-nowrap"
+                  style={{ color: isEmpty ? "#94A3B8" : colors.text }}
+                >
+                  {s.label}
+                </span>
+                {/* Value */}
+                {s.total > 0 && (
+                  <span
+                    className="text-[11px] font-bold mt-0.5"
+                    style={{ color: colors.text, opacity: 0.8 }}
+                  >
+                    {fmtVal(s.total)}
+                  </span>
+                )}
+                {/* Progress bar at bottom */}
+                {!isEmpty && s.key !== "lost" && (
+                  <div className="absolute bottom-0 left-0 right-0 h-[3px] rounded-b" style={{ background: colors.border }} />
+                )}
+                {/* Arrow connector */}
+                {!isLast && (
+                  <div
+                    className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-full z-10 w-0 h-0"
+                    style={{
+                      borderTop: "20px solid transparent",
+                      borderBottom: "20px solid transparent",
+                      borderLeft: `10px solid ${isEmpty ? "#E2E8F0" : colors.border}`,
+                    }}
+                  />
+                )}
+              </button>
             </div>
-            {i < stageSummary.length - 1 && (
-              <span className="text-slate-300 text-xs font-bold flex-shrink-0">→</span>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

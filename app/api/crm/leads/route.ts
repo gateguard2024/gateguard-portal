@@ -44,13 +44,17 @@ export async function GET(req: NextRequest) {
       .from('opportunities').select('show_lead_id').not('show_lead_id', 'is', null)
     const convertedIds = new Set((convertedOpps || []).map((o: any) => o.show_lead_id))
 
+    // For corporate users (scope.all), treat null assigned_dealer as assigned to GateGuard Corporate
+    // so "+ Assign" button doesn't show on leads that were captured before auto-assign was implemented
+    const fallbackAssignee = scope.all ? (user.name ?? 'GateGuard Corporate') : null
+
     const leads = (data || []).filter((row: any) => !convertedIds.has(row.id)).map((row: any) => ({
       id:             `show_${row.id}`,
       type:           'lead' as const,
       contact_name:   row.name,
       property_name:  row.property_name || '',
       created_at:     row.created_at,
-      assigned_dealer: row.assigned_dealer ?? null,
+      assigned_dealer: row.assigned_dealer ?? fallbackAssignee,
       // Detail page fields
       name:          row.property_name || row.name,
       company:       '',
@@ -60,9 +64,9 @@ export async function GET(req: NextRequest) {
         ? `${row.city}, ${row.state}`
         : (row.city ?? 'Atlanta') + ', ' + (row.state ?? 'GA'),
       stage:        row.stage ?? 'new',
-      rep:          row.assigned_dealer ?? 'Unassigned',
-      repInitials:  row.assigned_dealer
-        ? row.assigned_dealer.split(' ').map((w: string) => w[0] ?? '').join('').toUpperCase().slice(0, 2)
+      rep:          row.assigned_dealer ?? fallbackAssignee ?? 'Unassigned',
+      repInitials:  (row.assigned_dealer ?? fallbackAssignee)
+        ? (row.assigned_dealer ?? fallbackAssignee).split(' ').map((w: string) => w[0] ?? '').join('').toUpperCase().slice(0, 2)
         : 'UN',
       lastActivity: formatAge(row.created_at),
       source:       row.source ?? 'show',
