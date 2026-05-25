@@ -6,7 +6,7 @@ import {
   Clock, ArrowRight, Shield,
 } from 'lucide-react'
 
-const { AlertOctagon } = require('lucide-react') as any
+const { AlertOctagon, AlertTriangle } = require('lucide-react') as any
 
 /* ─── Types ──────────────────────────────────────────────────── */
 // Sourced from the incidents table (severity: low | medium | high | critical)

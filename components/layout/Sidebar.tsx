@@ -41,8 +41,9 @@ type NavSection = {
 };
 
 // ─── Navigation Architecture ──────────────────────────────────────────────────
-// 8 primary sections matching the sketch: Dashboard · Operations · Field & Tech
-// Security · Dealer Network · Intelligence · Money · Settings
+// 7 primary sections: Dashboard · Business · Field & Tech · Design
+//                     Security · Dealer Network · Settings
+// Intelligence removed — all AI agents live in the AI Army panel above nav
 
 const NAV_SECTIONS: NavSection[] = [
   {
@@ -55,13 +56,23 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    key: "operations",
-    label: "Operations",
-    icon: ClipboardList,
+    key: "business",
+    label: "Business",
+    icon: TrendingUp,
+    color: "#059669",
     items: [
+      // ── CRM & Pipeline ──
       { label: "CRM",              href: "/crm",       icon: MessageSquare,  description: "Leads, opportunities, pipeline" },
       { label: "Customers",        href: "/customers", icon: Users,          description: "All customer accounts" },
       { label: "Quotes",           href: "/quotes",    icon: FileText,       description: "Proposals and approvals" },
+      // ── Finance ──
+      { label: "Service Marketplace", href: "/services", icon: Package,     description: "TV, internet, video monitoring & more", badge: "New" },
+      { label: "Billing",          href: "/billing",   icon: CreditCard,     description: "Invoices and payments" },
+      { label: "Revenue",          href: "/revenue",   icon: TrendingUp,     description: "MRR/ARR dashboard" },
+      { label: "Reps & Commissions", href: "/reps",    icon: UserCheck,      description: "Rep hierarchy and payouts" },
+      { label: "Renewals",         href: "/renewals",  icon: Repeat,         description: "Contract renewals and alerts" },
+      { label: "Contracts",        href: "/contracts", icon: FileCheck,      description: "Contract storage" },
+      // ── Operations ──
       { label: "Operating System", href: "/eos",       icon: Layers,         description: "EOS — Rocks, Scorecard, L10" },
       { label: "The Feed",         href: "/feed",      icon: Flame,          description: "Team wins, challenges, leaderboard", badge: "New" },
       { label: "Messages",         href: "/communications", icon: Hash,      description: "Team messaging — channels + DMs", badge: "Soon" },
@@ -124,38 +135,8 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Territory Map",    href: "/map",           icon: Map,          description: "Property pins by health status" },
       { label: "Scorecard",        href: "/scorecard",     icon: Star,         description: "Dealer performance metrics" },
       { label: "Quests",           href: "/quests",        icon: Trophy,       description: "Time-boxed challenges and tier points", badge: "New" },
-      { label: "Reviews",           href: "/reviews",      icon: Star,         description: "Post-WO ratings and Google reviews" },
+      { label: "Reviews",          href: "/reviews",       icon: Star,         description: "Post-WO ratings and Google reviews" },
       { label: "Training",         href: "/training",      icon: GraduationCap,description: "Courses and certifications" },
-    ],
-  },
-  {
-    key: "intelligence",
-    label: "Intelligence",
-    icon: Zap,
-    color: "#6B7EFF",
-    items: [
-      { label: "ARIA — Lead Intel",  href: "/aria",       icon: Crosshair,      description: "AI lead research and outreach",     badge: "AI" },
-      { label: "TRINITY — Voice AI", href: "/trinity",    icon: Phone,          description: "Voice agent + call analytics",      badge: "AI" },
-      { label: "DirecTV / ATLAS",    href: "/directv",    icon: Satellite,      description: "DirecTV channel and orders" },
-      { label: "New Order",          href: "/orders/new", icon: Zap,            description: "Submit a DirecTV order" },
-      { label: "SARA Bridge",        href: "/migrate",    icon: ArrowRightLeft, description: "Migrate from SARA Plus" },
-      { label: "Marketing Hub",      href: "/marketing",  icon: Megaphone,      description: "Campaigns and content" },
-      { label: "Dealer Sites",       href: "/marketing/website", icon: Globe,   description: "Hosted dealer landing pages" },
-      { label: "Co-op Pool",         href: "/marketing/coop",    icon: Users,   description: "Shared lead pool" },
-    ],
-  },
-  {
-    key: "money",
-    label: "Money",
-    icon: DollarSign,
-    color: "#059669",
-    items: [
-      { label: "Service Marketplace",  href: "/services", icon: Package,      description: "TV, internet, video monitoring & more", badge: "New" },
-      { label: "Billing",            href: "/billing",  icon: CreditCard,   description: "Invoices and payments" },
-      { label: "Revenue",            href: "/revenue",  icon: TrendingUp,   description: "MRR/ARR dashboard" },
-      { label: "Reps & Commissions", href: "/reps",     icon: UserCheck,    description: "Rep hierarchy and payouts" },
-      { label: "Renewals",           href: "/renewals", icon: Repeat,       description: "Contract renewals and alerts" },
-      { label: "Contracts",          href: "/contracts",icon: FileCheck,    description: "Contract storage" },
     ],
   },
   {
@@ -163,13 +144,13 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Settings",
     icon: Settings,
     items: [
-      { label: "Company Setup",   href: "/onboarding",              icon: Building2,  description: "Company info, logo, integrations" },
-      { label: "Subscription",    href: "/settings/subscription",   icon: CreditCard, description: "Plan, add-ons, billing" },
+      { label: "Company Setup",   href: "/onboarding",              icon: Building2,     description: "Company info, logo, integrations" },
+      { label: "Subscription",    href: "/settings/subscription",   icon: CreditCard,    description: "Plan, add-ons, billing" },
       { label: "Cost Tracking",   href: "/admin/costs",             icon: BarChart3Icon, description: "Infra costs, unit economics, dealer P&L" },
-      { label: "Organizations",   href: "/admin",                   icon: Network,    description: "5-tier org hierarchy" },
-      { label: "User Management", href: "/admin/users",             icon: UserCog,    description: "Roles and access control" },
-      { label: "Notifications",   href: "/communications",          icon: Headphones, description: "Alerts and notification preferences" },
-      { label: "Customer Portal", href: "/portal",                  icon: Globe,      description: "Property manager view" },
+      { label: "Organizations",   href: "/admin",                   icon: Network,       description: "5-tier org hierarchy" },
+      { label: "User Management", href: "/admin/users",             icon: UserCog,       description: "Roles and access control" },
+      { label: "Notifications",   href: "/alerts",                  icon: Bell,          description: "Alerts and notification preferences" },
+      { label: "Customer Portal", href: "/portal",                  icon: Globe,         description: "Property manager view" },
     ],
   },
 ];
@@ -222,7 +203,7 @@ export function Sidebar() {
 
   const activeSection = getSectionForPath(pathname);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(() => {
-    const initial = activeSection && activeSection !== "dashboard" ? activeSection : "operations";
+    const initial = activeSection && activeSection !== "dashboard" ? activeSection : "business";
     return new Set([initial]);
   });
 
@@ -464,17 +445,14 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
         {NAV_SECTIONS.map(section => {
           // Section-level tier gates
+          if (section.key === "business"     && !showOperations && !showFinancials) return null;
           if (section.key === "design"       && !showDesign)      return null;
           if (section.key === "security"     && !showSecurity)    return null;
           if (section.key === "dealer"       && !showNetwork)     return null;
-          if (section.key === "intelligence" && !showIntelligence)return null;
-          if (section.key === "money"        && !showFinancials)  return null;
           if (section.key === "settings"     && !showAdmin && !isCorporate && !isMasterDealer && !isFullDealer) return null;
           // Install contractor: hide CRM-heavy and financial sections
-          if (isInstallContractor && section.key === "operations")  return null;
-          if (isInstallContractor && section.key === "dealer")      return null;
-          if (isInstallContractor && section.key === "intelligence") return null;
-          if (isInstallContractor && section.key === "money")       return null;
+          if (isInstallContractor && section.key === "business") return null;
+          if (isInstallContractor && section.key === "dealer")   return null;
 
           const SectionIcon = section.icon;
           const isExpanded      = expandedSections.has(section.key);
