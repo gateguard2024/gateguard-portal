@@ -42,7 +42,7 @@ type NavSection = {
 
 // ─── Navigation Architecture ──────────────────────────────────────────────────
 // 8 primary sections matching the sketch: Dashboard · Operations · Field & Tech
-// Security · Dealer Network · Intelligence · Money · Settings
+// Security · Dealer Network · AI Army · Money · Settings
 
 const NAV_SECTIONS: NavSection[] = [
   {
@@ -129,8 +129,8 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    key: "intelligence",
-    label: "Intelligence",
+    key: "ai-army",
+    label: "AI Army",
     icon: Zap,
     color: "#6B7EFF",
     items: [
@@ -267,7 +267,7 @@ export function Sidebar() {
   const showFinancials   = isCorporate || isMasterAgent || isMasterDealer || isFullDealer || isAdminRole;
   const showCompliance   = isCorporate || isMasterDealer || isFullDealer || isServiceDealer;
   const showSecurity     = isCorporate || isMasterDealer || isFullDealer;
-  const showIntelligence = isCorporate || isMasterDealer || isFullDealer || isMasterAgent;
+  const showAiArmy       = isCorporate || isMasterDealer || isFullDealer || isMasterAgent;
   const showDesign       = isCorporate || isMasterDealer || isFullDealer || isInstallContractor || isServiceDealer;
 
   const activeAgentCount = aiAgents.filter(a => a.active).length;
@@ -475,13 +475,13 @@ export function Sidebar() {
           if (section.key === "design"       && !showDesign)      return null;
           if (section.key === "security"     && !showSecurity)    return null;
           if (section.key === "dealer"       && !showNetwork)     return null;
-          if (section.key === "intelligence" && !showIntelligence)return null;
+          if (section.key === "ai-army"      && !showAiArmy)      return null;
           if (section.key === "money"        && !showFinancials)  return null;
           if (section.key === "settings"     && !showAdmin && !isCorporate && !isMasterDealer && !isFullDealer) return null;
           // Install contractor: hide CRM-heavy and financial sections
           if (isInstallContractor && section.key === "operations")  return null;
           if (isInstallContractor && section.key === "dealer")      return null;
-          if (isInstallContractor && section.key === "intelligence") return null;
+          if (isInstallContractor && section.key === "ai-army")       return null;
           if (isInstallContractor && section.key === "money")       return null;
 
           const SectionIcon = section.icon;
