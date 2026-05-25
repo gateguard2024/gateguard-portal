@@ -41,8 +41,8 @@ type NavSection = {
 };
 
 // ─── Navigation Architecture ──────────────────────────────────────────────────
-// 8 primary sections: Dashboard · Sales · Business · Field & Tech · Design
-//                     Security · Dealer Network · Settings
+// 9 primary sections: Dashboard · Sales · Business · Field & Tech · Design
+//                     Security · Dealer Network · Internal (corporate-only) · Settings
 // Intelligence removed — all AI agents live in the AI Army panel above nav
 
 const NAV_SECTIONS: NavSection[] = [
@@ -99,7 +99,6 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Dispatch",       href: "/dispatch",    icon: Truck,          description: "Tech scheduling and job board" },
       { label: "Inventory",      href: "/inventory",   icon: Package,        description: "Parts, stock, and POs" },
       { label: "Site Survey",    href: "/survey",      icon: ClipboardCheck, description: "Site walk and proposal builder" },
-      { label: "Playbooks",      href: "/playbooks",   icon: BookOpen,       description: "Step-by-step integration guides" },
       { label: "Documents",      href: "/documents",   icon: FolderOpen,     description: "Agreements, permits, manuals" },
       { label: "Reports",        href: "/reports",     icon: BarChart3Icon,  description: "Multi-site rollup" },
       { label: "Subcontractor",  href: "/subcontractor", icon: HardHat,      description: "Subcontractor work orders and docs" },
@@ -145,13 +144,22 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    key: "internal",
+    label: "Internal",
+    icon: ShieldCheck,
+    color: "#6B7EFF",
+    items: [
+      { label: "Playbooks",      href: "/playbooks",          icon: BookOpen,      description: "Step-by-step integration guides" },
+      { label: "Cost Tracking",  href: "/admin/costs",        icon: BarChart3Icon, description: "Infra costs, unit economics, dealer P&L" },
+    ],
+  },
+  {
     key: "settings",
     label: "Settings",
     icon: Settings,
     items: [
       { label: "Company Setup",   href: "/onboarding",              icon: Building2,     description: "Company info, logo, integrations" },
       { label: "Subscription",    href: "/settings/subscription",   icon: CreditCard,    description: "Plan, add-ons, billing" },
-      { label: "Cost Tracking",   href: "/admin/costs",             icon: BarChart3Icon, description: "Infra costs, unit economics, dealer P&L" },
       { label: "Organizations",   href: "/admin",                   icon: Network,       description: "5-tier org hierarchy" },
       { label: "User Management", href: "/admin/users",             icon: UserCog,       description: "Roles and access control" },
       { label: "Notifications",   href: "/alerts",                  icon: Bell,          description: "Alerts and notification preferences" },
@@ -455,6 +463,7 @@ export function Sidebar() {
           if (section.key === "design"       && !showDesign)      return null;
           if (section.key === "security"     && !showSecurity)    return null;
           if (section.key === "dealer"       && !showNetwork)     return null;
+          if (section.key === "internal"     && !isCorporate)     return null;
           if (section.key === "settings"     && !showAdmin && !isCorporate && !isMasterDealer && !isFullDealer) return null;
           // Install contractor: hide CRM-heavy and financial sections
           if (isInstallContractor && section.key === "sales")    return null;
@@ -564,8 +573,9 @@ export function Sidebar() {
                     if (item.href === "/compliance"    && !showCompliance) return null;
                     if (item.href === "/scorecard"     && !showNetwork)    return null;
                     if (item.href === "/training"      && !showNetwork)    return null;
-                    if (item.href === "/admin"         && !showAdmin)      return null;
+                    if (item.href === "/admin"          && !showAdmin)      return null;
                     if (item.href === "/admin/users"   && !showAdmin)      return null;
+                    if (item.href === "/playbooks"     && !isCorporate)    return null;
 
                     const Icon = item.icon;
                     const isActive = !item.external && (

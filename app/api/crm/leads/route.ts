@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
       contact_name:   row.name,
       property_name:  row.property_name || '',
       created_at:     row.created_at,
-      assigned_dealer: row.assigned_dealer ?? null,
+      assigned_dealer: row.assigned_dealer?.trim() || null,
       // Detail page fields
       name:          row.property_name || row.name,
       company:       '',

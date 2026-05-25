@@ -1588,7 +1588,7 @@ export default function BillingPage() {
                   className="flex items-center gap-1.5 px-4 py-2.5 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-colors disabled:opacity-50 font-medium"
                 >
                   <CheckCircle2 size={14} />
-                  {newInvSaving ? 'Saving…' : 'Save as Paid'}
+                  {newInvSaving ? 'Saving…' : 'Save'}
                 </button>
                 <button
                   onClick={() => saveNewInvoice(true, false)}
