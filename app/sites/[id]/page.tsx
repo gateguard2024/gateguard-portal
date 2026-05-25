@@ -40,6 +40,8 @@ interface Site {
   notes: string | null
   crm_customer_id: string | null
   crm_opp_id: string | null
+  een_account_id: string | null
+  brivo_account_id: string | null
   created_at: string
 }
 
@@ -346,6 +348,12 @@ export default function SiteDetailPage() {
   })
   const [assigningField, setAssigningField] = useState<string | null>(null)
   const [assignSaving, setAssignSaving] = useState(false)
+
+  // Integration IDs (EEN + Brivo) — inline edit
+  const [editingIntegration, setEditingIntegration] = useState(false)
+  const [eenIdDraft, setEenIdDraft]         = useState('')
+  const [brivoIdDraft, setBrivoIdDraft]     = useState('')
+  const [integrationSaving, setIntegrationSaving] = useState(false)
 
   // Warranty / RMA state
   const [rmaRecords, setRmaRecords]         = useState<RMARecord[]>([])
@@ -812,6 +820,110 @@ export default function SiteDetailPage() {
               <p className="text-sm text-slate-600 whitespace-pre-wrap">{site.notes}</p>
             ) : (
               <p className="text-sm text-slate-400">No notes</p>
+            )}
+          </div>
+
+          {/* Integration IDs — EEN + Brivo — full width */}
+          <div className="col-span-2 bg-white rounded-xl border border-slate-200 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <Wifi size={16} className="text-slate-400" /> Integration IDs
+                <span className="text-[10px] text-slate-400 font-normal ml-1">Used to link GGSOC alarms and portal incidents to this site</span>
+              </h3>
+              {!editingIntegration ? (
+                <button
+                  onClick={() => { setEenIdDraft(site.een_account_id ?? ''); setBrivoIdDraft(site.brivo_account_id ?? ''); setEditingIntegration(true) }}
+                  className="flex items-center gap-1 text-xs text-brand-400 hover:text-brand-500 font-medium"
+                >
+                  <Edit2 size={12} /> Edit
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setEditingIntegration(false)}
+                    className="text-xs text-slate-400 hover:text-slate-600"
+                  >Cancel</button>
+                  <button
+                    disabled={integrationSaving}
+                    onClick={async () => {
+                      setIntegrationSaving(true)
+                      try {
+                        await fetch(`/api/sites/${id}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            een_account_id:   eenIdDraft.trim()   || null,
+                            brivo_account_id: brivoIdDraft.trim() || null,
+                          }),
+                        })
+                        site.een_account_id   = eenIdDraft.trim()   || null
+                        site.brivo_account_id = brivoIdDraft.trim() || null
+                        setEditingIntegration(false)
+                      } finally {
+                        setIntegrationSaving(false)
+                      }
+                    }}
+                    className="flex items-center gap-1 px-3 py-1 rounded-lg bg-brand-400 text-white text-xs font-medium hover:bg-brand-500 disabled:opacity-50"
+                  >
+                    {integrationSaving ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              )}
+            </div>
+            {editingIntegration ? (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Eagle Eye Account ID <span className="font-normal text-slate-400">(GGSOC account_id)</span></label>
+                  <input
+                    type="text"
+                    value={eenIdDraft}
+                    onChange={e => setEenIdDraft(e.target.value)}
+                    placeholder="e.g. 00057123"
+                    className="w-full h-9 rounded-lg border border-slate-200 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-400/30 focus:border-brand-400"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Matches <code className="bg-slate-100 px-1 rounded">accounts.id</code> in GGSOC Supabase</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Brivo Account ID <span className="font-normal text-slate-400">(optional)</span></label>
+                  <input
+                    type="text"
+                    value={brivoIdDraft}
+                    onChange={e => setBrivoIdDraft(e.target.value)}
+                    placeholder="e.g. 123456"
+                    className="w-full h-9 rounded-lg border border-slate-200 px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-400/30 focus:border-brand-400"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Brivo numeric account ID for alarm matching</p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-slate-400 mb-1">Eagle Eye Account ID</p>
+                  {site.een_account_id ? (
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm text-slate-900 bg-slate-50 border border-slate-200 rounded px-2 py-1">{site.een_account_id}</span>
+                      <span className="flex items-center gap-1 text-[10px] text-emerald-600 font-medium bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" /> linked
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-slate-400 italic">Not set — alarms will match by site name only</span>
+                  )}
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400 mb-1">Brivo Account ID</p>
+                  {site.brivo_account_id ? (
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm text-slate-900 bg-slate-50 border border-slate-200 rounded px-2 py-1">{site.brivo_account_id}</span>
+                      <span className="flex items-center gap-1 text-[10px] text-emerald-600 font-medium bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" /> linked
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-slate-400 italic">Not set</span>
+                  )}
+                </div>
+              </div>
             )}
           </div>
 
