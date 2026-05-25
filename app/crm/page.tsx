@@ -344,7 +344,7 @@ export default function CRMPage() {
 
   const openOpps = allRecords
     .filter((r) => r.stage !== "won" && r.stage !== "lost")
-    .sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 10);
 
   // Suppress unused warning
@@ -771,46 +771,13 @@ export default function CRMPage() {
                         <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">
                           {lead.assigned_dealer}
                         </span>
-                      ) : canAssignLeads ? (
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setAssigningId(assigningId === lead.id ? null : lead.id);
-                          }}
-                          className="text-xs border border-[#6B7EFF] text-[#6B7EFF] px-2 py-0.5 rounded-full hover:bg-[#6B7EFF]/10 transition-colors flex-shrink-0"
-                        >
-                          + Assign
-                        </button>
                       ) : (
-                        <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">
-                          New
+                        <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">
+                          Unassigned
                         </span>
                       )}
                     </div>
 
-                    {assigningId === lead.id && canAssignLeads && (
-                      <div className="mt-2 flex gap-2" onClick={e => e.preventDefault()}>
-                        <input
-                          type="text"
-                          placeholder="Dealer name…"
-                          value={assignDealer[lead.id] ?? ""}
-                          onChange={(e) =>
-                            setAssignDealer((prev) => ({
-                              ...prev,
-                              [lead.id]: e.target.value,
-                            }))
-                          }
-                          className="flex-1 text-xs border border-border rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
-                        />
-                        <button
-                          onClick={() => handleAssign(lead.id)}
-                          disabled={assigningInProgress === lead.id}
-                          className="text-xs bg-[#6B7EFF] text-white px-2.5 py-1 rounded-lg hover:bg-[#5a6de8] disabled:opacity-50 transition-colors"
-                        >
-                          {assigningInProgress === lead.id ? "…" : "Assign"}
-                        </button>
-                      </div>
-                    )}
                   </Link>
                 ))}
               </div>
@@ -1215,15 +1182,14 @@ function PipelineFlowBar({ opportunities, onStageClick }: { opportunities: Oppor
       </div>
 
       {/* Chevron funnel */}
-      <div className="flex items-stretch gap-0 overflow-x-auto">
+      <div className="flex items-stretch gap-0 w-full">
         {stageSummary.map((s, i) => {
           const colors = STAGE_COLORS[s.key];
           const isEmpty = s.count === 0;
           const isLast = i === stageSummary.length - 1;
-          const widthPct = s.key === "lost" ? 80 : Math.max(80, Math.round((s.count / totalDeals) * 160) + 60);
 
           return (
-            <div key={s.key} className="flex items-stretch flex-shrink-0" style={{ minWidth: `${widthPct}px` }}>
+            <div key={s.key} className="flex items-stretch flex-1 min-w-[64px]">
               {/* Stage card */}
               <button
                 onClick={() => onStageClick?.(s.key)}
