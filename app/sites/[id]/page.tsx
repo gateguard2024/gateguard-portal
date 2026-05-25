@@ -369,6 +369,7 @@ export default function SiteDetailPage() {
   })
 
   function openEditSite() {
+    if (!site) return
     setEditForm({
       name:                  site.name                  ?? '',
       address:               site.address               ?? '',
