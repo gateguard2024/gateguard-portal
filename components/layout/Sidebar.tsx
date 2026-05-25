@@ -41,7 +41,7 @@ type NavSection = {
 };
 
 // ─── Navigation Architecture ──────────────────────────────────────────────────
-// 7 primary sections: Dashboard · Business · Field & Tech · Design
+// 8 primary sections: Dashboard · Sales · Business · Field & Tech · Design
 //                     Security · Dealer Network · Settings
 // Intelligence removed — all AI agents live in the AI Army panel above nav
 
@@ -56,23 +56,28 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    key: "business",
-    label: "Business",
+    key: "sales",
+    label: "Sales",
     icon: TrendingUp,
     color: "#059669",
     items: [
-      // ── CRM & Pipeline ──
-      { label: "CRM",              href: "/crm",       icon: MessageSquare,  description: "Leads, opportunities, pipeline" },
+      { label: "CRM",                  href: "/crm",      icon: MessageSquare, description: "Leads, opportunities, pipeline" },
+      { label: "Quotes",               href: "/quotes",   icon: FileText,      description: "Proposals and approvals" },
+      { label: "Service Marketplace",  href: "/services", icon: Package,       description: "TV, internet, video monitoring & more", badge: "New" },
+      { label: "Reps & Commissions",   href: "/reps",     icon: UserCheck,     description: "Rep hierarchy and payouts" },
+    ],
+  },
+  {
+    key: "business",
+    label: "Business",
+    icon: ClipboardList,
+    color: "#0891B2",
+    items: [
       { label: "Customers",        href: "/customers", icon: Users,          description: "All customer accounts" },
-      { label: "Quotes",           href: "/quotes",    icon: FileText,       description: "Proposals and approvals" },
-      // ── Finance ──
-      { label: "Service Marketplace", href: "/services", icon: Package,     description: "TV, internet, video monitoring & more", badge: "New" },
       { label: "Billing",          href: "/billing",   icon: CreditCard,     description: "Invoices and payments" },
       { label: "Revenue",          href: "/revenue",   icon: TrendingUp,     description: "MRR/ARR dashboard" },
-      { label: "Reps & Commissions", href: "/reps",    icon: UserCheck,      description: "Rep hierarchy and payouts" },
       { label: "Renewals",         href: "/renewals",  icon: Repeat,         description: "Contract renewals and alerts" },
       { label: "Contracts",        href: "/contracts", icon: FileCheck,      description: "Contract storage" },
-      // ── Operations ──
       { label: "Operating System", href: "/eos",       icon: Layers,         description: "EOS — Rocks, Scorecard, L10" },
       { label: "The Feed",         href: "/feed",      icon: Flame,          description: "Team wins, challenges, leaderboard", badge: "New" },
       { label: "Messages",         href: "/communications", icon: Hash,      description: "Team messaging — channels + DMs", badge: "Soon" },
@@ -445,12 +450,14 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
         {NAV_SECTIONS.map(section => {
           // Section-level tier gates
+          if (section.key === "sales"        && !showCRM && !showQuotes)           return null;
           if (section.key === "business"     && !showOperations && !showFinancials) return null;
           if (section.key === "design"       && !showDesign)      return null;
           if (section.key === "security"     && !showSecurity)    return null;
           if (section.key === "dealer"       && !showNetwork)     return null;
           if (section.key === "settings"     && !showAdmin && !isCorporate && !isMasterDealer && !isFullDealer) return null;
           // Install contractor: hide CRM-heavy and financial sections
+          if (isInstallContractor && section.key === "sales")    return null;
           if (isInstallContractor && section.key === "business") return null;
           if (isInstallContractor && section.key === "dealer")   return null;
 
