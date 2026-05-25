@@ -9,17 +9,31 @@ const supabase = createClient(
 )
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const user  = await getCurrentUser()
   const scope = await resolveOrgScope(user)
+
+  const { searchParams } = new URL(req.url)
+  const severityParam = searchParams.get('severity')   // e.g. "high,critical"
+  const limitParam    = searchParams.get('limit')
+  const limit         = Math.min(parseInt(limitParam ?? '50', 10), 200)
 
   let query = supabase
     .from('incidents')
     .select('*')
     .order('created_at', { ascending: false })
-    .limit(200)
+    .limit(limit)
 
   query = applyOrgScope(query, scope, 'org_id')
+
+  if (severityParam) {
+    const severities = severityParam.split(',').map(s => s.trim()).filter(Boolean)
+    if (severities.length === 1) {
+      query = query.eq('severity', severities[0])
+    } else if (severities.length > 1) {
+      query = query.in('severity', severities)
+    }
+  }
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

@@ -755,11 +755,12 @@ export default function QuoteDetailPage() {
       const endpoint = status === 'sent'
         ? `/api/quotes/${id}/send`
         : `/api/quotes/${id}`;
+      const method   = status === 'sent' ? 'POST' : 'PATCH';
       const body     = status === 'sent'
         ? undefined
         : JSON.stringify({ status });
       const res = await fetch(endpoint, {
-        method:  'POST',
+        method,
         headers: status === 'sent' ? {} : { 'Content-Type': 'application/json' },
         body,
       });
@@ -1041,6 +1042,16 @@ export default function QuoteDetailPage() {
             >
               {actioning === 'sent' ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
               Send to Client
+            </button>
+          )}
+          {(quote.status === 'sent' || quote.status === 'viewed' || quote.status === 'expired') && (
+            <button
+              onClick={() => patchStatus('sent')}
+              disabled={actioning === 'sent'}
+              className="flex items-center gap-1.5 px-3 py-2 border border-blue-200 text-blue-600 text-sm font-medium rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
+            >
+              {actioning === 'sent' ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+              Resend
             </button>
           )}
           {(quote.status === 'sent' || quote.status === 'viewed') && (

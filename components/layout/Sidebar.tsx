@@ -83,6 +83,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Dispatch",       href: "/dispatch",    icon: Truck,          description: "Tech scheduling and job board" },
       { label: "Inventory",      href: "/inventory",   icon: Package,        description: "Parts, stock, and POs" },
       { label: "Site Survey",    href: "/survey",      icon: ClipboardCheck, description: "Site walk and proposal builder" },
+      { label: "Playbooks",      href: "/playbooks",   icon: BookOpen,       description: "Step-by-step integration guides" },
       { label: "Documents",      href: "/documents",   icon: FolderOpen,     description: "Agreements, permits, manuals" },
       { label: "Reports",        href: "/reports",     icon: BarChart3Icon,  description: "Multi-site rollup" },
       { label: "Subcontractor",  href: "/subcontractor", icon: HardHat,      description: "Subcontractor work orders and docs" },
