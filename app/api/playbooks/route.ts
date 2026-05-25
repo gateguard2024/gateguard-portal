@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const org_id = scope.orgId ?? '00000000-0000-0000-0000-000000000001'
+    const org_id = scope.own_id ?? '00000000-0000-0000-0000-000000000001'
 
     const { data, error } = await supabase
       .from('playbook_runs')
