@@ -43,8 +43,6 @@ function isBypassPath(pathname: string): boolean {
         p => pathname.slice('/api/signatures/'.length).startsWith(p)
       )
     ) ||
-    // GGSOC → Portal alarm ingest webhook (auth via x-ggsoc-secret header, not Clerk)
-    pathname === '/api/incidents/ingest' ||
     // Auth flows
     pathname.startsWith('/sign-in') ||
     pathname.startsWith('/sign-up') ||

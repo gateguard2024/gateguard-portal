@@ -165,46 +165,6 @@ export default async function DashboardPage() {
     // fall through — liveAccounts stays empty, we'll show static fallback
   }
 
-  // ── 5. Monthly MRR (paid invoices this calendar month) ───────────────────────
-  let mrrValue = "—";
-  let mrrSub   = "No paid invoices yet";
-  try {
-    const now   = new Date();
-    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    const { data: invData, error: invErr } = await supabase
-      .from("invoices")
-      .select("total, paid_at")
-      .eq("status", "paid")
-      .gte("paid_at", `${month}-01`)
-      .lt("paid_at", `${month}-32`);
-    if (!invErr && invData) {
-      const mrr = invData.reduce((s, i) => s + (i.total ?? 0), 0);
-      const fmt = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n.toLocaleString()}`;
-      if (mrr > 0) {
-        mrrValue = fmt(mrr);
-        mrrSub   = `${invData.length} invoice${invData.length !== 1 ? "s" : ""} paid this month`;
-      }
-    }
-  } catch (_) { /* non-critical */ }
-
-  // ── 6. Open incidents count ────────────────────────────────────────────────
-  let openIncidents    = 0;
-  let incidentsSub     = "No open incidents";
-  let incidentsLive    = false;
-  try {
-    const { count, error } = await supabase
-      .from("incidents")
-      .select("*", { count: "exact", head: true })
-      .in("status", ["open", "investigating"]);
-    if (!error) {
-      openIncidents = count ?? 0;
-      incidentsSub  = openIncidents > 0
-        ? `${openIncidents} need attention`
-        : "All clear";
-      incidentsLive = true;
-    }
-  } catch (_) { /* non-critical */ }
-
   // If Supabase returned rows, use them; otherwise keep static fallback
   const staticAccounts = [
     { id: "s1",  name: "Angel Oak - Properties",   org_tier: "client",       created_at: "" },
@@ -224,73 +184,81 @@ export default async function DashboardPage() {
   const isLiveAccounts = liveAccounts.length > 0;
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Build KPI array — all live data or honest "—" placeholders, no demo badges
+  // Build KPI array (mix of live + static-with-demo badge)
   const kpis = [
     {
-      label: "Active Accounts",
-      value: activeAccountsCount > 0 ? String(activeAccountsCount) : "—",
-      sub:   activeAccountsSub,
-      icon:  Users,
-      color: "text-brand-400",
-      bg:    "bg-brand-400/10",
+      label:  "Active Accounts",
+      value:  activeAccountsCount > 0 ? String(activeAccountsCount) : "—",
+      sub:    activeAccountsSub,
+      icon:   Users,
+      color:  "text-brand-400",
+      bg:     "bg-brand-400/10",
+      live:   true,
     },
     {
-      label: "Quote Pipeline",
-      value: quotePipeline,
-      sub:   quoteSub,
-      icon:  TrendingUp,
-      color: "text-brand-400",
-      bg:    "bg-brand-400/10",
+      label:  "Quote Pipeline",
+      value:  quotePipeline,
+      sub:    quoteSub,
+      icon:   TrendingUp,
+      color:  "text-brand-400",
+      bg:     "bg-brand-400/10",
+      live:   true,
     },
     {
-      label: "Open Work Orders",
-      value: openWOCount > 0 ? String(openWOCount) : "—",
-      sub:   openWOSub,
-      icon:  Shield,
-      color: "text-blue-400",
-      bg:    "bg-blue-400/10",
+      label:  "Open Work Orders",
+      value:  openWOCount > 0 ? String(openWOCount) : "—",
+      sub:    openWOSub,
+      icon:   Shield,
+      color:  "text-blue-400",
+      bg:     "bg-blue-400/10",
+      live:   true,
     },
     {
-      label: "Open Incidents",
-      value: incidentsLive ? (openIncidents > 0 ? String(openIncidents) : "0") : "—",
-      sub:   incidentsSub,
-      icon:  AlertTriangle,
-      color: openIncidents > 0 ? "text-red-400" : "text-emerald-400",
-      bg:    openIncidents > 0 ? "bg-red-400/10" : "bg-emerald-400/10",
+      label:  "Active Alerts",
+      value:  "3",
+      sub:    "live soon",
+      icon:   AlertTriangle,
+      color:  "text-red-400",
+      bg:     "bg-red-400/10",
+      live:   false,
     },
     {
-      label: "Cameras Online",
-      value: "—",
-      sub:   "Connect Eagle Eye to enable",
-      icon:  Camera,
-      color: "text-muted-foreground",
-      bg:    "bg-muted/50",
+      label:  "Cameras Online",
+      value:  "115/138",
+      sub:    "23 offline — 2 properties",
+      icon:   Camera,
+      color:  "text-emerald-400",
+      bg:     "bg-emerald-400/10",
+      live:   false,
     },
     {
-      label: "Doors / Gates",
-      value: "—",
-      sub:   "Connect Brivo to enable",
-      icon:  Shield,
-      color: "text-muted-foreground",
-      bg:    "bg-muted/50",
+      label:  "Doors / Gates",
+      value:  "124",
+      sub:    "All online",
+      icon:   Shield,
+      color:  "text-blue-400",
+      bg:     "bg-blue-400/10",
+      live:   false,
     },
     {
-      label: "Monthly MRR",
-      value: mrrValue,
-      sub:   mrrSub,
-      icon:  DollarSign,
-      color: "text-emerald-400",
-      bg:    "bg-emerald-400/10",
+      label:  "Monthly MRR",
+      value:  "$94.2k",
+      sub:    "+12% vs last month",
+      icon:   DollarSign,
+      color:  "text-emerald-400",
+      bg:     "bg-emerald-400/10",
+      live:   false,
     },
     {
-      label: "DTV Activations",
-      value: "—",
-      sub:   "Link DirecTV channel to enable",
-      icon:  Radio,
-      color: "text-muted-foreground",
-      bg:    "bg-muted/50",
+      label:  "DTV Activations",
+      value:  "1,284",
+      sub:    "91.4% ARS · 78.2% ABP",
+      icon:   Radio,
+      color:  "text-blue-400",
+      bg:     "bg-blue-400/10",
+      live:   false,
     },
-  ];
+  ] as const;
 
   return (
     <div className="flex flex-col min-h-full">
@@ -313,7 +281,12 @@ export default async function DashboardPage() {
                   <Icon size={16} className={k.color} />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xl font-bold text-foreground leading-tight">{k.value}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xl font-bold text-foreground leading-tight">{k.value}</p>
+                    {!k.live && (
+                      <span className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground/60 font-medium uppercase tracking-wide">demo</span>
+                    )}
+                  </div>
                   <p className="text-[11px] font-medium text-muted-foreground mt-0.5">{k.label}</p>
                   <p className="text-[10px] text-muted-foreground/60 mt-0.5 truncate">{k.sub}</p>
                 </div>

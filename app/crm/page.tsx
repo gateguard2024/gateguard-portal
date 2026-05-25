@@ -7,6 +7,7 @@ import {
   RefreshCw, Calendar, ArrowRight, Plus,
   TrendingUp, Users, CheckCircle2, Zap,
   Phone, Mail, ClipboardList, X, ChevronDown,
+  Wrench, FileText,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { CalendarClock, StickyNote, UserPlus, UserCheck, Building2, Star } = require("lucide-react") as any;
@@ -54,9 +55,10 @@ interface Lead {
 
 interface Activity {
   id: string;
-  type: "call" | "email" | "meeting" | "task" | "note";
+  type: "call" | "email" | "meeting" | "task" | "note" | "work_order" | "quote" | "lead";
   subject: string;
   due_at: string;
+  created_at?: string;
   completed_at?: string | null;
   opportunity_name?: string;
 }
@@ -139,6 +141,12 @@ function activityIcon(type: Activity["type"]) {
       return <CalendarClock size={14} />;
     case "task":
       return <ClipboardList size={14} />;
+    case "work_order":
+      return <Wrench size={14} />;
+    case "quote":
+      return <FileText size={14} />;
+    case "lead":
+      return <Users size={14} />;
     default:
       return <ClipboardList size={14} />;
   }
@@ -323,9 +331,16 @@ export default function CRMPage() {
 
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const upcomingActivities = activities.filter(
-    (a) => !a.completed_at && new Date(a.due_at) <= tomorrow
-  );
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const upcomingActivities = activities.filter((a) => {
+    if (a.completed_at) return false;
+    // Traditional activities: due today or overdue
+    if (a.due_at && new Date(a.due_at) <= tomorrow) return true;
+    // Merged today items (WOs, quotes, leads): created today
+    if (a.created_at && new Date(a.created_at) >= todayStart) return true;
+    return false;
+  });
 
   const openOpps = allRecords
     .filter((r) => r.stage !== "won" && r.stage !== "lost")
@@ -459,6 +474,9 @@ export default function CRMPage() {
             />
           </Link>
         </div>
+
+        {/* Pipeline Flow Bar */}
+        <PipelineFlowBar opportunities={allRecords} />
 
         {/* ROW 2 — Pipeline + Activity */}
         <div className="grid grid-cols-2 gap-4">
@@ -1125,6 +1143,149 @@ export default function CRMPage() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// ── Pipeline Flow Bar ─────────────────────────────────────────────────────
+type PipelineStage = {
+  key: string;
+  label: string;
+  bg: string;
+  text: string;
+};
+
+const PIPELINE_STAGES: PipelineStage[] = [
+  { key: "meet_present",  label: "Meet & Present",  bg: "bg-blue-100",    text: "text-blue-700" },
+  { key: "survey_request",label: "Survey Request",  bg: "bg-violet-100",  text: "text-violet-700" },
+  { key: "propose",       label: "Propose",         bg: "bg-amber-100",   text: "text-amber-700" },
+  { key: "negotiate",     label: "Negotiate",       bg: "bg-orange-100",  text: "text-orange-700" },
+  { key: "won",           label: "Won",             bg: "bg-emerald-100", text: "text-emerald-700" },
+  { key: "lost",          label: "Lost",            bg: "bg-red-100",     text: "text-red-600" },
+];
+
+// Stage fill colors for the chevron funnel
+const STAGE_COLORS: Record<string, { fill: string; text: string; border: string; glow: string }> = {
+  meet_present:  { fill: "#EEF2FF", text: "#4F46E5", border: "#C7D2FE", glow: "rgba(99,102,241,0.15)" },
+  survey_request:{ fill: "#F5F3FF", text: "#7C3AED", border: "#DDD6FE", glow: "rgba(124,58,237,0.15)" },
+  propose:       { fill: "#FFFBEB", text: "#D97706", border: "#FDE68A", glow: "rgba(217,119,6,0.15)" },
+  negotiate:     { fill: "#FFF7ED", text: "#EA580C", border: "#FED7AA", glow: "rgba(234,88,12,0.15)" },
+  won:           { fill: "#ECFDF5", text: "#059669", border: "#A7F3D0", glow: "rgba(5,150,105,0.2)" },
+  lost:          { fill: "#FFF1F2", text: "#E11D48", border: "#FECDD3", glow: "rgba(225,29,72,0.1)" },
+};
+
+function fmtVal(v: number) {
+  if (v >= 1_000_000) return `$${(v / 1e6).toFixed(1)}M`;
+  if (v >= 1_000)     return `$${(v / 1_000).toFixed(0)}K`;
+  if (v > 0)          return `$${v}`;
+  return "";
+}
+
+function PipelineFlowBar({ opportunities, onStageClick }: { opportunities: Opportunity[]; onStageClick?: (stage: string) => void }) {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  const stageSummary = PIPELINE_STAGES.map((s) => {
+    const records = opportunities.filter((o) => o.stage === s.key);
+    const total = records.reduce((sum, o) => sum + (o.amount ?? 0), 0);
+    return { ...s, count: records.length, total };
+  });
+
+  const hasActivity = opportunities.some(
+    (o) => o.stage !== "lost" && new Date(o.created_at) >= sevenDaysAgo
+  );
+
+  const totalDeals = opportunities.filter(o => o.stage !== "lost").length || 1;
+
+  return (
+    <div className="bg-white rounded-xl border border-border p-4 mb-4">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <TrendingUp size={14} className="text-muted-foreground" />
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Pipeline Flow</span>
+          {hasActivity && (
+            <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+              <Zap size={9} />
+              Active this week
+            </span>
+          )}
+        </div>
+        <span className="text-xs text-muted-foreground">Click a stage to filter</span>
+      </div>
+
+      {/* Chevron funnel */}
+      <div className="flex items-stretch gap-0 overflow-x-auto">
+        {stageSummary.map((s, i) => {
+          const colors = STAGE_COLORS[s.key];
+          const isEmpty = s.count === 0;
+          const isLast = i === stageSummary.length - 1;
+          const widthPct = s.key === "lost" ? 80 : Math.max(80, Math.round((s.count / totalDeals) * 160) + 60);
+
+          return (
+            <div key={s.key} className="flex items-stretch flex-shrink-0" style={{ minWidth: `${widthPct}px` }}>
+              {/* Stage card */}
+              <button
+                onClick={() => onStageClick?.(s.key)}
+                className="flex-1 relative flex flex-col justify-center items-center py-3 px-3 transition-all duration-150 group"
+                style={{
+                  background: isEmpty ? "#F8FAFC" : colors.fill,
+                  border: `1px solid ${isEmpty ? "#E2E8F0" : colors.border}`,
+                  borderRight: isLast ? undefined : "none",
+                  borderRadius: i === 0 ? "10px 0 0 10px" : isLast ? "0 10px 10px 0" : "0",
+                  boxShadow: isEmpty ? "none" : `inset 0 0 0 0 ${colors.glow}`,
+                  cursor: "pointer",
+                }}
+                onMouseEnter={e => {
+                  if (!isEmpty) (e.currentTarget as HTMLElement).style.boxShadow = `0 4px 16px ${colors.glow}, inset 0 0 0 0 transparent`;
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLElement).style.boxShadow = "none";
+                }}
+              >
+                {/* Count badge */}
+                <span
+                  className="text-2xl font-black leading-none mb-0.5"
+                  style={{ color: isEmpty ? "#CBD5E1" : colors.text }}
+                >
+                  {s.count}
+                </span>
+                {/* Label */}
+                <span
+                  className="text-[10px] font-semibold uppercase tracking-wide leading-tight text-center whitespace-nowrap"
+                  style={{ color: isEmpty ? "#94A3B8" : colors.text }}
+                >
+                  {s.label}
+                </span>
+                {/* Value */}
+                {s.total > 0 && (
+                  <span
+                    className="text-[11px] font-bold mt-0.5"
+                    style={{ color: colors.text, opacity: 0.8 }}
+                  >
+                    {fmtVal(s.total)}
+                  </span>
+                )}
+                {/* Progress bar at bottom */}
+                {!isEmpty && s.key !== "lost" && (
+                  <div className="absolute bottom-0 left-0 right-0 h-[3px] rounded-b" style={{ background: colors.border }} />
+                )}
+                {/* Arrow connector */}
+                {!isLast && (
+                  <div
+                    className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-full z-10 w-0 h-0"
+                    style={{
+                      borderTop: "20px solid transparent",
+                      borderBottom: "20px solid transparent",
+                      borderLeft: `10px solid ${isEmpty ? "#E2E8F0" : colors.border}`,
+                    }}
+                  />
+                )}
+              </button>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

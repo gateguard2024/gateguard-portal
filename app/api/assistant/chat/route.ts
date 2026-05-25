@@ -78,6 +78,20 @@ const ACTION_TOOLS: Anthropic.Tool[] = [
       required: ['id', 'status'],
     },
   },
+  {
+    name: 'create_work_order',
+    description: 'Create a new work order.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        title: { type: 'string', description: 'Title / description of the work order' },
+        priority: { type: 'string', enum: ['low', 'normal', 'high', 'urgent'], description: 'Priority level' },
+        property_name: { type: 'string', description: 'Property or site name (optional)' },
+        scheduled_date: { type: 'string', description: 'Scheduled date in YYYY-MM-DD format (optional)' },
+      },
+      required: ['title'],
+    },
+  },
 ]
 
 // ─── Tool executor ──────────────────────────────────────────────────────────
@@ -126,6 +140,21 @@ async function executeTool(
         .eq('id', id)
       if (error) return { success: false, error: error.message }
       return { success: true, message: `Work order status updated to ${status}` }
+    }
+    case 'create_work_order': {
+      const { data, error } = await supabase
+        .from('work_orders')
+        .insert({
+          title: toolInput.title,
+          priority: toolInput.priority ?? 'normal',
+          status: 'open',
+          ...(toolInput.property_name ? { property_name: toolInput.property_name } : {}),
+          ...(toolInput.scheduled_date ? { scheduled_date: toolInput.scheduled_date } : {}),
+        })
+        .select()
+        .single()
+      if (error) return { success: false, error: error.message }
+      return { success: true, id: (data as { id: string }).id, message: `Work order created: ${toolInput.title}` }
     }
     default:
       return { success: false, error: 'Unknown tool' }
@@ -311,6 +340,7 @@ ACTIONS YOU CAN TAKE:
 - Update a to-do's due date, status, priority, or title
 - Create a new to-do
 - Mark a to-do as complete
+- Create a new work order
 - Reschedule a work order
 - Update a work order status
 
@@ -340,6 +370,7 @@ RESPONSE RULES:
     )
 
     let finalText = ''
+    const actionsExecuted: string[] = []
 
     // Agentic loop — handles tool_use up to 5 iterations
     for (let iteration = 0; iteration < 5; iteration++) {
@@ -360,6 +391,8 @@ RESPONSE RULES:
       if (response.stop_reason === 'tool_use') {
         const toolUseBlock = response.content.find(b => b.type === 'tool_use')
         if (!toolUseBlock || toolUseBlock.type !== 'tool_use') break
+
+        actionsExecuted.push(toolUseBlock.name)
 
         const toolResult = await executeTool(
           toolUseBlock.name,
@@ -390,7 +423,7 @@ RESPONSE RULES:
       break
     }
 
-    return NextResponse.json({ response: finalText, liveData })
+    return NextResponse.json({ response: finalText, liveData, actionsExecuted })
   } catch (err: unknown) {
     console.error('[assistant/chat]', err)
     return NextResponse.json({ error: 'Assistant unavailable' }, { status: 500 })
