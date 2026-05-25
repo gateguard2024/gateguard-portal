@@ -54,9 +54,39 @@ interface SearchResult {
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const PRIORITY_CONFIG = {
-  high:   { label: "High",   color: "text-red-400",    bg: "bg-red-400/10",    border: "border-red-400/30" },
-  normal: { label: "Normal", color: "text-amber-400",  bg: "bg-amber-400/10",  border: "border-amber-400/30" },
-  low:    { label: "Low",    color: "text-slate-400",  bg: "bg-slate-400/10",  border: "border-slate-400/30" },
+  high:   {
+    label: "High",   color: "text-red-500",    bg: "bg-red-50 dark:bg-red-950/30",
+    border: "border-red-100 dark:border-red-900/60",
+    stripe: "border-l-red-400",
+    checkBorder: "border-red-300 hover:border-red-400 hover:bg-red-50",
+    checkActive: "border-red-500 bg-red-500",
+    groupDot: "bg-red-400",
+    groupText: "text-red-600 dark:text-red-400",
+    groupBg: "bg-red-50/80 dark:bg-red-950/20",
+    groupBorder: "border-red-100 dark:border-red-900/40",
+  },
+  normal: {
+    label: "Normal", color: "text-amber-600 dark:text-amber-400",  bg: "bg-amber-50 dark:bg-amber-950/30",
+    border: "border-amber-100 dark:border-amber-900/60",
+    stripe: "border-l-amber-400",
+    checkBorder: "border-amber-300 hover:border-amber-400 hover:bg-amber-50",
+    checkActive: "border-amber-500 bg-amber-500",
+    groupDot: "bg-amber-400",
+    groupText: "text-amber-700 dark:text-amber-400",
+    groupBg: "bg-amber-50/80 dark:bg-amber-950/20",
+    groupBorder: "border-amber-100 dark:border-amber-900/40",
+  },
+  low:    {
+    label: "Low",    color: "text-slate-400",  bg: "bg-slate-50 dark:bg-slate-900/30",
+    border: "border-slate-100 dark:border-slate-800",
+    stripe: "border-l-slate-300",
+    checkBorder: "border-slate-300 hover:border-slate-400 hover:bg-slate-50",
+    checkActive: "border-slate-400 bg-slate-400",
+    groupDot: "bg-slate-300",
+    groupText: "text-slate-500",
+    groupBg: "bg-slate-50/60 dark:bg-slate-900/20",
+    groupBorder: "border-slate-100 dark:border-slate-800",
+  },
 };
 
 const LINKED_TYPES = [
@@ -471,6 +501,38 @@ function TodoSlideOver({
   );
 }
 
+// ─── Priority Group Header ────────────────────────────────────────────────────
+
+function PriorityGroupHeader({
+  priority,
+  count,
+  collapsed,
+  onToggle,
+}: {
+  priority: "high" | "normal" | "low";
+  count: number;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
+  const cfg = PRIORITY_CONFIG[priority];
+  return (
+    <button
+      onClick={onToggle}
+      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border ${cfg.groupBg} ${cfg.groupBorder} transition-colors hover:brightness-95`}
+    >
+      <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${cfg.groupDot}`} />
+      <span className={`text-xs font-bold uppercase tracking-wide ${cfg.groupText}`}>{cfg.label}</span>
+      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${cfg.bg} ${cfg.groupText} border ${cfg.groupBorder}`}>
+        {count}
+      </span>
+      <ChevronDown
+        size={13}
+        className={`ml-auto ${cfg.groupText} transition-transform duration-200 ${collapsed ? "-rotate-90" : ""}`}
+      />
+    </button>
+  );
+}
+
 // ─── Todo Row ─────────────────────────────────────────────────────────────────
 
 function TodoRow({
@@ -495,18 +557,20 @@ function TodoRow({
 
   return (
     <div
-      className={`group flex items-start gap-3 px-4 py-3 rounded-xl border transition-all cursor-pointer ${
+      className={`group flex items-start gap-3 pl-3 pr-4 py-3 rounded-r-xl rounded-l-none border-l-4 border border-r border-t border-b transition-all cursor-pointer ${
         isDone
-          ? "border-border/50 bg-card/50 opacity-60 hover:opacity-80"
-          : "border-border bg-card hover:border-brand-400/30"
+          ? "border-l-emerald-400 border-border/40 bg-card/40 opacity-55 hover:opacity-70"
+          : `${pCfg.stripe} ${pCfg.border} ${pCfg.bg} hover:shadow-sm hover:brightness-[0.98]`
       }`}
       onClick={() => onClick(todo)}
     >
-      {/* Checkbox */}
+      {/* Priority-colored checkbox */}
       <button
         onClick={e => { e.stopPropagation(); onToggleDone(todo.id, !isDone); }}
-        className={`mt-0.5 w-5 h-5 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors ${
-          isDone ? "border-emerald-400 bg-emerald-400" : "border-border hover:border-brand-400"
+        className={`mt-0.5 w-5 h-5 shrink-0 rounded-full border-2 flex items-center justify-center transition-all ${
+          isDone
+            ? "border-emerald-400 bg-emerald-400"
+            : pCfg.checkBorder
         }`}
       >
         {isDone && <Check size={10} className="text-white" strokeWidth={3} />}
@@ -514,32 +578,35 @@ function TodoRow({
 
       {/* Content */}
       <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium leading-snug ${isDone ? "line-through text-muted-foreground" : "text-foreground"}`}>
+        <p className={`text-sm font-semibold leading-snug ${isDone ? "line-through text-muted-foreground" : "text-foreground"}`}>
           {todo.title}
         </p>
         {todo.body && (
           <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{todo.body}</p>
         )}
         <div className="flex flex-wrap items-center gap-2 mt-1.5">
-          {/* Priority */}
+          {/* Priority chip — only visible on hover or done rows */}
           <div className="relative" onClick={e => e.stopPropagation()}>
             <button
               onClick={() => setShowPriorityMenu(v => !v)}
-              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${pCfg.bg} ${pCfg.color} ${pCfg.border}`}
+              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border transition-opacity ${
+                isDone ? "opacity-60" : "opacity-0 group-hover:opacity-100"
+              } ${pCfg.bg} ${pCfg.color} ${pCfg.border}`}
             >
               <Flag size={8} />
               {pCfg.label}
               <ChevronDown size={8} />
             </button>
             {showPriorityMenu && (
-              <div className="absolute z-20 top-full left-0 mt-1 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[100px]">
+              <div className="absolute z-20 top-full left-0 mt-1 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[110px]">
                 {(["high", "normal", "low"] as const).map(p => (
                   <button
                     key={p}
                     onClick={() => { onPriorityChange(todo.id, p); setShowPriorityMenu(false); }}
-                    className={`w-full text-left px-3 py-1.5 text-xs hover:bg-accent transition-colors ${PRIORITY_CONFIG[p].color}`}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-accent transition-colors flex items-center gap-2"
                   >
-                    {PRIORITY_CONFIG[p].label}
+                    <span className={`w-2 h-2 rounded-full ${PRIORITY_CONFIG[p].groupDot}`} />
+                    <span className={PRIORITY_CONFIG[p].color}>{PRIORITY_CONFIG[p].label}</span>
                   </button>
                 ))}
               </div>
@@ -547,22 +614,25 @@ function TodoRow({
           </div>
 
           {dueLabel && (
-            <span className={`inline-flex items-center gap-1 text-[10px] ${dueLabel.color}`}>
+            <span className={`inline-flex items-center gap-1 text-[10px] font-medium ${dueLabel.color}`}>
               <Clock3 size={9} />{dueLabel.text}
             </span>
           )}
           {todo.assigned_to_name && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-              <User size={9} />{todo.assigned_to_name}
+            <span className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <span className="w-4 h-4 rounded-full bg-brand-400/20 text-brand-400 flex items-center justify-center text-[8px] font-bold">
+                {todo.assigned_to_name[0]?.toUpperCase()}
+              </span>
+              {todo.assigned_to_name}
             </span>
           )}
           {todo.linked_label && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-brand-400/70">
+            <span className="inline-flex items-center gap-1 text-[10px] text-brand-400/80 font-medium">
               <Link2 size={9} />{todo.linked_label}
             </span>
           )}
           {recurring && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-violet-400">
+            <span className="inline-flex items-center gap-1 text-[10px] text-violet-500">
               <Repeat size={9} />
               {todo.recurrence_type}
             </span>
@@ -578,7 +648,7 @@ function TodoRow({
       {/* Delete */}
       <button
         onClick={e => { e.stopPropagation(); onDelete(todo.id); }}
-        className="opacity-0 group-hover:opacity-100 mt-0.5 p-1 rounded hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-all"
+        className="opacity-0 group-hover:opacity-100 mt-0.5 p-1.5 rounded-lg hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-all"
       >
         <Trash2 size={13} />
       </button>
@@ -653,12 +723,17 @@ function QuickAdd({ onAdd }: { onAdd: (title: string, priority: Todo["priority"]
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function TodosPage() {
-  const [todos, setTodos]       = useState<Todo[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState<string | null>(null);
-  const [view, setView]         = useState<"mine" | "assigned">("mine");
-  const [filter, setFilter]     = useState<"open" | "all" | "done">("open");
-  const [selected, setSelected] = useState<Todo | null>(null);
+  const [todos, setTodos]             = useState<Todo[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState<string | null>(null);
+  const [view, setView]               = useState<"mine" | "assigned">("mine");
+  const [filter, setFilter]           = useState<"open" | "all" | "done">("open");
+  const [selected, setSelected]       = useState<Todo | null>(null);
+  const [collapsed, setCollapsed]     = useState<Record<string, boolean>>({});
+
+  function toggleGroup(key: string) {
+    setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
+  }
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -733,6 +808,17 @@ export default function TodosPage() {
   const doneCnt = done.length;
   const highCnt = open.filter(t => t.priority === "high").length;
 
+  // Priority groups for open todos
+  const highTodos   = open.filter(t => t.priority === "high");
+  const normalTodos = open.filter(t => t.priority === "normal");
+  const lowTodos    = open.filter(t => t.priority === "low");
+
+  const priorityGroups: { key: "high" | "normal" | "low"; items: Todo[] }[] = [
+    { key: "high",   items: highTodos },
+    { key: "normal", items: normalTodos },
+    { key: "low",    items: lowTodos },
+  ];
+
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <TopBar
@@ -750,17 +836,14 @@ export default function TodosPage() {
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3">
           {[
-            { icon: Circle,      label: "Open",    value: openCnt, color: "text-brand-400",   bg: "bg-brand-400/10" },
-            { icon: AlertCircle, label: "High Pri", value: highCnt, color: "text-red-400",     bg: "bg-red-400/10" },
-            { icon: CheckSquare, label: "Done",     value: doneCnt, color: "text-emerald-400", bg: "bg-emerald-400/10" },
+            { label: "Open",     value: openCnt, color: "text-brand-400",   bg: "bg-brand-400/10",  stripe: "border-l-4 border-l-brand-400" },
+            { label: "High Pri", value: highCnt, color: "text-red-500",     bg: "bg-red-50 dark:bg-red-950/30",   stripe: "border-l-4 border-l-red-400" },
+            { label: "Done",     value: doneCnt, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/30", stripe: "border-l-4 border-l-emerald-400" },
           ].map(card => (
-            <div key={card.label} className="bg-card border border-border rounded-xl p-3 flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${card.bg}`}>
-                <card.icon size={14} className={card.color} />
-              </div>
+            <div key={card.label} className={`${card.bg} border border-border rounded-r-xl rounded-l-none ${card.stripe} p-4 flex items-center gap-3`}>
               <div>
-                <p className="text-xl font-bold text-foreground">{card.value}</p>
-                <p className="text-[10px] text-muted-foreground">{card.label}</p>
+                <p className={`text-2xl font-extrabold ${card.color}`}>{card.value}</p>
+                <p className="text-[11px] font-medium text-muted-foreground mt-0.5">{card.label}</p>
               </div>
             </div>
           ))}
@@ -773,7 +856,7 @@ export default function TodosPage() {
               <button
                 key={v}
                 onClick={() => setView(v)}
-                className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
                   view === v ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -786,7 +869,7 @@ export default function TodosPage() {
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`px-3 py-1 rounded-md text-xs font-medium transition-all capitalize ${
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all capitalize ${
                   filter === f ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -824,20 +907,71 @@ export default function TodosPage() {
           />
         )}
 
-        {!loading && !error && open.length > 0 && (
-          <div className="space-y-2">
-            {open.map(todo => (
-              <TodoRow key={todo.id} todo={todo} onToggleDone={toggleDone} onDelete={deleteTodo} onPriorityChange={changePriority} onClick={setSelected} />
-            ))}
+        {/* Priority-grouped open todos */}
+        {!loading && !error && open.length > 0 && filter !== "done" && (
+          <div className="space-y-4">
+            {priorityGroups.map(({ key, items }) => {
+              if (items.length === 0) return null;
+              const isCollapsed = collapsed[key] ?? false;
+              return (
+                <div key={key} className="space-y-1.5">
+                  <PriorityGroupHeader
+                    priority={key}
+                    count={items.length}
+                    collapsed={isCollapsed}
+                    onToggle={() => toggleGroup(key)}
+                  />
+                  {!isCollapsed && (
+                    <div className="space-y-1.5 pl-0">
+                      {items.map(todo => (
+                        <TodoRow
+                          key={todo.id}
+                          todo={todo}
+                          onToggleDone={toggleDone}
+                          onDelete={deleteTodo}
+                          onPriorityChange={changePriority}
+                          onClick={setSelected}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
+        {/* Done section */}
         {!loading && !error && done.length > 0 && filter !== "open" && (
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-1">Completed ({doneCnt})</p>
-            {done.map(todo => (
-              <TodoRow key={todo.id} todo={todo} onToggleDone={toggleDone} onDelete={deleteTodo} onPriorityChange={changePriority} onClick={setSelected} />
-            ))}
+          <div className="space-y-1.5">
+            <button
+              onClick={() => toggleGroup("done")}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border bg-emerald-50/80 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/40 transition-colors hover:brightness-95"
+            >
+              <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-emerald-400" />
+              <span className="text-xs font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">Done</span>
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40">
+                {doneCnt}
+              </span>
+              <ChevronDown
+                size={13}
+                className={`ml-auto text-emerald-600 dark:text-emerald-400 transition-transform duration-200 ${collapsed["done"] ? "-rotate-90" : ""}`}
+              />
+            </button>
+            {!collapsed["done"] && (
+              <div className="space-y-1.5">
+                {done.map(todo => (
+                  <TodoRow
+                    key={todo.id}
+                    todo={todo}
+                    onToggleDone={toggleDone}
+                    onDelete={deleteTodo}
+                    onPriorityChange={changePriority}
+                    onClick={setSelected}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
