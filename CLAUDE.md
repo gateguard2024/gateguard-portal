@@ -316,6 +316,20 @@ GateGuard is going live. Two parallel Vercel deployments must exist from this po
 - **`app/api/incidents/ingest/route.ts`** — Fixed empty file (was causing `is not a module` Vercel build error). Now a proper POST endpoint for ingesting incidents from external sources (GGSOC bridge, webhooks, hardware alarms).
 - **Service Marketplace** (`/services`) — Enterprise redesign: real provider logos from `/public/logos/` (`att.png`, `directv.png`, `gateguard.png`, `latch.png`, `xfinity.jpg`, `keystone.jpg`, `luxor.jpg`). `ProviderLogo` component with `LOGO_FILES` map handles mixed .png/.jpg extensions; falls back to styled initials if logo missing. Removed all emoji icons. Clean category pills, denser card grid, professional pricing strips modeled on Salesforce AppExchange.
 
+- **Session additions (May 25 2026 — continued) — Sprint 226 + portal polish:**
+- **Sprint 226 complete** — `/eos` To-Dos tab fully rebuilt as Monday.com-style data grid:
+  - Rows grouped by status: Open · In Progress · Blocked · Done (each group collapsible with animated chevron)
+  - Inline cell editing: click any task name / owner / due date / meeting field → input appears → blur or Enter saves via PATCH API
+  - Status chips: clickable dropdown per row (Open / In Progress / Blocked / Done). Selecting "Done" fires PATCH with `done: true`; moving out of Done fires PATCH with `done: false`
+  - Priority chips: High (rose) / Medium (amber) / Low (sky) / none — local state, no DB migration needed
+  - Bulk checkbox select: select-all in header, per-row checkbox. Bulk action bar: "Mark Done" + "Delete"
+  - Overdue highlighting: due dates < today shown in red on non-Done rows
+  - "+ Add item" inline row at bottom of each group; "+ Add To-Do" header button drops into Open group
+- **Reps commission model tiles** — redesigned: removed all `note` description text. Tiles now larger (`rounded-xl border-2 p-5`), rate at `text-3xl font-extrabold`, tier name `text-xs font-semibold`, "per unit / mo" label. 5-col desktop / 2-col mobile grid.
+- **CRM fixes**: Pipeline Flow Bar full width; Open Opportunities sorted newest-first; My Leads "+ Assign" button removed (shows assigned dealer name badge or "Unassigned" chip instead)
+- **Reps API scoping** (`GET /api/reps`): corporate → all; dealer admin tiers → all in org; `sales_partner` → self + direct reports + sub-reports (2 levels) via `clerk_user_id` lookup
+- **New API routes**: `app/api/contracts/route.ts` (GET list + POST create with GG-CTR-XXXXX numbering), `app/api/renewals/route.ts` (GET 90-day expiry bucket), `app/api/training/reset-attempts/route.ts` (POST delete quiz chapters by user)
+
 - **Sprint 6 additions (May 22 2026) — Design Section + Service Marketplace:**
 - **Sidebar** — NEXUS primary brand mark (large, blue), "by GateGuard" subtitle confirmed. New **Design** section added between Field & Tech and Security with 4 items: Floor Plans, System Design, As-Builts, E-Sign. Permission: `showDesign` = corporate | master_dealer | full_dealer | install_contractor | service_dealer.
 - `/services` — **Service Marketplace** first built: 22 services across 10 categories (TV, Internet, Video Monitoring, Package Lockers, Access Control, Smart Locks, Security, Network, Energy). Migration 070 backs the DB schema (service_catalog, dealer_service_enrollments, site_service_subscriptions).
