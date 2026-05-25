@@ -20,9 +20,8 @@ export async function POST(
   const body  = await req.json().catch(() => ({}))
 
   const {
-    amount_paid,
     paid_at = new Date().toISOString(),
-    notes,
+    payment_type,
   } = body
 
   const { data: invoice, error: fetchErr } = await supabase
@@ -41,17 +40,15 @@ export async function POST(
     return NextResponse.json({ error: 'Cannot mark a voided invoice as paid' }, { status: 400 })
   }
 
-  const paidAmount = amount_paid != null ? parseFloat(String(amount_paid)) : invoice.total
-
   // Mark paid
   const { data: updated, error: updateErr } = await supabase
     .from('invoices')
     .update({
-      status:      'paid',
-      amount_paid: paidAmount,
-      paid_at:     paid_at,
-      notes:       notes ?? null,
-      updated_at:  new Date().toISOString(),
+      status:       'paid',
+      amount_paid:  invoice.total,
+      paid_at:      paid_at,
+      payment_type: payment_type ?? null,
+      updated_at:   new Date().toISOString(),
     })
     .eq('id', params.id)
     .select()

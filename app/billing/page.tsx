@@ -47,6 +47,7 @@ interface Invoice {
   qb_invoice_id: string | null
   qb_synced_at: string | null
   paid_at: string | null
+  payment_type: string | null
   sent_at: string | null
   voided_at: string | null
   created_at: string
@@ -205,8 +206,8 @@ export default function BillingPage() {
   // Mark paid form
   const [markPaidOpen,   setMarkPaidOpen]   = useState(false)
   const [markPaidInv,    setMarkPaidInv]    = useState<Invoice | null>(null)
-  const [markPaidAmount, setMarkPaidAmount] = useState('')
-  const [markPaidNotes,  setMarkPaidNotes]  = useState('')
+  const [markPaidDate,   setMarkPaidDate]   = useState('')
+  const [markPaidType,   setMarkPaidType]   = useState('check')
 
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -329,14 +330,16 @@ export default function BillingPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount_paid: markPaidAmount ? parseFloat(markPaidAmount) : markPaidInv.total,
-          notes:       markPaidNotes || undefined,
+          paid_at:      markPaidDate || new Date().toISOString().split('T')[0],
+          payment_type: markPaidType,
         }),
       })
       const json = await res.json()
       if (json.error) { alert(json.error); return }
       setMarkPaidOpen(false)
       setMarkPaidInv(null)
+      setMarkPaidDate('')
+      setMarkPaidType('check')
       await fetchInvoices()
       if (detailInv?.id === markPaidInv.id) loadDetail(markPaidInv.id)
     } finally {
@@ -604,7 +607,7 @@ export default function BillingPage() {
       )}
       {row.status !== 'paid' && row.status !== 'void' && (
         <button
-          onClick={e => { e.stopPropagation(); setMarkPaidInv(row); setMarkPaidAmount(String(row.total)); setMarkPaidOpen(true) }}
+          onClick={e => { e.stopPropagation(); setMarkPaidInv(row); setMarkPaidDate(''); setMarkPaidType('check'); setMarkPaidOpen(true) }}
           className="flex items-center gap-1 text-[11px] text-emerald-400 border border-emerald-400/30 rounded px-2 py-1 hover:bg-emerald-400/10 transition-colors"
         >
           <CheckCircle2 size={10} /> Mark Paid
@@ -1371,7 +1374,7 @@ export default function BillingPage() {
             <div className="flex items-center gap-2 flex-wrap">
               {detailInv.status !== 'paid' && detailInv.status !== 'void' && (
                 <button
-                  onClick={() => { setMarkPaidInv(detailInv); setMarkPaidAmount(String(detailInv.total)); setMarkPaidOpen(true) }}
+                  onClick={() => { setMarkPaidInv(detailInv); setMarkPaidDate(''); setMarkPaidType('check'); setMarkPaidOpen(true) }}
                   className="flex items-center gap-1.5 px-3 py-2 text-sm bg-emerald-500/10 text-emerald-400 border border-emerald-400/20 rounded-lg hover:bg-emerald-500/20 transition-colors"
                 >
                   <CheckCircle2 size={14} /> Mark Paid
@@ -1407,7 +1410,17 @@ export default function BillingPage() {
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <StatusBadge status={detailInv.status} map={INV_STATUS} />
-                  {detailInv.paid_at && <span className="text-xs text-muted-foreground">Paid {fmtDate(detailInv.paid_at)}</span>}
+                  {detailInv.paid_at && (
+                  <span className="text-xs text-emerald-500 font-medium flex items-center gap-1">
+                    <CheckCircle2 size={11} />
+                    Paid {fmtDate(detailInv.paid_at)}
+                    {detailInv.payment_type && (
+                      <span className="text-muted-foreground font-normal capitalize">
+                        · {detailInv.payment_type.replace('_', ' ')}
+                      </span>
+                    )}
+                  </span>
+                )}
                 </div>
                 <p className="text-sm text-muted-foreground">Due {fmtDate(detailInv.due_date)}</p>
               </div>
@@ -1564,26 +1577,39 @@ export default function BillingPage() {
         <div className="fixed inset-0 z-[60] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => setMarkPaidOpen(false)} />
           <div className="relative bg-card border border-border rounded-xl w-80 p-5 shadow-2xl space-y-4">
-            <h3 className="font-semibold text-sm">Mark Invoice as Paid</h3>
-            <p className="text-xs text-muted-foreground">{markPaidInv.invoice_number} · {fmt(markPaidInv.total)}</p>
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="font-semibold text-sm">Record Payment</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">{markPaidInv.invoice_number} · {fmt(markPaidInv.total)}</p>
+              </div>
+              <CheckCircle2 size={18} className="text-emerald-400 shrink-0 mt-0.5" />
+            </div>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Amount Paid</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Payment Date</label>
                 <input
-                  type="number"
-                  value={markPaidAmount}
-                  onChange={e => setMarkPaidAmount(e.target.value)}
+                  type="date"
+                  value={markPaidDate}
+                  onChange={e => setMarkPaidDate(e.target.value)}
                   className="w-full h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
                 />
+                <p className="text-[10px] text-muted-foreground mt-1">Leave blank to use today</p>
               </div>
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Notes (optional)</label>
-                <input
-                  value={markPaidNotes}
-                  onChange={e => setMarkPaidNotes(e.target.value)}
-                  placeholder="Payment method, reference…"
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Payment Type</label>
+                <select
+                  value={markPaidType}
+                  onChange={e => setMarkPaidType(e.target.value)}
                   className="w-full h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
-                />
+                >
+                  <option value="check">Check</option>
+                  <option value="ach">ACH / Bank Transfer</option>
+                  <option value="credit_card">Credit Card</option>
+                  <option value="wire">Wire Transfer</option>
+                  <option value="cash">Cash</option>
+                  <option value="zelle">Zelle</option>
+                  <option value="other">Other</option>
+                </select>
               </div>
             </div>
             <div className="flex gap-2 pt-1">
