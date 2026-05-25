@@ -5,25 +5,26 @@ import { useSearchParams } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SkeletonRow } from "@/components/ui/SkeletonRow";
-import { ChevronLeft, ChevronRight, RefreshCw, CheckCircle2, Clock } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw, CheckCircle2, Clock, ChevronDown, Users } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { CalendarDays, CalendarClock, Link2Off, Settings, Save } = require("lucide-react") as any;
+const { CalendarDays, CalendarClock, Settings, Save, Eye, EyeOff, Wrench2 } = require("lucide-react") as any;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface CalendarEvent {
   id: string;
-  type: "todo" | "work_order" | "gcal" | "company";
+  type: "todo" | "work_order" | "gcal" | "company" | "meeting";
   title: string;
-  date: string;       // YYYY-MM-DD
-  time?: string;      // HH:MM
+  date: string;
+  time?: string;
   status: string;
   priority?: string;
   color: string;
   link?: string;
   gcal_event_id?: string;
-  source?: string;
+  source: string;
   isCompany?: boolean;
+  assignee?: string;
 }
 
 interface UnscheduledTodo {
@@ -42,20 +43,6 @@ interface UnscheduledWO {
   priority?: string | null;
 }
 
-interface UnscheduledLead {
-  id: string;
-  name: string;
-  company?: string | null;
-  stage: string;
-}
-
-interface GCalCalendar {
-  id: string;
-  summary: string;
-  backgroundColor: string;
-  primary: boolean;
-}
-
 type CalendarView = "week" | "month";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -64,7 +51,32 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-// ─── Priority badge ───────────────────────────────────────────────────────────
+// ─── Calendar source definitions ──────────────────────────────────────────────
+
+interface CalendarSource {
+  id: string;
+  label: string;
+  color: string;
+  group: string;
+  adminOnly?: boolean;
+  description?: string;
+}
+
+const CALENDAR_SOURCES: CalendarSource[] = [
+  // My Calendar
+  { id: "my_todos",       label: "My To-Dos",         color: "#6B7EFF", group: "Mine",   description: "To-dos with due dates" },
+  { id: "my_workorders",  label: "My Work Orders",     color: "#F59E0B", group: "Mine",   description: "Work orders assigned to me" },
+  // Team
+  { id: "all_installs",   label: "All Installs",       color: "#8B5CF6", group: "Team",   description: "Every install org-wide" },
+  { id: "all_service",    label: "All Service Calls",  color: "#F97316", group: "Team",   description: "Every service WO org-wide" },
+  { id: "sales_meetings", label: "Sales Appointments", color: "#10B981", group: "Team",   description: "CRM meetings & appointments" },
+  // Company
+  { id: "company",        label: "Company Events",     color: "#6B7EFF", group: "Company", description: "L10s, permit/quote expiries, GG events" },
+];
+
+const SOURCE_GROUPS = ["Mine", "Team", "Company"];
+
+// ─── Priority chip ────────────────────────────────────────────────────────────
 
 function PriorityChip({ priority }: { priority?: string }) {
   const map: Record<string, string> = {
@@ -81,7 +93,7 @@ function PriorityChip({ priority }: { priority?: string }) {
   );
 }
 
-// ─── Event chip (calendar cell) ───────────────────────────────────────────────
+// ─── Event chip ───────────────────────────────────────────────────────────────
 
 function EventChip({
   event,
@@ -107,14 +119,6 @@ function EventChip({
       title={event.title}
     >
       {event.time && <span className={`mr-1 ${isCompany ? "opacity-60" : "opacity-80"}`}>{event.time}</span>}
-      {isCompany && (
-        <span
-          className="inline-block text-[8px] font-bold px-0.5 py-0 rounded mr-1 align-middle"
-          style={{ backgroundColor: event.color, color: "#fff" }}
-        >
-          GG
-        </span>
-      )}
       {event.title}
     </button>
   );
@@ -131,31 +135,37 @@ function EventPopover({
   anchor: { top: number; left: number };
   onClose: () => void;
 }) {
-  const typeLabel =
-    event.type === "todo"         ? "To-Do" :
-    event.type === "work_order"   ? "Work Order" :
-    event.type === "company"      ? "GateGuard Event" :
-    "Google Calendar";
+  const src = CALENDAR_SOURCES.find((s) => s.id === event.source);
+  const typeLabel = src?.label ?? (
+    event.type === "todo"       ? "To-Do" :
+    event.type === "work_order" ? "Work Order" :
+    event.type === "meeting"    ? "Sales Meeting" :
+    event.type === "company"    ? "Company Event" : "Event"
+  );
+
   return (
     <div
-      className="fixed z-50 bg-white border border-border rounded-xl shadow-xl p-4 w-64"
+      className="fixed z-50 bg-white border border-border rounded-xl shadow-xl p-4 w-72"
       style={{ top: anchor.top, left: anchor.left }}
     >
-      <div className="flex items-start justify-between gap-2 mb-2">
+      <div className="flex items-start justify-between gap-2 mb-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-0.5">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{typeLabel}</p>
-            {event.isCompany && (
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white" style={{ backgroundColor: event.color }}>
-                GG
-              </span>
-            )}
+          <div className="flex items-center gap-1.5 mb-1">
+            <span
+              className="w-2 h-2 rounded-full shrink-0 inline-block"
+              style={{ backgroundColor: event.color }}
+            />
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{typeLabel}</p>
           </div>
           <p className="text-sm font-semibold text-foreground leading-tight">{event.title}</p>
+          {event.assignee && (
+            <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
+              <Users size={10} />
+              {event.assignee}
+            </p>
+          )}
         </div>
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-xs p-1">
-          ✕
-        </button>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-xs p-1 shrink-0">✕</button>
       </div>
       <div className="space-y-1 text-xs text-muted-foreground">
         <div className="flex items-center gap-1.5">
@@ -164,190 +174,202 @@ function EventPopover({
         </div>
         <div className="flex items-center gap-1.5">
           <CheckCircle2 size={11} />
-          Status: <span className="capitalize">{event.status.replace(/_/g, " ")}</span>
+          <span className="capitalize">{event.status.replace(/_/g, " ")}</span>
         </div>
-        {event.priority && (
-          <div className="flex items-center gap-1.5 mt-1">
-            <PriorityChip priority={event.priority} />
-          </div>
-        )}
+        {event.priority && <div className="mt-1"><PriorityChip priority={event.priority} /></div>}
       </div>
       {event.link && (
         <a
           href={event.link}
           className="mt-3 flex items-center gap-1.5 text-xs font-medium text-[#6B7EFF] hover:underline"
         >
-          Open detail →
+          Open →
         </a>
       )}
     </div>
   );
 }
 
-// ─── Calendars Settings Panel ─────────────────────────────────────────────────
+// ─── Sources panel (left rail) ────────────────────────────────────────────────
 
-function CalendarsPanel({
+function SourcesRail({
+  activeSources,
+  onChange,
   gcalConnected,
-  onClose,
+  lastSynced,
+  onSync,
+  syncing,
 }: {
+  activeSources: Set<string>;
+  onChange: (next: Set<string>) => void;
   gcalConnected: boolean;
-  onClose: () => void;
+  lastSynced: string | null;
+  onSync: () => void;
+  syncing: boolean;
 }) {
-  const [calendars, setCalendars]       = useState<GCalCalendar[]>([]);
-  const [selectedIds, setSelectedIds]   = useState<string[]>(['primary']);
-  const [loading, setLoading]           = useState(true);
-  const [saving, setSaving]             = useState(false);
-  const [saved, setSaved]               = useState(false);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
-  useEffect(() => {
-    if (!gcalConnected) { setLoading(false); return; }
-    void (async () => {
-      try {
-        const res = await fetch('/api/calendar/google/calendars');
-        if (res.ok) {
-          const d = await res.json() as { calendars: GCalCalendar[]; selectedIds: string[] };
-          setCalendars(d.calendars ?? []);
-          setSelectedIds(d.selectedIds ?? ['primary']);
-        }
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [gcalConnected]);
-
-  function toggleCalendar(id: string) {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-    setSaved(false);
+  function toggle(id: string) {
+    const next = new Set(activeSources);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    onChange(next);
   }
 
-  async function handleSave() {
-    setSaving(true);
-    try {
-      const res = await fetch('/api/calendar/google/calendars', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ selectedIds }),
-      });
-      if (res.ok) { setSaved(true); setTimeout(() => setSaved(false), 2500); }
-    } finally {
-      setSaving(false);
-    }
+  function toggleGroup(group: string) {
+    const groupSources = CALENDAR_SOURCES.filter((s) => s.group === group).map((s) => s.id);
+    const allOn = groupSources.every((id) => activeSources.has(id));
+    const next = new Set(activeSources);
+    groupSources.forEach((id) => allOn ? next.delete(id) : next.add(id));
+    onChange(next);
+  }
+
+  const allOn = CALENDAR_SOURCES.every((s) => activeSources.has(s.id));
+
+  function relativeSyncTime(): string {
+    if (!lastSynced) return "";
+    const diff = Math.floor((Date.now() - new Date(lastSynced).getTime()) / 1000);
+    if (diff < 60) return "just now";
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    return `${Math.floor(diff / 3600)}h ago`;
   }
 
   return (
-    <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-border rounded-xl shadow-xl z-30 overflow-hidden">
+    <div className="w-56 shrink-0 border-r border-border bg-white flex flex-col overflow-y-auto">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-slate-50">
-        <span className="text-sm font-semibold text-foreground">Calendars</span>
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-xs p-1">✕</button>
+      <div className="px-3 pt-4 pb-2 border-b border-border">
+        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">Calendars</p>
+        {/* Show All / My Calendar toggle */}
+        <button
+          onClick={() => onChange(new Set(allOn ? ["my_todos"] : CALENDAR_SOURCES.map((s) => s.id)))}
+          className={`w-full flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors ${
+            allOn
+              ? "bg-[#6B7EFF] text-white"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+          }`}
+        >
+          {allOn ? <Eye size={12} /> : <EyeOff size={12} />}
+          {allOn ? "Showing All" : "My Calendar Only"}
+        </button>
       </div>
 
-      <div className="p-3 space-y-3">
-        {/* GateGuard Company Calendar — always on */}
-        <div>
-          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2 px-1">
-            GateGuard Company
-          </p>
-          <div className="flex items-center gap-2 px-2 py-2 rounded-lg bg-[#6B7EFF]/5 border border-[#6B7EFF]/20">
-            <div className="w-3 h-3 rounded-sm bg-[#6B7EFF] shrink-0" />
-            <span className="text-xs font-medium text-foreground flex-1">GateGuard Company Calendar</span>
-            <span className="text-[9px] font-bold text-[#6B7EFF] bg-[#6B7EFF]/10 px-1.5 py-0.5 rounded-full">Always On</span>
-          </div>
-          <p className="text-[10px] text-muted-foreground px-1 mt-1">
-            L10 meetings, permit renewals, quote expiries, and installs/service WOs pushed outbound.
-          </p>
-        </div>
+      {/* Source groups */}
+      <div className="flex-1 p-2 space-y-1">
+        {SOURCE_GROUPS.map((group) => {
+          const sources = CALENDAR_SOURCES.filter((s) => s.group === group);
+          const isCollapsed = collapsed[group];
+          const groupAllOn = sources.every((s) => activeSources.has(s.id));
+          const groupSomeOn = sources.some((s) => activeSources.has(s.id));
 
-        {/* Google Calendars */}
-        {gcalConnected && (
-          <div>
-            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2 px-1">
-              My Google Calendars
-            </p>
-            {loading ? (
-              <div className="p-2"><SkeletonRow cols={2} rows={3} /></div>
-            ) : calendars.length === 0 ? (
-              <p className="text-xs text-muted-foreground px-1">No calendars found.</p>
-            ) : (
-              <div className="space-y-1">
-                {calendars.map((cal) => (
-                  <label
-                    key={cal.id}
-                    className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-accent cursor-pointer transition-colors"
-                  >
-                    <div
-                      className="w-3 h-3 rounded-sm shrink-0 border"
-                      style={{
-                        backgroundColor: selectedIds.includes(cal.id) ? cal.backgroundColor : 'transparent',
-                        borderColor: cal.backgroundColor,
-                      }}
-                    />
-                    <input
-                      type="checkbox"
-                      className="sr-only"
-                      checked={selectedIds.includes(cal.id)}
-                      onChange={() => toggleCalendar(cal.id)}
-                    />
-                    <span className="text-xs text-foreground flex-1 truncate">{cal.summary}</span>
-                    {cal.primary && (
-                      <span className="text-[9px] text-muted-foreground shrink-0">primary</span>
-                    )}
-                  </label>
-                ))}
-              </div>
-            )}
+          return (
+            <div key={group}>
+              {/* Group header */}
+              <button
+                className="w-full flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-accent transition-colors group"
+                onClick={() => setCollapsed((p) => ({ ...p, [group]: !p[group] }))}
+              >
+                <ChevronDown
+                  size={11}
+                  className={`text-muted-foreground transition-transform shrink-0 ${isCollapsed ? "-rotate-90" : ""}`}
+                />
+                <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide flex-1 text-left">
+                  {group}
+                </span>
+                {/* Group toggle dot */}
+                <span
+                  className={`w-2 h-2 rounded-full shrink-0 transition-all ${
+                    groupAllOn ? "opacity-100" : groupSomeOn ? "opacity-40" : "opacity-10"
+                  }`}
+                  style={{ backgroundColor: sources[0]?.color ?? "#6B7EFF" }}
+                  onClick={(e) => { e.stopPropagation(); toggleGroup(group); }}
+                  title={groupAllOn ? `Hide all ${group}` : `Show all ${group}`}
+                />
+              </button>
 
-            <button
-              onClick={() => { void handleSave(); }}
-              disabled={saving}
-              className="mt-3 w-full flex items-center justify-center gap-1.5 text-xs font-medium bg-[#6B7EFF] text-white px-3 py-2 rounded-lg hover:bg-[#5a6ee0] transition-colors disabled:opacity-60"
-            >
-              {saving ? (
-                <RefreshCw size={12} className="animate-spin" />
-              ) : saved ? (
-                <CheckCircle2 size={12} />
-              ) : (
-                <Save size={12} />
+              {/* Sources in group */}
+              {!isCollapsed && (
+                <div className="ml-2 space-y-0.5">
+                  {sources.map((src) => {
+                    const active = activeSources.has(src.id);
+                    return (
+                      <button
+                        key={src.id}
+                        onClick={() => toggle(src.id)}
+                        title={src.description}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-accent transition-colors text-left"
+                      >
+                        {/* Color checkbox */}
+                        <span
+                          className="w-3 h-3 rounded shrink-0 border-2 transition-all flex items-center justify-center"
+                          style={{
+                            backgroundColor: active ? src.color : "transparent",
+                            borderColor: src.color,
+                          }}
+                        >
+                          {active && (
+                            <svg width="7" height="5" viewBox="0 0 7 5" fill="none">
+                              <path d="M1 2.5L2.8 4L6 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          )}
+                        </span>
+                        <span className={`text-xs truncate ${active ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                          {src.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               )}
-              {saved ? "Saved!" : saving ? "Saving…" : "Save Calendar Selection"}
-            </button>
-          </div>
-        )}
+            </div>
+          );
+        })}
+      </div>
 
-        {!gcalConnected && (
-          <div className="text-center py-2">
-            <p className="text-xs text-muted-foreground mb-2">Connect Google Calendar to push portal events to your native calendar app.</p>
-            <a
-              href="/api/calendar/google/connect"
-              className="text-xs font-medium bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5a6ee0] transition-colors inline-block"
-            >
-              Connect Google Calendar
-            </a>
+      {/* External calendars section */}
+      <div className="border-t border-border p-3">
+        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">External</p>
+        {gcalConnected ? (
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-emerald-50">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+              <span className="text-xs font-medium text-emerald-700 flex-1 truncate">Google Calendar</span>
+              <button
+                onClick={onSync}
+                disabled={syncing}
+                className="shrink-0"
+                title="Sync now"
+              >
+                <RefreshCw size={11} className={`text-emerald-600 ${syncing ? "animate-spin" : ""}`} />
+              </button>
+            </div>
+            {lastSynced && (
+              <p className="text-[9px] text-muted-foreground px-2">
+                Pushed {relativeSyncTime()}
+              </p>
+            )}
           </div>
+        ) : (
+          <a
+            href="/api/calendar/google/connect"
+            className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:border-[#6B7EFF]/40 hover:text-[#6B7EFF] transition-colors"
+          >
+            <CalendarDays size={12} />
+            Push to Google Cal
+          </a>
         )}
       </div>
     </div>
   );
 }
 
-// ─── Event type filters ────────────────────────────────────────────────────────
-
-const EVENT_TYPES = [
-  { id: 'install',       label: 'Installs',        color: '#8B5CF6', dot: 'bg-purple-500' },
-  { id: 'service',       label: 'Service',          color: '#F59E0B', dot: 'bg-amber-500'  },
-  { id: 'company',       label: 'Company Events',   color: '#6B7EFF', dot: 'bg-[#6B7EFF]'  },
-  { id: 'sales_meeting', label: 'Sales Meetings',   color: '#10B981', dot: 'bg-emerald-500' },
-] as const
-
-type EventTypeId = typeof EVENT_TYPES[number]['id']
-
-// ─── Main page ────────────────────────────────────────────────────────────────
+// ─── Main wrapper ─────────────────────────────────────────────────────────────
 
 export default function CalendarPageWrapper() {
   return (
-    <Suspense fallback={<div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{color:'#6B7EFF'}}>Loading...</div></div>}>
+    <Suspense fallback={<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{color:"#6B7EFF"}}>Loading…</div></div>}>
       <CalendarPage />
     </Suspense>
   );
@@ -356,46 +378,38 @@ export default function CalendarPageWrapper() {
 function CalendarPage() {
   const searchParams = useSearchParams();
 
-  const [view, setView] = useState<CalendarView>("week");
+  const [view, setView]           = useState<CalendarView>("week");
   const [currentDate, setCurrentDate] = useState(() => new Date());
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
+  const [events, setEvents]       = useState<CalendarEvent[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [syncing, setSyncing]     = useState(false);
   const [gcalConnected, setGcalConnected] = useState(false);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
-  const [activeEvent, setActiveEvent] = useState<CalendarEvent | null>(null);
+  const [activeEvent, setActiveEvent]   = useState<CalendarEvent | null>(null);
   const [popoverAnchor, setPopoverAnchor] = useState<{ top: number; left: number } | null>(null);
-  const [showCalendarsPanel, setShowCalendarsPanel] = useState(false);
-  const [activeTypeFilters, setActiveTypeFilters] = useState<Set<EventTypeId>>(
-    new Set(EVENT_TYPES.map((t) => t.id))
+
+  // All sources on by default
+  const [activeSources, setActiveSources] = useState<Set<string>>(
+    new Set(CALENDAR_SOURCES.map((s) => s.id))
   );
 
   // Unscheduled panel
   const [unscheduledTodos, setUnscheduledTodos] = useState<UnscheduledTodo[]>([]);
-  const [unscheduledWOs, setUnscheduledWOs] = useState<UnscheduledWO[]>([]);
-  const [unscheduledLeads, setUnscheduledLeads] = useState<UnscheduledLead[]>([]);
+  const [unscheduledWOs, setUnscheduledWOs]     = useState<UnscheduledWO[]>([]);
   const [unscheduledLoading, setUnscheduledLoading] = useState(true);
 
   // Inline date pickers
   const [pickerTodoId, setPickerTodoId] = useState<string | null>(null);
-  const [pickerWoId, setPickerWoId] = useState<string | null>(null);
+  const [pickerWoId, setPickerWoId]     = useState<string | null>(null);
 
   // Drag-drop
   const dragItem = useRef<{ type: "todo" | "wo"; id: string } | null>(null);
 
-  // ── Show connected banner if redirected back from OAuth ─────────────────────
-  const connectedParam = searchParams.get("connected");
-  useEffect(() => {
-    if (connectedParam === "true") {
-      setGcalConnected(true);
-    }
-  }, [connectedParam]);
-
-  // ── Check GCal status on mount ───────────────────────────────────────────────
+  // ── GCal status on mount ──────────────────────────────────────────────────
   useEffect(() => {
     void (async () => {
       try {
-        const res = await fetch('/api/calendar/google/status');
+        const res = await fetch("/api/calendar/google/status");
         if (res.ok) {
           const d = await res.json() as { connected: boolean; last_synced?: string };
           setGcalConnected(d.connected ?? false);
@@ -403,16 +417,18 @@ function CalendarPage() {
         }
       } catch { /* ignore */ }
     })();
-  }, []);
+    const cp = searchParams.get("connected");
+    if (cp === "true") setGcalConnected(true);
+  }, [searchParams]);
 
-  // ── Fetch events for current month/year ──────────────────────────────────────
+  // ── Fetch events ──────────────────────────────────────────────────────────
   const fetchEvents = useCallback(async () => {
     setLoading(true);
     try {
       const year   = currentDate.getFullYear();
       const month  = currentDate.getMonth() + 1;
-      const types  = Array.from(activeTypeFilters).join(',');
-      const res    = await fetch(`/api/calendar/events?year=${year}&month=${month}&types=${types}`);
+      const sources = Array.from(activeSources).join(",");
+      const res = await fetch(`/api/calendar/events?year=${year}&month=${month}&sources=${sources}`);
       if (res.ok) {
         const d = await res.json() as { events: CalendarEvent[] };
         setEvents(d.events ?? []);
@@ -420,21 +436,19 @@ function CalendarPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentDate, activeTypeFilters]);
+  }, [currentDate, activeSources]);
 
   useEffect(() => { void fetchEvents(); }, [fetchEvents]);
 
-  // ── Fetch unscheduled items ───────────────────────────────────────────────────
+  // ── Unscheduled ───────────────────────────────────────────────────────────
   useEffect(() => {
     setUnscheduledLoading(true);
     void (async () => {
       try {
-        const [todosRes, wosRes, leadsRes] = await Promise.all([
-          fetch('/api/todos?status=open&no_due_date=true&limit=20'),
-          fetch('/api/maintenance?status=open&no_schedule=true&limit=20'),
-          fetch('/api/crm/leads?stage=new&limit=10'),
+        const [todosRes, wosRes] = await Promise.all([
+          fetch("/api/todos?status=open&no_due_date=true&limit=20"),
+          fetch("/api/maintenance?status=open&no_schedule=true&limit=20"),
         ]);
-
         if (todosRes.ok) {
           const d = await todosRes.json() as { todos?: UnscheduledTodo[] };
           setUnscheduledTodos((d.todos ?? []).filter((t) => !t.due_date));
@@ -443,41 +457,29 @@ function CalendarPage() {
           const d = await wosRes.json() as { work_orders?: UnscheduledWO[] };
           setUnscheduledWOs(d.work_orders ?? []);
         }
-        if (leadsRes.ok) {
-          const d = await leadsRes.json() as { leads?: UnscheduledLead[] };
-          setUnscheduledLeads(d.leads ?? []);
-        }
       } finally {
         setUnscheduledLoading(false);
       }
     })();
   }, []);
 
+  // ── Navigation ────────────────────────────────────────────────────────────
   function goBack() {
     setCurrentDate((d) => {
       const nd = new Date(d);
-      if (view === "week") {
-        nd.setDate(nd.getDate() - 7);
-      } else {
-        nd.setMonth(nd.getMonth() - 1);
-      }
+      view === "week" ? nd.setDate(nd.getDate() - 7) : nd.setMonth(nd.getMonth() - 1);
       return nd;
     });
   }
-
   function goForward() {
     setCurrentDate((d) => {
       const nd = new Date(d);
-      if (view === "week") {
-        nd.setDate(nd.getDate() + 7);
-      } else {
-        nd.setMonth(nd.getMonth() + 1);
-      }
+      view === "week" ? nd.setDate(nd.getDate() + 7) : nd.setMonth(nd.getMonth() + 1);
       return nd;
     });
   }
 
-  // ── GCal sync ─────────────────────────────────────────────────────────────────
+  // ── GCal sync ─────────────────────────────────────────────────────────────
   async function handleSync() {
     setSyncing(true);
     try {
@@ -492,16 +494,17 @@ function CalendarPage() {
     }
   }
 
-  // ── Event chip click → popover ────────────────────────────────────────────────
+  // ── Event popover ─────────────────────────────────────────────────────────
   function handleEventClick(event: CalendarEvent, el: HTMLElement) {
     setActiveEvent(event);
     const rect = el.getBoundingClientRect();
-    const top  = Math.min(rect.bottom + 8, window.innerHeight - 220);
-    const left = Math.min(rect.left, window.innerWidth - 272);
-    setPopoverAnchor({ top, left });
+    setPopoverAnchor({
+      top:  Math.min(rect.bottom + 8, window.innerHeight - 240),
+      left: Math.min(rect.left, window.innerWidth - 288),
+    });
   }
 
-  // ── Date setter for unscheduled items ─────────────────────────────────────────
+  // ── Date setting ──────────────────────────────────────────────────────────
   async function setTodoDate(id: string, date: string) {
     try {
       await fetch(`/api/todos/${id}`, {
@@ -528,11 +531,10 @@ function CalendarPage() {
     } catch { /* ignore */ }
   }
 
-  // ── Drag-and-drop handlers ────────────────────────────────────────────────────
+  // ── Drag-drop ─────────────────────────────────────────────────────────────
   function handleDragStart(type: "todo" | "wo", id: string) {
     dragItem.current = { type, id };
   }
-
   async function handleDropOnDay(dateStr: string) {
     const item = dragItem.current;
     if (!item) return;
@@ -541,22 +543,18 @@ function CalendarPage() {
     dragItem.current = null;
   }
 
-  // ── Week view: compute days in current week ────────────────────────────────────
+  // ── Week/month helpers ────────────────────────────────────────────────────
   function getWeekDays(): Date[] {
-    const d    = new Date(currentDate);
-    const day  = d.getDay();
-    const diff = d.getDate() - day;
-    const sunday = new Date(d.setDate(diff));
+    const d = new Date(currentDate);
+    const sunday = new Date(d.setDate(d.getDate() - d.getDay()));
     return Array.from({ length: 7 }, (_, i) => {
       const dd = new Date(sunday);
       dd.setDate(sunday.getDate() + i);
       return dd;
     });
   }
-
-  // ── Month view: compute grid cells ────────────────────────────────────────────
   function getMonthCells(): (Date | null)[] {
-    const year  = currentDate.getFullYear();
+    const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -566,109 +564,77 @@ function CalendarPage() {
     while (cells.length % 7 !== 0) cells.push(null);
     return cells;
   }
-
-  // ── Helpers ───────────────────────────────────────────────────────────────────
   function toDateStr(d: Date): string {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }
-
   function isToday(d: Date): boolean {
     const t = new Date();
     return d.getDate() === t.getDate() && d.getMonth() === t.getMonth() && d.getFullYear() === t.getFullYear();
   }
-
   function eventsForDate(dateStr: string): CalendarEvent[] {
     return events.filter((e) => e.date === dateStr);
   }
-
-  // ── Header label ──────────────────────────────────────────────────────────────
   function getHeaderLabel(): string {
-    if (view === "month") {
-      return `${MONTH_NAMES[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
-    }
+    if (view === "month") return `${MONTH_NAMES[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
     const days = getWeekDays();
-    const start = days[0];
-    const end   = days[6];
-    if (start.getMonth() === end.getMonth()) {
-      return `${MONTH_NAMES[start.getMonth()]} ${start.getDate()}–${end.getDate()}, ${start.getFullYear()}`;
+    const s = days[0], e = days[6];
+    if (s.getMonth() === e.getMonth()) {
+      return `${MONTH_NAMES[s.getMonth()]} ${s.getDate()}–${e.getDate()}, ${s.getFullYear()}`;
     }
-    return `${MONTH_NAMES[start.getMonth()]} ${start.getDate()} – ${MONTH_NAMES[end.getMonth()]} ${end.getDate()}, ${end.getFullYear()}`;
+    return `${MONTH_NAMES[s.getMonth()]} ${s.getDate()} – ${MONTH_NAMES[e.getMonth()]} ${e.getDate()}, ${e.getFullYear()}`;
   }
 
-  // ── Relative sync time ────────────────────────────────────────────────────────
-  function relativeSyncTime(): string {
-    if (!lastSynced) return "";
-    const diff = Math.floor((Date.now() - new Date(lastSynced).getTime()) / 1000);
-    if (diff < 60) return "just now";
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    return `${Math.floor(diff / 3600)}h ago`;
-  }
+  const totalUnscheduled = unscheduledTodos.length + unscheduledWOs.length;
 
-  const totalUnscheduled = unscheduledTodos.length + unscheduledWOs.length + unscheduledLeads.length;
-
-  // ── Week view rendering ───────────────────────────────────────────────────────
+  // ── Week view ─────────────────────────────────────────────────────────────
   function renderWeekView() {
     const weekDays = getWeekDays();
-    const hasAnyEvent = weekDays.some((d) => eventsForDate(toDateStr(d)).length > 0);
-
+    const hasAny = weekDays.some((d) => eventsForDate(toDateStr(d)).length > 0);
     return (
       <div className="flex-1 min-h-0 overflow-auto">
-        {/* Day headers */}
         <div className="grid grid-cols-7 border-b border-border bg-white sticky top-0 z-10">
-          {weekDays.map((day, i) => {
-            const today = isToday(day);
-            return (
-              <div
-                key={i}
-                className="py-3 px-2 text-center border-r border-border last:border-r-0"
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => { void handleDropOnDay(toDateStr(day)); }}
-              >
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-                  {DAY_NAMES[day.getDay()]}
-                </p>
-                <div className={`w-8 h-8 flex items-center justify-center mx-auto mt-1 rounded-full text-sm font-bold transition-colors ${
-                  today ? "bg-[#6B7EFF] text-white" : "text-foreground"
-                }`}>
-                  {day.getDate()}
-                </div>
+          {weekDays.map((day, i) => (
+            <div
+              key={i}
+              className="py-3 px-2 text-center border-r border-border last:border-r-0"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => { void handleDropOnDay(toDateStr(day)); }}
+            >
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                {DAY_NAMES[day.getDay()]}
+              </p>
+              <div className={`w-8 h-8 flex items-center justify-center mx-auto mt-1 rounded-full text-sm font-bold ${
+                isToday(day) ? "bg-[#6B7EFF] text-white" : "text-foreground"
+              }`}>
+                {day.getDate()}
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
-
-        {/* Event rows */}
         <div className="grid grid-cols-7">
           {weekDays.map((day, i) => {
             const dateStr = toDateStr(day);
             const dayEvents = eventsForDate(dateStr);
-            const allDay    = dayEvents.filter((e) => !e.time);
-            const timed     = dayEvents.filter((e) => !!e.time);
-
             return (
               <div
                 key={i}
-                className="min-h-[200px] border-r border-b border-border last:border-r-0 p-1.5 space-y-1"
+                className="min-h-[200px] border-r border-b border-border last:border-r-0 p-1.5 space-y-0.5"
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => { void handleDropOnDay(dateStr); }}
               >
-                {allDay.map((ev) => (
-                  <EventChip key={ev.id} event={ev} onClick={handleEventClick} />
-                ))}
-                {timed.map((ev) => (
+                {dayEvents.map((ev) => (
                   <EventChip key={ev.id} event={ev} onClick={handleEventClick} />
                 ))}
               </div>
             );
           })}
         </div>
-
-        {!loading && !hasAnyEvent && (
+        {!loading && !hasAny && (
           <div className="py-8">
             <EmptyState
               icon={<CalendarDays size={28} className="text-muted-foreground" />}
               title="No events this week"
-              description="To-dos and work orders scheduled for this week will appear here."
+              description="Scheduled work orders, to-dos, and meetings will appear here."
             />
           </div>
         )}
@@ -676,10 +642,9 @@ function CalendarPage() {
     );
   }
 
-  // ── Month view rendering ──────────────────────────────────────────────────────
+  // ── Month view ────────────────────────────────────────────────────────────
   function renderMonthView() {
     const cells = getMonthCells();
-
     return (
       <div className="flex-1 min-h-0 overflow-auto">
         <div className="grid grid-cols-7 border-b border-border bg-white sticky top-0 z-10">
@@ -689,20 +654,15 @@ function CalendarPage() {
             </div>
           ))}
         </div>
-
         <div className="grid grid-cols-7">
           {cells.map((cell, idx) => {
-            if (!cell) {
-              return (
-                <div key={`empty-${idx}`} className="min-h-[110px] bg-slate-50/60 border-r border-b border-border last:border-r-0" />
-              );
-            }
-            const dateStr  = toDateStr(cell);
+            if (!cell) return (
+              <div key={`empty-${idx}`} className="min-h-[110px] bg-slate-50/60 border-r border-b border-border last:border-r-0" />
+            );
+            const dateStr = toDateStr(cell);
             const dayEvents = eventsForDate(dateStr);
-            const visible  = dayEvents.slice(0, 3);
+            const visible = dayEvents.slice(0, 3);
             const overflow = dayEvents.length - 3;
-            const today    = isToday(cell);
-
             return (
               <div
                 key={dateStr}
@@ -711,7 +671,7 @@ function CalendarPage() {
                 onDrop={() => { void handleDropOnDay(dateStr); }}
               >
                 <div className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold mb-1 ${
-                  today ? "bg-[#6B7EFF] text-white" : "text-foreground"
+                  isToday(cell) ? "bg-[#6B7EFF] text-white" : "text-foreground"
                 }`}>
                   {cell.getDate()}
                 </div>
@@ -720,9 +680,7 @@ function CalendarPage() {
                     <EventChip key={ev.id} event={ev} onClick={handleEventClick} />
                   ))}
                   {overflow > 0 && (
-                    <p className="text-[9px] font-medium text-muted-foreground px-1">
-                      +{overflow} more
-                    </p>
+                    <p className="text-[9px] font-medium text-muted-foreground px-1">+{overflow} more</p>
                   )}
                 </div>
               </div>
@@ -733,224 +691,100 @@ function CalendarPage() {
     );
   }
 
-  // ─── Render ───────────────────────────────────────────────────────────────────
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col h-screen bg-[#F8FAFC]">
-      <TopBar
-        title="Calendar"
-        subtitle="Your schedule, to-dos, and work orders in one view"
-      />
+      <TopBar title="Calendar" subtitle="Your schedule across all work types" />
 
-      {/* GCal push banner */}
-      {!gcalConnected && (
-        <div className="mx-6 mt-4 flex items-center gap-3 bg-slate-50 border border-border rounded-xl px-4 py-3">
-          <CalendarDays size={16} className="text-muted-foreground shrink-0" />
-          <p className="text-sm text-muted-foreground flex-1">
-            Connect Google Calendar to push your installs, service calls, and meetings to your native calendar app.
-          </p>
-          <a
-            href="/api/calendar/google/connect"
-            className="text-sm font-medium bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5a6ee0] transition-colors shrink-0"
-          >
-            Connect
-          </a>
-        </div>
-      )}
+      <div className="flex flex-1 min-h-0">
+        {/* ── Left: Sources rail ────────────────────────────────────────── */}
+        <SourcesRail
+          activeSources={activeSources}
+          onChange={setActiveSources}
+          gcalConnected={gcalConnected}
+          lastSynced={lastSynced}
+          onSync={() => { void handleSync(); }}
+          syncing={syncing}
+        />
 
-      <div className="flex flex-1 min-h-0 gap-0">
-        {/* ── Left panel: calendar ──────────────────────────────────────────── */}
-        <div className="flex-1 flex flex-col min-h-0 p-6 pr-3 gap-4">
-          {/* Event type filter chips */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-semibold text-muted-foreground mr-1">Show:</span>
-            {EVENT_TYPES.map((et) => {
-              const active = activeTypeFilters.has(et.id);
-              return (
-                <button
-                  key={et.id}
-                  onClick={() => {
-                    setActiveTypeFilters((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(et.id)) {
-                        next.delete(et.id);
-                      } else {
-                        next.add(et.id);
-                      }
-                      // Always keep at least one active
-                      if (next.size === 0) return prev;
-                      return next;
-                    });
-                  }}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
-                    active
-                      ? "border-transparent text-white"
-                      : "border-border bg-white text-muted-foreground hover:border-slate-300"
-                  }`}
-                  style={active ? { backgroundColor: et.color } : {}}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full inline-block ${active ? "bg-white/70" : et.dot}`}
-                  />
-                  {et.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Calendar header */}
-          <div className="flex items-center gap-4 flex-wrap">
+        {/* ── Center: Calendar ──────────────────────────────────────────── */}
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          {/* Calendar header bar */}
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-white">
             {/* View toggle */}
-            <div className="flex items-center bg-white border border-border rounded-lg p-0.5">
-              <button
-                onClick={() => setView("week")}
-                className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-                  view === "week"
-                    ? "bg-[#6B7EFF] text-white"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Week
-              </button>
-              <button
-                onClick={() => setView("month")}
-                className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-                  view === "month"
-                    ? "bg-[#6B7EFF] text-white"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Month
-              </button>
+            <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
+              {(["week", "month"] as CalendarView[]).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  className={`px-3 py-1 rounded text-xs font-medium transition-colors capitalize ${
+                    view === v ? "bg-white text-foreground shadow-sm" : "text-muted-foreground"
+                  }`}
+                >
+                  {v}
+                </button>
+              ))}
             </div>
 
-            {/* Date navigation */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={goBack}
-                className="p-1.5 rounded-lg hover:bg-accent transition-colors border border-border"
-              >
+            {/* Date nav */}
+            <div className="flex items-center gap-1">
+              <button onClick={goBack} className="p-1.5 rounded-lg hover:bg-accent transition-colors border border-border">
                 <ChevronLeft size={14} className="text-muted-foreground" />
               </button>
               <span className="text-sm font-semibold text-foreground min-w-[200px] text-center">
                 {getHeaderLabel()}
               </span>
-              <button
-                onClick={goForward}
-                className="p-1.5 rounded-lg hover:bg-accent transition-colors border border-border"
-              >
+              <button onClick={goForward} className="p-1.5 rounded-lg hover:bg-accent transition-colors border border-border">
                 <ChevronRight size={14} className="text-muted-foreground" />
               </button>
             </div>
 
+            <button
+              onClick={() => setCurrentDate(new Date())}
+              className="text-xs font-medium text-muted-foreground hover:text-foreground px-2.5 py-1 rounded-lg border border-border hover:bg-accent transition-colors"
+            >
+              Today
+            </button>
+
             <div className="flex-1" />
 
-            {/* Google Calendar + Calendars settings */}
-            <div className="flex items-center gap-2">
-              {gcalConnected ? (
-                <>
-                  <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-                    Google Calendar Connected
-                  </span>
-                  {lastSynced && (
-                    <span className="text-[10px] text-muted-foreground">
-                      Last synced: {relativeSyncTime()}
-                    </span>
-                  )}
-                  <button
-                    onClick={() => { void handleSync(); }}
-                    disabled={syncing}
-                    className="p-1.5 rounded-lg hover:bg-accent transition-colors border border-border"
-                    title="Sync with Google Calendar"
-                  >
-                    <RefreshCw size={14} className={`text-muted-foreground ${syncing ? "animate-spin" : ""}`} />
-                  </button>
-                </>
-              ) : (
-                <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground bg-white border border-border px-2.5 py-1 rounded-full">
-                  <Link2Off size={11} />
-                  Not Connected
-                </span>
-              )}
+            {/* Event count badge */}
+            {events.length > 0 && (
+              <span className="text-xs text-muted-foreground bg-slate-100 px-2 py-0.5 rounded-full">
+                {events.length} event{events.length !== 1 ? "s" : ""}
+              </span>
+            )}
 
-              {/* Calendars settings button */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowCalendarsPanel((v) => !v)}
-                  className={`p-1.5 rounded-lg transition-colors border border-border ${
-                    showCalendarsPanel ? "bg-[#6B7EFF]/10 border-[#6B7EFF]/30" : "hover:bg-accent"
-                  }`}
-                  title="Calendar settings"
-                >
-                  <Settings size={14} className={showCalendarsPanel ? "text-[#6B7EFF]" : "text-muted-foreground"} />
-                </button>
-
-                {showCalendarsPanel && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-20"
-                      onClick={() => setShowCalendarsPanel(false)}
-                    />
-                    <div className="relative z-30">
-                      <CalendarsPanel
-                        gcalConnected={gcalConnected}
-                        onClose={() => setShowCalendarsPanel(false)}
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
+            {loading && (
+              <RefreshCw size={14} className="text-muted-foreground animate-spin" />
+            )}
           </div>
 
           {/* Calendar grid */}
-          <div className="flex-1 bg-white border border-border rounded-xl overflow-hidden flex flex-col min-h-0">
+          <div className="flex-1 bg-white border-b border-border overflow-hidden flex flex-col min-h-0">
             {loading ? (
-              <div className="p-4">
-                <SkeletonRow cols={7} rows={4} />
-              </div>
+              <div className="p-4"><SkeletonRow cols={7} rows={4} /></div>
             ) : (
               view === "week" ? renderWeekView() : renderMonthView()
             )}
           </div>
 
-          {/* Legend */}
-          <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-[#6B7EFF] inline-block" />
-              To-Dos
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-[#8B5CF6] inline-block" />
-              Installs
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-[#F59E0B] inline-block" />
-              Service
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-[#10B981] inline-block" />
-              Sales Meetings
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm border-l-2 border-[#6B7EFF] bg-[#6B7EFF]/10 inline-block" />
-              <span className="text-[9px] font-bold text-[#6B7EFF] bg-[#6B7EFF]/10 px-0.5 rounded mr-0.5">GG</span>
-              Company Events
-            </span>
-            {gcalConnected && (
-              <span className="flex items-center gap-1.5 text-[#10B981]">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-                Syncing to Google Calendar
+          {/* Legend strip */}
+          <div className="flex items-center gap-4 px-4 py-2 bg-white border-t border-border flex-wrap">
+            {CALENDAR_SOURCES.filter((s) => activeSources.has(s.id)).map((src) => (
+              <span key={src.id} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                <span className="w-2 h-2 rounded-sm inline-block" style={{ backgroundColor: src.color }} />
+                {src.label}
               </span>
-            )}
+            ))}
           </div>
         </div>
 
-        {/* ── Right panel: unscheduled ────────────────────────────────────────── */}
-        <div className="w-80 border-l border-border bg-white flex flex-col">
-          <div className="px-4 py-4 border-b border-border flex items-center gap-2">
-            <CalendarClock size={16} className="text-muted-foreground" />
+        {/* ── Right: Unscheduled ────────────────────────────────────────── */}
+        <div className="w-72 border-l border-border bg-white flex flex-col">
+          <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+            <CalendarClock size={15} className="text-muted-foreground" />
             <span className="text-sm font-semibold text-foreground">Unscheduled</span>
             {totalUnscheduled > 0 && (
               <span className="ml-auto text-[10px] font-bold bg-[#6B7EFF]/10 text-[#6B7EFF] px-1.5 py-0.5 rounded-full">
@@ -961,22 +795,20 @@ function CalendarPage() {
 
           <div className="flex-1 overflow-y-auto">
             {unscheduledLoading ? (
-              <div className="p-4">
-                <SkeletonRow cols={2} rows={4} />
-              </div>
+              <div className="p-4"><SkeletonRow cols={2} rows={4} /></div>
             ) : totalUnscheduled === 0 ? (
               <EmptyState
-                icon={<CheckCircle2 size={24} className="text-emerald-500" />}
-                title="All caught up"
-                description="No unscheduled to-dos, work orders, or open leads."
+                icon={<CheckCircle2 size={22} className="text-emerald-500" />}
+                title="All scheduled"
+                description="No unscheduled to-dos or work orders."
               />
             ) : (
               <div className="p-3 space-y-4">
-                {/* Open To-Dos */}
                 {unscheduledTodos.length > 0 && (
                   <div>
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2 px-1">
-                      Open To-Dos ({unscheduledTodos.length})
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2 px-1 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-[#6B7EFF] inline-block" />
+                      To-Dos ({unscheduledTodos.length})
                     </p>
                     <div className="space-y-1.5">
                       {unscheduledTodos.map((todo) => (
@@ -988,18 +820,13 @@ function CalendarPage() {
                         >
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-medium text-foreground truncate">{todo.title}</p>
-                            <div className="mt-0.5">
-                              <PriorityChip priority={todo.priority} />
-                            </div>
+                            <div className="mt-0.5"><PriorityChip priority={todo.priority} /></div>
                           </div>
                           {pickerTodoId === todo.id ? (
                             <input
-                              type="date"
-                              autoFocus
+                              type="date" autoFocus
                               className="text-xs border border-[#6B7EFF] rounded px-1.5 py-1 w-32 focus:outline-none"
-                              onChange={(e) => {
-                                if (e.target.value) void setTodoDate(todo.id, e.target.value);
-                              }}
+                              onChange={(e) => { if (e.target.value) void setTodoDate(todo.id, e.target.value); }}
                               onBlur={() => setPickerTodoId(null)}
                             />
                           ) : (
@@ -1016,10 +843,10 @@ function CalendarPage() {
                   </div>
                 )}
 
-                {/* Unscheduled Work Orders */}
                 {unscheduledWOs.length > 0 && (
                   <div>
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2 px-1">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2 px-1 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-[#F59E0B] inline-block" />
                       Work Orders ({unscheduledWOs.length})
                     </p>
                     <div className="space-y-1.5">
@@ -1028,27 +855,20 @@ function CalendarPage() {
                           key={wo.id}
                           draggable
                           onDragStart={() => handleDragStart("wo", wo.id)}
-                          className="flex items-center gap-2 p-2.5 rounded-lg border border-border bg-white hover:border-[#F59E0B]/30 hover:bg-amber-50/50 transition-colors cursor-grab active:cursor-grabbing group"
+                          className="flex items-center gap-2 p-2.5 rounded-lg border border-border bg-white hover:border-amber-300 hover:bg-amber-50/50 transition-colors cursor-grab active:cursor-grabbing group"
                         >
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-medium text-foreground truncate">{wo.title}</p>
                             {wo.site_name && (
                               <p className="text-[10px] text-muted-foreground truncate">{wo.site_name}</p>
                             )}
-                            {wo.priority && (
-                              <div className="mt-0.5">
-                                <PriorityChip priority={wo.priority} />
-                              </div>
-                            )}
+                            {wo.priority && <div className="mt-0.5"><PriorityChip priority={wo.priority} /></div>}
                           </div>
                           {pickerWoId === wo.id ? (
                             <input
-                              type="date"
-                              autoFocus
-                              className="text-xs border border-[#F59E0B] rounded px-1.5 py-1 w-32 focus:outline-none"
-                              onChange={(e) => {
-                                if (e.target.value) void setWODate(wo.id, e.target.value);
-                              }}
+                              type="date" autoFocus
+                              className="text-xs border border-amber-400 rounded px-1.5 py-1 w-32 focus:outline-none"
+                              onChange={(e) => { if (e.target.value) void setWODate(wo.id, e.target.value); }}
                               onBlur={() => setPickerWoId(null)}
                             />
                           ) : (
@@ -1065,36 +885,7 @@ function CalendarPage() {
                   </div>
                 )}
 
-                {/* Open Leads */}
-                {unscheduledLeads.length > 0 && (
-                  <div>
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2 px-1">
-                      Open Leads ({unscheduledLeads.length})
-                    </p>
-                    <div className="space-y-1.5">
-                      {unscheduledLeads.map((lead) => (
-                        <a
-                          key={lead.id}
-                          href={`/crm/leads/${lead.id}`}
-                          className="flex items-center gap-2 p-2.5 rounded-lg border border-border bg-white hover:border-[#6B7EFF]/30 hover:bg-[#6B7EFF]/5 transition-colors"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium text-foreground truncate">{lead.name}</p>
-                            {lead.company && (
-                              <p className="text-[10px] text-muted-foreground truncate">{lead.company}</p>
-                            )}
-                          </div>
-                          <span className="text-[9px] font-semibold bg-[#6B7EFF]/10 text-[#6B7EFF] px-1.5 py-0.5 rounded-full capitalize shrink-0">
-                            {lead.stage.replace(/_/g, " ")}
-                          </span>
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Drag hint */}
-                <div className="mt-2 px-1 py-2 bg-slate-50 rounded-lg border border-dashed border-border text-center">
+                <div className="px-1 py-2 bg-slate-50 rounded-lg border border-dashed border-border text-center">
                   <p className="text-[9px] text-muted-foreground">
                     Drag items onto a calendar day to schedule them
                   </p>
@@ -1108,10 +899,7 @@ function CalendarPage() {
       {/* Event popover */}
       {activeEvent && popoverAnchor && (
         <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => { setActiveEvent(null); setPopoverAnchor(null); }}
-          />
+          <div className="fixed inset-0 z-40" onClick={() => { setActiveEvent(null); setPopoverAnchor(null); }} />
           <EventPopover
             event={activeEvent}
             anchor={popoverAnchor}
