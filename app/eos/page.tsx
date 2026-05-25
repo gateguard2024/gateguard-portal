@@ -273,7 +273,7 @@ function mergeVTO(raw: Record<string, unknown> | null): VTOData {
 
 // ─── Tab: V/TO ────────────────────────────────────────────────────────────────
 
-function VTOTab({ rocks, issues, vtoInit }: { rocks: Rock[]; issues: Issue[]; vtoInit: Record<string, unknown> | null }) {
+function VTOTab({ rocks, issues, vtoInit, readOnly = false }: { rocks: Rock[]; issues: Issue[]; vtoInit: Record<string, unknown> | null; readOnly?: boolean }) {
   const [vto, setVto]       = useState<VTOData>(() => mergeVTO(vtoInit))
   const [saving, setSaving] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
@@ -293,8 +293,9 @@ function VTOTab({ rocks, issues, vtoInit }: { rocks: Rock[]; issues: Issue[]; vt
     }
   }
 
-  const isEditing = (s: string) => editing === s
+  const isEditing = (s: string) => !readOnly && editing === s
   const isSaving  = (s: string) => saving === s
+  const canEdit   = !readOnly
 
   // Per-section draft state
   const [cvDraft,      setCvDraft]      = useState<CVItem[]>([])
@@ -318,7 +319,7 @@ function VTOTab({ rocks, issues, vtoInit }: { rocks: Rock[]; issues: Issue[]; vt
     setEditing(section)
   }
 
-  const EditBtn = ({ section }: { section: string }) => (
+  const EditBtn = ({ section }: { section: string }) => canEdit ? (
     <button
       onClick={() => startEdit(section)}
       className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
@@ -326,7 +327,7 @@ function VTOTab({ rocks, issues, vtoInit }: { rocks: Rock[]; issues: Issue[]; vt
     >
       <Pencil size={13} />
     </button>
-  )
+  ) : null
 
   const SaveCancelBar = ({ section, onSave }: { section: string; onSave: () => void }) => (
     <div className="flex gap-2 pt-2">
@@ -2054,9 +2055,12 @@ function CoachPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
 const TABS = ["V/TO", "Rocks", "Scorecard", "Issues", "To-Dos", "L10 Meeting"] as const;
 type Tab = typeof TABS[number];
 
+type VTOLens = "global" | "local";
+
 export default function EOSPage() {
   const [activeTab, setActiveTab] = useState<Tab>("V/TO");
   const [coachOpen, setCoachOpen] = useState(false);
+  const [vtoLens, setVtoLens]     = useState<VTOLens>("local");
 
   // ── Live data state ──
   const [rocks, setRocks] = useState<Rock[]>([]);
@@ -2133,6 +2137,59 @@ export default function EOSPage() {
       />
 
       <div className="flex-1 p-6 max-w-7xl mx-auto w-full">
+
+        {/* ── Dual-Lens Segmented Control ─────────────────────────────────────── */}
+        <div className="flex items-center justify-center mb-6">
+          <div className="relative flex bg-white border border-border rounded-2xl p-1 shadow-sm gap-1">
+            {/* Animated indicator */}
+            <div
+              className={cn(
+                "absolute top-1 bottom-1 rounded-xl transition-all duration-300 ease-in-out pointer-events-none",
+                vtoLens === "global"
+                  ? "left-1 right-[calc(50%+2px)] bg-[#6B7EFF]"
+                  : "left-[calc(50%+2px)] right-1 bg-[#6B7EFF]"
+              )}
+            />
+            <button
+              onClick={() => setVtoLens("global")}
+              className={cn(
+                "relative z-10 flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors duration-200 min-w-[200px] justify-center",
+                vtoLens === "global" ? "text-white" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Target size={14} />
+              GateGuard Global Vision
+            </button>
+            <button
+              onClick={() => setVtoLens("local")}
+              className={cn(
+                "relative z-10 flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors duration-200 min-w-[200px] justify-center",
+                vtoLens === "local" ? "text-white" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Users size={14} />
+              My Dealership V/TO
+            </button>
+          </div>
+        </div>
+
+        {/* Global Vision banner — only shown in global mode */}
+        {vtoLens === "global" && (
+          <div className="mb-5 px-4 py-3 bg-[#6B7EFF]/5 border border-[#6B7EFF]/20 rounded-xl flex items-center gap-3 text-sm text-[#6B7EFF]">
+            <Target size={15} className="shrink-0" />
+            <div>
+              <span className="font-semibold">Viewing GateGuard Corporate Vision </span>
+              <span className="text-[#6B7EFF]/70">— Company-wide Rocks and V/TO set by corporate leadership. Read-only for your dealership.</span>
+            </div>
+            <button
+              onClick={() => setVtoLens("local")}
+              className="ml-auto shrink-0 text-xs bg-[#6B7EFF]/10 hover:bg-[#6B7EFF]/20 px-3 py-1.5 rounded-lg font-semibold transition-colors"
+            >
+              Switch to My V/TO →
+            </button>
+          </div>
+        )}
+
         {/* Tab bar */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-1 bg-white border border-border rounded-xl p-1 w-fit">
@@ -2173,7 +2230,7 @@ export default function EOSPage() {
           </div>
         ) : (
           <>
-            {activeTab === "V/TO"        && <VTOTab rocks={rocks} issues={issues} vtoInit={vto} />}
+            {activeTab === "V/TO"        && <VTOTab rocks={rocks} issues={issues} vtoInit={vto} readOnly={vtoLens === "global"} />}
             {activeTab === "Rocks"       && <RocksTab rocks={rocks} setRocks={setRocks} />}
             {activeTab === "Scorecard"   && <ScorecardTab measurables={measurables} setMeasurables={setMeasurables} />}
             {activeTab === "Issues"      && <IssuesTab issues={issues} setIssues={setIssues} />}
