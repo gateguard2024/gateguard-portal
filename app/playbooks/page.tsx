@@ -554,10 +554,10 @@ function NewPlaybookSlideOver({
   open: boolean
   onClose: () => void
   templates: PlaybookTemplate[]
-  activeTab: 'site_job' | 'dev_rd'
+  activeTab: 'site_job' | 'dev_rd' | 'corp_admin'
   onCreate: (run: PlaybookRun) => void
 }) {
-  const [type, setType] = useState<'site_job' | 'dev_rd'>(activeTab)
+  const [type, setType] = useState<'site_job' | 'dev_rd'>(activeTab === 'corp_admin' ? 'site_job' : activeTab)
   const [templateId, setTemplateId] = useState('')
   const [name, setName] = useState('')
   const [assignee, setAssignee] = useState('Russel Feldman')
@@ -570,7 +570,7 @@ function NewPlaybookSlideOver({
   // auto-fill name from template
   const filteredTemplates = templates.filter(t => t.type === type)
 
-  useEffect(() => { setType(activeTab) }, [activeTab])
+  useEffect(() => { if (activeTab !== 'corp_admin') setType(activeTab) }, [activeTab])
   useEffect(() => {
     if (templateId) {
       const tmpl = templates.find(t => t.id === templateId)
