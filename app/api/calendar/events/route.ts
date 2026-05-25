@@ -322,7 +322,7 @@ export async function GET(req: NextRequest) {
 
         const { data: gcalRows } = await supabase
           .from('gcal_events')
-          .select('id, gcal_event_id, title, start_time, end_time, is_all_day, status, description, location')
+          .select('id, gcal_event_id, title, start_time, end_time, is_all_day, status, description, location, html_link')
           .eq('user_id', user.id)
           .gte('start_time', startTs)
           .lte('start_time', endTs)
@@ -331,9 +331,10 @@ export async function GET(req: NextRequest) {
         for (const ev of gcalRows ?? []) {
           const startDt  = new Date(ev.start_time)
           const dateStr  = startDt.toISOString().split('T')[0]
+          // Convert UTC time to local time string for display
           const timeStr  = ev.is_all_day
             ? undefined
-            : `${String(startDt.getUTCHours()).padStart(2, '0')}:${String(startDt.getUTCMinutes()).padStart(2, '0')}`
+            : `${String(startDt.getHours()).padStart(2, '0')}:${String(startDt.getMinutes()).padStart(2, '0')}`
           events.push({
             id:           `gcal-${ev.gcal_event_id ?? ev.id}`,
             type:         'gcal',
@@ -342,6 +343,7 @@ export async function GET(req: NextRequest) {
             time:         timeStr,
             status:       ev.status ?? 'confirmed',
             color:        '#4285F4',
+            link:         ev.html_link ?? undefined,
             source:       'google_calendar',
             gcal_event_id: ev.gcal_event_id ?? undefined,
           })
