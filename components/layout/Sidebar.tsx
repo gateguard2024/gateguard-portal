@@ -12,7 +12,7 @@ import {
   Layers, Server, UserCheck, ShieldCheck, Star,
   GraduationCap, Crosshair, Activity,
   User, RefreshCw, Wrench as TechIcon,
-  ClipboardCheck, Building2, DollarSign,
+  ClipboardCheck, Building2, DollarSign, Mail,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, Tv: Satellite, Flame, Hash, Ruler, PenTool, MousePointer, FileSignature, HardHat, Trophy } = require("lucide-react") as any;
@@ -73,16 +73,15 @@ const NAV_SECTIONS: NavSection[] = [
     icon: ClipboardList,
     color: "#0891B2",
     items: [
+      { label: "Operating System", href: "/eos",       icon: Layers,         description: "EOS — Rocks, Scorecard, L10" },
       { label: "Customers",        href: "/customers", icon: Users,          description: "All customer accounts" },
       { label: "Billing",          href: "/billing",   icon: CreditCard,     description: "Invoices and payments" },
+      { label: "Expenses",         href: "/expenses",  icon: DollarSign,     description: "Expense tracking and reporting", badge: "New" },
+      { label: "Vendors",          href: "/vendors",   icon: Building2,      description: "Vendor management and POs" },
       { label: "Revenue",          href: "/revenue",   icon: TrendingUp,     description: "MRR/ARR dashboard" },
-      { label: "Renewals",         href: "/renewals",  icon: Repeat,         description: "Contract renewals and alerts" },
       { label: "Contracts",        href: "/contracts", icon: FileCheck,      description: "Contract storage" },
-      { label: "Operating System", href: "/eos",       icon: Layers,         description: "EOS — Rocks, Scorecard, L10" },
-      { label: "The Feed",         href: "/feed",      icon: Flame,          description: "Team wins, challenges, leaderboard", badge: "New" },
-      { label: "Messages",         href: "/communications", icon: Hash,      description: "Team messaging — channels + DMs", badge: "Soon" },
+      { label: "Renewals",         href: "/renewals",  icon: Repeat,         description: "Contract renewals and alerts" },
       { label: "Events",           href: "/events",    icon: Calendar,       description: "Property events and milestones" },
-      { label: "Incidents",        href: "/incidents", icon: AlertOctagon,   description: "Gate failures, security events" },
       { label: "Analytics",        href: "/analytics", icon: BarChart3Icon,  description: "MRR trends, property health" },
     ],
   },
@@ -91,6 +90,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Field & Tech",
     icon: TechIcon,
     items: [
+      { label: "Incidents",      href: "/incidents",   icon: AlertOctagon,   description: "Gate failures, security events" },
       { label: "Tech Tool",      href: "/tech",        icon: Zap,            description: "AI field diagnostic tool",   badge: "AI" },
       { label: "Knowledge Base", href: "/kb",          icon: BookOpen,       description: "Articles and manuals" },
       { label: "Products",       href: "/products",    icon: Package,        description: "Equipment catalog" },
@@ -211,7 +211,7 @@ export function Sidebar() {
   const [armyExpanded, setArmyExpanded] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [integrationsExpanded, setIntegrationsExpanded] = useState(false);
+  const [socialExpanded, setSocialExpanded] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const activeSection = getSectionForPath(pathname);
@@ -559,6 +559,8 @@ export function Sidebar() {
                     if (item.href === "/customers"     && !showOperations) return null;
                     if (item.href === "/quotes"        && !showQuotes)     return null;
                     if (item.href === "/billing"       && !showFinancials) return null;
+                    if (item.href === "/expenses"      && !showFinancials) return null;
+                    if (item.href === "/vendors"       && !showOperations) return null;
                     if (item.href === "/renewals"      && !showFinancials) return null;
                     if (item.href === "/revenue"       && !showFinancials) return null;
                     if (item.href === "/contracts"     && !showFinancials) return null;
@@ -616,42 +618,51 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* ── Live Integrations ─────────────────────────────────────────────── */}
+      {/* ── Social ───────────────────────────────────────────────────────── */}
       {!collapsed && (
         <div className="mx-2 border-t border-[hsl(var(--sidebar-border))] pt-2 pb-1 shrink-0">
           <button
-            onClick={() => setIntegrationsExpanded(v => !v)}
+            onClick={() => setSocialExpanded(v => !v)}
             className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 shadow" style={{ boxShadow: "0 0 4px #34d399" }} />
+            <MessageSquare size={10} className="text-brand-400 shrink-0" />
             <span className="text-[9px] uppercase tracking-[0.15em] text-[hsl(var(--sidebar-text))]/60 font-bold flex-1 text-left">
-              Live Integrations
-            </span>
-            <span className="text-[10px] text-emerald-400 font-semibold">
-              {integrations.filter(i => i.status === "connected").length}/{integrations.length}
+              Social
             </span>
             <ChevronDown
               size={9}
-              className={cn("transition-transform text-[hsl(var(--sidebar-text))]/40", integrationsExpanded && "rotate-180")}
+              className={cn("transition-transform text-[hsl(var(--sidebar-text))]/40", socialExpanded && "rotate-180")}
             />
           </button>
-          {integrationsExpanded && (
+          {socialExpanded && (
             <div className="mt-1 space-y-0 px-1">
-              {integrations.map(int => (
-                <div key={int.label} className="flex items-center gap-2 px-3 py-1.5">
-                  <div className={cn(
-                    "w-1.5 h-1.5 rounded-full shrink-0",
-                    int.status === "connected" ? "bg-emerald-400" : "bg-amber-400"
-                  )} />
-                  <span className="text-[10px] text-[hsl(var(--sidebar-text))] flex-1">{int.label}</span>
-                  <span className={cn(
-                    "text-[9px] font-semibold",
-                    int.status === "connected" ? "text-emerald-400" : "text-amber-400"
-                  )}>
-                    {int.status === "connected" ? "Live" : "Setup"}
-                  </span>
-                </div>
-              ))}
+              {([
+                { label: "The Feed",  href: "/feed",           Icon: Flame,          badge: undefined },
+                { label: "Messages",  href: "/communications", Icon: Hash,           badge: undefined },
+                { label: "Email",     href: "/email",          Icon: Mail,           badge: "Soon" },
+              ] as { label: string; href: string; Icon: React.ElementType; badge?: string }[]).map(item => {
+                const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                      isActive
+                        ? "bg-brand-400/20 text-white border border-brand-400/25"
+                        : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
+                    )}
+                  >
+                    <item.Icon size={12} className="shrink-0" />
+                    <span className="flex-1 truncate">{item.label}</span>
+                    {item.badge && (
+                      <span className="text-[8px] px-1.5 py-0.5 rounded-full font-bold text-white shrink-0" style={{ background: "#334155" }}>
+                        {item.badge}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
             </div>
           )}
         </div>
