@@ -55,6 +55,8 @@ interface WizardState {
   admin_email: string
   admin_role: PortalRole
   send_invite: boolean
+  // Step 6 — Feature permissions
+  permissions: Record<string, PermLevel>
 }
 
 const EMPTY: WizardState = {
@@ -66,6 +68,7 @@ const EMPTY: WizardState = {
   sales_partner_rate: '1.00', service_dealer_rate: '3.00', commission_notes: '',
   admin_first_name: '', admin_last_name: '', admin_email: '',
   admin_role: 'admin', send_invite: true,
+  permissions: {},
 }
 
 /* ─── Tier config (7 tiers) ──────────────────────────────── */
@@ -175,8 +178,51 @@ const STEPS = [
   { n: 3, label: 'Relationships' },
   { n: 4, label: 'Commission'    },
   { n: 5, label: 'Admin User'    },
-  { n: 6, label: 'Review'        },
+  { n: 6, label: 'Permissions'   },
+  { n: 7, label: 'Review'        },
 ]
+
+/* ─── Permission sections ─────────────────────────────────── */
+type PermLevel = 'none' | 'view' | 'edit' | 'administer'
+
+const PERM_SECTIONS: {
+  id: string
+  label: string
+  desc: string
+  icon: any
+  defaultByTier: Partial<Record<string, PermLevel>>
+}[] = [
+  { id: 'crm',       label: 'CRM & Sales',         desc: 'Leads, opportunities, pipeline',        icon: TrendingUp, defaultByTier: { full_dealer: 'edit', service_dealer: 'view', install_contractor: 'none', sales_partner: 'administer', master_dealer: 'administer', master_agent: 'edit' } },
+  { id: 'customers', label: 'Customers',            desc: 'Accounts, contacts, activity history',  icon: Users,      defaultByTier: { full_dealer: 'edit', service_dealer: 'view', install_contractor: 'view',  sales_partner: 'view',        master_dealer: 'administer', master_agent: 'edit' } },
+  { id: 'quotes',    label: 'Quotes & Proposals',   desc: 'Quote builder, client approvals',       icon: ClipboardList, defaultByTier: { full_dealer: 'edit', service_dealer: 'view', install_contractor: 'none', sales_partner: 'edit', master_dealer: 'administer', master_agent: 'edit' } },
+  { id: 'billing',   label: 'Billing & Invoices',   desc: 'Invoices, MRR, commission payouts',     icon: DollarSign, defaultByTier: { full_dealer: 'view', service_dealer: 'view', install_contractor: 'none', sales_partner: 'view', master_dealer: 'edit', master_agent: 'view' } },
+  { id: 'work_orders', label: 'Work Orders',        desc: 'Field jobs, dispatch, scheduling',      icon: Hammer,     defaultByTier: { full_dealer: 'edit', service_dealer: 'edit', install_contractor: 'edit', sales_partner: 'view', master_dealer: 'administer', master_agent: 'view' } },
+  { id: 'sites',     label: 'Properties & Sites',   desc: 'Installed properties, assets, health',  icon: Building2,  defaultByTier: { full_dealer: 'edit', service_dealer: 'view', install_contractor: 'view', sales_partner: 'view', master_dealer: 'administer', master_agent: 'view' } },
+  { id: 'inventory', label: 'Inventory',            desc: 'Parts, van stock, purchase orders',     icon: Layers,     defaultByTier: { full_dealer: 'edit', service_dealer: 'view', install_contractor: 'edit', sales_partner: 'none', master_dealer: 'edit', master_agent: 'view' } },
+  { id: 'tech_tool', label: 'Tech Tool & Surveys',  desc: '/tech diagnostics, site surveys',       icon: Zap,        defaultByTier: { full_dealer: 'administer', service_dealer: 'edit', install_contractor: 'administer', sales_partner: 'view', master_dealer: 'administer', master_agent: 'view' } },
+  { id: 'training',  label: 'Training & Certs',     desc: 'Courses, quizzes, certifications',      icon: Star,       defaultByTier: { full_dealer: 'edit', service_dealer: 'view', install_contractor: 'view', sales_partner: 'view', master_dealer: 'administer', master_agent: 'view' } },
+  { id: 'compliance',label: 'Compliance & Permits', desc: 'Permit tracker, renewal alerts',        icon: Shield,     defaultByTier: { full_dealer: 'edit', service_dealer: 'view', install_contractor: 'view', sales_partner: 'none', master_dealer: 'administer', master_agent: 'view' } },
+  { id: 'reps',      label: 'Reps & Commissions',   desc: 'Rep hierarchy, commission config',      icon: UserCheck,  defaultByTier: { full_dealer: 'administer', service_dealer: 'none', install_contractor: 'none', sales_partner: 'view', master_dealer: 'administer', master_agent: 'administer' } },
+  { id: 'design',    label: 'Design Suite',         desc: 'Floor plans, as-builts, e-sign',        icon: MapPin,     defaultByTier: { full_dealer: 'edit', service_dealer: 'view', install_contractor: 'edit', sales_partner: 'none', master_dealer: 'edit', master_agent: 'view' } },
+  { id: 'security',  label: 'Security Hardware',    desc: 'Cameras, access control, network',      icon: Shield,     defaultByTier: { full_dealer: 'edit', service_dealer: 'view', install_contractor: 'edit', sales_partner: 'none', master_dealer: 'edit', master_agent: 'view' } },
+  { id: 'ai_army',   label: 'AI Intelligence',      desc: 'ARIA, SCOUT, NEXUS, AI agents',         icon: Zap,        defaultByTier: { full_dealer: 'view', service_dealer: 'none', install_contractor: 'none', sales_partner: 'view', master_dealer: 'edit', master_agent: 'edit' } },
+  { id: 'admin',     label: 'Admin & Dealers',      desc: 'Dealer mgmt, users, scorecard, map',   icon: Hash,       defaultByTier: { full_dealer: 'none', service_dealer: 'none', install_contractor: 'none', sales_partner: 'none', master_dealer: 'view', master_agent: 'administer' } },
+]
+
+const PERM_LEVELS: { id: PermLevel; label: string; color: string; bg: string; ring: string }[] = [
+  { id: 'none',       label: 'None',       color: 'text-slate-400',   bg: 'bg-slate-100',   ring: 'ring-slate-300'   },
+  { id: 'view',       label: 'View',       color: 'text-sky-600',     bg: 'bg-sky-100',     ring: 'ring-sky-400'     },
+  { id: 'edit',       label: 'Edit',       color: 'text-amber-600',   bg: 'bg-amber-100',   ring: 'ring-amber-400'   },
+  { id: 'administer', label: 'Admin',      color: 'text-emerald-600', bg: 'bg-emerald-100', ring: 'ring-emerald-400' },
+]
+
+function defaultPermissions(tier: string): Record<string, PermLevel> {
+  const out: Record<string, PermLevel> = {}
+  for (const s of PERM_SECTIONS) {
+    out[s.id] = s.defaultByTier[tier] ?? 'view'
+  }
+  return out
+}
 
 function StepBar({ current }: { current: number }) {
   return (
@@ -383,13 +429,19 @@ export default function NewDealerPage() {
     }))
   }
 
+  /* ── Auto-populate permissions when tier is selected ── */
+  const selectTier = (tier: OrgTier) => {
+    setForm(f => ({
+      ...f,
+      org_tier: tier,
+      permissions: defaultPermissions(tier),
+    }))
+  }
+
   /* ── Skip commission step for tiers that don't need it ── */
   const advance = () => {
     if (step === 3 && !COMMISSION_TIERS.has(form.org_tier as string)) {
       setStep(5) // skip commission step
-    } else if (step === 5 && !COMMISSION_TIERS.has(form.org_tier as string)) {
-      // came from step 3 skip — go to review (6)
-      setStep(6)
     } else {
       setStep(s => s + 1)
     }
@@ -398,8 +450,6 @@ export default function NewDealerPage() {
   const retreat = () => {
     if (step === 5 && !COMMISSION_TIERS.has(form.org_tier as string)) {
       setStep(3) // back to relationships, skipping commission
-    } else if (step === 6 && !COMMISSION_TIERS.has(form.org_tier as string)) {
-      setStep(5)
     } else {
       setStep(s => Math.max(1, s - 1))
     }
@@ -412,6 +462,7 @@ export default function NewDealerPage() {
     if (step === 3) return true  // relationships are optional
     if (step === 4) return commissionPoolError(form) === null
     if (step === 5) return !!(form.admin_first_name.trim() && form.admin_last_name.trim() && form.admin_email.includes('@'))
+    if (step === 6) return true  // permissions always valid
     return true
   }
 
@@ -451,12 +502,13 @@ export default function NewDealerPage() {
                                  ? parseFloat(form.service_dealer_rate) || 3.00
                                  : null,
           commission_notes:    form.commission_notes || null,
+          permissions:         form.permissions,
         }),
       })
       const json = await res.json()
       if (!res.ok && res.status !== 207) throw new Error(json.error ?? 'Onboarding failed')
       setResult(json)
-      setStep(7)  // success screen
+      setStep(8)  // success screen
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -467,7 +519,7 @@ export default function NewDealerPage() {
   const selectedTier = TIERS.find(t => t.id === form.org_tier)
 
   /* ── Success screen ── */
-  if (step === 7 && result) {
+  if (step === 8 && result) {
     return (
       <div className="max-w-2xl mx-auto p-8">
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 text-center">
@@ -595,7 +647,7 @@ export default function NewDealerPage() {
             {TIERS.map(tier => (
               <button
                 key={tier.id}
-                onClick={() => set('org_tier', tier.id)}
+                onClick={() => selectTier(tier.id as OrgTier)}
                 className={`w-full text-left rounded-xl border-2 p-4 transition-all ${
                   form.org_tier === tier.id
                     ? `${tier.border} ${tier.bg}`
@@ -1036,8 +1088,82 @@ export default function NewDealerPage() {
         </div>
       )}
 
-      {/* ── Step 6: Review ───────────────────────────────────────────── */}
+      {/* ── Step 6: Feature Permissions ─────────────────────────────── */}
       {step === 6 && (
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900 mb-1">Feature Permissions</h2>
+          <p className="text-sm text-slate-500 mb-2">
+            Control what this dealer can access. Permissions are pre-filled based on their tier — adjust as needed.
+          </p>
+
+          {/* Legend */}
+          <div className="flex flex-wrap gap-3 mb-5">
+            {PERM_LEVELS.map(pl => (
+              <div key={pl.id} className="flex items-center gap-1.5">
+                <span className={`inline-block w-2.5 h-2.5 rounded-full ${pl.bg} ring-1 ${pl.ring}`} />
+                <span className="text-xs text-slate-600 font-medium">{pl.label}</span>
+                <span className="text-xs text-slate-400">
+                  {pl.id === 'none' && '— hidden'}
+                  {pl.id === 'view' && '— read only'}
+                  {pl.id === 'edit' && '— can make changes'}
+                  {pl.id === 'administer' && '— full control + invite'}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {PERM_SECTIONS.map(section => {
+              const Icon = section.icon
+              const current: PermLevel = form.permissions[section.id] ?? 'view'
+              const currentLevel = PERM_LEVELS.find(p => p.id === current)!
+              return (
+                <div
+                  key={section.id}
+                  className={`bg-white rounded-xl border p-3 transition-all ${
+                    current === 'none' ? 'border-slate-200 opacity-60' : 'border-slate-200'
+                  }`}
+                >
+                  <div className="flex items-start gap-3 mb-2.5">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${currentLevel.bg}`}>
+                      <Icon size={15} className={currentLevel.color} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-900 leading-tight">{section.label}</p>
+                      <p className="text-xs text-slate-400 leading-tight mt-0.5">{section.desc}</p>
+                    </div>
+                  </div>
+                  {/* 4-button pill selector */}
+                  <div className="flex rounded-lg overflow-hidden border border-slate-200 text-xs font-medium">
+                    {PERM_LEVELS.map((pl, idx) => (
+                      <button
+                        key={pl.id}
+                        onClick={() => setForm(f => ({ ...f, permissions: { ...f.permissions, [section.id]: pl.id } }))}
+                        className={`flex-1 py-1.5 transition-all ${
+                          idx > 0 ? 'border-l border-slate-200' : ''
+                        } ${
+                          current === pl.id
+                            ? `${pl.bg} ${pl.color} font-semibold`
+                            : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+                        }`}
+                      >
+                        {pl.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <p className="text-xs text-slate-400 mt-4">
+            These permissions apply to the primary admin and all users they invite under this organization. They can be changed later in the dealer detail page.
+          </p>
+        </div>
+      )}
+
+      {/* ── Step 7: Review ───────────────────────────────────────────── */}
+      {step === 7 && (
         <div>
           <h2 className="text-lg font-semibold text-slate-900 mb-1">Review & Launch</h2>
           <p className="text-sm text-slate-500 mb-6">Confirm everything below, then hit Launch to create the dealer account.</p>
@@ -1130,7 +1256,7 @@ export default function NewDealerPage() {
           <ChevronLeft size={16} /> Back
         </button>
 
-        {step < 6 ? (
+        {step < 7 ? (
           <button
             onClick={advance}
             disabled={!canAdvance()}
