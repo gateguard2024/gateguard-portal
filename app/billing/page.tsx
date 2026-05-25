@@ -998,369 +998,429 @@ export default function BillingPage() {
 
       </div>
 
-      {/* ── New Invoice SlideOver ── */}
-      <SlideOver
-        open={newInvOpen}
-        onClose={() => { setNewInvOpen(false); resetNewInvoiceForm() }}
-        title="New Invoice"
-        subtitle="Create a new invoice for a property"
-        size="lg"
-        footer={
-          <div className="flex items-center justify-between">
-            <button
-              onClick={() => { setNewInvOpen(false); resetNewInvoiceForm() }}
-              className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors"
-            >
-              Cancel
-            </button>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => saveNewInvoice(false)}
-                disabled={newInvSaving}
-                className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
-              >
-                Save as Draft
-              </button>
-              <button
-                onClick={() => saveNewInvoice(true)}
-                disabled={newInvSaving}
-                className="flex items-center gap-2 px-4 py-2 text-sm bg-[#6B7EFF] hover:bg-[#5a6ee0] text-white rounded-lg transition-colors disabled:opacity-50"
-              >
-                <Send size={14} />
-                {newInvSaving ? 'Saving…' : 'Save & Send'}
-              </button>
-            </div>
-          </div>
-        }
-      >
-        <div className="space-y-5 p-1">
-          {/* Property search */}
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Property</label>
-            <div className="relative">
-              <div
-                onClick={() => { setSiteDropdown(true); fetchSites(siteSearch) }}
-                className="w-full h-9 px-3 flex items-center justify-between bg-background border border-border rounded-lg cursor-pointer text-sm"
-              >
-                <span className={selectedSite ? 'text-foreground' : 'text-muted-foreground'}>
-                  {selectedSite ? selectedSite.name : 'Search properties…'}
-                </span>
-                <ChevronDown size={14} className="text-muted-foreground" />
+      {/* ── New Invoice — QB/Xero-style centered modal ── */}
+      {newInvOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-6 px-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setNewInvOpen(false); resetNewInvoiceForm() }} />
+          <div className="relative bg-background border border-border rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col">
+
+            {/* ── Modal header ── */}
+            <div className="flex items-center justify-between px-8 py-5 border-b border-border">
+              <div>
+                <h2 className="text-base font-semibold text-foreground">New Invoice</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">GateGuard · portal.gateguard.co</p>
               </div>
-              {siteDropdown && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-lg shadow-xl z-50 overflow-hidden">
-                  <div className="p-2 border-b border-border">
-                    <input
-                      autoFocus
-                      value={siteSearch}
-                      onChange={e => { setSiteSearch(e.target.value); fetchSites(e.target.value) }}
-                      placeholder="Type to search…"
-                      className="w-full px-2 py-1.5 text-sm bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
-                    />
-                  </div>
-                  <div className="max-h-48 overflow-y-auto">
-                    {sites.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No properties found</p>}
-                    {sites.map(s => (
-                      <button
-                        key={s.id}
-                        onClick={() => {
-                          setSelectedSite(s)
-                          setSiteDropdown(false)
-                          // Auto-add access plan if units exist
-                          if (s.units) {
-                            setNewLineItems([
-                              { service_type: 'video_monitoring', description: 'Video Monitoring Fee — Monthly', qty: '1', unit_price: '500.00', is_recurring: true },
-                              { service_type: 'access_plan', description: `GateGuard Access Plan — ${s.units} units × $5.00/unit/mo (gate service, Brivo, PMS integration, 36-month agreement)`, qty: String(s.units), unit_price: '5.00', is_recurring: true },
-                            ])
-                          }
-                        }}
-                        className="w-full text-left px-3 py-2.5 text-sm hover:bg-accent transition-colors"
-                      >
-                        <p className="font-medium">{s.name}</p>
-                        {s.units && <p className="text-xs text-muted-foreground">{s.units} units</p>}
-                      </button>
-                    ))}
-                  </div>
+              <div className="flex items-center gap-3">
+                <div className="text-right">
+                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Invoice Total</p>
+                  <p className="text-xl font-bold text-foreground tabular-nums">{fmt(newInvTotal())}</p>
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* Due date + Notes */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Due Date</label>
-              <input
-                type="date"
-                value={newDueDate}
-                onChange={e => setNewDueDate(e.target.value)}
-                className="w-full h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Notes</label>
-              <input
-                value={newNotes}
-                onChange={e => setNewNotes(e.target.value)}
-                placeholder="Optional notes…"
-                className="w-full h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
-              />
-            </div>
-          </div>
-
-          {/* Line items */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-medium text-muted-foreground">Line Items</label>
-              <button
-                onClick={addLineItem}
-                className="flex items-center gap-1 text-xs text-[#6B7EFF] hover:text-[#5a6ee0] transition-colors"
-              >
-                <Plus size={12} /> Add Line Item
-              </button>
-            </div>
-
-            {newLineItems.length === 0 && (
-              <div className="border border-dashed border-border rounded-lg py-6 text-center">
-                <p className="text-xs text-muted-foreground">No line items yet. Click "Add Line Item" to begin.</p>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              {newLineItems.map((li, idx) => (
-                <div key={idx} className="bg-muted/30 border border-border rounded-lg p-3 space-y-2">
-                  <div className="flex items-start gap-2">
-                    <div className="flex-1">
-                      <select
-                        value={li.service_type}
-                        onChange={e => updateLineItem(idx, 'service_type', e.target.value)}
-                        className="w-full h-8 px-2 text-xs bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
-                      >
-                        {SERVICE_TYPES.map(st => (
-                          <option key={st.value} value={st.value}>{st.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="w-20">
-                      <input
-                        type="number"
-                        value={li.qty}
-                        onChange={e => updateLineItem(idx, 'qty', e.target.value)}
-                        placeholder="Qty"
-                        className="w-full h-8 px-2 text-xs bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
-                      />
-                    </div>
-                    <div className="w-28">
-                      <input
-                        type="number"
-                        value={li.unit_price}
-                        onChange={e => updateLineItem(idx, 'unit_price', e.target.value)}
-                        placeholder="Unit price"
-                        className="w-full h-8 px-2 text-xs bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
-                      />
-                    </div>
-                    <div className="w-24 h-8 flex items-center justify-end">
-                      <span className="text-xs font-semibold text-foreground">
-                        {fmt((parseFloat(li.qty) || 0) * (parseFloat(li.unit_price) || 0))}
-                      </span>
-                    </div>
-                    <button onClick={() => removeLineItem(idx)} className="text-muted-foreground hover:text-red-400 transition-colors">
-                      <X size={14} />
-                    </button>
-                  </div>
-                  <input
-                    value={li.description}
-                    onChange={e => updateLineItem(idx, 'description', e.target.value)}
-                    placeholder="Description…"
-                    className="w-full h-8 px-2 text-xs bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
-                  />
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id={`recurring-${idx}`}
-                      checked={li.is_recurring}
-                      onChange={e => updateLineItem(idx, 'is_recurring', e.target.checked)}
-                      className="rounded accent-[#6B7EFF]"
-                    />
-                    <label htmlFor={`recurring-${idx}`} className="text-[11px] text-muted-foreground">Recurring monthly</label>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {newLineItems.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-border flex items-center justify-end gap-4">
-                <span className="text-xs text-muted-foreground">Total</span>
-                <span className="text-base font-bold text-foreground">{fmt(newInvTotal())}</span>
-              </div>
-            )}
-          </div>
-
-          {/* ── Phase Billing ── */}
-          {newLineItems.length > 0 && (
-            <div className="border border-border rounded-lg overflow-hidden">
-              {/* Toggle header */}
-              <div className="flex items-center justify-between px-4 py-3 bg-muted/30">
-                <div className="flex items-center gap-2">
-                  <Layers size={14} className="text-muted-foreground" />
-                  <span className="text-xs font-semibold text-foreground">Phase Billing</span>
-                  {!phaseEnabled && (
-                    <span className="text-xs text-muted-foreground">Bill in a single invoice</span>
-                  )}
-                </div>
-                {/* Toggle switch */}
                 <button
-                  type="button"
-                  role="switch"
-                  aria-checked={phaseEnabled}
-                  onClick={() => setPhaseEnabled(v => !v)}
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#6B7EFF] focus:ring-offset-1 ${
-                    phaseEnabled ? 'bg-[#6B7EFF]' : 'bg-muted-foreground/30'
-                  }`}
+                  onClick={() => { setNewInvOpen(false); resetNewInvoiceForm() }}
+                  className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                 >
-                  <span
-                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform ${
-                      phaseEnabled ? 'translate-x-4' : 'translate-x-0.5'
-                    }`}
-                  />
+                  <X size={16} />
                 </button>
               </div>
+            </div>
 
-              {/* Phase builder — shown when enabled */}
-              {phaseEnabled && (
-                <div className="p-4 space-y-3">
-                  {/* Summary */}
-                  <p className="text-xs text-muted-foreground">
-                    <span className="font-semibold text-foreground">{fmt(newInvTotal())}</span> will be split across {phases.length} phase invoice{phases.length !== 1 ? 's' : ''}
-                  </p>
+            {/* ── Invoice form body ── */}
+            <div className="p-8 space-y-7 overflow-y-auto">
 
-                  {/* Phase rows */}
-                  <div className="space-y-2">
-                    {/* Header row */}
-                    <div className="grid grid-cols-[1fr_72px_16px_96px_108px_28px] gap-1.5 px-1">
-                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Phase Label</span>
-                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-right">%</span>
-                      <span />
-                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-right">Amount</span>
-                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Due Date</span>
-                      <span />
-                    </div>
-
-                    {phases.map((ph, i) => {
-                      const total   = newInvTotal()
-                      const pct     = parseFloat(ph.percent) || 0
-                      // Computed display: if amount is entered directly, back-calculate % display
-                      const dispAmt = ph.amount ? parseFloat(ph.amount) : (total * pct / 100)
-                      const dispPct = ph.amount && total > 0
-                        ? (parseFloat(ph.amount) / total * 100).toFixed(1)
-                        : ph.percent
-                      return (
-                        <div key={i} className="grid grid-cols-[1fr_72px_16px_96px_108px_28px] gap-1.5 items-center">
-                          {/* Label */}
-                          <input
-                            value={ph.label}
-                            onChange={e => setPhases(prev => prev.map((p, j) => j === i ? { ...p, label: e.target.value } : p))}
-                            placeholder="Label"
-                            className="h-8 px-2 text-xs bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
-                          />
-                          {/* Percent — edits clear any direct amount */}
-                          <div className="relative flex items-center">
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              step="0.1"
-                              value={ph.amount ? dispPct : ph.percent}
-                              onChange={e => setPhases(prev => prev.map((p, j) => j === i
-                                ? { ...p, percent: e.target.value, amount: '' }
-                                : p))}
-                              className={`h-8 w-full px-2 pr-4 text-xs bg-background border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] text-right ${ph.amount ? 'border-[#6B7EFF]/40 text-muted-foreground' : 'border-border'}`}
-                            />
-                            <span className="absolute right-1.5 text-[10px] text-muted-foreground pointer-events-none">%</span>
-                          </div>
-                          {/* OR divider */}
-                          <span className="text-[10px] text-muted-foreground text-center select-none">or</span>
-                          {/* Amount — editable; editing clears percent back-calc */}
-                          <div className="relative flex items-center">
-                            <span className="absolute left-2 text-[10px] text-muted-foreground pointer-events-none">$</span>
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={ph.amount}
-                              placeholder={dispAmt > 0 ? dispAmt.toFixed(2) : '0.00'}
-                              onChange={e => setPhases(prev => prev.map((p, j) => j === i
-                                ? { ...p, amount: e.target.value, percent: '' }
-                                : p))}
-                              className={`h-8 w-full pl-5 pr-2 text-xs bg-background border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] text-right ${ph.amount ? 'border-[#6B7EFF] font-semibold text-foreground' : 'border-border'}`}
-                            />
-                          </div>
-                          {/* Due date */}
-                          <input
-                            type="date"
-                            value={ph.due_date}
-                            onChange={e => setPhases(prev => prev.map((p, j) => j === i ? { ...p, due_date: e.target.value } : p))}
-                            className="h-8 px-2 text-xs bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
-                          />
-                          {/* Delete */}
-                          {phases.length > 1 ? (
-                            <button
-                              type="button"
-                              onClick={() => setPhases(prev => prev.filter((_, j) => j !== i))}
-                              className="h-8 w-7 flex items-center justify-center text-muted-foreground hover:text-red-400 transition-colors"
-                              title="Remove phase"
-                            >
-                              <X size={13} />
-                            </button>
-                          ) : <span />}
+              {/* Bill To + Dates row */}
+              <div className="grid grid-cols-[1fr_auto] gap-8 items-start">
+                {/* Bill To */}
+                <div>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Bill To</p>
+                  <div className="relative">
+                    <div
+                      onClick={() => { setSiteDropdown(true); fetchSites(siteSearch) }}
+                      className={`w-full px-4 py-3 flex items-center justify-between bg-muted/30 border-2 rounded-xl cursor-pointer text-sm transition-colors hover:border-[#6B7EFF]/50 ${selectedSite ? 'border-[#6B7EFF]/40' : 'border-border'}`}
+                    >
+                      {selectedSite ? (
+                        <div>
+                          <p className="font-semibold text-foreground">{selectedSite.name}</p>
+                          {selectedSite.units && <p className="text-xs text-muted-foreground mt-0.5">{selectedSite.units} units</p>}
                         </div>
-                      )
-                    })}
+                      ) : (
+                        <span className="text-muted-foreground">Search properties…</span>
+                      )}
+                      <ChevronDown size={14} className="text-muted-foreground shrink-0" />
+                    </div>
+                    {siteDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-xl shadow-2xl z-50 overflow-hidden">
+                        <div className="p-2 border-b border-border">
+                          <input
+                            autoFocus
+                            value={siteSearch}
+                            onChange={e => { setSiteSearch(e.target.value); fetchSites(e.target.value) }}
+                            placeholder="Type to search properties…"
+                            className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]"
+                          />
+                        </div>
+                        <div className="max-h-56 overflow-y-auto">
+                          {sites.length === 0 && <p className="text-xs text-muted-foreground text-center py-6">No properties found</p>}
+                          {sites.map(s => (
+                            <button
+                              key={s.id}
+                              onClick={() => {
+                                setSelectedSite(s)
+                                setSiteDropdown(false)
+                                if (s.units) {
+                                  setNewLineItems([
+                                    { service_type: 'video_monitoring', description: 'Video Monitoring Fee — Monthly', qty: '1', unit_price: '500.00', is_recurring: true },
+                                    { service_type: 'access_plan', description: `GateGuard Access Plan — ${s.units} units × $5.00/unit/mo`, qty: String(s.units), unit_price: '5.00', is_recurring: true },
+                                  ])
+                                }
+                              }}
+                              className="w-full text-left px-4 py-3 text-sm hover:bg-accent transition-colors flex items-center justify-between"
+                            >
+                              <div>
+                                <p className="font-medium text-foreground">{s.name}</p>
+                                {s.units && <p className="text-xs text-muted-foreground">{s.units} units</p>}
+                              </div>
+                              {s.units && <span className="text-xs text-[#6B7EFF] font-medium">${((s.billing_video_fee ?? 500) + (s.units * (s.billing_unit_rate ?? 5))).toFixed(0)}/mo</span>}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Invoice metadata */}
+                <div className="space-y-3 min-w-[240px]">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">Invoice Date</label>
+                      <input
+                        type="date"
+                        defaultValue={new Date().toISOString().split('T')[0]}
+                        readOnly
+                        className="w-full h-9 px-3 text-sm bg-muted/30 border border-border rounded-lg text-muted-foreground cursor-default"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">Due Date</label>
+                      <input
+                        type="date"
+                        value={newDueDate}
+                        onChange={e => setNewDueDate(e.target.value)}
+                        className="w-full h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">Memo / Notes</label>
+                    <input
+                      value={newNotes}
+                      onChange={e => setNewNotes(e.target.value)}
+                      placeholder="Optional notes for the customer…"
+                      className="w-full h-9 px-3 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Quick-add service buttons ── */}
+              <div>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2.5">Quick Add Services</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {[
+                    { icon: '📹', label: 'Video Monitoring', type: 'video_monitoring', desc: 'Video Monitoring Fee — Monthly', qty: '1', price: '500.00' },
+                    { icon: '🏠', label: 'Access Plan', type: 'access_plan', desc: `GateGuard Access Plan${selectedSite?.units ? ` — ${selectedSite.units} units × $5.00/unit/mo` : ' — $5.00/unit/mo'}`, qty: selectedSite?.units ? String(selectedSite.units) : '', price: '5.00' },
+                    { icon: '🔧', label: 'Service Call', type: 'service_call', desc: 'On-site service call', qty: '1', price: '' },
+                    { icon: '🔨', label: 'Labor', type: 'labor', desc: 'Installation / labor', qty: '1', price: '' },
+                    { icon: '📦', label: 'Equipment', type: 'equipment', desc: '', qty: '1', price: '' },
+                  ].map(svc => (
+                    <button
+                      key={svc.type}
+                      onClick={() => setNewLineItems(prev => [...prev, { service_type: svc.type, description: svc.desc, qty: svc.qty, unit_price: svc.price, is_recurring: svc.type === 'video_monitoring' || svc.type === 'access_plan' }])}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-muted/30 hover:border-[#6B7EFF]/50 hover:bg-[#6B7EFF]/5 text-sm text-foreground transition-colors"
+                    >
+                      <span>{svc.icon}</span>
+                      <span className="font-medium">{svc.label}</span>
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setNewLineItems(prev => [...prev, { service_type: 'one_time', description: '', qty: '1', unit_price: '', is_recurring: false }])}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-[#6B7EFF]/40 text-[#6B7EFF] hover:bg-[#6B7EFF]/5 text-sm transition-colors"
+                  >
+                    <Plus size={14} /> Custom Line
+                  </button>
+                </div>
+              </div>
+
+              {/* ── Line items table ── */}
+              <div>
+                <div className="border border-border rounded-xl overflow-hidden">
+                  {/* Table header */}
+                  <div className="grid grid-cols-[2fr_80px_120px_110px_36px] bg-muted/50 border-b border-border px-4 py-2.5 gap-3">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Description / Service</span>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest text-center">Qty</span>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest text-right">Rate</span>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest text-right">Amount</span>
+                    <span />
                   </div>
 
-                  {/* Allocation indicator */}
-                  {(() => {
-                    const usingAmounts = phases.some(p => !!p.amount)
-                    if (usingAmounts) {
-                      const totalAmt  = phases.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0)
-                      const invTotal  = newInvTotal()
-                      const diff      = Math.abs(totalAmt - invTotal)
-                      const isOk      = diff < 0.02
-                      return (
-                        <div className={`flex items-center gap-2 text-xs ${isOk ? 'text-emerald-400' : 'text-amber-400'}`}>
-                          {isOk
-                            ? <><Check size={12} /> {fmt(totalAmt)} — fully allocated</>
-                            : <><AlertTriangle size={12} /> {fmt(totalAmt)} allocated of {fmt(invTotal)} total — {diff > 0 ? fmt(diff) + ' remaining' : 'over by ' + fmt(-diff)}</>
-                          }
+                  {/* Line item rows */}
+                  {newLineItems.length === 0 ? (
+                    <div className="px-4 py-10 text-center">
+                      <p className="text-sm text-muted-foreground">No line items yet — use the quick-add buttons above or click <span className="text-[#6B7EFF] font-medium">+ Custom Line</span></p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border">
+                      {newLineItems.map((li, idx) => (
+                        <div key={idx} className="grid grid-cols-[2fr_80px_120px_110px_36px] px-4 py-3 gap-3 items-center hover:bg-muted/20 transition-colors group">
+                          {/* Description + type */}
+                          <div className="space-y-1.5">
+                            <input
+                              value={li.description}
+                              onChange={e => updateLineItem(idx, 'description', e.target.value)}
+                              placeholder="Description…"
+                              className="w-full h-8 px-2.5 text-sm bg-transparent border border-transparent hover:border-border focus:border-[#6B7EFF] rounded-lg focus:outline-none focus:bg-background transition-colors"
+                            />
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={li.service_type}
+                                onChange={e => updateLineItem(idx, 'service_type', e.target.value)}
+                                className="h-6 px-1.5 text-[11px] bg-background border border-border rounded text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
+                              >
+                                {SERVICE_TYPES.map(st => (
+                                  <option key={st.value} value={st.value}>{st.label}</option>
+                                ))}
+                              </select>
+                              <label className="flex items-center gap-1 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={li.is_recurring}
+                                  onChange={e => updateLineItem(idx, 'is_recurring', e.target.checked)}
+                                  className="rounded accent-[#6B7EFF] w-3 h-3"
+                                />
+                                <span className="text-[10px] text-muted-foreground">Recurring</span>
+                              </label>
+                            </div>
+                          </div>
+                          {/* Qty */}
+                          <input
+                            type="number"
+                            value={li.qty}
+                            onChange={e => updateLineItem(idx, 'qty', e.target.value)}
+                            placeholder="1"
+                            className="w-full h-9 px-2 text-sm text-center bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]"
+                          />
+                          {/* Rate */}
+                          <div className="relative">
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">$</span>
+                            <input
+                              type="number"
+                              value={li.unit_price}
+                              onChange={e => updateLineItem(idx, 'unit_price', e.target.value)}
+                              placeholder="0.00"
+                              className="w-full h-9 pl-5 pr-2 text-sm text-right bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]"
+                            />
+                          </div>
+                          {/* Amount */}
+                          <div className="text-right">
+                            <span className="text-sm font-semibold text-foreground tabular-nums">
+                              {fmt((parseFloat(li.qty) || 0) * (parseFloat(li.unit_price) || 0))}
+                            </span>
+                          </div>
+                          {/* Delete */}
+                          <button
+                            onClick={() => removeLineItem(idx)}
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded text-muted-foreground hover:text-red-400 transition-all"
+                          >
+                            <X size={14} />
+                          </button>
                         </div>
-                      )
-                    }
-                    const total = phases.reduce((s, p) => s + (parseFloat(p.percent) || 0), 0)
-                    const isOk  = Math.round(total) === 100
-                    return (
-                      <div className={`flex items-center gap-2 text-xs ${isOk ? 'text-emerald-400' : 'text-amber-400'}`}>
-                        {isOk
-                          ? <><Check size={12} /> 100% allocated</>
-                          : <><AlertTriangle size={12} /> {total}% allocated — all phases must sum to 100%</>
-                        }
-                      </div>
-                    )
-                  })()}
+                      ))}
+                    </div>
+                  )}
 
-                  {/* Add phase button */}
-                  <button
-                    type="button"
-                    onClick={() => setPhases(prev => [...prev, { label: `Phase ${prev.length + 1}`, percent: '0', amount: '', due_date: '' }])}
-                    className="flex items-center gap-1 text-xs text-[#6B7EFF] hover:text-[#5a6ee0] transition-colors"
-                  >
-                    <Plus size={12} /> Add Phase
-                  </button>
+                  {/* Add row footer */}
+                  {newLineItems.length > 0 && (
+                    <div className="px-4 py-2.5 border-t border-border bg-muted/20">
+                      <button
+                        onClick={() => setNewLineItems(prev => [...prev, { service_type: 'one_time', description: '', qty: '1', unit_price: '', is_recurring: false }])}
+                        className="flex items-center gap-1.5 text-xs text-[#6B7EFF] hover:text-[#5a6ee0] transition-colors"
+                      >
+                        <Plus size={12} /> Add line item
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Totals */}
+                {newLineItems.length > 0 && (
+                  <div className="mt-4 flex justify-end">
+                    <div className="w-64 space-y-2 text-sm">
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Subtotal</span>
+                        <span className="tabular-nums">{fmt(newInvTotal())}</span>
+                      </div>
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Tax (0%)</span>
+                        <span className="tabular-nums">$0.00</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-base border-t border-border pt-2">
+                        <span>Total</span>
+                        <span className="text-[#6B7EFF] tabular-nums">{fmt(newInvTotal())}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Phase Billing (collapsed by default) ── */}
+              {newLineItems.length > 0 && (
+                <div className="border border-border rounded-xl overflow-hidden">
+                  <div className="flex items-center justify-between px-5 py-3.5 bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => setPhaseEnabled(v => !v)}>
+                    <div className="flex items-center gap-2">
+                      <Layers size={14} className="text-muted-foreground" />
+                      <span className="text-sm font-medium text-foreground">Phase Billing</span>
+                      <span className="text-xs text-muted-foreground">— split into deposit / milestone / final invoices</span>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={phaseEnabled}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${phaseEnabled ? 'bg-[#6B7EFF]' : 'bg-muted-foreground/30'}`}
+                    >
+                      <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform ${phaseEnabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                    </button>
+                  </div>
+
+                  {phaseEnabled && (
+                    <div className="p-5 space-y-4 border-t border-border">
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-semibold text-foreground">{fmt(newInvTotal())}</span> split across {phases.length} phase invoice{phases.length !== 1 ? 's' : ''}. Each phase creates a separate invoice.
+                      </p>
+
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-[1fr_72px_16px_96px_108px_28px] gap-1.5 px-1">
+                          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Phase Label</span>
+                          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-right">%</span>
+                          <span />
+                          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-right">Amount</span>
+                          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Due Date</span>
+                          <span />
+                        </div>
+
+                        {phases.map((ph, i) => {
+                          const total   = newInvTotal()
+                          const pct     = parseFloat(ph.percent) || 0
+                          const dispAmt = ph.amount ? parseFloat(ph.amount) : (total * pct / 100)
+                          const dispPct = ph.amount && total > 0 ? (parseFloat(ph.amount) / total * 100).toFixed(1) : ph.percent
+                          return (
+                            <div key={i} className="grid grid-cols-[1fr_72px_16px_96px_108px_28px] gap-1.5 items-center">
+                              <input
+                                value={ph.label}
+                                onChange={e => setPhases(prev => prev.map((p, j) => j === i ? { ...p, label: e.target.value } : p))}
+                                placeholder="Label"
+                                className="h-8 px-2 text-xs bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
+                              />
+                              <div className="relative flex items-center">
+                                <input
+                                  type="number" min="0" max="100" step="0.1"
+                                  value={ph.amount ? dispPct : ph.percent}
+                                  onChange={e => setPhases(prev => prev.map((p, j) => j === i ? { ...p, percent: e.target.value, amount: '' } : p))}
+                                  className={`h-8 w-full px-2 pr-4 text-xs bg-background border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] text-right ${ph.amount ? 'border-[#6B7EFF]/40 text-muted-foreground' : 'border-border'}`}
+                                />
+                                <span className="absolute right-1.5 text-[10px] text-muted-foreground pointer-events-none">%</span>
+                              </div>
+                              <span className="text-[10px] text-muted-foreground text-center select-none">or</span>
+                              <div className="relative flex items-center">
+                                <span className="absolute left-2 text-[10px] text-muted-foreground pointer-events-none">$</span>
+                                <input
+                                  type="number" min="0" step="0.01"
+                                  value={ph.amount}
+                                  placeholder={dispAmt > 0 ? dispAmt.toFixed(2) : '0.00'}
+                                  onChange={e => setPhases(prev => prev.map((p, j) => j === i ? { ...p, amount: e.target.value, percent: '' } : p))}
+                                  className={`h-8 w-full pl-5 pr-2 text-xs bg-background border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] text-right ${ph.amount ? 'border-[#6B7EFF] font-semibold text-foreground' : 'border-border'}`}
+                                />
+                              </div>
+                              <input
+                                type="date"
+                                value={ph.due_date}
+                                onChange={e => setPhases(prev => prev.map((p, j) => j === i ? { ...p, due_date: e.target.value } : p))}
+                                className="h-8 px-2 text-xs bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
+                              />
+                              {phases.length > 1 ? (
+                                <button type="button" onClick={() => setPhases(prev => prev.filter((_, j) => j !== i))}
+                                  className="h-8 w-7 flex items-center justify-center text-muted-foreground hover:text-red-400 transition-colors">
+                                  <X size={13} />
+                                </button>
+                              ) : <span />}
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      {(() => {
+                        const usingAmounts = phases.some(p => !!p.amount)
+                        if (usingAmounts) {
+                          const totalAmt = phases.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0)
+                          const invTotal = newInvTotal()
+                          const diff = Math.abs(totalAmt - invTotal)
+                          const isOk = diff < 0.02
+                          return (
+                            <div className={`flex items-center gap-2 text-xs ${isOk ? 'text-emerald-400' : 'text-amber-400'}`}>
+                              {isOk ? <><Check size={12} /> {fmt(totalAmt)} — fully allocated</> : <><AlertTriangle size={12} /> {fmt(totalAmt)} of {fmt(invTotal)} — {diff > 0 ? fmt(diff) + ' remaining' : 'over by ' + fmt(-diff)}</>}
+                            </div>
+                          )
+                        }
+                        const total = phases.reduce((s, p) => s + (parseFloat(p.percent) || 0), 0)
+                        const isOk = Math.round(total) === 100
+                        return (
+                          <div className={`flex items-center gap-2 text-xs ${isOk ? 'text-emerald-400' : 'text-amber-400'}`}>
+                            {isOk ? <><Check size={12} /> 100% allocated</> : <><AlertTriangle size={12} /> {total}% — must sum to 100%</>}
+                          </div>
+                        )
+                      })()}
+
+                      <button
+                        type="button"
+                        onClick={() => setPhases(prev => [...prev, { label: `Phase ${prev.length + 1}`, percent: '0', amount: '', due_date: '' }])}
+                        className="flex items-center gap-1 text-xs text-[#6B7EFF] hover:text-[#5a6ee0] transition-colors"
+                      >
+                        <Plus size={12} /> Add Phase
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
+
+            {/* ── Modal footer ── */}
+            <div className="flex items-center justify-between px-8 py-5 border-t border-border bg-muted/20 rounded-b-2xl">
+              <button
+                onClick={() => { setNewInvOpen(false); resetNewInvoiceForm() }}
+                className="px-5 py-2.5 text-sm border border-border rounded-xl hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => saveNewInvoice(false)}
+                  disabled={newInvSaving}
+                  className="px-5 py-2.5 text-sm border border-border rounded-xl hover:bg-muted transition-colors disabled:opacity-50"
+                >
+                  Save as Draft
+                </button>
+                <button
+                  onClick={() => saveNewInvoice(true)}
+                  disabled={newInvSaving}
+                  className="flex items-center gap-2 px-6 py-2.5 text-sm bg-[#6B7EFF] hover:bg-[#5a6ee0] text-white rounded-xl transition-colors disabled:opacity-50 font-medium shadow-lg shadow-[#6B7EFF]/20"
+                >
+                  <Send size={14} />
+                  {newInvSaving ? 'Saving…' : 'Save & Send'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-      </SlideOver>
+      )}
 
       {/* ── Invoice Detail SlideOver ── */}
       <SlideOver

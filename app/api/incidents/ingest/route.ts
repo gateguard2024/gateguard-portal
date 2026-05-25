@@ -82,11 +82,40 @@ export async function POST(req: NextRequest) {
         ? `GGSOC / ${record.operator_name}`
         : 'GGSOC'
 
+      // ── Site lookup: resolve site_id + org_id for hierarchy scoping ──────
+      // Match by een_account_id first (most precise), then brivo_account_id, then site name
+      let resolvedSiteId: string | null = null
+      let resolvedOrgId:  string | null = null
+      try {
+        const eenId   = record.een_account_id   ? String(record.een_account_id)   : null
+        const brivoId = record.brivo_account_id ? String(record.brivo_account_id) : null
+
+        let siteQuery = supabase
+          .from('sites')
+          .select('id, master_dealer_id, install_dealer_id, service_dealer_id, org_id')
+          .limit(1)
+
+        if (eenId) {
+          siteQuery = siteQuery.eq('een_account_id', eenId)
+        } else if (brivoId) {
+          siteQuery = siteQuery.eq('brivo_account_id', brivoId)
+        } else if (siteName) {
+          siteQuery = siteQuery.ilike('name', `%${siteName}%`)
+        }
+
+        const { data: siteRow } = await siteQuery.maybeSingle()
+        if (siteRow) {
+          resolvedSiteId = siteRow.id
+          // Primary org for this incident = master dealer (account owner)
+          resolvedOrgId  = siteRow.master_dealer_id ?? siteRow.org_id ?? null
+        }
+      } catch (_) { /* non-blocking — scoping degrades gracefully */ }
+
       const { data, error } = await supabase
         .from('incidents')
         .insert({
-          org_id:        null,
-          site_id:       null,
+          org_id:        resolvedOrgId,
+          site_id:       resolvedSiteId,
           title,
           description,
           severity,
@@ -208,11 +237,48 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // ── Site lookup for org attribution ────────────────────────────────────────
+  let resolvedOrgId: string | null = null
+  let resolvedSiteId: string | null = siteId
+
+  if (!resolvedSiteId && propertyName) {
+    // Try to find site by name when no site_id was provided
+    try {
+      const eenId   = (body.een_account_id   as string | undefined) ?? null
+      const brivoId = (body.brivo_account_id as string | undefined) ?? null
+
+      let siteQ = supabase
+        .from('sites')
+        .select('id, master_dealer_id, install_dealer_id, service_dealer_id, org_id')
+        .limit(1)
+
+      if (eenId)        siteQ = siteQ.eq('een_account_id', eenId)
+      else if (brivoId) siteQ = siteQ.eq('brivo_account_id', brivoId)
+      else              siteQ = siteQ.ilike('name', `%${propertyName}%`)
+
+      const { data: siteRow } = await siteQ.maybeSingle()
+      if (siteRow) {
+        resolvedSiteId = siteRow.id
+        resolvedOrgId  = siteRow.master_dealer_id ?? siteRow.org_id ?? null
+      }
+    } catch (_) { /* non-blocking */ }
+  } else if (resolvedSiteId) {
+    // site_id was provided — look up org attribution
+    try {
+      const { data: siteRow } = await supabase
+        .from('sites')
+        .select('master_dealer_id, org_id')
+        .eq('id', resolvedSiteId)
+        .maybeSingle()
+      if (siteRow) resolvedOrgId = siteRow.master_dealer_id ?? siteRow.org_id ?? null
+    } catch (_) { /* non-blocking */ }
+  }
+
   const { data, error } = await supabase
     .from('incidents')
     .insert({
-      org_id:        null,
-      site_id:       siteId,
+      org_id:        resolvedOrgId,
+      site_id:       resolvedSiteId,
       title,
       description,
       severity,
