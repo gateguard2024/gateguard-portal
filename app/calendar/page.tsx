@@ -266,6 +266,7 @@ function EventChip({
     >
       {event.time && <span className={`mr-1 ${isCompany ? "opacity-60" : "opacity-80"}`}>{event.time}</span>}
       {event.title}
+      {event.type === 'gcal' && <span className="ml-0.5 opacity-70 text-[8px]">🔒</span>}
     </button>
   );
 }
@@ -350,6 +351,19 @@ function SourcesRail({
   lastSynced,
   onSync,
   syncing,
+  icsConnections,
+  msConnected,
+  onAddIcsFeed,
+  onDeleteIcsFeed,
+  showIcsForm,
+  setShowIcsForm,
+  icsFormName,
+  setIcsFormName,
+  icsFormUrl,
+  setIcsFormUrl,
+  icsFormSaving,
+  globalBoardView,
+  onToggleGlobalBoard,
 }: {
   activeSources: Set<string>;
   onChange: (next: Set<string>) => void;
@@ -361,6 +375,19 @@ function SourcesRail({
   lastSynced: string | null;
   onSync: () => void;
   syncing: boolean;
+  icsConnections: Array<{id:string;name:string;color:string;last_synced_at:string|null;ics_url:string}>;
+  msConnected: boolean;
+  onAddIcsFeed: () => void;
+  onDeleteIcsFeed: (id: string) => void;
+  showIcsForm: boolean;
+  setShowIcsForm: (v: boolean) => void;
+  icsFormName: string;
+  setIcsFormName: (v: string) => void;
+  icsFormUrl: string;
+  setIcsFormUrl: (v: string) => void;
+  icsFormSaving: boolean;
+  globalBoardView: boolean;
+  onToggleGlobalBoard: () => void;
 }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [colorPickerFor, setColorPickerFor] = useState<string | null>(null);
@@ -521,33 +548,120 @@ function SourcesRail({
         </div>
 
         {/* External calendars section */}
-        <div className="border-t border-border p-3">
-          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">External</p>
+        <div className="border-t border-border p-3 space-y-2">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">External</p>
+            <button
+              onClick={onToggleGlobalBoard}
+              className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full transition-colors ${
+                globalBoardView
+                  ? 'bg-[#6B7EFF] text-white'
+                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+              }`}
+              title={globalBoardView ? 'Showing Global Board (personal events hidden)' : 'Switch to Global Board view'}
+            >
+              {globalBoardView ? '🌐 Board' : '👤 My View'}
+            </button>
+          </div>
+
+          {/* Google Calendar */}
           {gcalConnected ? (
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-emerald-50">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                <span className="text-xs font-medium text-emerald-700 flex-1 truncate">Google Calendar</span>
+                <span className="w-2 h-2 rounded-full bg-[#4285F4] shrink-0" />
+                <span className="text-xs font-medium text-slate-700 flex-1 truncate">Google Calendar</span>
                 <button onClick={onSync} disabled={syncing} className="shrink-0" title="Sync now">
-                  <RefreshCw size={11} className={`text-emerald-600 ${syncing ? "animate-spin" : ""}`} />
+                  <RefreshCw size={11} className={`text-slate-500 ${syncing ? 'animate-spin' : ''}`} />
                 </button>
               </div>
               {lastSynced && (
                 <p className="text-[9px] text-muted-foreground px-2">Synced {relativeSyncTime()}</p>
               )}
-              <p className="text-[9px] text-muted-foreground px-2 leading-tight">
-                Google events pulled to your calendar. GateGuard events pushed to Google.
-              </p>
             </div>
           ) : (
             <a
               href="/api/calendar/google/connect"
-              className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:border-[#6B7EFF]/40 hover:text-[#6B7EFF] transition-colors"
+              className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:border-[#4285F4]/40 hover:text-[#4285F4] transition-colors"
             >
               <CalendarDays size={12} />
-              Push to Google Cal
+              Connect Google Calendar
             </a>
           )}
+
+          {/* Microsoft / Outlook */}
+          {msConnected ? (
+            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-blue-50">
+              <span className="w-2 h-2 rounded-full bg-[#0078D4] shrink-0" />
+              <span className="text-xs font-medium text-slate-700 flex-1 truncate">Outlook Calendar</span>
+              <span className="text-[9px] text-emerald-600 font-medium">Live</span>
+            </div>
+          ) : (
+            <a
+              href="/api/calendar/microsoft/connect"
+              className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:border-[#0078D4]/40 hover:text-[#0078D4] transition-colors"
+            >
+              <CalendarDays size={12} />
+              Connect Outlook / M365
+            </a>
+          )}
+
+          {/* iCal feeds */}
+          {icsConnections.map((conn) => (
+            <div key={conn.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-emerald-50/60 group/ics">
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: conn.color || '#22C55E' }} />
+              <span className="text-xs font-medium text-slate-700 flex-1 truncate" title={conn.ics_url}>{conn.name}</span>
+              <button
+                onClick={() => onDeleteIcsFeed(conn.id)}
+                className="shrink-0 opacity-0 group-hover/ics:opacity-100 transition-opacity text-slate-400 hover:text-red-500"
+                title="Remove"
+              >✕</button>
+            </div>
+          ))}
+
+          {/* Add iCal feed */}
+          {showIcsForm ? (
+            <div className="space-y-1.5 p-2 bg-slate-50 rounded-lg border border-border">
+              <input
+                value={icsFormName}
+                onChange={(e) => setIcsFormName(e.target.value)}
+                placeholder="Calendar name"
+                className="w-full h-7 px-2 text-xs border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]/40"
+              />
+              <input
+                value={icsFormUrl}
+                onChange={(e) => setIcsFormUrl(e.target.value)}
+                placeholder="https://... or webcal://..."
+                className="w-full h-7 px-2 text-xs border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]/40"
+              />
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => { setShowIcsForm(false); setIcsFormName(''); setIcsFormUrl(''); }}
+                  className="flex-1 py-1 rounded border border-border text-xs text-muted-foreground hover:bg-accent transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={onAddIcsFeed}
+                  disabled={icsFormSaving || !icsFormName.trim() || !icsFormUrl.trim()}
+                  className="flex-1 py-1 rounded bg-[#6B7EFF] text-white text-xs font-medium hover:bg-[#5a6fd8] transition-colors disabled:opacity-40"
+                >
+                  {icsFormSaving ? '…' : 'Add'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowIcsForm(true)}
+              className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:border-emerald-400/40 hover:text-emerald-600 transition-colors"
+            >
+              <span className="text-sm leading-none">+</span>
+              Add iCal / webcal feed
+            </button>
+          )}
+
+          <p className="text-[9px] text-muted-foreground leading-tight px-0.5">
+            Personal events stay private — only GateGuard items appear on the global board.
+          </p>
         </div>
       </div>
 
@@ -601,6 +715,23 @@ function CalendarPage() {
     if (typeof window === "undefined") return [];
     try { return JSON.parse(localStorage.getItem("gg_cal_custom") ?? "[]") as CalendarSource[]; } catch { return []; }
   });
+
+  // iCal connections
+  const [icsConnections, setIcsConnections] = useState<Array<{
+    id: string; name: string; color: string; last_synced_at: string | null; ics_url: string;
+  }>>([]);
+
+  // Microsoft calendar
+  const [msConnected, setMsConnected] = useState(false);
+
+  // Gemini: My View vs Global Board View (global hides personal/external events)
+  const [globalBoardView, setGlobalBoardView] = useState(false);
+
+  // iCal add form
+  const [showIcsForm, setShowIcsForm] = useState(false);
+  const [icsFormName, setIcsFormName] = useState('');
+  const [icsFormUrl, setIcsFormUrl] = useState('');
+  const [icsFormSaving, setIcsFormSaving] = useState(false);
 
   function handleColorChange(id: string, color: string) {
     const next = { ...sourceColors, [id]: color };
@@ -666,6 +797,32 @@ function CalendarPage() {
         }
       } catch { /* ignore */ }
     })();
+    // Fetch iCal connections + auto-sync them
+    void (async () => {
+      try {
+        const icsRes = await fetch('/api/calendar/ics');
+        if (icsRes.ok) {
+          const d = await icsRes.json() as { connections: Array<{id:string;name:string;color:string;last_synced_at:string|null;ics_url:string}> };
+          setIcsConnections(d.connections ?? []);
+          if ((d.connections ?? []).length > 0) {
+            // Auto-sync all iCal feeds on page load
+            void fetch('/api/calendar/ics/sync', { method: 'POST' });
+          }
+        }
+      } catch { /* ignore */ }
+    })();
+
+    // Fetch Microsoft status
+    void (async () => {
+      try {
+        const msRes = await fetch('/api/calendar/microsoft/status');
+        if (msRes.ok) {
+          const d = await msRes.json() as { connected: boolean };
+          setMsConnected(d.connected ?? false);
+        }
+      } catch { /* ignore */ }
+    })();
+
     const cp = searchParams.get("connected");
     if (cp === "true") {
       setGcalConnected(true);
@@ -729,6 +886,37 @@ function CalendarPage() {
       view === "week" ? nd.setDate(nd.getDate() + 7) : nd.setMonth(nd.getMonth() + 1);
       return nd;
     });
+  }
+
+  // ── iCal feed management ──────────────────────────────────────────────────
+  async function handleAddIcsFeed() {
+    if (!icsFormUrl.trim() || !icsFormName.trim()) return;
+    setIcsFormSaving(true);
+    try {
+      const res = await fetch('/api/calendar/ics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: icsFormName.trim(), url: icsFormUrl.trim(), color: '#22C55E' }),
+      });
+      if (res.ok) {
+        const d = await res.json() as { connection: {id:string;name:string;color:string;last_synced_at:string|null;ics_url:string} };
+        setIcsConnections((prev) => [...prev, d.connection]);
+        setIcsFormName(''); setIcsFormUrl(''); setShowIcsForm(false);
+        // Sync the new feed
+        void fetch(`/api/calendar/ics/sync?id=${d.connection.id}`, { method: 'POST' });
+        setTimeout(() => void fetchEvents(), 3000);
+      }
+    } catch { /* ignore */ } finally {
+      setIcsFormSaving(false);
+    }
+  }
+
+  async function handleDeleteIcsFeed(id: string) {
+    try {
+      await fetch(`/api/calendar/ics?id=${id}`, { method: 'DELETE' });
+      setIcsConnections((prev) => prev.filter((c) => c.id !== id));
+      void fetchEvents();
+    } catch { /* ignore */ }
   }
 
   // ── GCal sync ─────────────────────────────────────────────────────────────
@@ -826,6 +1014,7 @@ function CalendarPage() {
   function eventsForDate(dateStr: string): CalendarEvent[] {
     return events
       .filter((e) => e.date === dateStr)
+      .filter((e) => !globalBoardView || (e.type !== 'gcal' && e.source !== 'google_calendar'))
       .map((e) => ({ ...e, color: effectiveColor(e.source) }));
   }
   function getHeaderLabel(): string {
@@ -964,6 +1153,19 @@ function CalendarPage() {
           lastSynced={lastSynced}
           onSync={() => { void handleSync(); }}
           syncing={syncing}
+          icsConnections={icsConnections}
+          msConnected={msConnected}
+          onAddIcsFeed={handleAddIcsFeed}
+          onDeleteIcsFeed={handleDeleteIcsFeed}
+          showIcsForm={showIcsForm}
+          setShowIcsForm={setShowIcsForm}
+          icsFormName={icsFormName}
+          setIcsFormName={setIcsFormName}
+          icsFormUrl={icsFormUrl}
+          setIcsFormUrl={setIcsFormUrl}
+          icsFormSaving={icsFormSaving}
+          globalBoardView={globalBoardView}
+          onToggleGlobalBoard={() => setGlobalBoardView((v) => !v)}
         />
 
         {/* ── Center: Calendar ──────────────────────────────────────────── */}
@@ -1005,6 +1207,26 @@ function CalendarPage() {
               Today
             </button>
 
+            {/* Gemini: My View / Global Board toggle */}
+            <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
+              <button
+                onClick={() => setGlobalBoardView(false)}
+                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 ${
+                  !globalBoardView ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground'
+                }`}
+              >
+                <span className="text-[10px]">👤</span> My View
+              </button>
+              <button
+                onClick={() => setGlobalBoardView(true)}
+                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 ${
+                  globalBoardView ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground'
+                }`}
+              >
+                <span className="text-[10px]">🌐</span> Board
+              </button>
+            </div>
+
             <div className="flex-1" />
 
             {/* Event count badge */}
@@ -1017,6 +1239,12 @@ function CalendarPage() {
             {loading && (
               <RefreshCw size={14} className="text-muted-foreground animate-spin" />
             )}
+
+            {/* Pulsing live sync indicator */}
+            <div className="flex items-center gap-1 text-[9px] text-emerald-600 font-semibold">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
+              Live
+            </div>
           </div>
 
           {/* Calendar grid */}
@@ -1074,7 +1302,7 @@ function CalendarPage() {
                           key={todo.id}
                           draggable
                           onDragStart={() => handleDragStart("todo", todo.id)}
-                          className="flex items-center gap-2 p-2.5 rounded-lg border border-border bg-white hover:border-[#6B7EFF]/30 hover:bg-[#6B7EFF]/5 transition-colors cursor-grab active:cursor-grabbing group"
+                          className="flex items-center gap-2 p-2.5 rounded-lg border border-border bg-white shadow-sm hover:shadow-md hover:border-[#6B7EFF]/30 hover:bg-[#6B7EFF]/5 transition-all cursor-grab active:cursor-grabbing group"
                         >
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-medium text-foreground truncate">{todo.title}</p>
@@ -1113,7 +1341,7 @@ function CalendarPage() {
                           key={wo.id}
                           draggable
                           onDragStart={() => handleDragStart("wo", wo.id)}
-                          className="flex items-center gap-2 p-2.5 rounded-lg border border-border bg-white hover:border-amber-300 hover:bg-amber-50/50 transition-colors cursor-grab active:cursor-grabbing group"
+                          className="flex items-center gap-2 p-2.5 rounded-lg border border-border bg-white shadow-sm hover:shadow-md hover:border-amber-300 hover:bg-amber-50/50 transition-all cursor-grab active:cursor-grabbing group"
                         >
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-medium text-foreground truncate">{wo.title}</p>

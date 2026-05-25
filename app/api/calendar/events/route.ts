@@ -342,7 +342,7 @@ export async function GET(req: NextRequest) {
             date:         dateStr,
             time:         timeStr,
             status:       ev.status ?? 'confirmed',
-            color:        '#4285F4',
+            color:        ev.source === 'ics' ? '#22C55E' : ev.source === 'microsoft' ? '#0078D4' : '#4285F4',
             link:         ev.html_link ?? undefined,
             source:       'google_calendar',
             gcal_event_id: ev.gcal_event_id ?? undefined,
