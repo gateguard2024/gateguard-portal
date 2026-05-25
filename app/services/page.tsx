@@ -48,7 +48,7 @@ const CATALOG: Service[] = [
   { id:'vm-2',  name:'Video Monitoring — AI',      provider:'Envision AI',        provider_id:'envision',  category:'video_monitoring', description:'AI-powered analytics — loitering detection, LPR, crowd alerts. No human monitoring required.',                       provider_color:'#6B7EFF', billing_type:'per_camera',   base_price:18,  unit_label:'camera',   min_units:4,  contract_months:12, dealer_commission_pct:12, gg_commission_pct:4,   is_featured:false, requires_enrollment:false, notes:'Requires Eagle Eye cameras already installed.' },
   { id:'vm-3',  name:'Virtual Guard Tours',         provider:'Securitas Digital',  provider_id:'securitas', category:'video_monitoring', description:'Scheduled virtual patrol tours via existing cameras. Incident reporting included.',                                 provider_color:'#1E293B', billing_type:'per_property', base_price:250, unit_label:'property', min_units:1,  contract_months:12, dealer_commission_pct:10, gg_commission_pct:3,   is_featured:false, requires_enrollment:true  },
   // Package Lockers
-  { id:'pl-1',  name:'Luxer One Smart Lockers',    provider:'Luxer One',          provider_id:'luxer',     category:'package_lockers', description:'Smart locker — residents get PIN/app notification on delivery. Reduces package theft 95%+.',                          provider_color:'#FF6B35', billing_type:'flat_fee',     base_price:149, unit_label:'property', min_units:1,  contract_months:36, dealer_commission_pct:20, gg_commission_pct:5,   is_featured:true,  requires_enrollment:false, notes:'Hardware sold separately. Min 4-door unit for <100 units.' },
+  { id:'pl-1',  name:'Luxer One Smart Lockers',    provider:'Luxer One',          provider_id:'luxor',     category:'package_lockers', description:'Smart locker — residents get PIN/app notification on delivery. Reduces package theft 95%+.',                          provider_color:'#FF6B35', billing_type:'flat_fee',     base_price:149, unit_label:'property', min_units:1,  contract_months:36, dealer_commission_pct:20, gg_commission_pct:5,   is_featured:true,  requires_enrollment:false, notes:'Hardware sold separately. Min 4-door unit for <100 units.' },
   { id:'pl-2',  name:'Amazon Hub Apartment',        provider:'Amazon',             provider_id:'amazon',    category:'package_lockers', description:'Amazon-branded locker — Amazon covers hardware cost, property earns revenue share on deliveries.',                   provider_color:'#FF9900', billing_type:'flat_fee',     base_price:0,   unit_label:'property', min_units:1,  contract_months:36, dealer_commission_pct:0,  gg_commission_pct:2,   is_featured:false, requires_enrollment:true,  notes:'Amazon pays dealer a referral fee at install. No monthly SaaS cost.' },
   { id:'pl-3',  name:'Package Concierge',           provider:'Package Concierge',  provider_id:'pkgconcierge', category:'package_lockers', description:'Full-service package room management — smart locker + attendant option.',                                      provider_color:'#0F4C81', billing_type:'flat_fee',     base_price:199, unit_label:'property', min_units:1,  contract_months:24, dealer_commission_pct:15, gg_commission_pct:4,   is_featured:false, requires_enrollment:false },
   // Access Control
@@ -87,38 +87,50 @@ const CATEGORIES: CatConfig[] = [
 
 // ─── Provider Logo ────────────────────────────────────────────────────────────
 
+// Map provider_id → exact filename in /public/logos/
+const LOGO_FILES: Record<string, string> = {
+  directv:    'directv.png',
+  att:        'att.png',
+  gateguard:  'gateguard.png',
+  latch:      'latch.png',
+  xfinity:    'xfinity.jpg',
+  keystone:   'keystone.jpg',
+  luxor:      'luxor.jpg',
+}
+
 function ProviderLogo({ providerId, providerName, size = 'md' }: {
   providerId: string
   providerName: string
   size?: 'sm' | 'md' | 'lg'
 }) {
-  const dims = size === 'sm' ? 32 : size === 'lg' ? 56 : 44
+  const dims     = size === 'sm' ? 32 : size === 'lg' ? 56 : 44
   const textSize = size === 'sm' ? 'text-[9px]' : size === 'lg' ? 'text-sm' : 'text-[11px]'
   const initials = providerName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 3)
+  const logoFile = LOGO_FILES[providerId]
 
-  // Attempt to load /logos/{provider_id}.png; fallback to styled initials
   return (
     <div
       className="relative shrink-0 rounded-lg overflow-hidden bg-white border border-gray-100 flex items-center justify-center"
       style={{ width: dims, height: dims }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={`/logos/${providerId}.png`}
-        alt={providerName}
-        width={dims}
-        height={dims}
-        className="object-contain w-full h-full p-1"
-        onError={e => {
-          // Hide img and show fallback
-          const target = e.currentTarget as HTMLImageElement
-          target.style.display = 'none'
-          const fallback = target.nextElementSibling as HTMLElement
-          if (fallback) fallback.style.display = 'flex'
-        }}
-      />
+      {logoFile ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={`/logos/${logoFile}`}
+          alt={providerName}
+          width={dims}
+          height={dims}
+          className="object-contain w-full h-full p-1"
+          onError={e => {
+            const target = e.currentTarget as HTMLImageElement
+            target.style.display = 'none'
+            const fallback = target.nextElementSibling as HTMLElement
+            if (fallback) fallback.style.display = 'flex'
+          }}
+        />
+      ) : null}
       <div
-        className={`absolute inset-0 items-center justify-center font-bold text-white hidden`}
+        className={`${logoFile ? 'absolute inset-0 hidden' : 'w-full h-full'} items-center justify-center font-bold text-white flex`}
         style={{ background: '#334155' }}
       >
         <span className={textSize}>{initials}</span>
