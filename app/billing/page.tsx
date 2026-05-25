@@ -64,6 +64,7 @@ interface Invoice {
 interface PhaseRow {
   label:    string  // e.g. "Deposit"
   percent:  string  // e.g. "30"
+  amount:   string  // dollar override — if set, drives percent; if blank, derived from percent
   due_date: string  // ISO date
 }
 
@@ -193,9 +194,9 @@ export default function BillingPage() {
   // Phase billing state
   const [phaseEnabled, setPhaseEnabled] = useState(false)
   const [phases, setPhases] = useState<PhaseRow[]>([
-    { label: 'Deposit',   percent: '30', due_date: '' },
-    { label: 'Milestone', percent: '30', due_date: '' },
-    { label: 'Final',     percent: '40', due_date: '' },
+    { label: 'Deposit',   percent: '30', amount: '', due_date: '' },
+    { label: 'Milestone', percent: '30', amount: '', due_date: '' },
+    { label: 'Final',     percent: '40', amount: '', due_date: '' },
   ])
 
   // Action loading
@@ -415,9 +416,20 @@ export default function BillingPage() {
     try {
       if (phaseEnabled) {
         // ── Phase billing path ──────────────────────────────────────────────────
-        const totalPct = phases.reduce((s, p) => s + (parseFloat(p.percent) || 0), 0)
-        if (Math.round(totalPct) !== 100) {
-          alert(`Phase percentages must sum to 100% (currently ${totalPct}%)`); return
+        // Validate: if using percent mode, must sum to 100
+        const usingAmounts = phases.some(p => !!p.amount)
+        if (!usingAmounts) {
+          const totalPct = phases.reduce((s, p) => s + (parseFloat(p.percent) || 0), 0)
+          if (Math.round(totalPct) !== 100) {
+            alert(`Phase percentages must sum to 100% (currently ${totalPct}%)`); return
+          }
+        } else {
+          // Amount mode: every phase must have an amount
+          for (const p of phases) {
+            if (!p.amount || parseFloat(p.amount) <= 0) {
+              alert(`Phase "${p.label}" is missing an amount`); return
+            }
+          }
         }
         for (const p of phases) {
           if (!p.due_date) { alert(`Phase "${p.label}" is missing a due date`); return }
@@ -431,7 +443,10 @@ export default function BillingPage() {
         for (let i = 0; i < phases.length; i++) {
           const ph       = phases[i]
           const pct      = parseFloat(ph.percent) || 0
-          const phaseAmt = parseFloat((contractTotal * pct / 100).toFixed(2))
+          // If amount was directly entered, use it; otherwise compute from percent
+          const phaseAmt = ph.amount
+            ? parseFloat(parseFloat(ph.amount).toFixed(2))
+            : parseFloat((contractTotal * pct / 100).toFixed(2))
 
           const body: Record<string, unknown> = {
             site_id:             selectedSite?.id ?? null,
@@ -443,7 +458,9 @@ export default function BillingPage() {
             phase_total_amount:  contractTotal,
             line_items: [{
               service_type: newLineItems[0]?.service_type ?? 'one_time',
-              description:  `${ph.label} — Phase ${i + 1} of ${phaseTotal} (${pct}%)`,
+              description:  ph.amount
+                ? `${ph.label} — Phase ${i + 1} of ${phaseTotal}`
+                : `${ph.label} — Phase ${i + 1} of ${phaseTotal} (${pct}%)`,
               qty:          1,
               unit_price:   phaseAmt,
               is_recurring: false,
@@ -502,9 +519,9 @@ export default function BillingPage() {
     setNewNotes('')
     setPhaseEnabled(false)
     setPhases([
-      { label: 'Deposit',   percent: '30', due_date: '' },
-      { label: 'Milestone', percent: '30', due_date: '' },
-      { label: 'Final',     percent: '40', due_date: '' },
+      { label: 'Deposit',   percent: '30', amount: '', due_date: '' },
+      { label: 'Milestone', percent: '30', amount: '', due_date: '' },
+      { label: 'Final',     percent: '40', amount: '', due_date: '' },
     ])
   }
 
@@ -1217,19 +1234,25 @@ export default function BillingPage() {
                   {/* Phase rows */}
                   <div className="space-y-2">
                     {/* Header row */}
-                    <div className="grid grid-cols-[1fr_64px_96px_108px_28px] gap-2 px-1">
+                    <div className="grid grid-cols-[1fr_72px_16px_96px_108px_28px] gap-1.5 px-1">
                       <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Phase Label</span>
                       <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-right">%</span>
+                      <span />
                       <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-right">Amount</span>
                       <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Due Date</span>
                       <span />
                     </div>
 
                     {phases.map((ph, i) => {
-                      const pct = parseFloat(ph.percent) || 0
-                      const amt = newInvTotal() * pct / 100
+                      const total   = newInvTotal()
+                      const pct     = parseFloat(ph.percent) || 0
+                      // Computed display: if amount is entered directly, back-calculate % display
+                      const dispAmt = ph.amount ? parseFloat(ph.amount) : (total * pct / 100)
+                      const dispPct = ph.amount && total > 0
+                        ? (parseFloat(ph.amount) / total * 100).toFixed(1)
+                        : ph.percent
                       return (
-                        <div key={i} className="grid grid-cols-[1fr_64px_96px_108px_28px] gap-2 items-center">
+                        <div key={i} className="grid grid-cols-[1fr_72px_16px_96px_108px_28px] gap-1.5 items-center">
                           {/* Label */}
                           <input
                             value={ph.label}
@@ -1237,21 +1260,37 @@ export default function BillingPage() {
                             placeholder="Label"
                             className="h-8 px-2 text-xs bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
                           />
-                          {/* Percent */}
+                          {/* Percent — edits clear any direct amount */}
                           <div className="relative flex items-center">
                             <input
                               type="number"
                               min="0"
                               max="100"
-                              value={ph.percent}
-                              onChange={e => setPhases(prev => prev.map((p, j) => j === i ? { ...p, percent: e.target.value } : p))}
-                              className="h-8 w-full px-2 pr-4 text-xs bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] text-right"
+                              step="0.1"
+                              value={ph.amount ? dispPct : ph.percent}
+                              onChange={e => setPhases(prev => prev.map((p, j) => j === i
+                                ? { ...p, percent: e.target.value, amount: '' }
+                                : p))}
+                              className={`h-8 w-full px-2 pr-4 text-xs bg-background border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] text-right ${ph.amount ? 'border-[#6B7EFF]/40 text-muted-foreground' : 'border-border'}`}
                             />
                             <span className="absolute right-1.5 text-[10px] text-muted-foreground pointer-events-none">%</span>
                           </div>
-                          {/* Amount (read-only) */}
-                          <div className="h-8 px-2 flex items-center justify-end bg-muted/40 border border-border rounded">
-                            <span className="text-xs font-semibold text-foreground">{fmt(amt)}</span>
+                          {/* OR divider */}
+                          <span className="text-[10px] text-muted-foreground text-center select-none">or</span>
+                          {/* Amount — editable; editing clears percent back-calc */}
+                          <div className="relative flex items-center">
+                            <span className="absolute left-2 text-[10px] text-muted-foreground pointer-events-none">$</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={ph.amount}
+                              placeholder={dispAmt > 0 ? dispAmt.toFixed(2) : '0.00'}
+                              onChange={e => setPhases(prev => prev.map((p, j) => j === i
+                                ? { ...p, amount: e.target.value, percent: '' }
+                                : p))}
+                              className={`h-8 w-full pl-5 pr-2 text-xs bg-background border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] text-right ${ph.amount ? 'border-[#6B7EFF] font-semibold text-foreground' : 'border-border'}`}
+                            />
                           </div>
                           {/* Due date */}
                           <input
@@ -1276,8 +1315,23 @@ export default function BillingPage() {
                     })}
                   </div>
 
-                  {/* Percent total indicator */}
+                  {/* Allocation indicator */}
                   {(() => {
+                    const usingAmounts = phases.some(p => !!p.amount)
+                    if (usingAmounts) {
+                      const totalAmt  = phases.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0)
+                      const invTotal  = newInvTotal()
+                      const diff      = Math.abs(totalAmt - invTotal)
+                      const isOk      = diff < 0.02
+                      return (
+                        <div className={`flex items-center gap-2 text-xs ${isOk ? 'text-emerald-400' : 'text-amber-400'}`}>
+                          {isOk
+                            ? <><Check size={12} /> {fmt(totalAmt)} — fully allocated</>
+                            : <><AlertTriangle size={12} /> {fmt(totalAmt)} allocated of {fmt(invTotal)} total — {diff > 0 ? fmt(diff) + ' remaining' : 'over by ' + fmt(-diff)}</>
+                          }
+                        </div>
+                      )
+                    }
                     const total = phases.reduce((s, p) => s + (parseFloat(p.percent) || 0), 0)
                     const isOk  = Math.round(total) === 100
                     return (
@@ -1293,7 +1347,7 @@ export default function BillingPage() {
                   {/* Add phase button */}
                   <button
                     type="button"
-                    onClick={() => setPhases(prev => [...prev, { label: `Phase ${prev.length + 1}`, percent: '0', due_date: '' }])}
+                    onClick={() => setPhases(prev => [...prev, { label: `Phase ${prev.length + 1}`, percent: '0', amount: '', due_date: '' }])}
                     className="flex items-center gap-1 text-xs text-[#6B7EFF] hover:text-[#5a6ee0] transition-colors"
                   >
                     <Plus size={12} /> Add Phase
