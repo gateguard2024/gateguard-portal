@@ -690,8 +690,10 @@ function TechTool() {
       }
     } else if (res.status === 401) {
       setCodeError(true); setCodeInput('')
+  } else if (res.status === 500) {
+      alert(`Server error — TECH_ACCESS_CODE may not be set in Vercel environment variables. Contact your GateGuard admin.`)
     } else {
-      alert(`Server error (${res.status}) — check Vercel env vars.`)
+      alert(`Unexpected error (${res.status}). Contact your GateGuard admin.`)
     }
   }
 

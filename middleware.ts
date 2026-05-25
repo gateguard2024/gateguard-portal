@@ -23,6 +23,7 @@ function isBypassPath(pathname: string): boolean {
     // so it needs Clerk to run. It accepts EITHER x-tech-code OR a Clerk session.
     (pathname.startsWith('/api/kb/') && !pathname.startsWith('/api/kb/parse-survey-transcript')) ||
     pathname.startsWith('/api/plaud/') ||
+    pathname.startsWith('/api/tech/') ||
     // Client-facing pages — no Clerk session required
     pathname.startsWith('/quotes/') ||
     // Conference landing page — public lead capture
