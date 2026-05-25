@@ -12,7 +12,6 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   timestamp: Date
-  actionConfirmed?: 'todo' | 'todo_completed' | 'work_order' | null
 }
 
 interface Alert {
@@ -29,13 +28,6 @@ const QUICK_PROMPTS = [
   "Show open quotes",
   "Any urgent work orders?",
   "My open leads",
-]
-
-// ─── Action quick prompt chips (shown after first message) ───────────────────
-const ACTION_PROMPTS = [
-  { label: '📝 Add to-do', prompt: 'Create a to-do: ' },
-  { label: '🔧 New work order', prompt: 'Create a work order: ' },
-  { label: '✅ Mark done', prompt: 'Mark to-do as done: ' },
 ]
 
 // ─── Alert icon map ──────────────────────────────────────────────────────────
@@ -215,21 +207,12 @@ export function NexusAssistant() {
           userName: '',
         }),
       })
-      const data = await res.json() as { response?: string; actionsExecuted?: string[] }
-
-      // Derive a single confirmation chip from the first action executed
-      let actionConfirmed: Message['actionConfirmed'] = null
-      const firstAction = data.actionsExecuted?.[0]
-      if (firstAction === 'create_todo') actionConfirmed = 'todo'
-      else if (firstAction === 'complete_todo') actionConfirmed = 'todo_completed'
-      else if (firstAction === 'create_work_order') actionConfirmed = 'work_order'
-
+      const data = await res.json()
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: data.response ?? 'Sorry, I hit an error. Try again.',
         timestamp: new Date(),
-        actionConfirmed,
       }])
     } catch {
       setMessages(prev => [...prev, {
@@ -392,26 +375,7 @@ export function NexusAssistant() {
                     >
                       {msg.role === 'user'
                         ? <span className="text-[13px]">{msg.content}</span>
-                        : (
-                          <>
-                            <AssistantMessage content={msg.content} />
-                            {msg.actionConfirmed === 'todo' && (
-                              <span className="inline-flex items-center gap-1 mt-2 text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">
-                                ✓ To-Do created
-                              </span>
-                            )}
-                            {msg.actionConfirmed === 'todo_completed' && (
-                              <span className="inline-flex items-center gap-1 mt-2 text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">
-                                ✓ To-Do completed
-                              </span>
-                            )}
-                            {msg.actionConfirmed === 'work_order' && (
-                              <span className="inline-flex items-center gap-1 mt-2 text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">
-                                ✓ Work order created
-                              </span>
-                            )}
-                          </>
-                        )
+                        : <AssistantMessage content={msg.content} />
                       }
                     </div>
                   </div>
@@ -430,7 +394,7 @@ export function NexusAssistant() {
                 )}
               </div>
 
-              {/* Quick prompts — shown when chat is empty */}
+              {/* Quick prompts */}
               {messages.length <= 1 && (
                 <div className="shrink-0 px-3 pb-2 flex flex-wrap gap-1.5">
                   {QUICK_PROMPTS.map(p => (
@@ -440,21 +404,6 @@ export function NexusAssistant() {
                       className="text-[11px] bg-slate-50 border border-border rounded-full px-2.5 py-1 hover:bg-[#6B7EFF]/5 hover:border-[#6B7EFF]/30 text-slate-600 hover:text-[#6B7EFF] transition-all"
                     >
                       {p}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Action chips — shown after conversation starts */}
-              {messages.length > 1 && (
-                <div className="shrink-0 px-3 pb-2 flex flex-wrap gap-1.5">
-                  {ACTION_PROMPTS.map(a => (
-                    <button
-                      key={a.label}
-                      onClick={() => setInput(a.prompt)}
-                      className="text-[11px] bg-slate-50 border border-border rounded-full px-2.5 py-1 hover:bg-[#6B7EFF]/5 hover:border-[#6B7EFF]/30 text-slate-600 hover:text-[#6B7EFF] transition-all"
-                    >
-                      {a.label}
                     </button>
                   ))}
                 </div>

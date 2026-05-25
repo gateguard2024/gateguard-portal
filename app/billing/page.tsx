@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useUser } from '@clerk/nextjs'
 import { TopBar } from '@/components/layout/TopBar'
 import { DataTable, Column } from '@/components/ui/DataTable'
 import { SlideOver } from '@/components/ui/SlideOver'
@@ -9,10 +8,10 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import {
   Plus, CheckCircle2, XCircle, AlertTriangle, Clock, FileText,
   TrendingUp, Filter, Search, Download, Send, Eye, RefreshCw,
-  Check, X, Lock,
+  Check, X,
 } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { CreditCard, DollarSign, Building2, Copy, ExternalLink, MoreVertical, ChevronDown, Zap, BookOpen, ArrowUpRight, Shield } = require('lucide-react') as any
+const { CreditCard, DollarSign, Building2, Copy, ExternalLink, MoreVertical, ChevronDown, Zap } = require('lucide-react') as any
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -144,13 +143,7 @@ function StatusBadge({ status, map }: { status: string; map: Record<string, { la
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function BillingPage() {
-  const { user } = useUser()
-  const orgTier = (user?.publicMetadata?.org_tier as string | undefined) ?? ''
-  const role    = (user?.publicMetadata?.role    as string | undefined) ?? ''
-  const isCorporate = orgTier === 'corporate' || role === 'admin'
-  const isDealer    = !isCorporate
-
-  const [tab, setTab] = useState<'invoices' | 'payouts' | 'qb'>('invoices')
+  const [tab, setTab] = useState<'invoices' | 'payouts'>('invoices')
 
   // Invoice state
   const [invoices,    setInvoices]    = useState<Invoice[]>([])
@@ -744,21 +737,17 @@ export default function BillingPage() {
 
         {/* ── Tabs ── */}
         <div className="flex items-center gap-0 border-b border-border">
-          {([
-            { key: 'invoices', label: 'Invoices' },
-            { key: 'payouts',  label: 'Commission Payouts' },
-            { key: 'qb',       label: 'QuickBooks Sync' },
-          ] as const).map(t => (
+          {(['invoices', 'payouts'] as const).map(t => (
             <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                tab === t.key
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors capitalize ${
+                tab === t
                   ? 'border-[#6B7EFF] text-[#6B7EFF]'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
-              {t.label}
+              {t === 'invoices' ? 'Invoices' : 'Commission Payouts'}
             </button>
           ))}
         </div>
@@ -898,266 +887,6 @@ export default function BillingPage() {
                 }
               />
             </div>
-          </div>
-        )}
-
-        {/* ── QuickBooks Sync Tab ── */}
-        {tab === 'qb' && (
-          <div className="space-y-6">
-
-            {/* Privacy banner for corporate users */}
-            {isCorporate && (
-              <div className="flex items-start gap-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3">
-                <Shield size={16} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Corporate Aggregate View</p>
-                  <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
-                    Individual dealer financials are private. You can see volume totals only. Dealers manage their own QB reconciliation.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* QB config banner */}
-            <div className="flex items-start gap-3 bg-card border border-border rounded-xl px-4 py-3">
-              <BookOpen size={16} className="text-muted-foreground flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-sm font-medium">QuickBooks Online — Push Only</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  GateGuard sends invoices to QB. QB never writes back to the portal. Set{' '}
-                  <code className="font-mono text-[10px] bg-muted px-1 py-0.5 rounded">QBO_ACCESS_TOKEN</code>{' '}
-                  +{' '}
-                  <code className="font-mono text-[10px] bg-muted px-1 py-0.5 rounded">QBO_REALM_ID</code>{' '}
-                  in Vercel env vars to activate.
-                </p>
-              </div>
-            </div>
-
-            {/* Corporate: aggregate-only view */}
-            {isCorporate ? (
-              <div className="grid grid-cols-3 gap-4">
-                {(() => {
-                  const synced   = invoices.filter(i => !!i.qb_invoice_id)
-                  const unsynced = invoices.filter(i => !i.qb_invoice_id)
-                  const syncedAmt   = synced.reduce((s, i) => s + (i.total ?? 0), 0)
-                  const unsyncedAmt = unsynced.reduce((s, i) => s + (i.total ?? 0), 0)
-                  return (
-                    <>
-                      <div className="bg-card border border-border rounded-xl p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Synced to QB</p>
-                          <CheckCircle2 size={14} className="text-emerald-400" />
-                        </div>
-                        <p className="text-2xl font-bold text-emerald-400">{synced.length}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{fmt(syncedAmt)} total volume</p>
-                      </div>
-                      <div className="bg-card border border-border rounded-xl p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pending Sync</p>
-                          <Clock size={14} className="text-amber-400" />
-                        </div>
-                        <p className="text-2xl font-bold text-amber-400">{unsynced.length}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{fmt(unsyncedAmt)} outstanding</p>
-                      </div>
-                      <div className="bg-card border border-border rounded-xl p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Sync Rate</p>
-                          <TrendingUp size={14} className="text-[#6B7EFF]" />
-                        </div>
-                        <p className="text-2xl font-bold text-[#6B7EFF]">
-                          {invoices.length > 0 ? Math.round((synced.length / invoices.length) * 100) : 0}%
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">of all portal invoices</p>
-                      </div>
-                    </>
-                  )
-                })()}
-              </div>
-            ) : (
-              /* Dealer: full reconciliation table */
-              <div className="space-y-4">
-                {/* Summary stats */}
-                <div className="grid grid-cols-3 gap-4">
-                  {(() => {
-                    const synced   = invoices.filter(i => !!i.qb_invoice_id)
-                    const unsynced = invoices.filter(i => !i.qb_invoice_id && i.status !== 'draft' && i.status !== 'void')
-                    const drafts   = invoices.filter(i => i.status === 'draft')
-                    return (
-                      <>
-                        <div className="bg-card border border-border rounded-xl p-4">
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                            <p className="text-xs font-medium text-muted-foreground">In QuickBooks</p>
-                          </div>
-                          <p className="text-xl font-bold">{synced.length}</p>
-                          <p className="text-xs text-muted-foreground mt-1">{fmt(synced.reduce((s, i) => s + (i.total ?? 0), 0))}</p>
-                        </div>
-                        <div className="bg-card border border-border rounded-xl p-4">
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className="w-2 h-2 rounded-full bg-amber-400" />
-                            <p className="text-xs font-medium text-muted-foreground">Ready to Push</p>
-                          </div>
-                          <p className="text-xl font-bold">{unsynced.length}</p>
-                          <p className="text-xs text-muted-foreground mt-1">{fmt(unsynced.reduce((s, i) => s + (i.total ?? 0), 0))}</p>
-                        </div>
-                        <div className="bg-card border border-border rounded-xl p-4">
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className="w-2 h-2 rounded-full bg-slate-400" />
-                            <p className="text-xs font-medium text-muted-foreground">Draft (not pushed)</p>
-                          </div>
-                          <p className="text-xl font-bold">{drafts.length}</p>
-                          <p className="text-xs text-muted-foreground mt-1">Finalize to push</p>
-                        </div>
-                      </>
-                    )
-                  })()}
-                </div>
-
-                {/* Reconciliation table */}
-                <div className="bg-card border border-border rounded-xl overflow-hidden">
-                  <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-                    <p className="text-sm font-semibold">Reconciliation — Portal Invoices vs QuickBooks</p>
-                    <span className="text-xs text-muted-foreground">Push only · Never reads from QB · Duplicate-safe</span>
-                  </div>
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/30">
-                        <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Invoice #</th>
-                        <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Property / Client</th>
-                        <th className="text-right px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Amount</th>
-                        <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Date</th>
-                        <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Portal Status</th>
-                        <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">QB Status</th>
-                        <th className="px-5 py-2.5" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {invLoading ? (
-                        Array.from({ length: 5 }).map((_, i) => (
-                          <tr key={i} className="border-b border-border last:border-0">
-                            {Array.from({ length: 7 }).map((_, j) => (
-                              <td key={j} className="px-5 py-3">
-                                <div className="h-4 bg-muted rounded animate-pulse" />
-                              </td>
-                            ))}
-                          </tr>
-                        ))
-                      ) : invoices.filter(i => i.status !== 'void').length === 0 ? (
-                        <tr>
-                          <td colSpan={7} className="text-center py-12 text-muted-foreground text-sm">
-                            No invoices to reconcile
-                          </td>
-                        </tr>
-                      ) : (
-                        invoices
-                          .filter(i => i.status !== 'void')
-                          .sort((a, b) => {
-                            // Unsyced non-drafts first
-                            const aReady = !a.qb_invoice_id && a.status !== 'draft'
-                            const bReady = !b.qb_invoice_id && b.status !== 'draft'
-                            if (aReady && !bReady) return -1
-                            if (!aReady && bReady) return 1
-                            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                          })
-                          .map(inv => {
-                            const synced   = !!inv.qb_invoice_id
-                            const isDraft  = inv.status === 'draft'
-                            const isLoading = actionLoading[`qb-${inv.id}`]
-                            return (
-                              <tr key={inv.id} className={`border-b border-border last:border-0 hover:bg-muted/20 transition-colors ${synced ? 'opacity-70' : ''}`}>
-                                <td className="px-5 py-3">
-                                  <span className="font-mono text-[#6B7EFF] text-xs">{inv.invoice_number}</span>
-                                </td>
-                                <td className="px-5 py-3 text-sm text-foreground">
-                                  {inv.client_name ?? inv.site_name ?? '—'}
-                                </td>
-                                <td className="px-5 py-3 text-right text-sm font-semibold">{fmt(inv.total)}</td>
-                                <td className="px-5 py-3 text-xs text-muted-foreground">{fmtDate(inv.issue_date)}</td>
-                                <td className="px-5 py-3">
-                                  <StatusBadge status={inv.status} map={INV_STATUS} />
-                                </td>
-                                <td className="px-5 py-3">
-                                  {synced ? (
-                                    <div>
-                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-400">
-                                        <CheckCircle2 size={10} />
-                                        In QB
-                                      </span>
-                                      {inv.qb_synced_at && (
-                                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                                          {new Date(inv.qb_synced_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                        </p>
-                                      )}
-                                      {inv.qb_invoice_id && (
-                                        <p className="text-[10px] font-mono text-muted-foreground">ID: {inv.qb_invoice_id}</p>
-                                      )}
-                                    </div>
-                                  ) : isDraft ? (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-500/10 text-slate-400">
-                                      <FileText size={10} />
-                                      Draft — finalize first
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/10 text-amber-400">
-                                      <Clock size={10} />
-                                      Not yet pushed
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="px-5 py-3 text-right">
-                                  {!synced && !isDraft ? (
-                                    <button
-                                      onClick={e => qbSync(inv, e)}
-                                      disabled={isLoading}
-                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#6B7EFF] hover:bg-[#5a6ee0] text-white transition-colors disabled:opacity-50"
-                                      title="Push this invoice to QuickBooks — safe to click, will not create duplicates"
-                                    >
-                                      <ArrowUpRight size={11} />
-                                      {isLoading ? 'Pushing…' : 'Push to QB'}
-                                    </button>
-                                  ) : synced ? (
-                                    <span className="text-xs text-muted-foreground italic">Synced ✓</span>
-                                  ) : (
-                                    <span className="text-xs text-muted-foreground italic">—</span>
-                                  )}
-                                </td>
-                              </tr>
-                            )
-                          })
-                      )}
-                    </tbody>
-                    {!invLoading && invoices.length > 0 && (
-                      <tfoot>
-                        <tr className="bg-muted/30 border-t border-border">
-                          <td colSpan={2} className="px-5 py-2.5 text-xs font-semibold text-muted-foreground">
-                            {invoices.filter(i => i.status !== 'void').length} invoices
-                          </td>
-                          <td className="px-5 py-2.5 text-right text-xs font-semibold">
-                            {fmt(invoices.filter(i => i.status !== 'void').reduce((s, i) => s + (i.total ?? 0), 0))}
-                          </td>
-                          <td colSpan={3} />
-                          <td className="px-5 py-2.5 text-right">
-                            <span className="text-xs text-emerald-400 font-medium">
-                              {invoices.filter(i => !!i.qb_invoice_id).length} synced
-                            </span>
-                          </td>
-                        </tr>
-                      </tfoot>
-                    )}
-                  </table>
-                </div>
-
-                {/* Duplicate safety note */}
-                <div className="flex items-start gap-3 bg-muted/30 rounded-xl px-4 py-3 text-xs text-muted-foreground">
-                  <Lock size={13} className="flex-shrink-0 mt-0.5 text-muted-foreground" />
-                  <span>
-                    <strong className="text-foreground">Duplicate-safe:</strong> Once an invoice is pushed, the QB Invoice ID is stored in the portal.
-                    Pushing again will update (not duplicate) using QB&apos;s sparse update API. Invoices already in QB show <em>Synced ✓</em> — the push button is disabled for them.
-                  </span>
-                </div>
-              </div>
-            )}
-
           </div>
         )}
 

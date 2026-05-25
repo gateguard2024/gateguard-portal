@@ -19,10 +19,6 @@ interface Incident {
   status: IncidentStatus
   reported_by: string | null
   site_id: string | null
-  source: 'manual' | 'soc_alarm' | 'soc_patrol' | null
-  soc_priority: string | null
-  soc_operator: string | null
-  soc_action: string | null
   created_at: string
   updated_at: string
 }
@@ -49,22 +45,6 @@ const TABS: Array<{ key: TabKey; label: string }> = [
   { key: 'medium',   label: 'Medium'   },
   { key: 'low',      label: 'Low'      },
 ]
-
-/* ─── Source badge ───────────────────────────────────────────── */
-function SourceBadge({ source }: { source: Incident['source'] }) {
-  if (!source || source === 'manual') return null
-  if (source === 'soc_alarm') return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 border border-red-200">
-      🚨 SOC Alarm
-    </span>
-  )
-  if (source === 'soc_patrol') return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-200">
-      🔍 SOC Patrol
-    </span>
-  )
-  return null
-}
 
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime()
@@ -326,7 +306,6 @@ export default function IncidentsPage() {
               <tr className="border-b border-slate-200 bg-slate-50">
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Date</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Title</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Source</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Severity</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Reported By</th>
@@ -339,19 +318,13 @@ export default function IncidentsPage() {
                 return (
                   <tr key={inc.id} className="hover:bg-slate-50 transition-colors cursor-pointer">
                     <td className="px-4 py-3.5 text-xs text-slate-500 whitespace-nowrap">{timeAgo(inc.created_at)}</td>
-                    <td className="px-4 py-3.5 max-w-xs">
+                    <td className="px-4 py-3.5">
                       <div>
                         <span className="font-medium text-slate-700 text-sm">{inc.title}</span>
                         {inc.description && (
                           <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">{inc.description}</p>
                         )}
                       </div>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <SourceBadge source={inc.source} />
-                      {(!inc.source || inc.source === 'manual') && (
-                        <span className="text-xs text-slate-400">Manual</span>
-                      )}
                     </td>
                     <td className="px-4 py-3.5">
                       <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${sevCfg.bg} ${sevCfg.color}`}>

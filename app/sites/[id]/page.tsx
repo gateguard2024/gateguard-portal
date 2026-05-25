@@ -8,10 +8,9 @@ import {
   Plus, Shield, Activity, ClipboardList, Package,
   CheckCircle2, AlertTriangle, XCircle, Wifi, WifiOff,
   Key, FileText, Trash2, RefreshCw, Copy, ExternalLink, X, Search,
-  Save, Loader2,
 } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Inbox, Edit3, Edit2, RotateCcw } = require('lucide-react') as any
+const { Inbox, Edit3, Edit2, RotateCcw, Save, Loader2 } = require('lucide-react') as any
 import { QuickActions } from '@/components/shared/QuickActions'
 
 /* ─── types ──────────────────────────────────────────── */

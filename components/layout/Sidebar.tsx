@@ -15,7 +15,7 @@ import {
   ClipboardCheck, Building2, DollarSign,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, Tv: Satellite, Flame, Hash, Ruler, PenTool, MousePointer, FileSignature, HardHat, Trophy, Store, BookMarked, Radar, Hammer } = require("lucide-react") as any;
+const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, Tv: Satellite, Flame, Hash, Ruler, PenTool, MousePointer, FileSignature, HardHat, Trophy } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useUser, useClerk, useSession } from "@clerk/nextjs";
@@ -42,7 +42,7 @@ type NavSection = {
 
 // ─── Navigation Architecture ──────────────────────────────────────────────────
 // 8 primary sections matching the sketch: Dashboard · Operations · Field & Tech
-// Security · Dealer Network · AI Army · Money · Settings
+// Security · Dealer Network · Intelligence · Money · Settings
 
 const NAV_SECTIONS: NavSection[] = [
   {
@@ -56,7 +56,7 @@ const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "operations",
-    label: "Business",
+    label: "Operations",
     icon: ClipboardList,
     items: [
       { label: "CRM",              href: "/crm",       icon: MessageSquare,  description: "Leads, opportunities, pipeline" },
@@ -85,7 +85,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Site Survey",    href: "/survey",      icon: ClipboardCheck, description: "Site walk and proposal builder" },
       { label: "Documents",      href: "/documents",   icon: FolderOpen,     description: "Agreements, permits, manuals" },
       { label: "Reports",        href: "/reports",     icon: BarChart3Icon,  description: "Multi-site rollup" },
-      { label: "Subcontractors", href: "/subcontractors", icon: Users,         description: "Manage subcontractors, compliance & WO access" },
+      { label: "Subcontractor",  href: "/subcontractor", icon: HardHat,      description: "Subcontractor work orders and docs" },
     ],
   },
   {
@@ -125,23 +125,16 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Quests",           href: "/quests",        icon: Trophy,       description: "Time-boxed challenges and tier points", badge: "New" },
       { label: "Reviews",           href: "/reviews",      icon: Star,         description: "Post-WO ratings and Google reviews" },
       { label: "Training",         href: "/training",      icon: GraduationCap,description: "Courses and certifications" },
-      { label: "Playbooks",        href: "/playbooks",     icon: ClipboardList, description: "Deployment checklists + dev lifecycle tracker" },
     ],
   },
   {
-    key: "ai-army",
-    label: "AI Army",
+    key: "intelligence",
+    label: "Intelligence",
     icon: Zap,
     color: "#6B7EFF",
     items: [
-      { label: "ARIA — Lead Intel",   href: "/aria",       icon: Crosshair,      description: "AI lead research and outreach",     badge: "AI" },
-      { label: "SCOUT — Market Intel", href: "/scout",    icon: Radar,          description: "Territory scanning and competitor intel", badge: "AI" },
+      { label: "ARIA — Lead Intel",  href: "/aria",       icon: Crosshair,      description: "AI lead research and outreach",     badge: "AI" },
       { label: "TRINITY — Voice AI", href: "/trinity",    icon: Phone,          description: "Voice agent + call analytics",      badge: "AI" },
-      { label: "ATLAS — DirecTV AI", href: "/atlas",      icon: Network,        description: "DirecTV channel AI and MDU automation", badge: "AI" },
-      { label: "CONCIERGE",          href: "/concierge",  icon: Users,          description: "Client-facing AI concierge",        badge: "AI" },
-      { label: "SAGE — Training AI", href: "/sage",       icon: BookOpen,       description: "Adaptive training intelligence",    badge: "AI" },
-      { label: "FORGE — Quote AI",   href: "/forge",      icon: Hammer,         description: "AI-powered quote builder",          badge: "AI" },
-      { label: "RELAY — Support AI", href: "/relay",      icon: Headphones,     description: "Tier-1 support automation",         badge: "AI" },
       { label: "DirecTV / ATLAS",    href: "/directv",    icon: Satellite,      description: "DirecTV channel and orders" },
       { label: "New Order",          href: "/orders/new", icon: Zap,            description: "Submit a DirecTV order" },
       { label: "SARA Bridge",        href: "/migrate",    icon: ArrowRightLeft, description: "Migrate from SARA Plus" },
@@ -156,14 +149,12 @@ const NAV_SECTIONS: NavSection[] = [
     icon: DollarSign,
     color: "#059669",
     items: [
-      { label: "Service Marketplace",  href: "/services",            icon: Package,      description: "TV, internet, video monitoring & more", badge: "New" },
-      { label: "Billing",            href: "/billing",             icon: CreditCard,   description: "Invoices and payments" },
-      { label: "Revenue",            href: "/revenue",             icon: TrendingUp,   description: "MRR/ARR dashboard" },
-      { label: "Reps & Commissions", href: "/reps",                icon: UserCheck,    description: "Rep hierarchy and payouts" },
-      { label: "Renewals",           href: "/renewals",            icon: Repeat,       description: "Contract renewals and alerts" },
-      { label: "Contracts",          href: "/contracts",           icon: FileCheck,    description: "Contract storage" },
-      { label: "Vendors",            href: "/vendors",             icon: Store,        description: "Suppliers, subcontractors, AP" },
-      { label: "Chart of Accounts",  href: "/chart-of-accounts",  icon: BookMarked,   description: "General ledger accounts" },
+      { label: "Service Marketplace",  href: "/services", icon: Package,      description: "TV, internet, video monitoring & more", badge: "New" },
+      { label: "Billing",            href: "/billing",  icon: CreditCard,   description: "Invoices and payments" },
+      { label: "Revenue",            href: "/revenue",  icon: TrendingUp,   description: "MRR/ARR dashboard" },
+      { label: "Reps & Commissions", href: "/reps",     icon: UserCheck,    description: "Rep hierarchy and payouts" },
+      { label: "Renewals",           href: "/renewals", icon: Repeat,       description: "Contract renewals and alerts" },
+      { label: "Contracts",          href: "/contracts",icon: FileCheck,    description: "Contract storage" },
     ],
   },
   {
@@ -192,14 +183,14 @@ const integrations = [
 ];
 
 const aiAgents = [
-  { name: "ARIA",      role: "Lead Intel",     color: "#6B7EFF", active: true,  href: "/aria" },
-  { name: "TRINITY",   role: "Voice",          color: "#0B7285", active: true,  href: "/trinity" },
-  { name: "SCOUT",     role: "Market",         color: "#7C3AED", active: true,  href: "/scout" },
-  { name: "ATLAS",     role: "DirecTV",        color: "#3B5BDB", active: true,  href: "/atlas" },
-  { name: "CONCIERGE", role: "Client Comms",   color: "#0891B2", active: true,  href: "/concierge" },
-  { name: "SAGE",      role: "Training",       color: "#15803D", active: true,  href: "/sage" },
-  { name: "FORGE",     role: "Quote Builder",  color: "#0B7285", active: true,  href: "/forge" },
-  { name: "RELAY",     role: "Tier-1 Support", color: "#E11D48", active: true,  href: "/relay" },
+  { name: "ARIA",    role: "Lead Intel",     color: "#6B7EFF", active: true,  href: "/aria" },
+  { name: "TRINITY", role: "Voice",          color: "#0B7285", active: true,  href: "/trinity" },
+  { name: "SCOUT",   role: "Market",         color: "#7C3AED", active: true,  href: null },
+  { name: "BEACON",  role: "Client Comms",   color: "#B45309", active: false, href: null },
+  { name: "FORGE",   role: "Quote Builder",  color: "#0B7285", active: true,  href: null },
+  { name: "ATLAS",   role: "DirecTV",        color: "#3B5BDB", active: true,  href: "/directv" },
+  { name: "SAGE",    role: "Training",       color: "#15803D", active: false, href: null },
+  { name: "RELAY",   role: "Tier-1 Support", color: "#6B7EFF", active: false, href: null },
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -267,7 +258,7 @@ export function Sidebar() {
   const showFinancials   = isCorporate || isMasterAgent || isMasterDealer || isFullDealer || isAdminRole;
   const showCompliance   = isCorporate || isMasterDealer || isFullDealer || isServiceDealer;
   const showSecurity     = isCorporate || isMasterDealer || isFullDealer;
-  const showAiArmy       = isCorporate || isMasterDealer || isFullDealer || isMasterAgent;
+  const showIntelligence = isCorporate || isMasterDealer || isFullDealer || isMasterAgent;
   const showDesign       = isCorporate || isMasterDealer || isFullDealer || isInstallContractor || isServiceDealer;
 
   const activeAgentCount = aiAgents.filter(a => a.active).length;
@@ -419,7 +410,7 @@ export function Sidebar() {
               AI Army
             </span>
             <span className="ml-auto text-[10px] font-semibold" style={{ color: "#6B7EFF" }}>
-              {activeAgentCount}/{aiAgents.length}
+              {activeAgentCount}/8
             </span>
             <ChevronDown
               size={10}
@@ -475,13 +466,13 @@ export function Sidebar() {
           if (section.key === "design"       && !showDesign)      return null;
           if (section.key === "security"     && !showSecurity)    return null;
           if (section.key === "dealer"       && !showNetwork)     return null;
-          if (section.key === "ai-army"      && !showAiArmy)      return null;
+          if (section.key === "intelligence" && !showIntelligence)return null;
           if (section.key === "money"        && !showFinancials)  return null;
           if (section.key === "settings"     && !showAdmin && !isCorporate && !isMasterDealer && !isFullDealer) return null;
           // Install contractor: hide CRM-heavy and financial sections
           if (isInstallContractor && section.key === "operations")  return null;
           if (isInstallContractor && section.key === "dealer")      return null;
-          if (isInstallContractor && section.key === "ai-army")       return null;
+          if (isInstallContractor && section.key === "intelligence") return null;
           if (isInstallContractor && section.key === "money")       return null;
 
           const SectionIcon = section.icon;
@@ -568,16 +559,14 @@ export function Sidebar() {
                 <div className="mt-0.5 ml-3 pl-3 border-l border-white/8 space-y-0.5 pb-1">
                   {section.items.map(item => {
                     // Item-level tier gates
-                    if (item.href === "/subcontractors" && !isInstallContractor && !isCorporate && !isMasterDealer && !isFullDealer) return null;
+                    if (item.href === "/subcontractor" && !isInstallContractor && !isCorporate) return null;
                     if (item.href === "/crm"           && !showCRM)        return null;
                     if (item.href === "/customers"     && !showOperations) return null;
                     if (item.href === "/quotes"        && !showQuotes)     return null;
-                    if (item.href === "/billing"             && !showFinancials) return null;
-                    if (item.href === "/renewals"            && !showFinancials) return null;
-                    if (item.href === "/revenue"             && !showFinancials) return null;
-                    if (item.href === "/contracts"           && !showFinancials) return null;
-                    if (item.href === "/vendors"             && !showFinancials) return null;
-                    if (item.href === "/chart-of-accounts"   && !showFinancials) return null;
+                    if (item.href === "/billing"       && !showFinancials) return null;
+                    if (item.href === "/renewals"      && !showFinancials) return null;
+                    if (item.href === "/revenue"       && !showFinancials) return null;
+                    if (item.href === "/contracts"     && !showFinancials) return null;
                     if (item.href === "/reps"          && !showCommissions)return null;
                     if (item.href === "/sites"         && !showSites)      return null;
                     if (item.href === "/maintenance"   && !showWOs)        return null;

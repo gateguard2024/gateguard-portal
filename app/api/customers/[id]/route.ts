@@ -95,35 +95,3 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }
-
-export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
-  // Check for child orgs or sites — soft-delete only if they exist
-  const { count: childCount } = await supabase
-    .from('organizations')
-    .select('id', { count: 'exact', head: true })
-    .eq('parent_org_id', params.id)
-    .eq('is_active', true)
-
-  const { count: siteCount } = await supabase
-    .from('sites')
-    .select('id', { count: 'exact', head: true })
-    .eq('org_id', params.id)
-
-  if ((childCount ?? 0) > 0 || (siteCount ?? 0) > 0) {
-    // Soft-delete: mark inactive
-    const { error } = await supabase
-      .from('organizations')
-      .update({ is_active: false, updated_at: new Date().toISOString() })
-      .eq('id', params.id)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ deleted: false, deactivated: true, reason: 'Has active children or sites — marked inactive' })
-  }
-
-  // Hard delete (no children, no sites)
-  const { error } = await supabase
-    .from('organizations')
-    .delete()
-    .eq('id', params.id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ deleted: true })
-}
