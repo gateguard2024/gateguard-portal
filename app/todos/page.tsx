@@ -54,39 +54,15 @@ interface SearchResult {
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const PRIORITY_CONFIG = {
-  high:   {
-    label: "High",   color: "text-red-500",    bg: "bg-red-50 dark:bg-red-950/30",
-    border: "border-red-100 dark:border-red-900/60",
-    stripe: "border-l-red-400",
-    checkBorder: "border-red-300 hover:border-red-400 hover:bg-red-50",
-    checkActive: "border-red-500 bg-red-500",
-    groupDot: "bg-red-400",
-    groupText: "text-red-600 dark:text-red-400",
-    groupBg: "bg-red-50/80 dark:bg-red-950/20",
-    groupBorder: "border-red-100 dark:border-red-900/40",
-  },
-  normal: {
-    label: "Normal", color: "text-amber-600 dark:text-amber-400",  bg: "bg-amber-50 dark:bg-amber-950/30",
-    border: "border-amber-100 dark:border-amber-900/60",
-    stripe: "border-l-amber-400",
-    checkBorder: "border-amber-300 hover:border-amber-400 hover:bg-amber-50",
-    checkActive: "border-amber-500 bg-amber-500",
-    groupDot: "bg-amber-400",
-    groupText: "text-amber-700 dark:text-amber-400",
-    groupBg: "bg-amber-50/80 dark:bg-amber-950/20",
-    groupBorder: "border-amber-100 dark:border-amber-900/40",
-  },
-  low:    {
-    label: "Low",    color: "text-slate-400",  bg: "bg-slate-50 dark:bg-slate-900/30",
-    border: "border-slate-100 dark:border-slate-800",
-    stripe: "border-l-slate-300",
-    checkBorder: "border-slate-300 hover:border-slate-400 hover:bg-slate-50",
-    checkActive: "border-slate-400 bg-slate-400",
-    groupDot: "bg-slate-300",
-    groupText: "text-slate-500",
-    groupBg: "bg-slate-50/60 dark:bg-slate-900/20",
-    groupBorder: "border-slate-100 dark:border-slate-800",
-  },
+  high:   { label: "High",   pill: "bg-rose-100 text-rose-700",    dot: "bg-rose-400" },
+  normal: { label: "Normal", pill: "bg-sky-100 text-sky-700",      dot: "bg-sky-400" },
+  low:    { label: "Low",    pill: "bg-slate-100 text-slate-500",  dot: "bg-slate-300" },
+};
+
+const STATUS_CONFIG = {
+  open:        { label: "Open",        emoji: "📬", pill: "bg-slate-100 text-slate-600" },
+  in_progress: { label: "In Progress", emoji: "🚀", pill: "bg-blue-100 text-blue-700" },
+  done:        { label: "Done",        emoji: "✅", pill: "bg-emerald-100 text-emerald-700" },
 };
 
 const LINKED_TYPES = [
@@ -501,221 +477,271 @@ function TodoSlideOver({
   );
 }
 
-// ─── Priority Group Header ────────────────────────────────────────────────────
+// ─── Table Group Header ───────────────────────────────────────────────────────
 
-function PriorityGroupHeader({
-  priority,
+function GroupHeader({
+  label,
   count,
+  dot,
   collapsed,
   onToggle,
 }: {
-  priority: "high" | "normal" | "low";
+  label: string;
   count: number;
+  dot: string;
   collapsed: boolean;
   onToggle: () => void;
 }) {
-  const cfg = PRIORITY_CONFIG[priority];
   return (
     <button
       onClick={onToggle}
-      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border ${cfg.groupBg} ${cfg.groupBorder} transition-colors hover:brightness-95`}
+      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-accent/40 transition-colors rounded-lg group/gh"
     >
-      <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${cfg.groupDot}`} />
-      <span className={`text-xs font-bold uppercase tracking-wide ${cfg.groupText}`}>{cfg.label}</span>
-      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${cfg.bg} ${cfg.groupText} border ${cfg.groupBorder}`}>
-        {count}
-      </span>
       <ChevronDown
         size={13}
-        className={`ml-auto ${cfg.groupText} transition-transform duration-200 ${collapsed ? "-rotate-90" : ""}`}
+        className={`text-muted-foreground transition-transform duration-200 ${collapsed ? "-rotate-90" : ""}`}
       />
+      <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
+      <span className="text-xs font-bold text-foreground">{label}</span>
+      <span className="ml-1 text-[11px] font-semibold text-muted-foreground bg-accent px-1.5 py-0.5 rounded-full">
+        {count}
+      </span>
     </button>
   );
 }
 
-// ─── Todo Row ─────────────────────────────────────────────────────────────────
+// ─── Todo Row (table-style) ───────────────────────────────────────────────────
 
 function TodoRow({
   todo,
   onToggleDone,
   onDelete,
+  onStatusChange,
   onPriorityChange,
   onClick,
 }: {
   todo: Todo;
   onToggleDone: (id: string, done: boolean) => void;
   onDelete: (id: string) => void;
+  onStatusChange: (id: string, status: Todo["status"]) => void;
   onPriorityChange: (id: string, priority: "high" | "normal" | "low") => void;
   onClick: (todo: Todo) => void;
 }) {
+  const [showStatusMenu,   setShowStatusMenu]   = useState(false);
   const [showPriorityMenu, setShowPriorityMenu] = useState(false);
   const isDone    = todo.status === "done";
   const dueLabel  = dueDateLabel(todo.due_date);
   const pCfg      = PRIORITY_CONFIG[todo.priority];
+  const sCfg      = STATUS_CONFIG[todo.status] ?? STATUS_CONFIG.open;
   const recurring = todo.recurrence_type && todo.recurrence_type !== "none";
   const hasAttach = (todo.todo_attachments?.length ?? 0) > 0;
 
   return (
     <div
-      className={`group flex items-start gap-3 pl-3 pr-4 py-3 rounded-r-xl rounded-l-none border-l-4 border border-r border-t border-b transition-all cursor-pointer ${
-        isDone
-          ? "border-l-emerald-400 border-border/40 bg-card/40 opacity-55 hover:opacity-70"
-          : `${pCfg.stripe} ${pCfg.border} ${pCfg.bg} hover:shadow-sm hover:brightness-[0.98]`
-      }`}
+      className={`group grid items-center border-b border-border/50 last:border-0 transition-colors cursor-pointer hover:bg-accent/30 ${isDone ? "opacity-55" : ""}`}
+      style={{ gridTemplateColumns: "28px 1fr 148px 96px 108px 36px 28px" }}
       onClick={() => onClick(todo)}
     >
-      {/* Priority-colored checkbox */}
-      <button
-        onClick={e => { e.stopPropagation(); onToggleDone(todo.id, !isDone); }}
-        className={`mt-0.5 w-5 h-5 shrink-0 rounded-full border-2 flex items-center justify-center transition-all ${
-          isDone
-            ? "border-emerald-400 bg-emerald-400"
-            : pCfg.checkBorder
-        }`}
-      >
-        {isDone && <Check size={10} className="text-white" strokeWidth={3} />}
-      </button>
+      {/* Checkbox */}
+      <div className="flex items-center justify-center">
+        <button
+          onClick={e => { e.stopPropagation(); onToggleDone(todo.id, !isDone); }}
+          className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 ${
+            isDone ? "!opacity-100 border-emerald-400 bg-emerald-400" : "border-border hover:border-brand-400"
+          }`}
+        >
+          {isDone && <Check size={9} className="text-white" strokeWidth={3} />}
+        </button>
+      </div>
 
-      {/* Content */}
-      <div className="flex-1 min-w-0">
-        <p className={`text-sm font-semibold leading-snug ${isDone ? "line-through text-muted-foreground" : "text-foreground"}`}>
+      {/* Title + inline chips */}
+      <div className="flex items-center gap-2 py-2.5 pr-2 min-w-0">
+        <span className={`text-sm font-medium leading-snug truncate ${isDone ? "line-through text-muted-foreground" : "text-foreground"}`}>
           {todo.title}
-        </p>
-        {todo.body && (
-          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{todo.body}</p>
+        </span>
+        {/* Inline tag chips */}
+        {todo.linked_label && (
+          <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-brand-400/10 text-brand-400">
+            <Link2 size={8} />{todo.linked_label}
+          </span>
         )}
-        <div className="flex flex-wrap items-center gap-2 mt-1.5">
-          {/* Priority chip — only visible on hover or done rows */}
-          <div className="relative" onClick={e => e.stopPropagation()}>
-            <button
-              onClick={() => setShowPriorityMenu(v => !v)}
-              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border transition-opacity ${
-                isDone ? "opacity-60" : "opacity-0 group-hover:opacity-100"
-              } ${pCfg.bg} ${pCfg.color} ${pCfg.border}`}
-            >
-              <Flag size={8} />
-              {pCfg.label}
-              <ChevronDown size={8} />
-            </button>
-            {showPriorityMenu && (
-              <div className="absolute z-20 top-full left-0 mt-1 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[110px]">
-                {(["high", "normal", "low"] as const).map(p => (
-                  <button
-                    key={p}
-                    onClick={() => { onPriorityChange(todo.id, p); setShowPriorityMenu(false); }}
-                    className="w-full text-left px-3 py-2 text-xs hover:bg-accent transition-colors flex items-center gap-2"
-                  >
-                    <span className={`w-2 h-2 rounded-full ${PRIORITY_CONFIG[p].groupDot}`} />
-                    <span className={PRIORITY_CONFIG[p].color}>{PRIORITY_CONFIG[p].label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+        {recurring && (
+          <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-100 text-violet-600">
+            <Repeat size={8} />{todo.recurrence_type}
+          </span>
+        )}
+        {hasAttach && (
+          <span className="shrink-0 inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+            <Paperclip size={9} />{todo.todo_attachments!.length}
+          </span>
+        )}
+      </div>
 
-          {dueLabel && (
-            <span className={`inline-flex items-center gap-1 text-[10px] font-medium ${dueLabel.color}`}>
-              <Clock3 size={9} />{dueLabel.text}
-            </span>
-          )}
-          {todo.assigned_to_name && (
-            <span className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground">
-              <span className="w-4 h-4 rounded-full bg-brand-400/20 text-brand-400 flex items-center justify-center text-[8px] font-bold">
-                {todo.assigned_to_name[0]?.toUpperCase()}
-              </span>
-              {todo.assigned_to_name}
-            </span>
-          )}
-          {todo.linked_label && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-brand-400/80 font-medium">
-              <Link2 size={9} />{todo.linked_label}
-            </span>
-          )}
-          {recurring && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-violet-500">
-              <Repeat size={9} />
-              {todo.recurrence_type}
-            </span>
-          )}
-          {hasAttach && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-              <Paperclip size={9} />{todo.todo_attachments!.length}
-            </span>
-          )}
-        </div>
+      {/* Status */}
+      <div className="relative" onClick={e => e.stopPropagation()}>
+        <button
+          onClick={() => setShowStatusMenu(v => !v)}
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all hover:ring-2 hover:ring-offset-1 hover:ring-brand-400/30 ${sCfg.pill}`}
+        >
+          <span>{sCfg.emoji}</span>
+          {sCfg.label}
+          <ChevronDown size={9} className="opacity-60" />
+        </button>
+        {showStatusMenu && (
+          <div className="absolute z-30 top-full left-0 mt-1 bg-popover border border-border rounded-xl shadow-xl py-1 min-w-[160px]">
+            {(["open", "in_progress", "done"] as const).map(s => {
+              const sc = STATUS_CONFIG[s];
+              return (
+                <button
+                  key={s}
+                  onClick={() => { onStatusChange(todo.id, s); setShowStatusMenu(false); }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-accent transition-colors flex items-center gap-2.5"
+                >
+                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${sc.pill}`}>
+                    {sc.emoji} {sc.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Priority */}
+      <div className="relative" onClick={e => e.stopPropagation()}>
+        <button
+          onClick={() => setShowPriorityMenu(v => !v)}
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all hover:ring-2 hover:ring-offset-1 hover:ring-brand-400/30 ${pCfg.pill}`}
+        >
+          <span className={`w-2 h-2 rounded-full ${pCfg.dot}`} />
+          {pCfg.label}
+        </button>
+        {showPriorityMenu && (
+          <div className="absolute z-30 top-full left-0 mt-1 bg-popover border border-border rounded-xl shadow-xl py-1 min-w-[120px]">
+            {(["high", "normal", "low"] as const).map(p => {
+              const pc = PRIORITY_CONFIG[p];
+              return (
+                <button
+                  key={p}
+                  onClick={() => { onPriorityChange(todo.id, p); setShowPriorityMenu(false); }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-accent transition-colors flex items-center gap-2"
+                >
+                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${pc.pill}`}>
+                    <span className={`w-2 h-2 rounded-full ${pc.dot}`} />{pc.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Due date */}
+      <div className="text-xs pr-2">
+        {dueLabel ? (
+          <span className={`font-medium ${dueLabel.color}`}>{dueLabel.text}</span>
+        ) : (
+          <span className="text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity">—</span>
+        )}
+      </div>
+
+      {/* Assignee avatar */}
+      <div className="flex items-center justify-center">
+        {todo.assigned_to_name ? (
+          <span
+            className="w-7 h-7 rounded-full bg-brand-400 text-white flex items-center justify-center text-[10px] font-bold uppercase shrink-0"
+            title={todo.assigned_to_name}
+          >
+            {todo.assigned_to_name.slice(0, 2)}
+          </span>
+        ) : (
+          <span className="w-7 h-7 rounded-full border-2 border-dashed border-border opacity-0 group-hover:opacity-60 transition-opacity" />
+        )}
       </div>
 
       {/* Delete */}
-      <button
-        onClick={e => { e.stopPropagation(); onDelete(todo.id); }}
-        className="opacity-0 group-hover:opacity-100 mt-0.5 p-1.5 rounded-lg hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-all"
-      >
-        <Trash2 size={13} />
-      </button>
+      <div className="flex items-center justify-center">
+        <button
+          onClick={e => { e.stopPropagation(); onDelete(todo.id); }}
+          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-all"
+        >
+          <Trash2 size={12} />
+        </button>
+      </div>
     </div>
   );
 }
 
-// ─── Quick Add ────────────────────────────────────────────────────────────────
+// ─── Quick Add (table-row style) ─────────────────────────────────────────────
 
 function QuickAdd({ onAdd }: { onAdd: (title: string, priority: Todo["priority"], due_date: string) => void }) {
   const [title, setTitle]       = useState("");
   const [priority, setPriority] = useState<Todo["priority"]>("normal");
   const [due, setDue]           = useState("");
-  const [expanded, setExpanded] = useState(false);
+  const inputRef                = useRef<HTMLInputElement>(null);
 
   function submit() {
     if (!title.trim()) return;
     onAdd(title.trim(), priority, due);
-    setTitle(""); setPriority("normal"); setDue(""); setExpanded(false);
+    setTitle(""); setPriority("normal"); setDue("");
+    inputRef.current?.focus();
   }
 
   return (
-    <div className="bg-card border border-border rounded-xl p-3 space-y-2">
-      <div className="flex items-center gap-2">
-        <Plus size={15} className="text-brand-400 shrink-0" />
+    <div
+      className="grid items-center border-t border-border/50 hover:bg-accent/20 transition-colors"
+      style={{ gridTemplateColumns: "28px 1fr 148px 96px 108px 36px 28px" }}
+    >
+      <div className="flex items-center justify-center">
+        <Plus size={14} className="text-muted-foreground/40" />
+      </div>
+      <div className="py-2.5 pr-2">
         <input
+          ref={inputRef}
           value={title}
           onChange={e => setTitle(e.target.value)}
-          onFocus={() => setExpanded(true)}
-          onKeyDown={e => { if (e.key === "Enter") submit(); if (e.key === "Escape") { setExpanded(false); setTitle(""); } }}
-          placeholder="Add a to-do… (Enter to save, click row for full details)"
-          className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/50 outline-none"
+          onKeyDown={e => { if (e.key === "Enter") submit(); if (e.key === "Escape") setTitle(""); }}
+          placeholder="Add a task…"
+          className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground/40 outline-none"
         />
+      </div>
+      {/* Status placeholder */}
+      <div />
+      {/* Priority picker */}
+      <div className="flex items-center gap-1">
+        {(["high", "normal", "low"] as const).map(p => (
+          <button
+            key={p}
+            onClick={() => setPriority(p)}
+            className={`w-2.5 h-2.5 rounded-full transition-all ring-1 ring-offset-1 ${
+              priority === p ? `${PRIORITY_CONFIG[p].dot} ring-current` : "bg-border ring-transparent hover:ring-border"
+            }`}
+            title={PRIORITY_CONFIG[p].label}
+          />
+        ))}
+      </div>
+      {/* Due date */}
+      <div>
+        <input
+          type="date"
+          value={due}
+          onChange={e => setDue(e.target.value)}
+          className="w-full bg-transparent text-xs text-muted-foreground outline-none"
+        />
+      </div>
+      {/* Spacer */}
+      <div />
+      {/* Submit */}
+      <div className="flex items-center justify-center">
         {title && (
-          <button onClick={submit} className="px-3 py-1 rounded-lg bg-brand-400 text-white text-xs font-semibold hover:bg-brand-400/80 transition-colors">
-            Add
+          <button
+            onClick={submit}
+            className="w-6 h-6 rounded bg-brand-400 text-white flex items-center justify-center hover:bg-brand-400/80 transition-colors"
+          >
+            <Check size={12} />
           </button>
         )}
       </div>
-      {expanded && (
-        <div className="flex items-center gap-3 pl-5">
-          <div className="flex items-center gap-1">
-            {(["high", "normal", "low"] as const).map(p => (
-              <button
-                key={p}
-                onClick={() => setPriority(p)}
-                className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition-all ${
-                  priority === p
-                    ? `${PRIORITY_CONFIG[p].bg} ${PRIORITY_CONFIG[p].color} ${PRIORITY_CONFIG[p].border}`
-                    : "border-border text-muted-foreground hover:bg-accent"
-                }`}
-              >
-                {PRIORITY_CONFIG[p].label}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-1.5 text-muted-foreground">
-            <Calendar size={11} />
-            <input
-              type="date"
-              value={due}
-              onChange={e => setDue(e.target.value)}
-              className="bg-transparent text-xs text-foreground outline-none"
-            />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -771,10 +797,18 @@ export default function TodosPage() {
       body: JSON.stringify({ status: done ? "done" : "open" }),
     });
     const data = await res.json();
-    // If a new recurring instance was spawned, add it
     if (res.ok && data.spawned) {
       setTodos(prev => [data.spawned, ...prev.map(t => t.id === id ? data.todo : t)]);
     }
+  }
+
+  async function changeStatus(id: string, status: Todo["status"]) {
+    setTodos(prev => prev.map(t => t.id === id ? { ...t, status } : t));
+    await fetch(`/api/todos/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
   }
 
   async function deleteTodo(id: string) {
@@ -808,16 +842,26 @@ export default function TodosPage() {
   const doneCnt = done.length;
   const highCnt = open.filter(t => t.priority === "high").length;
 
-  // Priority groups for open todos
-  const highTodos   = open.filter(t => t.priority === "high");
-  const normalTodos = open.filter(t => t.priority === "normal");
-  const lowTodos    = open.filter(t => t.priority === "low");
+  // Status groups (when showing "all")
+  const inProgressTodos = todos.filter(t => t.status === "in_progress").sort(prioritySort);
+  const openOnlyTodos   = todos.filter(t => t.status === "open").sort(prioritySort);
 
-  const priorityGroups: { key: "high" | "normal" | "low"; items: Todo[] }[] = [
-    { key: "high",   items: highTodos },
-    { key: "normal", items: normalTodos },
-    { key: "low",    items: lowTodos },
-  ];
+  // Build groups based on filter
+  type Group = { key: string; label: string; dot: string; items: Todo[] };
+  const groups: Group[] = [];
+  if (filter === "open") {
+    if (inProgressTodos.length > 0) groups.push({ key: "in_progress", label: "In Progress", dot: "bg-blue-400",    items: inProgressTodos });
+    if (openOnlyTodos.length > 0)   groups.push({ key: "open",        label: "Open",        dot: "bg-slate-400",  items: openOnlyTodos });
+  } else if (filter === "done") {
+    if (done.length > 0) groups.push({ key: "done", label: "Completed", dot: "bg-emerald-400", items: done });
+  } else {
+    if (inProgressTodos.length > 0) groups.push({ key: "in_progress", label: "In Progress", dot: "bg-blue-400",    items: inProgressTodos });
+    if (openOnlyTodos.length > 0)   groups.push({ key: "open",        label: "Open",        dot: "bg-slate-400",  items: openOnlyTodos });
+    if (done.length > 0)            groups.push({ key: "done",        label: "Completed",   dot: "bg-emerald-400", items: done });
+  }
+
+  // Column header definition (matches TodoRow grid)
+  const COL_STYLE = "28px 1fr 148px 96px 108px 36px 28px";
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -831,149 +875,119 @@ export default function TodosPage() {
         }
       />
 
-      <div className="flex-1 p-6 space-y-5 max-w-3xl mx-auto w-full">
+      <div className="flex-1 p-6 space-y-4 max-w-5xl mx-auto w-full">
 
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-3">
+        {/* Stats bar */}
+        <div className="flex items-center gap-3">
           {[
-            { label: "Open",     value: openCnt, color: "text-brand-400",   bg: "bg-brand-400/10",  stripe: "border-l-4 border-l-brand-400" },
-            { label: "High Pri", value: highCnt, color: "text-red-500",     bg: "bg-red-50 dark:bg-red-950/30",   stripe: "border-l-4 border-l-red-400" },
-            { label: "Done",     value: doneCnt, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/30", stripe: "border-l-4 border-l-emerald-400" },
-          ].map(card => (
-            <div key={card.label} className={`${card.bg} border border-border rounded-r-xl rounded-l-none ${card.stripe} p-4 flex items-center gap-3`}>
-              <div>
-                <p className={`text-2xl font-extrabold ${card.color}`}>{card.value}</p>
-                <p className="text-[11px] font-medium text-muted-foreground mt-0.5">{card.label}</p>
-              </div>
+            { label: "Open",        value: openCnt, accent: "text-brand-400",   bg: "bg-brand-400/10" },
+            { label: "In Progress", value: inProgressTodos.length, accent: "text-blue-600",    bg: "bg-blue-50" },
+            { label: "High Pri",    value: highCnt, accent: "text-rose-600",    bg: "bg-rose-50" },
+            { label: "Done",        value: doneCnt, accent: "text-emerald-600", bg: "bg-emerald-50" },
+          ].map(c => (
+            <div key={c.label} className={`flex items-center gap-2 px-3 py-2 rounded-xl ${c.bg} border border-border`}>
+              <span className={`text-lg font-extrabold leading-none ${c.accent}`}>{c.value}</span>
+              <span className="text-xs text-muted-foreground font-medium">{c.label}</span>
             </div>
           ))}
-        </div>
-
-        {/* Tabs + filter */}
-        <div className="flex items-center justify-between">
-          <div className="flex gap-1 bg-accent/40 p-1 rounded-lg">
-            {(["mine", "assigned"] as const).map(v => (
-              <button
-                key={v}
-                onClick={() => setView(v)}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                  view === v ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {v === "mine" ? "My To-Dos" : "Assigned Out"}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-1 bg-accent/40 p-1 rounded-lg">
+          <div className="ml-auto flex items-center gap-1">
+            <button
+              onClick={() => { if (view !== "mine") setView("mine"); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${view === "mine" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
+            >
+              My To-Dos
+            </button>
+            <button
+              onClick={() => { if (view !== "assigned") setView("assigned"); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${view === "assigned" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
+            >
+              Assigned Out
+            </button>
+            <div className="w-px h-4 bg-border mx-1" />
             {(["open", "all", "done"] as const).map(f => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all capitalize ${
-                  filter === f ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                }`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all capitalize ${filter === f ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
               >
-                {f}
+                {f === "open" ? "Active" : f === "all" ? "All" : "Done"}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Quick add */}
-        <QuickAdd onAdd={addTodo} />
+        {/* Main table */}
+        <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
 
-        {/* Hint */}
-        <p className="text-[11px] text-muted-foreground/50 text-center -mt-2">
-          Click any to-do to add notes, attachments, links, and recurrence
-        </p>
-
-        {/* States */}
-        {loading && (
-          <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
-            <Loader2 size={16} className="animate-spin" /> Loading to-dos…
+          {/* Column headers */}
+          <div
+            className="grid items-center border-b border-border bg-accent/40 px-0"
+            style={{ gridTemplateColumns: COL_STYLE }}
+          >
+            <div />
+            <div className="py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Task</div>
+            <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Status</div>
+            <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Priority</div>
+            <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Due date</div>
+            <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide text-center">Who</div>
+            <div />
           </div>
-        )}
-        {!loading && error && (
-          <div className="flex items-center justify-center gap-3 py-12">
-            <span className="text-sm text-destructive">{error}</span>
-            <button onClick={load} className="text-xs border border-border rounded-lg px-3 py-1.5 text-muted-foreground hover:text-foreground hover:bg-accent">Retry</button>
-          </div>
-        )}
-        {!loading && !error && todos.length === 0 && (
-          <EmptyState
-            icon={<CheckSquare size={32} className="text-muted-foreground" />}
-            title="All clear — no open To-Dos"
-            description="Add a to-do above to track action items"
-          />
-        )}
 
-        {/* Priority-grouped open todos */}
-        {!loading && !error && open.length > 0 && filter !== "done" && (
-          <div className="space-y-4">
-            {priorityGroups.map(({ key, items }) => {
-              if (items.length === 0) return null;
-              const isCollapsed = collapsed[key] ?? false;
-              return (
-                <div key={key} className="space-y-1.5">
-                  <PriorityGroupHeader
-                    priority={key}
-                    count={items.length}
-                    collapsed={isCollapsed}
-                    onToggle={() => toggleGroup(key)}
-                  />
-                  {!isCollapsed && (
-                    <div className="space-y-1.5 pl-0">
-                      {items.map(todo => (
-                        <TodoRow
-                          key={todo.id}
-                          todo={todo}
-                          onToggleDone={toggleDone}
-                          onDelete={deleteTodo}
-                          onPriorityChange={changePriority}
-                          onClick={setSelected}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
+          {/* Loading */}
+          {loading && (
+            <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground">
+              <Loader2 size={16} className="animate-spin" /> Loading to-dos…
+            </div>
+          )}
 
-        {/* Done section */}
-        {!loading && !error && done.length > 0 && filter !== "open" && (
-          <div className="space-y-1.5">
-            <button
-              onClick={() => toggleGroup("done")}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border bg-emerald-50/80 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/40 transition-colors hover:brightness-95"
-            >
-              <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-emerald-400" />
-              <span className="text-xs font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">Done</span>
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40">
-                {doneCnt}
-              </span>
-              <ChevronDown
-                size={13}
-                className={`ml-auto text-emerald-600 dark:text-emerald-400 transition-transform duration-200 ${collapsed["done"] ? "-rotate-90" : ""}`}
+          {/* Error */}
+          {!loading && error && (
+            <div className="flex items-center justify-center gap-3 py-12">
+              <span className="text-sm text-destructive">{error}</span>
+              <button onClick={load} className="text-xs border border-border rounded-lg px-3 py-1.5 text-muted-foreground hover:text-foreground hover:bg-accent">Retry</button>
+            </div>
+          )}
+
+          {/* Empty */}
+          {!loading && !error && todos.length === 0 && (
+            <div className="py-16 flex flex-col items-center gap-3">
+              <CheckSquare size={32} className="text-muted-foreground/30" />
+              <p className="text-sm font-medium text-muted-foreground">All clear — no to-dos</p>
+              <p className="text-xs text-muted-foreground/60">Use the row below to add one</p>
+            </div>
+          )}
+
+          {/* Groups */}
+          {!loading && !error && groups.map(group => (
+            <div key={group.key}>
+              <GroupHeader
+                label={group.label}
+                count={group.items.length}
+                dot={group.dot}
+                collapsed={collapsed[group.key] ?? false}
+                onToggle={() => toggleGroup(group.key)}
               />
-            </button>
-            {!collapsed["done"] && (
-              <div className="space-y-1.5">
-                {done.map(todo => (
-                  <TodoRow
-                    key={todo.id}
-                    todo={todo}
-                    onToggleDone={toggleDone}
-                    onDelete={deleteTodo}
-                    onPriorityChange={changePriority}
-                    onClick={setSelected}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+              {!(collapsed[group.key]) && group.items.map(todo => (
+                <TodoRow
+                  key={todo.id}
+                  todo={todo}
+                  onToggleDone={toggleDone}
+                  onDelete={deleteTodo}
+                  onStatusChange={changeStatus}
+                  onPriorityChange={changePriority}
+                  onClick={setSelected}
+                />
+              ))}
+            </div>
+          ))}
+
+          {/* Quick add row — pinned at bottom */}
+          <QuickAdd onAdd={addTodo} />
+        </div>
+
+        <p className="text-[11px] text-muted-foreground/50 text-center">
+          Click any row for notes, attachments, linked records, and recurrence settings
+        </p>
       </div>
 
       {/* Detail Slide-Over */}
