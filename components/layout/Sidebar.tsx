@@ -15,7 +15,7 @@ import {
   ClipboardCheck, Building2, DollarSign,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, Tv: Satellite, Flame, Hash, Ruler, PenTool, MousePointer, FileSignature, HardHat, Trophy, Store, BookMarked, Radar } = require("lucide-react") as any;
+const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, Tv: Satellite, Flame, Hash, Ruler, PenTool, MousePointer, FileSignature, HardHat, Trophy, Store, BookMarked, Radar, Hammer } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useUser, useClerk, useSession } from "@clerk/nextjs";
@@ -137,6 +137,11 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "ARIA — Lead Intel",   href: "/aria",       icon: Crosshair,      description: "AI lead research and outreach",     badge: "AI" },
       { label: "SCOUT — Market Intel", href: "/scout",    icon: Radar,          description: "Territory scanning and competitor intel", badge: "AI" },
       { label: "TRINITY — Voice AI", href: "/trinity",    icon: Phone,          description: "Voice agent + call analytics",      badge: "AI" },
+      { label: "ATLAS — DirecTV AI", href: "/atlas",      icon: Network,        description: "DirecTV channel AI and MDU automation", badge: "AI" },
+      { label: "CONCIERGE",          href: "/concierge",  icon: Users,          description: "Client-facing AI concierge",        badge: "AI" },
+      { label: "SAGE — Training AI", href: "/sage",       icon: BookOpen,       description: "Adaptive training intelligence",    badge: "AI" },
+      { label: "FORGE — Quote AI",   href: "/forge",      icon: Hammer,         description: "AI-powered quote builder",          badge: "AI" },
+      { label: "RELAY — Support AI", href: "/relay",      icon: Headphones,     description: "Tier-1 support automation",         badge: "AI" },
       { label: "DirecTV / ATLAS",    href: "/directv",    icon: Satellite,      description: "DirecTV channel and orders" },
       { label: "New Order",          href: "/orders/new", icon: Zap,            description: "Submit a DirecTV order" },
       { label: "SARA Bridge",        href: "/migrate",    icon: ArrowRightLeft, description: "Migrate from SARA Plus" },
@@ -187,14 +192,14 @@ const integrations = [
 ];
 
 const aiAgents = [
-  { name: "ARIA",    role: "Lead Intel",     color: "#6B7EFF", active: true,  href: "/aria" },
-  { name: "TRINITY", role: "Voice",          color: "#0B7285", active: true,  href: "/trinity" },
-  { name: "SCOUT",   role: "Market",         color: "#7C3AED", active: true,  href: "/scout" },
-  { name: "BEACON",  role: "Client Comms",   color: "#B45309", active: false, href: null },
-  { name: "FORGE",   role: "Quote Builder",  color: "#0B7285", active: true,  href: null },
-  { name: "ATLAS",   role: "DirecTV",        color: "#3B5BDB", active: true,  href: "/directv" },
-  { name: "SAGE",    role: "Training",       color: "#15803D", active: false, href: null },
-  { name: "RELAY",   role: "Tier-1 Support", color: "#6B7EFF", active: false, href: null },
+  { name: "ARIA",      role: "Lead Intel",     color: "#6B7EFF", active: true,  href: "/aria" },
+  { name: "TRINITY",   role: "Voice",          color: "#0B7285", active: true,  href: "/trinity" },
+  { name: "SCOUT",     role: "Market",         color: "#7C3AED", active: true,  href: "/scout" },
+  { name: "ATLAS",     role: "DirecTV",        color: "#3B5BDB", active: true,  href: "/atlas" },
+  { name: "CONCIERGE", role: "Client Comms",   color: "#0891B2", active: true,  href: "/concierge" },
+  { name: "SAGE",      role: "Training",       color: "#15803D", active: true,  href: "/sage" },
+  { name: "FORGE",     role: "Quote Builder",  color: "#0B7285", active: true,  href: "/forge" },
+  { name: "RELAY",     role: "Tier-1 Support", color: "#E11D48", active: true,  href: "/relay" },
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -414,7 +419,7 @@ export function Sidebar() {
               AI Army
             </span>
             <span className="ml-auto text-[10px] font-semibold" style={{ color: "#6B7EFF" }}>
-              {activeAgentCount}/8
+              {activeAgentCount}/{aiAgents.length}
             </span>
             <ChevronDown
               size={10}
