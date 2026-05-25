@@ -256,7 +256,7 @@ function CalendarsPanel({
             <span className="text-[9px] font-bold text-[#6B7EFF] bg-[#6B7EFF]/10 px-1.5 py-0.5 rounded-full">Always On</span>
           </div>
           <p className="text-[10px] text-muted-foreground px-1 mt-1">
-            L10 meetings, permit renewals, quote expiries, and company WOs.
+            L10 meetings, permit renewals, quote expiries, and installs/service WOs pushed outbound.
           </p>
         </div>
 
@@ -318,7 +318,7 @@ function CalendarsPanel({
 
         {!gcalConnected && (
           <div className="text-center py-2">
-            <p className="text-xs text-muted-foreground mb-2">Connect Google Calendar to select which calendars to sync.</p>
+            <p className="text-xs text-muted-foreground mb-2">Connect Google Calendar to push portal events to your native calendar app.</p>
             <a
               href="/api/calendar/google/connect"
               className="text-xs font-medium bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5a6ee0] transition-colors inline-block"
@@ -331,6 +331,17 @@ function CalendarsPanel({
     </div>
   );
 }
+
+// ─── Event type filters ────────────────────────────────────────────────────────
+
+const EVENT_TYPES = [
+  { id: 'install',       label: 'Installs',        color: '#8B5CF6', dot: 'bg-purple-500' },
+  { id: 'service',       label: 'Service',          color: '#F59E0B', dot: 'bg-amber-500'  },
+  { id: 'company',       label: 'Company Events',   color: '#6B7EFF', dot: 'bg-[#6B7EFF]'  },
+  { id: 'sales_meeting', label: 'Sales Meetings',   color: '#10B981', dot: 'bg-emerald-500' },
+] as const
+
+type EventTypeId = typeof EVENT_TYPES[number]['id']
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
@@ -355,6 +366,9 @@ function CalendarPage() {
   const [activeEvent, setActiveEvent] = useState<CalendarEvent | null>(null);
   const [popoverAnchor, setPopoverAnchor] = useState<{ top: number; left: number } | null>(null);
   const [showCalendarsPanel, setShowCalendarsPanel] = useState(false);
+  const [activeTypeFilters, setActiveTypeFilters] = useState<Set<EventTypeId>>(
+    new Set(EVENT_TYPES.map((t) => t.id))
+  );
 
   // Unscheduled panel
   const [unscheduledTodos, setUnscheduledTodos] = useState<UnscheduledTodo[]>([]);
@@ -395,9 +409,10 @@ function CalendarPage() {
   const fetchEvents = useCallback(async () => {
     setLoading(true);
     try {
-      const year  = currentDate.getFullYear();
-      const month = currentDate.getMonth() + 1;
-      const res   = await fetch(`/api/calendar/events?year=${year}&month=${month}`);
+      const year   = currentDate.getFullYear();
+      const month  = currentDate.getMonth() + 1;
+      const types  = Array.from(activeTypeFilters).join(',');
+      const res    = await fetch(`/api/calendar/events?year=${year}&month=${month}&types=${types}`);
       if (res.ok) {
         const d = await res.json() as { events: CalendarEvent[] };
         setEvents(d.events ?? []);
@@ -405,7 +420,7 @@ function CalendarPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentDate]);
+  }, [currentDate, activeTypeFilters]);
 
   useEffect(() => { void fetchEvents(); }, [fetchEvents]);
 
@@ -727,16 +742,16 @@ function CalendarPage() {
         subtitle="Your schedule, to-dos, and work orders in one view"
       />
 
-      {/* GCal connection banner */}
+      {/* GCal push banner */}
       {!gcalConnected && (
-        <div className="mx-6 mt-4 flex items-center gap-3 bg-[#6B7EFF]/5 border border-[#6B7EFF]/20 rounded-xl px-4 py-3">
-          <CalendarDays size={16} className="text-[#6B7EFF] shrink-0" />
-          <p className="text-sm text-foreground flex-1">
-            Connect Google Calendar to sync your events across platforms.
+        <div className="mx-6 mt-4 flex items-center gap-3 bg-slate-50 border border-border rounded-xl px-4 py-3">
+          <CalendarDays size={16} className="text-muted-foreground shrink-0" />
+          <p className="text-sm text-muted-foreground flex-1">
+            Connect Google Calendar to push your installs, service calls, and meetings to your native calendar app.
           </p>
           <a
             href="/api/calendar/google/connect"
-            className="text-sm font-medium bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5a6ee0] transition-colors"
+            className="text-sm font-medium bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5a6ee0] transition-colors shrink-0"
           >
             Connect
           </a>
@@ -746,6 +761,43 @@ function CalendarPage() {
       <div className="flex flex-1 min-h-0 gap-0">
         {/* ── Left panel: calendar ──────────────────────────────────────────── */}
         <div className="flex-1 flex flex-col min-h-0 p-6 pr-3 gap-4">
+          {/* Event type filter chips */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-semibold text-muted-foreground mr-1">Show:</span>
+            {EVENT_TYPES.map((et) => {
+              const active = activeTypeFilters.has(et.id);
+              return (
+                <button
+                  key={et.id}
+                  onClick={() => {
+                    setActiveTypeFilters((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(et.id)) {
+                        next.delete(et.id);
+                      } else {
+                        next.add(et.id);
+                      }
+                      // Always keep at least one active
+                      if (next.size === 0) return prev;
+                      return next;
+                    });
+                  }}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                    active
+                      ? "border-transparent text-white"
+                      : "border-border bg-white text-muted-foreground hover:border-slate-300"
+                  }`}
+                  style={active ? { backgroundColor: et.color } : {}}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full inline-block ${active ? "bg-white/70" : et.dot}`}
+                  />
+                  {et.label}
+                </button>
+              );
+            })}
+          </div>
+
           {/* Calendar header */}
           <div className="flex items-center gap-4 flex-wrap">
             {/* View toggle */}
@@ -870,24 +922,28 @@ function CalendarPage() {
               To-Dos
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-[#F59E0B] inline-block" />
-              Work Orders
+              <span className="w-2.5 h-2.5 rounded-sm bg-[#8B5CF6] inline-block" />
+              Installs
             </span>
-            {gcalConnected && (
-              <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-sm bg-[#10B981] inline-block" />
-                Google Calendar
-              </span>
-            )}
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm bg-[#F59E0B] inline-block" />
+              Service
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm bg-[#10B981] inline-block" />
+              Sales Meetings
+            </span>
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-sm border-l-2 border-[#6B7EFF] bg-[#6B7EFF]/10 inline-block" />
               <span className="text-[9px] font-bold text-[#6B7EFF] bg-[#6B7EFF]/10 px-0.5 rounded mr-0.5">GG</span>
               Company Events
             </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm border-l-2 border-[#EF4444] bg-[#EF4444]/10 inline-block" />
-              Expiries
-            </span>
+            {gcalConnected && (
+              <span className="flex items-center gap-1.5 text-[#10B981]">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                Syncing to Google Calendar
+              </span>
+            )}
           </div>
         </div>
 

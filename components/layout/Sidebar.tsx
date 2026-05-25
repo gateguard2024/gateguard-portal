@@ -15,7 +15,7 @@ import {
   ClipboardCheck, Building2, DollarSign,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, Tv: Satellite, Flame, Hash, Ruler, PenTool, MousePointer, FileSignature, HardHat, Trophy } = require("lucide-react") as any;
+const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, Tv: Satellite, Flame, Hash, Ruler, PenTool, MousePointer, FileSignature, HardHat, Trophy, Store, BookMarked } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useUser, useClerk, useSession } from "@clerk/nextjs";
@@ -150,12 +150,14 @@ const NAV_SECTIONS: NavSection[] = [
     icon: DollarSign,
     color: "#059669",
     items: [
-      { label: "Service Marketplace",  href: "/services", icon: Package,      description: "TV, internet, video monitoring & more", badge: "New" },
-      { label: "Billing",            href: "/billing",  icon: CreditCard,   description: "Invoices and payments" },
-      { label: "Revenue",            href: "/revenue",  icon: TrendingUp,   description: "MRR/ARR dashboard" },
-      { label: "Reps & Commissions", href: "/reps",     icon: UserCheck,    description: "Rep hierarchy and payouts" },
-      { label: "Renewals",           href: "/renewals", icon: Repeat,       description: "Contract renewals and alerts" },
-      { label: "Contracts",          href: "/contracts",icon: FileCheck,    description: "Contract storage" },
+      { label: "Service Marketplace",  href: "/services",            icon: Package,      description: "TV, internet, video monitoring & more", badge: "New" },
+      { label: "Billing",            href: "/billing",             icon: CreditCard,   description: "Invoices and payments" },
+      { label: "Revenue",            href: "/revenue",             icon: TrendingUp,   description: "MRR/ARR dashboard" },
+      { label: "Reps & Commissions", href: "/reps",                icon: UserCheck,    description: "Rep hierarchy and payouts" },
+      { label: "Renewals",           href: "/renewals",            icon: Repeat,       description: "Contract renewals and alerts" },
+      { label: "Contracts",          href: "/contracts",           icon: FileCheck,    description: "Contract storage" },
+      { label: "Vendors",            href: "/vendors",             icon: Store,        description: "Suppliers, subcontractors, AP" },
+      { label: "Chart of Accounts",  href: "/chart-of-accounts",  icon: BookMarked,   description: "General ledger accounts" },
     ],
   },
   {
@@ -564,10 +566,12 @@ export function Sidebar() {
                     if (item.href === "/crm"           && !showCRM)        return null;
                     if (item.href === "/customers"     && !showOperations) return null;
                     if (item.href === "/quotes"        && !showQuotes)     return null;
-                    if (item.href === "/billing"       && !showFinancials) return null;
-                    if (item.href === "/renewals"      && !showFinancials) return null;
-                    if (item.href === "/revenue"       && !showFinancials) return null;
-                    if (item.href === "/contracts"     && !showFinancials) return null;
+                    if (item.href === "/billing"             && !showFinancials) return null;
+                    if (item.href === "/renewals"            && !showFinancials) return null;
+                    if (item.href === "/revenue"             && !showFinancials) return null;
+                    if (item.href === "/contracts"           && !showFinancials) return null;
+                    if (item.href === "/vendors"             && !showFinancials) return null;
+                    if (item.href === "/chart-of-accounts"   && !showFinancials) return null;
                     if (item.href === "/reps"          && !showCommissions)return null;
                     if (item.href === "/sites"         && !showSites)      return null;
                     if (item.href === "/maintenance"   && !showWOs)        return null;

@@ -52,13 +52,23 @@ function generateL10Events(year: number, month: number, startDate: string, endDa
   return events
 }
 
-// GET /api/calendar/events?year=2026&month=5
+// GET /api/calendar/events?year=2026&month=5&types=install,service,company,sales_meeting
 export async function GET(req: NextRequest) {
   try {
     const user = await getCurrentUser()
     const { searchParams } = new URL(req.url)
     const year  = parseInt(searchParams.get('year')  ?? String(new Date().getFullYear()), 10)
     const month = parseInt(searchParams.get('month') ?? String(new Date().getMonth() + 1), 10)
+    const typesParam = searchParams.get('types') // comma-separated filter
+
+    const activeTypes = typesParam
+      ? new Set(typesParam.split(',').map((t) => t.trim()))
+      : null // null = show all
+
+    function shouldShow(category: string): boolean {
+      if (!activeTypes) return true
+      return activeTypes.has(category)
+    }
 
     // Build date range: first and last day of the month
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`
@@ -68,6 +78,7 @@ export async function GET(req: NextRequest) {
     const events: CalendarEvent[] = []
 
     // ── To-Dos ────────────────────────────────────────────────────────────────
+    // Always shown (they belong to the current user)
     const { data: todos } = await supabase
       .from('todos')
       .select('id, title, due_date, status, priority')
@@ -89,10 +100,10 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // ── Work Orders ───────────────────────────────────────────────────────────
+    // ── Work Orders (Installs + Service) ──────────────────────────────────────
     let woQuery = supabase
       .from('work_orders')
-      .select('id, title, scheduled_date, scheduled_time, status, priority, site_id')
+      .select('id, title, scheduled_date, scheduled_time, status, priority, site_id, job_type')
       .not('scheduled_date', 'is', null)
       .gte('scheduled_date', startDate)
       .lte('scheduled_date', endDate)
@@ -106,6 +117,12 @@ export async function GET(req: NextRequest) {
     const { data: wos } = await woQuery
 
     for (const wo of wos ?? []) {
+      const jt = (wo.job_type ?? '').toLowerCase()
+      const isInstall = jt.includes('install') || jt.includes('commission') || jt.includes('new install')
+      const category  = isInstall ? 'install' : 'service'
+
+      if (!shouldShow(category)) continue
+
       events.push({
         id:     wo.id,
         type:   'work_order',
@@ -113,46 +130,54 @@ export async function GET(req: NextRequest) {
         date:   wo.scheduled_date,
         time:   wo.scheduled_time ?? undefined,
         status: wo.status ?? 'open',
-        color:  '#F59E0B',
+        color:  isInstall ? '#8B5CF6' : '#F59E0B',
         link:   `/maintenance/${wo.id}`,
+        source: category,
       })
     }
 
-    // ── Google Calendar events (if token stored) ──────────────────────────────
-    const hasGCal = !!(process.env.GOOGLE_CALENDAR_CLIENT_ID && process.env.GOOGLE_CALENDAR_CLIENT_SECRET)
-    if (hasGCal) {
-      const { data: tokenRow } = await supabase
-        .from('user_settings')
-        .select('value')
-        .eq('user_id', user.id)
-        .eq('key', 'google_calendar_refresh_token')
-        .single()
+    // ── Sales Meetings (CRM activities) ───────────────────────────────────────
+    if (shouldShow('sales_meeting')) {
+      try {
+        const { data: meetings } = await supabase
+          .from('crm_activities')
+          .select('id, title, activity_type, activity_date, notes')
+          .eq('activity_type', 'meeting')
+          .not('activity_date', 'is', null)
+          .gte('activity_date', startDate)
+          .lte('activity_date', endDate)
+          .order('activity_date', { ascending: true })
 
-      if (tokenRow?.value) {
-        // Fetch cached gcal events for this month
-        const { data: gcalRows } = await supabase
-          .from('gcal_events')
-          .select('gcal_event_id, title, start_date, start_time, end_date, status')
-          .eq('user_id', user.id)
-          .gte('start_date', startDate)
-          .lte('start_date', endDate)
-
-        for (const ge of gcalRows ?? []) {
+        for (const m of meetings ?? []) {
+          const dateStr = typeof m.activity_date === 'string'
+            ? m.activity_date.split('T')[0]
+            : String(m.activity_date)
           events.push({
-            id:            ge.gcal_event_id,
-            type:          'gcal',
-            title:         ge.title ?? '(No title)',
-            date:          ge.start_date,
-            time:          ge.start_time ?? undefined,
-            status:        ge.status ?? 'confirmed',
-            color:         '#10B981',
-            gcal_event_id: ge.gcal_event_id,
+            id:        `meeting-${m.id}`,
+            type:      'company',
+            title:     m.title ?? 'Sales Meeting',
+            date:      dateStr,
+            status:    'scheduled',
+            color:     '#10B981',
+            link:      '/crm',
+            source:    'sales_meeting',
+            isCompany: false,
           })
         }
-      }
+      } catch { /* crm_activities may not exist yet */ }
     }
 
     // ── Company / GateGuard events ────────────────────────────────────────────
+    if (!shouldShow('company')) {
+      // Skip all company events if filter is active and 'company' not selected
+      events.sort((a, b) => {
+        const dateCompare = a.date.localeCompare(b.date)
+        if (dateCompare !== 0) return dateCompare
+        return (a.time ?? '').localeCompare(b.time ?? '')
+      })
+      return NextResponse.json({ events, year, month })
+    }
+
     // L10 meetings (every Friday)
     events.push(...generateL10Events(year, month, startDate, endDate))
 
