@@ -121,16 +121,16 @@ export default function AlertsPage() {
     setTestFiring(true)
     setTestResult(null)
     try {
-      const res = await fetch('/api/incidents/ingest', {
+      // Use authenticated POST /api/incidents so org_id is set correctly
+      const res = await fetch('/api/incidents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          alarm_type:    'gate_offline',
-          severity:      'critical',
-          property_name: 'Sunset Commons (TEST)',
-          description:   'Gate controller not responding — test alarm fired from Alerts page',
-          source:        'Portal Test',
-          triggered_by:  'Manual test',
+          title:       'Gate Offline — Sunset Commons (TEST)',
+          severity:    'critical',
+          status:      'open',
+          description: 'Gate controller not responding — test alarm fired from Alerts page',
+          reported_by: 'Portal Test',
         }),
       })
       const j = await res.json()
