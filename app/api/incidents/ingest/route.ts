@@ -11,89 +11,116 @@ const supabase = createClient(
 /**
  * POST /api/incidents/ingest
  *
- * Inbound alarm bridge from GGSOC (gateguard-dispatch-ui).
- * Auth: x-ggsoc-secret header must match GGSOC_INGEST_SECRET env var.
- * If GGSOC_INGEST_SECRET is not set, the request is allowed through with a
- * warning log (development / staging convenience).
+ * Accepts alarms from GGSOC (gateguard-dispatch-ui) in either payload shape:
  *
- * Body shape:
- *   alarm_type    string   — e.g. "gate_offline", "motion_detected", "access_denied"
- *   severity      string   — "low" | "medium" | "high" | "critical"
- *   property_name string   — human-readable property label
- *   site_id?      string   — UUID of the matching sites row (optional)
- *   description?  string   — free-form detail
- *   source        string   — originating system, e.g. "GGSOC", "brivo", "eagle_eye"
- *   triggered_by? string   — operator name / system identifier that fired the alarm
+ * GGSOC shape (from lib/portalIngest.ts):
+ *   source          'soc_alarm' | 'soc_patrol'
+ *   source_id       string
+ *   incident_status 'open' | 'resolved'
+ *   site_name       string
+ *   event_type?     string
+ *   priority?       'P1' | 'P2' | 'P3' | 'P4'
+ *   operator_name?  string
+ *   action_taken?   string
+ *   notes?          string
+ *   issue_detail?   string   (patrol only)
+ *
+ * Direct shape:
+ *   alarm_type      string   required
+ *   severity        'low' | 'medium' | 'high' | 'critical'
+ *   property_name   string
+ *   site_id?        uuid
+ *   description?    string
+ *   source?         string
+ *   triggered_by?   string
+ *
+ * Auth: x-ggsoc-secret header must match GGSOC_INGEST_SECRET env var.
  */
 export async function POST(req: NextRequest) {
-  // ── Auth check ────────────────────────────────────────────────────────────
+  // ── Auth ──────────────────────────────────────────────────────────────────
   const secret = process.env.GGSOC_INGEST_SECRET
-
   if (secret) {
     const provided = req.headers.get('x-ggsoc-secret')
     if (provided !== secret) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
   } else {
-    // No secret configured — allow but warn so ops can't miss it in logs
-    console.warn(
-      '[incidents/ingest] GGSOC_INGEST_SECRET is not set. ' +
-        'Request accepted without auth — set this env var in production.'
-    )
+    console.warn('[incidents/ingest] GGSOC_INGEST_SECRET not set — accepting without auth')
   }
 
-  // ── Parse body ────────────────────────────────────────────────────────────
-  let body: {
-    alarm_type: string
-    severity?: string
-    property_name?: string
-    site_id?: string
-    description?: string
-    source?: string
-    triggered_by?: string
-  }
-
+  // ── Parse ─────────────────────────────────────────────────────────────────
+  let body: Record<string, unknown>
   try {
     body = await req.json()
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const { alarm_type, severity, property_name, site_id, description, source, triggered_by } = body
+  // ── Normalise GGSOC vs direct payload shape ───────────────────────────────
+  const isGgsocShape = body.source === 'soc_alarm' || body.source === 'soc_patrol'
 
-  if (!alarm_type) {
-    return NextResponse.json({ error: 'alarm_type is required' }, { status: 400 })
-  }
+  // alarm_type / title seed
+  const alarmType: string = String(
+    isGgsocShape
+      ? (body.event_type ?? body.source ?? 'alarm')
+      : (body.alarm_type ?? body.event_type ?? 'alarm')
+  )
 
-  // ── Map alarm fields → incidents schema ──────────────────────────────────
+  // property name
+  const propertyName: string | undefined = String(
+    isGgsocShape ? (body.site_name ?? '') : (body.property_name ?? '')
+  ) || undefined
+
+  // severity — map P1-P4 to severity levels, fall back to direct severity field
+  const priorityMap: Record<string, string> = { P1: 'critical', P2: 'high', P3: 'medium', P4: 'low' }
+  const rawSev = isGgsocShape
+    ? (priorityMap[body.priority as string] ?? 'high')
+    : String(body.severity ?? 'medium')
+
   const validSeverities = ['low', 'medium', 'high', 'critical'] as const
   type Severity = (typeof validSeverities)[number]
-
-  const resolvedSeverity: Severity = validSeverities.includes(severity as Severity)
-    ? (severity as Severity)
+  const severity: Severity = validSeverities.includes(rawSev as Severity)
+    ? (rawSev as Severity)
     : 'medium'
 
-  const titleParts: string[] = []
-  titleParts.push(alarm_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()))
-  if (property_name) titleParts.push(`— ${property_name}`)
-  const title = titleParts.join(' ')
+  // status
+  const status = (body.incident_status === 'resolved' || body.status === 'resolved')
+    ? 'resolved' : 'open'
 
-  const reportedByParts: string[] = []
-  if (source) reportedByParts.push(source)
-  if (triggered_by) reportedByParts.push(triggered_by)
-  const reported_by = reportedByParts.join(' / ') || 'GGSOC'
+  // site_id (only meaningful in direct shape — GGSOC doesn't know portal UUIDs)
+  const siteId = (body.site_id as string | undefined) ?? null
+
+  // description
+  const descParts: string[] = []
+  if (body.event_label)  descParts.push(String(body.event_label))
+  if (body.action_taken) descParts.push(`Action: ${body.action_taken}`)
+  if (body.notes)        descParts.push(String(body.notes))
+  if (body.issue_detail) descParts.push(String(body.issue_detail))
+  if (body.description)  descParts.push(String(body.description))
+  const description = descParts.join(' · ') || null
+
+  // reported_by
+  const sourceName = isGgsocShape
+    ? (body.source === 'soc_patrol' ? 'GGSOC Patrol' : 'GGSOC')
+    : String(body.source ?? 'GGSOC')
+  const operatorName = (body.operator_name ?? body.triggered_by) as string | undefined
+  const reportedBy = operatorName ? `${sourceName} / ${operatorName}` : sourceName
+
+  // title
+  const titleBase = alarmType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  const title = propertyName ? `${titleBase} — ${propertyName}` : titleBase
 
   // ── Write to Supabase ─────────────────────────────────────────────────────
   const { data, error } = await supabase
     .from('incidents')
     .insert({
-      site_id:     site_id ?? null,
       org_id:      null,
+      site_id:     siteId,
       title,
-      description: description ?? null,
-      severity:    resolvedSeverity,
-      status:      'open',
-      reported_by,
+      description,
+      severity,
+      status,
+      reported_by: reportedBy,
     })
     .select('id')
     .single()

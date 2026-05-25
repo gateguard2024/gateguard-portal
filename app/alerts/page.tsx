@@ -104,15 +104,48 @@ export default function AlertsPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('all')
   const [alerts, setAlerts]       = useState<GGAlert[]>([])
   const [loading, setLoading]     = useState(true)
+  const [testFiring, setTestFiring] = useState(false)
+  const [testResult, setTestResult] = useState<string | null>(null)
 
-  useEffect(() => {
-    // Fetch high + critical incidents from the incidents table
+  function loadAlerts() {
     fetch('/api/incidents?severity=high,critical&limit=50')
       .then(r => r.json())
       .then(d => setAlerts(d.incidents ?? []))
       .catch(() => setAlerts([]))
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { loadAlerts() }, [])
+
+  async function fireTestAlarm() {
+    setTestFiring(true)
+    setTestResult(null)
+    try {
+      const res = await fetch('/api/incidents/ingest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          alarm_type:    'gate_offline',
+          severity:      'critical',
+          property_name: 'Sunset Commons (TEST)',
+          description:   'Gate controller not responding — test alarm fired from Alerts page',
+          source:        'Portal Test',
+          triggered_by:  'Manual test',
+        }),
+      })
+      const j = await res.json()
+      if (res.ok) {
+        setTestResult('✓ Test alarm created — refreshing...')
+        setTimeout(() => { loadAlerts(); setTestResult(null) }, 1200)
+      } else {
+        setTestResult(`✗ Error: ${j.error ?? res.status}`)
+      }
+    } catch (e) {
+      setTestResult(`✗ Network error`)
+    } finally {
+      setTestFiring(false)
+    }
+  }
 
   const filtered = alerts.filter(a =>
     activeTab === 'all' ? true : a.severity === activeTab
@@ -140,6 +173,21 @@ export default function AlertsPage() {
           <p className="text-sm text-slate-500 mt-0.5">
             Critical and warning events from your properties
           </p>
+        </div>
+        <div className="flex flex-col items-end gap-1.5">
+          <button
+            onClick={fireTestAlarm}
+            disabled={testFiring}
+            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium border border-dashed border-slate-300 rounded-lg text-slate-500 hover:border-brand-400 hover:text-brand-400 transition-colors disabled:opacity-50"
+          >
+            <AlertTriangle size={12} />
+            {testFiring ? 'Firing...' : 'Fire Test Alarm'}
+          </button>
+          {testResult && (
+            <span className={`text-xs font-medium ${testResult.startsWith('✓') ? 'text-green-600' : 'text-red-500'}`}>
+              {testResult}
+            </span>
+          )}
         </div>
       </div>
 
