@@ -11,28 +11,25 @@ const supabase = createClient(
 /**
  * POST /api/incidents/ingest
  *
- * Accepts alarms from GGSOC (gateguard-dispatch-ui) in either payload shape:
+ * Three accepted payload shapes:
  *
- * GGSOC shape (from lib/portalIngest.ts):
- *   source          'soc_alarm' | 'soc_patrol'
- *   source_id       string
- *   incident_status 'open' | 'resolved'
- *   site_name       string
- *   event_type?     string
- *   priority?       'P1' | 'P2' | 'P3' | 'P4'
- *   operator_name?  string
- *   action_taken?   string
- *   notes?          string
- *   issue_detail?   string   (patrol only)
+ * 1. Supabase Database Webhook (most reliable — server-side, fires 24/7):
+ *    Configure in GGSOC Supabase → Database → Webhooks → alarms table → INSERT + UPDATE
+ *    Target URL: https://portal.gateguard.co/api/incidents/ingest
+ *    Headers: x-ggsoc-secret: <GGSOC_INGEST_SECRET>
+ *    {
+ *      type:       'INSERT' | 'UPDATE'
+ *      table:      'alarms'
+ *      schema:     'public'
+ *      record:     { id, site_name, event_type, priority, status, operator_name, ... }
+ *      old_record: { ... } | null
+ *    }
  *
- * Direct shape:
- *   alarm_type      string   required
- *   severity        'low' | 'medium' | 'high' | 'critical'
- *   property_name   string
- *   site_id?        uuid
- *   description?    string
- *   source?         string
- *   triggered_by?   string
+ * 2. GGSOC portalIngest.ts browser shape (legacy, still supported):
+ *    { source: 'soc_alarm'|'soc_patrol', source_id, incident_status, site_name, priority, ... }
+ *
+ * 3. Direct shape:
+ *    { alarm_type, severity, property_name, description, source, triggered_by, site_id }
  *
  * Auth: x-ggsoc-secret header must match GGSOC_INGEST_SECRET env var.
  */
@@ -56,41 +53,128 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  // ── Normalise GGSOC vs direct payload shape ───────────────────────────────
-  const isGgsocShape = body.source === 'soc_alarm' || body.source === 'soc_patrol'
+  // ── Detect payload shape ──────────────────────────────────────────────────
+  const isSupabaseWebhook = typeof body.type === 'string' && body.table === 'alarms' && body.record
+  const isGgsocShape      = !isSupabaseWebhook && (body.source === 'soc_alarm' || body.source === 'soc_patrol')
+  // else: direct shape
 
-  // alarm_type / title seed
+  // ── Handle Supabase webhook ───────────────────────────────────────────────
+  if (isSupabaseWebhook) {
+    const record     = body.record as Record<string, unknown>
+    const oldRecord  = body.old_record as Record<string, unknown> | null
+    const webhookType = String(body.type) // 'INSERT' | 'UPDATE'
+
+    const priorityMap: Record<string, string> = { P1: 'critical', P2: 'high', P3: 'medium', P4: 'low' }
+    const severity = priorityMap[record.priority as string] ?? 'high'
+    const sourceExtId = String(record.id)
+
+    // INSERT → create a new open incident
+    if (webhookType === 'INSERT') {
+      const alarmType  = String(record.event_type ?? 'alarm')
+      const siteName   = String(record.site_name ?? '')
+      const titleBase  = alarmType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+      const title      = siteName ? `${titleBase} — ${siteName}` : titleBase
+      const descParts: string[] = []
+      if (record.event_label)  descParts.push(String(record.event_label))
+      if (record.notes)        descParts.push(String(record.notes))
+      const description = descParts.join(' · ') || null
+      const reportedBy  = record.operator_name
+        ? `GGSOC / ${record.operator_name}`
+        : 'GGSOC'
+
+      const { data, error } = await supabase
+        .from('incidents')
+        .insert({
+          org_id:        null,
+          site_id:       null,
+          title,
+          description,
+          severity,
+          status:        'open',
+          reported_by:   reportedBy,
+          source_ext_id: sourceExtId,
+          source_system: 'ggsoc',
+        })
+        .select('id')
+        .single()
+
+      if (error) {
+        console.error('[incidents/ingest] INSERT error:', error.message)
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+      return NextResponse.json({ id: data.id, action: 'created' }, { status: 201 })
+    }
+
+    // UPDATE → if the alarm was resolved, close the matching incident
+    if (webhookType === 'UPDATE') {
+      const newStatus = String(record.status ?? '')
+      const wasResolved = (newStatus === 'resolved' || newStatus === 'closed' || newStatus === 'completed')
+        && oldRecord
+        && oldRecord.status !== record.status
+
+      if (wasResolved) {
+        // First try to find by source_ext_id (exact match)
+        const { data: byId } = await supabase
+          .from('incidents')
+          .update({
+            status:      'resolved',
+            resolved_at: new Date().toISOString(),
+            reported_by: record.operator_name
+              ? `GGSOC / ${record.operator_name}`
+              : 'GGSOC',
+          })
+          .eq('source_ext_id', sourceExtId)
+          .eq('status', 'open')
+          .select('id')
+
+        if (byId && byId.length > 0) {
+          return NextResponse.json({ ids: byId.map(r => r.id), action: 'resolved' })
+        }
+
+        // Fallback: resolve most recent open incident for this site
+        const siteName = String(record.site_name ?? '')
+        if (siteName) {
+          const { data: bySite } = await supabase
+            .from('incidents')
+            .update({ status: 'resolved', resolved_at: new Date().toISOString() })
+            .ilike('title', `%${siteName}%`)
+            .eq('status', 'open')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .select('id')
+
+          if (bySite && bySite.length > 0) {
+            return NextResponse.json({ ids: bySite.map(r => r.id), action: 'resolved' })
+          }
+        }
+      }
+
+      return NextResponse.json({ action: 'no_change' })
+    }
+
+    return NextResponse.json({ action: 'ignored', type: webhookType })
+  }
+
+  // ── Normalise GGSOC browser shape or direct shape ─────────────────────────
+  const priorityMap: Record<string, string> = { P1: 'critical', P2: 'high', P3: 'medium', P4: 'low' }
+
   const alarmType: string = String(
     isGgsocShape
       ? (body.event_type ?? body.source ?? 'alarm')
       : (body.alarm_type ?? body.event_type ?? 'alarm')
   )
-
-  // property name
-  const propertyName: string | undefined = String(
-    isGgsocShape ? (body.site_name ?? '') : (body.property_name ?? '')
-  ) || undefined
-
-  // severity — map P1-P4 to severity levels, fall back to direct severity field
-  const priorityMap: Record<string, string> = { P1: 'critical', P2: 'high', P3: 'medium', P4: 'low' }
-  const rawSev = isGgsocShape
+  const propertyName = String(isGgsocShape ? (body.site_name ?? '') : (body.property_name ?? '')) || undefined
+  const rawSev       = isGgsocShape
     ? (priorityMap[body.priority as string] ?? 'high')
     : String(body.severity ?? 'medium')
 
   const validSeverities = ['low', 'medium', 'high', 'critical'] as const
   type Severity = (typeof validSeverities)[number]
-  const severity: Severity = validSeverities.includes(rawSev as Severity)
-    ? (rawSev as Severity)
-    : 'medium'
+  const severity: Severity = validSeverities.includes(rawSev as Severity) ? (rawSev as Severity) : 'medium'
 
-  // status
-  const status = (body.incident_status === 'resolved' || body.status === 'resolved')
+  const resolvedStatus = (body.incident_status === 'resolved' || body.status === 'resolved')
     ? 'resolved' : 'open'
 
-  // site_id (only meaningful in direct shape — GGSOC doesn't know portal UUIDs)
-  const siteId = (body.site_id as string | undefined) ?? null
-
-  // description
   const descParts: string[] = []
   if (body.event_label)  descParts.push(String(body.event_label))
   if (body.action_taken) descParts.push(`Action: ${body.action_taken}`)
@@ -99,28 +183,43 @@ export async function POST(req: NextRequest) {
   if (body.description)  descParts.push(String(body.description))
   const description = descParts.join(' · ') || null
 
-  // reported_by
-  const sourceName = isGgsocShape
+  const sourceName   = isGgsocShape
     ? (body.source === 'soc_patrol' ? 'GGSOC Patrol' : 'GGSOC')
     : String(body.source ?? 'GGSOC')
   const operatorName = (body.operator_name ?? body.triggered_by) as string | undefined
-  const reportedBy = operatorName ? `${sourceName} / ${operatorName}` : sourceName
+  const reportedBy   = operatorName ? `${sourceName} / ${operatorName}` : sourceName
 
-  // title
   const titleBase = alarmType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-  const title = propertyName ? `${titleBase} — ${propertyName}` : titleBase
+  const title     = propertyName ? `${titleBase} — ${propertyName}` : titleBase
+  const siteId    = (body.site_id as string | undefined) ?? null
+  const sourceExtId = (body.source_id as string | undefined) ?? null
 
-  // ── Write to Supabase ─────────────────────────────────────────────────────
+  // If this is a resolve from the browser shape, update existing incident
+  if (resolvedStatus === 'resolved' && sourceExtId) {
+    const { data: updated } = await supabase
+      .from('incidents')
+      .update({ status: 'resolved', resolved_at: new Date().toISOString(), reported_by: reportedBy })
+      .eq('source_ext_id', sourceExtId)
+      .eq('status', 'open')
+      .select('id')
+
+    if (updated && updated.length > 0) {
+      return NextResponse.json({ ids: updated.map(r => r.id), action: 'resolved' })
+    }
+  }
+
   const { data, error } = await supabase
     .from('incidents')
     .insert({
-      org_id:      null,
-      site_id:     siteId,
+      org_id:        null,
+      site_id:       siteId,
       title,
       description,
       severity,
-      status,
-      reported_by: reportedBy,
+      status:        resolvedStatus,
+      reported_by:   reportedBy,
+      source_ext_id: sourceExtId,
+      source_system: isGgsocShape ? 'ggsoc' : null,
     })
     .select('id')
     .single()
@@ -130,5 +229,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ id: data.id, success: true }, { status: 201 })
+  return NextResponse.json({ id: data.id, action: 'created' }, { status: 201 })
 }
