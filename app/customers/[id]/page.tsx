@@ -1,6 +1,6 @@
 "use client";
-import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { TopBar } from "@/components/layout/TopBar";
 import {
@@ -10,7 +10,7 @@ import {
   RefreshCw, X, Plus,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowLeft, Camera, DollarSign, Edit2, Activity, Save, Send } = require("lucide-react") as any;
+const { ArrowLeft, Camera, DollarSign, Edit2, Activity, Save, Send, Trash2, Wifi, Network, Key, Eye } = require("lucide-react") as any;
 import { QuickActions } from "@/components/shared/QuickActions";
 
 type OrgTier =
@@ -73,6 +73,13 @@ interface OrgAttachment {
 
 const ATTACHMENT_CATEGORIES = ['general', 'contract', 'invoice', 'permit', 'photo', 'other']
 
+interface ApiCredentials {
+  een?: { api_key?: string; account_id?: string; subdomain?: string };
+  brivo?: { client_id?: string; client_secret?: string; api_key?: string };
+  unifi?: { host?: string; username?: string; password?: string; site_id?: string };
+  custom?: Array<{ name: string; api_key: string; url?: string; notes?: string }>;
+}
+
 interface OrgDetail {
   id: string; name: string; org_tier: OrgTier;
   is_active: boolean;
@@ -80,11 +87,12 @@ interface OrgDetail {
   primary_contact_email: string | null;
   primary_contact_phone: string | null;
   address: string | null;
-  city: string | null; state: string | null;
+  city: string | null; state: string | null; zip: string | null;
   parent_org_id: string | null;
   parent_name: string | null;
   onboarded_at: string | null;
   notes: string | null;
+  api_credentials?: ApiCredentials;
   sites: Site[];
   children: ChildOrg[];
   recent_work_orders: WorkOrder[];
@@ -111,6 +119,7 @@ const WO_STATUS_COLOR: Record<string, string> = {
 
 export default function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [org, setOrg]           = useState<OrgDetail | null>(null);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
@@ -118,6 +127,17 @@ export default function CustomerDetailPage() {
   const [editForm, setEditForm] = useState<Partial<OrgDetail>>({});
   const [saving, setSaving]     = useState(false);
   const [saveErr, setSaveErr]   = useState<string | null>(null);
+  // Delete state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  // Integrations
+  const [showIntegrations, setShowIntegrations] = useState(false);
+  const [apiCreds, setApiCreds] = useState<ApiCredentials>({});
+  const [savingCreds, setSavingCreds] = useState(false);
+  // Address autocomplete
+  const addressInputRef = useRef<HTMLInputElement | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const autocompleteRef = useRef<any>(null);
   const [quotes, setQuotes]     = useState<OrgQuote[]>([]);
   const [quotesLoaded, setQuotesLoaded] = useState(false);
   const [activities, setActivities] = useState<{id:string;type:string;subject:string;body?:string;outcome?:string;created_by_name?:string;created_at:string}[]>([]);
@@ -144,13 +164,15 @@ export default function CustomerDetailPage() {
       setEditForm({
         name: data.name,
         address: data.address ?? "",
+        city: data.city ?? "",
+        state: data.state ?? "",
+        zip: data.zip ?? "",
         primary_contact_name: data.primary_contact_name ?? "",
         primary_contact_email: data.primary_contact_email ?? "",
         primary_contact_phone: data.primary_contact_phone ?? "",
-        city: data.city ?? "",
-        state: data.state ?? "",
         notes: data.notes ?? "",
       });
+      setApiCreds(data.api_credentials ?? {});
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
@@ -310,6 +332,84 @@ export default function CustomerDetailPage() {
     }
   }
 
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/customers/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      if (data.deleted) {
+        router.push('/customers');
+      } else if (data.deactivated) {
+        setOrg(o => o ? { ...o, is_active: false } : o);
+        setShowDeleteConfirm(false);
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Delete failed');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function saveCredentials() {
+    setSavingCreds(true);
+    try {
+      await fetch(`/api/customers/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_credentials: apiCreds }),
+      });
+      setOrg(o => o ? { ...o, api_credentials: apiCreds } : o);
+      setShowIntegrations(false);
+    } catch { /* swallow */ }
+    finally { setSavingCreds(false); }
+  }
+
+  // ── Google Places autocomplete ──────────────────────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const g = () => (window as any).google;
+  const initAutocomplete = useCallback(() => {
+    if (!addressInputRef.current || !g()?.maps?.places) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const Places = g().maps.places;
+    const ac = new Places.Autocomplete(addressInputRef.current, {
+      types: ['address'],
+      componentRestrictions: { country: 'us' },
+      fields: ['address_components'],
+    });
+    autocompleteRef.current = ac;
+    ac.addListener('place_changed', () => {
+      const place = ac.getPlace();
+      if (!place.address_components) return;
+      let street = '', city = '', state = '', zip = '';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const comp of place.address_components as any[]) {
+        const types: string[] = comp.types;
+        if (types.includes('street_number')) street = comp.long_name + ' ';
+        if (types.includes('route')) street += comp.short_name;
+        if (types.includes('locality')) city = comp.long_name;
+        if (types.includes('administrative_area_level_1')) state = comp.short_name;
+        if (types.includes('postal_code')) zip = comp.long_name;
+      }
+      setEditForm(f => ({ ...f, address: street.trim(), city, state, zip }));
+    });
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !showEdit) return;
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    if (!apiKey) return;
+    if (g()?.maps?.places) { setTimeout(initAutocomplete, 50); return; }
+    const existing = document.getElementById('gg-gmaps-script');
+    if (existing) { existing.addEventListener('load', initAutocomplete); return; }
+    const script = document.createElement('script');
+    script.id = 'gg-gmaps-script';
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+    script.async = true;
+    script.onload = initAutocomplete;
+    document.head.appendChild(script);
+  }, [showEdit, initAutocomplete]);
+
   if (loading) {
     return (
       <div className="flex flex-col min-h-screen">
@@ -391,12 +491,27 @@ export default function CustomerDetailPage() {
                 </div>
               </div>
             </div>
-            <button
-              onClick={() => setShowEdit(true)}
-              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg px-3 py-1.5 hover:bg-accent transition-colors"
-            >
-              <Edit2 size={13} /> Edit
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowIntegrations(true)}
+                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg px-3 py-1.5 hover:bg-accent transition-colors"
+                title="API & Integrations"
+              >
+                <Key size={13} /> Integrations
+              </button>
+              <button
+                onClick={() => setShowEdit(true)}
+                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg px-3 py-1.5 hover:bg-accent transition-colors"
+              >
+                <Edit2 size={13} /> Edit
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-600 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50 transition-colors"
+              >
+                <Trash2 size={13} /> Delete
+              </button>
+            </div>
           </div>
 
           {/* Stats row */}
@@ -894,15 +1009,21 @@ export default function CustomerDetailPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Street Address</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                  Street Address
+                  {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY && (
+                    <span className="ml-1 text-[10px] text-emerald-500 font-normal">✓ autocomplete active</span>
+                  )}
+                </label>
                 <input
+                  ref={(el) => { addressInputRef.current = el; if (el && showEdit) initAutocomplete(); }}
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
-                  placeholder="123 Main St"
+                  placeholder="123 Main St — type to search or enter manually"
                   value={(editForm as Record<string, unknown>).address as string ?? ""}
                   onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1.5">City</label>
                   <input
@@ -918,6 +1039,16 @@ export default function CustomerDetailPage() {
                     className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
                     value={editForm.state ?? ""}
                     onChange={e => setEditForm(f => ({ ...f, state: e.target.value.toUpperCase() }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">Zip</label>
+                  <input
+                    maxLength={10}
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50"
+                    value={(editForm as Record<string, unknown>).zip as string ?? ""}
+                    onChange={e => setEditForm(f => ({ ...f, zip: e.target.value }))}
+                    placeholder="30301"
                   />
                 </div>
               </div>
@@ -960,6 +1091,210 @@ export default function CustomerDetailPage() {
               >
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                 {saving ? "Saving…" : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirmation ─────────────────────────────────────────────── */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2.5 rounded-xl bg-red-100">
+                <Trash2 size={18} className="text-red-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground">Delete Account</h3>
+                <p className="text-xs text-muted-foreground">{org?.name}</p>
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground mb-2">
+              If this account has active sites or child organizations, it will be <strong>deactivated</strong> (not deleted).
+              Otherwise it will be <strong>permanently removed</strong>.
+            </p>
+            <p className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2 mb-5">This action cannot be undone.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:bg-accent">
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 py-2.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                {deleting ? 'Deleting…' : 'Delete Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Integrations Panel ──────────────────────────────────────────────── */}
+      {showIntegrations && (
+        <div className="fixed inset-0 z-50 flex">
+          <div className="flex-1 bg-black/40" onClick={() => setShowIntegrations(false)} />
+          <div className="w-[480px] bg-card border-l border-border flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+              <div>
+                <h2 className="text-base font-semibold text-foreground">API & Integrations</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">Store credentials per account — used by NEXUS and field tech tools</p>
+              </div>
+              <button onClick={() => setShowIntegrations(false)} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+
+              {/* Eagle Eye Networks */}
+              <div className="border border-border rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Eye size={14} className="text-brand-400" />
+                  <p className="text-sm font-semibold text-foreground">Eagle Eye Networks (Cameras)</p>
+                </div>
+                <div className="space-y-2">
+                  {[
+                    { key: 'api_key', label: 'API Key', placeholder: 'een_api_key_...' },
+                    { key: 'account_id', label: 'Account ID', placeholder: '12345' },
+                    { key: 'subdomain', label: 'Subdomain', placeholder: 'gateguard' },
+                  ].map(f => (
+                    <div key={f.key}>
+                      <label className="block text-[10px] font-medium text-muted-foreground mb-1 uppercase tracking-wide">{f.label}</label>
+                      <input
+                        className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50 font-mono text-xs"
+                        placeholder={f.placeholder}
+                        value={(apiCreds.een as Record<string, string>)?.[f.key] ?? ''}
+                        onChange={e => setApiCreds(c => ({ ...c, een: { ...c.een, [f.key]: e.target.value } }))}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Brivo */}
+              <div className="border border-border rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Shield size={14} className="text-violet-500" />
+                  <p className="text-sm font-semibold text-foreground">Brivo (Access Control)</p>
+                </div>
+                <div className="space-y-2">
+                  {[
+                    { key: 'client_id', label: 'Client ID', placeholder: 'brivo_client_id' },
+                    { key: 'client_secret', label: 'Client Secret', placeholder: '••••••••' },
+                    { key: 'api_key', label: 'API Key', placeholder: 'brivo_api_key' },
+                  ].map(f => (
+                    <div key={f.key}>
+                      <label className="block text-[10px] font-medium text-muted-foreground mb-1 uppercase tracking-wide">{f.label}</label>
+                      <input
+                        type={f.key.includes('secret') ? 'password' : 'text'}
+                        className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50 font-mono text-xs"
+                        placeholder={f.placeholder}
+                        value={(apiCreds.brivo as Record<string, string>)?.[f.key] ?? ''}
+                        onChange={e => setApiCreds(c => ({ ...c, brivo: { ...c.brivo, [f.key]: e.target.value } }))}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* UniFi */}
+              <div className="border border-border rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Wifi size={14} className="text-sky-500" />
+                  <p className="text-sm font-semibold text-foreground">UniFi Network</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { key: 'host', label: 'Host / IP', placeholder: '192.168.1.1', full: false },
+                    { key: 'username', label: 'Username', placeholder: 'admin', full: false },
+                    { key: 'password', label: 'Password', placeholder: '••••••••', full: false },
+                    { key: 'site_id', label: 'Site ID', placeholder: 'default', full: false },
+                  ].map(f => (
+                    <div key={f.key}>
+                      <label className="block text-[10px] font-medium text-muted-foreground mb-1 uppercase tracking-wide">{f.label}</label>
+                      <input
+                        type={f.key === 'password' ? 'password' : 'text'}
+                        className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-brand-400/50 font-mono text-xs"
+                        placeholder={f.placeholder}
+                        value={(apiCreds.unifi as Record<string, string>)?.[f.key] ?? ''}
+                        onChange={e => setApiCreds(c => ({ ...c, unifi: { ...c.unifi, [f.key]: e.target.value } }))}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom */}
+              <div className="border border-dashed border-border rounded-xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Network size={14} className="text-muted-foreground" />
+                    <p className="text-sm font-semibold text-foreground">Other APIs</p>
+                  </div>
+                  <button
+                    onClick={() => setApiCreds(c => ({ ...c, custom: [...(c.custom ?? []), { name: '', api_key: '', url: '', notes: '' }] }))}
+                    className="text-xs text-brand-400 hover:underline flex items-center gap-1"
+                  >
+                    <Plus size={11} /> Add
+                  </button>
+                </div>
+                {(apiCreds.custom ?? []).map((entry, i) => (
+                  <div key={i} className="mb-3 p-3 bg-background/50 rounded-lg border border-border/50 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-medium text-muted-foreground mb-1">Name</label>
+                        <input
+                          className="w-full px-2 py-1.5 rounded border border-border bg-background text-xs focus:outline-none"
+                          placeholder="Service name"
+                          value={entry.name}
+                          onChange={e => setApiCreds(c => { const arr = [...(c.custom ?? [])]; arr[i] = { ...arr[i], name: e.target.value }; return { ...c, custom: arr }; })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-medium text-muted-foreground mb-1">API Key</label>
+                        <input
+                          className="w-full px-2 py-1.5 rounded border border-border bg-background text-xs font-mono focus:outline-none"
+                          placeholder="key_..."
+                          value={entry.api_key}
+                          onChange={e => setApiCreds(c => { const arr = [...(c.custom ?? [])]; arr[i] = { ...arr[i], api_key: e.target.value }; return { ...c, custom: arr }; })}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        className="flex-1 px-2 py-1.5 rounded border border-border bg-background text-xs focus:outline-none"
+                        placeholder="API URL (optional)"
+                        value={entry.url ?? ''}
+                        onChange={e => setApiCreds(c => { const arr = [...(c.custom ?? [])]; arr[i] = { ...arr[i], url: e.target.value }; return { ...c, custom: arr }; })}
+                      />
+                      <button
+                        onClick={() => setApiCreds(c => ({ ...c, custom: (c.custom ?? []).filter((_, j) => j !== i) }))}
+                        className="p-1 text-red-400 hover:text-red-600"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {!(apiCreds.custom?.length) && (
+                  <p className="text-xs text-muted-foreground text-center py-2">No custom integrations yet — click Add to store any API credentials</p>
+                )}
+              </div>
+
+            </div>
+            <div className="px-6 py-4 border-t border-border flex gap-3">
+              <button onClick={() => setShowIntegrations(false)} className="flex-1 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:bg-accent">
+                Cancel
+              </button>
+              <button
+                onClick={saveCredentials}
+                disabled={savingCreds}
+                className="flex-1 py-2.5 rounded-lg bg-brand-400 hover:bg-brand-500 text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {savingCreds ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                {savingCreds ? 'Saving…' : 'Save Credentials'}
               </button>
             </div>
           </div>

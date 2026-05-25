@@ -778,8 +778,268 @@ function NewPlaybookSlideOver({
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
+// ─── Corp Admin Tab — static how-to playbooks + tech onboarding ───────────────
+
+const CORP_HOWTOS = [
+  {
+    id: 'pi',
+    icon: '🍓',
+    title: 'Set Up Raspberry Pi Middleware',
+    desc: 'Configure Pi as local-host programmer for UniFi intercom + door relay bridge',
+    steps: [
+      'Flash Raspberry Pi OS Lite (64-bit) to SD card using Raspberry Pi Imager',
+      'Enable SSH: add empty file named `ssh` to /boot partition before first boot',
+      'Connect Pi to property LAN switch — same subnet as UniFi controller',
+      'SSH in: `ssh pi@<pi-ip>` (default password: raspberry — change immediately)',
+      'Run: `sudo apt update && sudo apt install -y nodejs npm git`',
+      'Clone GateGuard Pi middleware: `git clone https://github.com/GateGuardCo/pi-middleware`',
+      'Copy `.env.example` → `.env`, fill in UNIFI_HOST, UNIFI_USER, UNIFI_PASS, SITE_ID, BRIVO_API_KEY',
+      'Run: `npm install && npm start` — verify webhook endpoint responds on port 3030',
+      'Set up PM2 for auto-restart: `npm install -g pm2 && pm2 start app.js --name gatecard && pm2 save`',
+      'Test door trigger: `curl -X POST http://<pi-ip>:3030/trigger -d \'{"door_id":"1"}\'`',
+      'Register Pi webhook URL in GateGuard Portal under site Integrations tab',
+    ],
+  },
+  {
+    id: 'app_property',
+    icon: '📱',
+    title: 'Set Up App for a Property',
+    desc: 'Provision GateCard.co for a new property — resident access, visitor management, kiosk',
+    steps: [
+      'Create org in portal at /admin/dealers/new — org_tier: client, assign to dealer',
+      'Create site at /sites — link to client org, enter full property address',
+      'In site detail > Integrations tab — add Eagle Eye account_id + API key',
+      'Add Brivo client_id, client_secret, api_key to site Integrations tab',
+      'Add UniFi host, credentials, site_id to site Integrations tab',
+      'Go to GateCard.co admin — create property (slug = site id from portal)',
+      'Invite property manager via Clerk portal invite (role: client)',
+      'Test resident QR scan → door open flow end-to-end',
+      'Set up visitor kiosk tablet — navigate to gatecard.co/kiosk/<site-slug>',
+      'Train property manager on GateCard visitor approval workflow',
+    ],
+  },
+  {
+    id: 'brivo',
+    icon: '🔐',
+    title: 'Brivo API Integration',
+    desc: 'Connect a property to Brivo Access Control — credentials, sync, door mapping',
+    steps: [
+      'Log in to Brivo Developer Portal — developer.brivo.com',
+      'Create OAuth2 client application — record client_id + client_secret',
+      'Generate API key for the property account',
+      'In portal site Integrations tab — enter Brivo client_id, client_secret, api_key',
+      'Test auth: GET https://auth.brivo.com/oauth/token with credentials',
+      'Fetch site list: GET /v1/api/sites — confirm target property appears',
+      'Map Brivo door IDs to GateGuard site asset IDs in site_asset_terminals table',
+      'Test credential provision: POST /v1/api/credentials — create mobile credential for test user',
+      'Set up webhook in Brivo for door events → GateGuard /api/webhooks/brivo',
+      'Verify resident sync: trigger /api/sync/residents → confirm Brivo credentials created',
+    ],
+  },
+  {
+    id: 'een',
+    icon: '📷',
+    title: 'Eagle Eye Networks API',
+    desc: 'Connect Eagle Eye cameras — live feeds, motion alerts, GGSOC integration',
+    steps: [
+      'Log in to Eagle Eye Networks account at login.eagleeyenetworks.com',
+      'Go to Account Settings > API Access — create API key',
+      'Note Account ID from dashboard top bar',
+      'In portal site Integrations tab — enter EEN api_key and account_id',
+      'Test auth: GET https://rest.eagleeyenetworks.com/g/device/list?auth_key=<api_key>',
+      'Fetch camera list — map camera ESNs to GateGuard site asset IDs',
+      'Set up motion alert webhook → GateGuard /api/webhooks/een for incident creation',
+      'In GGSOC admin — link EEN account to SOC property for live feed access',
+      'Test live feed: confirm camera streams appear in /cameras portal page',
+      'Test incident: trigger motion alert → confirm incident appears in /incidents',
+    ],
+  },
+  {
+    id: 'unifi',
+    icon: '🌐',
+    title: 'UniFi Network API',
+    desc: 'Connect UniFi controller — network monitoring, intercom, VLAN management',
+    steps: [
+      'Log in to UniFi Network controller (local IP or unifi.ui.com)',
+      'Create local admin user for API access — Settings > Admins',
+      'Note controller host IP, admin username/password, site name',
+      'In portal site Integrations tab — enter UniFi host, username, password, site_id',
+      'Test API: curl -X POST https://<host>:8443/api/login -d \'{"username":"...","password":"..."}\'',
+      'Test device list: GET https://<host>:8443/api/s/<site>/stat/device',
+      'For G3 Intercom: set webhook in UniFi to POST to Pi middleware on doorbell press',
+      'Map UniFi device MAC addresses to site_assets in portal',
+      'Configure VLAN rules in UniFi for IoT network isolation (cameras on VLAN 20, access on VLAN 30)',
+      'Verify network stats appear in /network portal page for this site',
+    ],
+  },
+  {
+    id: 'new_api',
+    icon: '🔌',
+    title: 'Adding a New API Integration',
+    desc: 'Template for onboarding any new vendor API to GateGuard',
+    steps: [
+      'Create `lib/<vendor>.ts` helper file (auth, fetch device list, trigger action)',
+      'Add credentials schema to org api_credentials JSONB (migration if new fields needed)',
+      'Create /api/webhooks/<vendor>/route.ts for inbound events',
+      'Add vendor to site Integrations panel in /customers/[id] (Integrations slide-over)',
+      'Write migration if new site_assets or site_asset_terminals columns needed',
+      'Add vendor constants to /tech wiring library if field diagnostic support needed',
+      'Add vendor to NEXUS system prompt context if AI needs to understand it',
+      'Test webhook end-to-end: trigger vendor event → confirm portal record created',
+      'Add to GGSOC event routing if vendor events should create SOC incidents',
+      'Document in portal CLAUDE.md under Env Vars + Key Source Files',
+    ],
+  },
+]
+
+const TECH_ONBOARDING_STEPS = [
+  { id: 'to1', title: 'Confirm Order', desc: 'Verify purchase order, equipment list, and site address. Confirm scheduling with property manager. Collect access badge/keys.', badge: '1' },
+  { id: 'to2', title: 'Set Up Brivo API', desc: 'Create OAuth client in Brivo Developer Portal. Enter client_id, client_secret, api_key in site Integrations tab. Test door list fetch. Map door IDs to site assets.', badge: '2' },
+  { id: 'to3', title: 'Set Up Eagle Eye API', desc: 'Generate EEN API key + note Account ID. Enter in site Integrations tab. Fetch camera list. Map camera ESNs to site assets. Verify live feed in /cameras.', badge: '3' },
+  { id: 'to4', title: 'Tie Site into GGSOC', desc: 'Log into GGSOC admin (ggsoc.com). Create property record — link EEN account + Brivo site ID. Assign to monitoring queue. Test live camera access from SOC agent view.', badge: '4' },
+  { id: 'to5', title: 'GGSOC Incidents → Portal Alerts', desc: 'Configure GGSOC webhook to POST to /api/webhooks/ggsoc on incident creation. Verify incident appears in /incidents portal page. Confirm alerts show in /alerts with correct site tag.', badge: '5' },
+  { id: 'to6', title: 'Set Up UniFi API', desc: 'Enter UniFi controller host, admin credentials, site_id in site Integrations tab. Test device list fetch. Map device MACs to site assets. Verify /network page shows live data.', badge: '6' },
+  { id: 'to7', title: 'UniFi Intercom + Pi Middleware', desc: 'Flash Pi with latest OS. Install GateGuard pi-middleware (see Pi setup playbook). Configure .env with UniFi + Brivo credentials. Set UniFi doorbell webhook → Pi endpoint. Test: ring intercom → Brivo credential check → door open.', badge: '7' },
+  { id: 'to8', title: 'Set Up QR Code App for Site', desc: 'In portal site detail — generate site QR code (links to gatecard.co/<site-slug>). Print and laminate for lobby/entrance. Test QR scan on both iOS and Android. Confirm visitor flow: scan → enter name → send host SMS → host approves → door opens.', badge: '8' },
+]
+
+function CorpAdminTab() {
+  const [expandedHowto, setExpandedHowto] = useState<string | null>(null)
+  const [checkedSteps, setCheckedSteps] = useState<Record<string, boolean>>({})
+  const [expandedOnboarding, setExpandedOnboarding] = useState<string | null>(null)
+
+  const totalChecked = Object.values(checkedSteps).filter(Boolean).length
+
+  return (
+    <div className="space-y-8">
+
+      {/* Tech Onboarding Workflow */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-base font-semibold text-gray-800 flex items-center gap-2">
+              <span className="w-7 h-7 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600 text-sm">🔧</span>
+              Tech Onboarding Workflow
+            </h3>
+            <p className="text-xs text-gray-500 mt-0.5 ml-9">Required sequence for every new site activation</p>
+          </div>
+          <span className="text-xs font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-full px-3 py-1">
+            {totalChecked}/{TECH_ONBOARDING_STEPS.length} complete
+          </span>
+        </div>
+
+        {/* Progress bar */}
+        <div className="h-1.5 bg-gray-100 rounded-full mb-5 overflow-hidden">
+          <div
+            className="h-full bg-indigo-500 rounded-full transition-all duration-300"
+            style={{ width: `${(totalChecked / TECH_ONBOARDING_STEPS.length) * 100}%` }}
+          />
+        </div>
+
+        <div className="space-y-2">
+          {TECH_ONBOARDING_STEPS.map((step, i) => {
+            const checked = checkedSteps[step.id] ?? false
+            const isOpen  = expandedOnboarding === step.id
+            const prev    = i === 0 ? true : (checkedSteps[TECH_ONBOARDING_STEPS[i - 1].id] ?? false)
+            return (
+              <div
+                key={step.id}
+                className={`bg-white border rounded-xl overflow-hidden transition-all ${
+                  checked ? 'border-emerald-200 bg-emerald-50/30' : !prev ? 'border-gray-100 opacity-60' : 'border-border hover:border-indigo-200'
+                }`}
+              >
+                <div
+                  className="flex items-center gap-3 p-4 cursor-pointer"
+                  onClick={() => setExpandedOnboarding(isOpen ? null : step.id)}
+                >
+                  <button
+                    onClick={e => { e.stopPropagation(); setCheckedSteps(c => ({ ...c, [step.id]: !c[step.id] })) }}
+                    className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                      checked ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300 hover:border-indigo-400'
+                    }`}
+                  >
+                    {checked && <Check className="w-3 h-3" />}
+                  </button>
+                  <span
+                    className="w-6 h-6 rounded-md bg-indigo-100 text-indigo-600 text-xs font-bold flex items-center justify-center flex-shrink-0"
+                  >
+                    {step.badge}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium ${checked ? 'text-emerald-700 line-through' : 'text-gray-800'}`}>{step.title}</p>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
+                </div>
+                {isOpen && (
+                  <div className="px-4 pb-4 pt-0 ml-12">
+                    <p className="text-sm text-gray-600 leading-relaxed">{step.desc}</p>
+                    {step.id === 'to7' && (
+                      <button
+                        onClick={() => {}}
+                        className="mt-2 text-xs text-indigo-500 hover:underline flex items-center gap-1"
+                      >
+                        <ExternalLink className="w-3 h-3" /> View Pi Setup playbook
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* How-To Guides */}
+      <div>
+        <h3 className="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">
+          <span className="w-7 h-7 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600 text-sm">📖</span>
+          Integration Playbooks
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {CORP_HOWTOS.map(guide => {
+            const isOpen = expandedHowto === guide.id
+            return (
+              <div key={guide.id} className="bg-white border border-border rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setExpandedHowto(isOpen ? null : guide.id)}
+                  className="w-full flex items-start gap-3 p-4 text-left hover:bg-gray-50 transition-colors"
+                >
+                  <span className="text-xl flex-shrink-0 mt-0.5">{guide.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-800">{guide.title}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{guide.desc}</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
+                    <span className="text-[10px] text-gray-400">{guide.steps.length} steps</span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                  </div>
+                </button>
+                {isOpen && (
+                  <div className="border-t border-border bg-gray-50 px-4 py-3">
+                    <ol className="space-y-2">
+                      {guide.steps.map((step, idx) => (
+                        <li key={idx} className="flex gap-2 text-xs text-gray-600">
+                          <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-600 font-bold text-[10px] flex items-center justify-center flex-shrink-0 mt-0.5">
+                            {idx + 1}
+                          </span>
+                          <span className="leading-relaxed">{step}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+    </div>
+  )
+}
+
 export default function PlaybooksPage() {
-  const [activeTab, setActiveTab] = useState<'site_job' | 'dev_rd'>('site_job')
+  const [activeTab, setActiveTab] = useState<'site_job' | 'dev_rd' | 'corp_admin'>('site_job')
   const [siteRuns, setSiteRuns] = useState<PlaybookRun[]>([])
   const [devRuns, setDevRuns]   = useState<PlaybookRun[]>([])
   const [templates, setTemplates] = useState<PlaybookTemplate[]>(DEMO_TEMPLATES)
@@ -932,6 +1192,14 @@ export default function PlaybooksPage() {
           >
             <FlaskConical className="w-4 h-4" />
             Dev &amp; R&amp;D
+          </button>
+          <button
+            onClick={() => setActiveTab('corp_admin')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all
+              ${activeTab === 'corp_admin' ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}
+          >
+            <Cpu className="w-4 h-4" />
+            GG Dev / Admin
           </button>
         </div>
 
@@ -1104,6 +1372,9 @@ export default function PlaybooksPage() {
           </div>
         )}
       </div>
+
+        {/* ── CORP ADMIN TAB ─────────────────────────────────────────────── */}
+        {activeTab === 'corp_admin' && <CorpAdminTab />}
 
       {/* New Playbook Slide-Over */}
       <NewPlaybookSlideOver
