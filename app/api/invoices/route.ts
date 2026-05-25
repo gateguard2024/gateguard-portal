@@ -29,6 +29,7 @@ export async function GET(req: NextRequest) {
       subtotal, tax_amount, total, amount_paid, balance_due,
       notes, stripe_payment_link, qb_invoice_id, qb_synced_at,
       paid_at, sent_at, voided_at, created_at, updated_at,
+      phase_group_id, phase_number, phase_label, phase_total_amount,
       invoice_line_items ( id, service_type, description, qty, unit_price, amount, is_recurring, sort_order )
     `)
     .order('created_at', { ascending: false })
@@ -90,6 +91,11 @@ export async function POST(req: NextRequest) {
     notes,
     due_date,
     line_items = [],
+    // Phase billing fields
+    phase_group_id,
+    phase_number,
+    phase_label,
+    phase_total_amount,
   } = body
 
   // Determine org_id
@@ -123,17 +129,22 @@ export async function POST(req: NextRequest) {
     .from('invoices')
     .insert({
       org_id,
-      client_org_id:  client_org_id ?? null,
-      site_id:        site_id ?? null,
+      client_org_id:       client_org_id ?? null,
+      site_id:             site_id ?? null,
       invoice_number,
-      status:         'draft',
-      issue_date:     new Date().toISOString().split('T')[0],
-      due_date:       due_date ?? new Date().toISOString().split('T')[0],
+      status:              'draft',
+      issue_date:          new Date().toISOString().split('T')[0],
+      due_date:            due_date ?? new Date().toISOString().split('T')[0],
       subtotal,
-      tax_amount:     0,
+      tax_amount:          0,
       total,
-      amount_paid:    0,
-      notes:          notes ?? null,
+      amount_paid:         0,
+      notes:               notes ?? null,
+      // Phase billing
+      phase_group_id:      phase_group_id      ?? null,
+      phase_number:        phase_number        ?? null,
+      phase_label:         phase_label         ?? null,
+      phase_total_amount:  phase_total_amount  ?? null,
     })
     .select()
     .single()

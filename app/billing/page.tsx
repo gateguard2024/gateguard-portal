@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Layers } = require('lucide-react') as any
 import { TopBar } from '@/components/layout/TopBar'
 import { DataTable, Column } from '@/components/ui/DataTable'
 import { SlideOver } from '@/components/ui/SlideOver'
@@ -50,8 +52,19 @@ interface Invoice {
   created_at: string
   site_name: string | null
   client_name: string | null
+  // Phase billing fields
+  phase_group_id?: string | null
+  phase_number?: number | null
+  phase_label?: string | null
+  phase_total_amount?: number | null
   invoice_line_items?: InvoiceLineItem[]
   commission_payouts?: CommissionPayout[]
+}
+
+interface PhaseRow {
+  label:    string  // e.g. "Deposit"
+  percent:  string  // e.g. "30"
+  due_date: string  // ISO date
 }
 
 interface CommissionPayout {
@@ -176,6 +189,14 @@ export default function BillingPage() {
   const [newDueDate,      setNewDueDate]      = useState('')
   const [newNotes,        setNewNotes]        = useState('')
   const [newInvSaving,    setNewInvSaving]    = useState(false)
+
+  // Phase billing state
+  const [phaseEnabled, setPhaseEnabled] = useState(false)
+  const [phases, setPhases] = useState<PhaseRow[]>([
+    { label: 'Deposit',   percent: '30', due_date: '' },
+    { label: 'Milestone', percent: '30', due_date: '' },
+    { label: 'Final',     percent: '40', due_date: '' },
+  ])
 
   // Action loading
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
@@ -392,26 +413,77 @@ export default function BillingPage() {
     if (!newLineItems.length) { alert('Add at least one line item'); return }
     setNewInvSaving(true)
     try {
-      const body: Record<string, unknown> = {
-        site_id:    selectedSite?.id ?? null,
-        notes:      newNotes || null,
-        due_date:   newDueDate || new Date().toISOString().split('T')[0],
-        line_items: newLineItems.map((li, idx) => ({
-          service_type: li.service_type,
-          description:  li.description,
-          qty:          parseFloat(li.qty)        || 1,
-          unit_price:   parseFloat(li.unit_price) || 0,
-          is_recurring: li.is_recurring,
-          sort_order:   idx,
-        })),
-      }
+      if (phaseEnabled) {
+        // ── Phase billing path ──────────────────────────────────────────────────
+        const totalPct = phases.reduce((s, p) => s + (parseFloat(p.percent) || 0), 0)
+        if (Math.round(totalPct) !== 100) {
+          alert(`Phase percentages must sum to 100% (currently ${totalPct}%)`); return
+        }
+        for (const p of phases) {
+          if (!p.due_date) { alert(`Phase "${p.label}" is missing a due date`); return }
+        }
 
-      const res  = await fetch('/api/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      const json = await res.json()
-      if (json.error) { alert(json.error); return }
+        const contractTotal = newInvTotal()
+        const phase_group_id = crypto.randomUUID()
+        const phaseTotal = phases.length
+        const createdIds: string[] = []
 
-      if (andSend && json.invoice) {
-        await fetch(`/api/invoices/${json.invoice.id}/send`, { method: 'POST' })
+        for (let i = 0; i < phases.length; i++) {
+          const ph       = phases[i]
+          const pct      = parseFloat(ph.percent) || 0
+          const phaseAmt = parseFloat((contractTotal * pct / 100).toFixed(2))
+
+          const body: Record<string, unknown> = {
+            site_id:             selectedSite?.id ?? null,
+            notes:               newNotes || null,
+            due_date:            ph.due_date,
+            phase_group_id,
+            phase_number:        i + 1,
+            phase_label:         ph.label,
+            phase_total_amount:  contractTotal,
+            line_items: [{
+              service_type: newLineItems[0]?.service_type ?? 'one_time',
+              description:  `${ph.label} — Phase ${i + 1} of ${phaseTotal} (${pct}%)`,
+              qty:          1,
+              unit_price:   phaseAmt,
+              is_recurring: false,
+              sort_order:   0,
+            }],
+          }
+
+          const res  = await fetch('/api/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+          const json = await res.json()
+          if (json.error) { alert(`Phase ${i + 1} error: ${json.error}`); return }
+          createdIds.push(json.invoice?.id)
+        }
+
+        if (andSend) {
+          // Send all phase invoices
+          await Promise.all(createdIds.map(id => fetch(`/api/invoices/${id}/send`, { method: 'POST' })))
+        }
+      } else {
+        // ── Standard single-invoice path ────────────────────────────────────────
+        const body: Record<string, unknown> = {
+          site_id:    selectedSite?.id ?? null,
+          notes:      newNotes || null,
+          due_date:   newDueDate || new Date().toISOString().split('T')[0],
+          line_items: newLineItems.map((li, idx) => ({
+            service_type: li.service_type,
+            description:  li.description,
+            qty:          parseFloat(li.qty)        || 1,
+            unit_price:   parseFloat(li.unit_price) || 0,
+            is_recurring: li.is_recurring,
+            sort_order:   idx,
+          })),
+        }
+
+        const res  = await fetch('/api/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        const json = await res.json()
+        if (json.error) { alert(json.error); return }
+
+        if (andSend && json.invoice) {
+          await fetch(`/api/invoices/${json.invoice.id}/send`, { method: 'POST' })
+        }
       }
 
       setNewInvOpen(false)
@@ -428,6 +500,12 @@ export default function BillingPage() {
     setNewLineItems([])
     setNewDueDate('')
     setNewNotes('')
+    setPhaseEnabled(false)
+    setPhases([
+      { label: 'Deposit',   percent: '30', due_date: '' },
+      { label: 'Milestone', percent: '30', due_date: '' },
+      { label: 'Final',     percent: '40', due_date: '' },
+    ])
   }
 
   // ── Invoice table columns ───────────────────────────────────────────────────
@@ -435,9 +513,17 @@ export default function BillingPage() {
     {
       key:    'invoice_number',
       label:  'Invoice #',
-      width:  'w-36',
+      width:  'w-44',
       render: (_, row) => (
-        <span className="font-mono text-[#6B7EFF] text-xs">{row.invoice_number}</span>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="font-mono text-[#6B7EFF] text-xs">{row.invoice_number}</span>
+          {row.phase_label && (
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400">
+              <Layers size={9} />
+              {row.phase_label}
+            </span>
+          )}
+        </div>
       ),
     },
     {
@@ -1089,6 +1175,133 @@ export default function BillingPage() {
               </div>
             )}
           </div>
+
+          {/* ── Phase Billing ── */}
+          {newLineItems.length > 0 && (
+            <div className="border border-border rounded-lg overflow-hidden">
+              {/* Toggle header */}
+              <div className="flex items-center justify-between px-4 py-3 bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <Layers size={14} className="text-muted-foreground" />
+                  <span className="text-xs font-semibold text-foreground">Phase Billing</span>
+                  {!phaseEnabled && (
+                    <span className="text-xs text-muted-foreground">Bill in a single invoice</span>
+                  )}
+                </div>
+                {/* Toggle switch */}
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={phaseEnabled}
+                  onClick={() => setPhaseEnabled(v => !v)}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#6B7EFF] focus:ring-offset-1 ${
+                    phaseEnabled ? 'bg-[#6B7EFF]' : 'bg-muted-foreground/30'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform ${
+                      phaseEnabled ? 'translate-x-4' : 'translate-x-0.5'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Phase builder — shown when enabled */}
+              {phaseEnabled && (
+                <div className="p-4 space-y-3">
+                  {/* Summary */}
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-semibold text-foreground">{fmt(newInvTotal())}</span> will be split across {phases.length} phase invoice{phases.length !== 1 ? 's' : ''}
+                  </p>
+
+                  {/* Phase rows */}
+                  <div className="space-y-2">
+                    {/* Header row */}
+                    <div className="grid grid-cols-[1fr_64px_96px_108px_28px] gap-2 px-1">
+                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Phase Label</span>
+                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-right">%</span>
+                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-right">Amount</span>
+                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Due Date</span>
+                      <span />
+                    </div>
+
+                    {phases.map((ph, i) => {
+                      const pct = parseFloat(ph.percent) || 0
+                      const amt = newInvTotal() * pct / 100
+                      return (
+                        <div key={i} className="grid grid-cols-[1fr_64px_96px_108px_28px] gap-2 items-center">
+                          {/* Label */}
+                          <input
+                            value={ph.label}
+                            onChange={e => setPhases(prev => prev.map((p, j) => j === i ? { ...p, label: e.target.value } : p))}
+                            placeholder="Label"
+                            className="h-8 px-2 text-xs bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
+                          />
+                          {/* Percent */}
+                          <div className="relative flex items-center">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={ph.percent}
+                              onChange={e => setPhases(prev => prev.map((p, j) => j === i ? { ...p, percent: e.target.value } : p))}
+                              className="h-8 w-full px-2 pr-4 text-xs bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] text-right"
+                            />
+                            <span className="absolute right-1.5 text-[10px] text-muted-foreground pointer-events-none">%</span>
+                          </div>
+                          {/* Amount (read-only) */}
+                          <div className="h-8 px-2 flex items-center justify-end bg-muted/40 border border-border rounded">
+                            <span className="text-xs font-semibold text-foreground">{fmt(amt)}</span>
+                          </div>
+                          {/* Due date */}
+                          <input
+                            type="date"
+                            value={ph.due_date}
+                            onChange={e => setPhases(prev => prev.map((p, j) => j === i ? { ...p, due_date: e.target.value } : p))}
+                            className="h-8 px-2 text-xs bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
+                          />
+                          {/* Delete */}
+                          {phases.length > 1 ? (
+                            <button
+                              type="button"
+                              onClick={() => setPhases(prev => prev.filter((_, j) => j !== i))}
+                              className="h-8 w-7 flex items-center justify-center text-muted-foreground hover:text-red-400 transition-colors"
+                              title="Remove phase"
+                            >
+                              <X size={13} />
+                            </button>
+                          ) : <span />}
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Percent total indicator */}
+                  {(() => {
+                    const total = phases.reduce((s, p) => s + (parseFloat(p.percent) || 0), 0)
+                    const isOk  = Math.round(total) === 100
+                    return (
+                      <div className={`flex items-center gap-2 text-xs ${isOk ? 'text-emerald-400' : 'text-amber-400'}`}>
+                        {isOk
+                          ? <><Check size={12} /> 100% allocated</>
+                          : <><AlertTriangle size={12} /> {total}% allocated — all phases must sum to 100%</>
+                        }
+                      </div>
+                    )
+                  })()}
+
+                  {/* Add phase button */}
+                  <button
+                    type="button"
+                    onClick={() => setPhases(prev => [...prev, { label: `Phase ${prev.length + 1}`, percent: '0', due_date: '' }])}
+                    className="flex items-center gap-1 text-xs text-[#6B7EFF] hover:text-[#5a6ee0] transition-colors"
+                  >
+                    <Plus size={12} /> Add Phase
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </SlideOver>
 
