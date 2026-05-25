@@ -15,7 +15,7 @@ import {
   ClipboardCheck, Building2, DollarSign,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, Tv: Satellite, Flame, Hash, Ruler, PenTool, MousePointer, FileSignature, HardHat, Trophy, Store, BookMarked } = require("lucide-react") as any;
+const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, Tv: Satellite, Flame, Hash, Ruler, PenTool, MousePointer, FileSignature, HardHat, Trophy, Store, BookMarked, Radar } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useUser, useClerk, useSession } from "@clerk/nextjs";
@@ -134,7 +134,8 @@ const NAV_SECTIONS: NavSection[] = [
     icon: Zap,
     color: "#6B7EFF",
     items: [
-      { label: "ARIA — Lead Intel",  href: "/aria",       icon: Crosshair,      description: "AI lead research and outreach",     badge: "AI" },
+      { label: "ARIA — Lead Intel",   href: "/aria",       icon: Crosshair,      description: "AI lead research and outreach",     badge: "AI" },
+      { label: "SCOUT — Market Intel", href: "/scout",    icon: Radar,          description: "Territory scanning and competitor intel", badge: "AI" },
       { label: "TRINITY — Voice AI", href: "/trinity",    icon: Phone,          description: "Voice agent + call analytics",      badge: "AI" },
       { label: "DirecTV / ATLAS",    href: "/directv",    icon: Satellite,      description: "DirecTV channel and orders" },
       { label: "New Order",          href: "/orders/new", icon: Zap,            description: "Submit a DirecTV order" },
@@ -188,7 +189,7 @@ const integrations = [
 const aiAgents = [
   { name: "ARIA",    role: "Lead Intel",     color: "#6B7EFF", active: true,  href: "/aria" },
   { name: "TRINITY", role: "Voice",          color: "#0B7285", active: true,  href: "/trinity" },
-  { name: "SCOUT",   role: "Market",         color: "#7C3AED", active: true,  href: null },
+  { name: "SCOUT",   role: "Market",         color: "#7C3AED", active: true,  href: "/scout" },
   { name: "BEACON",  role: "Client Comms",   color: "#B45309", active: false, href: null },
   { name: "FORGE",   role: "Quote Builder",  color: "#0B7285", active: true,  href: null },
   { name: "ATLAS",   role: "DirecTV",        color: "#3B5BDB", active: true,  href: "/directv" },
