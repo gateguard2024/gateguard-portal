@@ -1,8 +1,8 @@
 "use client";
 import { useState } from "react";
-import { Mail, Search, Star, Archive, Trash2, RefreshCw, Plus, ChevronDown, Inbox } from "lucide-react";
+import { Mail, Search, Star, Trash2, RefreshCw, Plus, ChevronDown } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Send, Edit2, Gmail, ArrowLeft, MoreVertical, Paperclip, Tag: TagIcon, CheckSquare } = require("lucide-react") as any;
+const { Archive, Inbox, Send, Edit2, ArrowLeft, MoreVertical, Paperclip, Tag: TagIcon, CheckSquare } = require("lucide-react") as any;
 
 const FOLDERS = [
   { label: "Inbox",    icon: Inbox, count: 4, active: true  },

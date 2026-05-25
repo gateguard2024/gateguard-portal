@@ -1,8 +1,8 @@
 "use client";
 import { useState } from "react";
-import { DollarSign, Plus, Filter, Download, TrendingDown, Receipt, Tag, Calendar } from "lucide-react";
+import { Plus, Filter, Download, Calendar } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { BarChart3: BarChart3Icon, Upload } = require("lucide-react") as any;
+const { DollarSign, TrendingDown, Receipt, Tag, BarChart3: BarChart3Icon, Upload } = require("lucide-react") as any;
 
 const CATEGORIES = ["All", "Labor", "Parts & Materials", "Fuel & Mileage", "Software & Subscriptions", "Equipment", "Office", "Marketing", "Other"];
 
