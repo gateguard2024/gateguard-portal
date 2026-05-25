@@ -9,31 +9,23 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// ── Helper: exchange refresh token for access token ───────────────────────────
 async function getAccessToken(refreshToken: string): Promise<string | null> {
   const clientId     = process.env.GOOGLE_CALENDAR_CLIENT_ID
   const clientSecret = process.env.GOOGLE_CALENDAR_CLIENT_SECRET
-
   if (!clientId || !clientSecret) return null
-
   try {
     const res = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        client_id:     clientId,
-        client_secret: clientSecret,
-        refresh_token: refreshToken,
-        grant_type:    'refresh_token',
+        client_id: clientId, client_secret: clientSecret,
+        refresh_token: refreshToken, grant_type: 'refresh_token',
       }).toString(),
     })
-
     if (!res.ok) return null
     const data = await res.json() as { access_token?: string }
     return data.access_token ?? null
-  } catch {
-    return null
-  }
+  } catch { return null }
 }
 
 interface GCalListEntry {
@@ -43,34 +35,31 @@ interface GCalListEntry {
   primary?: boolean
 }
 
-// GET /api/calendar/google/calendars
-// Returns the user's full calendar list + their saved selected IDs.
+// GET /api/calendar/google/calendars — full calendar list + user's saved selections
 export async function GET() {
   try {
     const user = await getCurrentUser()
 
-    const { data: tokenRow } = await supabase
+    // Read refresh token from dedicated column
+    const { data: row } = await supabase
       .from('user_settings')
-      .select('value')
+      .select('gcal_refresh_token, gcal_selected_calendar_ids')
       .eq('user_id', user.id)
-      .eq('key', 'google_calendar_refresh_token')
       .single()
 
-    if (!tokenRow?.value) {
+    if (!row?.gcal_refresh_token) {
       return NextResponse.json({ error: 'Google Calendar not connected' }, { status: 400 })
     }
 
-    const accessToken = await getAccessToken(tokenRow.value)
+    const accessToken = await getAccessToken(row.gcal_refresh_token)
     if (!accessToken) {
       return NextResponse.json({ error: 'Failed to refresh access token' }, { status: 401 })
     }
 
-    // Fetch the calendar list from Google
     const listRes = await fetch(
       'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250',
       { headers: { Authorization: `Bearer ${accessToken}` } }
     )
-
     if (!listRes.ok) {
       return NextResponse.json({ error: 'Failed to fetch calendar list from Google' }, { status: 502 })
     }
@@ -83,21 +72,13 @@ export async function GET() {
       primary:         c.primary ?? false,
     }))
 
-    // Read saved selected calendar IDs
-    const { data: selectedRow } = await supabase
-      .from('user_settings')
-      .select('value')
-      .eq('user_id', user.id)
-      .eq('key', 'google_calendar_selected_ids')
-      .single()
-
+    // Selected IDs from dedicated column (defaults to primary)
     let selectedIds: string[] = ['primary']
-    if (selectedRow?.value) {
+    if (row.gcal_selected_calendar_ids) {
       try {
-        selectedIds = JSON.parse(selectedRow.value) as string[]
-      } catch {
-        selectedIds = ['primary']
-      }
+        const parsed = row.gcal_selected_calendar_ids as string[]
+        if (Array.isArray(parsed) && parsed.length > 0) selectedIds = parsed
+      } catch { /* keep default */ }
     }
 
     return NextResponse.json({ calendars, selectedIds })
@@ -107,25 +88,18 @@ export async function GET() {
   }
 }
 
-// POST /api/calendar/google/calendars
-// Body: { selectedIds: string[] }
-// Saves the user's chosen calendar IDs to sync.
+// POST /api/calendar/google/calendars — save selected calendar IDs
 export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser()
     const body = await req.json() as { selectedIds?: string[] }
-
     const selectedIds = Array.isArray(body.selectedIds) ? body.selectedIds : ['primary']
 
     await supabase
       .from('user_settings')
       .upsert(
-        {
-          user_id: user.id,
-          key:     'google_calendar_selected_ids',
-          value:   JSON.stringify(selectedIds),
-        },
-        { onConflict: 'user_id,key' }
+        { user_id: user.id, gcal_selected_calendar_ids: selectedIds },
+        { onConflict: 'user_id' }
       )
 
     return NextResponse.json({ success: true, selectedIds })
