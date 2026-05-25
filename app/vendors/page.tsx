@@ -4,10 +4,10 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   Plus, X, Search, Package, Users, Mail, Phone,
-  FileText, ChevronDown, Save, Loader2, Check,
+  FileText, ChevronDown, Loader2, Check,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { DollarSign, Edit2, Store, Building2Icon, AlertCircle } = require("lucide-react") as any;
+const { DollarSign, Edit2, Store, Building2Icon, AlertCircle, Save } = require("lucide-react") as any;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
