@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
         parent_id:      body.parent_id ?? null,
         is_system:      false,
         is_active:      true,
-        org_id:         user.orgId ?? null,
+        org_id:         user.org_id ?? null,
       })
       .select()
       .single()
