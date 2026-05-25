@@ -99,9 +99,21 @@ interface Site {
 
 interface NewLineItem {
   service_type: string
+  name: string          // display name (from saved item or typed)
   description: string
   qty: string
   unit_price: string
+  is_recurring: boolean
+}
+
+interface SavedLineItem {
+  id: string
+  user_id: string | null
+  name: string
+  description: string | null
+  service_type: string
+  unit_price: number
+  default_qty: number
   is_recurring: boolean
 }
 
@@ -192,6 +204,12 @@ export default function BillingPage() {
   const [newNotes,        setNewNotes]        = useState('')
   const [newInvSaving,    setNewInvSaving]    = useState(false)
 
+  // Product/service picker state
+  const [savedItems,    setSavedItems]    = useState<SavedLineItem[]>([])
+  const [pickerIdx,     setPickerIdx]     = useState<number | null>(null)
+  const [pickerSearch,  setPickerSearch]  = useState('')
+  const [savingItem,    setSavingItem]    = useState<Record<number, boolean>>({})
+
   // Phase billing state
   const [phaseEnabled, setPhaseEnabled] = useState(false)
   const [phases, setPhases] = useState<PhaseRow[]>([
@@ -263,6 +281,17 @@ export default function BillingPage() {
       setPayLoading(false)
     }
   }, [payFilter, payPeriod])
+
+  // ── Fetch saved line items for product picker ───────────────────────────────
+  const fetchSavedItems = useCallback(async (q?: string) => {
+    try {
+      const params = new URLSearchParams()
+      if (q) params.set('q', q)
+      const res  = await fetch(`/api/saved-line-items?${params}`)
+      const json = await res.json()
+      setSavedItems(json.items ?? [])
+    } catch { /* non-critical */ }
+  }, [])
 
   // ── Fetch sites for new invoice form ────────────────────────────────────────
   const fetchSites = useCallback(async (q?: string) => {
@@ -373,8 +402,47 @@ export default function BillingPage() {
   }
 
   // ── New invoice ─────────────────────────────────────────────────────────────
-  function addLineItem() {
-    setNewLineItems(p => [...p, { service_type: 'video_monitoring', description: 'Video Monitoring Fee — Monthly', qty: '1', unit_price: '500.00', is_recurring: true }])
+  function addLineItem(saved?: SavedLineItem) {
+    if (saved) {
+      setNewLineItems(p => [...p, {
+        service_type: saved.service_type,
+        name:         saved.name,
+        description:  saved.description ?? '',
+        qty:          String(saved.default_qty),
+        unit_price:   String(saved.unit_price),
+        is_recurring: saved.is_recurring,
+      }])
+    } else {
+      setNewLineItems(p => [...p, { service_type: 'one_time', name: '', description: '', qty: '1', unit_price: '', is_recurring: false }])
+    }
+    setPickerIdx(null)
+    setPickerSearch('')
+  }
+
+  async function saveLineItemForUser(idx: number) {
+    const li = newLineItems[idx]
+    if (!li.description.trim() && !li.name.trim()) return
+    setSavingItem(p => ({ ...p, [idx]: true }))
+    try {
+      const res = await fetch('/api/saved-line-items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name:         li.name || li.description.slice(0, 60),
+          description:  li.description,
+          service_type: li.service_type,
+          unit_price:   parseFloat(li.unit_price) || 0,
+          default_qty:  parseFloat(li.qty) || 1,
+          is_recurring: li.is_recurring,
+        }),
+      })
+      const json = await res.json()
+      if (json.item) {
+        setSavedItems(prev => [...prev, json.item])
+      }
+    } finally {
+      setSavingItem(p => ({ ...p, [idx]: false }))
+    }
   }
 
   function updateLineItem(idx: number, field: keyof NewLineItem, value: string | boolean) {
@@ -413,7 +481,7 @@ export default function BillingPage() {
     }, 0)
   }
 
-  async function saveNewInvoice(andSend = false) {
+  async function saveNewInvoice(andSend = false, markPaid = false) {
     if (!newLineItems.length) { alert('Add at least one line item'); return }
     setNewInvSaving(true)
     try {
@@ -489,7 +557,7 @@ export default function BillingPage() {
           due_date:   newDueDate || new Date().toISOString().split('T')[0],
           line_items: newLineItems.map((li, idx) => ({
             service_type: li.service_type,
-            description:  li.description,
+            description:  li.description || li.name,
             qty:          parseFloat(li.qty)        || 1,
             unit_price:   parseFloat(li.unit_price) || 0,
             is_recurring: li.is_recurring,
@@ -503,6 +571,15 @@ export default function BillingPage() {
 
         if (andSend && json.invoice) {
           await fetch(`/api/invoices/${json.invoice.id}/send`, { method: 'POST' })
+        }
+
+        // Mark as paid immediately if requested
+        if (markPaid && json.invoice) {
+          await fetch(`/api/invoices/${json.invoice.id}/mark-paid`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paid_at: new Date().toISOString().split('T')[0], payment_type: 'check' }),
+          })
         }
       }
 
@@ -520,6 +597,8 @@ export default function BillingPage() {
     setNewLineItems([])
     setNewDueDate('')
     setNewNotes('')
+    setPickerIdx(null)
+    setPickerSearch('')
     setPhaseEnabled(false)
     setPhases([
       { label: 'Deposit',   percent: '30', amount: '', due_date: '' },
@@ -720,7 +799,7 @@ export default function BillingPage() {
         subtitle="Invoices · Commissions · QuickBooks"
         actions={
           <button
-            onClick={() => { setNewInvOpen(true); fetchSites() }}
+            onClick={() => { setNewInvOpen(true); fetchSites(); fetchSavedItems() }}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#6B7EFF] hover:bg-[#5a6ee0] text-white text-sm font-medium transition-colors shadow-lg shadow-[#6B7EFF]/20"
           >
             <Plus size={15} /> New Invoice
@@ -913,7 +992,7 @@ export default function BillingPage() {
                     icon={<FileText size={24} className="text-muted-foreground" />}
                     title="No invoices yet"
                     description="Create your first invoice to start tracking billing."
-                    action={{ label: '+ New Invoice', onClick: () => { setNewInvOpen(true); fetchSites() } }}
+                    action={{ label: '+ New Invoice', onClick: () => { setNewInvOpen(true); fetchSites(); fetchSavedItems() } }}
                   />
                 }
               />
@@ -1068,8 +1147,8 @@ export default function BillingPage() {
                                 setSiteDropdown(false)
                                 if (s.units) {
                                   setNewLineItems([
-                                    { service_type: 'video_monitoring', description: 'Video Monitoring Fee — Monthly', qty: '1', unit_price: '500.00', is_recurring: true },
-                                    { service_type: 'access_plan', description: `GateGuard Access Plan — ${s.units} units × $5.00/unit/mo`, qty: String(s.units), unit_price: '5.00', is_recurring: true },
+                                    { name: 'Video Monitoring', service_type: 'video_monitoring', description: 'Video Monitoring Fee — Monthly', qty: '1', unit_price: '500.00', is_recurring: true },
+                                    { name: 'Access Plan', service_type: 'access_plan', description: `GateGuard Access Plan — ${s.units} units × $5.00/unit/mo`, qty: String(s.units), unit_price: '5.00', is_recurring: true },
                                   ])
                                 }
                               }}
@@ -1122,41 +1201,13 @@ export default function BillingPage() {
                 </div>
               </div>
 
-              {/* ── Quick-add service buttons ── */}
-              <div>
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2.5">Quick Add Services</p>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {[
-                    { icon: '📹', label: 'Video Monitoring', type: 'video_monitoring', desc: 'Video Monitoring Fee — Monthly', qty: '1', price: '500.00' },
-                    { icon: '🏠', label: 'Access Plan', type: 'access_plan', desc: `GateGuard Access Plan${selectedSite?.units ? ` — ${selectedSite.units} units × $5.00/unit/mo` : ' — $5.00/unit/mo'}`, qty: selectedSite?.units ? String(selectedSite.units) : '', price: '5.00' },
-                    { icon: '🔧', label: 'Service Call', type: 'service_call', desc: 'On-site service call', qty: '1', price: '' },
-                    { icon: '🔨', label: 'Labor', type: 'labor', desc: 'Installation / labor', qty: '1', price: '' },
-                    { icon: '📦', label: 'Equipment', type: 'equipment', desc: '', qty: '1', price: '' },
-                  ].map(svc => (
-                    <button
-                      key={svc.type}
-                      onClick={() => setNewLineItems(prev => [...prev, { service_type: svc.type, description: svc.desc, qty: svc.qty, unit_price: svc.price, is_recurring: svc.type === 'video_monitoring' || svc.type === 'access_plan' }])}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-muted/30 hover:border-[#6B7EFF]/50 hover:bg-[#6B7EFF]/5 text-sm text-foreground transition-colors"
-                    >
-                      <span>{svc.icon}</span>
-                      <span className="font-medium">{svc.label}</span>
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => setNewLineItems(prev => [...prev, { service_type: 'one_time', description: '', qty: '1', unit_price: '', is_recurring: false }])}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-[#6B7EFF]/40 text-[#6B7EFF] hover:bg-[#6B7EFF]/5 text-sm transition-colors"
-                  >
-                    <Plus size={14} /> Custom Line
-                  </button>
-                </div>
-              </div>
-
-              {/* ── Line items table ── */}
-              <div>
+              {/* ── Line items table — QB style ── */}
+              <div onClick={() => pickerIdx !== null && setPickerIdx(null)}>
                 <div className="border border-border rounded-xl overflow-hidden">
                   {/* Table header */}
-                  <div className="grid grid-cols-[2fr_80px_120px_110px_36px] bg-muted/50 border-b border-border px-4 py-2.5 gap-3">
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Description / Service</span>
+                  <div className="grid grid-cols-[200px_1fr_80px_130px_100px_36px] bg-muted/50 border-b border-border px-3 py-2.5 gap-2">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Product / Service</span>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Description</span>
                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest text-center">Qty</span>
                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest text-right">Rate</span>
                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest text-right">Amount</span>
@@ -1165,88 +1216,211 @@ export default function BillingPage() {
 
                   {/* Line item rows */}
                   {newLineItems.length === 0 ? (
-                    <div className="px-4 py-10 text-center">
-                      <p className="text-sm text-muted-foreground">No line items yet — use the quick-add buttons above or click <span className="text-[#6B7EFF] font-medium">+ Custom Line</span></p>
+                    <div className="px-4 py-12 text-center space-y-3">
+                      <p className="text-sm text-muted-foreground">No line items yet</p>
+                      <button
+                        onClick={e => { e.stopPropagation(); setPickerIdx(-1); setPickerSearch(''); fetchSavedItems() }}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-dashed border-[#6B7EFF]/40 text-[#6B7EFF] hover:bg-[#6B7EFF]/5 text-sm transition-colors"
+                      >
+                        <Plus size={14} /> Add product or service
+                      </button>
                     </div>
                   ) : (
                     <div className="divide-y divide-border">
-                      {newLineItems.map((li, idx) => (
-                        <div key={idx} className="grid grid-cols-[2fr_80px_120px_110px_36px] px-4 py-3 gap-3 items-center hover:bg-muted/20 transition-colors group">
-                          {/* Description + type */}
-                          <div className="space-y-1.5">
+                      {newLineItems.map((li, idx) => {
+                        const isSaved   = savedItems.find(s => s.name === li.name)
+                        const canSave   = !isSaved && (li.description.trim() || li.name.trim()) && li.unit_price
+                        return (
+                          <div key={idx} className="grid grid-cols-[200px_1fr_80px_130px_100px_36px] px-3 py-2.5 gap-2 items-center hover:bg-muted/10 transition-colors group" onClick={e => e.stopPropagation()}>
+                            {/* Product/Service picker cell */}
+                            <div className="relative">
+                              <button
+                                onClick={() => { setPickerIdx(pickerIdx === idx ? null : idx); setPickerSearch(''); fetchSavedItems() }}
+                                className={`w-full text-left h-9 px-2.5 rounded-lg text-sm border transition-colors truncate ${
+                                  li.name
+                                    ? 'border-border bg-background text-foreground font-medium'
+                                    : 'border-dashed border-border bg-muted/20 text-muted-foreground'
+                                } hover:border-[#6B7EFF]/50`}
+                              >
+                                {li.name || 'Select…'}
+                              </button>
+                              {pickerIdx === idx && (
+                                <div className="absolute top-full left-0 z-50 mt-1 w-72 bg-popover border border-border rounded-xl shadow-2xl overflow-hidden">
+                                  <div className="p-2 border-b border-border">
+                                    <input
+                                      autoFocus
+                                      value={pickerSearch}
+                                      onChange={e => { setPickerSearch(e.target.value); fetchSavedItems(e.target.value) }}
+                                      placeholder="Search products & services…"
+                                      className="w-full px-3 py-1.5 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]"
+                                      onClick={e => e.stopPropagation()}
+                                    />
+                                  </div>
+                                  <div className="max-h-56 overflow-y-auto">
+                                    {savedItems.length === 0 && (
+                                      <p className="px-3 py-4 text-xs text-muted-foreground text-center">No saved items — type to search</p>
+                                    )}
+                                    {/* Group: global */}
+                                    {savedItems.filter(s => s.user_id === null).length > 0 && (
+                                      <div>
+                                        <p className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest border-b border-border">Standard Services</p>
+                                        {savedItems.filter(s => s.user_id === null).map(s => (
+                                          <button
+                                            key={s.id}
+                                            onClick={e => { e.stopPropagation(); updateLineItem(idx, 'name', s.name); updateLineItem(idx, 'description', s.description ?? ''); updateLineItem(idx, 'service_type', s.service_type); updateLineItem(idx, 'unit_price', String(s.unit_price)); updateLineItem(idx, 'qty', String(s.default_qty)); updateLineItem(idx, 'is_recurring', s.is_recurring); setPickerIdx(null) }}
+                                            className="w-full text-left px-3 py-2.5 hover:bg-accent transition-colors flex items-center justify-between"
+                                          >
+                                            <div>
+                                              <p className="text-sm font-medium text-foreground">{s.name}</p>
+                                              {s.description && <p className="text-xs text-muted-foreground truncate max-w-[180px]">{s.description}</p>}
+                                            </div>
+                                            {s.unit_price > 0 && <span className="text-xs text-[#6B7EFF] font-medium shrink-0 ml-2">{fmt(s.unit_price)}</span>}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {/* Group: my saved items */}
+                                    {savedItems.filter(s => s.user_id !== null).length > 0 && (
+                                      <div>
+                                        <p className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest border-b border-border bg-muted/20">My Saved Items</p>
+                                        {savedItems.filter(s => s.user_id !== null).map(s => (
+                                          <button
+                                            key={s.id}
+                                            onClick={e => { e.stopPropagation(); updateLineItem(idx, 'name', s.name); updateLineItem(idx, 'description', s.description ?? ''); updateLineItem(idx, 'service_type', s.service_type); updateLineItem(idx, 'unit_price', String(s.unit_price)); updateLineItem(idx, 'qty', String(s.default_qty)); updateLineItem(idx, 'is_recurring', s.is_recurring); setPickerIdx(null) }}
+                                            className="w-full text-left px-3 py-2.5 hover:bg-accent transition-colors flex items-center justify-between"
+                                          >
+                                            <div>
+                                              <p className="text-sm font-medium text-foreground">{s.name}</p>
+                                              {s.description && <p className="text-xs text-muted-foreground truncate max-w-[180px]">{s.description}</p>}
+                                            </div>
+                                            {s.unit_price > 0 && <span className="text-xs text-[#6B7EFF] font-medium shrink-0 ml-2">{fmt(s.unit_price)}</span>}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                  {/* Custom item entry */}
+                                  {pickerSearch.trim() && (
+                                    <div className="border-t border-border p-2">
+                                      <button
+                                        onClick={e => { e.stopPropagation(); updateLineItem(idx, 'name', pickerSearch.trim()); setPickerIdx(null) }}
+                                        className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-accent transition-colors flex items-center gap-2"
+                                      >
+                                        <Plus size={13} className="text-[#6B7EFF]" />
+                                        <span>Use &ldquo;<span className="font-medium">{pickerSearch.trim()}</span>&rdquo;</span>
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Description */}
                             <input
                               value={li.description}
                               onChange={e => updateLineItem(idx, 'description', e.target.value)}
                               placeholder="Description…"
-                              className="w-full h-8 px-2.5 text-sm bg-transparent border border-transparent hover:border-border focus:border-[#6B7EFF] rounded-lg focus:outline-none focus:bg-background transition-colors"
+                              className="w-full h-9 px-2.5 text-sm bg-transparent border border-transparent hover:border-border focus:border-[#6B7EFF] rounded-lg focus:outline-none focus:bg-background transition-colors"
                             />
-                            <div className="flex items-center gap-2">
-                              <select
-                                value={li.service_type}
-                                onChange={e => updateLineItem(idx, 'service_type', e.target.value)}
-                                className="h-6 px-1.5 text-[11px] bg-background border border-border rounded text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
-                              >
-                                {SERVICE_TYPES.map(st => (
-                                  <option key={st.value} value={st.value}>{st.label}</option>
-                                ))}
-                              </select>
-                              <label className="flex items-center gap-1 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={li.is_recurring}
-                                  onChange={e => updateLineItem(idx, 'is_recurring', e.target.checked)}
-                                  className="rounded accent-[#6B7EFF] w-3 h-3"
-                                />
-                                <span className="text-[10px] text-muted-foreground">Recurring</span>
-                              </label>
-                            </div>
-                          </div>
-                          {/* Qty */}
-                          <input
-                            type="number"
-                            value={li.qty}
-                            onChange={e => updateLineItem(idx, 'qty', e.target.value)}
-                            placeholder="1"
-                            className="w-full h-9 px-2 text-sm text-center bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]"
-                          />
-                          {/* Rate */}
-                          <div className="relative">
-                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">$</span>
+                            {/* Qty */}
                             <input
                               type="number"
-                              value={li.unit_price}
-                              onChange={e => updateLineItem(idx, 'unit_price', e.target.value)}
-                              placeholder="0.00"
-                              className="w-full h-9 pl-5 pr-2 text-sm text-right bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]"
+                              value={li.qty}
+                              onChange={e => updateLineItem(idx, 'qty', e.target.value)}
+                              placeholder="1"
+                              className="w-full h-9 px-2 text-sm text-center bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]"
                             />
+                            {/* Rate */}
+                            <div className="relative">
+                              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">$</span>
+                              <input
+                                type="number"
+                                value={li.unit_price}
+                                onChange={e => updateLineItem(idx, 'unit_price', e.target.value)}
+                                placeholder="0.00"
+                                className="w-full h-9 pl-5 pr-2 text-sm text-right bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]"
+                              />
+                            </div>
+                            {/* Amount */}
+                            <div className="text-right">
+                              <span className="text-sm font-semibold text-foreground tabular-nums">
+                                {fmt((parseFloat(li.qty) || 0) * (parseFloat(li.unit_price) || 0))}
+                              </span>
+                              {li.is_recurring && <p className="text-[9px] text-[#6B7EFF] font-medium">recurring</p>}
+                            </div>
+                            {/* Delete + Save */}
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                              {canSave && (
+                                <button
+                                  onClick={() => void saveLineItemForUser(idx)}
+                                  disabled={savingItem[idx]}
+                                  title="Save this item for future use"
+                                  className="p-1 rounded text-[#6B7EFF] hover:bg-[#6B7EFF]/10 transition-colors"
+                                >
+                                  {savingItem[idx] ? '…' : '★'}
+                                </button>
+                              )}
+                              <button
+                                onClick={() => removeLineItem(idx)}
+                                className="p-1 rounded text-muted-foreground hover:text-red-400 transition-colors"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
                           </div>
-                          {/* Amount */}
-                          <div className="text-right">
-                            <span className="text-sm font-semibold text-foreground tabular-nums">
-                              {fmt((parseFloat(li.qty) || 0) * (parseFloat(li.unit_price) || 0))}
-                            </span>
-                          </div>
-                          {/* Delete */}
-                          <button
-                            onClick={() => removeLineItem(idx)}
-                            className="opacity-0 group-hover:opacity-100 p-1 rounded text-muted-foreground hover:text-red-400 transition-all"
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
 
                   {/* Add row footer */}
                   {newLineItems.length > 0 && (
-                    <div className="px-4 py-2.5 border-t border-border bg-muted/20">
+                    <div className="px-4 py-2.5 border-t border-border bg-muted/20 flex items-center gap-4">
                       <button
-                        onClick={() => setNewLineItems(prev => [...prev, { service_type: 'one_time', description: '', qty: '1', unit_price: '', is_recurring: false }])}
+                        onClick={e => { e.stopPropagation(); setPickerIdx(newLineItems.length); setPickerSearch(''); fetchSavedItems() }}
                         className="flex items-center gap-1.5 text-xs text-[#6B7EFF] hover:text-[#5a6ee0] transition-colors"
                       >
-                        <Plus size={12} /> Add line item
+                        <Plus size={12} /> Add line
                       </button>
+                      <div className="relative">
+                        {pickerIdx === newLineItems.length && (
+                          <div className="absolute bottom-full left-0 z-50 mb-1 w-72 bg-popover border border-border rounded-xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+                            <div className="p-2 border-b border-border">
+                              <input
+                                autoFocus
+                                value={pickerSearch}
+                                onChange={e => { setPickerSearch(e.target.value); fetchSavedItems(e.target.value) }}
+                                placeholder="Search or type a new item…"
+                                className="w-full px-3 py-1.5 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]"
+                              />
+                            </div>
+                            <div className="max-h-48 overflow-y-auto">
+                              {savedItems.map(s => (
+                                <button
+                                  key={s.id}
+                                  onClick={() => { addLineItem(s) }}
+                                  className="w-full text-left px-3 py-2.5 hover:bg-accent transition-colors flex items-center justify-between"
+                                >
+                                  <div>
+                                    <p className="text-sm font-medium text-foreground">{s.name}</p>
+                                    {s.user_id === null && <p className="text-[10px] text-muted-foreground">Standard</p>}
+                                  </div>
+                                  {s.unit_price > 0 && <span className="text-xs text-[#6B7EFF] font-medium">{fmt(s.unit_price)}</span>}
+                                </button>
+                              ))}
+                              {pickerSearch.trim() && (
+                                <button
+                                  onClick={() => { addLineItem({ id: '', user_id: 'custom', name: pickerSearch.trim(), description: null, service_type: 'one_time', unit_price: 0, default_qty: 1, is_recurring: false }) }}
+                                  className="w-full text-left px-3 py-2 hover:bg-accent transition-colors flex items-center gap-2 border-t border-border"
+                                >
+                                  <Plus size={13} className="text-[#6B7EFF]" />
+                                  <span className="text-sm">Custom: &ldquo;{pickerSearch.trim()}&rdquo;</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1400,18 +1574,26 @@ export default function BillingPage() {
               >
                 Cancel
               </button>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2.5">
                 <button
-                  onClick={() => saveNewInvoice(false)}
+                  onClick={() => saveNewInvoice(false, false)}
                   disabled={newInvSaving}
-                  className="px-5 py-2.5 text-sm border border-border rounded-xl hover:bg-muted transition-colors disabled:opacity-50"
+                  className="px-4 py-2.5 text-sm border border-border rounded-xl hover:bg-muted transition-colors disabled:opacity-50"
                 >
                   Save as Draft
                 </button>
                 <button
-                  onClick={() => saveNewInvoice(true)}
+                  onClick={() => saveNewInvoice(false, true)}
                   disabled={newInvSaving}
-                  className="flex items-center gap-2 px-6 py-2.5 text-sm bg-[#6B7EFF] hover:bg-[#5a6ee0] text-white rounded-xl transition-colors disabled:opacity-50 font-medium shadow-lg shadow-[#6B7EFF]/20"
+                  className="flex items-center gap-1.5 px-4 py-2.5 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-colors disabled:opacity-50 font-medium"
+                >
+                  <CheckCircle2 size={14} />
+                  {newInvSaving ? 'Saving…' : 'Save as Paid'}
+                </button>
+                <button
+                  onClick={() => saveNewInvoice(true, false)}
+                  disabled={newInvSaving}
+                  className="flex items-center gap-2 px-5 py-2.5 text-sm bg-[#6B7EFF] hover:bg-[#5a6ee0] text-white rounded-xl transition-colors disabled:opacity-50 font-medium shadow-lg shadow-[#6B7EFF]/20"
                 >
                   <Send size={14} />
                   {newInvSaving ? 'Saving…' : 'Save & Send'}

@@ -18,6 +18,8 @@ interface Incident {
   severity: string;
   status: string;
   created_at: string;
+  acknowledged_at: string | null;
+  acknowledged_by: string | null;
 }
 
 function timeAgo(iso: string) {
@@ -38,6 +40,7 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [todayCount, setTodayCount] = useState(0);
   const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [acking, setAcking] = useState<Record<string, boolean>>({});
   const searchRef = useRef<HTMLInputElement>(null);
   const bellRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -70,6 +73,30 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
         // Non-critical — badge just won't show
       }
     })();
+  }, []);
+
+  // Quick-acknowledge from bell dropdown
+  const acknowledgeIncident = useCallback(async (incId: string) => {
+    setAcking(p => ({ ...p, [incId]: true }));
+    try {
+      const res = await fetch(`/api/incidents/${incId}/acknowledge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (res.ok) {
+        const d = await res.json() as { incident: { acknowledged_at: string; acknowledged_by: string } };
+        setIncidents(prev =>
+          prev.map(i =>
+            i.id === incId
+              ? { ...i, acknowledged_at: d.incident.acknowledged_at, acknowledged_by: d.incident.acknowledged_by }
+              : i
+          )
+        );
+      }
+    } catch { /* non-critical */ } finally {
+      setAcking(p => ({ ...p, [incId]: false }));
+    }
   }, []);
 
   // Fetch open incidents for bell badge — poll every 60s
@@ -226,26 +253,37 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
                   {incidents.map(inc => {
                     const isCritical = inc.severity === 'critical';
                     const Icon = isCritical ? AlertOctagon : AlertTriangle;
+                    const isAcked = !!inc.acknowledged_at;
                     return (
-                      <Link
-                        key={inc.id}
-                        href="/incidents"
-                        onClick={() => setBellOpen(false)}
-                        className="flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition-colors"
-                      >
+                      <div key={inc.id} className={`flex items-start gap-3 px-4 py-3 ${isAcked ? 'opacity-60' : ''}`}>
                         <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${isCritical ? 'bg-red-50' : 'bg-amber-50'}`}>
                           <Icon size={13} className={isCritical ? 'text-red-500' : 'text-amber-500'} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-slate-800 leading-snug truncate">{inc.title}</p>
+                          <Link href="/incidents" onClick={() => setBellOpen(false)}>
+                            <p className="text-xs font-medium text-slate-800 leading-snug truncate hover:underline">{inc.title}</p>
+                          </Link>
                           <div className="flex items-center gap-2 mt-0.5">
                             <span className={`text-[10px] font-semibold capitalize ${isCritical ? 'text-red-500' : 'text-amber-500'}`}>{inc.severity}</span>
                             <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
                               <Clock size={9} />{timeAgo(inc.created_at)}
                             </span>
+                            {isAcked && (
+                              <span className="text-[10px] text-emerald-500 font-medium">✓ Acked by {inc.acknowledged_by}</span>
+                            )}
                           </div>
                         </div>
-                      </Link>
+                        {!isAcked && (
+                          <button
+                            onClick={() => void acknowledgeIncident(inc.id)}
+                            disabled={acking[inc.id]}
+                            title="Acknowledge this incident"
+                            className="shrink-0 mt-0.5 px-2 py-1 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors disabled:opacity-50"
+                          >
+                            {acking[inc.id] ? '…' : 'Ack'}
+                          </button>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
