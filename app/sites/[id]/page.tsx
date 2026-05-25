@@ -431,7 +431,7 @@ export default function SiteDetailPage() {
         return
       }
       // Optimistically update local state
-      Object.assign(site, payload)
+      if (site) Object.assign(site, payload)
       setShowEditSite(false)
     } finally {
       setEditSaving(false)
