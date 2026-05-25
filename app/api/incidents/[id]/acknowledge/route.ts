@@ -21,9 +21,9 @@ export async function POST(
     const body = await req.json().catch(() => ({})) as Record<string, unknown>
     acknowledgedBy = typeof body.acknowledged_by === 'string' && body.acknowledged_by.trim()
       ? body.acknowledged_by.trim()
-      : (user?.fullName ?? user?.email ?? 'Unknown')
+      : (user?.name ?? user?.email ?? 'Unknown')
   } catch {
-    acknowledgedBy = user?.fullName ?? user?.email ?? 'Unknown'
+    acknowledgedBy = user?.name ?? user?.email ?? 'Unknown'
   }
 
   const { data, error } = await supabase

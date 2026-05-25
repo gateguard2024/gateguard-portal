@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import {
-  Bell, AlertTriangle, Info, CheckCircle2,
+  Bell, Info, CheckCircle2,
   Clock, ArrowRight, Shield,
 } from 'lucide-react'
 
@@ -104,9 +104,6 @@ export default function AlertsPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('all')
   const [alerts, setAlerts]       = useState<GGAlert[]>([])
   const [loading, setLoading]     = useState(true)
-  const [testFiring, setTestFiring] = useState(false)
-  const [testResult, setTestResult] = useState<string | null>(null)
-
   function loadAlerts() {
     fetch('/api/incidents?severity=high,critical&limit=50')
       .then(r => r.json())
@@ -116,36 +113,6 @@ export default function AlertsPage() {
   }
 
   useEffect(() => { loadAlerts() }, [])
-
-  async function fireTestAlarm() {
-    setTestFiring(true)
-    setTestResult(null)
-    try {
-      // Use authenticated POST /api/incidents so org_id is set correctly
-      const res = await fetch('/api/incidents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title:       'Gate Offline — Sunset Commons (TEST)',
-          severity:    'critical',
-          status:      'open',
-          description: 'Gate controller not responding — test alarm fired from Alerts page',
-          reported_by: 'Portal Test',
-        }),
-      })
-      const j = await res.json()
-      if (res.ok) {
-        setTestResult('✓ Test alarm created — refreshing...')
-        setTimeout(() => { loadAlerts(); setTestResult(null) }, 1200)
-      } else {
-        setTestResult(`✗ Error: ${j.error ?? res.status}`)
-      }
-    } catch (e) {
-      setTestResult(`✗ Network error`)
-    } finally {
-      setTestFiring(false)
-    }
-  }
 
   const filtered = alerts.filter(a =>
     activeTab === 'all' ? true : a.severity === activeTab
@@ -174,21 +141,13 @@ export default function AlertsPage() {
             Critical and warning events from your properties
           </p>
         </div>
-        <div className="flex flex-col items-end gap-1.5">
-          <button
-            onClick={fireTestAlarm}
-            disabled={testFiring}
-            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium border border-dashed border-slate-300 rounded-lg text-slate-500 hover:border-brand-400 hover:text-brand-400 transition-colors disabled:opacity-50"
-          >
-            <AlertTriangle size={12} />
-            {testFiring ? 'Firing...' : 'Fire Test Alarm'}
-          </button>
-          {testResult && (
-            <span className={`text-xs font-medium ${testResult.startsWith('✓') ? 'text-green-600' : 'text-red-500'}`}>
-              {testResult}
-            </span>
-          )}
-        </div>
+        <button
+          onClick={loadAlerts}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-200 rounded-lg text-slate-500 hover:border-brand-400 hover:text-brand-400 transition-colors"
+        >
+          <ArrowRight size={12} className="rotate-[-90deg]" />
+          Refresh
+        </button>
       </div>
 
       {/* ── Tabs ──────────────────────────────────────────────── */}
