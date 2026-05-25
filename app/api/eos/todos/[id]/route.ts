@@ -14,7 +14,7 @@ export async function PATCH(
 ) {
   try {
     const user = await getCurrentUser()
-    const orgId = user.org_id ?? 'corporate'
+    const orgId = user.org_id ?? '00000000-0000-0000-0000-000000000001'
     const body = await req.json()
 
     // If marking done, set done_at
@@ -51,7 +51,7 @@ export async function DELETE(
 ) {
   try {
     const user = await getCurrentUser()
-    const orgId = user.org_id ?? 'corporate'
+    const orgId = user.org_id ?? '00000000-0000-0000-0000-000000000001'
 
     const { error } = await supabase
       .from('eos_todos')

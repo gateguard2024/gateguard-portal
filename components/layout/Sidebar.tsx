@@ -85,7 +85,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Site Survey",    href: "/survey",      icon: ClipboardCheck, description: "Site walk and proposal builder" },
       { label: "Documents",      href: "/documents",   icon: FolderOpen,     description: "Agreements, permits, manuals" },
       { label: "Reports",        href: "/reports",     icon: BarChart3Icon,  description: "Multi-site rollup" },
-      { label: "Subcontractor",  href: "/subcontractor", icon: HardHat,      description: "Subcontractor work orders and docs" },
+      { label: "Subcontractors", href: "/subcontractors", icon: Users,         description: "Manage subcontractors, compliance & WO access" },
     ],
   },
   {
@@ -125,6 +125,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Quests",           href: "/quests",        icon: Trophy,       description: "Time-boxed challenges and tier points", badge: "New" },
       { label: "Reviews",           href: "/reviews",      icon: Star,         description: "Post-WO ratings and Google reviews" },
       { label: "Training",         href: "/training",      icon: GraduationCap,description: "Courses and certifications" },
+      { label: "Playbooks",        href: "/playbooks",     icon: ClipboardList, description: "Deployment checklists + dev lifecycle tracker" },
     ],
   },
   {
@@ -559,7 +560,7 @@ export function Sidebar() {
                 <div className="mt-0.5 ml-3 pl-3 border-l border-white/8 space-y-0.5 pb-1">
                   {section.items.map(item => {
                     // Item-level tier gates
-                    if (item.href === "/subcontractor" && !isInstallContractor && !isCorporate) return null;
+                    if (item.href === "/subcontractors" && !isInstallContractor && !isCorporate && !isMasterDealer && !isFullDealer) return null;
                     if (item.href === "/crm"           && !showCRM)        return null;
                     if (item.href === "/customers"     && !showOperations) return null;
                     if (item.href === "/quotes"        && !showQuotes)     return null;

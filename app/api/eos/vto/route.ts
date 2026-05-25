@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     const user = await getCurrentUser()
-    const orgId = user.org_id ?? 'corporate'
+    const orgId = user.org_id ?? '00000000-0000-0000-0000-000000000001'
 
     const { data, error } = await supabase
       .from('eos_vto')
@@ -38,7 +38,7 @@ export async function GET() {
 export async function PATCH(req: NextRequest) {
   try {
     const user = await getCurrentUser()
-    const orgId = user.org_id ?? 'corporate'
+    const orgId = user.org_id ?? '00000000-0000-0000-0000-000000000001'
     const body = await req.json()
 
     const { data, error } = await supabase

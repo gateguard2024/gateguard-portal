@@ -17,28 +17,22 @@ export async function PATCH(
     const orgId = user.org_id ?? '00000000-0000-0000-0000-000000000001'
     const body = await req.json()
 
-    // If resolving, set resolved_at
-    const updates: Record<string, unknown> = { ...body }
-    if (body.status === 'Resolved' && !body.resolved_at) {
-      updates.resolved_at = new Date().toISOString()
-    }
-
     const { data, error } = await supabase
-      .from('eos_issues')
-      .update(updates)
+      .from('eos_scorecard')
+      .update(body)
       .eq('id', params.id)
       .eq('org_id', orgId)
       .select()
       .single()
 
     if (error) {
-      console.error('[/api/eos/issues/[id] PATCH]', error)
+      console.error('[/api/eos/scorecard/[id] PATCH]', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json(data)
   } catch (err) {
-    console.error('[/api/eos/issues/[id] PATCH] unexpected:', err)
+    console.error('[/api/eos/scorecard/[id] PATCH] unexpected:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -51,20 +45,26 @@ export async function DELETE(
     const user = await getCurrentUser()
     const orgId = user.org_id ?? '00000000-0000-0000-0000-000000000001'
 
+    // Delete entries first (cascade should handle this, but being explicit)
+    await supabase
+      .from('eos_scorecard_entries')
+      .delete()
+      .eq('scorecard_id', params.id)
+
     const { error } = await supabase
-      .from('eos_issues')
+      .from('eos_scorecard')
       .delete()
       .eq('id', params.id)
       .eq('org_id', orgId)
 
     if (error) {
-      console.error('[/api/eos/issues/[id] DELETE]', error)
+      console.error('[/api/eos/scorecard/[id] DELETE]', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
   } catch (err) {
-    console.error('[/api/eos/issues/[id] DELETE] unexpected:', err)
+    console.error('[/api/eos/scorecard/[id] DELETE] unexpected:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

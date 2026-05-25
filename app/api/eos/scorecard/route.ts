@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     const user = await getCurrentUser()
-    const orgId = user.org_id ?? 'corporate'
+    const orgId = user.org_id ?? '00000000-0000-0000-0000-000000000001'
 
     // Fetch scorecard metrics with their last 13 weeks of entries
     const { data: metrics, error: metricsError } = await supabase
@@ -68,7 +68,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser()
-    const orgId = user.org_id ?? 'corporate'
+    const orgId = user.org_id ?? '00000000-0000-0000-0000-000000000001'
     const body = await req.json()
 
     const { name, owner, goal, unit, sort_order } = body

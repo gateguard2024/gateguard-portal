@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     const user = await getCurrentUser()
-    const orgId = user.org_id ?? 'corporate'
+    const orgId = user.org_id ?? '00000000-0000-0000-0000-000000000001'
 
     const { data, error } = await supabase
       .from('eos_rocks')
@@ -35,7 +35,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser()
-    const orgId = user.org_id ?? 'corporate'
+    const orgId = user.org_id ?? '00000000-0000-0000-0000-000000000001'
     const body = await req.json()
 
     const { name, owner, quarter, status, progress, due_date, is_company_rock } = body
