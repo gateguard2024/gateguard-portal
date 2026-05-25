@@ -306,9 +306,19 @@ GateGuard is going live. Two parallel Vercel deployments must exist from this po
   - `GateMaintenanceSurvey.enabled` field kept for backwards compat but is now always `true`; no UI toggle.
   - PRICING NOTE (`types/quote.ts`): Gate Operator Service Plan is included (not a billable add-on). Physical Gate Coverage = $250/gate/month (optional add-on).
 
+- **Session additions (May 25 2026) — Sidebar restructure + new pages:**
+- **Sidebar — Business section reordered**: Operating System · Customers · Billing · **Expenses** (new) · **Vendors** · Revenue · Contracts · Renewals · Events · Analytics. Feed/Messages/Incidents removed from Business.
+- **Sidebar — Field & Tech**: Incidents moved to first item (before Tech Tool).
+- **Sidebar — Internal section** (corporate `isCorporate` only, hidden from all other tiers): Playbooks · Cost Tracking. Double-gated: section-level AND item-level checks.
+- **Sidebar — Social panel** (bottom, replaces "Live Integrations"): collapsible section with The Feed (`/feed`), Messages (`/communications`), Email (`/email`, "Soon" badge). State: `socialExpanded`. Label: "Social" with MessageSquare icon.
+- `/expenses` — Expense tracking page: summary cards (This Month · Pending · Parts & Matls · Software), category filter rail, full table with vendor/category/description/tech/amount/status columns, approve/pending status badges. Gated by `showFinancials`.
+- `/email` — NEXUS Email inbox: three-panel layout (folder rail + connected accounts → thread list → thread detail/compose). Gmail OAuth connect flow. Folders: Inbox · Sent · Starred · Archived. Labels: Internal · Quote · Vendor · Compliance · Support. Compose + Reply. Gated by general access.
+- **`app/api/incidents/ingest/route.ts`** — Fixed empty file (was causing `is not a module` Vercel build error). Now a proper POST endpoint for ingesting incidents from external sources (GGSOC bridge, webhooks, hardware alarms).
+- **Service Marketplace** (`/services`) — Enterprise redesign: real provider logos from `/public/logos/` (`att.png`, `directv.png`, `gateguard.png`, `latch.png`, `xfinity.jpg`, `keystone.jpg`, `luxor.jpg`). `ProviderLogo` component with `LOGO_FILES` map handles mixed .png/.jpg extensions; falls back to styled initials if logo missing. Removed all emoji icons. Clean category pills, denser card grid, professional pricing strips modeled on Salesforce AppExchange.
+
 - **Sprint 6 additions (May 22 2026) — Design Section + Service Marketplace:**
 - **Sidebar** — NEXUS primary brand mark (large, blue), "by GateGuard" subtitle confirmed. New **Design** section added between Field & Tech and Security with 4 items: Floor Plans, System Design, As-Builts, E-Sign. Permission: `showDesign` = corporate | master_dealer | full_dealer | install_contractor | service_dealer.
-- `/services` — **Service Marketplace** fully rebuilt: 22 services across 10 categories (TV, Internet, Video Monitoring, Package Lockers, Access Control, Smart Locks, Security, Network, Energy). Two-column layout: `w-56` left rail with vertical category nav (emoji + count badges) + MRR estimator widget anchored at bottom. Main area: search bar + featured strip + responsive card grid. Cards have `p-6` padding, pricing in gray inset block, enrollment toggle. Enrollment summary table at bottom. Migration 070 backs the DB schema (service_catalog, dealer_service_enrollments, site_service_subscriptions).
+- `/services` — **Service Marketplace** first built: 22 services across 10 categories (TV, Internet, Video Monitoring, Package Lockers, Access Control, Smart Locks, Security, Network, Energy). Migration 070 backs the DB schema (service_catalog, dealer_service_enrollments, site_service_subscriptions).
 - **Browse Services in quote builder**: `ServicePickerPanel` added to `/quotes/new` (both line-item and wizard modes) + `SvcPickerPanel` in `/quotes/[id]` (POSTs directly to API). Both panels have 18-service catalog, category tabs, search, MRR/commission estimates. Services drop in as recurring line items in "Recurring Services" section.
 - `/design/floor-plans` — **Bluebeam + System Surveyor + D-Tools hybrid**. Full interactive canvas tool with 3 modes: **Survey** (System Surveyor — place devices from 20-device library, set condition/action/notes), **Design** (D-Tools — click-to-connect devices, cable type/length/terminal form, SVG connection lines color-coded by cable type), **Markup** (Bluebeam — text annotations via SVG layer). Left dark navy panel: category-grouped device library (survey mode) / device list for connecting (design mode) / annotation tools (markup mode). Drag-to-reposition devices. BOM auto-generated from placed devices. Right panel: device properties form (survey) / wire schedule table (design). Connection form modal: cable type, length, from/to terminal. Export PDF + Share Link. 2 demo properties preloaded (Sunset Commons, Riverview Apts). New plan creation modal. Key data: `DEVICE_TYPES` (20 types across 7 categories), `DEMO_PLANS` with devices + connections.
 - `/design/system` — Wire schedule + I/O block diagram. Wire Schedule tab: table (From Device → Terminal → Cable → Length → Terminal → To Device). I/O Diagram tab: SVG auto-layout block diagram with device boxes + annotated connection arrows. BOM table at bottom.
@@ -601,20 +611,20 @@ Two recurring line item types per property:
 - `/quotes/[id]/proposal` — Customer-facing proposal view
 - `/quotes/[id]/approve` — **CLIENT-FACING** approval page (no auth/sidebar). Property managers approve/decline via signed token link. Full-screen branded standalone page. (Route uses `[id]` segment — same level as `[id]/proposal`.)
 
-### Revenue & Billing
+### Business (sidebar section order: Operating System → Customers → Billing → Expenses → Vendors → Revenue → Contracts → Renewals → Events → Analytics)
+- `/eos` — EOS Operating System (Rocks, Scorecard, Issues, To-Dos, L10)
+- `/customers` — Customer accounts with org hierarchy
 - `/billing` — Invoices + QuickBooks sync, MRR tracking
-- `/renewals` — Contract renewal tracking + alerts
+- `/expenses` — Expense tracking: summary cards, category filter rail, vendor/amount/status table. Gated: showFinancials.
+- `/vendors` — Vendor management and POs
 - `/revenue` — MRR trends, ARR, commission dashboard
 - `/contracts` — Contract storage
-
-### Operations
+- `/renewals` — Contract renewal tracking + alerts
 - `/events` — Property event log (polished placeholder with demo data)
-- `/incidents` — Incident tracker (polished placeholder with demo data)
 - `/analytics` — Analytics dashboard (polished placeholder with demo data)
-- `/documents` — Document library (polished placeholder with demo data)
-- `/alerts` — Alert center (polished placeholder with demo data)
 
-### Field Service
+### Field & Tech (sidebar section — Incidents is first item)
+- `/incidents` — Incident tracker with Acknowledge workflow. First item in Field & Tech nav.
 - `/maintenance` — Work orders: open, in-progress, scheduled, completed
 - `/dispatch` — Job dispatch board, tech roster
 - `/inventory` — Warehouse stock, van stock, POs
@@ -631,14 +641,18 @@ Two recurring line item types per property:
 - `/access` — Brivo access control, credentials
 - `/network` — UniFi infrastructure, VLAN management
 
+### Social (sidebar bottom panel — replaces "Live Integrations")
+- `/feed` — The Feed: team wins, challenges, leaderboard
+- `/communications` — Messages: team channels + DMs
+- `/email` — NEXUS Email: three-panel inbox (folder rail + thread list + compose). Gmail/Outlook connect. Folders: Inbox · Sent · Starred · Archived. Labels: Internal · Quote · Vendor · Compliance · Support.
+
 ### Platform & Tools
 - `/kb` — AI diagnostic engine (vector search + Claude)
-- `/tech` — Field diagnostic tool v4 (see /tech section below)
+- `/tech` — Field diagnostic tool v10 (see /tech section below)
 - `/trinity` — TRINITY voice AI dashboard: live call monitoring, call history, sentiment scores, outcome tracking. Dark two-tone UI matching /tech.
 - `/portal` — Customer portal (property manager read-only)
 - `/survey` — Site survey tool (DVI enhancement planned)
 - `/onboarding` — Customer onboarding
-- `/communications` — Internal messaging
 - `/visitor` — Visitor management
 - `/products` — Equipment catalog (tags, field_service toggle, PDF manual upload)
 - `/energy` — Energy monitoring
@@ -649,6 +663,10 @@ Two recurring line item types per property:
 - `/marketing/dealer-social` — Dealer network content
 - `/marketing/coop` — Co-op lead pool
 - `/marketing/website` — Dealer hosted landing pages
+
+### Internal (corporate `isCorporate` only — hidden from all other tiers)
+- `/playbooks` — Step-by-step integration guides (GateGuard Corporate Admin + Tech Onboarding)
+- `/admin/costs` — Cost Tracking: infra costs, unit economics, dealer P&L
 
 ### Auth
 - `/sign-in/[[...sign-in]]` — Clerk sign-in (dark theme, GateGuard branded)
@@ -827,7 +845,7 @@ Note: `/reps`, `/compliance`, `/scorecard`, `/map`, `/reports` are placeholder U
 ### Portal pages
 | File | Purpose |
 |------|---------|
-| `components/layout/Sidebar.tsx` | Navigation. Add new routes here. Events/Incidents/Analytics/Documents/Alerts added under Operations. TRINITY link points to `/trinity`. |
+| `components/layout/Sidebar.tsx` | Navigation. 9 sections: Dashboard · Sales · Business · Field & Tech · Design · Security · Dealer Network · Internal (corporate-only) · Settings. Bottom: Social panel (Feed/Messages/Email). `isCorporate` gate on Internal section. Business order: OS → Customers → Billing → Expenses → Vendors → Revenue → Contracts → Renewals → Events → Analytics. Incidents is first item in Field & Tech. |
 | `app/reps/page.tsx` | Rep hierarchy + commission tracker (placeholder data) |
 | `app/compliance/page.tsx` | Permit tracker (placeholder data) |
 | `app/map/page.tsx` | Territory map (placeholder, needs Mapbox) |
@@ -840,6 +858,10 @@ Note: `/reps`, `/compliance`, `/scorecard`, `/map`, `/reports` are placeholder U
 | `app/analytics/page.tsx` | Polished placeholder page with demo analytics data |
 | `app/alerts/page.tsx` | Polished placeholder page with demo alerts data |
 | `app/trinity/page.tsx` | Full TRINITY voice AI dashboard — dark two-tone style matching /tech. Shows live calls, call history, sentiment scores, outcome tracking. |
+| `app/expenses/page.tsx` | Expense tracking page — summary cards, category filter, vendor table with approve/pending status. |
+| `app/email/page.tsx` | NEXUS Email inbox — three-panel (folders + thread list + compose). Gmail/Outlook connect. |
+| `public/logos/` | Provider logos for Service Marketplace: `att.png`, `directv.png`, `gateguard.png`, `latch.png`, `xfinity.jpg`, `keystone.jpg`, `luxor.jpg`. Mixed .png/.jpg — always use the `LOGO_FILES` map in `app/services/page.tsx` to resolve filenames. |
+| `app/api/incidents/ingest/route.ts` | POST endpoint for ingesting incidents from external sources (GGSOC bridge, hardware alarms, webhooks). Was an empty file — fixed May 25 2026. |
 
 ### Email + Dealer Onboarding
 | File | Purpose |
