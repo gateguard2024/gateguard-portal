@@ -2067,7 +2067,8 @@ export default function EOSPage() {
   const [measurables, setMeasurables] = useState<Measurable[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [todos, setTodos] = useState<TodoItem[]>([]);
-  const [vto, setVto] = useState<Record<string, unknown> | null>(null);
+  const [vto, setVto]               = useState<Record<string, unknown> | null>(null); // local (this org)
+  const [globalVto, setGlobalVto]   = useState<Record<string, unknown> | null>(null); // corporate read-only
   const [loading, setLoading] = useState(true);
 
   // ── Load all data on mount ──
@@ -2076,12 +2077,13 @@ export default function EOSPage() {
 
     const loadAll = async () => {
       try {
-        const [rocksRes, scorecardRes, issuesRes, todosRes, vtoRes] = await Promise.all([
+        const [rocksRes, scorecardRes, issuesRes, todosRes, vtoRes, globalVtoRes] = await Promise.all([
           fetch("/api/eos/rocks"),
           fetch("/api/eos/scorecard"),
           fetch("/api/eos/issues"),
           fetch("/api/eos/todos"),
           fetch("/api/eos/vto"),
+          fetch("/api/eos/vto?scope=global"),
         ]);
 
         const [rocksData, scorecardData, issuesData, todosData] = await Promise.all([
@@ -2090,7 +2092,8 @@ export default function EOSPage() {
           issuesRes.ok ? issuesRes.json() : [],
           todosRes.ok ? todosRes.json() : [],
         ]);
-        const vtoData = vtoRes.ok && vtoRes.status !== 404 ? await vtoRes.json() : null;
+        const vtoData       = vtoRes.ok       && vtoRes.status       !== 404 ? await vtoRes.json()       : null;
+        const globalVtoData = globalVtoRes.ok && globalVtoRes.status !== 404 ? await globalVtoRes.json() : null;
 
         if (!cancelled) {
           setRocks(Array.isArray(rocksData) ? rocksData : []);
@@ -2098,6 +2101,7 @@ export default function EOSPage() {
           setIssues(Array.isArray(issuesData) ? issuesData : []);
           setTodos(Array.isArray(todosData) ? todosData : []);
           setVto(vtoData);
+          setGlobalVto(globalVtoData);
           setLoading(false);
         }
       } catch (err) {
@@ -2230,7 +2234,7 @@ export default function EOSPage() {
           </div>
         ) : (
           <>
-            {activeTab === "V/TO"        && <VTOTab rocks={rocks} issues={issues} vtoInit={vto} readOnly={vtoLens === "global"} />}
+            {activeTab === "V/TO"        && <VTOTab rocks={rocks} issues={issues} vtoInit={vtoLens === "global" ? globalVto : vto} readOnly={vtoLens === "global"} />}
             {activeTab === "Rocks"       && <RocksTab rocks={rocks} setRocks={setRocks} />}
             {activeTab === "Scorecard"   && <ScorecardTab measurables={measurables} setMeasurables={setMeasurables} />}
             {activeTab === "Issues"      && <IssuesTab issues={issues} setIssues={setIssues} />}
