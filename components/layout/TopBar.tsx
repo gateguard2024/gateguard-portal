@@ -63,12 +63,12 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
   ];
 
   return (
-    <header className="h-16 border-b border-white/[0.07] flex items-center px-6 gap-4 sticky top-0 z-30" style={{ background: '#1c1917' }}>
+    <header className="h-16 border-b border-border flex items-center px-6 gap-4 sticky top-0 z-30 bg-white">
       {/* Title */}
       {!searchOpen && (
         <div className="flex-1 min-w-0">
-          <h1 className="text-base font-semibold truncate" style={{ color: '#fafaf9' }}>{title}</h1>
-          {subtitle && <p className="text-xs" style={{ color: '#78716c' }}>{subtitle}</p>}
+          <h1 className="text-base font-semibold text-foreground truncate">{title}</h1>
+          {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
         </div>
       )}
 
@@ -76,7 +76,7 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
       {searchOpen && (
         <div className="flex-1 flex items-center gap-2">
           <div className="flex-1 relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: '#78716c' }} />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
             <input
               ref={searchRef}
               type="text"
@@ -84,8 +84,7 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               onKeyDown={e => { if (e.key === "Escape") { setSearchOpen(false); setSearchQuery(""); }}}
-              className="w-full pl-9 pr-4 py-2 text-sm rounded-xl focus:outline-none"
-              style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(37,99,235,0.5)', color: '#fafaf9' }}
+              className="w-full pl-9 pr-4 py-2 text-sm rounded-xl focus:outline-none bg-slate-50 border border-brand-400/40 text-foreground focus:border-brand-400"
             />
             {/* Quick results */}
             {searchQuery.length > 0 && (
@@ -105,8 +104,7 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
           </div>
           <button
             onClick={() => { setSearchOpen(false); setSearchQuery(""); }}
-            className="p-2 rounded-lg transition-colors"
-            style={{ color: '#a8a29e' }}
+            className="p-2 rounded-lg transition-colors text-muted-foreground hover:text-foreground"
           >
             <X size={16} />
           </button>
@@ -119,10 +117,7 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
         {/* Search */}
         <button
           onClick={() => setSearchOpen(v => !v)}
-          className="p-2 rounded-lg transition-colors"
-          style={{ color: '#a8a29e' }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#fafaf9'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#a8a29e'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+          className="p-2 rounded-lg transition-colors text-muted-foreground hover:text-foreground hover:bg-slate-100"
           title="Search"
         >
           <Search size={17} />
@@ -131,10 +126,7 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
         {/* Calendar */}
         <button
           onClick={() => router.push("/calendar")}
-          className="p-2 rounded-lg transition-colors relative"
-          style={{ color: '#a8a29e' }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#fafaf9'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#a8a29e'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+          className="p-2 rounded-lg transition-colors relative text-muted-foreground hover:text-foreground hover:bg-slate-100"
           title="Calendar"
         >
           <CalendarDays size={17} />
@@ -149,10 +141,7 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
         <div className="relative" ref={bellRef}>
           <button
             onClick={() => setBellOpen(v => !v)}
-            className="p-2 rounded-lg transition-colors relative"
-            style={{ color: '#a8a29e' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#fafaf9'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#a8a29e'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+            className="p-2 rounded-lg transition-colors relative text-muted-foreground hover:text-foreground hover:bg-slate-100"
             title="Notifications"
           >
             <Bell size={17} />
@@ -175,32 +164,25 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
 
         {/* Help — links to KB */}
         <Link href="/kb" title="Knowledge Base & Help">
-          <button
-            className="p-2 rounded-lg transition-colors"
-            style={{ color: '#a8a29e' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#fafaf9'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#a8a29e'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
-          >
+          <button className="p-2 rounded-lg transition-colors text-muted-foreground hover:text-foreground hover:bg-slate-100">
             <HelpCircle size={17} />
           </button>
         </Link>
 
-        <div className="w-px h-5 mx-1" style={{ background: 'rgba(255,255,255,0.12)' }} />
+        <div className="w-px h-5 mx-1 bg-border" />
 
         {/* Profile dropdown */}
         <div className="relative" ref={profileRef}>
           <button
             onClick={() => setProfileOpen(v => !v)}
-            className="flex items-center gap-2 pl-1 rounded-lg px-2 py-1.5 transition-colors"
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+            className="flex items-center gap-2 pl-1 rounded-lg px-2 py-1.5 transition-colors hover:bg-slate-100"
           >
-            <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold" style={{ background: 'rgba(37,99,235,0.25)', border: '1px solid rgba(37,99,235,0.4)', color: '#93c5fd' }}>RF</div>
+            <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold bg-brand-400/10 border border-brand-400/30 text-brand-400">RF</div>
             <div className="hidden sm:block text-left">
-              <p className="text-xs font-semibold leading-tight" style={{ color: '#fafaf9' }}>Russel Feldman</p>
-              <p className="text-[10px] leading-tight" style={{ color: '#78716c' }}>GateGuard Corporate</p>
+              <p className="text-xs font-semibold leading-tight text-foreground">Russel Feldman</p>
+              <p className="text-[10px] leading-tight text-muted-foreground">GateGuard Corporate</p>
             </div>
-            <ChevronDown size={12} style={{ color: '#78716c' }} className={`transition-transform ${profileOpen ? "rotate-180" : ""}`} />
+            <ChevronDown size={12} className={`text-muted-foreground transition-transform ${profileOpen ? "rotate-180" : ""}`} />
           </button>
           {profileOpen && (
             <div className="absolute right-0 top-full mt-1.5 w-52 bg-white border border-border rounded-xl shadow-lg z-50 py-1 overflow-hidden">

@@ -46,29 +46,27 @@
 }
 
 /* ===================================================
-   Card elevation — deep shadow for dark backdrop
-   White top-edge highlight creates lifted tile effect
+   Card elevation — subtle lift on light backdrop
+   Soft multi-layer shadow makes white tiles float
    =================================================== */
 .bg-card {
   box-shadow:
-    0 6px 24px rgba(0, 0, 0, 0.45),
-    0 1px 4px rgba(0, 0, 0, 0.30),
-    0 1px 0px rgba(255, 255, 255, 0.06) inset;
+    0 1px 3px rgba(15, 36, 68, 0.06),
+    0 4px 16px rgba(15, 36, 68, 0.08),
+    0 0 0 1px rgba(15, 36, 68, 0.04);
 }
 
 /* ===================================================
-   Portal main content — warm graphite backdrop
-   Cards float as white tiles over this dark ground
+   Portal main content — light blue-grey backdrop
+   Off-white with a cool blue tint so white cards pop
    =================================================== */
 main.portal-main {
-  background: linear-gradient(135deg, #1c1917 0%, #27241f 60%, #1c1917 100%);
+  background: #EEF2F8;
   min-height: 100vh;
 }
 
 /* ===================================================
-   Page wrapper transparency — let graphite show through
-   All immediate children of portal-main (page divs) must
-   be transparent so the gradient backdrop is visible
+   Page wrapper transparency — let light bg show through
    =================================================== */
 main.portal-main > div {
   background-color: transparent !important;
