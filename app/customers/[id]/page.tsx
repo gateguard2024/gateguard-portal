@@ -249,17 +249,22 @@ export default function CustomerDetailPage() {
     setUploadingFile(true)
     setAttachUploadErr(null)
     try {
-      // Step 1: get signed upload URL from Supabase (reuse kb upload-url pattern)
-      const urlRes = await fetch('/api/kb/upload-url', {
+      // Step 1: get signed upload URL from generic upload endpoint
+      const safeName = file.name.replace(/\s+/g, '-')
+      const urlRes = await fetch('/api/upload-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: `org-attachments/${id}/${Date.now()}_${file.name}`, content_type: file.type }),
+        body: JSON.stringify({
+          filename: `org-attachments/${id}/${Date.now()}_${safeName}`,
+          content_type: file.type,
+          bucket: 'attachments',
+        }),
       })
       if (!urlRes.ok) {
-        // Fallback: store as data URL is not practical — just tell user
-        throw new Error('Could not get upload URL')
+        const errData = await urlRes.json().catch(() => ({})) as { error?: string }
+        throw new Error(errData.error ?? 'Could not get upload URL')
       }
-      const { upload_url, public_url } = await urlRes.json()
+      const { upload_url, public_url } = await urlRes.json() as { upload_url: string; public_url: string }
       // Step 2: upload directly to Supabase Storage
       await fetch(upload_url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
       // Step 3: register in DB

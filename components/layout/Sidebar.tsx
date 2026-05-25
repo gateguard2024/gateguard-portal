@@ -56,7 +56,7 @@ const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: "operations",
-    label: "Operations",
+    label: "Business",
     icon: ClipboardList,
     items: [
       { label: "CRM",              href: "/crm",       icon: MessageSquare,  description: "Leads, opportunities, pipeline" },

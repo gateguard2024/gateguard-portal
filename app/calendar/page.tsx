@@ -25,6 +25,7 @@ interface CalendarEvent {
   source: string;
   isCompany?: boolean;
   assignee?: string;
+  origin?: "portal" | "external"; // portal = created in GateGuard → shows on global; external = personal only
 }
 
 interface UnscheduledTodo {
@@ -75,6 +76,150 @@ const CALENDAR_SOURCES: CalendarSource[] = [
 ];
 
 const SOURCE_GROUPS = ["Mine", "Team", "Company"];
+
+// Color swatches for the color picker
+const SWATCHES = [
+  "#6B7EFF","#F59E0B","#8B5CF6","#F97316","#10B981","#EF4444",
+  "#3B82F6","#EC4899","#14B8A6","#F43F5E","#84CC16","#06B6D4",
+  "#A78BFA","#FB923C","#34D399","#94A3B8",
+];
+
+// ─── Color picker popover ──────────────────────────────────────────────────────
+
+function ColorPickerPopover({
+  currentColor,
+  onSelect,
+  onClose,
+}: {
+  currentColor: string;
+  onSelect: (color: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div className="absolute left-6 top-0 z-50 bg-white border border-border rounded-xl shadow-xl p-2.5 w-44">
+        <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wide mb-2 px-0.5">Choose color</p>
+        <div className="grid grid-cols-4 gap-1.5">
+          {SWATCHES.map((c) => (
+            <button
+              key={c}
+              onClick={() => { onSelect(c); onClose(); }}
+              className={`w-8 h-8 rounded-lg transition-transform hover:scale-110 focus:outline-none ${
+                c === currentColor ? "ring-2 ring-offset-1 ring-slate-500" : ""
+              }`}
+              style={{ backgroundColor: c }}
+            />
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── Add Calendar slide-over ──────────────────────────────────────────────────
+
+function AddCalendarSlideOver({
+  onAdd,
+  onClose,
+}: {
+  onAdd: (source: CalendarSource) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [color, setColor] = useState("#6B7EFF");
+  const [group, setGroup] = useState<"Mine" | "Team">("Mine");
+  const [showPicker, setShowPicker] = useState(false);
+
+  function handleSave() {
+    if (!name.trim()) return;
+    const id = `custom_${Date.now()}`;
+    onAdd({ id, label: name.trim(), color, group, description: "Custom calendar" });
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex">
+      <div className="flex-1 bg-black/30" onClick={onClose} />
+      <div className="w-80 bg-white shadow-2xl flex flex-col border-l border-border">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <h2 className="text-sm font-semibold text-foreground">Add Calendar</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">✕</button>
+        </div>
+        <div className="flex-1 p-5 space-y-5">
+          {/* Name */}
+          <div>
+            <label className="text-xs font-semibold text-foreground block mb-1.5">Calendar Name</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Customer Visits, PTO, Training"
+              className="w-full h-9 px-3 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/40"
+            />
+          </div>
+          {/* Color */}
+          <div>
+            <label className="text-xs font-semibold text-foreground block mb-1.5">Color</label>
+            <div className="relative inline-block">
+              <button
+                onClick={() => setShowPicker((p) => !p)}
+                className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg hover:bg-accent transition-colors text-sm"
+              >
+                <span className="w-4 h-4 rounded-md" style={{ backgroundColor: color }} />
+                <span className="text-muted-foreground">{color}</span>
+              </button>
+              {showPicker && (
+                <ColorPickerPopover
+                  currentColor={color}
+                  onSelect={setColor}
+                  onClose={() => setShowPicker(false)}
+                />
+              )}
+            </div>
+          </div>
+          {/* Group */}
+          <div>
+            <label className="text-xs font-semibold text-foreground block mb-1.5">Group</label>
+            <div className="flex gap-2">
+              {(["Mine", "Team"] as const).map((g) => (
+                <button
+                  key={g}
+                  onClick={() => setGroup(g)}
+                  className={`flex-1 py-2 rounded-lg text-xs font-medium border transition-colors ${
+                    group === g
+                      ? "border-[#6B7EFF] bg-[#6B7EFF]/10 text-[#6B7EFF]"
+                      : "border-border text-muted-foreground hover:bg-accent"
+                  }`}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1.5">
+              {group === "Mine" ? "Visible only to you by default." : "Visible org-wide in the Team group."}
+            </p>
+          </div>
+          {/* Origin note */}
+          <div className="bg-slate-50 border border-border rounded-lg p-3 text-[11px] text-muted-foreground">
+            Events you create from within GateGuard automatically appear on the company-wide global calendar. Calendar entries that only exist in your personal Google Calendar stay private.
+          </div>
+        </div>
+        <div className="px-5 py-4 border-t border-border flex gap-2">
+          <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:bg-accent transition-colors">
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!name.trim()}
+            className="flex-1 py-2 rounded-lg bg-[#6B7EFF] text-white text-sm font-medium hover:bg-[#5a6fd8] transition-colors disabled:opacity-40"
+          >
+            Add Calendar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Priority chip ────────────────────────────────────────────────────────────
 
@@ -195,6 +340,10 @@ function EventPopover({
 function SourcesRail({
   activeSources,
   onChange,
+  sourceColors,
+  onColorChange,
+  customSources,
+  onAddCalendar,
   gcalConnected,
   lastSynced,
   onSync,
@@ -202,32 +351,44 @@ function SourcesRail({
 }: {
   activeSources: Set<string>;
   onChange: (next: Set<string>) => void;
+  sourceColors: Record<string, string>;
+  onColorChange: (id: string, color: string) => void;
+  customSources: CalendarSource[];
+  onAddCalendar: (source: CalendarSource) => void;
   gcalConnected: boolean;
   lastSynced: string | null;
   onSync: () => void;
   syncing: boolean;
 }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [colorPickerFor, setColorPickerFor] = useState<string | null>(null);
+  const [showAddCalendar, setShowAddCalendar] = useState(false);
+
+  // Merge built-in and custom sources
+  const allSources = [...CALENDAR_SOURCES, ...customSources];
+
+  // Compute effective groups (include custom sources' groups)
+  const allGroups = Array.from(new Set([...SOURCE_GROUPS, ...customSources.map((s) => s.group)]));
+
+  function getEffectiveColor(src: CalendarSource): string {
+    return sourceColors[src.id] ?? src.color;
+  }
 
   function toggle(id: string) {
     const next = new Set(activeSources);
-    if (next.has(id)) {
-      next.delete(id);
-    } else {
-      next.add(id);
-    }
+    if (next.has(id)) next.delete(id); else next.add(id);
     onChange(next);
   }
 
   function toggleGroup(group: string) {
-    const groupSources = CALENDAR_SOURCES.filter((s) => s.group === group).map((s) => s.id);
+    const groupSources = allSources.filter((s) => s.group === group).map((s) => s.id);
     const allOn = groupSources.every((id) => activeSources.has(id));
     const next = new Set(activeSources);
     groupSources.forEach((id) => allOn ? next.delete(id) : next.add(id));
     onChange(next);
   }
 
-  const allOn = CALENDAR_SOURCES.every((s) => activeSources.has(s.id));
+  const allOn = allSources.every((s) => activeSources.has(s.id));
 
   function relativeSyncTime(): string {
     if (!lastSynced) return "";
@@ -238,130 +399,164 @@ function SourcesRail({
   }
 
   return (
-    <div className="w-56 shrink-0 border-r border-border bg-white flex flex-col overflow-y-auto">
-      {/* Header */}
-      <div className="px-3 pt-4 pb-2 border-b border-border">
-        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">Calendars</p>
-        {/* Show All / My Calendar toggle */}
-        <button
-          onClick={() => onChange(new Set(allOn ? ["my_todos"] : CALENDAR_SOURCES.map((s) => s.id)))}
-          className={`w-full flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors ${
-            allOn
-              ? "bg-[#6B7EFF] text-white"
-              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-          }`}
-        >
-          {allOn ? <Eye size={12} /> : <EyeOff size={12} />}
-          {allOn ? "Showing All" : "My Calendar Only"}
-        </button>
-      </div>
-
-      {/* Source groups */}
-      <div className="flex-1 p-2 space-y-1">
-        {SOURCE_GROUPS.map((group) => {
-          const sources = CALENDAR_SOURCES.filter((s) => s.group === group);
-          const isCollapsed = collapsed[group];
-          const groupAllOn = sources.every((s) => activeSources.has(s.id));
-          const groupSomeOn = sources.some((s) => activeSources.has(s.id));
-
-          return (
-            <div key={group}>
-              {/* Group header */}
-              <button
-                className="w-full flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-accent transition-colors group"
-                onClick={() => setCollapsed((p) => ({ ...p, [group]: !p[group] }))}
-              >
-                <ChevronDown
-                  size={11}
-                  className={`text-muted-foreground transition-transform shrink-0 ${isCollapsed ? "-rotate-90" : ""}`}
-                />
-                <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide flex-1 text-left">
-                  {group}
-                </span>
-                {/* Group toggle dot */}
-                <span
-                  className={`w-2 h-2 rounded-full shrink-0 transition-all ${
-                    groupAllOn ? "opacity-100" : groupSomeOn ? "opacity-40" : "opacity-10"
-                  }`}
-                  style={{ backgroundColor: sources[0]?.color ?? "#6B7EFF" }}
-                  onClick={(e) => { e.stopPropagation(); toggleGroup(group); }}
-                  title={groupAllOn ? `Hide all ${group}` : `Show all ${group}`}
-                />
-              </button>
-
-              {/* Sources in group */}
-              {!isCollapsed && (
-                <div className="ml-2 space-y-0.5">
-                  {sources.map((src) => {
-                    const active = activeSources.has(src.id);
-                    return (
-                      <button
-                        key={src.id}
-                        onClick={() => toggle(src.id)}
-                        title={src.description}
-                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-accent transition-colors text-left"
-                      >
-                        {/* Color checkbox */}
-                        <span
-                          className="w-3 h-3 rounded shrink-0 border-2 transition-all flex items-center justify-center"
-                          style={{
-                            backgroundColor: active ? src.color : "transparent",
-                            borderColor: src.color,
-                          }}
-                        >
-                          {active && (
-                            <svg width="7" height="5" viewBox="0 0 7 5" fill="none">
-                              <path d="M1 2.5L2.8 4L6 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          )}
-                        </span>
-                        <span className={`text-xs truncate ${active ? "text-foreground font-medium" : "text-muted-foreground"}`}>
-                          {src.label}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* External calendars section */}
-      <div className="border-t border-border p-3">
-        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">External</p>
-        {gcalConnected ? (
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-emerald-50">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-              <span className="text-xs font-medium text-emerald-700 flex-1 truncate">Google Calendar</span>
-              <button
-                onClick={onSync}
-                disabled={syncing}
-                className="shrink-0"
-                title="Sync now"
-              >
-                <RefreshCw size={11} className={`text-emerald-600 ${syncing ? "animate-spin" : ""}`} />
-              </button>
-            </div>
-            {lastSynced && (
-              <p className="text-[9px] text-muted-foreground px-2">
-                Pushed {relativeSyncTime()}
-              </p>
-            )}
-          </div>
-        ) : (
-          <a
-            href="/api/calendar/google/connect"
-            className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:border-[#6B7EFF]/40 hover:text-[#6B7EFF] transition-colors"
+    <>
+      <div className="w-56 shrink-0 border-r border-border bg-white flex flex-col overflow-y-auto">
+        {/* Header */}
+        <div className="px-3 pt-4 pb-2 border-b border-border">
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">Calendars</p>
+          <button
+            onClick={() => onChange(new Set(allOn ? ["my_todos"] : allSources.map((s) => s.id)))}
+            className={`w-full flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors ${
+              allOn ? "bg-[#6B7EFF] text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
           >
-            <CalendarDays size={12} />
-            Push to Google Cal
-          </a>
-        )}
+            {allOn ? <Eye size={12} /> : <EyeOff size={12} />}
+            {allOn ? "Showing All" : "My Calendar Only"}
+          </button>
+        </div>
+
+        {/* Source groups */}
+        <div className="flex-1 p-2 space-y-1">
+          {allGroups.map((group) => {
+            const sources = allSources.filter((s) => s.group === group);
+            const isCollapsed = collapsed[group];
+            const groupAllOn = sources.every((s) => activeSources.has(s.id));
+            const groupSomeOn = sources.some((s) => activeSources.has(s.id));
+            const groupColor = getEffectiveColor(sources[0] ?? CALENDAR_SOURCES[0]);
+
+            return (
+              <div key={group}>
+                {/* Group header */}
+                <button
+                  className="w-full flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-accent transition-colors"
+                  onClick={() => setCollapsed((p) => ({ ...p, [group]: !p[group] }))}
+                >
+                  <ChevronDown
+                    size={11}
+                    className={`text-muted-foreground transition-transform shrink-0 ${isCollapsed ? "-rotate-90" : ""}`}
+                  />
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide flex-1 text-left">
+                    {group}
+                  </span>
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 transition-all ${
+                      groupAllOn ? "opacity-100" : groupSomeOn ? "opacity-40" : "opacity-10"
+                    }`}
+                    style={{ backgroundColor: groupColor }}
+                    onClick={(e) => { e.stopPropagation(); toggleGroup(group); }}
+                    title={groupAllOn ? `Hide all ${group}` : `Show all ${group}`}
+                  />
+                </button>
+
+                {/* Sources in group */}
+                {!isCollapsed && (
+                  <div className="ml-2 space-y-0.5">
+                    {sources.map((src) => {
+                      const active = activeSources.has(src.id);
+                      const effectiveColor = getEffectiveColor(src);
+                      const isPickerOpen = colorPickerFor === src.id;
+                      return (
+                        <div key={src.id} className="relative group/row">
+                          <button
+                            onClick={() => toggle(src.id)}
+                            title={src.description}
+                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-accent transition-colors text-left pr-7"
+                          >
+                            {/* Color checkbox */}
+                            <span
+                              className="w-3 h-3 rounded shrink-0 border-2 transition-all flex items-center justify-center"
+                              style={{
+                                backgroundColor: active ? effectiveColor : "transparent",
+                                borderColor: effectiveColor,
+                              }}
+                            >
+                              {active && (
+                                <svg width="7" height="5" viewBox="0 0 7 5" fill="none">
+                                  <path d="M1 2.5L2.8 4L6 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              )}
+                            </span>
+                            <span className={`text-xs truncate flex-1 ${active ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                              {src.label}
+                            </span>
+                          </button>
+                          {/* Paint brush button — appears on row hover */}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setColorPickerFor(isPickerOpen ? null : src.id); }}
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 opacity-0 group-hover/row:opacity-100 transition-opacity p-1 rounded hover:bg-slate-200"
+                            title="Change color"
+                          >
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-muted-foreground">
+                              <path d="M3 21v-4l13-13 4 4L7 21H3z"/><path d="M14.5 6.5l3 3"/>
+                            </svg>
+                          </button>
+                          {/* Color picker popover */}
+                          {isPickerOpen && (
+                            <ColorPickerPopover
+                              currentColor={effectiveColor}
+                              onSelect={(c) => { onColorChange(src.id, c); }}
+                              onClose={() => setColorPickerFor(null)}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                    {/* + Add Calendar button per group (Mine/Team only) */}
+                    {(group === "Mine" || group === "Team") && (
+                      <button
+                        onClick={() => setShowAddCalendar(true)}
+                        className="w-full flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] text-muted-foreground hover:text-[#6B7EFF] hover:bg-accent transition-colors"
+                      >
+                        <span className="text-base leading-none">+</span>
+                        Add calendar
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* External calendars section */}
+        <div className="border-t border-border p-3">
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">External</p>
+          {gcalConnected ? (
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-emerald-50">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                <span className="text-xs font-medium text-emerald-700 flex-1 truncate">Google Calendar</span>
+                <button onClick={onSync} disabled={syncing} className="shrink-0" title="Sync now">
+                  <RefreshCw size={11} className={`text-emerald-600 ${syncing ? "animate-spin" : ""}`} />
+                </button>
+              </div>
+              {lastSynced && (
+                <p className="text-[9px] text-muted-foreground px-2">Pushed {relativeSyncTime()}</p>
+              )}
+              <p className="text-[9px] text-muted-foreground px-2 leading-tight">
+                External events stay personal — only GateGuard events appear on the global calendar.
+              </p>
+            </div>
+          ) : (
+            <a
+              href="/api/calendar/google/connect"
+              className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:border-[#6B7EFF]/40 hover:text-[#6B7EFF] transition-colors"
+            >
+              <CalendarDays size={12} />
+              Push to Google Cal
+            </a>
+          )}
+        </div>
       </div>
-    </div>
+
+      {/* Add Calendar slide-over */}
+      {showAddCalendar && (
+        <AddCalendarSlideOver
+          onAdd={onAddCalendar}
+          onClose={() => setShowAddCalendar(false)}
+        />
+      )}
+    </>
   );
 }
 
@@ -392,6 +587,38 @@ function CalendarPage() {
   const [activeSources, setActiveSources] = useState<Set<string>>(
     new Set(CALENDAR_SOURCES.map((s) => s.id))
   );
+
+  // Per-source color overrides (persisted in localStorage)
+  const [sourceColors, setSourceColors] = useState<Record<string, string>>(() => {
+    if (typeof window === "undefined") return {};
+    try { return JSON.parse(localStorage.getItem("gg_cal_colors") ?? "{}") as Record<string, string>; } catch { return {}; }
+  });
+
+  // Custom user-added calendars (persisted in localStorage)
+  const [customSources, setCustomSources] = useState<CalendarSource[]>(() => {
+    if (typeof window === "undefined") return [];
+    try { return JSON.parse(localStorage.getItem("gg_cal_custom") ?? "[]") as CalendarSource[]; } catch { return []; }
+  });
+
+  function handleColorChange(id: string, color: string) {
+    const next = { ...sourceColors, [id]: color };
+    setSourceColors(next);
+    if (typeof window !== "undefined") localStorage.setItem("gg_cal_colors", JSON.stringify(next));
+  }
+
+  function handleAddCalendar(source: CalendarSource) {
+    const next = [...customSources, source];
+    setCustomSources(next);
+    if (typeof window !== "undefined") localStorage.setItem("gg_cal_custom", JSON.stringify(next));
+    setActiveSources((prev) => new Set([...prev, source.id]));
+  }
+
+  // Returns the effective color for a given source id (user override or default)
+  function effectiveColor(sourceId: string): string {
+    if (sourceColors[sourceId]) return sourceColors[sourceId];
+    const src = [...CALENDAR_SOURCES, ...customSources].find((s) => s.id === sourceId);
+    return src?.color ?? "#6B7EFF";
+  }
 
   // Unscheduled panel
   const [unscheduledTodos, setUnscheduledTodos] = useState<UnscheduledTodo[]>([]);
@@ -572,7 +799,9 @@ function CalendarPage() {
     return d.getDate() === t.getDate() && d.getMonth() === t.getMonth() && d.getFullYear() === t.getFullYear();
   }
   function eventsForDate(dateStr: string): CalendarEvent[] {
-    return events.filter((e) => e.date === dateStr);
+    return events
+      .filter((e) => e.date === dateStr)
+      .map((e) => ({ ...e, color: effectiveColor(e.source) }));
   }
   function getHeaderLabel(): string {
     if (view === "month") return `${MONTH_NAMES[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
@@ -702,6 +931,10 @@ function CalendarPage() {
         <SourcesRail
           activeSources={activeSources}
           onChange={setActiveSources}
+          sourceColors={sourceColors}
+          onColorChange={handleColorChange}
+          customSources={customSources}
+          onAddCalendar={handleAddCalendar}
           gcalConnected={gcalConnected}
           lastSynced={lastSynced}
           onSync={() => { void handleSync(); }}
@@ -772,9 +1005,9 @@ function CalendarPage() {
 
           {/* Legend strip */}
           <div className="flex items-center gap-4 px-4 py-2 bg-white border-t border-border flex-wrap">
-            {CALENDAR_SOURCES.filter((s) => activeSources.has(s.id)).map((src) => (
+            {[...CALENDAR_SOURCES, ...customSources].filter((s) => activeSources.has(s.id)).map((src) => (
               <span key={src.id} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                <span className="w-2 h-2 rounded-sm inline-block" style={{ backgroundColor: src.color }} />
+                <span className="w-2 h-2 rounded-sm inline-block" style={{ backgroundColor: effectiveColor(src.id) }} />
                 {src.label}
               </span>
             ))}
