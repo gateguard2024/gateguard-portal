@@ -314,6 +314,41 @@ export async function GET(req: NextRequest) {
       } catch { /* non-blocking */ }
     }
 
+    // ── Google Calendar events ────────────────────────────────────────────────
+    if (show('google_calendar')) {
+      try {
+        const startTs = new Date(startDate).toISOString()
+        const endTs   = new Date(`${endDate}T23:59:59`).toISOString()
+
+        const { data: gcalRows } = await supabase
+          .from('gcal_events')
+          .select('id, gcal_event_id, title, start_time, end_time, is_all_day, status, description, location')
+          .eq('user_id', user.id)
+          .gte('start_time', startTs)
+          .lte('start_time', endTs)
+          .order('start_time', { ascending: true })
+
+        for (const ev of gcalRows ?? []) {
+          const startDt  = new Date(ev.start_time)
+          const dateStr  = startDt.toISOString().split('T')[0]
+          const timeStr  = ev.is_all_day
+            ? undefined
+            : `${String(startDt.getUTCHours()).padStart(2, '0')}:${String(startDt.getUTCMinutes()).padStart(2, '0')}`
+          events.push({
+            id:           `gcal-${ev.gcal_event_id ?? ev.id}`,
+            type:         'gcal',
+            title:        ev.title ?? '(No title)',
+            date:         dateStr,
+            time:         timeStr,
+            status:       ev.status ?? 'confirmed',
+            color:        '#4285F4',
+            source:       'google_calendar',
+            gcal_event_id: ev.gcal_event_id ?? undefined,
+          })
+        }
+      } catch { /* gcal_events table may not exist yet */ }
+    }
+
     // Deduplicate by id (my_workorders + all_installs/all_service can overlap)
     const seen = new Set<string>()
     const deduped = events.filter((e) => {

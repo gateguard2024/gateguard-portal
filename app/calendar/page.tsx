@@ -65,14 +65,15 @@ interface CalendarSource {
 
 const CALENDAR_SOURCES: CalendarSource[] = [
   // My Calendar
-  { id: "my_todos",       label: "My To-Dos",         color: "#6B7EFF", group: "Mine",   description: "To-dos with due dates" },
-  { id: "my_workorders",  label: "My Work Orders",     color: "#F59E0B", group: "Mine",   description: "Work orders assigned to me" },
+  { id: "my_todos",         label: "My To-Dos",           color: "#6B7EFF", group: "Mine",     description: "To-dos with due dates" },
+  { id: "my_workorders",    label: "My Work Orders",       color: "#F59E0B", group: "Mine",     description: "Work orders assigned to me" },
+  { id: "google_calendar",  label: "Google Calendar",      color: "#4285F4", group: "Mine",     description: "Events pulled from your Google Calendar" },
   // Team
-  { id: "all_installs",   label: "All Installs",       color: "#8B5CF6", group: "Team",   description: "Every install org-wide" },
-  { id: "all_service",    label: "All Service Calls",  color: "#F97316", group: "Team",   description: "Every service WO org-wide" },
-  { id: "sales_meetings", label: "Sales Appointments", color: "#10B981", group: "Team",   description: "CRM meetings & appointments" },
+  { id: "all_installs",     label: "All Installs",         color: "#8B5CF6", group: "Team",     description: "Every install org-wide" },
+  { id: "all_service",      label: "All Service Calls",    color: "#F97316", group: "Team",     description: "Every service WO org-wide" },
+  { id: "sales_meetings",   label: "Sales Appointments",   color: "#10B981", group: "Team",     description: "CRM meetings & appointments" },
   // Company
-  { id: "company",        label: "Company Events",     color: "#6B7EFF", group: "Company", description: "L10s, permit/quote expiries, GG events" },
+  { id: "company",          label: "Company Events",       color: "#6B7EFF", group: "Company",  description: "L10s, permit/quote expiries, GG events" },
 ];
 
 const SOURCE_GROUPS = ["Mine", "Team", "Company"];
@@ -285,7 +286,8 @@ function EventPopover({
     event.type === "todo"       ? "To-Do" :
     event.type === "work_order" ? "Work Order" :
     event.type === "meeting"    ? "Sales Meeting" :
-    event.type === "company"    ? "Company Event" : "Event"
+    event.type === "company"    ? "Company Event" :
+    event.type === "gcal"       ? "Google Calendar" : "Event"
   );
 
   return (
@@ -531,10 +533,10 @@ function SourcesRail({
                 </button>
               </div>
               {lastSynced && (
-                <p className="text-[9px] text-muted-foreground px-2">Pushed {relativeSyncTime()}</p>
+                <p className="text-[9px] text-muted-foreground px-2">Synced {relativeSyncTime()}</p>
               )}
               <p className="text-[9px] text-muted-foreground px-2 leading-tight">
-                External events stay personal — only GateGuard events appear on the global calendar.
+                Google events pulled to your calendar. GateGuard events pushed to Google.
               </p>
             </div>
           ) : (
@@ -632,20 +634,43 @@ function CalendarPage() {
   // Drag-drop
   const dragItem = useRef<{ type: "todo" | "wo"; id: string } | null>(null);
 
-  // ── GCal status on mount ──────────────────────────────────────────────────
+  // ── GCal status on mount + auto-sync ──────────────────────────────────────
   useEffect(() => {
     void (async () => {
       try {
         const res = await fetch("/api/calendar/google/status");
         if (res.ok) {
           const d = await res.json() as { connected: boolean; last_synced?: string };
-          setGcalConnected(d.connected ?? false);
+          const isConnected = d.connected ?? false;
+          setGcalConnected(isConnected);
           if (d.last_synced) setLastSynced(d.last_synced);
+
+          if (isConnected) {
+            // Enable google_calendar source automatically
+            setActiveSources((prev) => new Set([...prev, "google_calendar"]));
+
+            // Auto-sync on page load if connected (pulls latest GCal events into gcal_events table)
+            void (async () => {
+              try {
+                setSyncing(true);
+                const syncRes = await fetch("/api/calendar/google/sync", { method: "POST" });
+                if (syncRes.ok) {
+                  const sd = await syncRes.json() as { synced_at?: string };
+                  if (sd.synced_at) setLastSynced(sd.synced_at);
+                }
+              } catch { /* ignore */ } finally {
+                setSyncing(false);
+              }
+            })();
+          }
         }
       } catch { /* ignore */ }
     })();
     const cp = searchParams.get("connected");
-    if (cp === "true") setGcalConnected(true);
+    if (cp === "true") {
+      setGcalConnected(true);
+      setActiveSources((prev) => new Set([...prev, "google_calendar"]));
+    }
   }, [searchParams]);
 
   // ── Fetch events ──────────────────────────────────────────────────────────
