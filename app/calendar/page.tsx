@@ -355,10 +355,6 @@ function SourcesRail({
   msConnected,
   onAddIcsFeed,
   onDeleteIcsFeed,
-  showIcsForm,
-  setShowIcsForm,
-  icsFormName,
-  setIcsFormName,
   icsFormUrl,
   setIcsFormUrl,
   icsFormSaving,
@@ -379,10 +375,6 @@ function SourcesRail({
   msConnected: boolean;
   onAddIcsFeed: () => void;
   onDeleteIcsFeed: (id: string) => void;
-  showIcsForm: boolean;
-  setShowIcsForm: (v: boolean) => void;
-  icsFormName: string;
-  setIcsFormName: (v: string) => void;
   icsFormUrl: string;
   setIcsFormUrl: (v: string) => void;
   icsFormSaving: boolean;
@@ -618,46 +610,36 @@ function SourcesRail({
             </div>
           ))}
 
-          {/* Add iCal feed */}
-          {showIcsForm ? (
-            <div className="space-y-1.5 p-2 bg-slate-50 rounded-lg border border-border">
-              <input
-                value={icsFormName}
-                onChange={(e) => setIcsFormName(e.target.value)}
-                placeholder="Calendar name"
-                className="w-full h-7 px-2 text-xs border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]/40"
-              />
+          {/* Add iCal feed — paste URL(s) and press Enter */}
+          <div className="space-y-1">
+            <div className="relative">
               <input
                 value={icsFormUrl}
                 onChange={(e) => setIcsFormUrl(e.target.value)}
-                placeholder="https://... or webcal://..."
-                className="w-full h-7 px-2 text-xs border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]/40"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && icsFormUrl.trim()) {
+                    e.preventDefault();
+                    onAddIcsFeed();
+                  }
+                }}
+                placeholder="Paste iCal / webcal URL…"
+                disabled={icsFormSaving}
+                className="w-full h-8 pl-2.5 pr-8 text-xs border border-dashed border-emerald-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-400/40 focus:border-emerald-400 bg-emerald-50/40 placeholder:text-slate-400 disabled:opacity-60"
               />
-              <div className="flex gap-1.5">
-                <button
-                  onClick={() => { setShowIcsForm(false); setIcsFormName(''); setIcsFormUrl(''); }}
-                  className="flex-1 py-1 rounded border border-border text-xs text-muted-foreground hover:bg-accent transition-colors"
-                >
-                  Cancel
-                </button>
+              {icsFormSaving ? (
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-emerald-600 animate-pulse">…</span>
+              ) : icsFormUrl.trim() ? (
                 <button
                   onClick={onAddIcsFeed}
-                  disabled={icsFormSaving || !icsFormName.trim() || !icsFormUrl.trim()}
-                  className="flex-1 py-1 rounded bg-[#6B7EFF] text-white text-xs font-medium hover:bg-[#5a6fd8] transition-colors disabled:opacity-40"
-                >
-                  {icsFormSaving ? '…' : 'Add'}
-                </button>
-              </div>
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 px-1"
+                  title="Add (or press Enter)"
+                >↵</button>
+              ) : null}
             </div>
-          ) : (
-            <button
-              onClick={() => setShowIcsForm(true)}
-              className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:border-emerald-400/40 hover:text-emerald-600 transition-colors"
-            >
-              <span className="text-sm leading-none">+</span>
-              Add iCal / webcal feed
-            </button>
-          )}
+            <p className="text-[9px] text-muted-foreground px-0.5">
+              Name auto-detected · paste multiple URLs one at a time · webcal:// supported
+            </p>
+          </div>
 
           <p className="text-[9px] text-muted-foreground leading-tight px-0.5">
             Personal events stay private — only GateGuard items appear on the global board.
@@ -727,9 +709,7 @@ function CalendarPage() {
   // Gemini: My View vs Global Board View (global hides personal/external events)
   const [globalBoardView, setGlobalBoardView] = useState(false);
 
-  // iCal add form
-  const [showIcsForm, setShowIcsForm] = useState(false);
-  const [icsFormName, setIcsFormName] = useState('');
+  // iCal add form — always-visible single URL input, no modal needed
   const [icsFormUrl, setIcsFormUrl] = useState('');
   const [icsFormSaving, setIcsFormSaving] = useState(false);
 
@@ -890,20 +870,29 @@ function CalendarPage() {
 
   // ── iCal feed management ──────────────────────────────────────────────────
   async function handleAddIcsFeed() {
-    if (!icsFormUrl.trim() || !icsFormName.trim()) return;
+    const rawUrls = icsFormUrl.split('\n').map((u) => u.trim()).filter(Boolean);
+    if (!rawUrls.length) return;
     setIcsFormSaving(true);
     try {
       const res = await fetch('/api/calendar/ics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: icsFormName.trim(), url: icsFormUrl.trim(), color: '#22C55E' }),
+        // Send bulk if multiple lines, single otherwise — name auto-detected from feed
+        body: rawUrls.length === 1
+          ? JSON.stringify({ url: rawUrls[0], color: '#22C55E' })
+          : JSON.stringify({ urls: rawUrls, color: '#22C55E' }),
       });
       if (res.ok) {
-        const d = await res.json() as { connection: {id:string;name:string;color:string;last_synced_at:string|null;ics_url:string} };
-        setIcsConnections((prev) => [...prev, d.connection]);
-        setIcsFormName(''); setIcsFormUrl(''); setShowIcsForm(false);
-        // Sync the new feed
-        void fetch(`/api/calendar/ics/sync?id=${d.connection.id}`, { method: 'POST' });
+        const d = await res.json() as {
+          connection?: {id:string;name:string;color:string;last_synced_at:string|null;ics_url:string};
+          connections?: Array<{id:string;name:string;color:string;last_synced_at:string|null;ics_url:string}>;
+        };
+        const added = d.connections ?? (d.connection ? [d.connection] : []);
+        setIcsConnections((prev) => [...prev, ...added]);
+        setIcsFormUrl(''); // clear input, keep form open for next URL
+        for (const conn of added) {
+          void fetch(`/api/calendar/ics/sync?id=${conn.id}`, { method: 'POST' });
+        }
         setTimeout(() => void fetchEvents(), 3000);
       }
     } catch { /* ignore */ } finally {
@@ -1157,10 +1146,6 @@ function CalendarPage() {
           msConnected={msConnected}
           onAddIcsFeed={handleAddIcsFeed}
           onDeleteIcsFeed={handleDeleteIcsFeed}
-          showIcsForm={showIcsForm}
-          setShowIcsForm={setShowIcsForm}
-          icsFormName={icsFormName}
-          setIcsFormName={setIcsFormName}
           icsFormUrl={icsFormUrl}
           setIcsFormUrl={setIcsFormUrl}
           icsFormSaving={icsFormSaving}

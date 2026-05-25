@@ -27,46 +27,76 @@ export async function GET() {
   }
 }
 
-// POST /api/calendar/ics — add a new ICS subscription
-// Body: { name, url, color? }
+// Extract X-WR-CALNAME from an iCal feed text (returns null if not found)
+function extractCalName(text: string): string | null {
+  const m = text.match(/X-WR-CALNAME[^:\r\n]*:(.+)/i)
+  if (!m) return null
+  return m[1].trim().replace(/\\n/g, '').substring(0, 80) || null
+}
+
+// POST /api/calendar/ics — add a new ICS subscription (or bulk: array of urls)
+// Body: { url, name?, color? }  — name is OPTIONAL, auto-detected from feed
+// Body: { urls: string[] }       — bulk add, name auto-detected per feed
 export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser()
-    const body = await req.json() as { name?: string; url?: string; color?: string }
+    const body = await req.json() as { name?: string; url?: string; color?: string; urls?: string[] }
 
-    if (!body.url?.trim()) {
-      return NextResponse.json({ error: 'url is required' }, { status: 400 })
+    // Bulk mode
+    const rawUrls = body.urls?.length
+      ? body.urls
+      : body.url?.trim() ? [body.url.trim()] : []
+
+    if (!rawUrls.length) {
+      return NextResponse.json({ error: 'url or urls is required' }, { status: 400 })
     }
-    if (!body.name?.trim()) {
-      return NextResponse.json({ error: 'name is required' }, { status: 400 })
+
+    const results = []
+    for (const rawUrl of rawUrls) {
+      // Normalise webcal:// → https://
+      let url = rawUrl.trim()
+      if (!url) continue
+      if (url.startsWith('webcal://')) url = 'https://' + url.slice(9)
+
+      // Auto-detect calendar name from the feed
+      let name = body.name?.trim() ?? ''
+      try {
+        const feedRes = await fetch(url, { signal: AbortSignal.timeout(10000) })
+        if (feedRes.ok) {
+          const text = await feedRes.text()
+          name = name || extractCalName(text) || ''
+        }
+      } catch { /* fall through */ }
+
+      // Fallback: derive name from URL hostname
+      if (!name) {
+        try {
+          const hostname = new URL(url).hostname.replace(/^www\./, '')
+          name = hostname.split('.')[0].replace(/-/g, ' ')
+            .replace(/\b\w/g, (c) => c.toUpperCase())
+        } catch { name = 'Calendar' }
+      }
+
+      const { data, error } = await supabase
+        .from('calendar_connections')
+        .insert({
+          user_id:   user.id,
+          provider:  'ics',
+          name,
+          color:     body.color ?? '#22C55E',
+          ics_url:   url,
+          is_active: true,
+        })
+        .select()
+        .single()
+
+      if (!error && data) results.push({ connection: data, validated: true })
     }
 
-    // Normalise webcal:// → https://
-    let url = body.url.trim()
-    if (url.startsWith('webcal://')) url = 'https://' + url.slice(9)
-
-    // Quick validation — try to fetch the URL
-    let validated = false
-    try {
-      const testRes = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(8000) })
-      validated = testRes.ok
-    } catch { /* fall through — still save; might be a timing issue */ }
-
-    const { data, error } = await supabase
-      .from('calendar_connections')
-      .insert({
-        user_id:  user.id,
-        provider: 'ics',
-        name:     body.name.trim(),
-        color:    body.color ?? '#6B7EFF',
-        ics_url:  url,
-        is_active: true,
-      })
-      .select()
-      .single()
-
-    if (error) throw error
-    return NextResponse.json({ connection: data, validated }, { status: 201 })
+    if (results.length === 1) {
+      return NextResponse.json({ connection: results[0].connection, validated: true }, { status: 201 })
+    }
+    return NextResponse.json({ connections: results.map((r) => r.connection), count: results.length }, { status: 201 })
   } catch (err: unknown) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })
   }
