@@ -4,6 +4,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { PortalShell } from "@/components/layout/PortalShell";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], weight: ["300","400","500","600","700","800"] });
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {/* Offline status banner — fixed top, only shown when offline */}
           <OfflineBanner />
           <PortalShell>{children}</PortalShell>
+          <SpeedInsights />
         </ClerkProvider>
       </body>
     </html>
