@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, X, Search, ChevronDown, ChevronUp, Save, Loader2, Check, Lock } from "lucide-react";
+import { Plus, X, Search, ChevronDown, ChevronUp, Loader2, Check } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Edit2, AlertCircle, DollarSign, BarChart3 } = require("lucide-react") as any;
+const { Edit2, AlertCircle, DollarSign, BarChart3, Save, Lock } = require("lucide-react") as any;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
