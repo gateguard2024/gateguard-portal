@@ -322,7 +322,7 @@ export async function GET(req: NextRequest) {
 
         const { data: gcalRows } = await supabase
           .from('gcal_events')
-          .select('id, gcal_event_id, title, start_time, end_time, is_all_day, status, description, location, html_link')
+          .select('id, gcal_event_id, title, start_time, end_time, is_all_day, status, description, location, html_link, source')
           .eq('user_id', user.id)
           .gte('start_time', startTs)
           .lte('start_time', endTs)
