@@ -8,6 +8,7 @@ import {
   Plus, Shield, Activity, ClipboardList, Package,
   CheckCircle2, AlertTriangle, XCircle, Wifi, WifiOff,
   Key, FileText, Trash2, RefreshCw, Copy, ExternalLink, X, Search,
+  Save, Loader2,
 } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { Inbox, Edit3, Edit2, RotateCcw } = require('lucide-react') as any
@@ -355,6 +356,88 @@ export default function SiteDetailPage() {
   const [brivoIdDraft, setBrivoIdDraft]     = useState('')
   const [integrationSaving, setIntegrationSaving] = useState(false)
 
+  // ── Site edit SlideOver ────────────────────────────────────────────────
+  const [showEditSite, setShowEditSite] = useState(false)
+  const [editSaving, setEditSaving]     = useState(false)
+  const [editError, setEditError]       = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({
+    name: '', address: '', city: '', state: '', zip: '',
+    property_type: '', units: '',
+    pm_name: '', pm_email: '', pm_phone: '',
+    primary_contact_name: '', primary_contact_email: '', primary_contact_phone: '',
+    gate_code: '', parking_notes: '', access_notes: '', notes: '',
+    een_account_id: '', brivo_account_id: '',
+  })
+
+  function openEditSite() {
+    setEditForm({
+      name:                  site.name                  ?? '',
+      address:               site.address               ?? '',
+      city:                  site.city                  ?? '',
+      state:                 site.state                 ?? '',
+      zip:                   site.zip                   ?? '',
+      property_type:         site.property_type         ?? '',
+      units:                 site.units?.toString()     ?? '',
+      pm_name:               site.pm_name               ?? '',
+      pm_email:              site.pm_email              ?? '',
+      pm_phone:              site.pm_phone              ?? '',
+      primary_contact_name:  site.primary_contact_name  ?? '',
+      primary_contact_email: site.primary_contact_email ?? '',
+      primary_contact_phone: site.primary_contact_phone ?? '',
+      gate_code:             site.gate_code             ?? '',
+      parking_notes:         site.parking_notes         ?? '',
+      access_notes:          site.access_notes          ?? '',
+      notes:                 site.notes                 ?? '',
+      een_account_id:        site.een_account_id        ?? '',
+      brivo_account_id:      site.brivo_account_id      ?? '',
+    })
+    setEditError(null)
+    setShowEditSite(true)
+  }
+
+  async function saveEditSite() {
+    setEditSaving(true)
+    setEditError(null)
+    try {
+      const payload: Record<string, string | number | null> = {
+        name:                  editForm.name.trim()                  || null,
+        address:               editForm.address.trim()               || null,
+        city:                  editForm.city.trim()                  || null,
+        state:                 editForm.state.trim()                 || null,
+        zip:                   editForm.zip.trim()                   || null,
+        property_type:         editForm.property_type.trim()         || 'multifamily',
+        units:                 editForm.units ? parseInt(editForm.units) : null,
+        pm_name:               editForm.pm_name.trim()               || null,
+        pm_email:              editForm.pm_email.trim()              || null,
+        pm_phone:              editForm.pm_phone.trim()              || null,
+        primary_contact_name:  editForm.primary_contact_name.trim()  || null,
+        primary_contact_email: editForm.primary_contact_email.trim() || null,
+        primary_contact_phone: editForm.primary_contact_phone.trim() || null,
+        gate_code:             editForm.gate_code.trim()             || null,
+        parking_notes:         editForm.parking_notes.trim()         || null,
+        access_notes:          editForm.access_notes.trim()          || null,
+        notes:                 editForm.notes.trim()                 || null,
+        een_account_id:        editForm.een_account_id.trim()        || null,
+        brivo_account_id:      editForm.brivo_account_id.trim()      || null,
+      }
+      const res = await fetch(`/api/sites/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        const j = await res.json()
+        setEditError(j.error ?? 'Save failed')
+        return
+      }
+      // Optimistically update local state
+      Object.assign(site, payload)
+      setShowEditSite(false)
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
   // Warranty / RMA state
   const [rmaRecords, setRmaRecords]         = useState<RMARecord[]>([])
   const [rmaLoading, setRmaLoading]         = useState(false)
@@ -648,6 +731,12 @@ export default function SiteDetailPage() {
               <WifiOff size={12} /> {offlineAssets} offline
             </div>
           )}
+          <button
+            onClick={openEditSite}
+            className="flex items-center gap-1.5 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50"
+          >
+            <Edit2 size={15} /> Edit Site
+          </button>
           <button
             onClick={() => setShowAddAsset(true)}
             className="flex items-center gap-1.5 px-4 py-2 bg-brand-400 text-white rounded-lg text-sm font-medium hover:bg-brand-500"
@@ -1845,6 +1934,292 @@ export default function SiteDetailPage() {
           setTab('assets')
         }}
       />
+
+      {/* ── Edit Site SlideOver ─────────────────────────────────────────────── */}
+      {showEditSite && (
+        <div className="fixed inset-0 z-50 flex">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowEditSite(false)} />
+          <div className="relative ml-auto w-full max-w-xl bg-white shadow-2xl flex flex-col h-full">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Edit Site</h2>
+                <p className="text-xs text-slate-400 mt-0.5">{site.name}</p>
+              </div>
+              <button onClick={() => setShowEditSite(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {editError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">
+                  {editError}
+                </div>
+              )}
+
+              {/* Site Info */}
+              <section>
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Site Information</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Property Name *</label>
+                    <input
+                      value={editForm.name}
+                      onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                      placeholder="Sunset Commons"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Property Type</label>
+                      <select
+                        value={editForm.property_type}
+                        onChange={e => setEditForm(f => ({ ...f, property_type: e.target.value }))}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                      >
+                        <option value="multifamily">Multifamily</option>
+                        <option value="hoa">HOA</option>
+                        <option value="commercial">Commercial</option>
+                        <option value="mixed_use">Mixed Use</option>
+                        <option value="industrial">Industrial</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Total Units</label>
+                      <input
+                        value={editForm.units}
+                        onChange={e => setEditForm(f => ({ ...f, units: e.target.value }))}
+                        placeholder="200"
+                        type="number"
+                        min="0"
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* Address */}
+              <section>
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Address</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Street Address</label>
+                    <input
+                      value={editForm.address}
+                      onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))}
+                      placeholder="1234 Main St"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="col-span-1">
+                      <label className="block text-xs font-medium text-slate-600 mb-1">City</label>
+                      <input
+                        value={editForm.city}
+                        onChange={e => setEditForm(f => ({ ...f, city: e.target.value }))}
+                        placeholder="Atlanta"
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">State</label>
+                      <input
+                        value={editForm.state}
+                        onChange={e => setEditForm(f => ({ ...f, state: e.target.value }))}
+                        placeholder="GA"
+                        maxLength={2}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">ZIP</label>
+                      <input
+                        value={editForm.zip}
+                        onChange={e => setEditForm(f => ({ ...f, zip: e.target.value }))}
+                        placeholder="30301"
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* Property Manager */}
+              <section>
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Property Manager</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Name</label>
+                    <input
+                      value={editForm.pm_name}
+                      onChange={e => setEditForm(f => ({ ...f, pm_name: e.target.value }))}
+                      placeholder="Jane Smith"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Email</label>
+                      <input
+                        value={editForm.pm_email}
+                        onChange={e => setEditForm(f => ({ ...f, pm_email: e.target.value }))}
+                        type="email"
+                        placeholder="jane@property.com"
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Phone</label>
+                      <input
+                        value={editForm.pm_phone}
+                        onChange={e => setEditForm(f => ({ ...f, pm_phone: e.target.value }))}
+                        type="tel"
+                        placeholder="(404) 555-0100"
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* Primary Contact */}
+              <section>
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Primary Contact (on-site)</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Name</label>
+                    <input
+                      value={editForm.primary_contact_name}
+                      onChange={e => setEditForm(f => ({ ...f, primary_contact_name: e.target.value }))}
+                      placeholder="Front Desk"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Email</label>
+                      <input
+                        value={editForm.primary_contact_email}
+                        onChange={e => setEditForm(f => ({ ...f, primary_contact_email: e.target.value }))}
+                        type="email"
+                        placeholder="office@property.com"
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Phone</label>
+                      <input
+                        value={editForm.primary_contact_phone}
+                        onChange={e => setEditForm(f => ({ ...f, primary_contact_phone: e.target.value }))}
+                        type="tel"
+                        placeholder="(404) 555-0101"
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* Access Info */}
+              <section>
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Access &amp; Site Notes</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Gate Code</label>
+                    <input
+                      value={editForm.gate_code}
+                      onChange={e => setEditForm(f => ({ ...f, gate_code: e.target.value }))}
+                      placeholder="#1234"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Parking Notes</label>
+                    <input
+                      value={editForm.parking_notes}
+                      onChange={e => setEditForm(f => ({ ...f, parking_notes: e.target.value }))}
+                      placeholder="Use visitor lot on south side"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Access Notes</label>
+                    <textarea
+                      value={editForm.access_notes}
+                      onChange={e => setEditForm(f => ({ ...f, access_notes: e.target.value }))}
+                      placeholder="Badge required at gate B, call PM before entering"
+                      rows={2}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">General Notes</label>
+                    <textarea
+                      value={editForm.notes}
+                      onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))}
+                      placeholder="Internal notes about this property…"
+                      rows={3}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none"
+                    />
+                  </div>
+                </div>
+              </section>
+
+              {/* Integration IDs */}
+              <section>
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Integration IDs</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Eagle Eye Account ID</label>
+                    <input
+                      value={editForm.een_account_id}
+                      onChange={e => setEditForm(f => ({ ...f, een_account_id: e.target.value }))}
+                      placeholder="00001234"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-400"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">Matches the account_id in GGSOC. Used to route SOC incidents to this site.</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Brivo Account ID</label>
+                    <input
+                      value={editForm.brivo_account_id}
+                      onChange={e => setEditForm(f => ({ ...f, brivo_account_id: e.target.value }))}
+                      placeholder="123456"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-400"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">Brivo site account ID for access control sync.</p>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            {/* Footer */}
+            <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex gap-3 justify-end shrink-0">
+              <button
+                onClick={() => setShowEditSite(false)}
+                className="px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={editSaving}
+                onClick={saveEditSite}
+                className="px-5 py-2 text-sm bg-brand-400 text-white rounded-lg hover:bg-brand-500 disabled:opacity-50 flex items-center gap-2"
+              >
+                {editSaving ? (
+                  <><Loader2 size={14} className="animate-spin" /> Saving…</>
+                ) : (
+                  <><Save size={14} /> Save Changes</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
