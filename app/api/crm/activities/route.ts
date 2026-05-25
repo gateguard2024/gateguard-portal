@@ -65,7 +65,71 @@ export async function GET(req: NextRequest) {
       opportunity_name: row.opportunities?.name ?? null,
     }))
 
-    return NextResponse.json(activities)
+    // Today's cross-table items (work orders, quotes, leads created today)
+    const todayISO = new Date()
+    todayISO.setHours(0, 0, 0, 0)
+    const todayStr = todayISO.toISOString()
+
+    const [woResult, quotesResult, leadsResult] = await Promise.allSettled([
+      supabase
+        .from('work_orders')
+        .select('id, title, status, created_at')
+        .gte('created_at', todayStr)
+        .limit(5),
+      supabase
+        .from('quotes')
+        .select('id, title, status, updated_at')
+        .gte('updated_at', todayStr)
+        .in('status', ['sent', 'approved'])
+        .limit(5),
+      supabase
+        .from('show_leads')
+        .select('id, name, property_name, created_at')
+        .gte('created_at', todayStr)
+        .limit(5),
+    ])
+
+    const woItems = woResult.status === 'fulfilled' && !woResult.value.error
+      ? (woResult.value.data ?? []).map((r: any) => ({
+          id: `wo_${r.id}`,
+          type: 'work_order' as const,
+          subject: r.title ?? `Work Order #${r.id}`,
+          created_at: r.created_at,
+          due_at: r.created_at,
+          completed_at: null,
+          opportunity_id: null,
+          opportunity_name: null,
+        }))
+      : []
+
+    const quoteItems = quotesResult.status === 'fulfilled' && !quotesResult.value.error
+      ? (quotesResult.value.data ?? []).map((r: any) => ({
+          id: `quote_${r.id}`,
+          type: 'quote' as const,
+          subject: r.title ? `Quote ${r.status}: ${r.title}` : `Quote ${r.status}`,
+          created_at: r.updated_at,
+          due_at: r.updated_at,
+          completed_at: null,
+          opportunity_id: null,
+          opportunity_name: null,
+        }))
+      : []
+
+    const leadItems = leadsResult.status === 'fulfilled' && !leadsResult.value.error
+      ? (leadsResult.value.data ?? []).map((r: any) => ({
+          id: `lead_${r.id}`,
+          type: 'lead' as const,
+          subject: `New lead: ${r.name}${r.property_name ? ` — ${r.property_name}` : ''}`,
+          created_at: r.created_at,
+          due_at: r.created_at,
+          completed_at: null,
+          opportunity_id: null,
+          opportunity_name: null,
+        }))
+      : []
+
+    const merged = [...activities, ...woItems, ...quoteItems, ...leadItems]
+    return NextResponse.json(merged)
   } catch (err) {
     console.error('[/api/crm/activities] Unexpected error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

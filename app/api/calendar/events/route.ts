@@ -11,7 +11,7 @@ const supabase = createClient(
 
 export interface CalendarEvent {
   id: string
-  type: 'todo' | 'work_order' | 'gcal'
+  type: 'todo' | 'work_order' | 'gcal' | 'company'
   title: string
   date: string       // YYYY-MM-DD
   time?: string      // HH:MM if has time
@@ -20,6 +20,36 @@ export interface CalendarEvent {
   color: string      // hex
   link?: string      // portal deep link
   gcal_event_id?: string
+  // Company-event markers
+  source?: string
+  isCompany?: boolean
+}
+
+// Generate L10 Friday events for a given month (inline, avoids internal fetch)
+function generateL10Events(year: number, month: number, startDate: string, endDate: string): CalendarEvent[] {
+  const events: CalendarEvent[] = []
+  const daysInMonth = new Date(year, month, 0).getDate()
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(year, month - 1, d)
+    if (date.getDay() === 5) { // Friday
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+      if (dateStr >= startDate && dateStr <= endDate) {
+        events.push({
+          id:        `l10-${dateStr}`,
+          type:      'company',
+          title:     'L10 Weekly Meeting',
+          date:      dateStr,
+          time:      '06:00',
+          status:    'scheduled',
+          color:     '#6B7EFF',
+          link:      '/eos',
+          source:    'l10',
+          isCompany: true,
+        })
+      }
+    }
+  }
+  return events
 }
 
 // GET /api/calendar/events?year=2026&month=5
@@ -121,6 +151,88 @@ export async function GET(req: NextRequest) {
         }
       }
     }
+
+    // ── Company / GateGuard events ────────────────────────────────────────────
+    // L10 meetings (every Friday)
+    events.push(...generateL10Events(year, month, startDate, endDate))
+
+    // Manual company calendar events from DB (table created in migration 082)
+    try {
+      const { data: companyEvents } = await supabase
+        .from('company_calendar_events')
+        .select('id, title, event_type, date, time, link')
+        .gte('date', startDate)
+        .lte('date', endDate)
+
+      for (const ce of companyEvents ?? []) {
+        const dateStr = typeof ce.date === 'string' ? ce.date.split('T')[0] : String(ce.date)
+        events.push({
+          id:        ce.id,
+          type:      'company',
+          title:     ce.title,
+          date:      dateStr,
+          time:      ce.time ? String(ce.time).substring(0, 5) : undefined,
+          status:    'scheduled',
+          color:     '#6B7EFF',
+          link:      ce.link ?? undefined,
+          source:    ce.event_type,
+          isCompany: true,
+        })
+      }
+    } catch {
+      // table may not exist yet on older Supabase projects — fail silently
+    }
+
+    // Permits expiring this month
+    try {
+      const { data: permits } = await supabase
+        .from('permits')
+        .select('id, permit_type, expiry_date')
+        .not('expiry_date', 'is', null)
+        .gte('expiry_date', startDate)
+        .lte('expiry_date', endDate)
+
+      for (const p of permits ?? []) {
+        const dateStr = typeof p.expiry_date === 'string' ? p.expiry_date.split('T')[0] : String(p.expiry_date)
+        events.push({
+          id:        `permit-${p.id}`,
+          type:      'company',
+          title:     `Permit Expiry: ${p.permit_type ?? 'Permit'}`,
+          date:      dateStr,
+          status:    'expiring',
+          color:     '#EF4444',
+          link:      '/compliance',
+          source:    'permit',
+          isCompany: true,
+        })
+      }
+    } catch { /* non-blocking */ }
+
+    // Quotes expiring this month
+    try {
+      const { data: quotes } = await supabase
+        .from('quotes')
+        .select('id, title, expiry_date, status')
+        .not('expiry_date', 'is', null)
+        .gte('expiry_date', startDate)
+        .lte('expiry_date', endDate)
+        .in('status', ['sent', 'viewed'])
+
+      for (const q of quotes ?? []) {
+        const dateStr = typeof q.expiry_date === 'string' ? q.expiry_date.split('T')[0] : String(q.expiry_date)
+        events.push({
+          id:        `quote-${q.id}`,
+          type:      'company',
+          title:     `Quote Expiry: ${q.title ?? 'Quote'}`,
+          date:      dateStr,
+          status:    'expiring',
+          color:     '#EF4444',
+          link:      `/quotes/${q.id}`,
+          source:    'quote',
+          isCompany: true,
+        })
+      }
+    } catch { /* non-blocking */ }
 
     // Sort all events by date then time
     events.sort((a, b) => {

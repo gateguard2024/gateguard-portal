@@ -60,8 +60,10 @@ export async function GET(req: NextRequest) {
         ? `${row.city}, ${row.state}`
         : (row.city ?? 'Atlanta') + ', ' + (row.state ?? 'GA'),
       stage:        row.stage ?? 'new',
-      rep:          'R. Feldman',
-      repInitials:  'RF',
+      rep:          row.assigned_dealer ?? 'Unassigned',
+      repInitials:  row.assigned_dealer
+        ? row.assigned_dealer.split(' ').map((w: string) => w[0] ?? '').join('').toUpperCase().slice(0, 2)
+        : 'UN',
       lastActivity: formatAge(row.created_at),
       source:       row.source ?? 'show',
       notes:        row.notes ?? null,
@@ -79,7 +81,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    await getCurrentUser()
+    const user = await getCurrentUser()
     const body = await req.json()
 
     const {
@@ -95,17 +97,18 @@ export async function POST(req: NextRequest) {
     const { data, error } = await supabase
       .from('show_leads')
       .insert({
-        name:          name.trim(),
-        email:         email?.trim() ?? null,
-        phone:         phone?.trim() ?? null,
-        property_name: property_name?.trim() ?? company?.trim() ?? null,
-        source:        source ?? 'manual',
-        city:          city?.trim() ?? null,
-        state:         state?.trim() ?? null,
-        property_type: property_type ?? 'Multifamily',
-        contact_title: contact_title?.trim() ?? null,
-        units:         units ? parseInt(units, 10) : null,
-        notes:         notes?.trim() ?? null,
+        name:            name.trim(),
+        email:           email?.trim() ?? null,
+        phone:           phone?.trim() ?? null,
+        property_name:   property_name?.trim() ?? company?.trim() ?? null,
+        source:          source ?? 'manual',
+        city:            city?.trim() ?? null,
+        state:           state?.trim() ?? null,
+        property_type:   property_type ?? 'Multifamily',
+        contact_title:   contact_title?.trim() ?? null,
+        units:           units ? parseInt(units, 10) : null,
+        notes:           notes?.trim() ?? null,
+        assigned_dealer: user.name ?? null,
       })
       .select()
       .single()

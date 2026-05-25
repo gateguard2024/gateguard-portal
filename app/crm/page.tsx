@@ -7,6 +7,7 @@ import {
   RefreshCw, Calendar, ArrowRight, Plus,
   TrendingUp, Users, CheckCircle2, Zap,
   Phone, Mail, ClipboardList, X, ChevronDown,
+  Wrench, FileText,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { CalendarClock, StickyNote, UserPlus, UserCheck, Building2, Star } = require("lucide-react") as any;
@@ -54,9 +55,10 @@ interface Lead {
 
 interface Activity {
   id: string;
-  type: "call" | "email" | "meeting" | "task" | "note";
+  type: "call" | "email" | "meeting" | "task" | "note" | "work_order" | "quote" | "lead";
   subject: string;
   due_at: string;
+  created_at?: string;
   completed_at?: string | null;
   opportunity_name?: string;
 }
@@ -139,6 +141,12 @@ function activityIcon(type: Activity["type"]) {
       return <CalendarClock size={14} />;
     case "task":
       return <ClipboardList size={14} />;
+    case "work_order":
+      return <Wrench size={14} />;
+    case "quote":
+      return <FileText size={14} />;
+    case "lead":
+      return <Users size={14} />;
     default:
       return <ClipboardList size={14} />;
   }
@@ -323,9 +331,16 @@ export default function CRMPage() {
 
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const upcomingActivities = activities.filter(
-    (a) => !a.completed_at && new Date(a.due_at) <= tomorrow
-  );
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const upcomingActivities = activities.filter((a) => {
+    if (a.completed_at) return false;
+    // Traditional activities: due today or overdue
+    if (a.due_at && new Date(a.due_at) <= tomorrow) return true;
+    // Merged today items (WOs, quotes, leads): created today
+    if (a.created_at && new Date(a.created_at) >= todayStart) return true;
+    return false;
+  });
 
   const openOpps = allRecords
     .filter((r) => r.stage !== "won" && r.stage !== "lost")
@@ -459,6 +474,9 @@ export default function CRMPage() {
             />
           </Link>
         </div>
+
+        {/* Pipeline Flow Bar */}
+        <PipelineFlowBar opportunities={allRecords} />
 
         {/* ROW 2 — Pipeline + Activity */}
         <div className="grid grid-cols-2 gap-4">
@@ -1125,6 +1143,79 @@ export default function CRMPage() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// ── Pipeline Flow Bar ─────────────────────────────────────────────────────
+type PipelineStage = {
+  key: string;
+  label: string;
+  bg: string;
+  text: string;
+};
+
+const PIPELINE_STAGES: PipelineStage[] = [
+  { key: "meet_present",  label: "Meet & Present",  bg: "bg-blue-100",    text: "text-blue-700" },
+  { key: "survey_request",label: "Survey Request",  bg: "bg-violet-100",  text: "text-violet-700" },
+  { key: "propose",       label: "Propose",         bg: "bg-amber-100",   text: "text-amber-700" },
+  { key: "negotiate",     label: "Negotiate",       bg: "bg-orange-100",  text: "text-orange-700" },
+  { key: "won",           label: "Won",             bg: "bg-emerald-100", text: "text-emerald-700" },
+  { key: "lost",          label: "Lost",            bg: "bg-red-100",     text: "text-red-600" },
+];
+
+function PipelineFlowBar({ opportunities }: { opportunities: Opportunity[] }) {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  // Compute per-stage counts and totals
+  const stageSummary = PIPELINE_STAGES.map((s) => {
+    const records = opportunities.filter((o) => o.stage === s.key);
+    const total = records.reduce((sum, o) => sum + (o.amount ?? 0), 0);
+    return { ...s, count: records.length, total };
+  });
+
+  // Momentum: any deal updated in the last 7 days moving forward (not lost/won from the start)
+  const hasActivity = opportunities.some(
+    (o) => o.stage !== "lost" && new Date(o.created_at) >= sevenDaysAgo
+  );
+
+  return (
+    <div className="bg-white rounded-xl border border-border p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <TrendingUp size={14} className="text-muted-foreground" />
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Pipeline</span>
+        {hasActivity && (
+          <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">
+            <Zap size={10} className="text-emerald-500" />
+            Active
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-1 overflow-x-auto pb-1">
+        {stageSummary.map((s, i) => (
+          <div key={s.key} className="flex items-center gap-1 flex-shrink-0">
+            <div
+              className={cn(
+                "flex flex-col items-center px-3 py-1.5 rounded-full text-xs font-medium transition-all",
+                s.count > 0
+                  ? (s.key === "won" ? "bg-emerald-500 text-white" : s.key === "lost" ? "bg-red-500 text-white" : `${s.bg} ${s.text}`)
+                  : "bg-slate-100 text-slate-400"
+              )}
+            >
+              <span className="font-semibold whitespace-nowrap">{s.label}</span>
+              <span className="font-mono text-[10px] opacity-80">
+                {s.count > 0
+                  ? `${s.count} · ${s.total >= 1_000_000 ? `$${(s.total / 1e6).toFixed(1)}M` : s.total >= 1_000 ? `$${(s.total / 1_000).toFixed(0)}K` : s.total > 0 ? `$${s.total}` : `${s.count}`}`
+                  : "0"}
+              </span>
+            </div>
+            {i < stageSummary.length - 1 && (
+              <span className="text-slate-300 text-xs font-bold flex-shrink-0">→</span>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

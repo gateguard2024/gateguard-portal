@@ -5,15 +5,15 @@ import { useSearchParams } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SkeletonRow } from "@/components/ui/SkeletonRow";
-import { ChevronLeft, ChevronRight, RefreshCw, CheckCircle2, AlertTriangle, Clock } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw, CheckCircle2, Clock, Save } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { CalendarDays, CalendarClock, Link2Off, Grid3X3 } = require("lucide-react") as any;
+const { CalendarDays, CalendarClock, Link2Off, Settings } = require("lucide-react") as any;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface CalendarEvent {
   id: string;
-  type: "todo" | "work_order" | "gcal";
+  type: "todo" | "work_order" | "gcal" | "company";
   title: string;
   date: string;       // YYYY-MM-DD
   time?: string;      // HH:MM
@@ -22,6 +22,8 @@ interface CalendarEvent {
   color: string;
   link?: string;
   gcal_event_id?: string;
+  source?: string;
+  isCompany?: boolean;
 }
 
 interface UnscheduledTodo {
@@ -45,6 +47,13 @@ interface UnscheduledLead {
   name: string;
   company?: string | null;
   stage: string;
+}
+
+interface GCalCalendar {
+  id: string;
+  summary: string;
+  backgroundColor: string;
+  primary: boolean;
 }
 
 type CalendarView = "week" | "month";
@@ -81,14 +90,31 @@ function EventChip({
   event: CalendarEvent;
   onClick: (event: CalendarEvent, el: HTMLElement) => void;
 }) {
+  const isCompany = event.isCompany;
   return (
     <button
-      className="w-full text-left px-1.5 py-0.5 rounded text-[10px] font-medium truncate text-white transition-opacity hover:opacity-80"
-      style={{ backgroundColor: event.color }}
+      className={`w-full text-left px-1.5 py-0.5 rounded text-[10px] font-medium truncate transition-opacity hover:opacity-80 ${
+        isCompany
+          ? "border-l-2 text-slate-700 bg-slate-50"
+          : "text-white"
+      }`}
+      style={
+        isCompany
+          ? { borderLeftColor: event.color, backgroundColor: `${event.color}14` }
+          : { backgroundColor: event.color }
+      }
       onClick={(e) => onClick(event, e.currentTarget)}
       title={event.title}
     >
-      {event.time && <span className="opacity-80 mr-1">{event.time}</span>}
+      {event.time && <span className={`mr-1 ${isCompany ? "opacity-60" : "opacity-80"}`}>{event.time}</span>}
+      {isCompany && (
+        <span
+          className="inline-block text-[8px] font-bold px-0.5 py-0 rounded mr-1 align-middle"
+          style={{ backgroundColor: event.color, color: "#fff" }}
+        >
+          GG
+        </span>
+      )}
       {event.title}
     </button>
   );
@@ -105,7 +131,11 @@ function EventPopover({
   anchor: { top: number; left: number };
   onClose: () => void;
 }) {
-  const typeLabel = event.type === "todo" ? "To-Do" : event.type === "work_order" ? "Work Order" : "Google Calendar";
+  const typeLabel =
+    event.type === "todo"         ? "To-Do" :
+    event.type === "work_order"   ? "Work Order" :
+    event.type === "company"      ? "GateGuard Event" :
+    "Google Calendar";
   return (
     <div
       className="fixed z-50 bg-white border border-border rounded-xl shadow-xl p-4 w-64"
@@ -113,7 +143,14 @@ function EventPopover({
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">{typeLabel}</p>
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{typeLabel}</p>
+            {event.isCompany && (
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white" style={{ backgroundColor: event.color }}>
+                GG
+              </span>
+            )}
+          </div>
           <p className="text-sm font-semibold text-foreground leading-tight">{event.title}</p>
         </div>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-xs p-1">
@@ -147,6 +184,154 @@ function EventPopover({
   );
 }
 
+// ─── Calendars Settings Panel ─────────────────────────────────────────────────
+
+function CalendarsPanel({
+  gcalConnected,
+  onClose,
+}: {
+  gcalConnected: boolean;
+  onClose: () => void;
+}) {
+  const [calendars, setCalendars]       = useState<GCalCalendar[]>([]);
+  const [selectedIds, setSelectedIds]   = useState<string[]>(['primary']);
+  const [loading, setLoading]           = useState(true);
+  const [saving, setSaving]             = useState(false);
+  const [saved, setSaved]               = useState(false);
+
+  useEffect(() => {
+    if (!gcalConnected) { setLoading(false); return; }
+    void (async () => {
+      try {
+        const res = await fetch('/api/calendar/google/calendars');
+        if (res.ok) {
+          const d = await res.json() as { calendars: GCalCalendar[]; selectedIds: string[] };
+          setCalendars(d.calendars ?? []);
+          setSelectedIds(d.selectedIds ?? ['primary']);
+        }
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [gcalConnected]);
+
+  function toggleCalendar(id: string) {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+    setSaved(false);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/calendar/google/calendars', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ selectedIds }),
+      });
+      if (res.ok) { setSaved(true); setTimeout(() => setSaved(false), 2500); }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-border rounded-xl shadow-xl z-30 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-slate-50">
+        <span className="text-sm font-semibold text-foreground">Calendars</span>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-xs p-1">✕</button>
+      </div>
+
+      <div className="p-3 space-y-3">
+        {/* GateGuard Company Calendar — always on */}
+        <div>
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2 px-1">
+            GateGuard Company
+          </p>
+          <div className="flex items-center gap-2 px-2 py-2 rounded-lg bg-[#6B7EFF]/5 border border-[#6B7EFF]/20">
+            <div className="w-3 h-3 rounded-sm bg-[#6B7EFF] shrink-0" />
+            <span className="text-xs font-medium text-foreground flex-1">GateGuard Company Calendar</span>
+            <span className="text-[9px] font-bold text-[#6B7EFF] bg-[#6B7EFF]/10 px-1.5 py-0.5 rounded-full">Always On</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground px-1 mt-1">
+            L10 meetings, permit renewals, quote expiries, and company WOs.
+          </p>
+        </div>
+
+        {/* Google Calendars */}
+        {gcalConnected && (
+          <div>
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2 px-1">
+              My Google Calendars
+            </p>
+            {loading ? (
+              <div className="p-2"><SkeletonRow cols={2} rows={3} /></div>
+            ) : calendars.length === 0 ? (
+              <p className="text-xs text-muted-foreground px-1">No calendars found.</p>
+            ) : (
+              <div className="space-y-1">
+                {calendars.map((cal) => (
+                  <label
+                    key={cal.id}
+                    className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-accent cursor-pointer transition-colors"
+                  >
+                    <div
+                      className="w-3 h-3 rounded-sm shrink-0 border"
+                      style={{
+                        backgroundColor: selectedIds.includes(cal.id) ? cal.backgroundColor : 'transparent',
+                        borderColor: cal.backgroundColor,
+                      }}
+                    />
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={selectedIds.includes(cal.id)}
+                      onChange={() => toggleCalendar(cal.id)}
+                    />
+                    <span className="text-xs text-foreground flex-1 truncate">{cal.summary}</span>
+                    {cal.primary && (
+                      <span className="text-[9px] text-muted-foreground shrink-0">primary</span>
+                    )}
+                  </label>
+                ))}
+              </div>
+            )}
+
+            <button
+              onClick={() => { void handleSave(); }}
+              disabled={saving}
+              className="mt-3 w-full flex items-center justify-center gap-1.5 text-xs font-medium bg-[#6B7EFF] text-white px-3 py-2 rounded-lg hover:bg-[#5a6ee0] transition-colors disabled:opacity-60"
+            >
+              {saving ? (
+                <RefreshCw size={12} className="animate-spin" />
+              ) : saved ? (
+                <CheckCircle2 size={12} />
+              ) : (
+                <Save size={12} />
+              )}
+              {saved ? "Saved!" : saving ? "Saving…" : "Save Calendar Selection"}
+            </button>
+          </div>
+        )}
+
+        {!gcalConnected && (
+          <div className="text-center py-2">
+            <p className="text-xs text-muted-foreground mb-2">Connect Google Calendar to select which calendars to sync.</p>
+            <a
+              href="/api/calendar/google/connect"
+              className="text-xs font-medium bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5a6ee0] transition-colors inline-block"
+            >
+              Connect Google Calendar
+            </a>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function CalendarPageWrapper() {
@@ -169,6 +354,7 @@ function CalendarPage() {
   const [lastSynced, setLastSynced] = useState<string | null>(null);
   const [activeEvent, setActiveEvent] = useState<CalendarEvent | null>(null);
   const [popoverAnchor, setPopoverAnchor] = useState<{ top: number; left: number } | null>(null);
+  const [showCalendarsPanel, setShowCalendarsPanel] = useState(false);
 
   // Unscheduled panel
   const [unscheduledTodos, setUnscheduledTodos] = useState<UnscheduledTodo[]>([]);
@@ -191,6 +377,20 @@ function CalendarPage() {
     }
   }, [connectedParam]);
 
+  // ── Check GCal status on mount ───────────────────────────────────────────────
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch('/api/calendar/google/status');
+        if (res.ok) {
+          const d = await res.json() as { connected: boolean; last_synced?: string };
+          setGcalConnected(d.connected ?? false);
+          if (d.last_synced) setLastSynced(d.last_synced);
+        }
+      } catch { /* ignore */ }
+    })();
+  }, []);
+
   // ── Fetch events for current month/year ──────────────────────────────────────
   const fetchEvents = useCallback(async () => {
     setLoading(true);
@@ -198,73 +398,46 @@ function CalendarPage() {
       const year  = currentDate.getFullYear();
       const month = currentDate.getMonth() + 1;
       const res   = await fetch(`/api/calendar/events?year=${year}&month=${month}`);
-      if (!res.ok) throw new Error("Failed to fetch events");
-      const data = await res.json() as { events: CalendarEvent[] };
-      setEvents(data.events ?? []);
-      // Check if any GCal events → means connected
-      if ((data.events ?? []).some((e: CalendarEvent) => e.type === "gcal")) {
-        setGcalConnected(true);
+      if (res.ok) {
+        const d = await res.json() as { events: CalendarEvent[] };
+        setEvents(d.events ?? []);
       }
-    } catch {
-      setEvents([]);
     } finally {
       setLoading(false);
     }
   }, [currentDate]);
 
-  // ── Fetch unscheduled items ───────────────────────────────────────────────────
-  const fetchUnscheduled = useCallback(async () => {
-    setUnscheduledLoading(true);
-    try {
-      const [todosRes, wosRes, leadsRes] = await Promise.all([
-        fetch("/api/todos?unscheduled=true&limit=20"),
-        fetch("/api/maintenance?unscheduled=true&limit=20"),
-        fetch("/api/crm/leads?unscheduled=true&limit=20"),
-      ]);
-
-      if (todosRes.ok) {
-        const d = await todosRes.json() as { records?: UnscheduledTodo[] };
-        setUnscheduledTodos((d.records ?? []).filter((t) => !t.due_date));
-      }
-      if (wosRes.ok) {
-        const d = await wosRes.json() as { records?: UnscheduledWO[] };
-        setUnscheduledWOs(d.records ?? []);
-      }
-      if (leadsRes.ok) {
-        const d = await leadsRes.json() as { records?: UnscheduledLead[] };
-        setUnscheduledLeads(
-          (d.records ?? []).filter(
-            (l) => !["closed_won", "closed_lost"].includes(l.stage)
-          )
-        );
-      }
-    } catch {
-      // Non-critical — leave empty
-    } finally {
-      setUnscheduledLoading(false);
-    }
-  }, []);
-
   useEffect(() => { void fetchEvents(); }, [fetchEvents]);
-  useEffect(() => { void fetchUnscheduled(); }, [fetchUnscheduled]);
 
-  // Check GCal last synced
+  // ── Fetch unscheduled items ───────────────────────────────────────────────────
   useEffect(() => {
+    setUnscheduledLoading(true);
     void (async () => {
       try {
-        const res = await fetch("/api/calendar/google/status");
-        if (res.ok) {
-          const d = await res.json() as { connected?: boolean; last_synced?: string };
-          if (d.connected) setGcalConnected(true);
-          if (d.last_synced) setLastSynced(d.last_synced);
+        const [todosRes, wosRes, leadsRes] = await Promise.all([
+          fetch('/api/todos?status=open&no_due_date=true&limit=20'),
+          fetch('/api/maintenance?status=open&no_schedule=true&limit=20'),
+          fetch('/api/crm/leads?stage=new&limit=10'),
+        ]);
+
+        if (todosRes.ok) {
+          const d = await todosRes.json() as { todos?: UnscheduledTodo[] };
+          setUnscheduledTodos((d.todos ?? []).filter((t) => !t.due_date));
         }
-      } catch {
-        // Ignore — GCal status is non-critical
+        if (wosRes.ok) {
+          const d = await wosRes.json() as { work_orders?: UnscheduledWO[] };
+          setUnscheduledWOs(d.work_orders ?? []);
+        }
+        if (leadsRes.ok) {
+          const d = await leadsRes.json() as { leads?: UnscheduledLead[] };
+          setUnscheduledLeads(d.leads ?? []);
+        }
+      } finally {
+        setUnscheduledLoading(false);
       }
     })();
   }, []);
 
-  // ── Navigation ────────────────────────────────────────────────────────────────
   function goBack() {
     setCurrentDate((d) => {
       const nd = new Date(d);
@@ -308,7 +481,6 @@ function CalendarPage() {
   function handleEventClick(event: CalendarEvent, el: HTMLElement) {
     setActiveEvent(event);
     const rect = el.getBoundingClientRect();
-    // Position popover below the chip, clamped to viewport
     const top  = Math.min(rect.bottom + 8, window.innerHeight - 220);
     const left = Math.min(rect.left, window.innerWidth - 272);
     setPopoverAnchor({ top, left });
@@ -325,9 +497,7 @@ function CalendarPage() {
       setUnscheduledTodos((prev) => prev.filter((t) => t.id !== id));
       setPickerTodoId(null);
       await fetchEvents();
-    } catch {
-      // Ignore
-    }
+    } catch { /* ignore */ }
   }
 
   async function setWODate(id: string, date: string) {
@@ -340,9 +510,7 @@ function CalendarPage() {
       setUnscheduledWOs((prev) => prev.filter((w) => w.id !== id));
       setPickerWoId(null);
       await fetchEvents();
-    } catch {
-      // Ignore
-    }
+    } catch { /* ignore */ }
   }
 
   // ── Drag-and-drop handlers ────────────────────────────────────────────────────
@@ -361,7 +529,7 @@ function CalendarPage() {
   // ── Week view: compute days in current week ────────────────────────────────────
   function getWeekDays(): Date[] {
     const d    = new Date(currentDate);
-    const day  = d.getDay(); // 0=Sun
+    const day  = d.getDay();
     const diff = d.getDate() - day;
     const sunday = new Date(d.setDate(diff));
     return Array.from({ length: 7 }, (_, i) => {
@@ -375,12 +543,11 @@ function CalendarPage() {
   function getMonthCells(): (Date | null)[] {
     const year  = currentDate.getFullYear();
     const month = currentDate.getMonth();
-    const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
+    const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const cells: (Date | null)[] = [];
     for (let i = 0; i < firstDay; i++) cells.push(null);
     for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d));
-    // Pad to complete last row
     while (cells.length % 7 !== 0) cells.push(null);
     return cells;
   }
@@ -446,9 +613,7 @@ function CalendarPage() {
                   {DAY_NAMES[day.getDay()]}
                 </p>
                 <div className={`w-8 h-8 flex items-center justify-center mx-auto mt-1 rounded-full text-sm font-bold transition-colors ${
-                  today
-                    ? "bg-[#6B7EFF] text-white"
-                    : "text-foreground"
+                  today ? "bg-[#6B7EFF] text-white" : "text-foreground"
                 }`}>
                   {day.getDate()}
                 </div>
@@ -472,11 +637,9 @@ function CalendarPage() {
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => { void handleDropOnDay(dateStr); }}
               >
-                {/* All-day items first */}
                 {allDay.map((ev) => (
                   <EventChip key={ev.id} event={ev} onClick={handleEventClick} />
                 ))}
-                {/* Timed items */}
                 {timed.map((ev) => (
                   <EventChip key={ev.id} event={ev} onClick={handleEventClick} />
                 ))}
@@ -504,7 +667,6 @@ function CalendarPage() {
 
     return (
       <div className="flex-1 min-h-0 overflow-auto">
-        {/* Day-of-week headers */}
         <div className="grid grid-cols-7 border-b border-border bg-white sticky top-0 z-10">
           {DAY_NAMES.map((name) => (
             <div key={name} className="py-2 text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wide border-r border-border last:border-r-0">
@@ -513,7 +675,6 @@ function CalendarPage() {
           ))}
         </div>
 
-        {/* Month grid */}
         <div className="grid grid-cols-7">
           {cells.map((cell, idx) => {
             if (!cell) {
@@ -632,7 +793,7 @@ function CalendarPage() {
 
             <div className="flex-1" />
 
-            {/* Google Calendar controls */}
+            {/* Google Calendar + Calendars settings */}
             <div className="flex items-center gap-2">
               {gcalConnected ? (
                 <>
@@ -660,6 +821,34 @@ function CalendarPage() {
                   Not Connected
                 </span>
               )}
+
+              {/* Calendars settings button */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowCalendarsPanel((v) => !v)}
+                  className={`p-1.5 rounded-lg transition-colors border border-border ${
+                    showCalendarsPanel ? "bg-[#6B7EFF]/10 border-[#6B7EFF]/30" : "hover:bg-accent"
+                  }`}
+                  title="Calendar settings"
+                >
+                  <Settings size={14} className={showCalendarsPanel ? "text-[#6B7EFF]" : "text-muted-foreground"} />
+                </button>
+
+                {showCalendarsPanel && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-20"
+                      onClick={() => setShowCalendarsPanel(false)}
+                    />
+                    <div className="relative z-30">
+                      <CalendarsPanel
+                        gcalConnected={gcalConnected}
+                        onClose={() => setShowCalendarsPanel(false)}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
@@ -675,7 +864,7 @@ function CalendarPage() {
           </div>
 
           {/* Legend */}
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+          <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-sm bg-[#6B7EFF] inline-block" />
               To-Dos
@@ -690,6 +879,15 @@ function CalendarPage() {
                 Google Calendar
               </span>
             )}
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm border-l-2 border-[#6B7EFF] bg-[#6B7EFF]/10 inline-block" />
+              <span className="text-[9px] font-bold text-[#6B7EFF] bg-[#6B7EFF]/10 px-0.5 rounded mr-0.5">GG</span>
+              Company Events
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm border-l-2 border-[#EF4444] bg-[#EF4444]/10 inline-block" />
+              Expiries
+            </span>
           </div>
         </div>
 
