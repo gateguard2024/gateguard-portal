@@ -30,6 +30,10 @@ export async function GET(
       cover_message, terms_text, tax_rate, discount_percent, deposit_percent,
       survey_id, package_mode, selected_package, created_by_name, expiry_date,
       payment_plan, ramp_up_start_pct, ramp_up_step_pct, ramp_up_full_month,
+      whats_included, payment_schedule_json, sow_text,
+      agreement_type, agreement_html, attachments,
+      signed_at, signer_name, signer_email,
+      accepted_by_rep, accepted_by_rep_name,
       quote_line_items (
         id, sort_order, category, description, qty, unit_price, unit, is_recurring,
         section_name, product_id, item_type, is_optional, is_included,
@@ -108,6 +112,10 @@ export async function PATCH(
     'created_by_name', 'expiry_date',
     // migration 055 payment plan fields
     'payment_plan', 'ramp_up_start_pct', 'ramp_up_step_pct', 'ramp_up_full_month',
+    // migration 091 proposal v2 fields
+    'whats_included', 'payment_schedule_json', 'sow_text',
+    'agreement_type', 'agreement_html', 'attachments',
+    'accepted_by_rep', 'accepted_by_rep_name',
   ]
 
   const updates: Record<string, unknown> = {}

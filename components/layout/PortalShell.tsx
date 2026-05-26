@@ -19,14 +19,17 @@ import { MobileNav }        from '@/components/layout/MobileNav'
 
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const isTech   = pathname.startsWith('/tech')
+  const isTech       = pathname.startsWith('/tech')
+  // Proposal + approve pages are customer-facing — no sidebar, no portal chrome, no auth wall
+  const isStandalone = isTech
+    || /^\/quotes\/[^/]+(\/proposal|\/approve)(\/|$)/.test(pathname)
 
-  // Tech tool: full-screen, light, no portal chrome at all
-  if (isTech) {
+  // Standalone: full-screen, white canvas, no portal chrome
+  if (isStandalone) {
     return (
       <div style={{
         minHeight: '100dvh',
-        background: '#F1F5F9',
+        background: isTech ? '#F1F5F9' : '#ffffff',
         overscrollBehavior: 'none',
       }}>
         {children}

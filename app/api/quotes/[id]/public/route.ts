@@ -8,7 +8,7 @@ const supabase = createClient(
 export const dynamic = 'force-dynamic'
 
 // GET /api/quotes/[id]/public — public fetch (no Clerk auth required)
-// Used by client-facing approval page
+// Used by client-facing proposal + approve pages
 export async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } }
@@ -23,6 +23,10 @@ export async function GET(
       cover_message, terms_text, tax_rate, discount_percent, deposit_percent,
       package_mode, selected_package, created_by_name, expiry_date,
       payment_plan, ramp_up_start_pct, ramp_up_step_pct, ramp_up_full_month,
+      whats_included, payment_schedule_json, sow_text,
+      agreement_type, agreement_html, attachments,
+      signed_at, signer_name, signer_email,
+      accepted_by_rep, accepted_by_rep_name,
       quote_line_items (
         id, sort_order, category, description, qty, unit_price, unit, is_recurring,
         section_name, item_type, is_optional, is_included,
@@ -83,26 +87,56 @@ export async function GET(
   })
 }
 
-// POST /api/quotes/[id]/public — approve or decline (no auth required)
-// Body: { action: 'approve' | 'decline', selected_option?: string, item_selections?: { id: string; is_included: boolean }[], decline_note?: string }
+// POST /api/quotes/[id]/public — approve, decline, or sign (no auth required)
+// Body:
+//   action: 'approve' | 'decline' | 'sign'
+//   For sign: { signer_name, signer_email, signature_data (base64 PNG) }
+//   For approve: { selected_option?, item_selections? }
+//   For decline: { decline_note? }
+//   rep_accept: true — dealer accepting on behalf of client (sets accepted_by_rep)
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const body = await req.json()
-  const { action, selected_option, item_selections, decline_note } = body
+  const { action, selected_option, item_selections, decline_note,
+          signer_name, signer_email, signature_data, rep_accept } = body
 
-  if (action !== 'approve' && action !== 'decline') {
+  if (!['approve', 'decline', 'sign'].includes(action)) {
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
   }
+
+  // Grab client IP (best-effort for audit trail)
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+           ?? req.headers.get('x-real-ip')
+           ?? 'unknown'
 
   const ts = new Date().toISOString()
   const updates: Record<string, unknown> = { updated_at: ts }
 
-  if (action === 'approve') {
-    updates.status     = 'accepted'
+  if (action === 'sign') {
+    // Capture signature — sets signed_at but does NOT change status yet
+    if (!signer_name) return NextResponse.json({ error: 'signer_name required' }, { status: 400 })
+    updates.signed_at      = ts
+    updates.signer_name    = signer_name
+    updates.signer_email   = signer_email ?? null
+    updates.signer_ip      = ip
+    updates.signature_data = signature_data ?? null
+    // Also approve when signing
+    updates.status         = 'accepted'
+    updates.accepted_at    = ts
+    if (rep_accept) {
+      updates.accepted_by_rep      = true
+      updates.accepted_by_rep_name = signer_name
+    }
+  } else if (action === 'approve') {
+    updates.status      = 'accepted'
     updates.accepted_at = ts
     if (selected_option) updates.selected_package = selected_option
+    if (rep_accept) {
+      updates.accepted_by_rep      = true
+      updates.accepted_by_rep_name = signer_name ?? 'Rep'
+    }
   } else {
     updates.status      = 'declined'
     updates.declined_at = ts
@@ -124,7 +158,7 @@ export async function POST(
     .from('quotes')
     .update(updates)
     .eq('id', params.id)
-    .select('id, status, accepted_at, declined_at')
+    .select('id, status, accepted_at, declined_at, signed_at, signer_name, accepted_by_rep')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

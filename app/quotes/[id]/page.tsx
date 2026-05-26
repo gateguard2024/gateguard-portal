@@ -10,7 +10,7 @@ import {
   Search, Hash, Layers, X, Download, Mail,
 } from 'lucide-react';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Edit2, ArrowUpRight, DollarSign, Package, SlidersHorizontal, Tag, FileDown, LinkIcon, ClipboardList, Unlink } = require('lucide-react') as any;
+const { Edit2, ArrowUpRight, DollarSign, Package, SlidersHorizontal, Tag, FileDown, LinkIcon, ClipboardList, Unlink, Upload, Shield, ListChecks, Paperclip, UserCheck } = require('lucide-react') as any;
 import { cn } from '@/lib/utils';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -88,6 +88,18 @@ interface QuoteDetail {
   ramp_up_step_pct:    number | null;
   ramp_up_full_month:  number | null;
   opportunity_id:      string | null;
+  // migration 091
+  whats_included:        { label: string; included: boolean }[] | null;
+  payment_schedule_json: { label: string; description?: string; amount: number; suffix?: string; color?: string }[] | null;
+  sow_text:              string | null;
+  agreement_type:        string | null;
+  agreement_html:        string | null;
+  attachments:           { name: string; url: string; size?: number }[] | null;
+  signed_at:             string | null;
+  signer_name:           string | null;
+  signer_email:          string | null;
+  accepted_by_rep:       boolean | null;
+  accepted_by_rep_name:  string | null;
 }
 
 // ── Survey type ────────────────────────────────────────────────────────────────
@@ -702,6 +714,97 @@ function SvcPickerPanel({ quoteId, units, onAdded, onClose }: { quoteId:string; 
   );
 }
 
+// ── Agreement templates ────────────────────────────────────────────────────────
+
+const AGREEMENT_TYPES = [
+  { value: 'install_only',      label: 'Installation Only' },
+  { value: 'install_service',   label: 'Install + Service Agreement' },
+  { value: 'gate_maintenance',  label: 'Gate Maintenance Plan' },
+  { value: 'full_service',      label: 'Full Service Agreement' },
+];
+
+const AGREEMENT_TEMPLATES: Record<string, string> = {
+  install_only: `<h2>Installation Agreement</h2>
+<p>This Installation Agreement ("Agreement") is entered into between GateGuard ("Company") and the client ("Client") named in the proposal above.</p>
+<h3>1. Scope of Work</h3>
+<p>Company agrees to furnish all labor, materials, and equipment necessary to complete the installation as described in the attached scope of work and line items.</p>
+<h3>2. Payment Terms</h3>
+<p>A deposit of the amount specified is due upon execution of this agreement. The remaining balance is due upon completion of installation.</p>
+<h3>3. Warranty</h3>
+<p>Company warrants all labor for a period of ninety (90) days from the date of installation. Equipment warranties are subject to manufacturer terms.</p>
+<h3>4. Client Responsibilities</h3>
+<p>Client shall provide access to the property, adequate power to the installation locations, and a designated point of contact for scheduling.</p>
+<h3>5. Limitation of Liability</h3>
+<p>Company's liability shall not exceed the total contract value. Company is not liable for damages resulting from equipment failure after the warranty period.</p>`,
+
+  install_service: `<h2>Installation & Service Agreement</h2>
+<p>This Agreement is entered into between GateGuard ("Company") and the client ("Client") named in the proposal above.</p>
+<h3>1. Scope of Work</h3>
+<p>Company agrees to furnish all labor, materials, and equipment necessary to complete the installation and provide ongoing service as described herein.</p>
+<h3>2. Service Term</h3>
+<p>The service term commences upon installation completion and continues for sixty (60) months ("Initial Term"). Service renews automatically on a month-to-month basis unless either party provides thirty (30) days written notice of cancellation.</p>
+<h3>3. Early Termination</h3>
+<p>If Client terminates this Agreement prior to the expiration of the Initial Term, Client agrees to pay an early termination fee equal to the remaining monthly service fees for the balance of the Initial Term.</p>
+<h3>4. Payment Terms</h3>
+<p>Installation costs are due as specified in the payment schedule. Monthly service fees are billed in advance on the first of each month.</p>
+<h3>5. Service Coverage</h3>
+<p>Monthly service fees cover: remote monitoring, software updates, and one (1) scheduled preventive maintenance visit per year. Emergency service calls are billed at the prevailing rate.</p>
+<h3>6. Warranty</h3>
+<p>All installed equipment is covered under manufacturer warranty. Labor warranty of ninety (90) days applies to installation work.</p>
+<h3>7. Limitation of Liability</h3>
+<p>Company's liability shall not exceed the total contract value paid in the preceding twelve (12) months.</p>`,
+
+  gate_maintenance: `<h2>Gate Operator Maintenance Plan</h2>
+<p>This Maintenance Plan Agreement is entered into between GateGuard ("Company") and the client ("Client") named in the proposal above.</p>
+<h3>1. Coverage</h3>
+<p>This plan covers the gate operator(s), control board, wiring, and related control equipment specified in the proposal. The gate operator coverage includes: parts, labor, and emergency service calls for covered failures.</p>
+<h3>2. Exclusions</h3>
+<p>This plan does NOT cover the physical gate structure, gate panels, hinges, tracks, rollers, or structural components. Damage caused by vehicle impact, vandalism, acts of God, or misuse is excluded. Coverage is void if unauthorized modifications are made.</p>
+<h3>3. Response Time</h3>
+<p>Emergency service calls will be responded to within four (4) business hours. Non-emergency service calls within two (2) business days.</p>
+<h3>4. Plan Term</h3>
+<p>This plan is billed monthly and may be cancelled with thirty (30) days written notice after the initial twelve (12) month commitment period.</p>
+<h3>5. Preventive Maintenance</h3>
+<p>Company will perform two (2) scheduled preventive maintenance visits per year, including lubrication, limit adjustments, safety reverse testing, and system inspection.</p>`,
+
+  full_service: `<h2>Full Service Agreement</h2>
+<p>This Full Service Agreement ("Agreement") is entered into between GateGuard ("Company") and the client ("Client") named in the proposal above.</p>
+<h3>1. Scope of Services</h3>
+<p>Company agrees to provide comprehensive installation, monitoring, and service coverage for all access control, gate operator, camera, and network equipment specified in the proposal.</p>
+<h3>2. Service Term &amp; Commitment</h3>
+<p>The Initial Term is sixty (60) months from the date of installation completion. Early termination fee equals the remaining monthly fees for the balance of the Initial Term.</p>
+<h3>3. Service Level Agreement (SLA)</h3>
+<p><strong>Emergency Response:</strong> On-site within 4 business hours for gate/access failures.<br/>
+<strong>Standard Service:</strong> On-site within 2 business days for non-critical issues.<br/>
+<strong>Preventive Maintenance:</strong> Two (2) scheduled visits per year per site.</p>
+<h3>4. Coverage Inclusions</h3>
+<p>All labor, parts, and emergency service calls for: gate operators and control equipment, access control hardware, camera systems, and network equipment covered under this plan.</p>
+<h3>5. Gate Structure Coverage</h3>
+<p>If Physical Gate Coverage is included in the line items, coverage extends to: gate panels, tracks, hinges, rollers, and structural components for normal wear and mechanical failure. Damage from impact, vandalism, or Acts of God is excluded.</p>
+<h3>6. Payment Terms</h3>
+<p>Installation costs per the payment schedule. Monthly recurring fees billed on the first of each month. Late payments incur a 1.5% monthly finance charge.</p>
+<h3>7. Monitoring &amp; Reporting</h3>
+<p>Company will provide monthly uptime reports and proactive notification of any system anomalies or offline equipment detected through remote monitoring.</p>
+<h3>8. Limitation of Liability</h3>
+<p>Company's aggregate liability shall not exceed twelve (12) months of fees paid under this Agreement. Neither party shall be liable for consequential, incidental, or punitive damages.</p>
+<h3>9. Governing Law</h3>
+<p>This Agreement shall be governed by the laws of the state in which the property is located.</p>`,
+};
+
+// Default What's Included checklist
+const DEFAULT_WHATS_INCLUDED = [
+  { label: 'Gate operator installation & programming', included: true },
+  { label: 'Access control system configuration', included: true },
+  { label: 'Camera system installation & setup', included: true },
+  { label: 'Network infrastructure & VLAN setup', included: true },
+  { label: 'Mobile app setup for residents', included: true },
+  { label: '24/7 remote monitoring', included: true },
+  { label: 'Annual preventive maintenance visits', included: true },
+  { label: 'Dedicated tech support line', included: true },
+  { label: 'Online portal access for property manager', included: true },
+  { label: 'Training for on-site staff', included: true },
+];
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function QuoteDetailPage() {
@@ -739,6 +842,29 @@ export default function QuoteDetailPage() {
   // Notes & SOW state
   const [notes,           setNotes]          = useState<string>('');
   const [savingNotes,     setSavingNotes]    = useState<boolean>(false);
+
+  // What's Included state
+  const [whatsIncluded,   setWhatsIncluded]  = useState<{ label: string; included: boolean }[]>([]);
+  const [newWiLabel,      setNewWiLabel]     = useState<string>('');
+  const [savingWI,        setSavingWI]       = useState<boolean>(false);
+
+  // Agreement state — when type changes, pre-fill template if html is empty/default
+  const [agreementType,   setAgreementType]  = useState<string>('install_only');
+  const [agreementHtml,   setAgreementHtml]  = useState<string>('');
+  const [agreementOpen,   setAgreementOpen]  = useState<boolean>(false);
+  const [savingAgreement, setSavingAgreement] = useState<boolean>(false);
+  const [editAgreementHtml, setEditAgreementHtml] = useState<boolean>(false);
+
+  // Attachments state
+  const [attachments,     setAttachments]    = useState<{ name: string; url: string; size?: number }[]>([]);
+  const [uploadingFile,   setUploadingFile]  = useState<boolean>(false);
+  const [savingAttachments, setSavingAttachments] = useState<boolean>(false);
+
+  // Accept on behalf
+  const [repAcceptName,   setRepAcceptName]  = useState<string>('');
+  const [repAccepting,    setRepAccepting]   = useState<boolean>(false);
+  const [repAccepted,     setRepAccepted]    = useState<boolean>(false);
+
   const [surveys,         setSurveys]        = useState<SurveyOption[]>([]);
   const [showSurveyPicker, setShowSurveyPicker] = useState<boolean>(false);
   const [linkedSurvey,    setLinkedSurvey]   = useState<SurveyOption | null>(null);
@@ -758,6 +884,12 @@ export default function QuoteDetailPage() {
       setRampFullMonth(data.quote.ramp_up_full_month ?? 14);
       // Sync notes state
       setNotes(data.quote.notes ?? '');
+      // Sync migration 091 fields
+      setWhatsIncluded(data.quote.whats_included?.length ? data.quote.whats_included : DEFAULT_WHATS_INCLUDED);
+      setAgreementType(data.quote.agreement_type ?? 'install_only');
+      setAgreementHtml(data.quote.agreement_html ?? AGREEMENT_TEMPLATES['install_only']);
+      setAttachments(data.quote.attachments ?? []);
+      setRepAccepted(!!data.quote.accepted_by_rep);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load quote');
     } finally { setLoading(false); }
@@ -886,6 +1018,102 @@ export default function QuoteDetailPage() {
       setQuote(q => q ? { ...q, ...data.quote } : q);
     } catch (e) { alert(e instanceof Error ? e.message : 'Failed to save notes'); }
     finally { setSavingNotes(false); }
+  }
+
+  async function saveWhatsIncluded() {
+    setSavingWI(true);
+    try {
+      const res = await fetch(`/api/quotes/${id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ whats_included: whatsIncluded }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setQuote(q => q ? { ...q, whats_included: data.quote.whats_included } : q);
+    } catch (e) { alert(e instanceof Error ? e.message : 'Failed to save'); }
+    finally { setSavingWI(false); }
+  }
+
+  async function saveAgreement() {
+    setSavingAgreement(true);
+    try {
+      const res = await fetch(`/api/quotes/${id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ agreement_type: agreementType, agreement_html: agreementHtml }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setQuote(q => q ? { ...q, agreement_type: data.quote.agreement_type, agreement_html: data.quote.agreement_html } : q);
+      setEditAgreementHtml(false);
+    } catch (e) { alert(e instanceof Error ? e.message : 'Failed to save agreement'); }
+    finally { setSavingAgreement(false); }
+  }
+
+  async function saveAttachments(updated: { name: string; url: string; size?: number }[]) {
+    setSavingAttachments(true);
+    try {
+      const res = await fetch(`/api/quotes/${id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ attachments: updated }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setAttachments(data.quote.attachments ?? []);
+      setQuote(q => q ? { ...q, attachments: data.quote.attachments } : q);
+    } catch (e) { alert(e instanceof Error ? e.message : 'Failed to save attachments'); }
+    finally { setSavingAttachments(false); }
+  }
+
+  async function uploadAttachment(file: File) {
+    setUploadingFile(true);
+    try {
+      // 1. Get signed upload URL from Supabase
+      const urlRes = await fetch('/api/kb/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: `quote-attachments/${id}/${file.name}`, contentType: file.type }),
+      });
+      if (!urlRes.ok) throw new Error('Failed to get upload URL');
+      const { signedUrl, publicUrl } = await urlRes.json();
+
+      // 2. Upload directly to Supabase Storage
+      const uploadRes = await fetch(signedUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type },
+      });
+      if (!uploadRes.ok) throw new Error('Failed to upload file');
+
+      // 3. Append to attachments list + save
+      const newAttachment = { name: file.name, url: publicUrl ?? signedUrl.split('?')[0], size: file.size };
+      const updated = [...attachments, newAttachment];
+      setAttachments(updated);
+      await saveAttachments(updated);
+    } catch (e) { alert(e instanceof Error ? e.message : 'Upload failed'); }
+    finally { setUploadingFile(false); }
+  }
+
+  async function acceptOnBehalfOfClient() {
+    if (!repAcceptName.trim()) return;
+    setRepAccepting(true);
+    try {
+      const res = await fetch(`/api/quotes/${id}/public`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          action:      'approve',
+          rep_accept:  true,
+          signer_name: repAcceptName.trim(),
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setRepAccepted(true);
+      setQuote(q => q ? { ...q, status: 'accepted', accepted_at: new Date().toISOString(), accepted_by_rep: true, accepted_by_rep_name: repAcceptName.trim() } : q);
+    } catch (e) { alert(e instanceof Error ? e.message : 'Failed to accept'); }
+    finally { setRepAccepting(false); }
   }
 
   async function applyGlobalDiscount(pct: number) {
@@ -1723,6 +1951,254 @@ export default function QuoteDetailPage() {
               Save Notes
             </button>
           </div>
+
+          {/* ── What's Included ────────────────────────────────────────── */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <ListChecks size={14} className="text-[#6B7EFF]" />
+              <h2 className="text-sm font-semibold text-gray-900">What&apos;s Included</h2>
+              <span className="ml-auto text-[10px] text-gray-400">shown on proposal</span>
+            </div>
+            <div className="space-y-1.5">
+              {whatsIncluded.map((item, idx) => (
+                <div key={idx} className="flex items-center gap-2 group">
+                  <button
+                    onClick={() => {
+                      const updated = whatsIncluded.map((w, i) => i === idx ? { ...w, included: !w.included } : w);
+                      setWhatsIncluded(updated);
+                    }}
+                    className={cn(
+                      'w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors',
+                      item.included ? 'bg-[#6B7EFF] border-[#6B7EFF]' : 'border-gray-300'
+                    )}
+                  >
+                    {item.included && <Check size={10} className="text-white" />}
+                  </button>
+                  <span className={cn('text-xs flex-1', item.included ? 'text-gray-800' : 'text-gray-400 line-through')}>{item.label}</span>
+                  <button
+                    onClick={() => setWhatsIncluded(whatsIncluded.filter((_, i) => i !== idx))}
+                    className="opacity-0 group-hover:opacity-100 p-0.5 text-gray-400 hover:text-red-500 transition-opacity"
+                  >
+                    <X size={11} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            {/* Add new item */}
+            <div className="flex gap-2">
+              <input
+                value={newWiLabel}
+                onChange={e => setNewWiLabel(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && newWiLabel.trim()) {
+                    setWhatsIncluded([...whatsIncluded, { label: newWiLabel.trim(), included: true }]);
+                    setNewWiLabel('');
+                  }
+                }}
+                placeholder="Add item…"
+                className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
+              />
+              <button
+                onClick={() => {
+                  if (newWiLabel.trim()) {
+                    setWhatsIncluded([...whatsIncluded, { label: newWiLabel.trim(), included: true }]);
+                    setNewWiLabel('');
+                  }
+                }}
+                className="px-2 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs transition-colors"
+              >
+                <Plus size={11} />
+              </button>
+            </div>
+            <button
+              onClick={saveWhatsIncluded}
+              disabled={savingWI}
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#6B7EFF] hover:bg-[#5a6fd6] text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+            >
+              {savingWI ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+              Save
+            </button>
+          </div>
+
+          {/* ── Agreement ─────────────────────────────────────────────── */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-3">
+            <button
+              onClick={() => setAgreementOpen(v => !v)}
+              className="w-full flex items-center gap-2"
+            >
+              <Shield size={14} className="text-[#6B7EFF]" />
+              <h2 className="text-sm font-semibold text-gray-900 flex-1 text-left">Agreement</h2>
+              {quote?.signed_at && (
+                <span className="flex items-center gap-1 text-[10px] text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                  <Check size={9} /> Signed by {quote.signer_name}
+                </span>
+              )}
+              <ChevronDown size={13} className={cn('text-gray-400 transition-transform', agreementOpen && 'rotate-180')} />
+            </button>
+
+            {agreementOpen && (
+              <div className="space-y-3 pt-1">
+                {/* Type selector */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Agreement Type</label>
+                  <select
+                    value={agreementType}
+                    onChange={e => {
+                      setAgreementType(e.target.value);
+                      // Pre-fill template if user hasn't customised yet
+                      setAgreementHtml(AGREEMENT_TEMPLATES[e.target.value] ?? '');
+                    }}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-white"
+                  >
+                    {AGREEMENT_TYPES.map(t => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* HTML editor toggle */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-medium text-gray-700">Agreement Text</label>
+                    <button
+                      onClick={() => setEditAgreementHtml(v => !v)}
+                      className="text-[10px] text-[#6B7EFF] hover:underline"
+                    >
+                      {editAgreementHtml ? 'Preview' : 'Edit HTML'}
+                    </button>
+                  </div>
+                  {editAgreementHtml ? (
+                    <textarea
+                      value={agreementHtml}
+                      onChange={e => setAgreementHtml(e.target.value)}
+                      rows={14}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] resize-none"
+                      placeholder="Enter HTML agreement text…"
+                    />
+                  ) : (
+                    <div
+                      className="border border-gray-100 rounded-lg p-3 text-xs text-gray-700 leading-relaxed max-h-48 overflow-y-auto prose prose-xs"
+                      dangerouslySetInnerHTML={{ __html: agreementHtml || AGREEMENT_TEMPLATES[agreementType] || '' }}
+                    />
+                  )}
+                  <button
+                    onClick={() => setAgreementHtml(AGREEMENT_TEMPLATES[agreementType] ?? '')}
+                    className="mt-1 text-[10px] text-gray-400 hover:text-gray-600"
+                  >
+                    ↺ Reset to template
+                  </button>
+                </div>
+
+                <button
+                  onClick={saveAgreement}
+                  disabled={savingAgreement}
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#6B7EFF] hover:bg-[#5a6fd6] text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                >
+                  {savingAgreement ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                  Save Agreement
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* ── Attachments ───────────────────────────────────────────── */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Paperclip size={14} className="text-[#6B7EFF]" />
+              <h2 className="text-sm font-semibold text-gray-900">Attachments</h2>
+              <span className="ml-auto text-[10px] text-gray-400">{attachments.length} file{attachments.length !== 1 ? 's' : ''}</span>
+            </div>
+
+            {attachments.length > 0 && (
+              <div className="space-y-1.5">
+                {attachments.map((att, idx) => (
+                  <div key={idx} className="flex items-center gap-2 group bg-gray-50 rounded-lg px-3 py-2">
+                    <FileText size={12} className="text-gray-400 shrink-0" />
+                    <a href={att.url} target="_blank" rel="noreferrer" className="text-xs text-[#6B7EFF] hover:underline truncate flex-1">
+                      {att.name}
+                    </a>
+                    {att.size && <span className="text-[10px] text-gray-400">{(att.size / 1024).toFixed(0)} KB</span>}
+                    <button
+                      onClick={async () => {
+                        const updated = attachments.filter((_, i) => i !== idx);
+                        setAttachments(updated);
+                        await saveAttachments(updated);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity"
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <label className={cn(
+              'flex items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-lg px-4 py-3 cursor-pointer hover:border-[#6B7EFF]/40 hover:bg-blue-50/30 transition-colors',
+              uploadingFile && 'opacity-50 pointer-events-none'
+            )}>
+              {uploadingFile ? (
+                <><Loader2 size={13} className="animate-spin text-[#6B7EFF]" /><span className="text-xs text-gray-500">Uploading…</span></>
+              ) : (
+                <><Upload size={13} className="text-gray-400" /><span className="text-xs text-gray-500">Click to upload file</span></>
+              )}
+              <input
+                type="file"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) uploadAttachment(file);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+            {savingAttachments && (
+              <p className="text-[10px] text-gray-400 text-center flex items-center justify-center gap-1">
+                <Loader2 size={10} className="animate-spin" /> Saving…
+              </p>
+            )}
+          </div>
+
+          {/* ── Accept on behalf of client ────────────────────────────── */}
+          {quote && quote.status !== 'accepted' && quote.status !== 'declined' && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <UserCheck size={14} className="text-amber-600" />
+                <h2 className="text-sm font-semibold text-amber-900">Accept on Client&apos;s Behalf</h2>
+              </div>
+              <p className="text-xs text-amber-700">Use when the client has verbally agreed and you are recording their acceptance.</p>
+              {repAccepted ? (
+                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                  <Check size={12} className="text-emerald-600" />
+                  <span className="text-xs text-emerald-700 font-medium">Accepted on behalf of client by {repAcceptName || quote.accepted_by_rep_name}</span>
+                </div>
+              ) : (
+                <>
+                  <input
+                    value={repAcceptName}
+                    onChange={e => setRepAcceptName(e.target.value)}
+                    placeholder="Your name (rep recording acceptance)"
+                    className="w-full border border-amber-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
+                  />
+                  <button
+                    onClick={acceptOnBehalfOfClient}
+                    disabled={repAccepting || !repAcceptName.trim()}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                  >
+                    {repAccepting ? <Loader2 size={13} className="animate-spin" /> : <UserCheck size={13} />}
+                    Mark as Accepted
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+          {quote?.status === 'accepted' && quote.accepted_by_rep && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center gap-2">
+              <UserCheck size={13} className="text-emerald-600 shrink-0" />
+              <p className="text-xs text-emerald-700">Accepted on behalf of client by <strong>{quote.accepted_by_rep_name}</strong></p>
+            </div>
+          )}
+
         </div>
       </div>
 

@@ -452,7 +452,7 @@ export default function OpportunityDetailPage() {
     if (!id) return;
     fetch(`/api/quotes?opportunity_id=${id}`)
       .then(r => r.json())
-      .then(j => { setOppQuotes(j.quotes ?? []); setQuotesLoaded(true); })
+      .then(j => { setOppQuotes(j.records ?? j.quotes ?? []); setQuotesLoaded(true); })
       .catch(() => setQuotesLoaded(true));
   }, [id]);
 
