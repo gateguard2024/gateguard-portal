@@ -36,7 +36,7 @@ export async function POST(req: Request) {
   }
 
   const effectiveChannelId = overrideChannelId ?? thread.channel_id;
-  const channel = thread.message_channels as {
+  const channel = (thread.message_channels as unknown) as {
     channel_type: string;
     config: Record<string, unknown>;
     oauth_access_token?: string;
