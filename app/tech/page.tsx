@@ -976,9 +976,17 @@ function TechTool() {
               <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 8, color: 'rgba(160,190,255,0.5)', letterSpacing: '0.06em' }}>
                 {gpsGranted ? '📍 GPS ON' : '📍 GPS —'}
               </div>
+              <a href="/" style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 8, color: 'rgba(160,190,255,0.45)', letterSpacing: '0.06em', textDecoration: 'none', marginTop: 1 }}>
+                ← PORTAL
+              </a>
             </div>
           ) : (
-            <div style={S.statusPill}>● ONLINE</div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+              <div style={S.statusPill}>● ONLINE</div>
+              <a href="/" style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 8, color: 'rgba(160,190,255,0.45)', letterSpacing: '0.06em', textDecoration: 'none' }}>
+                ← PORTAL
+              </a>
+            </div>
           )}
         </div>
 
