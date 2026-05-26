@@ -5,11 +5,17 @@
  * Never throws — returns { success: false, error } on any failure.
  */
 
+export interface EmailAttachment {
+  filename: string
+  content: string // base64-encoded content
+}
+
 export interface SendEmailOptions {
   to: string | string[]
   subject: string
   html: string
   replyTo?: string
+  attachments?: EmailAttachment[]
 }
 
 export interface SendEmailResult {
@@ -36,6 +42,9 @@ export async function sendEmail(opts: SendEmailOptions): Promise<SendEmailResult
     }
     if (opts.replyTo) {
       payload.reply_to = opts.replyTo
+    }
+    if (opts.attachments && opts.attachments.length > 0) {
+      payload.attachments = opts.attachments
     }
 
     const res = await fetch('https://api.resend.com/emails', {

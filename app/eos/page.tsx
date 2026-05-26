@@ -1683,20 +1683,79 @@ function MeetingForm({
   const [attendees, setAttendees] = useState<{ name: string; email?: string }[]>(initial?.attendees ?? []);
   const [agenda, setAgenda] = useState<AgendaItem[]>(initial?.agenda?.length ? initial.agenda : (initial?.meeting_type === 'l10' ? DEFAULT_L10_AGENDA : []));
   const [notes, setNotes] = useState(initial?.notes ?? '');
-  const [newAttendeeName, setNewAttendeeName] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Attendee picker state
+  const [suggestions, setSuggestions] = useState<Array<{ id: string; name: string; email: string; source: string; role?: string }>>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [customEmail, setCustomEmail] = useState('');
+  const [editingEmailIdx, setEditingEmailIdx] = useState<number | null>(null);
+  const [editingEmailValue, setEditingEmailValue] = useState('');
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch('/api/eos/meetings/attendee-suggestions');
+        if (res.ok) {
+          const data = await res.json();
+          setSuggestions(Array.isArray(data) ? data : []);
+        }
+      } catch (_) { /* ignore */ }
+    })();
+  }, []);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const filteredSuggestions = searchQuery.trim()
+    ? suggestions.filter(s =>
+        s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.email.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : suggestions;
+
+  const addAttendeeFromSuggestion = (s: { name: string; email: string }) => {
+    const already = attendees.some(a => a.email && a.email.toLowerCase() === s.email.toLowerCase());
+    if (!already) {
+      setAttendees(prev => [...prev, { name: s.name, email: s.email }]);
+    }
+    setSearchQuery('');
+    setShowDropdown(false);
+  };
+
+  const addCustomAttendee = () => {
+    const q = searchQuery.trim();
+    if (!q) return;
+    const alreadyByName = attendees.some(a => a.name.toLowerCase() === q.toLowerCase());
+    if (alreadyByName) { setSearchQuery(''); setShowDropdown(false); return; }
+    const emailVal = customEmail.trim() || undefined;
+    setAttendees(prev => [...prev, { name: q, email: emailVal }]);
+    setSearchQuery('');
+    setCustomEmail('');
+    setShowDropdown(false);
+  };
+
+  const sourceLabel = (source: string): string => {
+    if (source === 'technician') return '🔧 Technician';
+    if (source === 'organization') return '🏢 Org';
+    return '✏️ Custom';
+  };
 
   const handleTypeChange = (newType: Meeting['meeting_type']) => {
     setType(newType);
     if (newType === 'l10' && agenda.length === 0) {
       setAgenda(DEFAULT_L10_AGENDA);
     }
-  };
-
-  const addAttendee = () => {
-    if (!newAttendeeName.trim()) return;
-    setAttendees(prev => [...prev, { name: newAttendeeName.trim() }]);
-    setNewAttendeeName('');
   };
 
   const handleSave = async () => {
@@ -1758,23 +1817,124 @@ function MeetingForm({
       </div>
       <div>
         <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-2">Attendees</label>
-        <div className="flex flex-wrap gap-2 mb-2">
-          {attendees.map((a, i) => (
-            <span key={i} className="flex items-center gap-1.5 text-xs bg-slate-100 border border-slate-200 rounded-full px-3 py-1 text-foreground">
-              {a.name}
-              <button onClick={() => setAttendees(prev => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-red-500 transition-colors"><X size={11} /></button>
-            </span>
-          ))}
-        </div>
-        <div className="flex gap-2">
+        {/* Attendee chips */}
+        {attendees.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-2">
+            {attendees.map((a, i) => (
+              <span key={i} className="flex items-center gap-1.5 text-xs bg-slate-100 border border-slate-200 rounded-full px-3 py-1 text-foreground">
+                <span className="font-medium">{a.name}</span>
+                {a.email ? (
+                  <span className="text-muted-foreground text-[10px]">{a.email}</span>
+                ) : (
+                  editingEmailIdx === i ? (
+                    <span className="flex items-center gap-1">
+                      <input
+                        autoFocus
+                        className="h-5 w-32 border border-[#6B7EFF]/40 rounded px-1 text-[10px] focus:outline-none bg-white"
+                        placeholder="email@example.com"
+                        value={editingEmailValue}
+                        onChange={e => setEditingEmailValue(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (editingEmailValue.trim()) {
+                              setAttendees(prev => prev.map((x, j) => j === i ? { ...x, email: editingEmailValue.trim() } : x));
+                            }
+                            setEditingEmailIdx(null);
+                            setEditingEmailValue('');
+                          }
+                          if (e.key === 'Escape') { setEditingEmailIdx(null); setEditingEmailValue(''); }
+                        }}
+                        onBlur={() => {
+                          if (editingEmailValue.trim()) {
+                            setAttendees(prev => prev.map((x, j) => j === i ? { ...x, email: editingEmailValue.trim() } : x));
+                          }
+                          setEditingEmailIdx(null);
+                          setEditingEmailValue('');
+                        }}
+                      />
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => { setEditingEmailIdx(i); setEditingEmailValue(''); }}
+                      className="text-amber-500 text-[10px] hover:underline"
+                      title="No email — click to add"
+                    >
+                      + email
+                    </button>
+                  )
+                )}
+                <button onClick={() => setAttendees(prev => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-red-500 transition-colors ml-0.5"><X size={11} /></button>
+              </span>
+            ))}
+          </div>
+        )}
+        {/* Contact picker */}
+        <div ref={pickerRef} className="relative">
           <input
-            className="flex-1 h-8 border border-border rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white"
-            placeholder="Attendee name"
-            value={newAttendeeName}
-            onChange={e => setNewAttendeeName(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addAttendee(); } }}
+            className="w-full h-8 border border-border rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white"
+            placeholder="Search contacts or type a name…"
+            value={searchQuery}
+            onChange={e => { setSearchQuery(e.target.value); setShowDropdown(true); }}
+            onFocus={() => setShowDropdown(true)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                if (filteredSuggestions.length > 0 && !searchQuery.trim()) return;
+                addCustomAttendee();
+              }
+              if (e.key === 'Escape') setShowDropdown(false);
+            }}
           />
-          <button onClick={addAttendee} className="h-8 px-3 text-xs bg-[#6B7EFF]/10 text-[#6B7EFF] border border-[#6B7EFF]/20 rounded-lg hover:bg-[#6B7EFF]/20 font-medium transition-colors">+ Add</button>
+          {showDropdown && (searchQuery.trim() || filteredSuggestions.length > 0) && (
+            <div className="absolute z-50 mt-1 w-full bg-white border border-border rounded-xl shadow-lg overflow-hidden max-h-56 overflow-y-auto">
+              {filteredSuggestions.map(s => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 text-left transition-colors"
+                  onMouseDown={e => { e.preventDefault(); addAttendeeFromSuggestion(s); }}
+                >
+                  <div className="w-7 h-7 rounded-full bg-[#6B7EFF]/10 text-[#6B7EFF] flex items-center justify-center text-[11px] font-bold shrink-0">
+                    {s.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-foreground truncate">{s.name}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">{s.email}</p>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground shrink-0">{sourceLabel(s.source)}</span>
+                </button>
+              ))}
+              {searchQuery.trim() && (
+                <div className="border-t border-border px-3 py-2">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Add custom</p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      className="flex-1 h-7 border border-border rounded px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-white"
+                      placeholder="email@example.com (optional)"
+                      value={customEmail}
+                      onChange={e => setCustomEmail(e.target.value)}
+                      onMouseDown={e => e.stopPropagation()}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') { e.preventDefault(); addCustomAttendee(); }
+                        if (e.key === 'Escape') setShowDropdown(false);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onMouseDown={e => { e.preventDefault(); addCustomAttendee(); }}
+                      className="h-7 px-2.5 text-[11px] bg-[#6B7EFF]/10 text-[#6B7EFF] border border-[#6B7EFF]/20 rounded hover:bg-[#6B7EFF]/20 font-semibold shrink-0 transition-colors"
+                    >
+                      + Add &quot;{searchQuery.trim()}&quot;
+                    </button>
+                  </div>
+                </div>
+              )}
+              {filteredSuggestions.length === 0 && !searchQuery.trim() && (
+                <div className="px-3 py-4 text-center text-xs text-muted-foreground">No contacts found. Type a name to add a custom attendee.</div>
+              )}
+            </div>
+          )}
         </div>
       </div>
       <div>
@@ -1824,6 +1984,8 @@ function L10Tab({ issues, todos }: { issues: Issue[]; todos: TodoItem[] }) {
   const [view, setView] = useState<'list' | 'detail' | 'create' | 'edit'>('list');
   const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
   const [activeTimers, setActiveTimers] = useState<Record<number, { running: boolean; elapsed: number }>>({});
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteResult, setInviteResult] = useState<{ sent: number; failed: number } | null>(null);
   const timerRefs = useRef<Record<number, ReturnType<typeof setInterval>>>({});
 
   const openIssues = issues.filter(i => i.status !== 'Resolved');
@@ -1878,6 +2040,27 @@ function L10Tab({ issues, todos }: { issues: Issue[]; todos: TodoItem[] }) {
       setMeetings(prev => prev.filter(m => m.id !== id));
       if (selectedMeeting?.id === id) { setSelectedMeeting(null); setView('list'); }
     }
+  };
+
+  const sendInvites = async () => {
+    if (!selectedMeeting) return;
+    setInviteLoading(true);
+    setInviteResult(null);
+    try {
+      const res = await fetch(`/api/eos/meetings/${selectedMeeting.id}/invite`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json() as { sent: number; failed: number };
+        setInviteResult({ sent: data.sent, failed: data.failed });
+        // Refresh the meeting to pick up invited_at
+        const meetingRes = await fetch(`/api/eos/meetings/${selectedMeeting.id}`);
+        if (meetingRes.ok) {
+          const updated = await meetingRes.json() as Meeting & { invited_at?: string };
+          setSelectedMeeting(updated);
+          setMeetings(prev => prev.map(m => m.id === updated.id ? updated : m));
+        }
+      }
+    } catch (_) { /* ignore */ }
+    setInviteLoading(false);
   };
 
   const startTimer = (idx: number) => {
@@ -2050,16 +2233,42 @@ function L10Tab({ issues, todos }: { issues: Issue[]; todos: TodoItem[] }) {
               <p className="text-xs text-muted-foreground mt-0.5">{formatSchedule(selectedMeeting)} · {selectedMeeting.duration_minutes} min</p>
             </div>
           </div>
-          <button onClick={() => setView('edit')} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground border border-border px-3 py-1.5 rounded-lg hover:bg-accent transition-colors font-medium">
-            <Edit2 size={12} /> Edit
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => void sendInvites()}
+              disabled={inviteLoading}
+              className="flex items-center gap-1.5 text-xs bg-[#6B7EFF]/10 text-[#6B7EFF] border border-[#6B7EFF]/20 px-3 py-1.5 rounded-lg hover:bg-[#6B7EFF]/20 transition-colors font-medium disabled:opacity-50"
+            >
+              {inviteLoading ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+              {inviteLoading ? 'Sending…' : '📧 Send Invites'}
+            </button>
+            <button onClick={() => setView('edit')} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground border border-border px-3 py-1.5 rounded-lg hover:bg-accent transition-colors font-medium">
+              <Edit2 size={12} /> Edit
+            </button>
+          </div>
         </div>
+        {inviteResult && (
+          <div className={cn('flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium', inviteResult.failed === 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200')}>
+            <CheckCircle2 size={13} />
+            {inviteResult.failed === 0
+              ? `Invites sent to ${inviteResult.sent} attendee${inviteResult.sent !== 1 ? 's' : ''}`
+              : `${inviteResult.sent} sent, ${inviteResult.failed} failed`}
+          </div>
+        )}
+        {(selectedMeeting as Meeting & { invited_at?: string }).invited_at && !inviteResult && (
+          <p className="text-[10px] text-muted-foreground">
+            Last invited: {new Date((selectedMeeting as Meeting & { invited_at?: string }).invited_at!).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+          </p>
+        )}
         {selectedMeeting.attendees.length > 0 && (
           <div className="flex items-center gap-2">
             <Users size={13} className="text-muted-foreground" />
             <div className="flex items-center gap-1.5 flex-wrap">
               {selectedMeeting.attendees.map((a, i) => (
-                <span key={i} className="text-xs bg-slate-100 border border-slate-200 rounded-full px-2.5 py-0.5 text-foreground">{a.name}</span>
+                <span key={i} className={cn('text-xs border rounded-full px-2.5 py-0.5', a.email ? 'bg-slate-100 border-slate-200 text-foreground' : 'bg-amber-50 border-amber-200 text-amber-700')}>
+                  {a.name}
+                  {!a.email && <span className="ml-1 text-[9px]">(no email)</span>}
+                </span>
               ))}
             </div>
           </div>
