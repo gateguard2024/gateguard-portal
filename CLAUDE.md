@@ -351,6 +351,24 @@ GateGuard is going live. Two parallel Vercel deployments must exist from this po
 - **`lib/email-sender.ts` updated** — Added `EmailAttachment` interface (`{ filename: string; content: string }`) and optional `attachments?: EmailAttachment[]` to `SendEmailOptions`. Passed through to Resend payload when present. Used by meeting invite route for `.ics` files.
 - **New API routes**: `app/api/eos/meetings/attendee-suggestions/route.ts` (GET — merged contacts from technicians + orgs), `app/api/eos/meetings/[id]/invite/route.ts` (POST — send .ics calendar invites via Resend)
 
+- **Session additions (May 25 2026 — continued) — Per-tech access codes for /tech field tool:**
+- **Migration 089** (`supabase/migrations/089_tech_codes.sql`) — adds `tech_code text UNIQUE` + `tech_code_generated_at timestamptz` to both `technicians` and `organizations` tables. Indexes on both. `generate_tech_code()` SQL function: 8-char alphanumeric, no ambiguous chars (no O/0/I/1/L). Run on beta before pushing to prod.
+- **`lib/tech-auth.ts`** (NEW) — `validateTechCode(code)` async helper. Priority: (1) per-tech code in `technicians.tech_code` → returns `{ valid, techId, techName, orgId, level: 'tech' }`, (2) per-org code in `organizations.tech_code` → returns `{ valid, orgId, level: 'org' }`, (3) global `TECH_ACCESS_CODE` env var → returns `{ valid: true, level: 'global' }`. Also exports `generateTechCodeLocal()` for JS-side code generation.
+- **`/api/kb/products` updated** — now uses `validateTechCode()` instead of inline env var check. When per-tech code matches, response includes `{ techId, techName, orgId, authLevel }` so the frontend can auto-identify without an identity picker screen.
+- **`app/tech/page.tsx` login persistence fix** — switched `sessionStorage` → `localStorage` for `gg_tech_code`. Codes now survive tab close / browser restart. When API returns `techId + techName` from a per-tech code, identity is auto-set in localStorage and the identity picker screen is skipped entirely.
+- **`/api/technicians/[id]/generate-code/route.ts`** (NEW) — `POST /api/technicians/[id]/generate-code`. Generates a unique 8-char code, updates `technicians.tech_code + tech_code_generated_at`, returns `{ tech_code, name }`. Requires Clerk auth.
+- **`/api/organizations/[id]/generate-tech-code/route.ts`** (NEW) — Same for per-org (dealer-level) codes. `POST /api/organizations/[id]/generate-tech-code`.
+- **`/dispatch` page updated** — `Tech` interface gains `tech_code?: string | null`. `TechRow` component gains `onGenerateCode` prop. Access code shown as a monospace chip (select-all to copy) below the tech's name. On hover: `↻` regenerate button if code exists, `+ Generate access code` link if not. `handleGenerateCode()` calls the new API and updates local state optimistically.
+- **`/api/dispatch` route** — `tech_code` added to Supabase select + response mapping so the roster page always loads with current codes.
+- **PIN screen copy updated** — "PERSONAL CODES: GET FROM YOUR DEALER PORTAL / DEALER CODE: ASSIGNED BY GATEGUARD" (two-line hint at bottom of PIN card).
+
+- **Session additions (May 26 2026) — KB wiring + User Manual v10:**
+- **GateGuard NEXUS User Manual v10** — `GateGuard_NEXUS_User_Manual_v10.docx` updated with per-tech login system changes: Section 12 intro updated ("personal 8-character access code... persists across sessions"), Section 12.1 "Accessing /tech" rewritten with new code instructions, new Section 12.1.1 "Per-Tech Access Codes" inserted (how dealers generate codes from /dispatch, how techs experience it — auto-identity, single entry, three-tier code hierarchy: per-tech → per-org → global). PDF version: `tmp/GateGuard_NEXUS_User_Manual_v10.pdf`.
+- **`/api/kb/bulk-find-manuals`** (NEW) — `POST /api/kb/bulk-find-manuals`. Batch auto-finds + embeds manuals for all products where `manual_url IS NULL`. Body params: `brand` (filter to specific brand), `limit` (default 50), `dry_run` (list products without processing). Uses same two-pass strategy as single `find-manual`: known URL patterns → Claude AI search. Returns `{ processed, found, not_found, errors, results[] }` per product. `maxDuration: 300` (5-min batch job).
+- **`scripts/seed-kb.mjs`** (NEW) — Comprehensive KB seeder runnable locally. Three tasks in sequence: (1) import GateGuard NEXUS User Manual as searchable `GG-NEXUS-PORTAL` product entry — creates product if missing, uploads PDF to Supabase Storage, chunks + embeds; (2) auto-find + embed DoorKing manuals (priority brand); (3) auto-find + embed all remaining products missing manuals. CLI flags: `--dry-run`, `--manual-only`, `--auto-only`, `--brand <name>`. Usage: `npx dotenv -e .env.local -- node scripts/seed-kb.mjs`. PDF candidates checked: `./tmp/`, `~/Desktop/Claude/`, `/tmp/`.
+- **`tmp/`** added to `.gitignore` — local PDFs + temp seeding files not committed.
+- **Migration 089 reminder** — `supabase/migrations/089_tech_codes.sql` must be run on beta Supabase before the per-tech code system works. Adds `tech_code` + `tech_code_generated_at` to `technicians` and `organizations`.
+
 - **Sprint 6 additions (May 22 2026) — Design Section + Service Marketplace:**
 - **Sidebar** — NEXUS primary brand mark (large, blue), "by GateGuard" subtitle confirmed. New **Design** section added between Field & Tech and Security with 4 items: Floor Plans, System Design, As-Builts, E-Sign. Permission: `showDesign` = corporate | master_dealer | full_dealer | install_contractor | service_dealer.
 - `/services` — **Service Marketplace** first built: 22 services across 10 categories (TV, Internet, Video Monitoring, Package Lockers, Access Control, Smart Locks, Security, Network, Energy). Migration 070 backs the DB schema (service_catalog, dealer_service_enrollments, site_service_subscriptions).
@@ -859,6 +877,9 @@ Note: `/reps`, `/compliance`, `/scorecard`, `/map`, `/reports` are placeholder U
 | `app/api/kb/parse-survey-transcript/route.ts` | Accepts a Plaud voice transcript or typed site walk notes → Claude Haiku → extracts structured SurveyDevice[] list (name, brand, model, location, condition, action, notes) + auto-detects property name. Auth: x-tech-code. |
 | `app/api/plaud/transcribe/route.ts` | Native Plaud API integration. Accepts multipart audio file (m4a/mp3/wav/etc) → uploads to Supabase Storage → submits to Plaud transcription API → polls until complete → returns transcript text. Auth: x-tech-code. Env: PLAUD_CLIENT_ID, PLAUD_SECRET_KEY. |
 | `app/api/kb/resolve/route.ts` | Resolution capture + learning loop. Updates troubleshoot_sessions.resolved + embeds kb_article from symptom+history+fix note. Auth: x-tech-code. |
+| `lib/tech-auth.ts` | `validateTechCode(code)` — three-tier auth for /tech: per-tech DB code → per-org DB code → global TECH_ACCESS_CODE env var. Returns `{ valid, techId?, techName?, orgId?, level }`. Also exports `generateTechCodeLocal()` for JS code generation. |
+| `app/api/technicians/[id]/generate-code/route.ts` | POST — generates unique 8-char alphanumeric access code for a technician, writes to `technicians.tech_code`. Returns `{ tech_code, name }`. |
+| `app/api/organizations/[id]/generate-tech-code/route.ts` | POST — same for per-dealer/org codes, writes to `organizations.tech_code`. |
 
 ### Survey + Quotes
 | File | Purpose |
@@ -902,8 +923,23 @@ Note: `/reps`, `/compliance`, `/scorecard`, `/map`, `/reports` are placeholder U
 | File | Purpose |
 |------|---------|
 | `lib/email-templates.ts` | 7 HTML email generator functions: dealer welcome, NDA, agreement, work order, quote approval, permit renewal, invoice. Dark navy `#0B1728` header, `#6B7EFF` CTA button. |
-| `lib/email-sender.ts` | `sendEmail()` utility wrapping Resend — never throws, safe fire-and-forget. |
+| `lib/email-sender.ts` | `sendEmail()` utility wrapping Resend — never throws, safe fire-and-forget. Supports optional `attachments: [{ filename, content }]` array for `.ics` files etc. |
 | `app/api/admin/dealers/send-docs/route.ts` | POST → auto-sends NDA + Agreement emails when a new dealer is created. Tier→doc mapping: master_agent/master_dealer → NDA-A, full_dealer/service_dealer/install_contractor → NDA-B, sales_partner → NDA-C. |
+
+### Tech Auth + Per-Tech Codes
+| File | Purpose |
+|------|---------|
+| `lib/tech-auth.ts` | `validateTechCode(code)` — three-tier auth: per-tech (technicians.tech_code) → per-org (organizations.tech_code) → global env var. Returns `{ valid, techId, techName, orgId, level }`. Also exports `generateTechCodeLocal()`. |
+| `app/api/technicians/[id]/generate-code/route.ts` | POST — generate unique 8-char code for a tech. Updates tech_code + tech_code_generated_at. Requires Clerk auth. |
+| `app/api/organizations/[id]/generate-tech-code/route.ts` | POST — same for per-dealer org-level access codes. |
+| `supabase/migrations/089_tech_codes.sql` | Adds tech_code + tech_code_generated_at to technicians + organizations. Adds generate_tech_code() SQL function. **MUST RUN ON BETA BEFORE PUSHING TECH AUTH CHANGES.** |
+
+### Knowledge Base Seeding + Bulk Import
+| File | Purpose |
+|------|---------|
+| `app/api/kb/bulk-find-manuals/route.ts` | POST — batch auto-find + embed manuals for all products where manual_url IS NULL. Body: `{ brand?, limit?, dry_run? }`. Returns per-product results. maxDuration: 300s. |
+| `scripts/seed-kb.mjs` | Local Node.js seeder. Task 1: import GateGuard NEXUS User Manual as GG-NEXUS-PORTAL product entry. Task 2: DoorKing auto-find. Task 3: all remaining missing manuals. Flags: `--dry-run`, `--manual-only`, `--auto-only`, `--brand`. Usage: `npx dotenv -e .env.local -- node scripts/seed-kb.mjs`. |
+| `tmp/GateGuard_NEXUS_User_Manual_v10.pdf` | PDF version of v10 manual for KB seeding. Regenerate: `soffice --headless --convert-to pdf GateGuard_NEXUS_User_Manual_v10.docx --outdir ./tmp/`. Gitignored. |
 
 ### EOS (Entrepreneurial Operating System)
 | File | Purpose |
