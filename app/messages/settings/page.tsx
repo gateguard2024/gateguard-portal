@@ -128,19 +128,21 @@ function ChannelCard({
     setConfig({});
   }
 
-  const oauthUrl = def.oauthState
-    ? `/api/auth/gmail-oauth?state=${def.oauthState}&redirect_uri=${encodeURIComponent(`${typeof window !== "undefined" ? window.location.origin : ""}/api/auth/gmail-oauth`)}`
+  const oauthState = "oauthState" in def ? (def as { oauthState: string }).oauthState : null;
+
+  const oauthUrl = oauthState
+    ? `/api/auth/gmail-oauth?state=${oauthState}&redirect_uri=${encodeURIComponent(`${typeof window !== "undefined" ? window.location.origin : ""}/api/auth/gmail-oauth`)}`
     : null;
 
   // For OAuth-only channels (gmail + caldav via Google), build the Google OAuth consent URL
-  const googleOAuthUrl = def.oauthState ? (() => {
+  const googleOAuthUrl = oauthState ? (() => {
     const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
     if (!clientId) return null;
-    const scopes = def.oauthState === "caldav"
+    const scopes = oauthState === "caldav"
       ? "https://www.googleapis.com/auth/calendar openid email"
       : "https://mail.google.com/ openid email";
     const redirectUri = encodeURIComponent(`${typeof window !== "undefined" ? window.location.origin : ""}/api/auth/gmail-oauth`);
-    return `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent&state=${def.oauthState}`;
+    return `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent&state=${oauthState}`;
   })() : null;
 
   return (
