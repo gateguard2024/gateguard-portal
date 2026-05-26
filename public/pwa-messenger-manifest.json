@@ -1,0 +1,36 @@
+{
+  "name": "GateGuard Messenger",
+  "short_name": "GG Messenger",
+  "description": "Unified company communications — SMS, email, CalDAV, and org chat",
+  "start_url": "/pwa/messenger",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0C111D",
+  "theme_color": "#6B7EFF",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Inbox",
+      "short_name": "Inbox",
+      "description": "Open unified inbox",
+      "url": "/pwa/messenger",
+      "icons": [{ "src": "/logo.png", "sizes": "any", "type": "image/png" }]
+    },
+    {
+      "name": "Channel settings",
+      "short_name": "Settings",
+      "description": "Manage connected channels",
+      "url": "/messages/settings",
+      "icons": [{ "src": "/logo.png", "sizes": "any", "type": "image/png" }]
+    }
+  ]
+}

@@ -69,6 +69,17 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    key: "communications",
+    label: "Communications",
+    icon: MessageSquare,
+    color: "#6B7EFF",
+    items: [
+      { label: "Messages",      href: "/messages",          icon: MessageSquare, description: "Unified inbox — SMS, email, CalDAV, org chat", badge: "New" },
+      { label: "Calendar",      href: "/calendar",          icon: Calendar,      description: "Schedule, to-dos, and work orders" },
+      { label: "Messenger PWA", href: "/pwa/messenger",     icon: MessageSquare, description: "Install as mobile app — WhatsApp-style org chat" },
+    ],
+  },
+  {
     key: "business",
     label: "Business",
     icon: Building2,
