@@ -6,8 +6,9 @@ import {
   Shield, Check, CheckCircle2, XCircle, Phone, Mail,
   MapPin, Calendar, Clock, Building2, ChevronDown, ChevronUp,
   Loader2, AlertTriangle, TrendingUp, Download, FileText,
-  Pen, RotateCcw,
 } from 'lucide-react';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Pen, RotateCcw } = require('lucide-react') as any;
 import { formatCurrency, buildRampSchedule, type RampRow } from '@/lib/quote-calculator';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
