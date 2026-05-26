@@ -15,8 +15,9 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const type = searchParams.get("type") ?? "gmail"; // "gmail" | "caldav" | "both"
 
-  // Use GOOGLE_CLIENT_ID (messages OAuth client); fall back to calendar client if same app
-  const clientId = process.env.GOOGLE_CLIENT_ID ?? process.env.GOOGLE_CALENDAR_CLIENT_ID;
+  // Use whichever Google client ID is configured — same credential works for Gmail + Calendar
+  const clientId = process.env.GOOGLE_CLIENT_ID
+    ?? process.env.GOOGLE_CALENDAR_CLIENT_ID;
   const appUrl   = process.env.NEXT_PUBLIC_APP_URL ?? "https://portal.gateguard.co";
 
   if (!clientId) {

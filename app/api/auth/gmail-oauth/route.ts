@@ -22,8 +22,9 @@ export async function GET(req: Request) {
     return NextResponse.redirect(new URL("/messages/settings?error=oauth_denied", req.url));
   }
 
-  const clientId     = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  // Fall back to calendar credentials — same Google OAuth app handles both
+  const clientId     = process.env.GOOGLE_CLIENT_ID     ?? process.env.GOOGLE_CALENDAR_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET ?? process.env.GOOGLE_CALENDAR_CLIENT_SECRET;
   const redirectUri  = `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/auth/gmail-oauth`;
 
   if (!clientId || !clientSecret) {
