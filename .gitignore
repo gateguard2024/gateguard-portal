@@ -39,6 +39,3 @@ yarn-error.log*
 .idea/
 *.swp
 *.swo
-
-# Local seed data + temp files
-tmp/

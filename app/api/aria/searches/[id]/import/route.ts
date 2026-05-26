@@ -171,16 +171,9 @@ export async function POST(
       })
 
     if (rows.length === 0) {
-      // All already exist — fetch their IDs so Scout can still launch campaigns
-      const { data: existingLeadData } = await supabase
-        .from('show_leads')
-        .select('id')
-        .in('property_name', propertyNames)
-
       return NextResponse.json({
         created: 0,
         skipped: prospects.length,
-        lead_ids: (existingLeadData ?? []).map((l: { id: string }) => l.id),
         message: 'All prospects already exist as leads',
       })
     }

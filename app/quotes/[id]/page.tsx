@@ -157,11 +157,12 @@ function buildRampSchedule(mrr: number, startPct: number, stepPct: number, fullM
 
 function ItemForm({ quoteId, item, onSaved, onClose }: ItemFormProps) {
   const isEdit = !!item;
-  const [saving, setSaving] = useState(false);
-  const [err,    setErr]    = useState('');
+  const [saving, setSaving]               = useState(false);
+  const [err,    setErr]                  = useState('');
   const [productSearch, setProductSearch] = useState('');
   const [products, setProducts]           = useState<Array<{ id: string; name: string; sku: string; list_price: number }>>([]);
   const [showProducts, setShowProducts]   = useState(false);
+  const [saveToProducts, setSaveToProducts] = useState(false);
 
   const [form, setForm] = useState({
     description:          item?.description          ?? '',
@@ -199,16 +200,35 @@ function ItemForm({ quoteId, item, onSaved, onClose }: ItemFormProps) {
     if (!form.description.trim()) { setErr('Description is required'); return; }
     setSaving(true); setErr('');
     try {
+      // If "save to catalog" is checked and this is a new custom item, create the product first
+      let resolvedProductId = form.product_id;
+      if (!isEdit && saveToProducts && !form.product_id) {
+        const pRes = await fetch('/api/products', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+            name:       form.description,
+            sku:        form.sku       || undefined,
+            sell_price: form.unit_price,
+            list_price: form.unit_price,
+            category:   form.section_name || 'Custom',
+          }),
+        });
+        const pJson = await pRes.json();
+        if (!pRes.ok) throw new Error(`Catalog save failed: ${pJson.error ?? 'unknown'}`);
+        resolvedProductId = pJson.product?.id ?? null;
+      }
+
       const url    = isEdit ? `/api/quotes/${quoteId}/items/${item!.id}` : `/api/quotes/${quoteId}/items`;
       const method = isEdit ? 'PATCH' : 'POST';
       const res    = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(form),
+        body:    JSON.stringify({ ...form, product_id: resolvedProductId }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? 'Failed');
-      onSaved(isEdit ? json.item : json.item);
+      onSaved(json.item);
       onClose();
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : 'Error');
@@ -403,7 +423,7 @@ function ItemForm({ quoteId, item, onSaved, onClose }: ItemFormProps) {
           </div>
 
           {/* Optional / Recurring flags */}
-          <div className="flex gap-4">
+          <div className="flex gap-4 flex-wrap">
             <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
               <input
                 type="checkbox"
@@ -423,6 +443,20 @@ function ItemForm({ quoteId, item, onSaved, onClose }: ItemFormProps) {
               Recurring (MRR)
             </label>
           </div>
+
+          {/* Save to Products catalog — only for new custom items not picked from catalog */}
+          {!isEdit && !form.product_id && (
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none px-3 py-2.5 rounded-lg border border-dashed border-[#6B7EFF]/40 bg-[#6B7EFF]/5 hover:bg-[#6B7EFF]/10 transition-colors">
+              <input
+                type="checkbox"
+                checked={saveToProducts}
+                onChange={e => setSaveToProducts(e.target.checked)}
+                className="rounded border-gray-300 accent-[#6B7EFF]"
+              />
+              <span className="text-[#4B5AE8] font-medium">Save to Products catalog</span>
+              <span className="text-gray-400 text-xs">— reuse in future quotes &amp; invoices</span>
+            </label>
+          )}
 
           {/* Notes */}
           <div>

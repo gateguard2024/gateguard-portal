@@ -46,7 +46,7 @@ export async function GET() {
 
   let techQuery = supabase
     .from('technicians')
-    .select('id, name, initials, role, status, current_job_id, phone, email, employment_type, can_access_portal, portal_invite_sent_at, schedule, tech_code')
+    .select('id, name, initials, role, status, current_job_id, phone, email, employment_type, can_access_portal, portal_invite_sent_at, schedule')
     .order('name')
 
   // Technicians may have org_id = NULL (legacy/unscoped records).
@@ -90,7 +90,6 @@ export async function GET() {
     // Phone/email only sent if caller can view sensitive data
     phone:                user.canViewSensitive ? t.phone : null,
     email:                user.canViewSensitive ? t.email : null,
-    tech_code:            t.tech_code ?? null,
   }))
 
   return NextResponse.json({ jobs, techs })

@@ -5,10 +5,10 @@ import { TopBar } from "@/components/layout/TopBar";
 import {
   Plus, Check, Trash2, Calendar, User, ChevronDown,
   Loader2, AlertCircle, RefreshCw, X, Upload, Paperclip,
-  FileText, Download, Search, CheckCircle2, Circle,
+  FileText, Download, Search,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { CheckSquare, Clock3, Link2, Flag, Repeat, ExternalLink, TrendingUp } = require("lucide-react") as any;
+const { CheckSquare, Circle, Clock3, Link2, Flag, Repeat, ExternalLink } = require("lucide-react") as any;
 import { EmptyState } from "@/components/ui/EmptyState";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -54,28 +54,10 @@ interface SearchResult {
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const PRIORITY_CONFIG = {
-  high:   { label: "High",   pill: "bg-rose-100 text-rose-700",    dot: "bg-rose-400" },
-  normal: { label: "Normal", pill: "bg-sky-100 text-sky-700",      dot: "bg-sky-400" },
-  low:    { label: "Low",    pill: "bg-slate-100 text-slate-500",  dot: "bg-slate-300" },
+  high:   { label: "High",   color: "text-red-400",    bg: "bg-red-400/10",    border: "border-red-400/30" },
+  normal: { label: "Normal", color: "text-amber-400",  bg: "bg-amber-400/10",  border: "border-amber-400/30" },
+  low:    { label: "Low",    color: "text-slate-400",  bg: "bg-slate-400/10",  border: "border-slate-400/30" },
 };
-
-// Icon is a React component — rendered inline. No emojis.
-const STATUS_CONFIG: Record<string, {
-  label: string;
-  pill: string;
-  iconCls: string;
-  iconVariant: "circle" | "clock" | "check";
-}> = {
-  open:        { label: "Open",        pill: "bg-slate-100 text-slate-600",   iconCls: "text-slate-400",   iconVariant: "circle" },
-  in_progress: { label: "In Progress", pill: "bg-blue-50  text-blue-700",     iconCls: "text-blue-500",    iconVariant: "clock"  },
-  done:        { label: "Done",        pill: "bg-emerald-50 text-emerald-700", iconCls: "text-emerald-500", iconVariant: "check"  },
-};
-
-function StatusIcon({ variant, cls }: { variant: "circle" | "clock" | "check"; cls: string }) {
-  if (variant === "check")  return <CheckCircle2 size={12} className={cls} />;
-  if (variant === "clock")  return <Clock3       size={12} className={cls} />;
-  return <Circle size={12} className={cls} />;
-}
 
 const LINKED_TYPES = [
   { value: "lead",        label: "Lead" },
@@ -489,272 +471,181 @@ function TodoSlideOver({
   );
 }
 
-// ─── Table Group Header ───────────────────────────────────────────────────────
-
-function GroupHeader({
-  label,
-  count,
-  dot,
-  collapsed,
-  onToggle,
-}: {
-  label: string;
-  count: number;
-  dot: string;
-  collapsed: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      onClick={onToggle}
-      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-accent/40 transition-colors rounded-lg group/gh"
-    >
-      <ChevronDown
-        size={13}
-        className={`text-muted-foreground transition-transform duration-200 ${collapsed ? "-rotate-90" : ""}`}
-      />
-      <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
-      <span className="text-xs font-bold text-foreground">{label}</span>
-      <span className="ml-1 text-[11px] font-semibold text-muted-foreground bg-accent px-1.5 py-0.5 rounded-full">
-        {count}
-      </span>
-    </button>
-  );
-}
-
-// ─── Todo Row (table-style) ───────────────────────────────────────────────────
+// ─── Todo Row ─────────────────────────────────────────────────────────────────
 
 function TodoRow({
   todo,
   onToggleDone,
   onDelete,
-  onStatusChange,
   onPriorityChange,
   onClick,
 }: {
   todo: Todo;
   onToggleDone: (id: string, done: boolean) => void;
   onDelete: (id: string) => void;
-  onStatusChange: (id: string, status: Todo["status"]) => void;
   onPriorityChange: (id: string, priority: "high" | "normal" | "low") => void;
   onClick: (todo: Todo) => void;
 }) {
-  const [showStatusMenu,   setShowStatusMenu]   = useState(false);
   const [showPriorityMenu, setShowPriorityMenu] = useState(false);
   const isDone    = todo.status === "done";
   const dueLabel  = dueDateLabel(todo.due_date);
   const pCfg      = PRIORITY_CONFIG[todo.priority];
-  const sCfg      = STATUS_CONFIG[todo.status] ?? STATUS_CONFIG.open;
   const recurring = todo.recurrence_type && todo.recurrence_type !== "none";
   const hasAttach = (todo.todo_attachments?.length ?? 0) > 0;
 
   return (
     <div
-      className={`group grid items-center border-b border-border/50 last:border-0 transition-colors cursor-pointer hover:bg-accent/30 ${isDone ? "opacity-55" : ""}`}
-      style={{ gridTemplateColumns: "28px 1fr 148px 96px 108px 36px 28px" }}
+      className={`group flex items-start gap-3 px-4 py-3 rounded-xl border transition-all cursor-pointer ${
+        isDone
+          ? "border-border/50 bg-card/50 opacity-60 hover:opacity-80"
+          : "border-border bg-card hover:border-brand-400/30"
+      }`}
       onClick={() => onClick(todo)}
     >
       {/* Checkbox */}
-      <div className="flex items-center justify-center">
-        <button
-          onClick={e => { e.stopPropagation(); onToggleDone(todo.id, !isDone); }}
-          className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 ${
-            isDone ? "!opacity-100 border-emerald-400 bg-emerald-400" : "border-border hover:border-brand-400"
-          }`}
-        >
-          {isDone && <Check size={9} className="text-white" strokeWidth={3} />}
-        </button>
-      </div>
+      <button
+        onClick={e => { e.stopPropagation(); onToggleDone(todo.id, !isDone); }}
+        className={`mt-0.5 w-5 h-5 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors ${
+          isDone ? "border-emerald-400 bg-emerald-400" : "border-border hover:border-brand-400"
+        }`}
+      >
+        {isDone && <Check size={10} className="text-white" strokeWidth={3} />}
+      </button>
 
-      {/* Title + inline chips */}
-      <div className="flex items-center gap-2 py-2.5 pr-2 min-w-0">
-        <span className={`text-sm font-medium leading-snug truncate ${isDone ? "line-through text-muted-foreground" : "text-foreground"}`}>
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm font-medium leading-snug ${isDone ? "line-through text-muted-foreground" : "text-foreground"}`}>
           {todo.title}
-        </span>
-        {/* Inline tag chips */}
-        {todo.linked_label && (
-          <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-brand-400/10 text-brand-400">
-            <Link2 size={8} />{todo.linked_label}
-          </span>
+        </p>
+        {todo.body && (
+          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{todo.body}</p>
         )}
-        {recurring && (
-          <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-100 text-violet-600">
-            <Repeat size={8} />{todo.recurrence_type}
-          </span>
-        )}
-        {hasAttach && (
-          <span className="shrink-0 inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-            <Paperclip size={9} />{todo.todo_attachments!.length}
-          </span>
-        )}
-      </div>
-
-      {/* Status */}
-      <div className="relative" onClick={e => e.stopPropagation()}>
-        <button
-          onClick={() => setShowStatusMenu(v => !v)}
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all hover:ring-2 hover:ring-offset-1 hover:ring-brand-400/30 ${sCfg.pill}`}
-        >
-          <StatusIcon variant={sCfg.iconVariant} cls={sCfg.iconCls} />
-          {sCfg.label}
-          <ChevronDown size={9} className="opacity-60" />
-        </button>
-        {showStatusMenu && (
-          <div className="absolute z-30 top-full left-0 mt-1 bg-popover border border-border rounded-xl shadow-xl py-1 min-w-[160px]">
-            {(["open", "in_progress", "done"] as const).map(s => {
-              const sc = STATUS_CONFIG[s];
-              return (
-                <button
-                  key={s}
-                  onClick={() => { onStatusChange(todo.id, s); setShowStatusMenu(false); }}
-                  className="w-full text-left px-3 py-2 text-xs hover:bg-accent transition-colors flex items-center gap-2.5"
-                >
-                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${sc.pill}`}>
-                    <StatusIcon variant={sc.iconVariant} cls={sc.iconCls} />
-                    {sc.label}
-                  </span>
-                </button>
-              );
-            })}
+        <div className="flex flex-wrap items-center gap-2 mt-1.5">
+          {/* Priority */}
+          <div className="relative" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => setShowPriorityMenu(v => !v)}
+              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${pCfg.bg} ${pCfg.color} ${pCfg.border}`}
+            >
+              <Flag size={8} />
+              {pCfg.label}
+              <ChevronDown size={8} />
+            </button>
+            {showPriorityMenu && (
+              <div className="absolute z-20 top-full left-0 mt-1 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[100px]">
+                {(["high", "normal", "low"] as const).map(p => (
+                  <button
+                    key={p}
+                    onClick={() => { onPriorityChange(todo.id, p); setShowPriorityMenu(false); }}
+                    className={`w-full text-left px-3 py-1.5 text-xs hover:bg-accent transition-colors ${PRIORITY_CONFIG[p].color}`}
+                  >
+                    {PRIORITY_CONFIG[p].label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* Priority */}
-      <div className="relative" onClick={e => e.stopPropagation()}>
-        <button
-          onClick={() => setShowPriorityMenu(v => !v)}
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all hover:ring-2 hover:ring-offset-1 hover:ring-brand-400/30 ${pCfg.pill}`}
-        >
-          <span className={`w-2 h-2 rounded-full ${pCfg.dot}`} />
-          {pCfg.label}
-        </button>
-        {showPriorityMenu && (
-          <div className="absolute z-30 top-full left-0 mt-1 bg-popover border border-border rounded-xl shadow-xl py-1 min-w-[120px]">
-            {(["high", "normal", "low"] as const).map(p => {
-              const pc = PRIORITY_CONFIG[p];
-              return (
-                <button
-                  key={p}
-                  onClick={() => { onPriorityChange(todo.id, p); setShowPriorityMenu(false); }}
-                  className="w-full text-left px-3 py-2 text-xs hover:bg-accent transition-colors flex items-center gap-2"
-                >
-                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${pc.pill}`}>
-                    <span className={`w-2 h-2 rounded-full ${pc.dot}`} />{pc.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Due date */}
-      <div className="text-xs pr-2">
-        {dueLabel ? (
-          <span className={`font-medium ${dueLabel.color}`}>{dueLabel.text}</span>
-        ) : (
-          <span className="text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity">—</span>
-        )}
-      </div>
-
-      {/* Assignee avatar */}
-      <div className="flex items-center justify-center">
-        {todo.assigned_to_name ? (
-          <span
-            className="w-7 h-7 rounded-full bg-brand-400 text-white flex items-center justify-center text-[10px] font-bold uppercase shrink-0"
-            title={todo.assigned_to_name}
-          >
-            {todo.assigned_to_name.slice(0, 2)}
-          </span>
-        ) : (
-          <span className="w-7 h-7 rounded-full border-2 border-dashed border-border opacity-0 group-hover:opacity-60 transition-opacity" />
-        )}
+          {dueLabel && (
+            <span className={`inline-flex items-center gap-1 text-[10px] ${dueLabel.color}`}>
+              <Clock3 size={9} />{dueLabel.text}
+            </span>
+          )}
+          {todo.assigned_to_name && (
+            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+              <User size={9} />{todo.assigned_to_name}
+            </span>
+          )}
+          {todo.linked_label && (
+            <span className="inline-flex items-center gap-1 text-[10px] text-brand-400/70">
+              <Link2 size={9} />{todo.linked_label}
+            </span>
+          )}
+          {recurring && (
+            <span className="inline-flex items-center gap-1 text-[10px] text-violet-400">
+              <Repeat size={9} />
+              {todo.recurrence_type}
+            </span>
+          )}
+          {hasAttach && (
+            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+              <Paperclip size={9} />{todo.todo_attachments!.length}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Delete */}
-      <div className="flex items-center justify-center">
-        <button
-          onClick={e => { e.stopPropagation(); onDelete(todo.id); }}
-          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-all"
-        >
-          <Trash2 size={12} />
-        </button>
-      </div>
+      <button
+        onClick={e => { e.stopPropagation(); onDelete(todo.id); }}
+        className="opacity-0 group-hover:opacity-100 mt-0.5 p-1 rounded hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-all"
+      >
+        <Trash2 size={13} />
+      </button>
     </div>
   );
 }
 
-// ─── Quick Add (table-row style) ─────────────────────────────────────────────
+// ─── Quick Add ────────────────────────────────────────────────────────────────
 
 function QuickAdd({ onAdd }: { onAdd: (title: string, priority: Todo["priority"], due_date: string) => void }) {
   const [title, setTitle]       = useState("");
   const [priority, setPriority] = useState<Todo["priority"]>("normal");
   const [due, setDue]           = useState("");
-  const inputRef                = useRef<HTMLInputElement>(null);
+  const [expanded, setExpanded] = useState(false);
 
   function submit() {
     if (!title.trim()) return;
     onAdd(title.trim(), priority, due);
-    setTitle(""); setPriority("normal"); setDue("");
-    inputRef.current?.focus();
+    setTitle(""); setPriority("normal"); setDue(""); setExpanded(false);
   }
 
   return (
-    <div
-      className="grid items-center border-t border-border/50 hover:bg-accent/20 transition-colors"
-      style={{ gridTemplateColumns: "28px 1fr 148px 96px 108px 36px 28px" }}
-    >
-      <div className="flex items-center justify-center">
-        <Plus size={14} className="text-muted-foreground/40" />
-      </div>
-      <div className="py-2.5 pr-2">
+    <div className="bg-card border border-border rounded-xl p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <Plus size={15} className="text-brand-400 shrink-0" />
         <input
-          ref={inputRef}
           value={title}
           onChange={e => setTitle(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter") submit(); if (e.key === "Escape") setTitle(""); }}
-          placeholder="Add a task…"
-          className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground/40 outline-none"
+          onFocus={() => setExpanded(true)}
+          onKeyDown={e => { if (e.key === "Enter") submit(); if (e.key === "Escape") { setExpanded(false); setTitle(""); } }}
+          placeholder="Add a to-do… (Enter to save, click row for full details)"
+          className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/50 outline-none"
         />
-      </div>
-      {/* Status placeholder */}
-      <div />
-      {/* Priority picker */}
-      <div className="flex items-center gap-1">
-        {(["high", "normal", "low"] as const).map(p => (
-          <button
-            key={p}
-            onClick={() => setPriority(p)}
-            className={`w-2.5 h-2.5 rounded-full transition-all ring-1 ring-offset-1 ${
-              priority === p ? `${PRIORITY_CONFIG[p].dot} ring-current` : "bg-border ring-transparent hover:ring-border"
-            }`}
-            title={PRIORITY_CONFIG[p].label}
-          />
-        ))}
-      </div>
-      {/* Due date */}
-      <div>
-        <input
-          type="date"
-          value={due}
-          onChange={e => setDue(e.target.value)}
-          className="w-full bg-transparent text-xs text-muted-foreground outline-none"
-        />
-      </div>
-      {/* Spacer */}
-      <div />
-      {/* Submit */}
-      <div className="flex items-center justify-center">
         {title && (
-          <button
-            onClick={submit}
-            className="w-6 h-6 rounded bg-brand-400 text-white flex items-center justify-center hover:bg-brand-400/80 transition-colors"
-          >
-            <Check size={12} />
+          <button onClick={submit} className="px-3 py-1 rounded-lg bg-brand-400 text-white text-xs font-semibold hover:bg-brand-400/80 transition-colors">
+            Add
           </button>
         )}
       </div>
+      {expanded && (
+        <div className="flex items-center gap-3 pl-5">
+          <div className="flex items-center gap-1">
+            {(["high", "normal", "low"] as const).map(p => (
+              <button
+                key={p}
+                onClick={() => setPriority(p)}
+                className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition-all ${
+                  priority === p
+                    ? `${PRIORITY_CONFIG[p].bg} ${PRIORITY_CONFIG[p].color} ${PRIORITY_CONFIG[p].border}`
+                    : "border-border text-muted-foreground hover:bg-accent"
+                }`}
+              >
+                {PRIORITY_CONFIG[p].label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <Calendar size={11} />
+            <input
+              type="date"
+              value={due}
+              onChange={e => setDue(e.target.value)}
+              className="bg-transparent text-xs text-foreground outline-none"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -762,17 +653,12 @@ function QuickAdd({ onAdd }: { onAdd: (title: string, priority: Todo["priority"]
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function TodosPage() {
-  const [todos, setTodos]             = useState<Todo[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [error, setError]             = useState<string | null>(null);
-  const [view, setView]               = useState<"mine" | "assigned">("mine");
-  const [filter, setFilter]           = useState<"open" | "all" | "done">("open");
-  const [selected, setSelected]       = useState<Todo | null>(null);
-  const [collapsed, setCollapsed]     = useState<Record<string, boolean>>({});
-
-  function toggleGroup(key: string) {
-    setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
-  }
+  const [todos, setTodos]       = useState<Todo[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState<string | null>(null);
+  const [view, setView]         = useState<"mine" | "assigned">("mine");
+  const [filter, setFilter]     = useState<"open" | "all" | "done">("open");
+  const [selected, setSelected] = useState<Todo | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -810,18 +696,10 @@ export default function TodosPage() {
       body: JSON.stringify({ status: done ? "done" : "open" }),
     });
     const data = await res.json();
+    // If a new recurring instance was spawned, add it
     if (res.ok && data.spawned) {
       setTodos(prev => [data.spawned, ...prev.map(t => t.id === id ? data.todo : t)]);
     }
-  }
-
-  async function changeStatus(id: string, status: Todo["status"]) {
-    setTodos(prev => prev.map(t => t.id === id ? { ...t, status } : t));
-    await fetch(`/api/todos/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
   }
 
   async function deleteTodo(id: string) {
@@ -855,42 +733,6 @@ export default function TodosPage() {
   const doneCnt = done.length;
   const highCnt = open.filter(t => t.priority === "high").length;
 
-  // Status groups (when showing "all")
-  const inProgressTodos = todos.filter(t => t.status === "in_progress").sort(prioritySort);
-  const openOnlyTodos   = todos.filter(t => t.status === "open").sort(prioritySort);
-
-  // Build groups based on filter
-  type Group = { key: string; label: string; dot: string; items: Todo[] };
-  const groups: Group[] = [];
-  if (filter === "open") {
-    if (inProgressTodos.length > 0) groups.push({ key: "in_progress", label: "In Progress", dot: "bg-blue-400",    items: inProgressTodos });
-    if (openOnlyTodos.length > 0)   groups.push({ key: "open",        label: "Open",        dot: "bg-slate-400",  items: openOnlyTodos });
-  } else if (filter === "done") {
-    if (done.length > 0) groups.push({ key: "done", label: "Completed", dot: "bg-emerald-400", items: done });
-  } else {
-    if (inProgressTodos.length > 0) groups.push({ key: "in_progress", label: "In Progress", dot: "bg-blue-400",    items: inProgressTodos });
-    if (openOnlyTodos.length > 0)   groups.push({ key: "open",        label: "Open",        dot: "bg-slate-400",  items: openOnlyTodos });
-    if (done.length > 0)            groups.push({ key: "done",        label: "Completed",   dot: "bg-emerald-400", items: done });
-  }
-
-  // Column header definition (matches TodoRow grid)
-  const COL_STYLE = "28px 1fr 148px 96px 108px 36px 28px";
-
-  // Top 10 highest priority open todos for sidebar
-  const top10 = [...todos]
-    .filter(t => t.status !== "done")
-    .sort((a, b) => {
-      const pOrder = { high: 0, normal: 1, low: 2 };
-      const pDiff = pOrder[a.priority] - pOrder[b.priority];
-      if (pDiff !== 0) return pDiff;
-      // then by due date ascending (overdue first, no date last)
-      if (!a.due_date && !b.due_date) return 0;
-      if (!a.due_date) return 1;
-      if (!b.due_date) return -1;
-      return a.due_date.localeCompare(b.due_date);
-    })
-    .slice(0, 10);
-
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <TopBar
@@ -903,201 +745,101 @@ export default function TodosPage() {
         }
       />
 
-      <div className="flex-1 p-6 flex gap-5 min-h-0">
-        {/* ── Left: main table ────────────────────────────────────────────── */}
-        <div className="flex-1 min-w-0 space-y-4">
+      <div className="flex-1 p-6 space-y-5 max-w-3xl mx-auto w-full">
 
-          {/* Stats + filters bar */}
-          <div className="flex items-center gap-3 flex-wrap">
-            {[
-              { label: "Open",        value: openCnt,                accent: "text-brand-400",   bg: "bg-brand-400/10" },
-              { label: "In Progress", value: inProgressTodos.length, accent: "text-blue-600",    bg: "bg-blue-50" },
-              { label: "High Pri",    value: highCnt,                accent: "text-rose-600",    bg: "bg-rose-50" },
-              { label: "Done",        value: doneCnt,                accent: "text-emerald-600", bg: "bg-emerald-50" },
-            ].map(c => (
-              <div key={c.label} className={`flex items-center gap-2 px-3 py-2 rounded-xl ${c.bg} border border-border`}>
-                <span className={`text-lg font-extrabold leading-none ${c.accent}`}>{c.value}</span>
-                <span className="text-xs text-muted-foreground font-medium">{c.label}</span>
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { icon: Circle,      label: "Open",    value: openCnt, color: "text-brand-400",   bg: "bg-brand-400/10" },
+            { icon: AlertCircle, label: "High Pri", value: highCnt, color: "text-red-400",     bg: "bg-red-400/10" },
+            { icon: CheckSquare, label: "Done",     value: doneCnt, color: "text-emerald-400", bg: "bg-emerald-400/10" },
+          ].map(card => (
+            <div key={card.label} className="bg-card border border-border rounded-xl p-3 flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${card.bg}`}>
+                <card.icon size={14} className={card.color} />
               </div>
-            ))}
-            <div className="ml-auto flex items-center gap-1">
-              <button
-                onClick={() => { if (view !== "mine") setView("mine"); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${view === "mine" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
-              >
-                My To-Dos
-              </button>
-              <button
-                onClick={() => { if (view !== "assigned") setView("assigned"); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${view === "assigned" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
-              >
-                Assigned Out
-              </button>
-              <div className="w-px h-4 bg-border mx-1" />
-              {(["open", "all", "done"] as const).map(f => (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all capitalize ${filter === f ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
-                >
-                  {f === "open" ? "Active" : f === "all" ? "All" : "Done"}
-                </button>
-              ))}
+              <div>
+                <p className="text-xl font-bold text-foreground">{card.value}</p>
+                <p className="text-[10px] text-muted-foreground">{card.label}</p>
+              </div>
             </div>
-          </div>
-
-          {/* Main table */}
-          <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-
-            {/* Column headers */}
-            <div
-              className="grid items-center border-b border-border bg-accent/40"
-              style={{ gridTemplateColumns: COL_STYLE }}
-            >
-              <div />
-              <div className="py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Task</div>
-              <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Status</div>
-              <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Priority</div>
-              <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Due date</div>
-              <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide text-center">Who</div>
-              <div />
-            </div>
-
-            {/* Loading */}
-            {loading && (
-              <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground">
-                <Loader2 size={16} className="animate-spin" /> Loading to-dos…
-              </div>
-            )}
-
-            {/* Error */}
-            {!loading && error && (
-              <div className="flex items-center justify-center gap-3 py-12">
-                <span className="text-sm text-destructive">{error}</span>
-                <button onClick={load} className="text-xs border border-border rounded-lg px-3 py-1.5 text-muted-foreground hover:text-foreground hover:bg-accent">Retry</button>
-              </div>
-            )}
-
-            {/* Empty */}
-            {!loading && !error && todos.length === 0 && (
-              <div className="py-16 flex flex-col items-center gap-3">
-                <CheckSquare size={32} className="text-muted-foreground/30" />
-                <p className="text-sm font-medium text-muted-foreground">All clear — no to-dos</p>
-                <p className="text-xs text-muted-foreground/60">Use the row below to add one</p>
-              </div>
-            )}
-
-            {/* Groups */}
-            {!loading && !error && groups.map(group => (
-              <div key={group.key}>
-                <GroupHeader
-                  label={group.label}
-                  count={group.items.length}
-                  dot={group.dot}
-                  collapsed={collapsed[group.key] ?? false}
-                  onToggle={() => toggleGroup(group.key)}
-                />
-                {!(collapsed[group.key]) && group.items.map(todo => (
-                  <TodoRow
-                    key={todo.id}
-                    todo={todo}
-                    onToggleDone={toggleDone}
-                    onDelete={deleteTodo}
-                    onStatusChange={changeStatus}
-                    onPriorityChange={changePriority}
-                    onClick={setSelected}
-                  />
-                ))}
-              </div>
-            ))}
-
-            {/* Quick add row */}
-            <QuickAdd onAdd={addTodo} />
-          </div>
-
-          <p className="text-[11px] text-muted-foreground/50 text-center">
-            Click any row for notes, attachments, linked records, and recurrence settings
-          </p>
+          ))}
         </div>
 
-        {/* ── Right: Priority sidebar ──────────────────────────────────────── */}
-        <div className="w-72 shrink-0 space-y-4">
-          {/* Top priorities card */}
-          <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm sticky top-6">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-accent/40">
-              <TrendingUp size={13} className="text-rose-500" />
-              <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Top Priorities</h3>
-              {highCnt > 0 && (
-                <span className="ml-auto text-[10px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full">
-                  {highCnt} high
-                </span>
-              )}
-            </div>
-
-            {loading ? (
-              <div className="flex items-center justify-center py-10 gap-2 text-muted-foreground text-xs">
-                <Loader2 size={13} className="animate-spin" /> Loading…
-              </div>
-            ) : top10.length === 0 ? (
-              <div className="py-10 flex flex-col items-center gap-2 text-muted-foreground/50">
-                <CheckCircle2 size={24} className="text-emerald-400" />
-                <p className="text-xs font-medium">Nothing pending</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-border/50">
-                {top10.map((todo, idx) => {
-                  const pCfg  = PRIORITY_CONFIG[todo.priority];
-                  const sCfg  = STATUS_CONFIG[todo.status] ?? STATUS_CONFIG.open;
-                  const dueL  = dueDateLabel(todo.due_date);
-                  return (
-                    <button
-                      key={todo.id}
-                      onClick={() => setSelected(todo)}
-                      className="w-full text-left px-4 py-3 hover:bg-accent/40 transition-colors group/sp"
-                    >
-                      <div className="flex items-start gap-2.5">
-                        {/* Rank */}
-                        <span className="text-[10px] font-bold text-muted-foreground/40 w-4 shrink-0 pt-0.5">
-                          {idx + 1}
-                        </span>
-                        {/* Content */}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-foreground leading-snug truncate">
-                            {todo.title}
-                          </p>
-                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                            {/* Priority dot */}
-                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${pCfg.pill}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${pCfg.dot}`} />
-                              {pCfg.label}
-                            </span>
-                            {/* Status icon */}
-                            <span className={`inline-flex items-center gap-1 text-[10px] font-medium ${sCfg.iconCls}`}>
-                              <StatusIcon variant={sCfg.iconVariant} cls={sCfg.iconCls} />
-                              {sCfg.label}
-                            </span>
-                            {/* Due date */}
-                            {dueL && (
-                              <span className={`text-[10px] font-medium ${dueL.color}`}>{dueL.text}</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {top10.length > 0 && (
-              <div className="px-4 py-2.5 border-t border-border bg-accent/20">
-                <p className="text-[10px] text-muted-foreground/60 text-center">
-                  Sorted by priority · due date
-                </p>
-              </div>
-            )}
+        {/* Tabs + filter */}
+        <div className="flex items-center justify-between">
+          <div className="flex gap-1 bg-accent/40 p-1 rounded-lg">
+            {(["mine", "assigned"] as const).map(v => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                  view === v ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {v === "mine" ? "My To-Dos" : "Assigned Out"}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-1 bg-accent/40 p-1 rounded-lg">
+            {(["open", "all", "done"] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-all capitalize ${
+                  filter === f ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {f}
+              </button>
+            ))}
           </div>
         </div>
+
+        {/* Quick add */}
+        <QuickAdd onAdd={addTodo} />
+
+        {/* Hint */}
+        <p className="text-[11px] text-muted-foreground/50 text-center -mt-2">
+          Click any to-do to add notes, attachments, links, and recurrence
+        </p>
+
+        {/* States */}
+        {loading && (
+          <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
+            <Loader2 size={16} className="animate-spin" /> Loading to-dos…
+          </div>
+        )}
+        {!loading && error && (
+          <div className="flex items-center justify-center gap-3 py-12">
+            <span className="text-sm text-destructive">{error}</span>
+            <button onClick={load} className="text-xs border border-border rounded-lg px-3 py-1.5 text-muted-foreground hover:text-foreground hover:bg-accent">Retry</button>
+          </div>
+        )}
+        {!loading && !error && todos.length === 0 && (
+          <EmptyState
+            icon={<CheckSquare size={32} className="text-muted-foreground" />}
+            title="All clear — no open To-Dos"
+            description="Add a to-do above to track action items"
+          />
+        )}
+
+        {!loading && !error && open.length > 0 && (
+          <div className="space-y-2">
+            {open.map(todo => (
+              <TodoRow key={todo.id} todo={todo} onToggleDone={toggleDone} onDelete={deleteTodo} onPriorityChange={changePriority} onClick={setSelected} />
+            ))}
+          </div>
+        )}
+
+        {!loading && !error && done.length > 0 && filter !== "open" && (
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-1">Completed ({doneCnt})</p>
+            {done.map(todo => (
+              <TodoRow key={todo.id} todo={todo} onToggleDone={toggleDone} onDelete={deleteTodo} onPriorityChange={changePriority} onClick={setSelected} />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Detail Slide-Over */}

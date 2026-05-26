@@ -3,14 +3,13 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { TopBar } from "@/components/layout/TopBar";
 import { cn } from "@/lib/utils";
-import PeoplePicker from "@/components/shared/PeoplePicker";
 import {
   CheckCircle2, Circle, Clock, TrendingUp,
   TrendingDown, Minus, Plus, X, ChevronRight, Users,
   Calendar, Target, Send, Zap, ChevronDown, Loader2,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Timer, Flag, Pencil, Edit2, Trash2, ChevronLeft, Play } = require("lucide-react") as any;
+const { Timer, Flag, Pencil } = require("lucide-react") as any;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -274,7 +273,7 @@ function mergeVTO(raw: Record<string, unknown> | null): VTOData {
 
 // ─── Tab: V/TO ────────────────────────────────────────────────────────────────
 
-function VTOTab({ rocks, issues, vtoInit, readOnly = false, onSeeAllRocks }: { rocks: Rock[]; issues: Issue[]; vtoInit: Record<string, unknown> | null; readOnly?: boolean; onSeeAllRocks?: () => void }) {
+function VTOTab({ rocks, issues, vtoInit }: { rocks: Rock[]; issues: Issue[]; vtoInit: Record<string, unknown> | null }) {
   const [vto, setVto]       = useState<VTOData>(() => mergeVTO(vtoInit))
   const [saving, setSaving] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
@@ -294,9 +293,8 @@ function VTOTab({ rocks, issues, vtoInit, readOnly = false, onSeeAllRocks }: { r
     }
   }
 
-  const isEditing = (s: string) => !readOnly && editing === s
+  const isEditing = (s: string) => editing === s
   const isSaving  = (s: string) => saving === s
-  const canEdit   = !readOnly
 
   // Per-section draft state
   const [cvDraft,      setCvDraft]      = useState<CVItem[]>([])
@@ -320,7 +318,7 @@ function VTOTab({ rocks, issues, vtoInit, readOnly = false, onSeeAllRocks }: { r
     setEditing(section)
   }
 
-  const EditBtn = ({ section }: { section: string }) => canEdit ? (
+  const EditBtn = ({ section }: { section: string }) => (
     <button
       onClick={() => startEdit(section)}
       className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
@@ -328,7 +326,7 @@ function VTOTab({ rocks, issues, vtoInit, readOnly = false, onSeeAllRocks }: { r
     >
       <Pencil size={13} />
     </button>
-  ) : null
+  )
 
   const SaveCancelBar = ({ section, onSave }: { section: string; onSave: () => void }) => (
     <div className="flex gap-2 pt-2">
@@ -600,7 +598,7 @@ function VTOTab({ rocks, issues, vtoInit, readOnly = false, onSeeAllRocks }: { r
         <SectionCard>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-foreground">Q2 2026 Rocks</h3>
-            <span className="text-[10px] text-muted-foreground">Due Jun 30 · <button onClick={onSeeAllRocks} className="text-[#6B7EFF] hover:underline">See all →</button></span>
+            <span className="text-[10px] text-muted-foreground">Due Jun 30 · <a href="#rocks" className="text-[#6B7EFF] hover:underline">See all →</a></span>
           </div>
           {rocks.length === 0 ? (
             <p className="text-xs text-muted-foreground italic">No rocks yet — add them in the Rocks tab.</p>
@@ -665,16 +663,16 @@ function RocksTab({ rocks, setRocks }: { rocks: Rock[]; setRocks: React.Dispatch
           quarter: "Q2-2026",
           status: newRock.status,
           progress: newRock.progress ?? 0,
-          due_date: newRock.due ? newRock.due : 'Jun 30',
+          due_date: newRock.due ? newRock.due : null,
           is_company_rock: true,
         }),
       });
       if (res.ok) {
         const created = await res.json();
         setRocks(prev => [...prev, created]);
+        setAdding(false);
         setNewRock({ status: "On Track", progress: 0, due: "Jun 30", owner: "Russel Feldman" });
       }
-      setAdding(false);
     } finally {
       setSaving(false);
     }
@@ -784,12 +782,10 @@ function RocksTab({ rocks, setRocks }: { rocks: Rock[]; setRocks: React.Dispatch
                   />
                 </td>
                 <td className="px-4 py-2">
-                  <PeoplePicker
+                  <input
+                    className="w-full border border-border rounded px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
                     value={newRock.owner || ""}
-                    onChange={name => setNewRock(p => ({ ...p, owner: name }))}
-                    placeholder="Owner"
-                    mode="form"
-                    inputClassName="h-8 text-sm"
+                    onChange={e => setNewRock(p => ({ ...p, owner: e.target.value }))}
                   />
                 </td>
                 <td className="px-4 py-2">
@@ -860,13 +856,10 @@ function RocksTab({ rocks, setRocks }: { rocks: Rock[]; setRocks: React.Dispatch
 // ─── Tab: Scorecard ───────────────────────────────────────────────────────────
 
 function ScorecardTab({ measurables, setMeasurables }: { measurables: Measurable[]; setMeasurables: React.Dispatch<React.SetStateAction<Measurable[]>> }) {
-  const [adding, setAdding] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [newMetric, setNewMetric] = useState({ name: "", owner: "", goal: "", unit: "" });
-
+  // Get current and previous week_of values
   const getWeekOf = (offsetWeeks = 0): string => {
     const d = new Date();
-    d.setDate(d.getDate() - d.getDay() + 1 - offsetWeeks * 7);
+    d.setDate(d.getDate() - d.getDay() + 1 - offsetWeeks * 7); // Monday
     return d.toISOString().split("T")[0];
   };
 
@@ -879,6 +872,7 @@ function ScorecardTab({ measurables, setMeasurables }: { measurables: Measurable
   };
 
   const updateEntry = async (metricId: string, weekOf: string, value: string) => {
+    // Optimistic update
     setMeasurables(prev => prev.map(m => {
       if (m.id !== metricId) return m;
       const existingIdx = m.entries.findIndex(e => e.week_of === weekOf);
@@ -892,6 +886,7 @@ function ScorecardTab({ measurables, setMeasurables }: { measurables: Measurable
         entries: [{ id: `temp-${Date.now()}`, scorecard_id: metricId, week_of: weekOf, value }, ...m.entries],
       };
     }));
+
     void (async () => {
       try {
         await fetch("/api/eos/scorecard/entries", {
@@ -903,119 +898,14 @@ function ScorecardTab({ measurables, setMeasurables }: { measurables: Measurable
     })();
   };
 
-  const addMetric = async () => {
-    if (!newMetric.name.trim()) return;
-    setSaving(true);
-    try {
-      const res = await fetch("/api/eos/scorecard", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: newMetric.name.trim(),
-          owner: newMetric.owner.trim(),
-          goal: newMetric.goal.trim(),
-          unit: newMetric.unit.trim(),
-          sort_order: measurables.length,
-        }),
-      });
-      if (res.ok) {
-        const created = await res.json();
-        setMeasurables(prev => [...prev, created]);
-        setNewMetric({ name: "", owner: "", goal: "", unit: "" });
-        setAdding(false);
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const deleteMetric = async (id: string) => {
-    setMeasurables(prev => prev.filter(m => m.id !== id));
-    void (async () => {
-      try {
-        await fetch(`/api/eos/scorecard/${id}`, { method: "DELETE" });
-      } catch (_) { /* non-blocking */ }
-    })();
-  };
-
   const thisWeekLabel = new Date(thisWeekOf + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-bold text-foreground">Weekly Scorecard</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Week of {thisWeekLabel} · Updated each L10</p>
-        </div>
-        <button
-          onClick={() => setAdding(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#6B7EFF] text-white text-sm font-medium rounded-lg hover:bg-[#5a6de8] transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Add Measurable
-        </button>
+      <div>
+        <h2 className="text-base font-bold text-foreground">Weekly Scorecard</h2>
+        <p className="text-xs text-muted-foreground mt-0.5">Week of {thisWeekLabel} · Updated each L10</p>
       </div>
-
-      {adding && (
-        <div className="bg-white border border-[#6B7EFF]/30 rounded-xl p-4 space-y-3">
-          <p className="text-sm font-semibold text-foreground">New Measurable</p>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground font-medium mb-1 block">Measurable Name *</label>
-              <input
-                autoFocus
-                className="w-full h-9 border border-border rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
-                placeholder="e.g. Number of Cold Calls"
-                value={newMetric.name}
-                onChange={e => setNewMetric(p => ({ ...p, name: e.target.value }))}
-                onKeyDown={e => e.key === "Enter" && addMetric()}
-              />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground font-medium mb-1 block">Owner</label>
-              <PeoplePicker
-                value={newMetric.owner}
-                onChange={name => setNewMetric(p => ({ ...p, owner: name }))}
-                placeholder="Assign to…"
-                mode="form"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground font-medium mb-1 block">Goal</label>
-              <input
-                className="w-full h-9 border border-border rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
-                placeholder="e.g. ≥ 25 or > 5"
-                value={newMetric.goal}
-                onChange={e => setNewMetric(p => ({ ...p, goal: e.target.value }))}
-              />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground font-medium mb-1 block">Unit</label>
-              <input
-                className="w-full h-9 border border-border rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
-                placeholder="e.g. calls, $, %"
-                value={newMetric.unit}
-                onChange={e => setNewMetric(p => ({ ...p, unit: e.target.value }))}
-              />
-            </div>
-          </div>
-          <div className="flex gap-2 justify-end pt-1">
-            <button
-              onClick={() => { setAdding(false); setNewMetric({ name: "", owner: "", goal: "", unit: "" }); }}
-              className="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={addMetric}
-              disabled={saving || !newMetric.name.trim()}
-              className="px-4 py-1.5 text-sm font-medium bg-[#6B7EFF] text-white rounded-lg hover:bg-[#5a6de8] disabled:opacity-50 transition-colors"
-            >
-              {saving ? "Saving…" : "Add Measurable"}
-            </button>
-          </div>
-        </div>
-      )}
 
       <div className="bg-white border border-border rounded-xl overflow-hidden">
         <table className="w-full text-sm">
@@ -1031,29 +921,18 @@ function ScorecardTab({ measurables, setMeasurables }: { measurables: Measurable
           <tbody>
             {measurables.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center">
-                  <div className="flex flex-col items-center gap-2">
-                    <span className="text-2xl">📊</span>
-                    <p className="text-sm font-medium text-foreground">No scorecard metrics yet</p>
-                    <p className="text-xs text-muted-foreground">Click &quot;Add Measurable&quot; to track your first weekly number</p>
-                    <button
-                      onClick={() => setAdding(true)}
-                      className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-[#6B7EFF] text-white text-sm font-medium rounded-lg hover:bg-[#5a6de8] transition-colors"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Add Measurable
-                    </button>
-                  </div>
+                <td colSpan={7} className="px-4 py-8 text-center text-sm text-muted-foreground italic">
+                  No scorecard metrics yet.
                 </td>
               </tr>
             ) : measurables.map(m => {
               const thisWeek = getEntryValue(m, thisWeekOf);
               const lastWeek = getEntryValue(m, lastWeekOf);
               return (
-                <tr key={m.id} className="border-b border-border last:border-0 hover:bg-slate-50/50 transition-colors group">
+                <tr key={m.id} className="border-b border-border last:border-0 hover:bg-slate-50/50 transition-colors">
                   <td className="px-4 py-3 font-medium text-foreground">{m.name}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{m.owner || "—"}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-foreground bg-slate-50/50">{m.goal || "—"}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{m.owner}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-foreground bg-slate-50/50">{m.goal}</td>
                   <td className="px-4 py-3">
                     <input
                       className="w-20 border border-border rounded px-2 py-0.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
@@ -1067,16 +946,7 @@ function ScorecardTab({ measurables, setMeasurables }: { measurables: Measurable
                     <TrendIcon current={thisWeek} previous={lastWeek} />
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <GoalStatus goal={m.goal} value={thisWeek} />
-                      <button
-                        onClick={() => deleteMetric(m.id)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-red-50 text-red-400 hover:text-red-600"
-                        title="Delete measurable"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                    <GoalStatus goal={m.goal} value={thisWeek} />
                   </td>
                 </tr>
               );
@@ -1200,12 +1070,11 @@ function IssuesTab({ issues, setIssues }: { issues: Issue[]; setIssues: React.Di
                   <option key={p} value={p}>{p}</option>
                 ))}
               </select>
-              <PeoplePicker
-                value={newIssue.owner || ""}
-                onChange={name => setNewIssue(p => ({ ...p, owner: name }))}
+              <input
+                className="border border-border rounded px-2 py-1.5 text-sm bg-white focus:outline-none w-24"
                 placeholder="Owner"
-                mode="form"
-                className="w-40"
+                value={newIssue.owner || ""}
+                onChange={e => setNewIssue(p => ({ ...p, owner: e.target.value }))}
               />
               <button
                 onClick={addIssue}
@@ -1318,209 +1187,73 @@ function IssuesTab({ issues, setIssues }: { issues: Issue[]; setIssues: React.Di
 
 // ─── Tab: To-Dos ──────────────────────────────────────────────────────────────
 
-type TodoStatus = "open" | "in_progress" | "blocked" | "done";
-type TodoPriority = "high" | "medium" | "low" | "none";
-
-interface TodoMeta {
-  status: TodoStatus;
-  priority: TodoPriority;
-}
-
-const STATUS_CONFIG: Record<TodoStatus, { label: string; color: string; dot: string }> = {
-  open:        { label: "Open",        color: "bg-slate-100 text-slate-600",   dot: "bg-slate-400" },
-  in_progress: { label: "In Progress", color: "bg-blue-100 text-blue-700",     dot: "bg-blue-500" },
-  blocked:     { label: "Blocked",     color: "bg-rose-100 text-rose-700",     dot: "bg-rose-500" },
-  done:        { label: "Done",        color: "bg-emerald-100 text-emerald-700", dot: "bg-emerald-500" },
-};
-
-const PRIORITY_CONFIG: Record<TodoPriority, { label: string; color: string }> = {
-  high:   { label: "High",   color: "bg-rose-50 text-rose-600 border border-rose-200" },
-  medium: { label: "Medium", color: "bg-amber-50 text-amber-600 border border-amber-200" },
-  low:    { label: "Low",    color: "bg-sky-50 text-sky-600 border border-sky-200" },
-  none:   { label: "—",      color: "bg-transparent text-slate-400" },
-};
-
-const GROUP_ORDER: TodoStatus[] = ["open", "in_progress", "blocked", "done"];
-const GROUP_HEADER: Record<TodoStatus, { label: string; accent: string; bg: string }> = {
-  open:        { label: "Open",        accent: "text-slate-600",   bg: "bg-slate-50" },
-  in_progress: { label: "In Progress", accent: "text-blue-700",    bg: "bg-blue-50/60" },
-  blocked:     { label: "Blocked",     accent: "text-rose-700",    bg: "bg-rose-50/60" },
-  done:        { label: "Done",        accent: "text-emerald-700", bg: "bg-emerald-50/40" },
-};
-
-function initMeta(todos: TodoItem[]): Record<string, TodoMeta> {
-  const map: Record<string, TodoMeta> = {};
-  for (const t of todos) {
-    map[t.id] = { status: t.done ? "done" : "open", priority: "none" };
-  }
-  return map;
-}
-
 function TodosTab({ todos, setTodos }: { todos: TodoItem[]; setTodos: React.Dispatch<React.SetStateAction<TodoItem[]>> }) {
-  const [meta, setMeta] = useState<Record<string, TodoMeta>>(() => initMeta(todos));
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [collapsed, setCollapsed] = useState<Set<TodoStatus>>(new Set());
-  const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
-  const [editValue, setEditValue] = useState("");
-  const [addingGroup, setAddingGroup] = useState<TodoStatus | null>(null);
-  const [newRowText, setNewRowText] = useState("");
-  const [openStatus, setOpenStatus] = useState<string | null>(null);
-  const [openPriority, setOpenPriority] = useState<string | null>(null);
-  const editRef = useRef<HTMLInputElement | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [newTodo, setNewTodo] = useState<Partial<TodoItem>>({ owner: "RF", meeting: "" });
+  const [saving, setSaving] = useState(false);
 
-  // Sync new todos into meta
-  useEffect(() => {
-    setMeta(prev => {
-      const next = { ...prev };
-      for (const t of todos) {
-        if (!next[t.id]) {
-          next[t.id] = { status: t.done ? "done" : "open", priority: "none" };
-        }
-      }
-      return next;
-    });
-  }, [todos]);
-
-  useEffect(() => {
-    if (editingCell && editRef.current) editRef.current.focus();
-  }, [editingCell]);
-
-  const patchTodo = (id: string, patch: Partial<TodoItem>) => {
-    setTodos(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t));
+  const toggle = async (id: string) => {
+    const todo = todos.find(t => t.id === id);
+    if (!todo) return;
+    const newDone = !todo.done;
+    setTodos(prev => prev.map(t => t.id === id ? { ...t, done: newDone } : t));
     void (async () => {
       try {
         await fetch(`/api/eos/todos/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(patch),
+          body: JSON.stringify({ done: newDone }),
         });
       } catch (_) { /* non-blocking */ }
     })();
   };
 
-  const deleteTodo = (id: string) => {
+  const deleteTodo = async (id: string) => {
     setTodos(prev => prev.filter(t => t.id !== id));
-    setSelected(prev => { const s = new Set(prev); s.delete(id); return s; });
     void (async () => {
-      try { await fetch(`/api/eos/todos/${id}`, { method: "DELETE" }); }
-      catch (_) { /* non-blocking */ }
+      try {
+        await fetch(`/api/eos/todos/${id}`, { method: "DELETE" });
+      } catch (_) { /* non-blocking */ }
     })();
   };
 
-  const setStatus = (id: string, status: TodoStatus) => {
-    setMeta(prev => ({ ...prev, [id]: { ...(prev[id] ?? { priority: "none" }), status } }));
-    patchTodo(id, { done: status === "done" });
-    setOpenStatus(null);
-  };
-
-  const setPriority = (id: string, priority: TodoPriority) => {
-    setMeta(prev => ({ ...prev, [id]: { ...(prev[id] ?? { status: "open" }), priority } }));
-    setOpenPriority(null);
-  };
-
-  const commitEdit = () => {
-    if (!editingCell) return;
-    const { id, field } = editingCell;
-    if (field === "text" && editValue.trim()) patchTodo(id, { text: editValue.trim() });
-    if (field === "owner") patchTodo(id, { owner: editValue.trim() });
-    if (field === "meeting") patchTodo(id, { meeting: editValue.trim() });
-    if (field === "due_date") patchTodo(id, { due_date: editValue || null });
-    setEditingCell(null);
-  };
-
-  const startEdit = (id: string, field: string, current: string) => {
-    setEditingCell({ id, field });
-    setEditValue(current ?? "");
-  };
-
-  const addToGroup = async (status: TodoStatus) => {
-    if (!newRowText.trim()) { setAddingGroup(null); return; }
-    const res = await fetch("/api/eos/todos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: newRowText.trim(), owner: "RF", due_date: null, meeting: "" }),
-    });
-    if (res.ok) {
-      const created = await res.json();
-      setTodos(prev => [created, ...prev]);
-      setMeta(prev => ({ ...prev, [created.id]: { status, priority: "none" } }));
-      if (status === "done") patchTodo(created.id, { done: true });
+  const addTodo = async () => {
+    if (!newTodo.text) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/eos/todos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: newTodo.text,
+          owner: newTodo.owner,
+          due_date: newTodo.due_date ?? null,
+          meeting: newTodo.meeting ?? "",
+        }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setTodos(prev => [created, ...prev]);
+        setAdding(false);
+        setNewTodo({ owner: "RF", meeting: "" });
+      }
+    } finally {
+      setSaving(false);
     }
-    setNewRowText("");
-    setAddingGroup(null);
   };
 
-  const bulkDelete = () => {
-    for (const id of selected) deleteTodo(id);
-    setSelected(new Set());
-  };
-
-  const bulkMarkDone = () => {
-    for (const id of selected) setStatus(id, "done");
-    setSelected(new Set());
-  };
-
-  const toggleSelect = (id: string) => {
-    setSelected(prev => {
-      const s = new Set(prev);
-      s.has(id) ? s.delete(id) : s.add(id);
-      return s;
-    });
-  };
-
-  const selectAll = () => {
-    if (selected.size === todos.length) { setSelected(new Set()); return; }
-    setSelected(new Set(todos.map(t => t.id)));
-  };
-
-  const today = new Date().toISOString().slice(0, 10);
-
-  const grouped = GROUP_ORDER.reduce<Record<TodoStatus, TodoItem[]>>((acc, s) => {
-    acc[s] = todos.filter(t => (meta[t.id]?.status ?? (t.done ? "done" : "open")) === s);
-    return acc;
-  }, { open: [], in_progress: [], blocked: [], done: [] });
-
-  const openCount  = grouped.open.length + grouped.in_progress.length + grouped.blocked.length;
-  const doneCount  = grouped.done.length;
-
-  const colWidths = ["w-8", "w-8", "flex-1 min-w-[200px]", "w-28", "w-32", "w-36", "w-28", "w-28", "w-8"];
-
-  const renderCell = (todo: TodoItem, field: string, value: string, extraClass = "") => {
-    const isEditing = editingCell?.id === todo.id && editingCell?.field === field;
-    if (isEditing) {
-      return (
-        <input
-          ref={editRef}
-          type={field === "due_date" ? "date" : "text"}
-          value={editValue}
-          onChange={e => setEditValue(e.target.value)}
-          onBlur={commitEdit}
-          onKeyDown={e => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") setEditingCell(null); }}
-          className={cn("w-full bg-white border border-[#6B7EFF] rounded px-2 py-0.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30", extraClass)}
-        />
-      );
-    }
-    return (
-      <span
-        onClick={() => startEdit(todo.id, field, value)}
-        className={cn("block cursor-text min-h-[20px] rounded px-1 py-0.5 hover:bg-slate-100 transition-colors truncate", extraClass)}
-        title={value}
-      >
-        {value || <span className="text-slate-300 text-xs italic">—</span>}
-      </span>
-    );
-  };
+  const openCount = todos.filter(t => !t.done).length;
+  const doneCount = todos.filter(t => t.done).length;
 
   return (
-    <div className="space-y-4" onClick={() => { setOpenStatus(null); setOpenPriority(null); }}>
-      {/* Header */}
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-bold text-foreground">To-Do List</h2>
           <p className="text-xs text-muted-foreground mt-0.5">{openCount} open · {doneCount} complete</p>
         </div>
         <button
-          onClick={() => { setAddingGroup("open"); setCollapsed(prev => { const s = new Set(prev); s.delete("open"); return s; }); }}
+          onClick={() => setAdding(true)}
           className="flex items-center gap-1.5 text-sm bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5B6EEF] transition-colors font-medium"
         >
           <Plus size={14} />
@@ -1528,212 +1261,112 @@ function TodosTab({ todos, setTodos }: { todos: TodoItem[]; setTodos: React.Disp
         </button>
       </div>
 
-      {/* Bulk action bar */}
-      {selected.size > 0 && (
-        <div className="flex items-center gap-3 bg-[#6B7EFF]/10 border border-[#6B7EFF]/30 rounded-lg px-4 py-2.5">
-          <span className="text-sm font-semibold text-[#6B7EFF]">{selected.size} selected</span>
-          <button onClick={bulkMarkDone} className="text-xs bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full hover:bg-emerald-200 transition-colors font-medium">
-            Mark Done
-          </button>
-          <button onClick={bulkDelete} className="text-xs bg-rose-100 text-rose-700 px-2.5 py-1 rounded-full hover:bg-rose-200 transition-colors font-medium">
-            Delete
-          </button>
-          <button onClick={() => setSelected(new Set())} className="ml-auto text-muted-foreground hover:text-foreground">
-            <X size={15} />
-          </button>
+      {adding && (
+        <div className="bg-blue-50/30 border border-blue-200 rounded-xl p-4 space-y-3">
+          <h4 className="text-sm font-semibold text-foreground">New To-Do</h4>
+          <div className="grid grid-cols-1 gap-3">
+            <input
+              className="border border-border rounded px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
+              placeholder="What needs to get done?"
+              value={newTodo.text || ""}
+              onChange={e => setNewTodo(p => ({ ...p, text: e.target.value }))}
+              autoFocus
+            />
+            <div className="flex gap-3">
+              <input
+                className="border border-border rounded px-2 py-1.5 text-sm bg-white focus:outline-none w-24"
+                placeholder="Owner"
+                value={newTodo.owner || ""}
+                onChange={e => setNewTodo(p => ({ ...p, owner: e.target.value }))}
+              />
+              <input
+                type="date"
+                className="border border-border rounded px-2 py-1.5 text-sm bg-white focus:outline-none"
+                value={newTodo.due_date || ""}
+                onChange={e => setNewTodo(p => ({ ...p, due_date: e.target.value }))}
+              />
+              <input
+                className="border border-border rounded px-2 py-1.5 text-sm bg-white focus:outline-none flex-1"
+                placeholder="Meeting (e.g. L10 5/23)"
+                value={newTodo.meeting || ""}
+                onChange={e => setNewTodo(p => ({ ...p, meeting: e.target.value }))}
+              />
+              <button
+                onClick={addTodo}
+                disabled={saving || !newTodo.text}
+                className="flex items-center gap-1.5 text-sm bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5B6EEF] transition-colors font-medium disabled:opacity-50"
+              >
+                <CheckCircle2 size={14} />
+                Save
+              </button>
+              <button onClick={() => setAdding(false)} className="p-1.5 text-muted-foreground hover:bg-slate-100 rounded">
+                <X size={16} />
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Grid */}
       <div className="bg-white border border-border rounded-xl overflow-hidden">
-        {/* Column header */}
-        <div className="flex items-center gap-0 bg-slate-50 border-b border-border text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          <div className="w-10 flex-shrink-0 px-3 py-3">
-            <input type="checkbox" checked={selected.size === todos.length && todos.length > 0} onChange={selectAll} className="rounded" />
-          </div>
-          <div className="flex-1 min-w-[200px] px-3 py-3">Task</div>
-          <div className="w-28 flex-shrink-0 px-3 py-3">Owner</div>
-          <div className="w-32 flex-shrink-0 px-3 py-3">Due Date</div>
-          <div className="w-36 flex-shrink-0 px-3 py-3">Meeting</div>
-          <div className="w-28 flex-shrink-0 px-3 py-3">Priority</div>
-          <div className="w-28 flex-shrink-0 px-3 py-3">Status</div>
-          <div className="w-8 flex-shrink-0" />
-        </div>
-
-        {todos.length === 0 && (
-          <div className="px-4 py-10 text-center text-sm text-muted-foreground italic">
-            No to-dos yet — click Add To-Do to get started.
-          </div>
-        )}
-
-        {GROUP_ORDER.map(status => {
-          const group = grouped[status];
-          const cfg = GROUP_HEADER[status];
-          const sCfg = STATUS_CONFIG[status];
-          const isCollapsed = collapsed.has(status);
-          if (group.length === 0 && addingGroup !== status) return null;
-
-          return (
-            <div key={status}>
-              {/* Group header */}
-              <div
-                className={cn("flex items-center gap-2 px-3 py-2 border-b border-border cursor-pointer select-none", cfg.bg)}
-                onClick={() => setCollapsed(prev => {
-                  const s = new Set(prev);
-                  s.has(status) ? s.delete(status) : s.add(status);
-                  return s;
-                })}
-              >
-                <ChevronDown size={13} className={cn("transition-transform flex-shrink-0", cfg.accent, isCollapsed && "-rotate-90")} />
-                <span className={cn("text-xs font-bold uppercase tracking-wider", cfg.accent)}>{cfg.label}</span>
-                <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full ml-0.5", sCfg.color)}>{group.length}</span>
-              </div>
-
-              {!isCollapsed && (
-                <>
-                  {group.map(todo => {
-                    const m = meta[todo.id] ?? { status: "open", priority: "none" };
-                    const isOverdue = todo.due_date && todo.due_date < today && status !== "done";
-                    const isSel = selected.has(todo.id);
-
-                    return (
-                      <div
-                        key={todo.id}
-                        className={cn(
-                          "flex items-center gap-0 border-b border-border last:border-0 group transition-colors text-sm",
-                          isSel ? "bg-[#6B7EFF]/5" : "hover:bg-slate-50/70",
-                          status === "done" && "opacity-60"
-                        )}
-                      >
-                        {/* Checkbox */}
-                        <div className="w-10 flex-shrink-0 px-3 py-2.5">
-                          <input
-                            type="checkbox"
-                            checked={isSel}
-                            onChange={() => toggleSelect(todo.id)}
-                            className="rounded"
-                            onClick={e => e.stopPropagation()}
-                          />
-                        </div>
-
-                        {/* Task text */}
-                        <div className="flex-1 min-w-[200px] px-2 py-2">
-                          <span className={cn(status === "done" && "line-through text-muted-foreground")}>
-                            {renderCell(todo, "text", todo.text, "font-medium text-foreground")}
-                          </span>
-                        </div>
-
-                        {/* Owner */}
-                        <div className="w-28 flex-shrink-0 px-1 py-1.5 text-muted-foreground" onClick={e => e.stopPropagation()}>
-                          <PeoplePicker
-                            value={todo.owner ?? ""}
-                            onChange={name => patchTodo(todo.id, { owner: name })}
-                            placeholder="Assign…"
-                            mode="inline"
-                          />
-                        </div>
-
-                        {/* Due date */}
-                        <div className={cn("w-32 flex-shrink-0 px-2 py-2", isOverdue ? "text-rose-600 font-semibold" : "text-muted-foreground")}>
-                          {renderCell(todo, "due_date", todo.due_date ?? "", isOverdue ? "text-rose-600" : "")}
-                        </div>
-
-                        {/* Meeting */}
-                        <div className="w-36 flex-shrink-0 px-2 py-2 text-muted-foreground">
-                          {renderCell(todo, "meeting", todo.meeting ?? "")}
-                        </div>
-
-                        {/* Priority chip */}
-                        <div className="w-28 flex-shrink-0 px-2 py-2 relative" onClick={e => e.stopPropagation()}>
-                          <button
-                            onClick={() => setOpenPriority(openPriority === todo.id ? null : todo.id)}
-                            className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap", PRIORITY_CONFIG[m.priority].color)}
-                          >
-                            {PRIORITY_CONFIG[m.priority].label}
-                          </button>
-                          {openPriority === todo.id && (
-                            <div className="absolute left-0 top-8 z-20 bg-white border border-border rounded-lg shadow-lg py-1 min-w-[100px]">
-                              {(["high", "medium", "low", "none"] as TodoPriority[]).map(p => (
-                                <button
-                                  key={p}
-                                  onClick={() => setPriority(todo.id, p)}
-                                  className={cn("w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 transition-colors font-medium", PRIORITY_CONFIG[p].color, "bg-transparent border-0")}
-                                >
-                                  {PRIORITY_CONFIG[p].label}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Status chip */}
-                        <div className="w-28 flex-shrink-0 px-2 py-2 relative" onClick={e => e.stopPropagation()}>
-                          <button
-                            onClick={() => setOpenStatus(openStatus === todo.id ? null : todo.id)}
-                            className={cn("flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap", STATUS_CONFIG[m.status].color)}
-                          >
-                            <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", STATUS_CONFIG[m.status].dot)} />
-                            {STATUS_CONFIG[m.status].label}
-                          </button>
-                          {openStatus === todo.id && (
-                            <div className="absolute left-0 top-8 z-20 bg-white border border-border rounded-lg shadow-lg py-1 min-w-[120px]">
-                              {(["open", "in_progress", "blocked", "done"] as TodoStatus[]).map(s => (
-                                <button
-                                  key={s}
-                                  onClick={() => setStatus(todo.id, s)}
-                                  className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 transition-colors flex items-center gap-2"
-                                >
-                                  <span className={cn("w-2 h-2 rounded-full", STATUS_CONFIG[s].dot)} />
-                                  <span className="font-medium text-foreground">{STATUS_CONFIG[s].label}</span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Delete */}
-                        <div className="w-8 flex-shrink-0 pr-2 flex items-center justify-center">
-                          <button
-                            onClick={() => deleteTodo(todo.id)}
-                            className="p-1 text-muted-foreground hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-all"
-                          >
-                            <X size={13} />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {/* Inline add row */}
-                  {addingGroup === status ? (
-                    <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-blue-50/20">
-                      <div className="w-6 flex-shrink-0" />
-                      <input
-                        autoFocus
-                        value={newRowText}
-                        onChange={e => setNewRowText(e.target.value)}
-                        onKeyDown={e => { if (e.key === "Enter") addToGroup(status); if (e.key === "Escape") { setAddingGroup(null); setNewRowText(""); } }}
-                        onBlur={() => { if (!newRowText.trim()) { setAddingGroup(null); } }}
-                        placeholder="Task name..."
-                        className="flex-1 text-sm bg-white border border-[#6B7EFF] rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
-                      />
-                      <button onClick={() => addToGroup(status)} className="text-xs bg-[#6B7EFF] text-white px-2.5 py-1 rounded-lg hover:bg-[#5B6EEF] font-medium">Add</button>
-                      <button onClick={() => { setAddingGroup(null); setNewRowText(""); }} className="text-muted-foreground hover:text-foreground"><X size={13} /></button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setAddingGroup(status)}
-                      className="flex items-center gap-1.5 w-full px-10 py-2 text-xs text-muted-foreground hover:text-[#6B7EFF] hover:bg-slate-50/80 transition-colors border-b border-border last:border-0"
-                    >
-                      <Plus size={12} />
-                      Add item
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          );
-        })}
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-slate-50 border-b border-border">
+              {["", "To-Do", "Owner", "Due", "Meeting", "Status", ""].map((h, i) => (
+                <th key={i} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {todos.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-sm text-muted-foreground italic">
+                  No to-dos yet — add one above.
+                </td>
+              </tr>
+            ) : todos.map(todo => (
+              <tr key={todo.id} className={cn(
+                "border-b border-border last:border-0 hover:bg-slate-50/50 transition-colors group",
+                todo.done && "opacity-60"
+              )}>
+                <td className="pl-4 py-3 w-8">
+                  <button
+                    onClick={() => toggle(todo.id)}
+                    className="text-muted-foreground hover:text-[#6B7EFF] transition-colors"
+                  >
+                    {todo.done
+                      ? <CheckCircle2 size={18} className="text-emerald-500" />
+                      : <Circle size={18} />
+                    }
+                  </button>
+                </td>
+                <td className="px-4 py-3 font-medium text-foreground">
+                  <span className={cn(todo.done && "line-through text-muted-foreground")}>
+                    {todo.text}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-muted-foreground">{todo.owner}</td>
+                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDate(todo.due_date)}</td>
+                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{todo.meeting}</td>
+                <td className="px-4 py-3">
+                  {todo.done
+                    ? <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Done</span>
+                    : <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">Open</span>
+                  }
+                </td>
+                <td className="px-4 py-3">
+                  <button
+                    onClick={() => deleteTodo(todo.id)}
+                    className="p-1 text-muted-foreground hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-all"
+                  >
+                    <X size={14} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -1741,769 +1374,176 @@ function TodosTab({ todos, setTodos }: { todos: TodoItem[]; setTodos: React.Disp
 
 // ─── Tab: L10 Meeting ─────────────────────────────────────────────────────────
 
-interface AgendaItem {
-  label: string;
-  duration: number;
-  description: string;
-  highlight?: boolean;
-}
-
-interface Meeting {
-  id: string;
-  name: string;
-  meeting_type: 'l10' | 'quarterly' | 'annual' | 'department' | 'custom';
-  day_of_week: string | null;
-  time_of_day: string | null;
-  duration_minutes: number;
-  attendees: { name: string; email?: string }[];
-  agenda: AgendaItem[];
-  recurrence: string;
-  next_meeting_at: string | null;
-  is_active: boolean;
-  notes: string | null;
-  created_at: string;
-}
-
-const DEFAULT_L10_AGENDA: AgendaItem[] = [
-  { label: 'Segue (Good News)', duration: 5, description: 'Each person shares personal and professional good news' },
-  { label: 'Scorecard Review', duration: 5, description: 'Review each measurable — red means issues, drop to issues list' },
-  { label: 'Rock Review', duration: 5, description: 'On track or off track — no discussion, just status' },
-  { label: 'Customer / Employee Headlines', duration: 5, description: 'Headlines only — customer praise, employee news' },
-  { label: 'To-Do List Review', duration: 5, description: 'Done or not done — 7-day actions, 90% completion rate is the goal' },
-  { label: 'IDS (Issues)', duration: 60, description: 'Identify-Discuss-Solve. The most important 60 minutes.', highlight: true },
-  { label: 'Conclude', duration: 5, description: 'Recap To-Dos, cascade messages to the team, rate the meeting 1-10' },
+const agendaItems = [
+  { label: "Segue (Good News)", duration: 5, description: "Each person shares personal and professional good news" },
+  { label: "Scorecard Review", duration: 5, description: "Review each measurable — red means issues, drop it to the issues list" },
+  { label: "Rock Review", duration: 5, description: "On track or off track — no discussion, just status" },
+  { label: "Customer / Employee Headlines", duration: 5, description: "Headlines only — customer praise, employee news, nothing major" },
+  { label: "To-Do List Review", duration: 5, description: "Done or not done — 7-day actions, 90% completion rate is the goal" },
+  { label: "IDS (Issues)", duration: 60, description: "The most important 60 minutes. Work through issues one at a time using Identify-Discuss-Solve", highlight: true },
+  { label: "Conclude", duration: 5, description: "Recap To-Dos, cascade messages to the team, rate the meeting 1-10" },
 ];
 
-const MEETING_TYPE_LABELS: Record<string, string> = {
-  l10: 'L10 Meeting',
-  quarterly: 'Quarterly Review',
-  annual: 'Annual Planning',
-  department: 'Department Meeting',
-  custom: 'Custom Meeting',
-};
-
-const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const RECURRENCE_OPTIONS = ['weekly', 'biweekly', 'monthly', 'quarterly', 'once'];
-
-function MeetingTypeBadge({ type }: { type: string }) {
-  const colors: Record<string, string> = {
-    l10: 'bg-[#6B7EFF]/10 text-[#6B7EFF] border-[#6B7EFF]/20',
-    quarterly: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    annual: 'bg-violet-50 text-violet-700 border-violet-200',
-    department: 'bg-amber-50 text-amber-700 border-amber-200',
-    custom: 'bg-slate-50 text-slate-600 border-slate-200',
-  };
-  return (
-    <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full border', colors[type] ?? colors.custom)}>
-      {MEETING_TYPE_LABELS[type] ?? type}
-    </span>
-  );
-}
-
-function MeetingForm({
-  initial,
-  onSave,
-  onCancel,
-}: {
-  initial?: Partial<Meeting>;
-  onSave: (data: Partial<Meeting>) => Promise<void>;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState(initial?.name ?? 'L10 Meeting');
-  const [type, setType] = useState<Meeting['meeting_type']>(initial?.meeting_type ?? 'l10');
-  const [day, setDay] = useState(initial?.day_of_week ?? 'Friday');
-  const [time, setTime] = useState(initial?.time_of_day ?? '06:00');
-  const [duration, setDuration] = useState(initial?.duration_minutes ?? 90);
-  const [recurrence, setRecurrence] = useState(initial?.recurrence ?? 'weekly');
-  const [attendees, setAttendees] = useState<{ name: string; email?: string }[]>(initial?.attendees ?? []);
-  const [agenda, setAgenda] = useState<AgendaItem[]>(initial?.agenda?.length ? initial.agenda : (initial?.meeting_type === 'l10' ? DEFAULT_L10_AGENDA : []));
-  const [notes, setNotes] = useState(initial?.notes ?? '');
-  const [saving, setSaving] = useState(false);
-
-  // Attendee picker state
-  const [suggestions, setSuggestions] = useState<Array<{ id: string; name: string; email: string; source: string; role?: string }>>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [customEmail, setCustomEmail] = useState('');
-  const [editingEmailIdx, setEditingEmailIdx] = useState<number | null>(null);
-  const [editingEmailValue, setEditingEmailValue] = useState('');
-  const pickerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const res = await fetch('/api/eos/meetings/attendee-suggestions');
-        if (res.ok) {
-          const data = await res.json();
-          setSuggestions(Array.isArray(data) ? data : []);
-        }
-      } catch (_) { /* ignore */ }
-    })();
-  }, []);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
-        setShowDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const filteredSuggestions = searchQuery.trim()
-    ? suggestions.filter(s =>
-        s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.email.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : suggestions;
-
-  const addAttendeeFromSuggestion = (s: { name: string; email: string }) => {
-    const already = attendees.some(a => a.email && a.email.toLowerCase() === s.email.toLowerCase());
-    if (!already) {
-      setAttendees(prev => [...prev, { name: s.name, email: s.email }]);
-    }
-    setSearchQuery('');
-    setShowDropdown(false);
-  };
-
-  const addCustomAttendee = () => {
-    const q = searchQuery.trim();
-    if (!q) return;
-    const alreadyByName = attendees.some(a => a.name.toLowerCase() === q.toLowerCase());
-    if (alreadyByName) { setSearchQuery(''); setShowDropdown(false); return; }
-    const emailVal = customEmail.trim() || undefined;
-    setAttendees(prev => [...prev, { name: q, email: emailVal }]);
-    setSearchQuery('');
-    setCustomEmail('');
-    setShowDropdown(false);
-  };
-
-  const sourceLabel = (source: string): string => {
-    if (source === 'technician') return '🔧 Technician';
-    if (source === 'organization') return '🏢 Org';
-    return '✏️ Custom';
-  };
-
-  const handleTypeChange = (newType: Meeting['meeting_type']) => {
-    setType(newType);
-    if (newType === 'l10' && agenda.length === 0) {
-      setAgenda(DEFAULT_L10_AGENDA);
-    }
-  };
-
-  const handleSave = async () => {
-    if (!name.trim()) return;
-    setSaving(true);
-    try {
-      await onSave({ name, meeting_type: type, day_of_week: day, time_of_day: time, duration_minutes: duration, recurrence, attendees, agenda, notes: notes || null });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Meeting Name</label>
-          <input
-            className="w-full h-9 border border-border rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder="e.g. Weekly L10"
-          />
-        </div>
-        <div>
-          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Meeting Type</label>
-          <select
-            className="w-full h-9 border border-border rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white"
-            value={type}
-            onChange={e => handleTypeChange(e.target.value as Meeting['meeting_type'])}
-          >
-            {Object.entries(MEETING_TYPE_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-      <div className="grid grid-cols-4 gap-4">
-        <div>
-          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Day</label>
-          <select className="w-full h-9 border border-border rounded-lg px-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white" value={day} onChange={e => setDay(e.target.value)}>
-            {DAYS_OF_WEEK.map(d => <option key={d} value={d}>{d}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Time</label>
-          <input type="time" className="w-full h-9 border border-border rounded-lg px-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white" value={time} onChange={e => setTime(e.target.value)} />
-        </div>
-        <div>
-          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Duration (min)</label>
-          <input type="number" min={15} max={480} className="w-full h-9 border border-border rounded-lg px-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white" value={duration} onChange={e => setDuration(Number(e.target.value))} />
-        </div>
-        <div>
-          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Recurrence</label>
-          <select className="w-full h-9 border border-border rounded-lg px-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white" value={recurrence} onChange={e => setRecurrence(e.target.value)}>
-            {RECURRENCE_OPTIONS.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
-          </select>
-        </div>
-      </div>
-      <div>
-        <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-2">Attendees</label>
-        {/* Attendee chips */}
-        {attendees.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-2">
-            {attendees.map((a, i) => (
-              <span key={i} className="flex items-center gap-1.5 text-xs bg-slate-100 border border-slate-200 rounded-full px-3 py-1 text-foreground">
-                <span className="font-medium">{a.name}</span>
-                {a.email ? (
-                  <span className="text-muted-foreground text-[10px]">{a.email}</span>
-                ) : (
-                  editingEmailIdx === i ? (
-                    <span className="flex items-center gap-1">
-                      <input
-                        autoFocus
-                        className="h-5 w-32 border border-[#6B7EFF]/40 rounded px-1 text-[10px] focus:outline-none bg-white"
-                        placeholder="email@example.com"
-                        value={editingEmailValue}
-                        onChange={e => setEditingEmailValue(e.target.value)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            if (editingEmailValue.trim()) {
-                              setAttendees(prev => prev.map((x, j) => j === i ? { ...x, email: editingEmailValue.trim() } : x));
-                            }
-                            setEditingEmailIdx(null);
-                            setEditingEmailValue('');
-                          }
-                          if (e.key === 'Escape') { setEditingEmailIdx(null); setEditingEmailValue(''); }
-                        }}
-                        onBlur={() => {
-                          if (editingEmailValue.trim()) {
-                            setAttendees(prev => prev.map((x, j) => j === i ? { ...x, email: editingEmailValue.trim() } : x));
-                          }
-                          setEditingEmailIdx(null);
-                          setEditingEmailValue('');
-                        }}
-                      />
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => { setEditingEmailIdx(i); setEditingEmailValue(''); }}
-                      className="text-amber-500 text-[10px] hover:underline"
-                      title="No email — click to add"
-                    >
-                      + email
-                    </button>
-                  )
-                )}
-                <button onClick={() => setAttendees(prev => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-red-500 transition-colors ml-0.5"><X size={11} /></button>
-              </span>
-            ))}
-          </div>
-        )}
-        {/* Contact picker */}
-        <div ref={pickerRef} className="relative">
-          <input
-            className="w-full h-8 border border-border rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white"
-            placeholder="Search contacts or type a name…"
-            value={searchQuery}
-            onChange={e => { setSearchQuery(e.target.value); setShowDropdown(true); }}
-            onFocus={() => setShowDropdown(true)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                if (filteredSuggestions.length > 0 && !searchQuery.trim()) return;
-                addCustomAttendee();
-              }
-              if (e.key === 'Escape') setShowDropdown(false);
-            }}
-          />
-          {showDropdown && (searchQuery.trim() || filteredSuggestions.length > 0) && (
-            <div className="absolute z-50 mt-1 w-full bg-white border border-border rounded-xl shadow-lg overflow-hidden max-h-56 overflow-y-auto">
-              {filteredSuggestions.map(s => (
-                <button
-                  key={s.id}
-                  type="button"
-                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 text-left transition-colors"
-                  onMouseDown={e => { e.preventDefault(); addAttendeeFromSuggestion(s); }}
-                >
-                  <div className="w-7 h-7 rounded-full bg-[#6B7EFF]/10 text-[#6B7EFF] flex items-center justify-center text-[11px] font-bold shrink-0">
-                    {s.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-foreground truncate">{s.name}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">{s.email}</p>
-                  </div>
-                  <span className="text-[10px] text-muted-foreground shrink-0">{sourceLabel(s.source)}</span>
-                </button>
-              ))}
-              {searchQuery.trim() && (
-                <div className="border-t border-border px-3 py-2">
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Add custom</p>
-                  <div className="flex items-center gap-2">
-                    <input
-                      className="flex-1 h-7 border border-border rounded px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-white"
-                      placeholder="email@example.com (optional)"
-                      value={customEmail}
-                      onChange={e => setCustomEmail(e.target.value)}
-                      onMouseDown={e => e.stopPropagation()}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') { e.preventDefault(); addCustomAttendee(); }
-                        if (e.key === 'Escape') setShowDropdown(false);
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onMouseDown={e => { e.preventDefault(); addCustomAttendee(); }}
-                      className="h-7 px-2.5 text-[11px] bg-[#6B7EFF]/10 text-[#6B7EFF] border border-[#6B7EFF]/20 rounded hover:bg-[#6B7EFF]/20 font-semibold shrink-0 transition-colors"
-                    >
-                      + Add &quot;{searchQuery.trim()}&quot;
-                    </button>
-                  </div>
-                </div>
-              )}
-              {filteredSuggestions.length === 0 && !searchQuery.trim() && (
-                <div className="px-3 py-4 text-center text-xs text-muted-foreground">No contacts found. Type a name to add a custom attendee.</div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Agenda Items</label>
-          <button onClick={() => setAgenda(prev => [...prev, { label: '', duration: 5, description: '' }])} className="text-xs text-[#6B7EFF] hover:underline flex items-center gap-1"><Plus size={11} /> Add item</button>
-        </div>
-        <div className="space-y-2">
-          {agenda.map((item, i) => (
-            <div key={i} className={cn('border rounded-lg p-3 bg-white', item.highlight ? 'border-[#6B7EFF]/30 bg-[#6B7EFF]/3' : 'border-border')}>
-              <div className="flex items-start gap-3">
-                <div className="flex flex-col gap-1.5 flex-1">
-                  <div className="flex gap-2">
-                    <input className="flex-1 h-7 border border-border rounded px-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-white" placeholder="Agenda item name" value={item.label} onChange={e => setAgenda(prev => prev.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} />
-                    <div className="flex items-center gap-1">
-                      <input type="number" min={1} max={120} className="w-14 h-7 border border-border rounded px-2 text-sm text-center focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-white" value={item.duration} onChange={e => setAgenda(prev => prev.map((x, j) => j === i ? { ...x, duration: Number(e.target.value) } : x))} />
-                      <span className="text-xs text-muted-foreground">min</span>
-                    </div>
-                  </div>
-                  <input className="h-7 border border-border rounded px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-white text-muted-foreground" placeholder="Description (optional)" value={item.description} onChange={e => setAgenda(prev => prev.map((x, j) => j === i ? { ...x, description: e.target.value } : x))} />
-                </div>
-                <button onClick={() => setAgenda(prev => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-red-500 mt-0.5 shrink-0 transition-colors"><X size={14} /></button>
-              </div>
-            </div>
-          ))}
-        </div>
-        <p className="text-xs text-muted-foreground mt-2">Total: {agenda.reduce((sum, a) => sum + a.duration, 0)} minutes</p>
-      </div>
-      <div>
-        <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Notes</label>
-        <textarea className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white resize-none" rows={2} placeholder="Optional meeting notes…" value={notes} onChange={e => setNotes(e.target.value)} />
-      </div>
-      <div className="flex gap-3 pt-2 border-t border-border">
-        <button onClick={handleSave} disabled={saving || !name.trim()} className="flex items-center gap-1.5 text-sm bg-[#6B7EFF] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#5B6EEF] disabled:opacity-50 transition-colors">
-          {saving ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
-          {saving ? 'Saving…' : (initial?.id ? 'Save Changes' : 'Create Meeting')}
-        </button>
-        <button onClick={onCancel} className="text-sm text-muted-foreground hover:text-foreground px-4 py-2 rounded-lg border border-border transition-colors">Cancel</button>
-      </div>
-    </div>
-  );
-}
+const meetingRatings = [8, 9, 8, 10, 9, 8];
 
 function L10Tab({ issues, todos }: { issues: Issue[]; todos: TodoItem[] }) {
-  const [meetings, setMeetings] = useState<Meeting[]>([]);
-  const [loadingMeetings, setLoadingMeetings] = useState(true);
-  const [view, setView] = useState<'list' | 'detail' | 'create' | 'edit'>('list');
-  const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
-  const [activeTimers, setActiveTimers] = useState<Record<number, { running: boolean; elapsed: number }>>({});
-  const [inviteLoading, setInviteLoading] = useState(false);
-  const [inviteResult, setInviteResult] = useState<{ sent: number; failed: number } | null>(null);
-  const timerRefs = useRef<Record<number, ReturnType<typeof setInterval>>>({});
-
-  const openIssues = issues.filter(i => i.status !== 'Resolved');
+  const openIssues = issues.filter(i => i.status !== "Resolved");
   const openTodos = todos.filter(t => !t.done);
 
-  useEffect(() => {
-    const loadMeetings = async () => {
-      try {
-        const res = await fetch('/api/eos/meetings');
-        if (res.ok) {
-          const data = await res.json();
-          setMeetings(Array.isArray(data) ? data : []);
-        }
-      } catch (_) { /* ignore */ }
-      setLoadingMeetings(false);
-    };
-    void loadMeetings();
-  }, []);
-
-  const createMeeting = async (data: Partial<Meeting>) => {
-    const res = await fetch('/api/eos/meetings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (res.ok) {
-      const created = await res.json();
-      setMeetings(prev => [...prev, created]);
-      setView('list');
-    }
-  };
-
-  const updateMeeting = async (data: Partial<Meeting>) => {
-    if (!selectedMeeting) return;
-    const res = await fetch(`/api/eos/meetings/${selectedMeeting.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (res.ok) {
-      const updated = await res.json();
-      setMeetings(prev => prev.map(m => m.id === updated.id ? updated : m));
-      setSelectedMeeting(updated);
-      setView('detail');
-    }
-  };
-
-  const deleteMeeting = async (id: string) => {
-    if (!confirm('Delete this meeting?')) return;
-    const res = await fetch(`/api/eos/meetings/${id}`, { method: 'DELETE' });
-    if (res.ok) {
-      setMeetings(prev => prev.filter(m => m.id !== id));
-      if (selectedMeeting?.id === id) { setSelectedMeeting(null); setView('list'); }
-    }
-  };
-
-  const sendInvites = async () => {
-    if (!selectedMeeting) return;
-    setInviteLoading(true);
-    setInviteResult(null);
-    try {
-      const res = await fetch(`/api/eos/meetings/${selectedMeeting.id}/invite`, { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json() as { sent: number; failed: number };
-        setInviteResult({ sent: data.sent, failed: data.failed });
-        // Refresh the meeting to pick up invited_at
-        const meetingRes = await fetch(`/api/eos/meetings/${selectedMeeting.id}`);
-        if (meetingRes.ok) {
-          const updated = await meetingRes.json() as Meeting & { invited_at?: string };
-          setSelectedMeeting(updated);
-          setMeetings(prev => prev.map(m => m.id === updated.id ? updated : m));
-        }
-      }
-    } catch (_) { /* ignore */ }
-    setInviteLoading(false);
-  };
-
-  const startTimer = (idx: number) => {
-    setActiveTimers(prev => ({ ...prev, [idx]: { running: true, elapsed: prev[idx]?.elapsed ?? 0 } }));
-    timerRefs.current[idx] = setInterval(() => {
-      setActiveTimers(prev => ({ ...prev, [idx]: { ...prev[idx], running: true, elapsed: (prev[idx]?.elapsed ?? 0) + 1 } }));
-    }, 1000);
-  };
-
-  const stopTimer = (idx: number) => {
-    clearInterval(timerRefs.current[idx]);
-    setActiveTimers(prev => ({ ...prev, [idx]: { ...prev[idx], running: false } }));
-  };
-
-  const resetTimer = (idx: number) => {
-    clearInterval(timerRefs.current[idx]);
-    setActiveTimers(prev => ({ ...prev, [idx]: { running: false, elapsed: 0 } }));
-  };
-
-  const fmtTimer = (secs: number) => {
-    const m = Math.floor(secs / 60).toString().padStart(2, '0');
-    const s = (secs % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
-  };
-
-  const formatSchedule = (meeting: Meeting) => {
-    const parts: string[] = [];
-    if (meeting.recurrence && meeting.recurrence !== 'once') parts.push(meeting.recurrence.charAt(0).toUpperCase() + meeting.recurrence.slice(1));
-    if (meeting.day_of_week) parts.push(meeting.day_of_week);
-    if (meeting.time_of_day) {
-      const [h, m] = meeting.time_of_day.split(':');
-      const hour = parseInt(h);
-      const ampm = hour >= 12 ? 'PM' : 'AM';
-      const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
-      parts.push(`at ${displayHour}:${m} ${ampm}`);
-    }
-    return parts.length ? parts.join(' ') : 'No schedule set';
-  };
-
-  if (view === 'list') {
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
+  return (
+    <div className="space-y-4">
+      {/* Next meeting header */}
+      <div className="bg-[#6B7EFF]/5 border border-[#6B7EFF]/20 rounded-xl p-5">
+        <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-base font-bold text-foreground">Meetings</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">Manage your EOS meeting cadence</p>
+            <p className="text-[10px] font-semibold text-[#6B7EFF] uppercase tracking-wider mb-1">Next L10 Meeting</p>
+            <h2 className="text-lg font-bold text-foreground">Friday, May 22, 2026 at 6:00 AM</h2>
+            <div className="flex items-center gap-3 mt-2">
+              <div className="flex items-center gap-1.5">
+                <Users size={13} className="text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Russel Feldman, Nicole Gagliardi</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Clock size={13} className="text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">90 min total</span>
+              </div>
+            </div>
           </div>
-          <button onClick={() => setView('create')} className="flex items-center gap-1.5 text-sm bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5B6EEF] transition-colors font-medium">
-            <Plus size={14} /> New Meeting
-          </button>
+          <div className="text-right">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Last Meeting Ratings</p>
+            <div className="flex items-center gap-1.5 justify-end">
+              {meetingRatings.map((r, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    "w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border",
+                    r >= 9 ? "bg-emerald-50 border-emerald-200 text-emerald-700" :
+                    r >= 7 ? "bg-blue-50 border-blue-200 text-blue-700" :
+                    "bg-amber-50 border-amber-200 text-amber-700"
+                  )}
+                >
+                  {r}
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1">avg: {(meetingRatings.reduce((a, b) => a + b, 0) / meetingRatings.length).toFixed(1)}/10</p>
+          </div>
         </div>
-        {loadingMeetings ? (
-          <div className="flex items-center justify-center py-16"><Loader2 size={24} className="text-[#6B7EFF] animate-spin" /></div>
-        ) : meetings.length === 0 ? (
-          <div className="bg-white border border-border rounded-xl p-12 text-center">
-            <Calendar size={36} className="text-muted-foreground/40 mx-auto mb-3" />
-            <h3 className="text-sm font-semibold text-foreground mb-1">No meetings yet</h3>
-            <p className="text-xs text-muted-foreground mb-4">Create your first L10 or other EOS meeting to get started.</p>
-            <button onClick={() => setView('create')} className="inline-flex items-center gap-1.5 text-sm bg-[#6B7EFF] text-white px-4 py-2 rounded-lg hover:bg-[#5B6EEF] transition-colors font-medium">
-              <Plus size={13} /> Create L10 Meeting
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {meetings.map(meeting => (
-              <div key={meeting.id} className="bg-white border border-border rounded-xl p-5 hover:border-[#6B7EFF]/30 hover:shadow-sm transition-all cursor-pointer group" onClick={() => { setSelectedMeeting(meeting); setView('detail'); setActiveTimers({}); }}>
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-sm font-bold text-foreground">{meeting.name}</h3>
-                    <MeetingTypeBadge type={meeting.meeting_type} />
-                  </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={e => { e.stopPropagation(); setSelectedMeeting(meeting); setView('edit'); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-muted-foreground hover:text-foreground transition-colors"><Edit2 size={13} /></button>
-                    <button onClick={e => { e.stopPropagation(); void deleteMeeting(meeting.id); }} className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors"><Trash2 size={13} /></button>
-                  </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Agenda */}
+        <div className="lg:col-span-2">
+          <h3 className="text-sm font-semibold text-foreground mb-3">Meeting Agenda</h3>
+          <div className="space-y-2">
+            {agendaItems.map((item, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "bg-white border rounded-xl p-4 flex items-start gap-4",
+                  item.highlight
+                    ? "border-[#6B7EFF]/30 bg-[#6B7EFF]/3"
+                    : "border-border"
+                )}
+              >
+                <div className={cn(
+                  "w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0",
+                  item.highlight ? "bg-[#6B7EFF] text-white" : "bg-slate-100 text-slate-600"
+                )}>
+                  <span className="text-sm font-bold leading-none">{item.duration}</span>
+                  <span className="text-[9px] leading-none mt-0.5">min</span>
                 </div>
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Clock size={12} className="shrink-0" />
-                    <span>{formatSchedule(meeting)} · {meeting.duration_minutes} min</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className={cn("text-sm font-semibold", item.highlight ? "text-[#6B7EFF]" : "text-foreground")}>
+                      {item.label}
+                    </p>
+                    {item.highlight && (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#6B7EFF] text-white">
+                        80% of value
+                      </span>
+                    )}
                   </div>
-                  {meeting.attendees.length > 0 && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Users size={12} className="shrink-0" />
-                      <span>{meeting.attendees.map(a => a.name).join(', ')}</span>
-                    </div>
-                  )}
-                  {meeting.agenda.length > 0 && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Target size={12} className="shrink-0" />
-                      <span>{meeting.agenda.length} agenda items · {meeting.agenda.reduce((s, a) => s + a.duration, 0)} min total</span>
-                    </div>
-                  )}
+                  <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
                 </div>
-                <div className="mt-3 pt-3 border-t border-border">
-                  <span className="flex items-center gap-1.5 text-xs text-[#6B7EFF] font-semibold">
-                    <Play size={11} /> Run Meeting →
-                  </span>
+                <div className="flex items-center gap-2">
+                  <button className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5">
+                    <Timer size={12} />
+                    Start
+                  </button>
                 </div>
               </div>
             ))}
           </div>
-        )}
-        {meetings.length > 0 && (
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-white border border-border rounded-xl p-4 text-center">
-              <p className="text-2xl font-bold text-foreground">{openIssues.length}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Open Issues</p>
-            </div>
-            <div className="bg-white border border-border rounded-xl p-4 text-center">
-              <p className="text-2xl font-bold text-foreground">{openTodos.length}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Open To-Dos</p>
-            </div>
-            <div className="bg-white border border-border rounded-xl p-4 text-center">
-              <p className="text-2xl font-bold text-foreground">{meetings.length}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Active Meetings</p>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
+        </div>
 
-  if (view === 'create') {
-    return (
-      <div className="max-w-3xl space-y-4">
-        <div className="flex items-center gap-3">
-          <button onClick={() => setView('list')} className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"><ChevronLeft size={16} /></button>
-          <div>
-            <h2 className="text-base font-bold text-foreground">New Meeting</h2>
-            <p className="text-xs text-muted-foreground">Configure your meeting schedule and agenda</p>
-          </div>
-        </div>
-        <div className="bg-white border border-border rounded-xl p-6">
-          <MeetingForm onSave={createMeeting} onCancel={() => setView('list')} />
-        </div>
-      </div>
-    );
-  }
-
-  if (view === 'edit' && selectedMeeting) {
-    return (
-      <div className="max-w-3xl space-y-4">
-        <div className="flex items-center gap-3">
-          <button onClick={() => setView('detail')} className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"><ChevronLeft size={16} /></button>
-          <div>
-            <h2 className="text-base font-bold text-foreground">Edit Meeting</h2>
-            <p className="text-xs text-muted-foreground">{selectedMeeting.name}</p>
-          </div>
-        </div>
-        <div className="bg-white border border-border rounded-xl p-6">
-          <MeetingForm initial={selectedMeeting} onSave={updateMeeting} onCancel={() => setView('detail')} />
-        </div>
-      </div>
-    );
-  }
-
-  if (view === 'detail' && selectedMeeting) {
-    const agenda = selectedMeeting.agenda ?? [];
-    return (
-      <div className="space-y-4">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={() => setView('list')} className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"><ChevronLeft size={16} /></button>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-foreground">{selectedMeeting.name}</h2>
-                <MeetingTypeBadge type={selectedMeeting.meeting_type} />
+        {/* Live issues + todos for meeting prep */}
+        <div className="space-y-4">
+          <div className="bg-white border border-border rounded-xl p-4">
+            <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+              <span>Issues for This Meeting</span>
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200">
+                {openIssues.length}
+              </span>
+            </h4>
+            {openIssues.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">No open issues.</p>
+            ) : (
+              <div className="space-y-2">
+                {openIssues.map(issue => (
+                  <div key={issue.id} className="flex items-start gap-2">
+                    <PriorityPill priority={issue.priority} />
+                    <p className="text-xs text-foreground flex-1">{issue.description}</p>
+                  </div>
+                ))}
               </div>
-              <p className="text-xs text-muted-foreground mt-0.5">{formatSchedule(selectedMeeting)} · {selectedMeeting.duration_minutes} min</p>
-            </div>
+            )}
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => void sendInvites()}
-              disabled={inviteLoading}
-              className="flex items-center gap-1.5 text-xs bg-[#6B7EFF]/10 text-[#6B7EFF] border border-[#6B7EFF]/20 px-3 py-1.5 rounded-lg hover:bg-[#6B7EFF]/20 transition-colors font-medium disabled:opacity-50"
-            >
-              {inviteLoading ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
-              {inviteLoading ? 'Sending…' : '📧 Send Invites'}
-            </button>
-            <button onClick={() => setView('edit')} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground border border-border px-3 py-1.5 rounded-lg hover:bg-accent transition-colors font-medium">
-              <Edit2 size={12} /> Edit
-            </button>
-          </div>
-        </div>
-        {inviteResult && (
-          <div className={cn('flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium', inviteResult.failed === 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200')}>
-            <CheckCircle2 size={13} />
-            {inviteResult.failed === 0
-              ? `Invites sent to ${inviteResult.sent} attendee${inviteResult.sent !== 1 ? 's' : ''}`
-              : `${inviteResult.sent} sent, ${inviteResult.failed} failed`}
-          </div>
-        )}
-        {(selectedMeeting as Meeting & { invited_at?: string }).invited_at && !inviteResult && (
-          <p className="text-[10px] text-muted-foreground">
-            Last invited: {new Date((selectedMeeting as Meeting & { invited_at?: string }).invited_at!).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
-          </p>
-        )}
-        {selectedMeeting.attendees.length > 0 && (
-          <div className="flex items-center gap-2">
-            <Users size={13} className="text-muted-foreground" />
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {selectedMeeting.attendees.map((a, i) => (
-                <span key={i} className={cn('text-xs border rounded-full px-2.5 py-0.5', a.email ? 'bg-slate-100 border-slate-200 text-foreground' : 'bg-amber-50 border-amber-200 text-amber-700')}>
-                  {a.name}
-                  {!a.email && <span className="ml-1 text-[9px]">(no email)</span>}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <div className="lg:col-span-2 space-y-2">
-            <h3 className="text-sm font-semibold text-foreground">Meeting Agenda</h3>
-            {agenda.length === 0 ? (
-              <div className="bg-white border border-border rounded-xl p-8 text-center">
-                <p className="text-xs text-muted-foreground">No agenda items. <button onClick={() => setView('edit')} className="text-[#6B7EFF] hover:underline">Edit this meeting</button> to add agenda items.</p>
-              </div>
-            ) : agenda.map((item, i) => {
-              const timer = activeTimers[i];
-              const isRunning = timer?.running ?? false;
-              const elapsed = timer?.elapsed ?? 0;
-              const limitSecs = item.duration * 60;
-              const overTime = elapsed > 0 && elapsed > limitSecs;
-              return (
-                <div key={i} className={cn('bg-white border rounded-xl p-4 flex items-start gap-4', item.highlight ? 'border-[#6B7EFF]/30 bg-[#6B7EFF]/3' : 'border-border', overTime && 'border-red-200 bg-red-50/30')}>
-                  <div className={cn('w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0', item.highlight ? 'bg-[#6B7EFF] text-white' : 'bg-slate-100 text-slate-600')}>
-                    <span className="text-sm font-bold leading-none">{item.duration}</span>
-                    <span className="text-[9px] leading-none mt-0.5">min</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className={cn('text-sm font-semibold', item.highlight ? 'text-[#6B7EFF]' : 'text-foreground')}>{item.label}</p>
-                      {item.highlight && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#6B7EFF] text-white">80% of value</span>}
+
+          <div className="bg-white border border-border rounded-xl p-4">
+            <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+              <span>Open To-Dos</span>
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                {openTodos.length}
+              </span>
+            </h4>
+            {openTodos.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">All to-dos complete!</p>
+            ) : (
+              <div className="space-y-2">
+                {openTodos.map(todo => (
+                  <div key={todo.id} className="flex items-start gap-2">
+                    <Circle size={14} className="text-muted-foreground mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs text-foreground">{todo.text}</p>
+                      <p className="text-[10px] text-muted-foreground">{todo.owner} · due {formatDate(todo.due_date)}</p>
                     </div>
-                    {item.description && <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>}
-                    {elapsed > 0 && (
-                      <p className={cn('text-xs font-mono mt-1.5 font-semibold', overTime ? 'text-red-500' : 'text-[#6B7EFF]')}>
-                        {fmtTimer(elapsed)} / {fmtTimer(limitSecs)}{overTime && ' — OVER TIME'}
-                      </p>
-                    )}
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {!isRunning ? (
-                      <button onClick={() => startTimer(i)} className="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 font-medium">
-                        <Play size={11} />{elapsed > 0 ? 'Resume' : 'Start'}
-                      </button>
-                    ) : (
-                      <button onClick={() => stopTimer(i)} className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 px-3 py-1.5 rounded-lg transition-colors font-medium">Pause</button>
-                    )}
-                    {elapsed > 0 && <button onClick={() => resetTimer(i)} className="text-xs text-muted-foreground hover:text-foreground px-2 py-1.5 rounded-lg hover:bg-slate-100 transition-colors">Reset</button>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="space-y-4">
-            <div className="bg-white border border-border rounded-xl p-4">
-              <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                <span>Issues for This Meeting</span>
-                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200">{openIssues.length}</span>
-              </h4>
-              {openIssues.length === 0 ? <p className="text-xs text-muted-foreground italic">No open issues.</p> : (
-                <div className="space-y-2">
-                  {openIssues.map(issue => (
-                    <div key={issue.id} className="flex items-start gap-2">
-                      <PriorityPill priority={issue.priority} />
-                      <p className="text-xs text-foreground flex-1">{issue.description}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="bg-white border border-border rounded-xl p-4">
-              <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                <span>Open To-Dos</span>
-                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">{openTodos.length}</span>
-              </h4>
-              {openTodos.length === 0 ? <p className="text-xs text-muted-foreground italic">All to-dos complete!</p> : (
-                <div className="space-y-2">
-                  {openTodos.map(todo => (
-                    <div key={todo.id} className="flex items-start gap-2">
-                      <Circle size={14} className="text-muted-foreground mt-0.5 shrink-0" />
-                      <div>
-                        <p className="text-xs text-foreground">{todo.text}</p>
-                        <p className="text-[10px] text-muted-foreground">{todo.owner} · due {formatDate(todo.due_date)}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            {selectedMeeting.notes && (
-              <div className="bg-slate-50 border border-border rounded-xl p-4">
-                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Notes</h4>
-                <p className="text-xs text-foreground">{selectedMeeting.notes}</p>
+                ))}
               </div>
             )}
           </div>
         </div>
       </div>
-    );
-  }
 
-  return null;
+      {/* Cadence note */}
+      <div className="bg-slate-50 border border-border rounded-xl p-4">
+        <div className="flex items-start gap-3">
+          <Calendar size={16} className="text-muted-foreground mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-foreground">Weekly Cadence</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Every Friday at 6:00 AM · Attendees: Russel Feldman, Nicole Gagliardi · 90 minutes
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              The L10 is the heartbeat of EOS execution. The meeting is rated every week — a score below 8 means the meeting itself goes on the issues list.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
-
 
 // ─── AI EOS Coach Panel ───────────────────────────────────────────────────────
 
@@ -2783,20 +1823,16 @@ function CoachPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
 const TABS = ["V/TO", "Rocks", "Scorecard", "Issues", "To-Dos", "L10 Meeting"] as const;
 type Tab = typeof TABS[number];
 
-type VTOLens = "global" | "local";
-
 export default function EOSPage() {
   const [activeTab, setActiveTab] = useState<Tab>("V/TO");
   const [coachOpen, setCoachOpen] = useState(false);
-  const [vtoLens, setVtoLens]     = useState<VTOLens>("local");
 
   // ── Live data state ──
   const [rocks, setRocks] = useState<Rock[]>([]);
   const [measurables, setMeasurables] = useState<Measurable[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [todos, setTodos] = useState<TodoItem[]>([]);
-  const [vto, setVto]               = useState<Record<string, unknown> | null>(null); // local (this org)
-  const [globalVto, setGlobalVto]   = useState<Record<string, unknown> | null>(null); // corporate read-only
+  const [vto, setVto] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
 
   // ── Load all data on mount ──
@@ -2805,13 +1841,12 @@ export default function EOSPage() {
 
     const loadAll = async () => {
       try {
-        const [rocksRes, scorecardRes, issuesRes, todosRes, vtoRes, globalVtoRes] = await Promise.all([
+        const [rocksRes, scorecardRes, issuesRes, todosRes, vtoRes] = await Promise.all([
           fetch("/api/eos/rocks"),
           fetch("/api/eos/scorecard"),
           fetch("/api/eos/issues"),
           fetch("/api/eos/todos"),
           fetch("/api/eos/vto"),
-          fetch("/api/eos/vto?scope=global"),
         ]);
 
         const [rocksData, scorecardData, issuesData, todosData] = await Promise.all([
@@ -2820,8 +1855,7 @@ export default function EOSPage() {
           issuesRes.ok ? issuesRes.json() : [],
           todosRes.ok ? todosRes.json() : [],
         ]);
-        const vtoData       = vtoRes.ok       && vtoRes.status       !== 404 ? await vtoRes.json()       : null;
-        const globalVtoData = globalVtoRes.ok && globalVtoRes.status !== 404 ? await globalVtoRes.json() : null;
+        const vtoData = vtoRes.ok && vtoRes.status !== 404 ? await vtoRes.json() : null;
 
         if (!cancelled) {
           setRocks(Array.isArray(rocksData) ? rocksData : []);
@@ -2829,7 +1863,6 @@ export default function EOSPage() {
           setIssues(Array.isArray(issuesData) ? issuesData : []);
           setTodos(Array.isArray(todosData) ? todosData : []);
           setVto(vtoData);
-          setGlobalVto(globalVtoData);
           setLoading(false);
         }
       } catch (err) {
@@ -2869,59 +1902,6 @@ export default function EOSPage() {
       />
 
       <div className="flex-1 p-6 max-w-7xl mx-auto w-full">
-
-        {/* ── Dual-Lens Segmented Control ─────────────────────────────────────── */}
-        <div className="flex items-center justify-center mb-6">
-          <div className="relative flex bg-white border border-border rounded-2xl p-1 shadow-sm gap-1">
-            {/* Animated indicator */}
-            <div
-              className={cn(
-                "absolute top-1 bottom-1 rounded-xl transition-all duration-300 ease-in-out pointer-events-none",
-                vtoLens === "global"
-                  ? "left-1 right-[calc(50%+2px)] bg-[#6B7EFF]"
-                  : "left-[calc(50%+2px)] right-1 bg-[#6B7EFF]"
-              )}
-            />
-            <button
-              onClick={() => setVtoLens("global")}
-              className={cn(
-                "relative z-10 flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors duration-200 min-w-[200px] justify-center",
-                vtoLens === "global" ? "text-white" : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Target size={14} />
-              GateGuard Global Vision
-            </button>
-            <button
-              onClick={() => setVtoLens("local")}
-              className={cn(
-                "relative z-10 flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors duration-200 min-w-[200px] justify-center",
-                vtoLens === "local" ? "text-white" : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Users size={14} />
-              My Dealership V/TO
-            </button>
-          </div>
-        </div>
-
-        {/* Global Vision banner — only shown in global mode */}
-        {vtoLens === "global" && (
-          <div className="mb-5 px-4 py-3 bg-[#6B7EFF]/5 border border-[#6B7EFF]/20 rounded-xl flex items-center gap-3 text-sm text-[#6B7EFF]">
-            <Target size={15} className="shrink-0" />
-            <div>
-              <span className="font-semibold">Viewing GateGuard Corporate Vision </span>
-              <span className="text-[#6B7EFF]/70">— Company-wide Rocks and V/TO set by corporate leadership. Read-only for your dealership.</span>
-            </div>
-            <button
-              onClick={() => setVtoLens("local")}
-              className="ml-auto shrink-0 text-xs bg-[#6B7EFF]/10 hover:bg-[#6B7EFF]/20 px-3 py-1.5 rounded-lg font-semibold transition-colors"
-            >
-              Switch to My V/TO →
-            </button>
-          </div>
-        )}
-
         {/* Tab bar */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-1 bg-white border border-border rounded-xl p-1 w-fit">
@@ -2962,16 +1942,7 @@ export default function EOSPage() {
           </div>
         ) : (
           <>
-            {activeTab === "V/TO"        && (
-              <VTOTab
-                key={vtoLens}
-                rocks={rocks}
-                issues={issues}
-                vtoInit={vtoLens === "global" ? globalVto : vto}
-                readOnly={vtoLens === "global" && !((globalVto as Record<string,unknown>|null)?.org_id === (vto as Record<string,unknown>|null)?.org_id && globalVto !== null && vto !== null)}
-                onSeeAllRocks={() => setActiveTab("Rocks")}
-              />
-            )}
+            {activeTab === "V/TO"        && <VTOTab rocks={rocks} issues={issues} vtoInit={vto} />}
             {activeTab === "Rocks"       && <RocksTab rocks={rocks} setRocks={setRocks} />}
             {activeTab === "Scorecard"   && <ScorecardTab measurables={measurables} setMeasurables={setMeasurables} />}
             {activeTab === "Issues"      && <IssuesTab issues={issues} setIssues={setIssues} />}

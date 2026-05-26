@@ -2,42 +2,50 @@
 
 import { useState, useEffect } from 'react'
 import {
-  Bell, Info, CheckCircle2,
-  Clock, ArrowRight, Shield,
+  Bell, AlertTriangle, Info, CheckCircle2,
+  Clock, ArrowRight, Wrench, Shield, WifiOff,
 } from 'lucide-react'
 
-const { AlertOctagon, AlertTriangle } = require('lucide-react') as any
+const { AlertOctagon, FileWarning, UserPlus, Star } = require('lucide-react') as any
 
 /* ─── Types ──────────────────────────────────────────────────── */
-// Sourced from the incidents table (severity: low | medium | high | critical)
-// Alerts page shows only high + critical incidents (the urgent ones).
-// The "warning" tab maps to "high" severity.
-type TabKey = 'all' | 'critical' | 'high'
+type AlertSeverity = 'critical' | 'warning' | 'info'
+type TabKey = 'all' | AlertSeverity
 
 interface GGAlert {
   id: string
-  severity: string          // low | medium | high | critical
-  status: string            // open | investigating | resolved | closed
+  severity: string
+  event_type: string
   title: string
   description: string | null
-  reported_by: string | null
-  site_id: string | null
+  resolved: boolean
   created_at: string
-  updated_at: string
 }
 
 /* ─── Config ─────────────────────────────────────────────────── */
 const SEVERITY_CONFIG: Record<string, { bar: string; icon: React.ElementType; iconColor: string; label: string }> = {
-  critical: { bar: 'bg-red-500',   icon: AlertOctagon,  iconColor: 'text-red-500',   label: 'Critical' },
-  high:     { bar: 'bg-amber-400', icon: AlertTriangle, iconColor: 'text-amber-500', label: 'High'     },
-  medium:   { bar: 'bg-blue-400',  icon: Info,          iconColor: 'text-blue-500',  label: 'Medium'   },
-  low:      { bar: 'bg-slate-300', icon: Bell,          iconColor: 'text-slate-400', label: 'Low'      },
+  critical: { bar: 'bg-red-500',   icon: AlertOctagon, iconColor: 'text-red-500',   label: 'Critical' },
+  warning:  { bar: 'bg-amber-400', icon: AlertTriangle, iconColor: 'text-amber-500', label: 'Warning'  },
+  info:     { bar: 'bg-blue-400',  icon: Info,          iconColor: 'text-blue-500',  label: 'Info'     },
+}
+
+const EVENT_TYPE_ICONS: Record<string, React.ElementType> = {
+  offline:     WifiOff,
+  online:      CheckCircle2,
+  alert:       AlertOctagon,
+  inspection:  FileWarning,
+  work_order:  Wrench,
+  access:      Shield,
+  visitor:     UserPlus,
+  install:     Star,
+  other:       Bell,
 }
 
 const TABS: Array<{ key: TabKey; label: string }> = [
-  { key: 'all',      label: 'All Alerts' },
-  { key: 'critical', label: 'Critical'   },
-  { key: 'high',     label: 'High'       },
+  { key: 'all',      label: 'All'      },
+  { key: 'critical', label: 'Critical' },
+  { key: 'warning',  label: 'Warnings' },
+  { key: 'info',     label: 'Info'     },
 ]
 
 function timeAgo(iso: string) {
@@ -52,18 +60,18 @@ function timeAgo(iso: string) {
 
 /* ─── Alert row ──────────────────────────────────────────────── */
 function AlertRow({ alert }: { alert: GGAlert }) {
-  const sevCfg  = SEVERITY_CONFIG[alert.severity] ?? SEVERITY_CONFIG.high
-  const isOpen  = alert.status === 'open' || alert.status === 'investigating'
+  const sevCfg  = SEVERITY_CONFIG[alert.severity]  ?? SEVERITY_CONFIG.info
+  const CatIcon = EVENT_TYPE_ICONS[alert.event_type] ?? Bell
 
   return (
-    <div className={`flex items-start gap-0 border-b border-slate-100 last:border-0 transition-colors ${isOpen ? 'bg-blue-50/40' : ''}`}>
+    <div className={`flex items-start gap-0 border-b border-slate-100 last:border-0 transition-colors ${alert.resolved ? '' : 'bg-blue-50/40'}`}>
       <div className={`w-1 self-stretch rounded-l-xl shrink-0 ${sevCfg.bar}`} />
       <div className="flex-1 flex items-start gap-3 px-4 py-3.5">
         <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 mt-0.5">
-          <sevCfg.icon size={14} className="text-slate-500" />
+          <CatIcon size={14} className="text-slate-500" />
         </div>
         <div className="flex-1 min-w-0">
-          {isOpen && (
+          {!alert.resolved && (
             <span className="inline-block w-2 h-2 rounded-full bg-brand-400 mb-1 align-middle mr-1" />
           )}
           <p className="text-sm text-slate-800 leading-snug font-medium">{alert.title}</p>
@@ -78,17 +86,14 @@ function AlertRow({ alert }: { alert: GGAlert }) {
             <span className={`text-xs font-semibold ${sevCfg.iconColor}`}>
               {sevCfg.label}
             </span>
-            {alert.reported_by && (
-              <span className="text-xs text-slate-400">via {alert.reported_by}</span>
-            )}
-            {!isOpen && (
-              <span className="text-xs text-emerald-600 font-medium capitalize">{alert.status}</span>
+            {alert.resolved && (
+              <span className="text-xs text-emerald-600 font-medium">Resolved</span>
             )}
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <a
-            href="/incidents"
+            href="/sites"
             className="flex items-center gap-1 text-xs font-semibold text-brand-400 hover:text-brand-500 transition-colors whitespace-nowrap"
           >
             View <ArrowRight size={11} />
@@ -104,21 +109,20 @@ export default function AlertsPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('all')
   const [alerts, setAlerts]       = useState<GGAlert[]>([])
   const [loading, setLoading]     = useState(true)
-  function loadAlerts() {
-    fetch('/api/incidents?severity=high,critical&limit=50')
+
+  useEffect(() => {
+    fetch('/api/events?alerts=true')
       .then(r => r.json())
-      .then(d => setAlerts(d.incidents ?? []))
+      .then(d => setAlerts(d.events ?? []))
       .catch(() => setAlerts([]))
       .finally(() => setLoading(false))
-  }
-
-  useEffect(() => { loadAlerts() }, [])
+  }, [])
 
   const filtered = alerts.filter(a =>
     activeTab === 'all' ? true : a.severity === activeTab
   )
 
-  const unreadCount = alerts.filter(a => a.status === 'open' || a.status === 'investigating').length
+  const unreadCount = alerts.filter(a => !a.resolved).length
   const tabCount    = (key: TabKey) =>
     key === 'all' ? alerts.length : alerts.filter(a => a.severity === key).length
 
@@ -141,13 +145,6 @@ export default function AlertsPage() {
             Critical and warning events from your properties
           </p>
         </div>
-        <button
-          onClick={loadAlerts}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-200 rounded-lg text-slate-500 hover:border-brand-400 hover:text-brand-400 transition-colors"
-        >
-          <ArrowRight size={12} className="rotate-[-90deg]" />
-          Refresh
-        </button>
       </div>
 
       {/* ── Tabs ──────────────────────────────────────────────── */}

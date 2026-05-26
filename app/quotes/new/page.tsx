@@ -55,7 +55,6 @@ interface QuoteMeta {
   mrr_discount_mode: 'percent' | 'amount';
   deposit_percent: number;
   package_mode: boolean;
-  terms_text?: string;
   opportunity_id?: string;
   rampUp?: boolean;
   rampUpNotes?: string;
@@ -167,35 +166,19 @@ const defaultSurvey: SiteSurvey = {
   },
 };
 
-const DEFAULT_REQUIREMENTS = `INTERNET REQUIREMENTS
-Customer agrees to provide dedicated business-class internet service with a minimum of 25/10 Mbps symmetrical speed at the main network enclosure location. GateGuard equipment requires a stable, persistent connection. Residential or shared internet services are not acceptable. Customer is responsible for maintaining internet service throughout the agreement term.
-
-NETWORK SECURITY
-GateGuard will provide and manage all network equipment included in this proposal. Customer agrees not to alter, reset, or connect unauthorized devices to the GateGuard-managed network. Any changes to network configuration must be approved and performed by GateGuard personnel. Unauthorized modifications void the service agreement.
-
-POWER AND LIGHTING
-Customer is responsible for providing 110V power (GFCI-protected where required by code) at each camera, access control, and gate operator location prior to the installation date. All entry points must have adequate lighting (minimum 1.0 foot-candle at camera height) for proper camera operation. GateGuard is not responsible for electrical work outside the scope of this proposal.
-
-ADDITIONAL REQUIREMENTS
-Any structural modifications including concrete cutting, conduit runs over 50 feet, trenching, or work requiring licensed subcontractors are not included in this proposal and will be billed separately at cost plus 20%. Customer is responsible for obtaining any required permits unless specifically listed as a line item. GateGuard will provide permit documentation upon request.
-
-PM VISIT REQUIRED
-A property management representative must be present on installation day to provide site access, approve gate placement, and sign off on the as-built configuration. Final commissioning and go-live cannot occur without property management sign-off. Failure to have a representative available will result in a rescheduling fee of $250.`;
-
 const defaultMeta: QuoteMeta = {
   title: '', client_name: '', client_email: '', client_phone: '',
   property_name: '', property_address: '',
   notes: '', tax_rate: 0, discount_percent: 0, discount_mode: 'percent' as const, discount_amount: 0,
   mrr_discount: 0, mrr_discount_mode: 'percent' as const,
   deposit_percent: 50, package_mode: false,
-  terms_text: DEFAULT_REQUIREMENTS,
 };
 
 function blankItem(): NewLineItem {
   return {
     _id: `li_${Date.now()}`,
     description: '', qty: 1, unit_price: 0, unit: 'each',
-    is_recurring: false, section_name: 'Infrastructure',
+    is_recurring: false, section_name: 'Equipment',
     item_type: 'equipment', is_optional: false,
     category: 'General', notes: '',
     product_id: null, image_url: null, model_number: null, sku: null, package_tier: null,
@@ -497,7 +480,7 @@ function ItemFormPanel({
     setResults([]);
   }
 
-  const SECTIONS = ['Infrastructure', 'Cameras', 'Wireless & Networking', 'Labor', 'Software / MRR', 'Access Control', 'Materials', 'Equipment', 'Other'];
+  const SECTIONS = ['Equipment', 'Labor', 'Monitoring', 'Urgent Repairs', 'Recommended Work', 'Optional Upgrades'];
   const TYPES    = ['equipment', 'labor', 'monitoring', 'service', 'material'];
   const TIERS    = [{ v: null, l: 'Any Tier' }, { v: 'basic', l: 'Basic' }, { v: 'standard', l: 'Standard' }, { v: 'premium', l: 'Premium' }];
 
@@ -914,7 +897,6 @@ function NewQuotePage() {
           property_name:    meta.property_name || null,
           property_address: meta.property_address || null,
           notes:            surveySow || meta.notes || null,
-          terms_text:       meta.terms_text || DEFAULT_REQUIREMENTS,
           tax_rate:         meta.tax_rate,
           discount_percent: meta.discount_percent,
           deposit_percent:  meta.deposit_percent,
@@ -987,7 +969,6 @@ function NewQuotePage() {
           total_one_time:   totals.setupTotal,
           total_mrr:        totals.monthlyTotal,
           dealer_mrr:       totals.dealerMRR,
-          terms_text:       DEFAULT_REQUIREMENTS,
           client_org_id:    prefilledClientOrgId  || null,
           opportunity_id:   prefilledOpportunityId || null,
         }),

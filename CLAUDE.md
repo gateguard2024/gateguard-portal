@@ -306,72 +306,9 @@ GateGuard is going live. Two parallel Vercel deployments must exist from this po
   - `GateMaintenanceSurvey.enabled` field kept for backwards compat but is now always `true`; no UI toggle.
   - PRICING NOTE (`types/quote.ts`): Gate Operator Service Plan is included (not a billable add-on). Physical Gate Coverage = $250/gate/month (optional add-on).
 
-- **Session additions (May 25 2026) — Sidebar restructure + new pages:**
-- **Sidebar — Business section reordered**: Operating System · Customers · Billing · **Expenses** (new) · **Vendors** · Revenue · Contracts · Renewals · Events · Analytics. Feed/Messages/Incidents removed from Business.
-- **Sidebar — Field & Tech**: Incidents moved to first item (before Tech Tool).
-- **Sidebar — Internal section** (corporate `isCorporate` only, hidden from all other tiers): Playbooks · Cost Tracking. Double-gated: section-level AND item-level checks.
-- **Sidebar — Social panel** (bottom, replaces "Live Integrations"): collapsible section with The Feed (`/feed`), Messages (`/communications`), Email (`/email`, "Soon" badge). State: `socialExpanded`. Label: "Social" with MessageSquare icon.
-- `/expenses` — Expense tracking page: summary cards (This Month · Pending · Parts & Matls · Software), category filter rail, full table with vendor/category/description/tech/amount/status columns, approve/pending status badges. Gated by `showFinancials`.
-- `/email` — NEXUS Email inbox: three-panel layout (folder rail + connected accounts → thread list → thread detail/compose). Gmail OAuth connect flow. Folders: Inbox · Sent · Starred · Archived. Labels: Internal · Quote · Vendor · Compliance · Support. Compose + Reply. Gated by general access.
-- **`app/api/incidents/ingest/route.ts`** — Fixed empty file (was causing `is not a module` Vercel build error). Now a proper POST endpoint for ingesting incidents from external sources (GGSOC bridge, webhooks, hardware alarms).
-- **Service Marketplace** (`/services`) — Enterprise redesign: real provider logos from `/public/logos/` (`att.png`, `directv.png`, `gateguard.png`, `latch.png`, `xfinity.jpg`, `keystone.jpg`, `luxor.jpg`). `ProviderLogo` component with `LOGO_FILES` map handles mixed .png/.jpg extensions; falls back to styled initials if logo missing. Removed all emoji icons. Clean category pills, denser card grid, professional pricing strips modeled on Salesforce AppExchange.
-
-- **Session additions (May 25 2026 — continued) — Sprint 226 + portal polish:**
-- **Sprint 226 complete** — `/eos` To-Dos tab fully rebuilt as Monday.com-style data grid:
-  - Rows grouped by status: Open · In Progress · Blocked · Done (each group collapsible with animated chevron)
-  - Inline cell editing: click any task name / owner / due date / meeting field → input appears → blur or Enter saves via PATCH API
-  - Status chips: clickable dropdown per row (Open / In Progress / Blocked / Done). Selecting "Done" fires PATCH with `done: true`; moving out of Done fires PATCH with `done: false`
-  - Priority chips: High (rose) / Medium (amber) / Low (sky) / none — local state, no DB migration needed
-  - Bulk checkbox select: select-all in header, per-row checkbox. Bulk action bar: "Mark Done" + "Delete"
-  - Overdue highlighting: due dates < today shown in red on non-Done rows
-  - "+ Add item" inline row at bottom of each group; "+ Add To-Do" header button drops into Open group
-- **Reps commission model tiles** — redesigned: removed all `note` description text. Tiles now larger (`rounded-xl border-2 p-5`), rate at `text-3xl font-extrabold`, tier name `text-xs font-semibold`, "per unit / mo" label. 5-col desktop / 2-col mobile grid.
-- **CRM fixes**: Pipeline Flow Bar full width; Open Opportunities sorted newest-first; My Leads "+ Assign" button removed (shows assigned dealer name badge or "Unassigned" chip instead)
-- **Reps API scoping** (`GET /api/reps`): corporate → all; dealer admin tiers → all in org; `sales_partner` → self + direct reports + sub-reports (2 levels) via `clerk_user_id` lookup
-- **New API routes**: `app/api/contracts/route.ts` (GET list + POST create with GG-CTR-XXXXX numbering), `app/api/renewals/route.ts` (GET 90-day expiry bucket), `app/api/training/reset-attempts/route.ts` (POST delete quiz chapters by user)
-
-- **Session additions (May 25 2026 — continued) — EOS bug fixes + L10 meeting attendee system:**
-- **`lib/eos-org.ts`** (NEW) — Centralized helper `resolveEosOrgId(user)`. Corporate admin users (e.g. rfeldman@gateguard.co) have no `org_id` in Clerk `publicMetadata` (predates the org_id requirement). The old null-fallback UUID `'00000000-0000-0000-0000-000000000001'` doesn't exist in `organizations` → FK violation on all EOS INSERTs. Fix: when `user.org_id` is null, query `organizations` by `org_tier='corporate'` and return the real corporate org ID. Applied to all 10 EOS API routes.
-- **EOS Rocks fix** — Rocks were silently failing to save (FK violation). Now uses `resolveEosOrgId` in `app/api/eos/rocks/route.ts` and `app/api/eos/rocks/[id]/route.ts`. Adding a second rock now works.
-- **EOS V/TO lens contamination fix** — `VTOTab` was mounted once; switching between Global/My Dealership lenses didn't remount it, so `useState(() => mergeVTO(vtoInit))` lazy initializer never re-ran — My Dealership edits were PATCHing local data over global data. Fix: `key={vtoLens}` on `<VTOTab>` in `app/eos/page.tsx` forces React to unmount/remount on lens change, re-initializing all state from the new `vtoInit` prop. Global and local are now fully isolated.
-- **`resolveEosOrgId` applied to all EOS routes**: `rocks/route.ts`, `rocks/[id]/route.ts`, `todos/route.ts`, `todos/[id]/route.ts`, `issues/route.ts`, `issues/[id]/route.ts`, `scorecard/route.ts`, `scorecard/[id]/route.ts`, `meetings/route.ts`, `vto/route.ts`
-- **L10 Meeting attendee system** — Full contact picker on MeetingForm:
-  - Fetches `GET /api/eos/meetings/attendee-suggestions` on mount → merged list from `technicians` + `organizations` (by primary_email), max 50, sorted by name
-  - Search input with client-side filtering by name/email
-  - Dropdown with source badges (🔧 Technician / 🏢 Org / ✏️ Custom)
-  - Click-to-add with email dedup; custom attendee entry with inline email field
-  - Amber `(no email)` indicator on chips for attendees without an email address
-- **L10 Meeting "Send Invites" button** — on L10Tab meeting detail view:
-  - `POST /api/eos/meetings/[id]/invite` → loads attendees, filters to those with email, builds universal `.ics` VCALENDAR string, sends via Resend with base64 `.ics` attachment
-  - DTSTART resolved from: `next_meeting_at` → parse `time_of_day` on today's/next occurrence → fallback to tomorrow 9am UTC
-  - Duration from `duration_minutes` field on meeting
-  - Stores `invited_at` timestamp on meeting record (non-blocking PATCH)
-  - Returns `{ sent, failed, skipped }` counts + per-attendee result array
-  - UI: `inviteLoading` state, success/failure banner, "Last invited: …" timestamp display
-- **`lib/email-sender.ts` updated** — Added `EmailAttachment` interface (`{ filename: string; content: string }`) and optional `attachments?: EmailAttachment[]` to `SendEmailOptions`. Passed through to Resend payload when present. Used by meeting invite route for `.ics` files.
-- **New API routes**: `app/api/eos/meetings/attendee-suggestions/route.ts` (GET — merged contacts from technicians + orgs), `app/api/eos/meetings/[id]/invite/route.ts` (POST — send .ics calendar invites via Resend)
-
-- **Session additions (May 25 2026 — continued) — Per-tech access codes for /tech field tool:**
-- **Migration 089** (`supabase/migrations/089_tech_codes.sql`) — adds `tech_code text UNIQUE` + `tech_code_generated_at timestamptz` to both `technicians` and `organizations` tables. Indexes on both. `generate_tech_code()` SQL function: 8-char alphanumeric, no ambiguous chars (no O/0/I/1/L). Run on beta before pushing to prod.
-- **`lib/tech-auth.ts`** (NEW) — `validateTechCode(code)` async helper. Priority: (1) per-tech code in `technicians.tech_code` → returns `{ valid, techId, techName, orgId, level: 'tech' }`, (2) per-org code in `organizations.tech_code` → returns `{ valid, orgId, level: 'org' }`, (3) global `TECH_ACCESS_CODE` env var → returns `{ valid: true, level: 'global' }`. Also exports `generateTechCodeLocal()` for JS-side code generation.
-- **`/api/kb/products` updated** — now uses `validateTechCode()` instead of inline env var check. When per-tech code matches, response includes `{ techId, techName, orgId, authLevel }` so the frontend can auto-identify without an identity picker screen.
-- **`app/tech/page.tsx` login persistence fix** — switched `sessionStorage` → `localStorage` for `gg_tech_code`. Codes now survive tab close / browser restart. When API returns `techId + techName` from a per-tech code, identity is auto-set in localStorage and the identity picker screen is skipped entirely.
-- **`/api/technicians/[id]/generate-code/route.ts`** (NEW) — `POST /api/technicians/[id]/generate-code`. Generates a unique 8-char code, updates `technicians.tech_code + tech_code_generated_at`, returns `{ tech_code, name }`. Requires Clerk auth.
-- **`/api/organizations/[id]/generate-tech-code/route.ts`** (NEW) — Same for per-org (dealer-level) codes. `POST /api/organizations/[id]/generate-tech-code`.
-- **`/dispatch` page updated** — `Tech` interface gains `tech_code?: string | null`. `TechRow` component gains `onGenerateCode` prop. Access code shown as a monospace chip (select-all to copy) below the tech's name. On hover: `↻` regenerate button if code exists, `+ Generate access code` link if not. `handleGenerateCode()` calls the new API and updates local state optimistically.
-- **`/api/dispatch` route** — `tech_code` added to Supabase select + response mapping so the roster page always loads with current codes.
-- **PIN screen copy updated** — "PERSONAL CODES: GET FROM YOUR DEALER PORTAL / DEALER CODE: ASSIGNED BY GATEGUARD" (two-line hint at bottom of PIN card).
-
-- **Session additions (May 26 2026) — KB wiring + User Manual v10:**
-- **GateGuard NEXUS User Manual v10** — `GateGuard_NEXUS_User_Manual_v10.docx` updated with per-tech login system changes: Section 12 intro updated ("personal 8-character access code... persists across sessions"), Section 12.1 "Accessing /tech" rewritten with new code instructions, new Section 12.1.1 "Per-Tech Access Codes" inserted (how dealers generate codes from /dispatch, how techs experience it — auto-identity, single entry, three-tier code hierarchy: per-tech → per-org → global). PDF version: `tmp/GateGuard_NEXUS_User_Manual_v10.pdf`.
-- **`/api/kb/bulk-find-manuals`** (NEW) — `POST /api/kb/bulk-find-manuals`. Batch auto-finds + embeds manuals for all products where `manual_url IS NULL`. Body params: `brand` (filter to specific brand), `limit` (default 50), `dry_run` (list products without processing). Uses same two-pass strategy as single `find-manual`: known URL patterns → Claude AI search. Returns `{ processed, found, not_found, errors, results[] }` per product. `maxDuration: 300` (5-min batch job).
-- **`scripts/seed-kb.mjs`** (NEW) — Comprehensive KB seeder runnable locally. Three tasks in sequence: (1) import GateGuard NEXUS User Manual as searchable `GG-NEXUS-PORTAL` product entry — creates product if missing, uploads PDF to Supabase Storage, chunks + embeds; (2) auto-find + embed DoorKing manuals (priority brand); (3) auto-find + embed all remaining products missing manuals. CLI flags: `--dry-run`, `--manual-only`, `--auto-only`, `--brand <name>`. Usage: `npx dotenv -e .env.local -- node scripts/seed-kb.mjs`. PDF candidates checked: `./tmp/`, `~/Desktop/Claude/`, `/tmp/`.
-- **`tmp/`** added to `.gitignore` — local PDFs + temp seeding files not committed.
-- **Migration 089 reminder** — `supabase/migrations/089_tech_codes.sql` must be run on beta Supabase before the per-tech code system works. Adds `tech_code` + `tech_code_generated_at` to `technicians` and `organizations`.
-
 - **Sprint 6 additions (May 22 2026) — Design Section + Service Marketplace:**
 - **Sidebar** — NEXUS primary brand mark (large, blue), "by GateGuard" subtitle confirmed. New **Design** section added between Field & Tech and Security with 4 items: Floor Plans, System Design, As-Builts, E-Sign. Permission: `showDesign` = corporate | master_dealer | full_dealer | install_contractor | service_dealer.
-- `/services` — **Service Marketplace** first built: 22 services across 10 categories (TV, Internet, Video Monitoring, Package Lockers, Access Control, Smart Locks, Security, Network, Energy). Migration 070 backs the DB schema (service_catalog, dealer_service_enrollments, site_service_subscriptions).
+- `/services` — **Service Marketplace** fully rebuilt: 22 services across 10 categories (TV, Internet, Video Monitoring, Package Lockers, Access Control, Smart Locks, Security, Network, Energy). Two-column layout: `w-56` left rail with vertical category nav (emoji + count badges) + MRR estimator widget anchored at bottom. Main area: search bar + featured strip + responsive card grid. Cards have `p-6` padding, pricing in gray inset block, enrollment toggle. Enrollment summary table at bottom. Migration 070 backs the DB schema (service_catalog, dealer_service_enrollments, site_service_subscriptions).
 - **Browse Services in quote builder**: `ServicePickerPanel` added to `/quotes/new` (both line-item and wizard modes) + `SvcPickerPanel` in `/quotes/[id]` (POSTs directly to API). Both panels have 18-service catalog, category tabs, search, MRR/commission estimates. Services drop in as recurring line items in "Recurring Services" section.
 - `/design/floor-plans` — **Bluebeam + System Surveyor + D-Tools hybrid**. Full interactive canvas tool with 3 modes: **Survey** (System Surveyor — place devices from 20-device library, set condition/action/notes), **Design** (D-Tools — click-to-connect devices, cable type/length/terminal form, SVG connection lines color-coded by cable type), **Markup** (Bluebeam — text annotations via SVG layer). Left dark navy panel: category-grouped device library (survey mode) / device list for connecting (design mode) / annotation tools (markup mode). Drag-to-reposition devices. BOM auto-generated from placed devices. Right panel: device properties form (survey) / wire schedule table (design). Connection form modal: cable type, length, from/to terminal. Export PDF + Share Link. 2 demo properties preloaded (Sunset Commons, Riverview Apts). New plan creation modal. Key data: `DEVICE_TYPES` (20 types across 7 categories), `DEMO_PLANS` with devices + connections.
 - `/design/system` — Wire schedule + I/O block diagram. Wire Schedule tab: table (From Device → Terminal → Cable → Length → Terminal → To Device). I/O Diagram tab: SVG auto-layout block diagram with device boxes + annotated connection arrows. BOM table at bottom.
@@ -664,20 +601,20 @@ Two recurring line item types per property:
 - `/quotes/[id]/proposal` — Customer-facing proposal view
 - `/quotes/[id]/approve` — **CLIENT-FACING** approval page (no auth/sidebar). Property managers approve/decline via signed token link. Full-screen branded standalone page. (Route uses `[id]` segment — same level as `[id]/proposal`.)
 
-### Business (sidebar section order: Operating System → Customers → Billing → Expenses → Vendors → Revenue → Contracts → Renewals → Events → Analytics)
-- `/eos` — EOS Operating System (Rocks, Scorecard, Issues, To-Dos, L10)
-- `/customers` — Customer accounts with org hierarchy
+### Revenue & Billing
 - `/billing` — Invoices + QuickBooks sync, MRR tracking
-- `/expenses` — Expense tracking: summary cards, category filter rail, vendor/amount/status table. Gated: showFinancials.
-- `/vendors` — Vendor management and POs
+- `/renewals` — Contract renewal tracking + alerts
 - `/revenue` — MRR trends, ARR, commission dashboard
 - `/contracts` — Contract storage
-- `/renewals` — Contract renewal tracking + alerts
-- `/events` — Property event log (polished placeholder with demo data)
-- `/analytics` — Analytics dashboard (polished placeholder with demo data)
 
-### Field & Tech (sidebar section — Incidents is first item)
-- `/incidents` — Incident tracker with Acknowledge workflow. First item in Field & Tech nav.
+### Operations
+- `/events` — Property event log (polished placeholder with demo data)
+- `/incidents` — Incident tracker (polished placeholder with demo data)
+- `/analytics` — Analytics dashboard (polished placeholder with demo data)
+- `/documents` — Document library (polished placeholder with demo data)
+- `/alerts` — Alert center (polished placeholder with demo data)
+
+### Field Service
 - `/maintenance` — Work orders: open, in-progress, scheduled, completed
 - `/dispatch` — Job dispatch board, tech roster
 - `/inventory` — Warehouse stock, van stock, POs
@@ -694,18 +631,14 @@ Two recurring line item types per property:
 - `/access` — Brivo access control, credentials
 - `/network` — UniFi infrastructure, VLAN management
 
-### Social (sidebar bottom panel — replaces "Live Integrations")
-- `/feed` — The Feed: team wins, challenges, leaderboard
-- `/communications` — Messages: team channels + DMs
-- `/email` — NEXUS Email: three-panel inbox (folder rail + thread list + compose). Gmail/Outlook connect. Folders: Inbox · Sent · Starred · Archived. Labels: Internal · Quote · Vendor · Compliance · Support.
-
 ### Platform & Tools
 - `/kb` — AI diagnostic engine (vector search + Claude)
-- `/tech` — Field diagnostic tool v10 (see /tech section below)
+- `/tech` — Field diagnostic tool v4 (see /tech section below)
 - `/trinity` — TRINITY voice AI dashboard: live call monitoring, call history, sentiment scores, outcome tracking. Dark two-tone UI matching /tech.
 - `/portal` — Customer portal (property manager read-only)
 - `/survey` — Site survey tool (DVI enhancement planned)
 - `/onboarding` — Customer onboarding
+- `/communications` — Internal messaging
 - `/visitor` — Visitor management
 - `/products` — Equipment catalog (tags, field_service toggle, PDF manual upload)
 - `/energy` — Energy monitoring
@@ -716,10 +649,6 @@ Two recurring line item types per property:
 - `/marketing/dealer-social` — Dealer network content
 - `/marketing/coop` — Co-op lead pool
 - `/marketing/website` — Dealer hosted landing pages
-
-### Internal (corporate `isCorporate` only — hidden from all other tiers)
-- `/playbooks` — Step-by-step integration guides (GateGuard Corporate Admin + Tech Onboarding)
-- `/admin/costs` — Cost Tracking: infra costs, unit economics, dealer P&L
 
 ### Auth
 - `/sign-in/[[...sign-in]]` — Clerk sign-in (dark theme, GateGuard branded)
@@ -877,9 +806,6 @@ Note: `/reps`, `/compliance`, `/scorecard`, `/map`, `/reports` are placeholder U
 | `app/api/kb/parse-survey-transcript/route.ts` | Accepts a Plaud voice transcript or typed site walk notes → Claude Haiku → extracts structured SurveyDevice[] list (name, brand, model, location, condition, action, notes) + auto-detects property name. Auth: x-tech-code. |
 | `app/api/plaud/transcribe/route.ts` | Native Plaud API integration. Accepts multipart audio file (m4a/mp3/wav/etc) → uploads to Supabase Storage → submits to Plaud transcription API → polls until complete → returns transcript text. Auth: x-tech-code. Env: PLAUD_CLIENT_ID, PLAUD_SECRET_KEY. |
 | `app/api/kb/resolve/route.ts` | Resolution capture + learning loop. Updates troubleshoot_sessions.resolved + embeds kb_article from symptom+history+fix note. Auth: x-tech-code. |
-| `lib/tech-auth.ts` | `validateTechCode(code)` — three-tier auth for /tech: per-tech DB code → per-org DB code → global TECH_ACCESS_CODE env var. Returns `{ valid, techId?, techName?, orgId?, level }`. Also exports `generateTechCodeLocal()` for JS code generation. |
-| `app/api/technicians/[id]/generate-code/route.ts` | POST — generates unique 8-char alphanumeric access code for a technician, writes to `technicians.tech_code`. Returns `{ tech_code, name }`. |
-| `app/api/organizations/[id]/generate-tech-code/route.ts` | POST — same for per-dealer/org codes, writes to `organizations.tech_code`. |
 
 ### Survey + Quotes
 | File | Purpose |
@@ -901,7 +827,7 @@ Note: `/reps`, `/compliance`, `/scorecard`, `/map`, `/reports` are placeholder U
 ### Portal pages
 | File | Purpose |
 |------|---------|
-| `components/layout/Sidebar.tsx` | Navigation. 9 sections: Dashboard · Sales · Business · Field & Tech · Design · Security · Dealer Network · Internal (corporate-only) · Settings. Bottom: Social panel (Feed/Messages/Email). `isCorporate` gate on Internal section. Business order: OS → Customers → Billing → Expenses → Vendors → Revenue → Contracts → Renewals → Events → Analytics. Incidents is first item in Field & Tech. |
+| `components/layout/Sidebar.tsx` | Navigation. Add new routes here. Events/Incidents/Analytics/Documents/Alerts added under Operations. TRINITY link points to `/trinity`. |
 | `app/reps/page.tsx` | Rep hierarchy + commission tracker (placeholder data) |
 | `app/compliance/page.tsx` | Permit tracker (placeholder data) |
 | `app/map/page.tsx` | Territory map (placeholder, needs Mapbox) |
@@ -914,50 +840,13 @@ Note: `/reps`, `/compliance`, `/scorecard`, `/map`, `/reports` are placeholder U
 | `app/analytics/page.tsx` | Polished placeholder page with demo analytics data |
 | `app/alerts/page.tsx` | Polished placeholder page with demo alerts data |
 | `app/trinity/page.tsx` | Full TRINITY voice AI dashboard — dark two-tone style matching /tech. Shows live calls, call history, sentiment scores, outcome tracking. |
-| `app/expenses/page.tsx` | Expense tracking page — summary cards, category filter, vendor table with approve/pending status. |
-| `app/email/page.tsx` | NEXUS Email inbox — three-panel (folders + thread list + compose). Gmail/Outlook connect. |
-| `public/logos/` | Provider logos for Service Marketplace: `att.png`, `directv.png`, `gateguard.png`, `latch.png`, `xfinity.jpg`, `keystone.jpg`, `luxor.jpg`. Mixed .png/.jpg — always use the `LOGO_FILES` map in `app/services/page.tsx` to resolve filenames. |
-| `app/api/incidents/ingest/route.ts` | POST endpoint for ingesting incidents from external sources (GGSOC bridge, hardware alarms, webhooks). Was an empty file — fixed May 25 2026. |
 
 ### Email + Dealer Onboarding
 | File | Purpose |
 |------|---------|
 | `lib/email-templates.ts` | 7 HTML email generator functions: dealer welcome, NDA, agreement, work order, quote approval, permit renewal, invoice. Dark navy `#0B1728` header, `#6B7EFF` CTA button. |
-| `lib/email-sender.ts` | `sendEmail()` utility wrapping Resend — never throws, safe fire-and-forget. Supports optional `attachments: [{ filename, content }]` array for `.ics` files etc. |
+| `lib/email-sender.ts` | `sendEmail()` utility wrapping Resend — never throws, safe fire-and-forget. |
 | `app/api/admin/dealers/send-docs/route.ts` | POST → auto-sends NDA + Agreement emails when a new dealer is created. Tier→doc mapping: master_agent/master_dealer → NDA-A, full_dealer/service_dealer/install_contractor → NDA-B, sales_partner → NDA-C. |
-
-### Tech Auth + Per-Tech Codes
-| File | Purpose |
-|------|---------|
-| `lib/tech-auth.ts` | `validateTechCode(code)` — three-tier auth: per-tech (technicians.tech_code) → per-org (organizations.tech_code) → global env var. Returns `{ valid, techId, techName, orgId, level }`. Also exports `generateTechCodeLocal()`. |
-| `app/api/technicians/[id]/generate-code/route.ts` | POST — generate unique 8-char code for a tech. Updates tech_code + tech_code_generated_at. Requires Clerk auth. |
-| `app/api/organizations/[id]/generate-tech-code/route.ts` | POST — same for per-dealer org-level access codes. |
-| `supabase/migrations/089_tech_codes.sql` | Adds tech_code + tech_code_generated_at to technicians + organizations. Adds generate_tech_code() SQL function. **MUST RUN ON BETA BEFORE PUSHING TECH AUTH CHANGES.** |
-
-### Knowledge Base Seeding + Bulk Import
-| File | Purpose |
-|------|---------|
-| `app/api/kb/bulk-find-manuals/route.ts` | POST — batch auto-find + embed manuals for all products where manual_url IS NULL. Body: `{ brand?, limit?, dry_run? }`. Returns per-product results. maxDuration: 300s. |
-| `scripts/seed-kb.mjs` | Local Node.js seeder. Task 1: import GateGuard NEXUS User Manual as GG-NEXUS-PORTAL product entry. Task 2: DoorKing auto-find. Task 3: all remaining missing manuals. Flags: `--dry-run`, `--manual-only`, `--auto-only`, `--brand`. Usage: `npx dotenv -e .env.local -- node scripts/seed-kb.mjs`. |
-| `tmp/GateGuard_NEXUS_User_Manual_v10.pdf` | PDF version of v10 manual for KB seeding. Regenerate: `soffice --headless --convert-to pdf GateGuard_NEXUS_User_Manual_v10.docx --outdir ./tmp/`. Gitignored. |
-
-### EOS (Entrepreneurial Operating System)
-| File | Purpose |
-|------|---------|
-| `lib/eos-org.ts` | `resolveEosOrgId(user)` — resolves the correct org_id for EOS operations. Corporate admin users whose Clerk `publicMetadata.org_id` is null get looked up by `org_tier='corporate'`. Applied to all 10 EOS API routes to fix FK violations. |
-| `app/api/eos/rocks/route.ts` | GET (list) + POST (create). Uses `resolveEosOrgId`. |
-| `app/api/eos/rocks/[id]/route.ts` | PATCH + DELETE by id. Uses `resolveEosOrgId` for org scoping. |
-| `app/api/eos/todos/route.ts` | GET + POST. Uses `resolveEosOrgId`. |
-| `app/api/eos/todos/[id]/route.ts` | PATCH + DELETE. Uses `resolveEosOrgId`. |
-| `app/api/eos/issues/route.ts` | GET + POST. Uses `resolveEosOrgId`. |
-| `app/api/eos/issues/[id]/route.ts` | PATCH + DELETE. Uses `resolveEosOrgId`. |
-| `app/api/eos/scorecard/route.ts` | GET + POST. Uses `resolveEosOrgId`. |
-| `app/api/eos/scorecard/[id]/route.ts` | PATCH + DELETE. Uses `resolveEosOrgId`. |
-| `app/api/eos/vto/route.ts` | GET (local + global scope) + PATCH. Uses `resolveEosOrgId` for local scope; global scope looks up `org_tier='corporate'` directly. |
-| `app/api/eos/meetings/route.ts` | GET + POST. Uses `resolveEosOrgId`. Default L10 agenda seeded on create. |
-| `app/api/eos/meetings/[id]/route.ts` | GET + PATCH + DELETE by meeting id. |
-| `app/api/eos/meetings/attendee-suggestions/route.ts` | GET — returns merged contact list from `technicians` + `organizations` (by primary_email), max 50, sorted by name. Used by meeting form contact picker. |
-| `app/api/eos/meetings/[id]/invite/route.ts` | POST — sends `.ics` calendar invites to all meeting attendees with email via Resend. Builds VCALENDAR string, base64-encodes, sends as attachment. Stores `invited_at` on meeting record. Returns `{ sent, failed, skipped }`. |
 
 ### TRINITY Voice AI
 | File | Purpose |

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { resolveEosOrgId } from '@/lib/eos-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,7 +11,7 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     const user = await getCurrentUser()
-    const orgId = await resolveEosOrgId(user)
+    const orgId = user.org_id ?? '00000000-0000-0000-0000-000000000001'
 
     const { data, error } = await supabase
       .from('eos_todos')
@@ -37,7 +36,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser()
-    const orgId = await resolveEosOrgId(user)
+    const orgId = user.org_id ?? '00000000-0000-0000-0000-000000000001'
     const body = await req.json()
 
     const { text, owner, due_date, meeting } = body
@@ -63,23 +62,6 @@ export async function POST(req: NextRequest) {
       console.error('[/api/eos/todos POST]', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
-
-    // Cross-post to main todos table (fire-and-forget)
-    void (async () => {
-      try {
-        await supabase.from('todos').insert({
-          org_id: orgId,
-          title: text,
-          assigned_to_name: owner ?? '',
-          due_date: due_date ?? null,
-          status: 'open',
-          priority: 'medium',
-          linked_type: 'eos_l10',
-          linked_id: data.id,
-          created_by: user.id ?? '',
-        })
-      } catch (_) { /* non-blocking */ }
-    })()
 
     return NextResponse.json(data, { status: 201 })
   } catch (err) {

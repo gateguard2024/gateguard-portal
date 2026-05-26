@@ -12,7 +12,7 @@ import {
   Layers, Server, UserCheck, ShieldCheck, Star,
   GraduationCap, Crosshair, Activity,
   User, RefreshCw, Wrench as TechIcon,
-  ClipboardCheck, Building2, DollarSign, Mail,
+  ClipboardCheck, Building2, DollarSign,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, Tv: Satellite, Flame, Hash, Ruler, PenTool, MousePointer, FileSignature, HardHat, Trophy } = require("lucide-react") as any;
@@ -41,9 +41,8 @@ type NavSection = {
 };
 
 // ─── Navigation Architecture ──────────────────────────────────────────────────
-// 9 primary sections: Dashboard · Sales · Business · Field & Tech · Design
-//                     Security · Dealer Network · Internal (corporate-only) · Settings
-// Intelligence removed — all AI agents live in the AI Army panel above nav
+// 8 primary sections matching the sketch: Dashboard · Operations · Field & Tech
+// Security · Dealer Network · Intelligence · Money · Settings
 
 const NAV_SECTIONS: NavSection[] = [
   {
@@ -56,32 +55,18 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    key: "sales",
-    label: "Sales",
-    icon: TrendingUp,
-    color: "#059669",
-    items: [
-      { label: "CRM",                  href: "/crm",      icon: MessageSquare, description: "Leads, opportunities, pipeline" },
-      { label: "Quotes",               href: "/quotes",   icon: FileText,      description: "Proposals and approvals" },
-      { label: "Service Marketplace",  href: "/services", icon: Package,       description: "TV, internet, video monitoring & more", badge: "New" },
-      { label: "Reps & Commissions",   href: "/reps",     icon: UserCheck,     description: "Rep hierarchy and payouts" },
-    ],
-  },
-  {
-    key: "business",
-    label: "Business",
+    key: "operations",
+    label: "Operations",
     icon: ClipboardList,
-    color: "#0891B2",
     items: [
-      { label: "Operating System", href: "/eos",       icon: Layers,         description: "EOS — Rocks, Scorecard, L10" },
+      { label: "CRM",              href: "/crm",       icon: MessageSquare,  description: "Leads, opportunities, pipeline" },
       { label: "Customers",        href: "/customers", icon: Users,          description: "All customer accounts" },
-      { label: "Billing",          href: "/billing",   icon: CreditCard,     description: "Invoices and payments" },
-      { label: "Expenses",         href: "/expenses",  icon: DollarSign,     description: "Expense tracking and reporting", badge: "New" },
-      { label: "Vendors",          href: "/vendors",   icon: Building2,      description: "Vendor management and POs" },
-      { label: "Revenue",          href: "/revenue",   icon: TrendingUp,     description: "MRR/ARR dashboard" },
-      { label: "Contracts",        href: "/contracts", icon: FileCheck,      description: "Contract storage" },
-      { label: "Renewals",         href: "/renewals",  icon: Repeat,         description: "Contract renewals and alerts" },
+      { label: "Quotes",           href: "/quotes",    icon: FileText,       description: "Proposals and approvals" },
+      { label: "Operating System", href: "/eos",       icon: Layers,         description: "EOS — Rocks, Scorecard, L10" },
+      { label: "The Feed",         href: "/feed",      icon: Flame,          description: "Team wins, challenges, leaderboard", badge: "New" },
+      { label: "Messages",         href: "/communications", icon: Hash,      description: "Team messaging — channels + DMs", badge: "Soon" },
       { label: "Events",           href: "/events",    icon: Calendar,       description: "Property events and milestones" },
+      { label: "Incidents",        href: "/incidents", icon: AlertOctagon,   description: "Gate failures, security events" },
       { label: "Analytics",        href: "/analytics", icon: BarChart3Icon,  description: "MRR trends, property health" },
     ],
   },
@@ -90,7 +75,6 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Field & Tech",
     icon: TechIcon,
     items: [
-      { label: "Incidents",      href: "/incidents",   icon: AlertOctagon,   description: "Gate failures, security events" },
       { label: "Tech Tool",      href: "/tech",        icon: Zap,            description: "AI field diagnostic tool",   badge: "AI" },
       { label: "Knowledge Base", href: "/kb",          icon: BookOpen,       description: "Articles and manuals" },
       { label: "Products",       href: "/products",    icon: Package,        description: "Equipment catalog" },
@@ -101,7 +85,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Site Survey",    href: "/survey",      icon: ClipboardCheck, description: "Site walk and proposal builder" },
       { label: "Documents",      href: "/documents",   icon: FolderOpen,     description: "Agreements, permits, manuals" },
       { label: "Reports",        href: "/reports",     icon: BarChart3Icon,  description: "Multi-site rollup" },
-      { label: "Subcontractor",  href: "/subcontractor", icon: HardHat,      description: "Subcontractor work orders and docs" },
+      { label: "Subcontractors", href: "/subcontractors", icon: Users,         description: "Manage subcontractors, compliance & WO access" },
     ],
   },
   {
@@ -139,18 +123,38 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Territory Map",    href: "/map",           icon: Map,          description: "Property pins by health status" },
       { label: "Scorecard",        href: "/scorecard",     icon: Star,         description: "Dealer performance metrics" },
       { label: "Quests",           href: "/quests",        icon: Trophy,       description: "Time-boxed challenges and tier points", badge: "New" },
-      { label: "Reviews",          href: "/reviews",       icon: Star,         description: "Post-WO ratings and Google reviews" },
+      { label: "Reviews",           href: "/reviews",      icon: Star,         description: "Post-WO ratings and Google reviews" },
       { label: "Training",         href: "/training",      icon: GraduationCap,description: "Courses and certifications" },
     ],
   },
   {
-    key: "internal",
-    label: "Internal",
-    icon: ShieldCheck,
+    key: "intelligence",
+    label: "Intelligence",
+    icon: Zap,
     color: "#6B7EFF",
     items: [
-      { label: "Playbooks",      href: "/playbooks",          icon: BookOpen,      description: "Step-by-step integration guides" },
-      { label: "Cost Tracking",  href: "/admin/costs",        icon: BarChart3Icon, description: "Infra costs, unit economics, dealer P&L" },
+      { label: "ARIA — Lead Intel",  href: "/aria",       icon: Crosshair,      description: "AI lead research and outreach",     badge: "AI" },
+      { label: "TRINITY — Voice AI", href: "/trinity",    icon: Phone,          description: "Voice agent + call analytics",      badge: "AI" },
+      { label: "DirecTV / ATLAS",    href: "/directv",    icon: Satellite,      description: "DirecTV channel and orders" },
+      { label: "New Order",          href: "/orders/new", icon: Zap,            description: "Submit a DirecTV order" },
+      { label: "SARA Bridge",        href: "/migrate",    icon: ArrowRightLeft, description: "Migrate from SARA Plus" },
+      { label: "Marketing Hub",      href: "/marketing",  icon: Megaphone,      description: "Campaigns and content" },
+      { label: "Dealer Sites",       href: "/marketing/website", icon: Globe,   description: "Hosted dealer landing pages" },
+      { label: "Co-op Pool",         href: "/marketing/coop",    icon: Users,   description: "Shared lead pool" },
+    ],
+  },
+  {
+    key: "money",
+    label: "Money",
+    icon: DollarSign,
+    color: "#059669",
+    items: [
+      { label: "Service Marketplace",  href: "/services", icon: Package,      description: "TV, internet, video monitoring & more", badge: "New" },
+      { label: "Billing",            href: "/billing",  icon: CreditCard,   description: "Invoices and payments" },
+      { label: "Revenue",            href: "/revenue",  icon: TrendingUp,   description: "MRR/ARR dashboard" },
+      { label: "Reps & Commissions", href: "/reps",     icon: UserCheck,    description: "Rep hierarchy and payouts" },
+      { label: "Renewals",           href: "/renewals", icon: Repeat,       description: "Contract renewals and alerts" },
+      { label: "Contracts",          href: "/contracts",icon: FileCheck,    description: "Contract storage" },
     ],
   },
   {
@@ -158,12 +162,13 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Settings",
     icon: Settings,
     items: [
-      { label: "Company Setup",   href: "/onboarding",              icon: Building2,     description: "Company info, logo, integrations" },
-      { label: "Subscription",    href: "/settings/subscription",   icon: CreditCard,    description: "Plan, add-ons, billing" },
-      { label: "Organizations",   href: "/admin",                   icon: Network,       description: "5-tier org hierarchy" },
-      { label: "User Management", href: "/admin/users",             icon: UserCog,       description: "Roles and access control" },
-      { label: "Notifications",   href: "/alerts",                  icon: Bell,          description: "Alerts and notification preferences" },
-      { label: "Customer Portal", href: "/portal",                  icon: Globe,         description: "Property manager view" },
+      { label: "Company Setup",   href: "/onboarding",              icon: Building2,  description: "Company info, logo, integrations" },
+      { label: "Subscription",    href: "/settings/subscription",   icon: CreditCard, description: "Plan, add-ons, billing" },
+      { label: "Cost Tracking",   href: "/admin/costs",             icon: BarChart3Icon, description: "Infra costs, unit economics, dealer P&L" },
+      { label: "Organizations",   href: "/admin",                   icon: Network,    description: "5-tier org hierarchy" },
+      { label: "User Management", href: "/admin/users",             icon: UserCog,    description: "Roles and access control" },
+      { label: "Notifications",   href: "/communications",          icon: Headphones, description: "Alerts and notification preferences" },
+      { label: "Customer Portal", href: "/portal",                  icon: Globe,      description: "Property manager view" },
     ],
   },
 ];
@@ -211,12 +216,12 @@ export function Sidebar() {
   const [armyExpanded, setArmyExpanded] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [socialExpanded, setSocialExpanded] = useState(false);
+  const [integrationsExpanded, setIntegrationsExpanded] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const activeSection = getSectionForPath(pathname);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(() => {
-    const initial = activeSection && activeSection !== "dashboard" ? activeSection : "business";
+    const initial = activeSection && activeSection !== "dashboard" ? activeSection : "operations";
     return new Set([initial]);
   });
 
@@ -458,17 +463,17 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
         {NAV_SECTIONS.map(section => {
           // Section-level tier gates
-          if (section.key === "sales"        && !showCRM && !showQuotes)           return null;
-          if (section.key === "business"     && !showOperations && !showFinancials) return null;
           if (section.key === "design"       && !showDesign)      return null;
           if (section.key === "security"     && !showSecurity)    return null;
           if (section.key === "dealer"       && !showNetwork)     return null;
-          if (section.key === "internal"     && !isCorporate)     return null;
+          if (section.key === "intelligence" && !showIntelligence)return null;
+          if (section.key === "money"        && !showFinancials)  return null;
           if (section.key === "settings"     && !showAdmin && !isCorporate && !isMasterDealer && !isFullDealer) return null;
           // Install contractor: hide CRM-heavy and financial sections
-          if (isInstallContractor && section.key === "sales")    return null;
-          if (isInstallContractor && section.key === "business") return null;
-          if (isInstallContractor && section.key === "dealer")   return null;
+          if (isInstallContractor && section.key === "operations")  return null;
+          if (isInstallContractor && section.key === "dealer")      return null;
+          if (isInstallContractor && section.key === "intelligence") return null;
+          if (isInstallContractor && section.key === "money")       return null;
 
           const SectionIcon = section.icon;
           const isExpanded      = expandedSections.has(section.key);
@@ -554,13 +559,11 @@ export function Sidebar() {
                 <div className="mt-0.5 ml-3 pl-3 border-l border-white/8 space-y-0.5 pb-1">
                   {section.items.map(item => {
                     // Item-level tier gates
-                    if (item.href === "/subcontractor" && !isInstallContractor && !isCorporate) return null;
+                    if (item.href === "/subcontractors" && !isInstallContractor && !isCorporate && !isMasterDealer && !isFullDealer) return null;
                     if (item.href === "/crm"           && !showCRM)        return null;
                     if (item.href === "/customers"     && !showOperations) return null;
                     if (item.href === "/quotes"        && !showQuotes)     return null;
                     if (item.href === "/billing"       && !showFinancials) return null;
-                    if (item.href === "/expenses"      && !showFinancials) return null;
-                    if (item.href === "/vendors"       && !showOperations) return null;
                     if (item.href === "/renewals"      && !showFinancials) return null;
                     if (item.href === "/revenue"       && !showFinancials) return null;
                     if (item.href === "/contracts"     && !showFinancials) return null;
@@ -575,9 +578,8 @@ export function Sidebar() {
                     if (item.href === "/compliance"    && !showCompliance) return null;
                     if (item.href === "/scorecard"     && !showNetwork)    return null;
                     if (item.href === "/training"      && !showNetwork)    return null;
-                    if (item.href === "/admin"          && !showAdmin)      return null;
+                    if (item.href === "/admin"         && !showAdmin)      return null;
                     if (item.href === "/admin/users"   && !showAdmin)      return null;
-                    if (item.href === "/playbooks"     && !isCorporate)    return null;
 
                     const Icon = item.icon;
                     const isActive = !item.external && (
@@ -618,51 +620,42 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* ── Social ───────────────────────────────────────────────────────── */}
+      {/* ── Live Integrations ─────────────────────────────────────────────── */}
       {!collapsed && (
         <div className="mx-2 border-t border-[hsl(var(--sidebar-border))] pt-2 pb-1 shrink-0">
           <button
-            onClick={() => setSocialExpanded(v => !v)}
+            onClick={() => setIntegrationsExpanded(v => !v)}
             className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
           >
-            <MessageSquare size={10} className="text-brand-400 shrink-0" />
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 shadow" style={{ boxShadow: "0 0 4px #34d399" }} />
             <span className="text-[9px] uppercase tracking-[0.15em] text-[hsl(var(--sidebar-text))]/60 font-bold flex-1 text-left">
-              Social
+              Live Integrations
+            </span>
+            <span className="text-[10px] text-emerald-400 font-semibold">
+              {integrations.filter(i => i.status === "connected").length}/{integrations.length}
             </span>
             <ChevronDown
               size={9}
-              className={cn("transition-transform text-[hsl(var(--sidebar-text))]/40", socialExpanded && "rotate-180")}
+              className={cn("transition-transform text-[hsl(var(--sidebar-text))]/40", integrationsExpanded && "rotate-180")}
             />
           </button>
-          {socialExpanded && (
+          {integrationsExpanded && (
             <div className="mt-1 space-y-0 px-1">
-              {([
-                { label: "The Feed",  href: "/feed",           Icon: Flame,          badge: undefined },
-                { label: "Messages",  href: "/communications", Icon: Hash,           badge: undefined },
-                { label: "Email",     href: "/email",          Icon: Mail,           badge: "Soon" },
-              ] as { label: string; href: string; Icon: React.ElementType; badge?: string }[]).map(item => {
-                const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={cn(
-                      "flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
-                      isActive
-                        ? "bg-brand-400/20 text-white border border-brand-400/25"
-                        : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
-                    )}
-                  >
-                    <item.Icon size={12} className="shrink-0" />
-                    <span className="flex-1 truncate">{item.label}</span>
-                    {item.badge && (
-                      <span className="text-[8px] px-1.5 py-0.5 rounded-full font-bold text-white shrink-0" style={{ background: "#334155" }}>
-                        {item.badge}
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
+              {integrations.map(int => (
+                <div key={int.label} className="flex items-center gap-2 px-3 py-1.5">
+                  <div className={cn(
+                    "w-1.5 h-1.5 rounded-full shrink-0",
+                    int.status === "connected" ? "bg-emerald-400" : "bg-amber-400"
+                  )} />
+                  <span className="text-[10px] text-[hsl(var(--sidebar-text))] flex-1">{int.label}</span>
+                  <span className={cn(
+                    "text-[9px] font-semibold",
+                    int.status === "connected" ? "text-emerald-400" : "text-amber-400"
+                  )}>
+                    {int.status === "connected" ? "Live" : "Setup"}
+                  </span>
+                </div>
+              ))}
             </div>
           )}
         </div>

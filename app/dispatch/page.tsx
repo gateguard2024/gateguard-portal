@@ -69,7 +69,6 @@ interface Tech {
   can_access_portal?:    boolean;
   portal_invite_sent_at?: string | null;
   schedule?:             TechSchedule | null;
-  tech_code?:            string | null;
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -1024,7 +1023,7 @@ function techStreak(techId: string): number {
   return Math.abs(h) % 13 // 0-12
 }
 
-function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete, onEditSchedule, hasLiveGPS, onGenerateCode }: {
+function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete, onEditSchedule, hasLiveGPS }: {
   tech:            Tech;
   jobs:            Job[];
   onStatusChange:  (id: string, status: TechStatus) => void;
@@ -1033,7 +1032,6 @@ function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete, on
   onDelete:        (id: string) => void;
   onEditSchedule:  (tech: Tech) => void;
   hasLiveGPS?:     boolean;
-  onGenerateCode:  (tech: Tech) => void;
 }) {
   const conf = techStatusConfig[tech.status] ?? techStatusConfig['Offline'];
   const currentJob = jobs.find(j => j.id === tech.currentJobId);
@@ -1132,30 +1130,6 @@ function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete, on
             <p className="text-[10px] text-emerald-600 w-full text-right">Portal ✓</p>
           )}
         </div>
-      </div>
-      {/* Access code row — shown on hover or when code exists */}
-      <div className="mt-1.5 flex items-center gap-1.5 ml-12">
-        {tech.tech_code ? (
-          <>
-            <span className="font-mono text-[10px] font-semibold tracking-widest text-slate-500 bg-slate-100 rounded px-1.5 py-0.5 select-all">
-              {tech.tech_code}
-            </span>
-            <button
-              onClick={() => onGenerateCode(tech)}
-              className="text-[10px] text-slate-400 hover:text-[#6B7EFF] opacity-0 group-hover:opacity-100 transition-opacity"
-              title="Regenerate access code"
-            >
-              ↻
-            </button>
-          </>
-        ) : (
-          <button
-            onClick={() => onGenerateCode(tech)}
-            className="text-[10px] text-[#6B7EFF] hover:underline opacity-0 group-hover:opacity-100 transition-opacity"
-          >
-            + Generate access code
-          </button>
-        )}
       </div>
     </div>
   );
@@ -1689,7 +1663,6 @@ export default function DispatchPage() {
         employment_type:      raw.employment_type ?? 'employee',
         can_access_portal:    raw.can_access_portal ?? false,
         portal_invite_sent_at: raw.portal_invite_sent_at ?? null,
-        tech_code:            raw.tech_code ?? null,
       };
       setTechs(prev => [...prev, technician]);
       setShowAddTech(false);
@@ -1712,17 +1685,6 @@ export default function DispatchPage() {
       setTechs(prev => prev.filter(t => t.id !== id));
     } catch {
       alert('Failed to remove technician');
-    }
-  };
-
-  const handleGenerateCode = async (tech: Tech) => {
-    try {
-      const res = await fetch(`/api/technicians/${tech.id}/generate-code`, { method: 'POST' });
-      if (!res.ok) { alert('Failed to generate code'); return; }
-      const { tech_code } = await res.json();
-      setTechs(prev => prev.map(t => t.id === tech.id ? { ...t, tech_code } : t));
-    } catch {
-      alert('Failed to generate code');
     }
   };
 
@@ -2225,7 +2187,6 @@ export default function DispatchPage() {
                     canDelete={canDeleteTech}
                     onDelete={handleDeleteTech}
                     onEditSchedule={t => setScheduleTech(t)}
-                    onGenerateCode={handleGenerateCode}
                     hasLiveGPS={fleetLocations.some(f => f.tech_id === tech.id && new Date(f.updated_at).getTime() > Date.now() - 15 * 60 * 1000)}
                   />
                 ))

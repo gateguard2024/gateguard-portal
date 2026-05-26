@@ -10,19 +10,30 @@ const supabase = createClient(
 )
 
 // GET /api/calendar/google/status
+// Returns { connected: boolean, last_synced: string | null }
 export async function GET() {
   try {
     const user = await getCurrentUser()
 
-    // Read from dedicated columns (migration 053 schema)
-    const { data: row } = await supabase
+    const { data: tokenRow } = await supabase
       .from('user_settings')
-      .select('gcal_refresh_token, gcal_last_synced_at, gcal_connected_at')
+      .select('value')
       .eq('user_id', user.id)
+      .eq('key', 'google_calendar_refresh_token')
       .single()
 
-    const connected   = !!(row?.gcal_refresh_token)
-    const last_synced = row?.gcal_last_synced_at ?? null
+    const connected = !!(tokenRow?.value)
+
+    let last_synced: string | null = null
+    if (connected) {
+      const { data: syncRow } = await supabase
+        .from('user_settings')
+        .select('value')
+        .eq('user_id', user.id)
+        .eq('key', 'google_calendar_last_synced')
+        .single()
+      last_synced = syncRow?.value ?? null
+    }
 
     return NextResponse.json({ connected, last_synced })
   } catch {

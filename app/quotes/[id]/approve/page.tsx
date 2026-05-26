@@ -728,37 +728,6 @@ function QuoteApprovePage({ params }: { params: { id: string } }) {
         </div>
       )}
 
-      {/* ── REQUIREMENTS ──────────────────────────────────────────────────────── */}
-      {quote.terms_text && parseSow(quote.terms_text).length > 0 && (
-        <div style={{ background: LIGHT, borderTop: `1px solid ${BORDER}` }}>
-          <div style={{ maxWidth: 780, margin: '0 auto', padding: '72px 32px' }}>
-            <div style={{ display: 'inline-block', background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 6, padding: '4px 12px', fontFamily: MONO, fontSize: 9, color: AMBER, letterSpacing: '0.14em', marginBottom: 16 }}>SITE REQUIREMENTS</div>
-            <h2 style={{ fontSize: 36, fontWeight: 900, color: NAVY, margin: '0 0 8px', letterSpacing: '-1px' }}>Requirements &amp; Conditions</h2>
-            <p style={{ fontSize: 15, color: MUTED, marginBottom: 40, lineHeight: 1.7 }}>
-              The following requirements must be met prior to the installation date. Please review and confirm with your GateGuard project manager.
-            </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {parseSow(quote.terms_text).map((section, i) => (
-                <div key={i} style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '24px 28px' }}>
-                  <div style={{ display: 'flex', gap: 14, marginBottom: 14, alignItems: 'flex-start' }}>
-                    <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>
-                      <span style={{ fontSize: 10, fontWeight: 800, color: AMBER, fontFamily: MONO }}>{String(i + 1).padStart(2, '0')}</span>
-                    </div>
-                    <h3 style={{ fontSize: 12, fontWeight: 800, color: TEXT, margin: 0, letterSpacing: '0.1em', textTransform: 'uppercase', paddingTop: 6 }}>{section.heading}</h3>
-                  </div>
-                  <div style={{ paddingLeft: 42 }}>
-                    {section.body.split('\n').filter(l => l.trim()).map((line, li) => (
-                      <p key={li} style={{ fontSize: 14, color: '#374151', lineHeight: 1.8, margin: '0 0 8px' }}>{line}</p>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ── ROLLOUT SCHEDULE ──────────────────────────────────────────────────── */}
       <div style={{ background: NAVY }}>
         <div style={{ maxWidth: 780, margin: '0 auto', padding: '72px 32px' }}>
@@ -920,37 +889,6 @@ function QuoteApprovePage({ params }: { params: { id: string } }) {
           {!canApprove && (
             <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginBottom: 20 }}>Select a package above to continue</p>
           )}
-
-          {/* Acceptance statement */}
-          <div style={{ maxWidth: 480, margin: '0 auto 28px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 14, padding: '20px 24px', textAlign: 'left' }}>
-            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', lineHeight: 1.75, margin: '0 0 18px' }}>
-              By approving this proposal, <strong style={{ color: WHITE }}>{clientName !== 'there' ? clientName : 'the undersigned'}</strong> acknowledges receipt of this proposal and agrees to the requirements and conditions outlined above. A formal service agreement will be provided for e-signature prior to installation.
-            </p>
-            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: 140 }}>
-                <div style={{ fontFamily: MONO, fontSize: 8, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.12em', marginBottom: 6 }}>ACCEPTED BY</div>
-                <div style={{ borderBottom: '1px solid rgba(255,255,255,0.18)', paddingBottom: 5 }}>
-                  <span style={{ fontSize: 13, color: clientName !== 'there' ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.2)', fontStyle: clientName !== 'there' ? 'normal' : 'italic' }}>
-                    {clientName !== 'there' ? clientName : '________________________'}
-                  </span>
-                </div>
-              </div>
-              <div style={{ minWidth: 100 }}>
-                <div style={{ fontFamily: MONO, fontSize: 8, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.12em', marginBottom: 6 }}>DATE</div>
-                <div style={{ borderBottom: '1px solid rgba(255,255,255,0.18)', paddingBottom: 5 }}>
-                  <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
-                    {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </span>
-                </div>
-              </div>
-              <div style={{ minWidth: 100 }}>
-                <div style={{ fontFamily: MONO, fontSize: 8, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.12em', marginBottom: 6 }}>PROPOSAL #</div>
-                <div style={{ borderBottom: '1px solid rgba(255,255,255,0.18)', paddingBottom: 5 }}>
-                  <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontFamily: MONO }}>{quote.quote_number}</span>
-                </div>
-              </div>
-            </div>
-          </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 400, margin: '0 auto' }}>
             <button onClick={handleApprove} disabled={!canApprove || submitting}

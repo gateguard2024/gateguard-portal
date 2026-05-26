@@ -452,14 +452,21 @@ export default function RepsPage() {
             <DollarSign size={15} className="text-brand-400" />
             <h2 className="text-sm font-semibold">Dealer Commission Model — $5.00 Dealer Pool / Unit / Month</h2>
           </div>
-          <div className="p-5 grid grid-cols-2 sm:grid-cols-5 gap-4">
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-5 gap-3">
             {COMMISSION_MODEL.map(m => (
-              <div key={m.tier} className={`rounded-xl border-2 ${m.border} ${m.bg} p-5 flex flex-col items-center justify-center text-center gap-2`}>
-                <div className={`text-3xl font-extrabold ${m.color}`}>{m.rate}</div>
-                <div className="text-xs font-semibold text-slate-600 leading-tight">{m.tier}</div>
-                <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">per unit / mo</div>
+              <div key={m.tier} className={`rounded-lg border ${m.border} ${m.bg} p-3`}>
+                <div className={`text-lg font-bold ${m.color}`}>{m.rate}</div>
+                <div className="text-xs font-semibold text-slate-700 mt-0.5">{m.tier}</div>
+                <div className="text-[10px] text-slate-500 mt-1 leading-snug">{m.note}</div>
               </div>
             ))}
+          </div>
+          <div className="px-5 py-3 border-t border-border bg-background/30">
+            <p className="text-[10px] text-muted-foreground">
+              Property pays $10/unit/month · GateGuard keeps $5.00 gross margin · Dealer pool: $5.00 distributed per config above.
+              Add-ons (Video Monitoring, Callbox, LPR, Kiosk): 50/50 GateGuard/Dealer split.
+              Door Surcharge: ($200 × units) ÷ 12/month → 100% GateGuard.
+            </p>
           </div>
         </div>
 

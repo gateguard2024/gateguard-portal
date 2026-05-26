@@ -8,21 +8,7 @@ import {
   Loader2, Shield, Package, Wifi, AlertCircle,
   ChevronRight, TrendingUp, Globe, Clock, Download, Trash2, Check,
 } from "lucide-react";
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Flame, Thermometer, FileSearch, RefreshCw } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
-
-// ── Pain Intel Types ─────────────────────────────────────────────────────────
-
-interface PainIntelResult {
-  pain_signals: string[];
-  service_signals: string[];
-  pain_score: number;
-  service_score: number;
-  lead_temperature: 'hot' | 'warm' | 'cold';
-  outreach_angle: string;
-  citations: Array<{ signal: string; source: string }>;
-}
 
 interface SavedSearch {
   id: string;
@@ -330,11 +316,6 @@ export default function ARIAPage() {
     hierarchy:   { org_id: string; org_name: string; org_tier: string; own_count: number; child_count: number; total_count: number; depth: number }[];
     corporate_total: number;
   } | null>(null);
-  // ── Pain Intel state ──────────────────────────────────────────────────────
-  const [painIntelLoading, setPainIntelLoading] = useState(false);
-  const [painIntelResult, setPainIntelResult]   = useState<PainIntelResult | null>(null);
-  const [painIntelError, setPainIntelError]     = useState<string | null>(null);
-  const [activeTab, setActiveTab]               = useState<'overview' | 'pain_intel'>('overview');
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Load saved searches + usage stats on mount
@@ -357,9 +338,6 @@ export default function ARIAPage() {
     setResults(null);
     setSavedSearchId(null);
     setSelectedProspect(0);
-    setPainIntelResult(null);
-    setPainIntelError(null);
-    setActiveTab('overview');
     setPhase(1);
 
     // Fire API in parallel with animation
@@ -417,7 +395,7 @@ export default function ARIAPage() {
     try {
       const r = await fetch(`/api/aria/searches/${id}/import`, { method: 'POST' });
       const d = await r.json();
-      if (!r.ok || d.error) throw new Error(d.error ?? `Import failed (${r.status})`);
+      if (d.error) throw new Error(d.error);
       setImportResult(prev => ({ ...prev, [id]: { created: d.created, skipped: d.skipped } }));
       // Update local saved searches list
       setSavedSearches(prev => prev.map(s => s.id === id
@@ -425,7 +403,6 @@ export default function ARIAPage() {
         : s
       ));
     } catch (e: any) {
-      console.error('[aria] import error:', e.message);
       setImportResult(prev => ({ ...prev, [id]: { created: -1, skipped: 0 } }));
     } finally {
       setImporting(null);
@@ -487,40 +464,6 @@ export default function ARIAPage() {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  async function runPainIntel(prospect: { property: { name: string; address: string }; profile?: { primary_concern?: string } }) {
-    if (painIntelLoading) return;
-    setPainIntelLoading(true);
-    setPainIntelError(null);
-    setPainIntelResult(null);
-    setActiveTab('pain_intel');
-    try {
-      // Parse city/state from address e.g. "123 Main St, Atlanta, GA 30301"
-      const addressParts = (prospect.property.address || '').split(',');
-      const city  = addressParts.length >= 2 ? addressParts[addressParts.length - 2]?.trim() : '';
-      const statePart = addressParts.length >= 1 ? addressParts[addressParts.length - 1]?.trim() : '';
-      const state = statePart.split(' ')[0] ?? '';
-
-      const res = await fetch('/api/aria/pain-intel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          property_name:    prospect.property.name,
-          property_address: prospect.property.address,
-          city,
-          state,
-        }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: PainIntelResult = await res.json();
-      if ((data as any).error) throw new Error((data as any).error);
-      setPainIntelResult(data);
-    } catch (e: any) {
-      setPainIntelError(e.message ?? 'Failed to run pain intel');
-    } finally {
-      setPainIntelLoading(false);
-    }
-  }
-
   const isRunning = phase >= 1 && phase <= 5;
   const isDone    = phase === 6;
   const prospect  = results?.prospects[selectedProspect];
@@ -541,13 +484,12 @@ export default function ARIAPage() {
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-lg font-bold text-gray-900">ARIA — Lead Intelligence Engine</h1>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: "#EEF0FF", color: "#6B7EFF" }}>AI AGENT</span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">v1.1</span>
               <span className="flex h-2 w-2 relative">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: "#6B7EFF" }} />
                 <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: "#6B7EFF" }} />
               </span>
             </div>
-            <p className="text-xs text-gray-400 mt-0.5">Researches properties · Maps decision maker hierarchy · Mines intent signals · Pain Intel v1.1 · Builds SCOUT handoff packets</p>
+            <p className="text-xs text-gray-400 mt-0.5">Researches properties · Maps decision maker hierarchy · Mines intent signals · Builds SCOUT handoff packets</p>
           </div>
         </div>
 
@@ -937,59 +879,8 @@ export default function ARIAPage() {
               </div>
             )}
 
-            {/* ── Tab bar ── */}
-            {prospect && (
-              <div className="flex items-center gap-1 bg-white rounded-2xl border border-gray-200 shadow-sm p-1.5">
-                <button
-                  onClick={() => setActiveTab('overview')}
-                  className={cn(
-                    "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-sm font-semibold transition-all",
-                    activeTab === 'overview'
-                      ? "bg-[#6B7EFF] text-white shadow-sm"
-                      : "text-gray-500 hover:bg-gray-100",
-                  )}
-                >
-                  <Cpu size={13} />
-                  Overview
-                </button>
-                <button
-                  onClick={() => {
-                    setActiveTab('pain_intel');
-                    if (!painIntelResult && !painIntelLoading) {
-                      runPainIntel(prospect);
-                    }
-                  }}
-                  className={cn(
-                    "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-sm font-semibold transition-all",
-                    activeTab === 'pain_intel'
-                      ? "bg-red-600 text-white shadow-sm"
-                      : "text-gray-500 hover:bg-gray-100",
-                  )}
-                >
-                  <Flame size={13} />
-                  Pain Intel
-                  {painIntelResult && (
-                    <span
-                      className={cn(
-                        "text-[9px] font-bold px-1.5 py-0.5 rounded-full",
-                        activeTab === 'pain_intel'
-                          ? "bg-white/20 text-white"
-                          : painIntelResult.lead_temperature === 'hot'
-                            ? "bg-red-100 text-red-700"
-                            : painIntelResult.lead_temperature === 'warm'
-                              ? "bg-amber-100 text-amber-700"
-                              : "bg-gray-100 text-gray-600",
-                      )}
-                    >
-                      {painIntelResult.lead_temperature.toUpperCase()}
-                    </span>
-                  )}
-                </button>
-              </div>
-            )}
-
             {/* Main prospect detail */}
-            {prospect && activeTab === 'overview' && (
+            {prospect && (
               <div className="grid grid-cols-12 gap-4">
 
                 {/* ── Left: Property + DM + Profile ── */}
@@ -1494,217 +1385,6 @@ export default function ARIAPage() {
                   )}
 
                 </div>
-              </div>
-            )}
-
-            {/* ── Pain Intel Tab ──────────────────────────────────────────── */}
-            {prospect && activeTab === 'pain_intel' && (
-              <div className="space-y-4">
-
-                {/* Loading state */}
-                {painIntelLoading && (
-                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, #EF4444 0%, #DC2626 100%)" }}>
-                      <Flame size={20} className="text-white" />
-                    </div>
-                    <div className="text-center">
-                      <p className="text-sm font-semibold text-gray-800">Mining pain signals for {prospect.property.name}…</p>
-                      <p className="text-xs text-gray-400 mt-1">Running 6 targeted searches · Synthesizing with Claude Haiku</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Loader2 size={15} className="text-red-500 animate-spin" />
-                      <span className="text-xs text-gray-500">Analyzing gate complaints, permit records, service signals…</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Error state */}
-                {painIntelError && !painIntelLoading && (
-                  <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3">
-                    <AlertCircle size={16} className="text-red-500 shrink-0" />
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-red-700">Pain Intel failed</p>
-                      <p className="text-xs text-red-600 mt-0.5">{painIntelError}</p>
-                    </div>
-                    <button
-                      onClick={() => runPainIntel(prospect)}
-                      className="text-xs px-3 py-1.5 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-700 transition-colors"
-                    >
-                      Retry
-                    </button>
-                  </div>
-                )}
-
-                {/* Results */}
-                {painIntelResult && !painIntelLoading && (() => {
-                  const tempColors = {
-                    hot:  { bg: 'bg-red-50',    border: 'border-red-200',   text: 'text-red-700',   badge: 'bg-red-600 text-white',     label: 'HOT' },
-                    warm: { bg: 'bg-amber-50',   border: 'border-amber-200', text: 'text-amber-700', badge: 'bg-amber-500 text-white',    label: 'WARM' },
-                    cold: { bg: 'bg-slate-50',   border: 'border-slate-200', text: 'text-slate-600', badge: 'bg-slate-400 text-white',    label: 'COLD' },
-                  };
-                  const tc = tempColors[painIntelResult.lead_temperature] ?? tempColors.cold;
-
-                  return (
-                    <>
-                      {/* Temperature + scores header */}
-                      <div className={`rounded-2xl border p-5 ${tc.bg} ${tc.border}`}>
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <div className="flex items-center gap-2">
-                            <span className={`text-[11px] font-bold px-3 py-1.5 rounded-full ${tc.badge}`}>
-                              {tc.label} LEAD
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-4 ml-auto">
-                            <div className="text-center">
-                              <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Pain Score</p>
-                              <p className={`text-2xl font-black tabular-nums ${tc.text}`}>
-                                {painIntelResult.pain_score}<span className="text-sm font-normal text-gray-400">/10</span>
-                              </p>
-                            </div>
-                            <div className="text-center">
-                              <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Service Score</p>
-                              <p className="text-2xl font-black tabular-nums text-[#6B7EFF]">
-                                {painIntelResult.service_score}<span className="text-sm font-normal text-gray-400">/10</span>
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Outreach angle */}
-                        <div className="mt-4 p-3 bg-white/70 rounded-xl border border-white">
-                          <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mb-1">Best Outreach Opening</p>
-                          <p className="text-sm text-gray-800 font-medium leading-relaxed italic">
-                            &ldquo;{painIntelResult.outreach_angle}&rdquo;
-                          </p>
-                          <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(painIntelResult.outreach_angle);
-                              setCopied(true);
-                              setTimeout(() => setCopied(false), 1500);
-                            }}
-                            className="mt-2 flex items-center gap-1 text-[10px] text-gray-500 hover:text-[#6B7EFF] transition-colors"
-                          >
-                            <Copy size={9} />
-                            {copied ? 'Copied!' : 'Copy'}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        {/* Pain Signals */}
-                        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-                          <div className="flex items-center gap-2 mb-4">
-                            <Flame size={13} className="text-red-500" />
-                            <span className="text-[10px] font-bold tracking-widest uppercase text-red-700">Pain Signals</span>
-                            <span className="ml-auto text-[10px] text-gray-400">{painIntelResult.pain_signals.length} found</span>
-                          </div>
-                          {painIntelResult.pain_signals.length === 0 ? (
-                            <p className="text-xs text-gray-400 italic">No pain signals detected in public sources.</p>
-                          ) : (
-                            <ul className="space-y-2.5">
-                              {painIntelResult.pain_signals.map((sig, i) => (
-                                <li key={i} className="flex items-start gap-2">
-                                  <div className="w-4 h-4 rounded-full bg-red-100 flex items-center justify-center shrink-0 mt-0.5">
-                                    <span className="text-[9px] font-bold text-red-600">{i + 1}</span>
-                                  </div>
-                                  <p className="text-[11px] text-gray-700 leading-relaxed">{sig}</p>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-
-                        {/* Service Signals */}
-                        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-                          <div className="flex items-center gap-2 mb-4">
-                            <Zap size={13} style={{ color: '#6B7EFF' }} />
-                            <span className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#6B7EFF' }}>Service Signals</span>
-                            <span className="ml-auto text-[10px] text-gray-400">{painIntelResult.service_signals.length} found</span>
-                          </div>
-                          {painIntelResult.service_signals.length === 0 ? (
-                            <p className="text-xs text-gray-400 italic">No service signals detected in public sources.</p>
-                          ) : (
-                            <ul className="space-y-2.5">
-                              {painIntelResult.service_signals.map((sig, i) => (
-                                <li key={i} className="flex items-start gap-2">
-                                  <div className="w-4 h-4 rounded-full bg-[#6B7EFF]/10 flex items-center justify-center shrink-0 mt-0.5">
-                                    <span className="text-[9px] font-bold text-[#6B7EFF]">{i + 1}</span>
-                                  </div>
-                                  <p className="text-[11px] text-gray-700 leading-relaxed">{sig}</p>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Citations */}
-                      {painIntelResult.citations && painIntelResult.citations.length > 0 && (
-                        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-                          <div className="flex items-center gap-2 mb-4">
-                            <FileSearch size={13} className="text-gray-500" />
-                            <span className="text-[10px] font-bold tracking-widest uppercase text-gray-500">Sources</span>
-                          </div>
-                          <div className="space-y-2">
-                            {painIntelResult.citations.map((c, i) => (
-                              <div key={i} className="flex items-start gap-2 p-2.5 rounded-lg bg-gray-50 border border-gray-100">
-                                <span className="text-[9px] font-bold text-gray-400 shrink-0 mt-0.5">{i + 1}</span>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-[11px] text-gray-700 leading-relaxed">{c.signal}</p>
-                                  {c.source && c.source !== 'No source found' && (
-                                    <a
-                                      href={c.source.startsWith('http') ? c.source : undefined}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-[10px] text-[#6B7EFF] hover:underline truncate block mt-0.5"
-                                    >
-                                      {c.source.startsWith('http')
-                                        ? (() => { try { return new URL(c.source).hostname } catch { return c.source } })()
-                                        : c.source}
-                                    </a>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Re-run button */}
-                      <div className="flex justify-end">
-                        <button
-                          onClick={() => runPainIntel(prospect)}
-                          className="flex items-center gap-1.5 text-xs px-4 py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors font-medium"
-                        >
-                          <RefreshCw size={11} />
-                          Re-run Pain Intel
-                        </button>
-                      </div>
-                    </>
-                  );
-                })()}
-
-                {/* Empty state — not yet run */}
-                {!painIntelResult && !painIntelLoading && !painIntelError && (
-                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-10 flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center">
-                      <Flame size={20} className="text-red-400" />
-                    </div>
-                    <div className="text-center">
-                      <p className="text-sm font-semibold text-gray-800">Run Pain Intel on {prospect.property.name}</p>
-                      <p className="text-xs text-gray-400 mt-1 max-w-sm">Mines gate complaints, permit records, service contracts, and resident pain points across 6 targeted web searches.</p>
-                    </div>
-                    <button
-                      onClick={() => runPainIntel(prospect)}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-semibold text-sm shadow-sm transition-all"
-                      style={{ background: "linear-gradient(135deg, #EF4444 0%, #DC2626 100%)" }}
-                    >
-                      <Flame size={14} />
-                      Run Deep Pain Intel
-                    </button>
-                  </div>
-                )}
-
               </div>
             )}
 

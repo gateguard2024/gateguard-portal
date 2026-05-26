@@ -3,10 +3,10 @@
 import { useState } from "react";
 import Image from "next/image";
 import {
-  Shield, AlertTriangle, CheckCircle2, Clock, Eye,
+  Shield, AlertTriangle, CheckCircle2, Clock, Eye, EyeOff,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { HardHat, Briefcase, Wrench, CalendarDays, MapPin, ArrowRight, EyeOff } = require("lucide-react") as any;
+const { HardHat, Briefcase, Wrench, CalendarDays, MapPin, ArrowRight } = require("lucide-react") as any;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
