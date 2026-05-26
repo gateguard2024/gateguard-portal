@@ -52,7 +52,7 @@ interface UnscheduledLead {
   stage: string;
 }
 
-type CalendarView = "week" | "month";
+type CalendarView = "day" | "week" | "month";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_NAMES = [
@@ -125,6 +125,32 @@ function EstBadge({ minutes }: { minutes?: number | null }) {
   );
 }
 
+// ─── Avatar stack (decorative, uses event id as seed) ────────────────────────
+
+const AVATAR_COLORS = ["#6B7EFF","#EA580C","#15803d","#854F0B","#185FA5","#993556"];
+
+function AvatarStack({ seed, count = 2 }: { seed: string; count?: number }) {
+  const avatars = Array.from({ length: Math.min(count, 3) }, (_, i) => {
+    const code = seed.charCodeAt(i % seed.length) + i;
+    const bg   = AVATAR_COLORS[code % AVATAR_COLORS.length];
+    const initials = String.fromCharCode(65 + (code % 26));
+    return { bg, initials };
+  });
+  return (
+    <div className="flex -space-x-1.5">
+      {avatars.map((a, i) => (
+        <div
+          key={i}
+          className="w-4 h-4 rounded-full border border-white/40 flex items-center justify-center text-[7px] font-bold text-white shrink-0"
+          style={{ backgroundColor: a.bg, zIndex: 3 - i }}
+        >
+          {a.initials}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Rich event card (calendar cell) ─────────────────────────────────────────
 
 function EventCard({
@@ -134,33 +160,47 @@ function EventCard({
   event: CalendarEvent;
   onClick: (event: CalendarEvent, el: HTMLElement) => void;
 }) {
+  const { MoreHorizontal } = require("lucide-react") as any; // eslint-disable-line @typescript-eslint/no-explicit-any
   const color = colorForType(event.type);
-  const isUrgent = event.priority === "urgent";
-  const isPersonal = event.type === "gcal";
+  const badgeLabel = event.priority === "urgent"
+    ? "Urgent"
+    : event.type === "gcal"
+    ? "Personal"
+    : event.type === "work_order"
+    ? "Work Order"
+    : null;
 
   return (
     <button
-      className="w-full text-left rounded-lg overflow-hidden transition-opacity hover:opacity-85 focus:outline-none"
+      className="w-full text-left rounded-lg overflow-hidden transition-opacity hover:opacity-90 focus:outline-none"
       style={{ backgroundColor: color }}
       onClick={(e) => onClick(event, e.currentTarget)}
       title={event.title}
     >
-      <div className="px-2 py-1.5">
+      <div className="px-2 pt-1.5 pb-1">
+        {/* Title */}
         <p className="text-white text-[10px] font-semibold leading-tight truncate">{event.title}</p>
+        {/* Time */}
         {event.time && (
           <p className="text-white/70 text-[9px] mt-0.5">{event.time}</p>
         )}
-        <div className="flex items-center gap-1 mt-1 flex-wrap">
-          {isUrgent && (
-            <span className="text-[8px] font-bold bg-white/20 text-white px-1.5 py-0.5 rounded-full uppercase tracking-wide">
-              Urgent
+        {/* Badge */}
+        {badgeLabel && (
+          <div className="mt-1">
+            <span className="text-[8px] font-bold bg-white/25 text-white px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+              {badgeLabel}
             </span>
-          )}
-          {isPersonal && (
-            <span className="text-[8px] font-bold bg-white/20 text-white px-1.5 py-0.5 rounded-full uppercase tracking-wide">
-              GCal
-            </span>
-          )}
+          </div>
+        )}
+        {/* Footer: avatars + menu */}
+        <div className="flex items-center justify-between mt-1.5">
+          <AvatarStack seed={event.id} count={2} />
+          <div
+            className="w-4 h-4 rounded flex items-center justify-center opacity-60 hover:opacity-100 hover:bg-white/20 transition-all"
+            onClick={(e) => { e.stopPropagation(); onClick(event, e.currentTarget as HTMLElement); }}
+          >
+            <MoreHorizontal size={10} className="text-white" />
+          </div>
         </div>
       </div>
     </button>
@@ -257,7 +297,7 @@ function EventPopover({
   );
 }
 
-// ─── Sidebar section accordion ────────────────────────────────────────────────
+// ─── Sidebar section accordion (dark) ────────────────────────────────────────
 
 function SidebarSection({
   label,
@@ -275,17 +315,17 @@ function SidebarSection({
     <div className="mb-1">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-accent transition-colors"
+        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/5 transition-colors"
       >
         <ChevronDown
           size={13}
-          className={`text-muted-foreground shrink-0 transition-transform duration-150 ${open ? "" : "-rotate-90"}`}
+          className={`text-white/40 shrink-0 transition-transform duration-150 ${open ? "" : "-rotate-90"}`}
         />
-        <span className="text-[11px] font-bold text-foreground uppercase tracking-wide flex-1 text-left">
+        <span className="text-[11px] font-bold text-white/80 uppercase tracking-wide flex-1 text-left">
           {label}
         </span>
         {count > 0 && (
-          <span className="text-[9px] font-bold bg-[#6B7EFF]/10 text-[#6B7EFF] px-1.5 py-0.5 rounded-full">
+          <span className="text-[9px] font-bold bg-[#6B7EFF]/30 text-[#a8b4ff] px-1.5 py-0.5 rounded-full">
             {count}
           </span>
         )}
@@ -295,7 +335,50 @@ function SidebarSection({
   );
 }
 
-// ─── Monday.com-style task card ───────────────────────────────────────────────
+// ─── Monday.com-style task card (dark sidebar version) ───────────────────────
+
+function StatusChipDark({ status }: { status: string }) {
+  const s = status.toLowerCase().replace(/_/g, " ");
+  const map: Record<string, string> = {
+    blocked:      "bg-red-500/20 text-red-300 border border-red-500/30",
+    working:      "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30",
+    "in progress":"bg-blue-500/20 text-blue-300 border border-blue-500/30",
+    new:          "bg-white/10 text-white/60 border border-white/10",
+    open:         "bg-white/10 text-white/60 border border-white/10",
+    pending:      "bg-amber-500/20 text-amber-300 border border-amber-500/30",
+    scheduled:    "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30",
+  };
+  return (
+    <span className={`inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide ${map[s] ?? "bg-white/10 text-white/60"}`}>
+      {s}
+    </span>
+  );
+}
+
+function PriorityChipDark({ priority }: { priority?: string }) {
+  const map: Record<string, string> = {
+    urgent: "bg-red-500/20 text-red-300 border border-red-500/30",
+    high:   "bg-orange-500/20 text-orange-300 border border-orange-500/30",
+    medium: "bg-amber-500/20 text-amber-300 border border-amber-500/30",
+    low:    "bg-white/10 text-white/40 border border-white/10",
+  };
+  const label = (priority ?? "medium").toLowerCase();
+  return (
+    <span className={`inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide ${map[label] ?? map.medium}`}>
+      {label}
+    </span>
+  );
+}
+
+function EstBadgeDark({ minutes }: { minutes?: number | null }) {
+  if (!minutes) return <span className="text-[9px] text-white/30">—</span>;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const label = h > 0 ? (m > 0 ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
+  return (
+    <span className="text-[9px] font-semibold text-white/50 whitespace-nowrap">{label}</span>
+  );
+}
 
 function TaskCard({
   name,
@@ -326,33 +409,36 @@ function TaskCard({
     <div
       draggable
       onDragStart={onDragStart}
-      className="mx-2.5 mb-1.5 rounded-lg border border-border bg-white hover:border-[#6B7EFF]/30 hover:bg-[#6B7EFF]/[0.02] transition-colors cursor-grab active:cursor-grabbing group"
-      style={{ borderLeft: `3px solid ${accentColor}` }}
+      className="mx-2.5 mb-1.5 rounded-lg cursor-grab active:cursor-grabbing group transition-all hover:brightness-110"
+      style={{
+        backgroundColor: "#151f2e",
+        borderLeft: `3px solid ${accentColor}`,
+        border: `0.5px solid rgba(255,255,255,0.08)`,
+        borderLeftWidth: "3px",
+        borderLeftColor: accentColor,
+      }}
     >
       <div className="px-2.5 py-2">
         {/* Top row */}
         <div className="flex items-start gap-1.5 mb-1.5">
-          <div className="w-3.5 h-3.5 rounded border border-border mt-0.5 shrink-0 flex items-center justify-center">
+          <div className="w-3.5 h-3.5 rounded border border-white/20 mt-0.5 shrink-0 flex items-center justify-center">
             <CheckCircle2 size={9} className="text-[#6B7EFF] opacity-0 group-hover:opacity-60 transition-opacity" />
           </div>
-          <p className="text-xs font-medium text-foreground leading-tight flex-1 min-w-0">{name}</p>
-          <GripVertical size={12} className="text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 mt-0.5 transition-colors" />
+          <p className="text-[11px] font-medium text-white/90 leading-tight flex-1 min-w-0">{name}</p>
+          <GripVertical size={12} className="text-white/20 group-hover:text-white/50 shrink-0 mt-0.5 transition-colors" />
         </div>
-        {/* Sub label */}
-        {sub && (
-          <p className="text-[10px] text-muted-foreground mb-1.5 pl-5 truncate">{sub}</p>
-        )}
-        {/* Pills row */}
-        <div className="flex items-center gap-1 flex-wrap pl-5">
-          <StatusChip status={status} />
-          {priority && <PriorityChip priority={priority} />}
-          <EstBadge minutes={estimatedMinutes} />
-          {/* Schedule button */}
+        {/* Sub */}
+        {sub && <p className="text-[10px] text-white/40 mb-1.5 pl-5 truncate">{sub}</p>}
+        {/* Pills */}
+        <div className="flex items-center gap-1.5 flex-wrap pl-5">
+          <StatusChipDark status={status} />
+          {priority && <PriorityChipDark priority={priority} />}
+          <EstBadgeDark minutes={estimatedMinutes} />
           {schedulerOpen ? (
             <input
               type="date"
               autoFocus
-              className="text-[9px] border border-[#6B7EFF] rounded px-1 py-0.5 focus:outline-none ml-auto"
+              className="text-[9px] border border-[#6B7EFF]/50 rounded px-1 py-0.5 bg-[#0C111D] text-white focus:outline-none ml-auto"
               onChange={(e) => { if (e.target.value) onScheduleChange(e.target.value); }}
               onBlur={onScheduleBlur}
             />
@@ -487,14 +573,18 @@ function CalendarPage() {
   function goBack() {
     setCurrentDate((d) => {
       const nd = new Date(d);
-      view === "week" ? nd.setDate(nd.getDate() - 7) : nd.setMonth(nd.getMonth() - 1);
+      if (view === "day")   nd.setDate(nd.getDate() - 1);
+      else if (view === "week") nd.setDate(nd.getDate() - 7);
+      else nd.setMonth(nd.getMonth() - 1);
       return nd;
     });
   }
   function goForward() {
     setCurrentDate((d) => {
       const nd = new Date(d);
-      view === "week" ? nd.setDate(nd.getDate() + 7) : nd.setMonth(nd.getMonth() + 1);
+      if (view === "day")   nd.setDate(nd.getDate() + 1);
+      else if (view === "week") nd.setDate(nd.getDate() + 7);
+      else nd.setMonth(nd.getMonth() + 1);
       return nd;
     });
   }
@@ -625,6 +715,40 @@ function CalendarPage() {
   }
 
   const totalUnscheduled = unscheduledTodos.length + unscheduledWOs.length + unscheduledLeads.length;
+
+  // ── Day view ──────────────────────────────────────────────────────────────────
+  function renderDayView() {
+    const dateStr   = toDateStr(currentDate);
+    const dayEvents = eventsForDate(dateStr);
+    const hours     = Array.from({ length: 24 }, (_, i) => i);
+    return (
+      <div className="flex-1 min-h-0 overflow-auto">
+        <div className="border-b border-border bg-white sticky top-0 z-10 py-3 px-4">
+          <p className="text-sm font-bold text-foreground">{DAY_NAMES[currentDate.getDay()]}, {MONTH_NAMES[currentDate.getMonth()]} {currentDate.getDate()}</p>
+        </div>
+        <div className="relative">
+          {hours.map((h) => {
+            const label = h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`;
+            const hStr  = String(h).padStart(2, "0") + ":00";
+            const hourEvents = dayEvents.filter((e) => e.time && e.time.startsWith(String(h).padStart(2, "0")));
+            return (
+              <div key={h} className="flex border-b border-border min-h-[52px]">
+                <div className="w-16 shrink-0 px-2 py-1 text-[10px] text-muted-foreground text-right">{label}</div>
+                <div className="flex-1 px-2 py-1 space-y-1"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => { void handleDropOnDay(dateStr); }}
+                >
+                  {hourEvents.map((ev) => (
+                    <EventCard key={ev.id} event={ev} onClick={handleEventClick} />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   // ── Week view ─────────────────────────────────────────────────────────────────
   function renderWeekView() {
@@ -784,7 +908,7 @@ function CalendarPage() {
           <div className="flex items-center gap-3 flex-wrap">
             {/* View toggle */}
             <div className="flex items-center bg-white border border-border rounded-lg p-0.5">
-              {(["week", "month"] as CalendarView[]).map((v) => (
+              {(["day", "week", "month"] as CalendarView[]).map((v) => (
                 <button
                   key={v}
                   onClick={() => setView(v)}
@@ -810,12 +934,12 @@ function CalendarPage() {
               </button>
             </div>
 
-            {/* Today button */}
+            {/* Go to Today button */}
             <button
               onClick={goToday}
               className="px-3 py-1.5 text-xs font-medium border border-border rounded-lg bg-white hover:bg-accent transition-colors text-foreground"
             >
-              Today
+              Go to Today
             </button>
 
             <div className="flex-1" />
@@ -823,14 +947,19 @@ function CalendarPage() {
             {/* GCal badge */}
             {gcalConnected ? (
               <div className="flex items-center gap-2">
-                <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
+                <span className="flex items-center gap-2 text-xs font-semibold bg-white border border-border px-2.5 py-1.5 rounded-lg shadow-sm">
+                  {/* Google G */}
+                  <svg width="14" height="14" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                  </svg>
+                  <span className="text-foreground">Connected</span>
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-                  Google connected
                 </span>
                 {lastSynced && (
-                  <span className="text-[10px] text-muted-foreground hidden sm:inline">
-                    {relativeSyncTime()}
-                  </span>
+                  <span className="text-[10px] text-muted-foreground hidden sm:inline">{relativeSyncTime()}</span>
                 )}
                 <button
                   onClick={() => { void handleSync(); }}
@@ -842,10 +971,18 @@ function CalendarPage() {
                 </button>
               </div>
             ) : (
-              <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground bg-white border border-border px-2.5 py-1 rounded-full">
-                <Link2Off size={11} />
-                Not connected
-              </span>
+              <a
+                href="/api/calendar/google/connect"
+                className="flex items-center gap-2 text-xs font-semibold bg-white border border-border px-2.5 py-1.5 rounded-lg shadow-sm hover:bg-accent transition-colors"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
+                Connect Google
+              </a>
             )}
           </div>
 
@@ -854,7 +991,7 @@ function CalendarPage() {
             {loading ? (
               <div className="p-4"><SkeletonRow cols={7} rows={4} /></div>
             ) : (
-              view === "week" ? renderWeekView() : renderMonthView()
+              view === "day" ? renderDayView() : view === "week" ? renderWeekView() : renderMonthView()
             )}
           </div>
 
@@ -878,38 +1015,43 @@ function CalendarPage() {
           </div>
         </div>
 
-        {/* ── Right: workflow queue ──────────────────────────────────────────── */}
-        <div className="w-80 border-l border-border bg-white flex flex-col">
+        {/* ── Right: workflow queue (dark) ──────────────────────────────────── */}
+        <div className="w-80 border-l border-white/10 flex flex-col" style={{ backgroundColor: "#0C111D" }}>
           {/* Sidebar header */}
-          <div className="px-4 py-3.5 border-b border-border">
+          <div className="px-4 py-3.5 border-b border-white/10">
             <div className="flex items-center gap-2 mb-0.5">
-              <CalendarClock size={15} className="text-muted-foreground" />
-              <span className="text-xs font-bold uppercase tracking-wide text-foreground">Workflow queue</span>
+              <CalendarClock size={15} className="text-white/40" />
+              <span className="text-[11px] font-bold uppercase tracking-wider text-white/90">Monday.com-Style Workflow Queue &amp; Task Inbox</span>
               {totalUnscheduled > 0 && (
-                <span className="ml-auto text-[9px] font-bold bg-[#6B7EFF]/10 text-[#6B7EFF] px-1.5 py-0.5 rounded-full">
+                <span className="ml-auto text-[9px] font-bold bg-[#6B7EFF]/30 text-[#a8b4ff] px-1.5 py-0.5 rounded-full shrink-0">
                   {totalUnscheduled}
                 </span>
               )}
             </div>
-            <p className="text-[10px] text-muted-foreground">Drag tasks onto the calendar to block time</p>
+            <p className="text-[10px] text-white/40 mt-0.5">Drag tasks onto the calendar to block time.</p>
           </div>
 
           {/* Column headers */}
-          <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-4 py-1.5 border-b border-border bg-slate-50/60">
-            <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wide">Item</span>
-            <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wide">Status</span>
-            <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wide">Est.</span>
+          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 px-4 py-1.5 border-b border-white/10">
+            <span className="text-[9px] font-bold text-white/30 uppercase tracking-wider">Status</span>
+            <span className="text-[9px] font-bold text-white/30 uppercase tracking-wider">Priority</span>
+            <span className="text-[9px] font-bold text-white/30 uppercase tracking-wider">Est. Time</span>
+            <span className="text-[9px] font-bold text-white/30 uppercase tracking-wider">Drag</span>
           </div>
 
           <div className="flex-1 overflow-y-auto py-1">
             {unscheduledLoading ? (
               <div className="p-4"><SkeletonRow cols={2} rows={4} /></div>
             ) : totalUnscheduled === 0 ? (
-              <EmptyState
-                icon={<CheckCircle2 size={24} className="text-emerald-500" />}
-                title="All caught up"
-                description="No unscheduled to-dos, work orders, or open leads."
-              />
+              <div className="flex flex-col items-center justify-center h-48 gap-3">
+                <div className="w-10 h-10 rounded-full border-2 border-emerald-500/40 flex items-center justify-center">
+                  <CheckCircle2 size={20} className="text-emerald-500" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-semibold text-white/80">All caught up</p>
+                  <p className="text-[11px] text-white/40 mt-0.5 max-w-[200px]">No unscheduled to-dos, work orders, or open leads.</p>
+                </div>
+              </div>
             ) : (
               <>
                 {/* To-Dos */}
@@ -962,16 +1104,16 @@ function CalendarPage() {
                       <a
                         key={lead.id}
                         href={`/crm/leads/${lead.id}`}
-                        className="mx-2.5 mb-1.5 flex items-center gap-2 p-2.5 rounded-lg border border-border bg-white hover:border-[#6B7EFF]/30 hover:bg-[#6B7EFF]/5 transition-colors"
-                        style={{ borderLeft: "3px solid #6B7EFF" }}
+                        className="mx-2.5 mb-1.5 flex items-center gap-2 p-2.5 rounded-lg transition-all hover:brightness-110"
+                        style={{ backgroundColor: "#151f2e", borderLeft: "3px solid #6B7EFF", border: "0.5px solid rgba(255,255,255,0.08)", borderLeftWidth: "3px", borderLeftColor: "#6B7EFF" }}
                       >
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-foreground truncate">{lead.name}</p>
+                          <p className="text-[11px] font-medium text-white/90 truncate">{lead.name}</p>
                           {lead.company && (
-                            <p className="text-[10px] text-muted-foreground truncate">{lead.company}</p>
+                            <p className="text-[10px] text-white/40 truncate">{lead.company}</p>
                           )}
                         </div>
-                        <span className="text-[9px] font-bold bg-[#6B7EFF]/10 text-[#6B7EFF] px-1.5 py-0.5 rounded-full capitalize shrink-0">
+                        <span className="text-[9px] font-bold bg-[#6B7EFF]/30 text-[#a8b4ff] px-1.5 py-0.5 rounded-full capitalize shrink-0">
                           {lead.stage.replace(/_/g, " ")}
                         </span>
                       </a>
@@ -983,17 +1125,16 @@ function CalendarPage() {
           </div>
 
           {/* Quick-add bar */}
-          <div className="px-3 py-2.5 border-t border-border bg-white">
-            <div className="flex items-center gap-2 bg-slate-50 border border-border rounded-lg px-2.5 py-1.5">
-              <Plus size={12} className="text-muted-foreground shrink-0" />
+          <div className="px-3 py-2.5 border-t border-white/10" style={{ backgroundColor: "#0C111D" }}>
+            <div className="flex items-center gap-2 rounded-lg px-2.5 py-1.5" style={{ backgroundColor: "#151f2e", border: "0.5px solid rgba(255,255,255,0.1)" }}>
+              <Plus size={12} className="text-white/30 shrink-0" />
               <input
                 value={quickAdd}
                 onChange={(e) => setQuickAdd(e.target.value)}
-                placeholder="Quick add — e.g. &quot;Call John Thu 2pm&quot;"
-                className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground outline-none"
+                placeholder={`Quick add — e.g. "Call John Thu 2pm"`}
+                className="flex-1 bg-transparent text-xs text-white/80 placeholder:text-white/25 outline-none"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && quickAdd.trim()) {
-                    // Future: parse natural language and create todo
                     setQuickAdd("");
                   }
                 }}
