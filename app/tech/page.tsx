@@ -580,9 +580,9 @@ function TechTool() {
   const bottomRef   = useRef<HTMLDivElement>(null)
   const photoRef    = useRef<HTMLInputElement>(null)
 
-  // ── On mount: check sessionStorage for saved code + restore identity ────────
+  // ── On mount: check localStorage for saved code + restore identity ──────────
   useEffect(() => {
-    const saved = sessionStorage.getItem('gg_tech_code')
+    const saved = localStorage.getItem('gg_tech_code')   // persists across tab closes
     if (saved) { setTechCode(saved); setScreen('home') }
     const savedTechId   = localStorage.getItem('gg_tech_id')
     const savedTechName = localStorage.getItem('gg_tech_name')
@@ -618,7 +618,16 @@ function TechTool() {
     if (!techCode) return
     fetch('/api/kb/products', { headers: { 'x-tech-code': techCode } })
       .then(r => r.json())
-      .then(d => setProducts(d.products ?? []))
+      .then(d => {
+        setProducts(d.products ?? [])
+        // If per-tech code and no identity stored yet, auto-set from API response
+        if (d.techId && d.techName && !localStorage.getItem('gg_tech_id')) {
+          localStorage.setItem('gg_tech_id', d.techId)
+          localStorage.setItem('gg_tech_name', d.techName)
+          setTechId(d.techId)
+          setTechName(d.techName)
+        }
+      })
       .catch(() => {})
   }, [techCode])
 
@@ -676,13 +685,25 @@ function TechTool() {
     const res = await fetch('/api/kb/products', { headers: { 'x-tech-code': code } })
     if (res.ok) {
       const data = await res.json()
-      sessionStorage.setItem('gg_tech_code', code)
+      // Persist to localStorage so code survives tab close / browser restart
+      localStorage.setItem('gg_tech_code', code)
       setTechCode(code); setProducts(data.products ?? [])
+
+      // Per-tech code: API returns the tech's identity — auto-skip identity screen
+      if (data.techId && data.techName) {
+        localStorage.setItem('gg_tech_id', data.techId)
+        localStorage.setItem('gg_tech_name', data.techName)
+        setTechId(data.techId)
+        setTechName(data.techName)
+        setScreen('home')
+        return
+      }
+
       const savedTechId = localStorage.getItem('gg_tech_id')
       if (savedTechId) {
         setScreen('home')
       } else {
-        // Fetch tech list and go to identity screen
+        // Global / org code: fetch tech list and go to identity screen
         fetch('/api/tech/identity', { headers: { 'x-tech-code': code } })
           .then(r => r.json())
           .then(d => { setAllTechs(d.technicians ?? []); setScreen('identity') })
@@ -869,8 +890,9 @@ function TechTool() {
           >
             AUTHENTICATE ›
           </button>
-          <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, textAlign: 'center', marginTop: 20, letterSpacing: '0.1em' }}>
-            CODE PROVIDED BY YOUR GATEGUARD DEALER
+          <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, textAlign: 'center', marginTop: 20, letterSpacing: '0.1em', lineHeight: 1.6 }}>
+            PERSONAL CODES: GET FROM YOUR DEALER PORTAL<br />
+            DEALER CODE: ASSIGNED BY GATEGUARD
           </div>
         </div>
       </div>

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { TopBar } from "@/components/layout/TopBar";
 import { cn } from "@/lib/utils";
+import PeoplePicker from "@/components/shared/PeoplePicker";
 import {
   CheckCircle2, Circle, Clock, TrendingUp,
   TrendingDown, Minus, Plus, X, ChevronRight, Users,
@@ -783,10 +784,12 @@ function RocksTab({ rocks, setRocks }: { rocks: Rock[]; setRocks: React.Dispatch
                   />
                 </td>
                 <td className="px-4 py-2">
-                  <input
-                    className="w-full border border-border rounded px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
+                  <PeoplePicker
                     value={newRock.owner || ""}
-                    onChange={e => setNewRock(p => ({ ...p, owner: e.target.value }))}
+                    onChange={name => setNewRock(p => ({ ...p, owner: name }))}
+                    placeholder="Owner"
+                    mode="form"
+                    inputClassName="h-8 text-sm"
                   />
                 </td>
                 <td className="px-4 py-2">
@@ -970,11 +973,11 @@ function ScorecardTab({ measurables, setMeasurables }: { measurables: Measurable
             </div>
             <div>
               <label className="text-xs text-muted-foreground font-medium mb-1 block">Owner</label>
-              <input
-                className="w-full h-9 border border-border rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
-                placeholder="e.g. RF or Nicole"
+              <PeoplePicker
                 value={newMetric.owner}
-                onChange={e => setNewMetric(p => ({ ...p, owner: e.target.value }))}
+                onChange={name => setNewMetric(p => ({ ...p, owner: name }))}
+                placeholder="Assign to…"
+                mode="form"
               />
             </div>
             <div>
@@ -1197,11 +1200,12 @@ function IssuesTab({ issues, setIssues }: { issues: Issue[]; setIssues: React.Di
                   <option key={p} value={p}>{p}</option>
                 ))}
               </select>
-              <input
-                className="border border-border rounded px-2 py-1.5 text-sm bg-white focus:outline-none w-24"
-                placeholder="Owner"
+              <PeoplePicker
                 value={newIssue.owner || ""}
-                onChange={e => setNewIssue(p => ({ ...p, owner: e.target.value }))}
+                onChange={name => setNewIssue(p => ({ ...p, owner: name }))}
+                placeholder="Owner"
+                mode="form"
+                className="w-40"
               />
               <button
                 onClick={addIssue}
@@ -1620,8 +1624,13 @@ function TodosTab({ todos, setTodos }: { todos: TodoItem[]; setTodos: React.Disp
                         </div>
 
                         {/* Owner */}
-                        <div className="w-28 flex-shrink-0 px-2 py-2 text-muted-foreground">
-                          {renderCell(todo, "owner", todo.owner ?? "")}
+                        <div className="w-28 flex-shrink-0 px-1 py-1.5 text-muted-foreground" onClick={e => e.stopPropagation()}>
+                          <PeoplePicker
+                            value={todo.owner ?? ""}
+                            onChange={name => patchTodo(todo.id, { owner: name })}
+                            placeholder="Assign…"
+                            mode="inline"
+                          />
                         </div>
 
                         {/* Due date */}
