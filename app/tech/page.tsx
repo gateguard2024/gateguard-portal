@@ -672,7 +672,7 @@ function TechTool() {
   async function submitCode() {
     setCodeError(false)
     const code = codeInput.trim().toUpperCase()
-    if (!code) return
+    if (!code) { setCodeError(true); return }
     const res = await fetch('/api/kb/products', { headers: { 'x-tech-code': code } })
     if (res.ok) {
       const data = await res.json()
@@ -864,8 +864,8 @@ function TechTool() {
             </div>
           )}
           <button
-            onClick={submitCode} disabled={!codeInput.trim()}
-            style={{ ...S.primaryBtn, marginTop: 16, opacity: codeInput.trim() ? 1 : 0.25 }}
+            onClick={submitCode}
+            style={{ ...S.primaryBtn, marginTop: 16 }}
           >
             AUTHENTICATE ›
           </button>
