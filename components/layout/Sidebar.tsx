@@ -55,19 +55,40 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    key: "operations",
-    label: "Operations",
-    icon: ClipboardList,
+    key: "sales",
+    label: "Sales & Marketing",
+    icon: TrendingUp,
+    color: "#059669",
     items: [
-      { label: "CRM",              href: "/crm",       icon: MessageSquare,  description: "Leads, opportunities, pipeline" },
-      { label: "Customers",        href: "/customers", icon: Users,          description: "All customer accounts" },
-      { label: "Quotes",           href: "/quotes",    icon: FileText,       description: "Proposals and approvals" },
-      { label: "Operating System", href: "/eos",       icon: Layers,         description: "EOS — Rocks, Scorecard, L10" },
-      { label: "The Feed",         href: "/feed",      icon: Flame,          description: "Team wins, challenges, leaderboard", badge: "New" },
-      { label: "Messages",         href: "/communications", icon: Hash,      description: "Team messaging — channels + DMs", badge: "Soon" },
-      { label: "Events",           href: "/events",    icon: Calendar,       description: "Property events and milestones" },
-      { label: "Incidents",        href: "/incidents", icon: AlertOctagon,   description: "Gate failures, security events" },
-      { label: "Analytics",        href: "/analytics", icon: BarChart3Icon,  description: "MRR trends, property health" },
+      { label: "CRM",                 href: "/crm",       icon: MessageSquare,  description: "Leads, opportunities, pipeline" },
+      { label: "Quotes",              href: "/quotes",    icon: FileText,       description: "Proposals and approvals" },
+      { label: "Site Survey",         href: "/survey",    icon: ClipboardCheck, description: "Site walk and proposal builder" },
+      { label: "Service Marketplace", href: "/services",  icon: Package,        description: "TV, internet, video monitoring & more", badge: "New" },
+      { label: "Reps & Commissions",  href: "/reps",      icon: UserCheck,      description: "Rep hierarchy and payouts" },
+      { label: "Marketing Hub",       href: "/marketing", icon: Megaphone,      description: "Campaigns and content" },
+    ],
+  },
+  {
+    key: "business",
+    label: "Business",
+    icon: Building2,
+    items: [
+      { label: "Operating System", href: "/eos",      icon: Layers,    description: "EOS — Rocks, Scorecard, L10" },
+      { label: "Customers",        href: "/customers", icon: Users,     description: "All customer accounts" },
+      { label: "Properties",       href: "/sites",     icon: Building2, description: "Installed sites and assets" },
+      { label: "Billing",          href: "/billing",   icon: CreditCard,description: "Invoices and payments" },
+      { label: "Expenses",         href: "/expenses",  icon: DollarSign,description: "Expense tracking" },
+      { label: "Revenue",          href: "/revenue",   icon: TrendingUp,description: "MRR/ARR dashboard" },
+    ],
+  },
+  {
+    key: "documents",
+    label: "Documents",
+    icon: FileText,
+    items: [
+      { label: "Contracts",         href: "/contracts",         icon: FileCheck,   description: "Contract storage" },
+      { label: "Renewals",          href: "/renewals",          icon: Repeat,      description: "Contract renewals and alerts" },
+      { label: "Vendor Compliance", href: "/vendor-compliance", icon: ShieldCheck, description: "Vendor permits, certs, expiry alerts" },
     ],
   },
   {
@@ -75,17 +96,14 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Field & Tech",
     icon: TechIcon,
     items: [
-      { label: "Tech Tool",      href: "/tech",        icon: Zap,            description: "AI field diagnostic tool",   badge: "AI" },
-      { label: "Knowledge Base", href: "/kb",          icon: BookOpen,       description: "Articles and manuals" },
-      { label: "Products",       href: "/products",    icon: Package,        description: "Equipment catalog" },
-      { label: "Properties",     href: "/sites",       icon: Building2,      description: "Installed sites and assets" },
-      { label: "Work Orders",    href: "/maintenance", icon: Wrench,         description: "Work orders and service history" },
-      { label: "Dispatch",       href: "/dispatch",    icon: Truck,          description: "Tech scheduling and job board" },
-      { label: "Inventory",      href: "/inventory",   icon: Package,        description: "Parts, stock, and POs" },
-      { label: "Site Survey",    href: "/survey",      icon: ClipboardCheck, description: "Site walk and proposal builder" },
-      { label: "Documents",      href: "/documents",   icon: FolderOpen,     description: "Agreements, permits, manuals" },
-      { label: "Reports",        href: "/reports",     icon: BarChart3Icon,  description: "Multi-site rollup" },
-      { label: "Subcontractors", href: "/subcontractors", icon: Users,         description: "Manage subcontractors, compliance & WO access" },
+      { label: "Incidents",       href: "/incidents",      icon: AlertOctagon, description: "Gate failures, security events" },
+      { label: "Tech Tool",       href: "/tech",           icon: Zap,          description: "AI field diagnostic tool", badge: "AI" },
+      { label: "Knowledge Base",  href: "/kb",             icon: BookOpen,     description: "Articles and manuals" },
+      { label: "Products",        href: "/products",       icon: Package,      description: "Equipment catalog" },
+      { label: "Work Orders",     href: "/maintenance",    icon: Wrench,       description: "Work orders and service history" },
+      { label: "Dispatch",        href: "/dispatch",       icon: Truck,        description: "Tech scheduling and job board" },
+      { label: "Inventory",       href: "/inventory",      icon: Package,      description: "Parts, stock, and POs" },
+      { label: "Sub-Contractors", href: "/subcontractors", icon: Users,        description: "Manage subcontractors, compliance & WO access" },
     ],
   },
   {
@@ -94,22 +112,22 @@ const NAV_SECTIONS: NavSection[] = [
     icon: Layers,
     color: "#0891B2",
     items: [
-      { label: "Floor Plans",   href: "/design/floor-plans", icon: FileText,      description: "Place devices on blueprints" },
-      { label: "System Design", href: "/design/system",      icon: Zap,           description: "I/O schematics + wiring" },
-      { label: "As-Builts",     href: "/design/as-builts",   icon: FileCheck,     description: "Auto-generate install docs" },
-      { label: "E-Sign",        href: "/design/esign",       icon: FileCheck,     description: "Legal document signatures" },
+      { label: "Floor Plans",   href: "/design/floor-plans", icon: FileText,  description: "Place devices on blueprints" },
+      { label: "System Design", href: "/design/system",      icon: Zap,       description: "I/O schematics + wiring" },
+      { label: "As-Builts",     href: "/design/as-builts",   icon: FileCheck, description: "Auto-generate install docs" },
+      { label: "E-Sign",        href: "/design/esign",       icon: FileCheck, description: "Legal document signatures" },
     ],
   },
   {
-    key: "security",
-    label: "Security",
+    key: "systems",
+    label: "Systems",
     icon: Shield,
     color: "#0B7285",
     items: [
-      { label: "Cameras",        href: "/cameras",          icon: Camera,   description: "Eagle Eye live feeds and clips" },
-      { label: "Access Control", href: "/access",           icon: Shield,   description: "Brivo credentials and logs" },
-      { label: "Network",        href: "/network",          icon: Server,   description: "UniFi infrastructure and VLANs" },
-      { label: "SOC",            href: "https://ggsoc.com", icon: Radio, external: true, description: "Live call center (ggsoc.com)" },
+      { label: "Cameras",        href: "/cameras",          icon: Camera,  description: "Eagle Eye live feeds and clips" },
+      { label: "Access Control", href: "/access",           icon: Shield,  description: "Brivo credentials and logs" },
+      { label: "Networks",       href: "/network",          icon: Server,  description: "UniFi infrastructure and VLANs" },
+      { label: "SOC",            href: "https://ggsoc.com", icon: Radio,   external: true, description: "Live call center (ggsoc.com)" },
     ],
   },
   {
@@ -118,68 +136,27 @@ const NAV_SECTIONS: NavSection[] = [
     icon: UserCheck,
     color: "#7C3AED",
     items: [
-      { label: "Dealers",          href: "/admin/dealers", icon: Users,        description: "Onboard and manage dealer orgs", badge: "Admin" },
-      { label: "Compliance",       href: "/compliance",    icon: ShieldCheck,  description: "Permits, certs, expiry alerts" },
-      { label: "Territory Map",    href: "/map",           icon: Map,          description: "Property pins by health status" },
-      { label: "Scorecard",        href: "/scorecard",     icon: Star,         description: "Dealer performance metrics" },
-      { label: "Quests",           href: "/quests",        icon: Trophy,       description: "Time-boxed challenges and tier points", badge: "New" },
-      { label: "Reviews",           href: "/reviews",      icon: Star,         description: "Post-WO ratings and Google reviews" },
-      { label: "Training",         href: "/training",      icon: GraduationCap,description: "Courses and certifications" },
+      { label: "Dealers",       href: "/admin/dealers",     icon: Users,         description: "Onboard and manage dealer orgs", badge: "Admin" },
+      { label: "Compliance",    href: "/compliance",        icon: ShieldCheck,   description: "Permits, certs, expiry alerts" },
+      { label: "Territory Map", href: "/map",               icon: Map,           description: "Property pins by health status" },
+      { label: "Scorecard",     href: "/scorecard",         icon: Star,          description: "Dealer performance metrics" },
+      { label: "Quests",        href: "/quests",            icon: Trophy,        description: "Time-boxed challenges and tier points", badge: "New" },
+      { label: "Reviews",       href: "/reviews",           icon: Star,          description: "Post-WO ratings and Google reviews" },
+      { label: "Training",      href: "/training",          icon: GraduationCap, description: "Courses and certifications" },
+      { label: "Dealer Sites",  href: "/marketing/website", icon: Globe,         description: "Hosted dealer landing pages" },
     ],
   },
   {
-    key: "intelligence",
-    label: "Intelligence",
-    icon: Zap,
+    key: "internal",
+    label: "Internal",
+    icon: Globe,
     color: "#6B7EFF",
     items: [
-      { label: "ARIA — Lead Intel",  href: "/aria",       icon: Crosshair,      description: "AI lead research and outreach",     badge: "AI" },
-      { label: "TRINITY — Voice AI", href: "/trinity",    icon: Phone,          description: "Voice agent + call analytics",      badge: "AI" },
-      { label: "DirecTV / ATLAS",    href: "/directv",    icon: Satellite,      description: "DirecTV channel and orders" },
-      { label: "New Order",          href: "/orders/new", icon: Zap,            description: "Submit a DirecTV order" },
-      { label: "SARA Bridge",        href: "/migrate",    icon: ArrowRightLeft, description: "Migrate from SARA Plus" },
-      { label: "Marketing Hub",      href: "/marketing",  icon: Megaphone,      description: "Campaigns and content" },
-      { label: "Dealer Sites",       href: "/marketing/website", icon: Globe,   description: "Hosted dealer landing pages" },
-      { label: "Co-op Pool",         href: "/marketing/coop",    icon: Users,   description: "Shared lead pool" },
+      { label: "Playbooks",        href: "/playbooks",      icon: BookOpen, description: "Internal playbooks and SOPs" },
+      { label: "Co-Op Pool",       href: "/marketing/coop", icon: Users,    description: "Shared lead pool" },
+      { label: "Customer Portals", href: "/portal",         icon: Globe,    description: "Property manager view" },
     ],
   },
-  {
-    key: "money",
-    label: "Money",
-    icon: DollarSign,
-    color: "#059669",
-    items: [
-      { label: "Service Marketplace",  href: "/services", icon: Package,      description: "TV, internet, video monitoring & more", badge: "New" },
-      { label: "Billing",            href: "/billing",  icon: CreditCard,   description: "Invoices and payments" },
-      { label: "Revenue",            href: "/revenue",  icon: TrendingUp,   description: "MRR/ARR dashboard" },
-      { label: "Reps & Commissions", href: "/reps",     icon: UserCheck,    description: "Rep hierarchy and payouts" },
-      { label: "Renewals",           href: "/renewals", icon: Repeat,       description: "Contract renewals and alerts" },
-      { label: "Contracts",          href: "/contracts",icon: FileCheck,    description: "Contract storage" },
-    ],
-  },
-  {
-    key: "settings",
-    label: "Settings",
-    icon: Settings,
-    items: [
-      { label: "Company Setup",   href: "/onboarding",              icon: Building2,  description: "Company info, logo, integrations" },
-      { label: "Subscription",    href: "/settings/subscription",   icon: CreditCard, description: "Plan, add-ons, billing" },
-      { label: "Cost Tracking",   href: "/admin/costs",             icon: BarChart3Icon, description: "Infra costs, unit economics, dealer P&L" },
-      { label: "Organizations",   href: "/admin",                   icon: Network,    description: "5-tier org hierarchy" },
-      { label: "User Management", href: "/admin/users",             icon: UserCog,    description: "Roles and access control" },
-      { label: "Notifications",   href: "/communications",          icon: Headphones, description: "Alerts and notification preferences" },
-      { label: "Customer Portal", href: "/portal",                  icon: Globe,      description: "Property manager view" },
-    ],
-  },
-];
-
-const integrations = [
-  { label: "Eagle Eye",   status: "connected" as const },
-  { label: "Brivo",      status: "connected" as const },
-  { label: "DirecTV",    status: "connected" as const },
-  { label: "QuickBooks", status: "pending"   as const },
-  { label: "Twilio",     status: "pending"   as const },
-  { label: "Tavily",     status: "connected" as const },
 ];
 
 const aiAgents = [
@@ -216,7 +193,7 @@ export function Sidebar() {
   const [armyExpanded, setArmyExpanded] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [integrationsExpanded, setIntegrationsExpanded] = useState(false);
+  const [socialExpanded, setSocialExpanded] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const activeSection = getSectionForPath(pathname);
@@ -463,17 +440,17 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
         {NAV_SECTIONS.map(section => {
           // Section-level tier gates
-          if (section.key === "design"       && !showDesign)      return null;
-          if (section.key === "security"     && !showSecurity)    return null;
-          if (section.key === "dealer"       && !showNetwork)     return null;
-          if (section.key === "intelligence" && !showIntelligence)return null;
-          if (section.key === "money"        && !showFinancials)  return null;
-          if (section.key === "settings"     && !showAdmin && !isCorporate && !isMasterDealer && !isFullDealer) return null;
-          // Install contractor: hide CRM-heavy and financial sections
-          if (isInstallContractor && section.key === "operations")  return null;
-          if (isInstallContractor && section.key === "dealer")      return null;
-          if (isInstallContractor && section.key === "intelligence") return null;
-          if (isInstallContractor && section.key === "money")       return null;
+          if (section.key === "sales"     && !showCRM && !showQuotes)          return null;
+          if (section.key === "business"  && !showSites && !showFinancials)    return null;
+          if (section.key === "documents" && !showFinancials)                  return null;
+          if (section.key === "design"    && !showDesign)                      return null;
+          if (section.key === "systems"   && !showSecurity)                    return null;
+          if (section.key === "dealer"    && !showNetwork)                     return null;
+          if (section.key === "internal"  && !isCorporate)                     return null;
+          // Install contractor: hide sales-heavy, dealer, and internal sections
+          if (isInstallContractor && section.key === "sales")     return null;
+          if (isInstallContractor && section.key === "dealer")    return null;
+          if (isInstallContractor && section.key === "internal")  return null;
 
           const SectionIcon = section.icon;
           const isExpanded      = expandedSections.has(section.key);
@@ -559,27 +536,29 @@ export function Sidebar() {
                 <div className="mt-0.5 ml-3 pl-3 border-l border-white/8 space-y-0.5 pb-1">
                   {section.items.map(item => {
                     // Item-level tier gates
-                    if (item.href === "/subcontractors" && !isInstallContractor && !isCorporate && !isMasterDealer && !isFullDealer) return null;
-                    if (item.href === "/crm"           && !showCRM)        return null;
-                    if (item.href === "/customers"     && !showOperations) return null;
-                    if (item.href === "/quotes"        && !showQuotes)     return null;
-                    if (item.href === "/billing"       && !showFinancials) return null;
-                    if (item.href === "/renewals"      && !showFinancials) return null;
-                    if (item.href === "/revenue"       && !showFinancials) return null;
-                    if (item.href === "/contracts"     && !showFinancials) return null;
-                    if (item.href === "/reps"          && !showCommissions)return null;
-                    if (item.href === "/sites"         && !showSites)      return null;
-                    if (item.href === "/maintenance"   && !showWOs)        return null;
-                    if (item.href === "/dispatch"      && !showDispatch)   return null;
-                    if (item.href === "/inventory"     && !showFieldFull)  return null;
-                    if (item.href === "/survey"        && !showFieldFull)  return null;
-                    if (item.href === "/reports"       && !showFinancials) return null;
-                    if (item.href === "/admin/dealers" && !showAdmin)      return null;
-                    if (item.href === "/compliance"    && !showCompliance) return null;
-                    if (item.href === "/scorecard"     && !showNetwork)    return null;
-                    if (item.href === "/training"      && !showNetwork)    return null;
-                    if (item.href === "/admin"         && !showAdmin)      return null;
-                    if (item.href === "/admin/users"   && !showAdmin)      return null;
+                    if (item.href === "/subcontractors"   && !isInstallContractor && !isCorporate && !isMasterDealer && !isFullDealer) return null;
+                    if (item.href === "/crm"              && !showCRM)        return null;
+                    if (item.href === "/customers"        && !showOperations) return null;
+                    if (item.href === "/quotes"           && !showQuotes)     return null;
+                    if (item.href === "/billing"          && !showFinancials) return null;
+                    if (item.href === "/expenses"         && !showFinancials) return null;
+                    if (item.href === "/renewals"         && !showFinancials) return null;
+                    if (item.href === "/revenue"          && !showFinancials) return null;
+                    if (item.href === "/contracts"        && !showFinancials) return null;
+                    if (item.href === "/reps"             && !showCommissions)return null;
+                    if (item.href === "/sites"            && !showSites)      return null;
+                    if (item.href === "/maintenance"      && !showWOs)        return null;
+                    if (item.href === "/dispatch"         && !showDispatch)   return null;
+                    if (item.href === "/inventory"        && !showFieldFull)  return null;
+                    if (item.href === "/survey"           && !showFieldFull)  return null;
+                    if (item.href === "/admin/dealers"    && !showAdmin)      return null;
+                    if (item.href === "/compliance"       && !showCompliance) return null;
+                    if (item.href === "/vendor-compliance"&& !showCompliance) return null;
+                    if (item.href === "/scorecard"        && !showNetwork)    return null;
+                    if (item.href === "/training"         && !showNetwork)    return null;
+                    if (item.href === "/admin"            && !showAdmin)      return null;
+                    if (item.href === "/admin/users"      && !showAdmin)      return null;
+                    if (item.href === "/playbooks"        && !isCorporate)    return null;
 
                     const Icon = item.icon;
                     const isActive = !item.external && (
@@ -620,42 +599,49 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* ── Live Integrations ─────────────────────────────────────────────── */}
+      {/* ── Social ────────────────────────────────────────────────────────── */}
       {!collapsed && (
         <div className="mx-2 border-t border-[hsl(var(--sidebar-border))] pt-2 pb-1 shrink-0">
           <button
-            onClick={() => setIntegrationsExpanded(v => !v)}
+            onClick={() => setSocialExpanded(v => !v)}
             className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 shadow" style={{ boxShadow: "0 0 4px #34d399" }} />
             <span className="text-[9px] uppercase tracking-[0.15em] text-[hsl(var(--sidebar-text))]/60 font-bold flex-1 text-left">
-              Live Integrations
-            </span>
-            <span className="text-[10px] text-emerald-400 font-semibold">
-              {integrations.filter(i => i.status === "connected").length}/{integrations.length}
+              Social
             </span>
             <ChevronDown
               size={9}
-              className={cn("transition-transform text-[hsl(var(--sidebar-text))]/40", integrationsExpanded && "rotate-180")}
+              className={cn("transition-transform text-[hsl(var(--sidebar-text))]/40", socialExpanded && "rotate-180")}
             />
           </button>
-          {integrationsExpanded && (
-            <div className="mt-1 space-y-0 px-1">
-              {integrations.map(int => (
-                <div key={int.label} className="flex items-center gap-2 px-3 py-1.5">
-                  <div className={cn(
-                    "w-1.5 h-1.5 rounded-full shrink-0",
-                    int.status === "connected" ? "bg-emerald-400" : "bg-amber-400"
-                  )} />
-                  <span className="text-[10px] text-[hsl(var(--sidebar-text))] flex-1">{int.label}</span>
-                  <span className={cn(
-                    "text-[9px] font-semibold",
-                    int.status === "connected" ? "text-emerald-400" : "text-amber-400"
-                  )}>
-                    {int.status === "connected" ? "Live" : "Setup"}
-                  </span>
-                </div>
-              ))}
+          {socialExpanded && (
+            <div className="mt-1 space-y-0.5 px-1">
+              <Link
+                href="/feed"
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                  pathname.startsWith("/feed")
+                    ? "bg-brand-400/20 text-white border border-brand-400/25"
+                    : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
+                )}
+              >
+                <Flame size={12} className="shrink-0" />
+                <span>The Feed</span>
+                <span className="ml-auto text-[8px] px-1.5 py-0.5 rounded-full font-bold text-white shrink-0" style={{ background: "#334155" }}>New</span>
+              </Link>
+              <Link
+                href="/communications"
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                  pathname.startsWith("/communications")
+                    ? "bg-brand-400/20 text-white border border-brand-400/25"
+                    : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
+                )}
+              >
+                <Hash size={12} className="shrink-0" />
+                <span>Messages</span>
+                <span className="ml-auto text-[8px] px-1.5 py-0.5 rounded-full font-bold text-white shrink-0" style={{ background: "#334155" }}>Soon</span>
+              </Link>
             </div>
           )}
         </div>
