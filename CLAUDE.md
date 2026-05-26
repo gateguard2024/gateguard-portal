@@ -330,6 +330,27 @@ GateGuard is going live. Two parallel Vercel deployments must exist from this po
 - **Reps API scoping** (`GET /api/reps`): corporate → all; dealer admin tiers → all in org; `sales_partner` → self + direct reports + sub-reports (2 levels) via `clerk_user_id` lookup
 - **New API routes**: `app/api/contracts/route.ts` (GET list + POST create with GG-CTR-XXXXX numbering), `app/api/renewals/route.ts` (GET 90-day expiry bucket), `app/api/training/reset-attempts/route.ts` (POST delete quiz chapters by user)
 
+- **Session additions (May 25 2026 — continued) — EOS bug fixes + L10 meeting attendee system:**
+- **`lib/eos-org.ts`** (NEW) — Centralized helper `resolveEosOrgId(user)`. Corporate admin users (e.g. rfeldman@gateguard.co) have no `org_id` in Clerk `publicMetadata` (predates the org_id requirement). The old null-fallback UUID `'00000000-0000-0000-0000-000000000001'` doesn't exist in `organizations` → FK violation on all EOS INSERTs. Fix: when `user.org_id` is null, query `organizations` by `org_tier='corporate'` and return the real corporate org ID. Applied to all 10 EOS API routes.
+- **EOS Rocks fix** — Rocks were silently failing to save (FK violation). Now uses `resolveEosOrgId` in `app/api/eos/rocks/route.ts` and `app/api/eos/rocks/[id]/route.ts`. Adding a second rock now works.
+- **EOS V/TO lens contamination fix** — `VTOTab` was mounted once; switching between Global/My Dealership lenses didn't remount it, so `useState(() => mergeVTO(vtoInit))` lazy initializer never re-ran — My Dealership edits were PATCHing local data over global data. Fix: `key={vtoLens}` on `<VTOTab>` in `app/eos/page.tsx` forces React to unmount/remount on lens change, re-initializing all state from the new `vtoInit` prop. Global and local are now fully isolated.
+- **`resolveEosOrgId` applied to all EOS routes**: `rocks/route.ts`, `rocks/[id]/route.ts`, `todos/route.ts`, `todos/[id]/route.ts`, `issues/route.ts`, `issues/[id]/route.ts`, `scorecard/route.ts`, `scorecard/[id]/route.ts`, `meetings/route.ts`, `vto/route.ts`
+- **L10 Meeting attendee system** — Full contact picker on MeetingForm:
+  - Fetches `GET /api/eos/meetings/attendee-suggestions` on mount → merged list from `technicians` + `organizations` (by primary_email), max 50, sorted by name
+  - Search input with client-side filtering by name/email
+  - Dropdown with source badges (🔧 Technician / 🏢 Org / ✏️ Custom)
+  - Click-to-add with email dedup; custom attendee entry with inline email field
+  - Amber `(no email)` indicator on chips for attendees without an email address
+- **L10 Meeting "Send Invites" button** — on L10Tab meeting detail view:
+  - `POST /api/eos/meetings/[id]/invite` → loads attendees, filters to those with email, builds universal `.ics` VCALENDAR string, sends via Resend with base64 `.ics` attachment
+  - DTSTART resolved from: `next_meeting_at` → parse `time_of_day` on today's/next occurrence → fallback to tomorrow 9am UTC
+  - Duration from `duration_minutes` field on meeting
+  - Stores `invited_at` timestamp on meeting record (non-blocking PATCH)
+  - Returns `{ sent, failed, skipped }` counts + per-attendee result array
+  - UI: `inviteLoading` state, success/failure banner, "Last invited: …" timestamp display
+- **`lib/email-sender.ts` updated** — Added `EmailAttachment` interface (`{ filename: string; content: string }`) and optional `attachments?: EmailAttachment[]` to `SendEmailOptions`. Passed through to Resend payload when present. Used by meeting invite route for `.ics` files.
+- **New API routes**: `app/api/eos/meetings/attendee-suggestions/route.ts` (GET — merged contacts from technicians + orgs), `app/api/eos/meetings/[id]/invite/route.ts` (POST — send .ics calendar invites via Resend)
+
 - **Sprint 6 additions (May 22 2026) — Design Section + Service Marketplace:**
 - **Sidebar** — NEXUS primary brand mark (large, blue), "by GateGuard" subtitle confirmed. New **Design** section added between Field & Tech and Security with 4 items: Floor Plans, System Design, As-Builts, E-Sign. Permission: `showDesign` = corporate | master_dealer | full_dealer | install_contractor | service_dealer.
 - `/services` — **Service Marketplace** first built: 22 services across 10 categories (TV, Internet, Video Monitoring, Package Lockers, Access Control, Smart Locks, Security, Network, Energy). Migration 070 backs the DB schema (service_catalog, dealer_service_enrollments, site_service_subscriptions).
@@ -883,6 +904,24 @@ Note: `/reps`, `/compliance`, `/scorecard`, `/map`, `/reports` are placeholder U
 | `lib/email-templates.ts` | 7 HTML email generator functions: dealer welcome, NDA, agreement, work order, quote approval, permit renewal, invoice. Dark navy `#0B1728` header, `#6B7EFF` CTA button. |
 | `lib/email-sender.ts` | `sendEmail()` utility wrapping Resend — never throws, safe fire-and-forget. |
 | `app/api/admin/dealers/send-docs/route.ts` | POST → auto-sends NDA + Agreement emails when a new dealer is created. Tier→doc mapping: master_agent/master_dealer → NDA-A, full_dealer/service_dealer/install_contractor → NDA-B, sales_partner → NDA-C. |
+
+### EOS (Entrepreneurial Operating System)
+| File | Purpose |
+|------|---------|
+| `lib/eos-org.ts` | `resolveEosOrgId(user)` — resolves the correct org_id for EOS operations. Corporate admin users whose Clerk `publicMetadata.org_id` is null get looked up by `org_tier='corporate'`. Applied to all 10 EOS API routes to fix FK violations. |
+| `app/api/eos/rocks/route.ts` | GET (list) + POST (create). Uses `resolveEosOrgId`. |
+| `app/api/eos/rocks/[id]/route.ts` | PATCH + DELETE by id. Uses `resolveEosOrgId` for org scoping. |
+| `app/api/eos/todos/route.ts` | GET + POST. Uses `resolveEosOrgId`. |
+| `app/api/eos/todos/[id]/route.ts` | PATCH + DELETE. Uses `resolveEosOrgId`. |
+| `app/api/eos/issues/route.ts` | GET + POST. Uses `resolveEosOrgId`. |
+| `app/api/eos/issues/[id]/route.ts` | PATCH + DELETE. Uses `resolveEosOrgId`. |
+| `app/api/eos/scorecard/route.ts` | GET + POST. Uses `resolveEosOrgId`. |
+| `app/api/eos/scorecard/[id]/route.ts` | PATCH + DELETE. Uses `resolveEosOrgId`. |
+| `app/api/eos/vto/route.ts` | GET (local + global scope) + PATCH. Uses `resolveEosOrgId` for local scope; global scope looks up `org_tier='corporate'` directly. |
+| `app/api/eos/meetings/route.ts` | GET + POST. Uses `resolveEosOrgId`. Default L10 agenda seeded on create. |
+| `app/api/eos/meetings/[id]/route.ts` | GET + PATCH + DELETE by meeting id. |
+| `app/api/eos/meetings/attendee-suggestions/route.ts` | GET — returns merged contact list from `technicians` + `organizations` (by primary_email), max 50, sorted by name. Used by meeting form contact picker. |
+| `app/api/eos/meetings/[id]/invite/route.ts` | POST — sends `.ics` calendar invites to all meeting attendees with email via Resend. Builds VCALENDAR string, base64-encodes, sends as attachment. Stores `invited_at` on meeting record. Returns `{ sent, failed, skipped }`. |
 
 ### TRINITY Voice AI
 | File | Purpose |
