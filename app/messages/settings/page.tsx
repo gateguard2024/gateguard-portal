@@ -181,16 +181,8 @@ function OAuthCard({
   existing: Channel | undefined;
   onDisconnect: (id: string) => Promise<void>;
 }) {
-  function buildOAuthUrl() {
-    const clientId   = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-    if (!clientId) return "#";
-    const scopes     = oauthState === "caldav"
-      ? "https://www.googleapis.com/auth/calendar openid email"
-      : "https://mail.google.com/ openid email";
-    const origin     = typeof window !== "undefined" ? window.location.origin : "";
-    const redirectUri = encodeURIComponent(`${origin}/api/auth/gmail-oauth`);
-    return `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent&state=${oauthState}`;
-  }
+  // Server-side route builds the Google OAuth URL — same pattern as /api/calendar/google/connect
+  const connectHref = `/api/auth/google/connect?type=${oauthState}`;
 
   return (
     <ChannelCard
@@ -205,7 +197,7 @@ function OAuthCard({
     >
       {!existing?.is_active && (
         <a
-          href={buildOAuthUrl()}
+          href={connectHref}
           className="flex items-center justify-center gap-2 w-full py-2 rounded-xl text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
           style={{ border: "1px solid #e5e7eb" }}
         >
