@@ -857,10 +857,13 @@ function RocksTab({ rocks, setRocks }: { rocks: Rock[]; setRocks: React.Dispatch
 // ─── Tab: Scorecard ───────────────────────────────────────────────────────────
 
 function ScorecardTab({ measurables, setMeasurables }: { measurables: Measurable[]; setMeasurables: React.Dispatch<React.SetStateAction<Measurable[]>> }) {
-  // Get current and previous week_of values
+  const [adding, setAdding] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [newMetric, setNewMetric] = useState({ name: "", owner: "", goal: "", unit: "" });
+
   const getWeekOf = (offsetWeeks = 0): string => {
     const d = new Date();
-    d.setDate(d.getDate() - d.getDay() + 1 - offsetWeeks * 7); // Monday
+    d.setDate(d.getDate() - d.getDay() + 1 - offsetWeeks * 7);
     return d.toISOString().split("T")[0];
   };
 
@@ -873,7 +876,6 @@ function ScorecardTab({ measurables, setMeasurables }: { measurables: Measurable
   };
 
   const updateEntry = async (metricId: string, weekOf: string, value: string) => {
-    // Optimistic update
     setMeasurables(prev => prev.map(m => {
       if (m.id !== metricId) return m;
       const existingIdx = m.entries.findIndex(e => e.week_of === weekOf);
@@ -887,7 +889,6 @@ function ScorecardTab({ measurables, setMeasurables }: { measurables: Measurable
         entries: [{ id: `temp-${Date.now()}`, scorecard_id: metricId, week_of: weekOf, value }, ...m.entries],
       };
     }));
-
     void (async () => {
       try {
         await fetch("/api/eos/scorecard/entries", {
@@ -899,14 +900,119 @@ function ScorecardTab({ measurables, setMeasurables }: { measurables: Measurable
     })();
   };
 
+  const addMetric = async () => {
+    if (!newMetric.name.trim()) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/eos/scorecard", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newMetric.name.trim(),
+          owner: newMetric.owner.trim(),
+          goal: newMetric.goal.trim(),
+          unit: newMetric.unit.trim(),
+          sort_order: measurables.length,
+        }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setMeasurables(prev => [...prev, created]);
+        setNewMetric({ name: "", owner: "", goal: "", unit: "" });
+        setAdding(false);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteMetric = async (id: string) => {
+    setMeasurables(prev => prev.filter(m => m.id !== id));
+    void (async () => {
+      try {
+        await fetch(`/api/eos/scorecard/${id}`, { method: "DELETE" });
+      } catch (_) { /* non-blocking */ }
+    })();
+  };
+
   const thisWeekLabel = new Date(thisWeekOf + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-base font-bold text-foreground">Weekly Scorecard</h2>
-        <p className="text-xs text-muted-foreground mt-0.5">Week of {thisWeekLabel} · Updated each L10</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-bold text-foreground">Weekly Scorecard</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Week of {thisWeekLabel} · Updated each L10</p>
+        </div>
+        <button
+          onClick={() => setAdding(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#6B7EFF] text-white text-sm font-medium rounded-lg hover:bg-[#5a6de8] transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Add Measurable
+        </button>
       </div>
+
+      {adding && (
+        <div className="bg-white border border-[#6B7EFF]/30 rounded-xl p-4 space-y-3">
+          <p className="text-sm font-semibold text-foreground">New Measurable</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-muted-foreground font-medium mb-1 block">Measurable Name *</label>
+              <input
+                autoFocus
+                className="w-full h-9 border border-border rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
+                placeholder="e.g. Number of Cold Calls"
+                value={newMetric.name}
+                onChange={e => setNewMetric(p => ({ ...p, name: e.target.value }))}
+                onKeyDown={e => e.key === "Enter" && addMetric()}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground font-medium mb-1 block">Owner</label>
+              <input
+                className="w-full h-9 border border-border rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
+                placeholder="e.g. RF or Nicole"
+                value={newMetric.owner}
+                onChange={e => setNewMetric(p => ({ ...p, owner: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground font-medium mb-1 block">Goal</label>
+              <input
+                className="w-full h-9 border border-border rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
+                placeholder="e.g. ≥ 25 or > 5"
+                value={newMetric.goal}
+                onChange={e => setNewMetric(p => ({ ...p, goal: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground font-medium mb-1 block">Unit</label>
+              <input
+                className="w-full h-9 border border-border rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
+                placeholder="e.g. calls, $, %"
+                value={newMetric.unit}
+                onChange={e => setNewMetric(p => ({ ...p, unit: e.target.value }))}
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end pt-1">
+            <button
+              onClick={() => { setAdding(false); setNewMetric({ name: "", owner: "", goal: "", unit: "" }); }}
+              className="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={addMetric}
+              disabled={saving || !newMetric.name.trim()}
+              className="px-4 py-1.5 text-sm font-medium bg-[#6B7EFF] text-white rounded-lg hover:bg-[#5a6de8] disabled:opacity-50 transition-colors"
+            >
+              {saving ? "Saving…" : "Add Measurable"}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white border border-border rounded-xl overflow-hidden">
         <table className="w-full text-sm">
@@ -922,18 +1028,29 @@ function ScorecardTab({ measurables, setMeasurables }: { measurables: Measurable
           <tbody>
             {measurables.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-sm text-muted-foreground italic">
-                  No scorecard metrics yet.
+                <td colSpan={7} className="px-4 py-10 text-center">
+                  <div className="flex flex-col items-center gap-2">
+                    <span className="text-2xl">📊</span>
+                    <p className="text-sm font-medium text-foreground">No scorecard metrics yet</p>
+                    <p className="text-xs text-muted-foreground">Click &quot;Add Measurable&quot; to track your first weekly number</p>
+                    <button
+                      onClick={() => setAdding(true)}
+                      className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-[#6B7EFF] text-white text-sm font-medium rounded-lg hover:bg-[#5a6de8] transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add Measurable
+                    </button>
+                  </div>
                 </td>
               </tr>
             ) : measurables.map(m => {
               const thisWeek = getEntryValue(m, thisWeekOf);
               const lastWeek = getEntryValue(m, lastWeekOf);
               return (
-                <tr key={m.id} className="border-b border-border last:border-0 hover:bg-slate-50/50 transition-colors">
+                <tr key={m.id} className="border-b border-border last:border-0 hover:bg-slate-50/50 transition-colors group">
                   <td className="px-4 py-3 font-medium text-foreground">{m.name}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{m.owner}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-foreground bg-slate-50/50">{m.goal}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{m.owner || "—"}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-foreground bg-slate-50/50">{m.goal || "—"}</td>
                   <td className="px-4 py-3">
                     <input
                       className="w-20 border border-border rounded px-2 py-0.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30"
@@ -947,7 +1064,16 @@ function ScorecardTab({ measurables, setMeasurables }: { measurables: Measurable
                     <TrendIcon current={thisWeek} previous={lastWeek} />
                   </td>
                   <td className="px-4 py-3">
-                    <GoalStatus goal={m.goal} value={thisWeek} />
+                    <div className="flex items-center gap-2">
+                      <GoalStatus goal={m.goal} value={thisWeek} />
+                      <button
+                        onClick={() => deleteMetric(m.id)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-red-50 text-red-400 hover:text-red-600"
+                        title="Delete measurable"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
