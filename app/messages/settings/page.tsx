@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { TopBar } from "@/components/layout/TopBar";
-import { CheckCircle2, Plus, Trash2, RefreshCw, Settings, Eye, EyeOff } from "lucide-react";
+import { CheckCircle2, Plus, Trash2, RefreshCw, Settings, Eye } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Mail, PhoneCall, Calendar, Lock, Server, ExternalLink } = require("lucide-react") as any;
+const { Mail, PhoneCall, Calendar, Lock, Server, ExternalLink, EyeOff } = require("lucide-react") as any;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
