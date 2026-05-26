@@ -4,12 +4,46 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bell, Search, ChevronDown, X, Settings, User } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { HelpCircle, LogOut, CalendarDays } = require("lucide-react") as any;
+const { HelpCircle, LogOut, CalendarDays, AlertTriangle, ShieldAlert, Info } = require("lucide-react") as any;
 
 interface TopBarProps {
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;
+}
+
+interface Incident {
+  id: string;
+  title: string;
+  severity: string;
+  status: string;
+  source: string;
+  occurred_at: string;
+  acknowledged_at: string | null;
+}
+
+const SEVERITY_COLOR: Record<string, string> = {
+  critical: "text-red-600 bg-red-50",
+  high:     "text-orange-600 bg-orange-50",
+  medium:   "text-amber-600 bg-amber-50",
+  low:      "text-blue-600 bg-blue-50",
+};
+
+const SEVERITY_DOT: Record<string, string> = {
+  critical: "bg-red-500",
+  high:     "bg-orange-500",
+  medium:   "bg-amber-400",
+  low:      "bg-blue-400",
+};
+
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1)  return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)  return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
 }
 
 export function TopBar({ title, subtitle, actions }: TopBarProps) {
@@ -19,6 +53,8 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
   const [bellOpen, setBellOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [todayCount, setTodayCount] = useState(0);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [incidentsLoading, setIncidentsLoading] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const bellRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -52,6 +88,58 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
       }
     })();
   }, []);
+
+  // Fetch open (unacknowledged) incidents for bell badge + dropdown
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/incidents");
+        if (res.ok) {
+          const data = await res.json() as { incidents?: Incident[] };
+          // Show open incidents that haven't been acknowledged
+          const open = (data.incidents ?? []).filter(
+            i => i.status === "open" && !i.acknowledged_at
+          ).slice(0, 20);
+          setIncidents(open);
+        }
+      } catch {
+        // Non-critical
+      }
+    })();
+  }, []);
+
+  // Refresh incidents when bell opens
+  useEffect(() => {
+    if (!bellOpen) return;
+    setIncidentsLoading(true);
+    void (async () => {
+      try {
+        const res = await fetch("/api/incidents");
+        if (res.ok) {
+          const data = await res.json() as { incidents?: Incident[] };
+          const open = (data.incidents ?? []).filter(
+            i => i.status === "open" && !i.acknowledged_at
+          ).slice(0, 20);
+          setIncidents(open);
+        }
+      } catch {
+        // silently ignore
+      } finally {
+        setIncidentsLoading(false);
+      }
+    })();
+  }, [bellOpen]);
+
+  async function acknowledgeIncident(id: string, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await fetch(`/api/incidents/${id}/acknowledge`, { method: "POST" });
+      setIncidents(prev => prev.filter(i => i.id !== id));
+    } catch {
+      // silently ignore
+    }
+  }
 
   // Quick search destinations
   const SEARCH_SHORTCUTS = [
@@ -137,27 +225,93 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
           )}
         </button>
 
-        {/* Bell — notifications */}
+        {/* Bell — live incidents */}
         <div className="relative" ref={bellRef}>
           <button
             onClick={() => setBellOpen(v => !v)}
             className="p-2 rounded-lg transition-colors relative text-muted-foreground hover:text-foreground hover:bg-slate-100"
-            title="Notifications"
+            title="Incidents & Alerts"
           >
             <Bell size={17} />
-            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-[#2563eb] rounded-full" />
+            {incidents.length > 0 && (
+              <span className="absolute top-1 right-1 min-w-[14px] h-[14px] flex items-center justify-center bg-red-500 text-white text-[8px] font-bold rounded-full px-0.5 leading-none">
+                {incidents.length > 9 ? "9+" : incidents.length}
+              </span>
+            )}
+            {incidents.length === 0 && (
+              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-slate-300 rounded-full" />
+            )}
           </button>
           {bellOpen && (
-            <div className="absolute right-0 top-full mt-1.5 w-80 bg-white border border-border rounded-xl shadow-xl z-50 overflow-hidden">
+            <div className="absolute right-0 top-full mt-1.5 w-96 bg-white border border-border rounded-xl shadow-xl z-50 overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                <p className="text-sm font-semibold text-foreground">Notifications</p>
-                <button onClick={() => setBellOpen(false)} className="text-muted-foreground hover:text-foreground"><X size={14} /></button>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold text-foreground">Incidents & Alerts</p>
+                  {incidents.length > 0 && (
+                    <span className="text-[10px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">{incidents.length} open</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Link href="/incidents" onClick={() => setBellOpen(false)}
+                    className="text-xs text-brand-400 hover:underline font-medium">View all</Link>
+                  <button onClick={() => setBellOpen(false)} className="text-muted-foreground hover:text-foreground ml-1"><X size={14} /></button>
+                </div>
               </div>
-              <div className="py-6 text-center">
-                <p className="text-2xl mb-2">🔔</p>
-                <p className="text-sm text-muted-foreground">No new notifications</p>
-                <p className="text-xs text-muted-foreground mt-1">Renewal alerts, lead assignments, and WO updates will appear here</p>
-              </div>
+
+              {incidentsLoading ? (
+                <div className="py-8 flex items-center justify-center">
+                  <div className="w-5 h-5 border-2 border-brand-400/30 border-t-brand-400 rounded-full animate-spin" />
+                </div>
+              ) : incidents.length === 0 ? (
+                <div className="py-8 text-center">
+                  <p className="text-2xl mb-2">✅</p>
+                  <p className="text-sm font-medium text-foreground">All clear</p>
+                  <p className="text-xs text-muted-foreground mt-1">No open incidents right now</p>
+                </div>
+              ) : (
+                <div className="max-h-[400px] overflow-y-auto divide-y divide-border">
+                  {incidents.map(incident => (
+                    <Link
+                      key={incident.id}
+                      href="/incidents"
+                      onClick={() => setBellOpen(false)}
+                      className="flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition-colors group"
+                    >
+                      {/* severity dot */}
+                      <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${SEVERITY_DOT[incident.severity] ?? "bg-slate-400"}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{incident.title}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wide ${SEVERITY_COLOR[incident.severity] ?? "text-slate-600 bg-slate-100"}`}>
+                            {incident.severity}
+                          </span>
+                          {incident.source === "ggsoc" && (
+                            <span className="text-[10px] text-muted-foreground">GGSOC</span>
+                          )}
+                          <span className="text-[10px] text-muted-foreground">{timeAgo(incident.occurred_at)}</span>
+                        </div>
+                      </div>
+                      {/* Quick acknowledge */}
+                      <button
+                        onClick={e => acknowledgeIncident(incident.id, e)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 text-[10px] text-muted-foreground hover:text-green-600 border border-border hover:border-green-300 rounded px-1.5 py-0.5 bg-white"
+                        title="Acknowledge"
+                      >
+                        ACK
+                      </button>
+                    </Link>
+                  ))}
+                </div>
+              )}
+
+              {incidents.length > 0 && (
+                <div className="px-4 py-2.5 border-t border-border bg-slate-50">
+                  <Link href="/incidents" onClick={() => setBellOpen(false)}
+                    className="text-xs text-brand-400 hover:underline font-medium">
+                    Open full incident tracker →
+                  </Link>
+                </div>
+              )}
             </div>
           )}
         </div>
