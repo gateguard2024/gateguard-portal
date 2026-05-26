@@ -417,7 +417,7 @@ export default function ARIAPage() {
     try {
       const r = await fetch(`/api/aria/searches/${id}/import`, { method: 'POST' });
       const d = await r.json();
-      if (d.error) throw new Error(d.error);
+      if (!r.ok || d.error) throw new Error(d.error ?? `Import failed (${r.status})`);
       setImportResult(prev => ({ ...prev, [id]: { created: d.created, skipped: d.skipped } }));
       // Update local saved searches list
       setSavedSearches(prev => prev.map(s => s.id === id
@@ -425,6 +425,7 @@ export default function ARIAPage() {
         : s
       ));
     } catch (e: any) {
+      console.error('[aria] import error:', e.message);
       setImportResult(prev => ({ ...prev, [id]: { created: -1, skipped: 0 } }));
     } finally {
       setImporting(null);
