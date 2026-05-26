@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase";
 
 const GOOGLE_TOKEN_URL    = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
@@ -70,7 +70,7 @@ export async function GET(req: Request) {
   const isCalDAV = state === "caldav" || state === "both";
   const isGmail  = !state || state === "gmail" || state === "both";
 
-  const supabase = createClient();
+  const supabase = createServiceClient();
 
   // Upsert Gmail channel
   if (isGmail) {

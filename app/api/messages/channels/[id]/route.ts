@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase";
 
 // PATCH /api/messages/channels/[id] — update channel (display_name, config, is_active)
 export async function PATCH(
@@ -21,7 +21,7 @@ export async function PATCH(
     return NextResponse.json({ error: "No updatable fields provided" }, { status: 400 });
   }
 
-  const supabase = createClient();
+  const supabase = createServiceClient();
   const { data, error } = await supabase
     .from("message_channels")
     .update(update)
@@ -44,7 +44,7 @@ export async function DELETE(
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const supabase = createClient();
+  const supabase = createServiceClient();
   const { error } = await supabase
     .from("message_channels")
     .delete()

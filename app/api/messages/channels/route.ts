@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase";
 
 // GET /api/messages/channels — list all channels for the current user
 export async function GET() {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const supabase = createClient();
+  const supabase = createServiceClient();
   void (async () => {
     try {
       await supabase.from("message_channels").select("id").limit(1);
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "channel_type and display_name are required" }, { status: 400 });
   }
 
-  const supabase = createClient();
+  const supabase = createServiceClient();
   const { data, error } = await supabase
     .from("message_channels")
     .insert({

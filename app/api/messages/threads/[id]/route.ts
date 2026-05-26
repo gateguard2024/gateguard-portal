@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase";
 
 // GET /api/messages/threads/[id] — thread detail + messages
 export async function GET(
@@ -10,7 +10,7 @@ export async function GET(
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const supabase = createClient();
+  const supabase = createServiceClient();
 
   // Fetch thread (verifies ownership via RLS)
   const { data: thread, error: threadErr } = await supabase
@@ -78,7 +78,7 @@ export async function PATCH(
     return NextResponse.json({ error: "No updatable fields" }, { status: 400 });
   }
 
-  const supabase = createClient();
+  const supabase = createServiceClient();
   const { data, error } = await supabase
     .from("message_threads")
     .update(update)

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase";
 
 interface SendBody {
   thread_id: string;
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "thread_id and body are required" }, { status: 400 });
   }
 
-  const supabase = createClient();
+  const supabase = createServiceClient();
 
   // 1. Load thread + channel (ownership enforced by RLS)
   const { data: thread, error: threadErr } = await supabase

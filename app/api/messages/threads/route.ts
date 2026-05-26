@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase";
 
 // GET /api/messages/threads
 // Query params: channel_id, linked_wo_id, linked_quote_id, unread=true, limit, offset
@@ -16,7 +16,7 @@ export async function GET(req: Request) {
   const limit       = Math.min(parseInt(searchParams.get("limit")  ?? "50"), 100);
   const offset      = parseInt(searchParams.get("offset") ?? "0");
 
-  const supabase = createClient();
+  const supabase = createServiceClient();
 
   let query = supabase
     .from("message_threads")
@@ -68,7 +68,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "channel_id and participants required" }, { status: 400 });
   }
 
-  const supabase = createClient();
+  const supabase = createServiceClient();
   const { data, error } = await supabase
     .from("message_threads")
     .insert({
