@@ -69,17 +69,6 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    key: "communications",
-    label: "Communications",
-    icon: MessageSquare,
-    color: "#6B7EFF",
-    items: [
-      { label: "Messages",      href: "/messages",          icon: MessageSquare, description: "Unified inbox — SMS, email, CalDAV, org chat", badge: "New" },
-      { label: "Calendar",      href: "/calendar",          icon: Calendar,      description: "Schedule, to-dos, and work orders" },
-      { label: "Messenger PWA", href: "/pwa/messenger",     icon: MessageSquare, description: "Install as mobile app — WhatsApp-style org chat" },
-    ],
-  },
-  {
     key: "business",
     label: "Business",
     icon: Building2,
@@ -209,7 +198,7 @@ export function Sidebar() {
 
   const activeSection = getSectionForPath(pathname);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(() => {
-    const initial = activeSection && activeSection !== "dashboard" ? activeSection : "operations";
+    const initial = activeSection && activeSection !== "dashboard" ? activeSection : "sales";
     return new Set([initial]);
   });
 
@@ -627,23 +616,23 @@ export function Sidebar() {
           {socialExpanded && (
             <div className="mt-1 space-y-0.5 px-1">
               <Link
-                href="/communications"
+                href="/messages"
                 className={cn(
                   "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
-                  pathname.startsWith("/communications")
+                  pathname.startsWith("/messages")
                     ? "bg-brand-400/20 text-white border border-brand-400/25"
                     : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
                 )}
               >
                 <Hash size={12} className="shrink-0" />
                 <span>Messages</span>
-                <span className="ml-auto text-[8px] px-1.5 py-0.5 rounded-full font-bold text-white shrink-0" style={{ background: "#334155" }}>Soon</span>
+                <span className="ml-auto text-[8px] px-1.5 py-0.5 rounded-full font-bold text-white shrink-0" style={{ background: "#334155" }}>New</span>
               </Link>
               <Link
-                href="/messenger"
+                href="/pwa/messenger"
                 className={cn(
                   "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
-                  pathname.startsWith("/messenger")
+                  pathname.startsWith("/pwa/messenger")
                     ? "bg-brand-400/20 text-white border border-brand-400/25"
                     : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
                 )}
