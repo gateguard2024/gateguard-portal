@@ -1021,7 +1021,7 @@ function CalendarPage() {
           <div className="px-4 py-3.5 border-b border-white/10">
             <div className="flex items-center gap-2 mb-0.5">
               <CalendarClock size={15} className="text-white/40" />
-              <span className="text-[11px] font-bold uppercase tracking-wider text-white/90">Monday.com-Style Workflow Queue &amp; Task Inbox</span>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-white/90">Workflow Queue &amp; Task Inbox</span>
               {totalUnscheduled > 0 && (
                 <span className="ml-auto text-[9px] font-bold bg-[#6B7EFF]/30 text-[#a8b4ff] px-1.5 py-0.5 rounded-full shrink-0">
                   {totalUnscheduled}
@@ -1056,7 +1056,7 @@ function CalendarPage() {
               <>
                 {/* To-Dos */}
                 {unscheduledTodos.length > 0 && (
-                  <SidebarSection label="To-Dos" count={unscheduledTodos.length}>
+                  <SidebarSection label="Task Inbox" count={unscheduledTodos.length}>
                     {unscheduledTodos.map((todo) => (
                       <TaskCard
                         key={todo.id}
@@ -1077,7 +1077,7 @@ function CalendarPage() {
 
                 {/* Work Orders */}
                 {unscheduledWOs.length > 0 && (
-                  <SidebarSection label="Unscheduled work orders" count={unscheduledWOs.length}>
+                  <SidebarSection label="Workflow Queue" count={unscheduledWOs.length}>
                     {unscheduledWOs.map((wo) => (
                       <TaskCard
                         key={wo.id}
@@ -1099,7 +1099,7 @@ function CalendarPage() {
 
                 {/* Open Leads */}
                 {unscheduledLeads.length > 0 && (
-                  <SidebarSection label="Open leads" count={unscheduledLeads.length} defaultOpen={false}>
+                  <SidebarSection label="Active Leads" count={unscheduledLeads.length} defaultOpen={false}>
                     {unscheduledLeads.map((lead) => (
                       <a
                         key={lead.id}
