@@ -357,14 +357,13 @@ export function Sidebar() {
             href="/calendar"
             title="Calendar"
             className={cn(
-              "flex-1 flex flex-col items-center gap-0.5 py-2 rounded-lg transition-colors group",
+              "flex items-center justify-center p-2.5 rounded-lg transition-colors",
               pathname.startsWith("/calendar")
                 ? "bg-brand-400/20 text-brand-400"
                 : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
             )}
           >
             <CalendarDays size={14} />
-            <span className="text-[8px] font-semibold uppercase tracking-wide">Calendar</span>
           </Link>
           <Link
             href="/todos"
@@ -610,7 +609,7 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* ── Social ────────────────────────────────────────────────────────── */}
+      {/* ── Comms & Social ────────────────────────────────────────────────── */}
       {!collapsed && (
         <div className="mx-2 border-t border-[hsl(var(--sidebar-border))] pt-2 pb-1 shrink-0">
           <button
@@ -618,7 +617,7 @@ export function Sidebar() {
             className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
           >
             <span className="text-[9px] uppercase tracking-[0.15em] text-[hsl(var(--sidebar-text))]/60 font-bold flex-1 text-left">
-              Social
+              Comms &amp; Social
             </span>
             <ChevronDown
               size={9}
@@ -627,19 +626,6 @@ export function Sidebar() {
           </button>
           {socialExpanded && (
             <div className="mt-1 space-y-0.5 px-1">
-              <Link
-                href="/feed"
-                className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
-                  pathname.startsWith("/feed")
-                    ? "bg-brand-400/20 text-white border border-brand-400/25"
-                    : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
-                )}
-              >
-                <Flame size={12} className="shrink-0" />
-                <span>The Feed</span>
-                <span className="ml-auto text-[8px] px-1.5 py-0.5 rounded-full font-bold text-white shrink-0" style={{ background: "#334155" }}>New</span>
-              </Link>
               <Link
                 href="/communications"
                 className={cn(
@@ -652,6 +638,31 @@ export function Sidebar() {
                 <Hash size={12} className="shrink-0" />
                 <span>Messages</span>
                 <span className="ml-auto text-[8px] px-1.5 py-0.5 rounded-full font-bold text-white shrink-0" style={{ background: "#334155" }}>Soon</span>
+              </Link>
+              <Link
+                href="/messenger"
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                  pathname.startsWith("/messenger")
+                    ? "bg-brand-400/20 text-white border border-brand-400/25"
+                    : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
+                )}
+              >
+                <MessageSquare size={12} className="shrink-0" />
+                <span>Messenger PWA</span>
+              </Link>
+              <Link
+                href="/feed"
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                  pathname.startsWith("/feed")
+                    ? "bg-brand-400/20 text-white border border-brand-400/25"
+                    : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
+                )}
+              >
+                <Flame size={12} className="shrink-0" />
+                <span>The Feed</span>
+                <span className="ml-auto text-[8px] px-1.5 py-0.5 rounded-full font-bold text-white shrink-0" style={{ background: "#334155" }}>New</span>
               </Link>
             </div>
           )}
