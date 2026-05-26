@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { resolveEosOrgId } from '@/lib/eos-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,7 +12,7 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     const user = await getCurrentUser()
-    const orgId = user.org_id ?? '00000000-0000-0000-0000-000000000001'
+    const orgId = await resolveEosOrgId(user)
 
     const { data, error } = await supabase
       .from('eos_issues')
@@ -34,7 +35,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser()
-    const orgId = user.org_id ?? '00000000-0000-0000-0000-000000000001'
+    const orgId = await resolveEosOrgId(user)
     const body = await req.json()
 
     const { description, type, owner, priority, status } = body

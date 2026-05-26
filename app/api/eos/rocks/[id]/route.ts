@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { resolveEosOrgId } from '@/lib/eos-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,7 +15,7 @@ export async function PATCH(
 ) {
   try {
     const user = await getCurrentUser()
-    const orgId = user.org_id ?? '00000000-0000-0000-0000-000000000001'
+    const orgId = await resolveEosOrgId(user)
     const body = await req.json()
 
     const { data, error } = await supabase
@@ -43,7 +44,7 @@ export async function DELETE(
 ) {
   try {
     const user = await getCurrentUser()
-    const orgId = user.org_id ?? '00000000-0000-0000-0000-000000000001'
+    const orgId = await resolveEosOrgId(user)
 
     const { error } = await supabase
       .from('eos_rocks')

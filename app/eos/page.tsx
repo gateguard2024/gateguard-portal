@@ -2618,7 +2618,16 @@ export default function EOSPage() {
           </div>
         ) : (
           <>
-            {activeTab === "V/TO"        && <VTOTab rocks={rocks} issues={issues} vtoInit={vtoLens === "global" ? globalVto : vto} readOnly={vtoLens === "global" && !((globalVto as Record<string,unknown>|null)?.org_id === (vto as Record<string,unknown>|null)?.org_id && globalVto !== null && vto !== null)} onSeeAllRocks={() => setActiveTab("Rocks")} />}
+            {activeTab === "V/TO"        && (
+              <VTOTab
+                key={vtoLens}
+                rocks={rocks}
+                issues={issues}
+                vtoInit={vtoLens === "global" ? globalVto : vto}
+                readOnly={vtoLens === "global" && !((globalVto as Record<string,unknown>|null)?.org_id === (vto as Record<string,unknown>|null)?.org_id && globalVto !== null && vto !== null)}
+                onSeeAllRocks={() => setActiveTab("Rocks")}
+              />
+            )}
             {activeTab === "Rocks"       && <RocksTab rocks={rocks} setRocks={setRocks} />}
             {activeTab === "Scorecard"   && <ScorecardTab measurables={measurables} setMeasurables={setMeasurables} />}
             {activeTab === "Issues"      && <IssuesTab issues={issues} setIssues={setIssues} />}

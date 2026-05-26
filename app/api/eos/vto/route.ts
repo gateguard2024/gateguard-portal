@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { resolveEosOrgId } from '@/lib/eos-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -43,9 +44,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(data ?? null, { status: data ? 200 : 404 })
     }
 
-    // Local: current user's own org
+    // Local: current user's own org — use resolveEosOrgId to handle corporate users
+    // whose Clerk metadata predates the org_id requirement
     const user = await getCurrentUser()
-    const orgId = user.org_id ?? '00000000-0000-0000-0000-000000000001'
+    const orgId = await resolveEosOrgId(user)
 
     const { data, error } = await supabase
       .from('eos_vto')
@@ -77,7 +79,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     const user = await getCurrentUser()
-    const orgId = user.org_id ?? '00000000-0000-0000-0000-000000000001'
+    const orgId = await resolveEosOrgId(user)
     const body = await req.json()
 
     const { data, error } = await supabase
