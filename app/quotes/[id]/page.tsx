@@ -215,7 +215,7 @@ function ItemForm({ quoteId, item, onSaved, onClose }: ItemFormProps) {
     } finally { setSaving(false); }
   }
 
-  const SECTIONS   = ['Equipment', 'Labor', 'Software / MRR', 'Cameras', 'Access Control', 'Network', 'Materials', 'Other'];
+  const SECTIONS   = ['Infrastructure', 'Cameras', 'Wireless & Networking', 'Labor', 'Software / MRR', 'Access Control', 'Materials', 'Equipment', 'Other'];
   const ITEM_TYPES = [
     { v: 'equipment', l: 'Equipment' },
     { v: 'labor',     l: 'Labor'     },
@@ -697,6 +697,11 @@ export default function QuoteDetailPage() {
   const [generatingEmail, setGeneratingEmail] = useState<boolean>(false);
   const [emailCopied,     setEmailCopied]    = useState<boolean>(false);
 
+  // Global discount editing
+  const [editingDiscount,   setEditingDiscount]   = useState<boolean>(false);
+  const [discountDraft,     setDiscountDraft]      = useState<string>('');
+  const [applyingDiscount,  setApplyingDiscount]   = useState<boolean>(false);
+
   // Notes & SOW state
   const [notes,           setNotes]          = useState<string>('');
   const [savingNotes,     setSavingNotes]    = useState<boolean>(false);
@@ -847,6 +852,30 @@ export default function QuoteDetailPage() {
       setQuote(q => q ? { ...q, ...data.quote } : q);
     } catch (e) { alert(e instanceof Error ? e.message : 'Failed to save notes'); }
     finally { setSavingNotes(false); }
+  }
+
+  async function applyGlobalDiscount(pct: number) {
+    if (!quote) return;
+    setApplyingDiscount(true);
+    try {
+      // 1. Save the quote-level discount_percent
+      await fetch(`/api/quotes/${id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ discount_percent: pct }),
+      });
+      // 2. Apply to every line item so the strikethrough per-line is visible
+      const patchPromises = quote.quote_line_items.map(item =>
+        fetch(`/api/quotes/${id}/items/${item.id}`, {
+          method:  'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ line_discount_percent: pct }),
+        })
+      );
+      await Promise.all(patchPromises);
+      await fetchQuote();
+    } catch (e) { alert(e instanceof Error ? e.message : 'Failed to apply discount'); }
+    finally { setApplyingDiscount(false); setEditingDiscount(false); }
   }
 
   async function linkSurvey(survey: SurveyOption) {
@@ -1269,9 +1298,43 @@ export default function QuoteDetailPage() {
 
           {/* Totals */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <DollarSign size={14} className="text-[#6B7EFF]" />
-              <h2 className="text-sm font-semibold text-gray-900">Pricing</h2>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <DollarSign size={14} className="text-[#6B7EFF]" />
+                <h2 className="text-sm font-semibold text-gray-900">Pricing</h2>
+              </div>
+              {!editingDiscount ? (
+                <button
+                  onClick={() => { setDiscountDraft(String(discPct)); setEditingDiscount(true); }}
+                  className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-[#6B7EFF] border border-dashed border-gray-200 hover:border-[#6B7EFF]/40 rounded px-1.5 py-0.5 transition-colors"
+                >
+                  <Tag size={9} /> {discPct > 0 ? `${discPct}% disc` : '+ Discount'}
+                </button>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number" min={0} max={100} step={0.5}
+                    value={discountDraft}
+                    onChange={e => setDiscountDraft(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') applyGlobalDiscount(parseFloat(discountDraft) || 0); if (e.key === 'Escape') setEditingDiscount(false); }}
+                    placeholder="10"
+                    className="w-16 border border-[#6B7EFF] rounded px-1.5 py-0.5 text-xs text-center focus:outline-none"
+                    autoFocus
+                  />
+                  <span className="text-xs text-gray-400">%</span>
+                  <button
+                    onClick={() => applyGlobalDiscount(parseFloat(discountDraft) || 0)}
+                    disabled={applyingDiscount}
+                    className="flex items-center gap-0.5 px-1.5 py-0.5 bg-[#6B7EFF] text-white text-[10px] font-medium rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  >
+                    {applyingDiscount ? <Loader2 size={9} className="animate-spin" /> : <Check size={9} />}
+                    Apply all
+                  </button>
+                  <button onClick={() => setEditingDiscount(false)} className="p-0.5 text-gray-300 hover:text-gray-500">
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
             </div>
             <div className="space-y-2.5 text-sm">
               <div className="flex justify-between text-gray-600">
