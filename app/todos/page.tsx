@@ -944,6 +944,7 @@ export default function TodosPage() {
   const [scope, setScope]         = useState<"mine" | "assigned">("mine");
   const [viewMode, setViewMode]   = useState<ViewMode>("list");
   const [selected, setSelected]   = useState<Todo | null>(null);
+  const [showDone, setShowDone]   = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -1016,17 +1017,22 @@ export default function TodosPage() {
   const doneCount  = todos.filter(t => t.status === "done").length;
 
   // ── Grouped todos ──────────────────────────────────────────────────────────
+  const visibleTodos = useMemo(
+    () => showDone ? todos : todos.filter(t => t.status !== "done"),
+    [todos, showDone]
+  );
+
   const groupedTodos = useMemo(() => {
     return GROUPS.map(group => ({
       ...group,
-      todos: todos
+      todos: visibleTodos
         .filter(t => {
           if (group.linked_types.includes(null) && !t.linked_type) return true;
           return group.linked_types.includes(t.linked_type);
         })
         .sort(prioritySort),
     })).filter(g => g.todos.length > 0 || g.key === "inbox");
-  }, [todos]);
+  }, [visibleTodos]);
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
@@ -1069,6 +1075,21 @@ export default function TodosPage() {
                 </button>
               ))}
             </div>
+
+            {/* Show/hide completed */}
+            <button
+              onClick={() => setShowDone(v => !v)}
+              className={`flex items-center gap-1.5 text-xs font-medium border rounded-lg px-3 py-1.5 transition-colors ${
+                showDone
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-600"
+                  : "border-slate-200 bg-white text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              <CheckCircle2 size={12} />
+              {showDone
+                ? "Hide completed"
+                : `Show completed${doneCount > 0 ? ` (${doneCount})` : ""}`}
+            </button>
 
             <button
               onClick={load}
@@ -1149,7 +1170,7 @@ export default function TodosPage() {
         {/* ── Kanban view ──────────────────────────────────────────────────── */}
         {!loading && !error && todos.length > 0 && viewMode === "kanban" && (
           <KanbanView
-            todos={todos}
+            todos={visibleTodos}
             onToggleDone={toggleDone}
             onDelete={deleteTodo}
             onClick={setSelected}
