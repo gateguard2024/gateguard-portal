@@ -9,7 +9,7 @@ import {
   Calendar, Target, Send, Zap, ChevronDown, Loader2,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Timer, Flag, Pencil } = require("lucide-react") as any;
+const { Timer, Flag, Pencil, Edit2, Trash2, ChevronLeft, Play } = require("lucide-react") as any;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -273,7 +273,7 @@ function mergeVTO(raw: Record<string, unknown> | null): VTOData {
 
 // ─── Tab: V/TO ────────────────────────────────────────────────────────────────
 
-function VTOTab({ rocks, issues, vtoInit, readOnly = false }: { rocks: Rock[]; issues: Issue[]; vtoInit: Record<string, unknown> | null; readOnly?: boolean }) {
+function VTOTab({ rocks, issues, vtoInit, readOnly = false, onSeeAllRocks }: { rocks: Rock[]; issues: Issue[]; vtoInit: Record<string, unknown> | null; readOnly?: boolean; onSeeAllRocks?: () => void }) {
   const [vto, setVto]       = useState<VTOData>(() => mergeVTO(vtoInit))
   const [saving, setSaving] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
@@ -599,7 +599,7 @@ function VTOTab({ rocks, issues, vtoInit, readOnly = false }: { rocks: Rock[]; i
         <SectionCard>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-foreground">Q2 2026 Rocks</h3>
-            <span className="text-[10px] text-muted-foreground">Due Jun 30 · <a href="#rocks" className="text-[#6B7EFF] hover:underline">See all →</a></span>
+            <span className="text-[10px] text-muted-foreground">Due Jun 30 · <button onClick={onSeeAllRocks} className="text-[#6B7EFF] hover:underline">See all →</button></span>
           </div>
           {rocks.length === 0 ? (
             <p className="text-xs text-muted-foreground italic">No rocks yet — add them in the Rocks tab.</p>
@@ -664,16 +664,16 @@ function RocksTab({ rocks, setRocks }: { rocks: Rock[]; setRocks: React.Dispatch
           quarter: "Q2-2026",
           status: newRock.status,
           progress: newRock.progress ?? 0,
-          due_date: newRock.due ? newRock.due : null,
+          due_date: newRock.due ? newRock.due : 'Jun 30',
           is_company_rock: true,
         }),
       });
       if (res.ok) {
         const created = await res.json();
         setRocks(prev => [...prev, created]);
-        setAdding(false);
         setNewRock({ status: "On Track", progress: 0, due: "Jun 30", owner: "Russel Feldman" });
       }
+      setAdding(false);
     } finally {
       setSaving(false);
     }
@@ -1606,176 +1606,560 @@ function TodosTab({ todos, setTodos }: { todos: TodoItem[]; setTodos: React.Disp
 
 // ─── Tab: L10 Meeting ─────────────────────────────────────────────────────────
 
-const agendaItems = [
-  { label: "Segue (Good News)", duration: 5, description: "Each person shares personal and professional good news" },
-  { label: "Scorecard Review", duration: 5, description: "Review each measurable — red means issues, drop it to the issues list" },
-  { label: "Rock Review", duration: 5, description: "On track or off track — no discussion, just status" },
-  { label: "Customer / Employee Headlines", duration: 5, description: "Headlines only — customer praise, employee news, nothing major" },
-  { label: "To-Do List Review", duration: 5, description: "Done or not done — 7-day actions, 90% completion rate is the goal" },
-  { label: "IDS (Issues)", duration: 60, description: "The most important 60 minutes. Work through issues one at a time using Identify-Discuss-Solve", highlight: true },
-  { label: "Conclude", duration: 5, description: "Recap To-Dos, cascade messages to the team, rate the meeting 1-10" },
+interface AgendaItem {
+  label: string;
+  duration: number;
+  description: string;
+  highlight?: boolean;
+}
+
+interface Meeting {
+  id: string;
+  name: string;
+  meeting_type: 'l10' | 'quarterly' | 'annual' | 'department' | 'custom';
+  day_of_week: string | null;
+  time_of_day: string | null;
+  duration_minutes: number;
+  attendees: { name: string; email?: string }[];
+  agenda: AgendaItem[];
+  recurrence: string;
+  next_meeting_at: string | null;
+  is_active: boolean;
+  notes: string | null;
+  created_at: string;
+}
+
+const DEFAULT_L10_AGENDA: AgendaItem[] = [
+  { label: 'Segue (Good News)', duration: 5, description: 'Each person shares personal and professional good news' },
+  { label: 'Scorecard Review', duration: 5, description: 'Review each measurable — red means issues, drop to issues list' },
+  { label: 'Rock Review', duration: 5, description: 'On track or off track — no discussion, just status' },
+  { label: 'Customer / Employee Headlines', duration: 5, description: 'Headlines only — customer praise, employee news' },
+  { label: 'To-Do List Review', duration: 5, description: 'Done or not done — 7-day actions, 90% completion rate is the goal' },
+  { label: 'IDS (Issues)', duration: 60, description: 'Identify-Discuss-Solve. The most important 60 minutes.', highlight: true },
+  { label: 'Conclude', duration: 5, description: 'Recap To-Dos, cascade messages to the team, rate the meeting 1-10' },
 ];
 
-const meetingRatings = [8, 9, 8, 10, 9, 8];
+const MEETING_TYPE_LABELS: Record<string, string> = {
+  l10: 'L10 Meeting',
+  quarterly: 'Quarterly Review',
+  annual: 'Annual Planning',
+  department: 'Department Meeting',
+  custom: 'Custom Meeting',
+};
 
-function L10Tab({ issues, todos }: { issues: Issue[]; todos: TodoItem[] }) {
-  const openIssues = issues.filter(i => i.status !== "Resolved");
-  const openTodos = todos.filter(t => !t.done);
+const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const RECURRENCE_OPTIONS = ['weekly', 'biweekly', 'monthly', 'quarterly', 'once'];
+
+function MeetingTypeBadge({ type }: { type: string }) {
+  const colors: Record<string, string> = {
+    l10: 'bg-[#6B7EFF]/10 text-[#6B7EFF] border-[#6B7EFF]/20',
+    quarterly: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    annual: 'bg-violet-50 text-violet-700 border-violet-200',
+    department: 'bg-amber-50 text-amber-700 border-amber-200',
+    custom: 'bg-slate-50 text-slate-600 border-slate-200',
+  };
+  return (
+    <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full border', colors[type] ?? colors.custom)}>
+      {MEETING_TYPE_LABELS[type] ?? type}
+    </span>
+  );
+}
+
+function MeetingForm({
+  initial,
+  onSave,
+  onCancel,
+}: {
+  initial?: Partial<Meeting>;
+  onSave: (data: Partial<Meeting>) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(initial?.name ?? 'L10 Meeting');
+  const [type, setType] = useState<Meeting['meeting_type']>(initial?.meeting_type ?? 'l10');
+  const [day, setDay] = useState(initial?.day_of_week ?? 'Friday');
+  const [time, setTime] = useState(initial?.time_of_day ?? '06:00');
+  const [duration, setDuration] = useState(initial?.duration_minutes ?? 90);
+  const [recurrence, setRecurrence] = useState(initial?.recurrence ?? 'weekly');
+  const [attendees, setAttendees] = useState<{ name: string; email?: string }[]>(initial?.attendees ?? []);
+  const [agenda, setAgenda] = useState<AgendaItem[]>(initial?.agenda?.length ? initial.agenda : (initial?.meeting_type === 'l10' ? DEFAULT_L10_AGENDA : []));
+  const [notes, setNotes] = useState(initial?.notes ?? '');
+  const [newAttendeeName, setNewAttendeeName] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleTypeChange = (newType: Meeting['meeting_type']) => {
+    setType(newType);
+    if (newType === 'l10' && agenda.length === 0) {
+      setAgenda(DEFAULT_L10_AGENDA);
+    }
+  };
+
+  const addAttendee = () => {
+    if (!newAttendeeName.trim()) return;
+    setAttendees(prev => [...prev, { name: newAttendeeName.trim() }]);
+    setNewAttendeeName('');
+  };
+
+  const handleSave = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      await onSave({ name, meeting_type: type, day_of_week: day, time_of_day: time, duration_minutes: duration, recurrence, attendees, agenda, notes: notes || null });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
-    <div className="space-y-4">
-      {/* Next meeting header */}
-      <div className="bg-[#6B7EFF]/5 border border-[#6B7EFF]/20 rounded-xl p-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-[10px] font-semibold text-[#6B7EFF] uppercase tracking-wider mb-1">Next L10 Meeting</p>
-            <h2 className="text-lg font-bold text-foreground">Friday, May 22, 2026 at 6:00 AM</h2>
-            <div className="flex items-center gap-3 mt-2">
-              <div className="flex items-center gap-1.5">
-                <Users size={13} className="text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Russel Feldman, Nicole Gagliardi</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Clock size={13} className="text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">90 min total</span>
-              </div>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Last Meeting Ratings</p>
-            <div className="flex items-center gap-1.5 justify-end">
-              {meetingRatings.map((r, i) => (
-                <div
-                  key={i}
-                  className={cn(
-                    "w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border",
-                    r >= 9 ? "bg-emerald-50 border-emerald-200 text-emerald-700" :
-                    r >= 7 ? "bg-blue-50 border-blue-200 text-blue-700" :
-                    "bg-amber-50 border-amber-200 text-amber-700"
-                  )}
-                >
-                  {r}
-                </div>
-              ))}
-            </div>
-            <p className="text-[10px] text-muted-foreground mt-1">avg: {(meetingRatings.reduce((a, b) => a + b, 0) / meetingRatings.length).toFixed(1)}/10</p>
-          </div>
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Meeting Name</label>
+          <input
+            className="w-full h-9 border border-border rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="e.g. Weekly L10"
+          />
+        </div>
+        <div>
+          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Meeting Type</label>
+          <select
+            className="w-full h-9 border border-border rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white"
+            value={type}
+            onChange={e => handleTypeChange(e.target.value as Meeting['meeting_type'])}
+          >
+            {Object.entries(MEETING_TYPE_LABELS).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
+          </select>
         </div>
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Agenda */}
-        <div className="lg:col-span-2">
-          <h3 className="text-sm font-semibold text-foreground mb-3">Meeting Agenda</h3>
-          <div className="space-y-2">
-            {agendaItems.map((item, i) => (
-              <div
-                key={i}
-                className={cn(
-                  "bg-white border rounded-xl p-4 flex items-start gap-4",
-                  item.highlight
-                    ? "border-[#6B7EFF]/30 bg-[#6B7EFF]/3"
-                    : "border-border"
-                )}
-              >
-                <div className={cn(
-                  "w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0",
-                  item.highlight ? "bg-[#6B7EFF] text-white" : "bg-slate-100 text-slate-600"
-                )}>
-                  <span className="text-sm font-bold leading-none">{item.duration}</span>
-                  <span className="text-[9px] leading-none mt-0.5">min</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className={cn("text-sm font-semibold", item.highlight ? "text-[#6B7EFF]" : "text-foreground")}>
-                      {item.label}
-                    </p>
-                    {item.highlight && (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#6B7EFF] text-white">
-                        80% of value
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5">
-                    <Timer size={12} />
-                    Start
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+      <div className="grid grid-cols-4 gap-4">
+        <div>
+          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Day</label>
+          <select className="w-full h-9 border border-border rounded-lg px-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white" value={day} onChange={e => setDay(e.target.value)}>
+            {DAYS_OF_WEEK.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
         </div>
-
-        {/* Live issues + todos for meeting prep */}
-        <div className="space-y-4">
-          <div className="bg-white border border-border rounded-xl p-4">
-            <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-              <span>Issues for This Meeting</span>
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200">
-                {openIssues.length}
-              </span>
-            </h4>
-            {openIssues.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic">No open issues.</p>
-            ) : (
-              <div className="space-y-2">
-                {openIssues.map(issue => (
-                  <div key={issue.id} className="flex items-start gap-2">
-                    <PriorityPill priority={issue.priority} />
-                    <p className="text-xs text-foreground flex-1">{issue.description}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="bg-white border border-border rounded-xl p-4">
-            <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-              <span>Open To-Dos</span>
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                {openTodos.length}
-              </span>
-            </h4>
-            {openTodos.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic">All to-dos complete!</p>
-            ) : (
-              <div className="space-y-2">
-                {openTodos.map(todo => (
-                  <div key={todo.id} className="flex items-start gap-2">
-                    <Circle size={14} className="text-muted-foreground mt-0.5 shrink-0" />
-                    <div>
-                      <p className="text-xs text-foreground">{todo.text}</p>
-                      <p className="text-[10px] text-muted-foreground">{todo.owner} · due {formatDate(todo.due_date)}</p>
+        <div>
+          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Time</label>
+          <input type="time" className="w-full h-9 border border-border rounded-lg px-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white" value={time} onChange={e => setTime(e.target.value)} />
+        </div>
+        <div>
+          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Duration (min)</label>
+          <input type="number" min={15} max={480} className="w-full h-9 border border-border rounded-lg px-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white" value={duration} onChange={e => setDuration(Number(e.target.value))} />
+        </div>
+        <div>
+          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Recurrence</label>
+          <select className="w-full h-9 border border-border rounded-lg px-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white" value={recurrence} onChange={e => setRecurrence(e.target.value)}>
+            {RECURRENCE_OPTIONS.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-2">Attendees</label>
+        <div className="flex flex-wrap gap-2 mb-2">
+          {attendees.map((a, i) => (
+            <span key={i} className="flex items-center gap-1.5 text-xs bg-slate-100 border border-slate-200 rounded-full px-3 py-1 text-foreground">
+              {a.name}
+              <button onClick={() => setAttendees(prev => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-red-500 transition-colors"><X size={11} /></button>
+            </span>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input
+            className="flex-1 h-8 border border-border rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white"
+            placeholder="Attendee name"
+            value={newAttendeeName}
+            onChange={e => setNewAttendeeName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addAttendee(); } }}
+          />
+          <button onClick={addAttendee} className="h-8 px-3 text-xs bg-[#6B7EFF]/10 text-[#6B7EFF] border border-[#6B7EFF]/20 rounded-lg hover:bg-[#6B7EFF]/20 font-medium transition-colors">+ Add</button>
+        </div>
+      </div>
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Agenda Items</label>
+          <button onClick={() => setAgenda(prev => [...prev, { label: '', duration: 5, description: '' }])} className="text-xs text-[#6B7EFF] hover:underline flex items-center gap-1"><Plus size={11} /> Add item</button>
+        </div>
+        <div className="space-y-2">
+          {agenda.map((item, i) => (
+            <div key={i} className={cn('border rounded-lg p-3 bg-white', item.highlight ? 'border-[#6B7EFF]/30 bg-[#6B7EFF]/3' : 'border-border')}>
+              <div className="flex items-start gap-3">
+                <div className="flex flex-col gap-1.5 flex-1">
+                  <div className="flex gap-2">
+                    <input className="flex-1 h-7 border border-border rounded px-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-white" placeholder="Agenda item name" value={item.label} onChange={e => setAgenda(prev => prev.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} />
+                    <div className="flex items-center gap-1">
+                      <input type="number" min={1} max={120} className="w-14 h-7 border border-border rounded px-2 text-sm text-center focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-white" value={item.duration} onChange={e => setAgenda(prev => prev.map((x, j) => j === i ? { ...x, duration: Number(e.target.value) } : x))} />
+                      <span className="text-xs text-muted-foreground">min</span>
                     </div>
                   </div>
-                ))}
+                  <input className="h-7 border border-border rounded px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-white text-muted-foreground" placeholder="Description (optional)" value={item.description} onChange={e => setAgenda(prev => prev.map((x, j) => j === i ? { ...x, description: e.target.value } : x))} />
+                </div>
+                <button onClick={() => setAgenda(prev => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-red-500 mt-0.5 shrink-0 transition-colors"><X size={14} /></button>
               </div>
-            )}
-          </div>
+            </div>
+          ))}
         </div>
+        <p className="text-xs text-muted-foreground mt-2">Total: {agenda.reduce((sum, a) => sum + a.duration, 0)} minutes</p>
       </div>
-
-      {/* Cadence note */}
-      <div className="bg-slate-50 border border-border rounded-xl p-4">
-        <div className="flex items-start gap-3">
-          <Calendar size={16} className="text-muted-foreground mt-0.5 shrink-0" />
-          <div>
-            <p className="text-sm font-semibold text-foreground">Weekly Cadence</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Every Friday at 6:00 AM · Attendees: Russel Feldman, Nicole Gagliardi · 90 minutes
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              The L10 is the heartbeat of EOS execution. The meeting is rated every week — a score below 8 means the meeting itself goes on the issues list.
-            </p>
-          </div>
-        </div>
+      <div>
+        <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Notes</label>
+        <textarea className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white resize-none" rows={2} placeholder="Optional meeting notes…" value={notes} onChange={e => setNotes(e.target.value)} />
+      </div>
+      <div className="flex gap-3 pt-2 border-t border-border">
+        <button onClick={handleSave} disabled={saving || !name.trim()} className="flex items-center gap-1.5 text-sm bg-[#6B7EFF] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#5B6EEF] disabled:opacity-50 transition-colors">
+          {saving ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+          {saving ? 'Saving…' : (initial?.id ? 'Save Changes' : 'Create Meeting')}
+        </button>
+        <button onClick={onCancel} className="text-sm text-muted-foreground hover:text-foreground px-4 py-2 rounded-lg border border-border transition-colors">Cancel</button>
       </div>
     </div>
   );
 }
+
+function L10Tab({ issues, todos }: { issues: Issue[]; todos: TodoItem[] }) {
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [loadingMeetings, setLoadingMeetings] = useState(true);
+  const [view, setView] = useState<'list' | 'detail' | 'create' | 'edit'>('list');
+  const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
+  const [activeTimers, setActiveTimers] = useState<Record<number, { running: boolean; elapsed: number }>>({});
+  const timerRefs = useRef<Record<number, ReturnType<typeof setInterval>>>({});
+
+  const openIssues = issues.filter(i => i.status !== 'Resolved');
+  const openTodos = todos.filter(t => !t.done);
+
+  useEffect(() => {
+    const loadMeetings = async () => {
+      try {
+        const res = await fetch('/api/eos/meetings');
+        if (res.ok) {
+          const data = await res.json();
+          setMeetings(Array.isArray(data) ? data : []);
+        }
+      } catch (_) { /* ignore */ }
+      setLoadingMeetings(false);
+    };
+    void loadMeetings();
+  }, []);
+
+  const createMeeting = async (data: Partial<Meeting>) => {
+    const res = await fetch('/api/eos/meetings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (res.ok) {
+      const created = await res.json();
+      setMeetings(prev => [...prev, created]);
+      setView('list');
+    }
+  };
+
+  const updateMeeting = async (data: Partial<Meeting>) => {
+    if (!selectedMeeting) return;
+    const res = await fetch(`/api/eos/meetings/${selectedMeeting.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      setMeetings(prev => prev.map(m => m.id === updated.id ? updated : m));
+      setSelectedMeeting(updated);
+      setView('detail');
+    }
+  };
+
+  const deleteMeeting = async (id: string) => {
+    if (!confirm('Delete this meeting?')) return;
+    const res = await fetch(`/api/eos/meetings/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      setMeetings(prev => prev.filter(m => m.id !== id));
+      if (selectedMeeting?.id === id) { setSelectedMeeting(null); setView('list'); }
+    }
+  };
+
+  const startTimer = (idx: number) => {
+    setActiveTimers(prev => ({ ...prev, [idx]: { running: true, elapsed: prev[idx]?.elapsed ?? 0 } }));
+    timerRefs.current[idx] = setInterval(() => {
+      setActiveTimers(prev => ({ ...prev, [idx]: { ...prev[idx], running: true, elapsed: (prev[idx]?.elapsed ?? 0) + 1 } }));
+    }, 1000);
+  };
+
+  const stopTimer = (idx: number) => {
+    clearInterval(timerRefs.current[idx]);
+    setActiveTimers(prev => ({ ...prev, [idx]: { ...prev[idx], running: false } }));
+  };
+
+  const resetTimer = (idx: number) => {
+    clearInterval(timerRefs.current[idx]);
+    setActiveTimers(prev => ({ ...prev, [idx]: { running: false, elapsed: 0 } }));
+  };
+
+  const fmtTimer = (secs: number) => {
+    const m = Math.floor(secs / 60).toString().padStart(2, '0');
+    const s = (secs % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+
+  const formatSchedule = (meeting: Meeting) => {
+    const parts: string[] = [];
+    if (meeting.recurrence && meeting.recurrence !== 'once') parts.push(meeting.recurrence.charAt(0).toUpperCase() + meeting.recurrence.slice(1));
+    if (meeting.day_of_week) parts.push(meeting.day_of_week);
+    if (meeting.time_of_day) {
+      const [h, m] = meeting.time_of_day.split(':');
+      const hour = parseInt(h);
+      const ampm = hour >= 12 ? 'PM' : 'AM';
+      const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+      parts.push(`at ${displayHour}:${m} ${ampm}`);
+    }
+    return parts.length ? parts.join(' ') : 'No schedule set';
+  };
+
+  if (view === 'list') {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-foreground">Meetings</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Manage your EOS meeting cadence</p>
+          </div>
+          <button onClick={() => setView('create')} className="flex items-center gap-1.5 text-sm bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5B6EEF] transition-colors font-medium">
+            <Plus size={14} /> New Meeting
+          </button>
+        </div>
+        {loadingMeetings ? (
+          <div className="flex items-center justify-center py-16"><Loader2 size={24} className="text-[#6B7EFF] animate-spin" /></div>
+        ) : meetings.length === 0 ? (
+          <div className="bg-white border border-border rounded-xl p-12 text-center">
+            <Calendar size={36} className="text-muted-foreground/40 mx-auto mb-3" />
+            <h3 className="text-sm font-semibold text-foreground mb-1">No meetings yet</h3>
+            <p className="text-xs text-muted-foreground mb-4">Create your first L10 or other EOS meeting to get started.</p>
+            <button onClick={() => setView('create')} className="inline-flex items-center gap-1.5 text-sm bg-[#6B7EFF] text-white px-4 py-2 rounded-lg hover:bg-[#5B6EEF] transition-colors font-medium">
+              <Plus size={13} /> Create L10 Meeting
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {meetings.map(meeting => (
+              <div key={meeting.id} className="bg-white border border-border rounded-xl p-5 hover:border-[#6B7EFF]/30 hover:shadow-sm transition-all cursor-pointer group" onClick={() => { setSelectedMeeting(meeting); setView('detail'); setActiveTimers({}); }}>
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm font-bold text-foreground">{meeting.name}</h3>
+                    <MeetingTypeBadge type={meeting.meeting_type} />
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={e => { e.stopPropagation(); setSelectedMeeting(meeting); setView('edit'); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-muted-foreground hover:text-foreground transition-colors"><Edit2 size={13} /></button>
+                    <button onClick={e => { e.stopPropagation(); void deleteMeeting(meeting.id); }} className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors"><Trash2 size={13} /></button>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Clock size={12} className="shrink-0" />
+                    <span>{formatSchedule(meeting)} · {meeting.duration_minutes} min</span>
+                  </div>
+                  {meeting.attendees.length > 0 && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Users size={12} className="shrink-0" />
+                      <span>{meeting.attendees.map(a => a.name).join(', ')}</span>
+                    </div>
+                  )}
+                  {meeting.agenda.length > 0 && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Target size={12} className="shrink-0" />
+                      <span>{meeting.agenda.length} agenda items · {meeting.agenda.reduce((s, a) => s + a.duration, 0)} min total</span>
+                    </div>
+                  )}
+                </div>
+                <div className="mt-3 pt-3 border-t border-border">
+                  <span className="flex items-center gap-1.5 text-xs text-[#6B7EFF] font-semibold">
+                    <Play size={11} /> Run Meeting →
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {meetings.length > 0 && (
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-white border border-border rounded-xl p-4 text-center">
+              <p className="text-2xl font-bold text-foreground">{openIssues.length}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Open Issues</p>
+            </div>
+            <div className="bg-white border border-border rounded-xl p-4 text-center">
+              <p className="text-2xl font-bold text-foreground">{openTodos.length}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Open To-Dos</p>
+            </div>
+            <div className="bg-white border border-border rounded-xl p-4 text-center">
+              <p className="text-2xl font-bold text-foreground">{meetings.length}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Active Meetings</p>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (view === 'create') {
+    return (
+      <div className="max-w-3xl space-y-4">
+        <div className="flex items-center gap-3">
+          <button onClick={() => setView('list')} className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"><ChevronLeft size={16} /></button>
+          <div>
+            <h2 className="text-base font-bold text-foreground">New Meeting</h2>
+            <p className="text-xs text-muted-foreground">Configure your meeting schedule and agenda</p>
+          </div>
+        </div>
+        <div className="bg-white border border-border rounded-xl p-6">
+          <MeetingForm onSave={createMeeting} onCancel={() => setView('list')} />
+        </div>
+      </div>
+    );
+  }
+
+  if (view === 'edit' && selectedMeeting) {
+    return (
+      <div className="max-w-3xl space-y-4">
+        <div className="flex items-center gap-3">
+          <button onClick={() => setView('detail')} className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"><ChevronLeft size={16} /></button>
+          <div>
+            <h2 className="text-base font-bold text-foreground">Edit Meeting</h2>
+            <p className="text-xs text-muted-foreground">{selectedMeeting.name}</p>
+          </div>
+        </div>
+        <div className="bg-white border border-border rounded-xl p-6">
+          <MeetingForm initial={selectedMeeting} onSave={updateMeeting} onCancel={() => setView('detail')} />
+        </div>
+      </div>
+    );
+  }
+
+  if (view === 'detail' && selectedMeeting) {
+    const agenda = selectedMeeting.agenda ?? [];
+    return (
+      <div className="space-y-4">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setView('list')} className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"><ChevronLeft size={16} /></button>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-foreground">{selectedMeeting.name}</h2>
+                <MeetingTypeBadge type={selectedMeeting.meeting_type} />
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">{formatSchedule(selectedMeeting)} · {selectedMeeting.duration_minutes} min</p>
+            </div>
+          </div>
+          <button onClick={() => setView('edit')} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground border border-border px-3 py-1.5 rounded-lg hover:bg-accent transition-colors font-medium">
+            <Edit2 size={12} /> Edit
+          </button>
+        </div>
+        {selectedMeeting.attendees.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Users size={13} className="text-muted-foreground" />
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {selectedMeeting.attendees.map((a, i) => (
+                <span key={i} className="text-xs bg-slate-100 border border-slate-200 rounded-full px-2.5 py-0.5 text-foreground">{a.name}</span>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="lg:col-span-2 space-y-2">
+            <h3 className="text-sm font-semibold text-foreground">Meeting Agenda</h3>
+            {agenda.length === 0 ? (
+              <div className="bg-white border border-border rounded-xl p-8 text-center">
+                <p className="text-xs text-muted-foreground">No agenda items. <button onClick={() => setView('edit')} className="text-[#6B7EFF] hover:underline">Edit this meeting</button> to add agenda items.</p>
+              </div>
+            ) : agenda.map((item, i) => {
+              const timer = activeTimers[i];
+              const isRunning = timer?.running ?? false;
+              const elapsed = timer?.elapsed ?? 0;
+              const limitSecs = item.duration * 60;
+              const overTime = elapsed > 0 && elapsed > limitSecs;
+              return (
+                <div key={i} className={cn('bg-white border rounded-xl p-4 flex items-start gap-4', item.highlight ? 'border-[#6B7EFF]/30 bg-[#6B7EFF]/3' : 'border-border', overTime && 'border-red-200 bg-red-50/30')}>
+                  <div className={cn('w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0', item.highlight ? 'bg-[#6B7EFF] text-white' : 'bg-slate-100 text-slate-600')}>
+                    <span className="text-sm font-bold leading-none">{item.duration}</span>
+                    <span className="text-[9px] leading-none mt-0.5">min</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className={cn('text-sm font-semibold', item.highlight ? 'text-[#6B7EFF]' : 'text-foreground')}>{item.label}</p>
+                      {item.highlight && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#6B7EFF] text-white">80% of value</span>}
+                    </div>
+                    {item.description && <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>}
+                    {elapsed > 0 && (
+                      <p className={cn('text-xs font-mono mt-1.5 font-semibold', overTime ? 'text-red-500' : 'text-[#6B7EFF]')}>
+                        {fmtTimer(elapsed)} / {fmtTimer(limitSecs)}{overTime && ' — OVER TIME'}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {!isRunning ? (
+                      <button onClick={() => startTimer(i)} className="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 font-medium">
+                        <Play size={11} />{elapsed > 0 ? 'Resume' : 'Start'}
+                      </button>
+                    ) : (
+                      <button onClick={() => stopTimer(i)} className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 px-3 py-1.5 rounded-lg transition-colors font-medium">Pause</button>
+                    )}
+                    {elapsed > 0 && <button onClick={() => resetTimer(i)} className="text-xs text-muted-foreground hover:text-foreground px-2 py-1.5 rounded-lg hover:bg-slate-100 transition-colors">Reset</button>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="space-y-4">
+            <div className="bg-white border border-border rounded-xl p-4">
+              <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                <span>Issues for This Meeting</span>
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200">{openIssues.length}</span>
+              </h4>
+              {openIssues.length === 0 ? <p className="text-xs text-muted-foreground italic">No open issues.</p> : (
+                <div className="space-y-2">
+                  {openIssues.map(issue => (
+                    <div key={issue.id} className="flex items-start gap-2">
+                      <PriorityPill priority={issue.priority} />
+                      <p className="text-xs text-foreground flex-1">{issue.description}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="bg-white border border-border rounded-xl p-4">
+              <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                <span>Open To-Dos</span>
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">{openTodos.length}</span>
+              </h4>
+              {openTodos.length === 0 ? <p className="text-xs text-muted-foreground italic">All to-dos complete!</p> : (
+                <div className="space-y-2">
+                  {openTodos.map(todo => (
+                    <div key={todo.id} className="flex items-start gap-2">
+                      <Circle size={14} className="text-muted-foreground mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-xs text-foreground">{todo.text}</p>
+                        <p className="text-[10px] text-muted-foreground">{todo.owner} · due {formatDate(todo.due_date)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {selectedMeeting.notes && (
+              <div className="bg-slate-50 border border-border rounded-xl p-4">
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Notes</h4>
+                <p className="text-xs text-foreground">{selectedMeeting.notes}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 
 // ─── AI EOS Coach Panel ───────────────────────────────────────────────────────
 
@@ -2234,7 +2618,7 @@ export default function EOSPage() {
           </div>
         ) : (
           <>
-            {activeTab === "V/TO"        && <VTOTab rocks={rocks} issues={issues} vtoInit={vtoLens === "global" ? globalVto : vto} readOnly={vtoLens === "global"} />}
+            {activeTab === "V/TO"        && <VTOTab rocks={rocks} issues={issues} vtoInit={vtoLens === "global" ? globalVto : vto} readOnly={vtoLens === "global" && !((globalVto as Record<string,unknown>|null)?.org_id === (vto as Record<string,unknown>|null)?.org_id && globalVto !== null && vto !== null)} onSeeAllRocks={() => setActiveTab("Rocks")} />}
             {activeTab === "Rocks"       && <RocksTab rocks={rocks} setRocks={setRocks} />}
             {activeTab === "Scorecard"   && <ScorecardTab measurables={measurables} setMeasurables={setMeasurables} />}
             {activeTab === "Issues"      && <IssuesTab issues={issues} setIssues={setIssues} />}

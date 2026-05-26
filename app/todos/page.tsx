@@ -5,10 +5,10 @@ import { TopBar } from "@/components/layout/TopBar";
 import {
   Plus, Check, Trash2, Calendar, User, ChevronDown,
   Loader2, AlertCircle, RefreshCw, X, Upload, Paperclip,
-  FileText, Download, Search,
+  FileText, Download, Search, CheckCircle2, Circle,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { CheckSquare, Circle, Clock3, Link2, Flag, Repeat, ExternalLink } = require("lucide-react") as any;
+const { CheckSquare, Clock3, Link2, Flag, Repeat, ExternalLink, TrendingUp } = require("lucide-react") as any;
 import { EmptyState } from "@/components/ui/EmptyState";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -59,11 +59,23 @@ const PRIORITY_CONFIG = {
   low:    { label: "Low",    pill: "bg-slate-100 text-slate-500",  dot: "bg-slate-300" },
 };
 
-const STATUS_CONFIG = {
-  open:        { label: "Open",        emoji: "📬", pill: "bg-slate-100 text-slate-600" },
-  in_progress: { label: "In Progress", emoji: "🚀", pill: "bg-blue-100 text-blue-700" },
-  done:        { label: "Done",        emoji: "✅", pill: "bg-emerald-100 text-emerald-700" },
+// Icon is a React component — rendered inline. No emojis.
+const STATUS_CONFIG: Record<string, {
+  label: string;
+  pill: string;
+  iconCls: string;
+  iconVariant: "circle" | "clock" | "check";
+}> = {
+  open:        { label: "Open",        pill: "bg-slate-100 text-slate-600",   iconCls: "text-slate-400",   iconVariant: "circle" },
+  in_progress: { label: "In Progress", pill: "bg-blue-50  text-blue-700",     iconCls: "text-blue-500",    iconVariant: "clock"  },
+  done:        { label: "Done",        pill: "bg-emerald-50 text-emerald-700", iconCls: "text-emerald-500", iconVariant: "check"  },
 };
+
+function StatusIcon({ variant, cls }: { variant: "circle" | "clock" | "check"; cls: string }) {
+  if (variant === "check")  return <CheckCircle2 size={12} className={cls} />;
+  if (variant === "clock")  return <Clock3       size={12} className={cls} />;
+  return <Circle size={12} className={cls} />;
+}
 
 const LINKED_TYPES = [
   { value: "lead",        label: "Lead" },
@@ -583,7 +595,7 @@ function TodoRow({
           onClick={() => setShowStatusMenu(v => !v)}
           className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all hover:ring-2 hover:ring-offset-1 hover:ring-brand-400/30 ${sCfg.pill}`}
         >
-          <span>{sCfg.emoji}</span>
+          <StatusIcon variant={sCfg.iconVariant} cls={sCfg.iconCls} />
           {sCfg.label}
           <ChevronDown size={9} className="opacity-60" />
         </button>
@@ -598,7 +610,8 @@ function TodoRow({
                   className="w-full text-left px-3 py-2 text-xs hover:bg-accent transition-colors flex items-center gap-2.5"
                 >
                   <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${sc.pill}`}>
-                    {sc.emoji} {sc.label}
+                    <StatusIcon variant={sc.iconVariant} cls={sc.iconCls} />
+                    {sc.label}
                   </span>
                 </button>
               );
@@ -863,6 +876,21 @@ export default function TodosPage() {
   // Column header definition (matches TodoRow grid)
   const COL_STYLE = "28px 1fr 148px 96px 108px 36px 28px";
 
+  // Top 10 highest priority open todos for sidebar
+  const top10 = [...todos]
+    .filter(t => t.status !== "done")
+    .sort((a, b) => {
+      const pOrder = { high: 0, normal: 1, low: 2 };
+      const pDiff = pOrder[a.priority] - pOrder[b.priority];
+      if (pDiff !== 0) return pDiff;
+      // then by due date ascending (overdue first, no date last)
+      if (!a.due_date && !b.due_date) return 0;
+      if (!a.due_date) return 1;
+      if (!b.due_date) return -1;
+      return a.due_date.localeCompare(b.due_date);
+    })
+    .slice(0, 10);
+
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <TopBar
@@ -875,119 +903,201 @@ export default function TodosPage() {
         }
       />
 
-      <div className="flex-1 p-6 space-y-4 max-w-5xl mx-auto w-full">
+      <div className="flex-1 p-6 flex gap-5 min-h-0">
+        {/* ── Left: main table ────────────────────────────────────────────── */}
+        <div className="flex-1 min-w-0 space-y-4">
 
-        {/* Stats bar */}
-        <div className="flex items-center gap-3">
-          {[
-            { label: "Open",        value: openCnt, accent: "text-brand-400",   bg: "bg-brand-400/10" },
-            { label: "In Progress", value: inProgressTodos.length, accent: "text-blue-600",    bg: "bg-blue-50" },
-            { label: "High Pri",    value: highCnt, accent: "text-rose-600",    bg: "bg-rose-50" },
-            { label: "Done",        value: doneCnt, accent: "text-emerald-600", bg: "bg-emerald-50" },
-          ].map(c => (
-            <div key={c.label} className={`flex items-center gap-2 px-3 py-2 rounded-xl ${c.bg} border border-border`}>
-              <span className={`text-lg font-extrabold leading-none ${c.accent}`}>{c.value}</span>
-              <span className="text-xs text-muted-foreground font-medium">{c.label}</span>
-            </div>
-          ))}
-          <div className="ml-auto flex items-center gap-1">
-            <button
-              onClick={() => { if (view !== "mine") setView("mine"); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${view === "mine" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
-            >
-              My To-Dos
-            </button>
-            <button
-              onClick={() => { if (view !== "assigned") setView("assigned"); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${view === "assigned" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
-            >
-              Assigned Out
-            </button>
-            <div className="w-px h-4 bg-border mx-1" />
-            {(["open", "all", "done"] as const).map(f => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all capitalize ${filter === f ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
-              >
-                {f === "open" ? "Active" : f === "all" ? "All" : "Done"}
-              </button>
+          {/* Stats + filters bar */}
+          <div className="flex items-center gap-3 flex-wrap">
+            {[
+              { label: "Open",        value: openCnt,                accent: "text-brand-400",   bg: "bg-brand-400/10" },
+              { label: "In Progress", value: inProgressTodos.length, accent: "text-blue-600",    bg: "bg-blue-50" },
+              { label: "High Pri",    value: highCnt,                accent: "text-rose-600",    bg: "bg-rose-50" },
+              { label: "Done",        value: doneCnt,                accent: "text-emerald-600", bg: "bg-emerald-50" },
+            ].map(c => (
+              <div key={c.label} className={`flex items-center gap-2 px-3 py-2 rounded-xl ${c.bg} border border-border`}>
+                <span className={`text-lg font-extrabold leading-none ${c.accent}`}>{c.value}</span>
+                <span className="text-xs text-muted-foreground font-medium">{c.label}</span>
+              </div>
             ))}
-          </div>
-        </div>
-
-        {/* Main table */}
-        <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-
-          {/* Column headers */}
-          <div
-            className="grid items-center border-b border-border bg-accent/40 px-0"
-            style={{ gridTemplateColumns: COL_STYLE }}
-          >
-            <div />
-            <div className="py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Task</div>
-            <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Status</div>
-            <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Priority</div>
-            <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Due date</div>
-            <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide text-center">Who</div>
-            <div />
-          </div>
-
-          {/* Loading */}
-          {loading && (
-            <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground">
-              <Loader2 size={16} className="animate-spin" /> Loading to-dos…
-            </div>
-          )}
-
-          {/* Error */}
-          {!loading && error && (
-            <div className="flex items-center justify-center gap-3 py-12">
-              <span className="text-sm text-destructive">{error}</span>
-              <button onClick={load} className="text-xs border border-border rounded-lg px-3 py-1.5 text-muted-foreground hover:text-foreground hover:bg-accent">Retry</button>
-            </div>
-          )}
-
-          {/* Empty */}
-          {!loading && !error && todos.length === 0 && (
-            <div className="py-16 flex flex-col items-center gap-3">
-              <CheckSquare size={32} className="text-muted-foreground/30" />
-              <p className="text-sm font-medium text-muted-foreground">All clear — no to-dos</p>
-              <p className="text-xs text-muted-foreground/60">Use the row below to add one</p>
-            </div>
-          )}
-
-          {/* Groups */}
-          {!loading && !error && groups.map(group => (
-            <div key={group.key}>
-              <GroupHeader
-                label={group.label}
-                count={group.items.length}
-                dot={group.dot}
-                collapsed={collapsed[group.key] ?? false}
-                onToggle={() => toggleGroup(group.key)}
-              />
-              {!(collapsed[group.key]) && group.items.map(todo => (
-                <TodoRow
-                  key={todo.id}
-                  todo={todo}
-                  onToggleDone={toggleDone}
-                  onDelete={deleteTodo}
-                  onStatusChange={changeStatus}
-                  onPriorityChange={changePriority}
-                  onClick={setSelected}
-                />
+            <div className="ml-auto flex items-center gap-1">
+              <button
+                onClick={() => { if (view !== "mine") setView("mine"); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${view === "mine" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
+              >
+                My To-Dos
+              </button>
+              <button
+                onClick={() => { if (view !== "assigned") setView("assigned"); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${view === "assigned" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
+              >
+                Assigned Out
+              </button>
+              <div className="w-px h-4 bg-border mx-1" />
+              {(["open", "all", "done"] as const).map(f => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all capitalize ${filter === f ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
+                >
+                  {f === "open" ? "Active" : f === "all" ? "All" : "Done"}
+                </button>
               ))}
             </div>
-          ))}
+          </div>
 
-          {/* Quick add row — pinned at bottom */}
-          <QuickAdd onAdd={addTodo} />
+          {/* Main table */}
+          <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+
+            {/* Column headers */}
+            <div
+              className="grid items-center border-b border-border bg-accent/40"
+              style={{ gridTemplateColumns: COL_STYLE }}
+            >
+              <div />
+              <div className="py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Task</div>
+              <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Status</div>
+              <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Priority</div>
+              <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Due date</div>
+              <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide text-center">Who</div>
+              <div />
+            </div>
+
+            {/* Loading */}
+            {loading && (
+              <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground">
+                <Loader2 size={16} className="animate-spin" /> Loading to-dos…
+              </div>
+            )}
+
+            {/* Error */}
+            {!loading && error && (
+              <div className="flex items-center justify-center gap-3 py-12">
+                <span className="text-sm text-destructive">{error}</span>
+                <button onClick={load} className="text-xs border border-border rounded-lg px-3 py-1.5 text-muted-foreground hover:text-foreground hover:bg-accent">Retry</button>
+              </div>
+            )}
+
+            {/* Empty */}
+            {!loading && !error && todos.length === 0 && (
+              <div className="py-16 flex flex-col items-center gap-3">
+                <CheckSquare size={32} className="text-muted-foreground/30" />
+                <p className="text-sm font-medium text-muted-foreground">All clear — no to-dos</p>
+                <p className="text-xs text-muted-foreground/60">Use the row below to add one</p>
+              </div>
+            )}
+
+            {/* Groups */}
+            {!loading && !error && groups.map(group => (
+              <div key={group.key}>
+                <GroupHeader
+                  label={group.label}
+                  count={group.items.length}
+                  dot={group.dot}
+                  collapsed={collapsed[group.key] ?? false}
+                  onToggle={() => toggleGroup(group.key)}
+                />
+                {!(collapsed[group.key]) && group.items.map(todo => (
+                  <TodoRow
+                    key={todo.id}
+                    todo={todo}
+                    onToggleDone={toggleDone}
+                    onDelete={deleteTodo}
+                    onStatusChange={changeStatus}
+                    onPriorityChange={changePriority}
+                    onClick={setSelected}
+                  />
+                ))}
+              </div>
+            ))}
+
+            {/* Quick add row */}
+            <QuickAdd onAdd={addTodo} />
+          </div>
+
+          <p className="text-[11px] text-muted-foreground/50 text-center">
+            Click any row for notes, attachments, linked records, and recurrence settings
+          </p>
         </div>
 
-        <p className="text-[11px] text-muted-foreground/50 text-center">
-          Click any row for notes, attachments, linked records, and recurrence settings
-        </p>
+        {/* ── Right: Priority sidebar ──────────────────────────────────────── */}
+        <div className="w-72 shrink-0 space-y-4">
+          {/* Top priorities card */}
+          <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm sticky top-6">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-accent/40">
+              <TrendingUp size={13} className="text-rose-500" />
+              <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Top Priorities</h3>
+              {highCnt > 0 && (
+                <span className="ml-auto text-[10px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full">
+                  {highCnt} high
+                </span>
+              )}
+            </div>
+
+            {loading ? (
+              <div className="flex items-center justify-center py-10 gap-2 text-muted-foreground text-xs">
+                <Loader2 size={13} className="animate-spin" /> Loading…
+              </div>
+            ) : top10.length === 0 ? (
+              <div className="py-10 flex flex-col items-center gap-2 text-muted-foreground/50">
+                <CheckCircle2 size={24} className="text-emerald-400" />
+                <p className="text-xs font-medium">Nothing pending</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border/50">
+                {top10.map((todo, idx) => {
+                  const pCfg  = PRIORITY_CONFIG[todo.priority];
+                  const sCfg  = STATUS_CONFIG[todo.status] ?? STATUS_CONFIG.open;
+                  const dueL  = dueDateLabel(todo.due_date);
+                  return (
+                    <button
+                      key={todo.id}
+                      onClick={() => setSelected(todo)}
+                      className="w-full text-left px-4 py-3 hover:bg-accent/40 transition-colors group/sp"
+                    >
+                      <div className="flex items-start gap-2.5">
+                        {/* Rank */}
+                        <span className="text-[10px] font-bold text-muted-foreground/40 w-4 shrink-0 pt-0.5">
+                          {idx + 1}
+                        </span>
+                        {/* Content */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-foreground leading-snug truncate">
+                            {todo.title}
+                          </p>
+                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                            {/* Priority dot */}
+                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${pCfg.pill}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${pCfg.dot}`} />
+                              {pCfg.label}
+                            </span>
+                            {/* Status icon */}
+                            <span className={`inline-flex items-center gap-1 text-[10px] font-medium ${sCfg.iconCls}`}>
+                              <StatusIcon variant={sCfg.iconVariant} cls={sCfg.iconCls} />
+                              {sCfg.label}
+                            </span>
+                            {/* Due date */}
+                            {dueL && (
+                              <span className={`text-[10px] font-medium ${dueL.color}`}>{dueL.text}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {top10.length > 0 && (
+              <div className="px-4 py-2.5 border-t border-border bg-accent/20">
+                <p className="text-[10px] text-muted-foreground/60 text-center">
+                  Sorted by priority · due date
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Detail Slide-Over */}

@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
         quarter: quarter ?? 'Q2-2026',
         status: status ?? 'On Track',
         progress: progress ?? 0,
-        due_date: due_date ?? null,
+        due_date: due_date ?? 'Jun 30',
         is_company_rock: is_company_rock ?? true,
       })
       .select()

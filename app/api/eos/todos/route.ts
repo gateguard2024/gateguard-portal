@@ -63,6 +63,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    // Cross-post to main todos table (fire-and-forget)
+    void (async () => {
+      try {
+        await supabase.from('todos').insert({
+          org_id: orgId,
+          title: text,
+          assigned_to_name: owner ?? '',
+          due_date: due_date ?? null,
+          status: 'open',
+          priority: 'medium',
+          linked_type: 'eos_l10',
+          linked_id: data.id,
+          created_by: user.id ?? '',
+        })
+      } catch (_) { /* non-blocking */ }
+    })()
+
     return NextResponse.json(data, { status: 201 })
   } catch (err) {
     console.error('[/api/eos/todos POST] unexpected:', err)
