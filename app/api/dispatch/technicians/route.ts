@@ -10,7 +10,7 @@ const supabase = createClient(
 export async function GET() {
   const { data, error } = await supabase
     .from('technicians')
-    .select('id, name, initials, role, status, current_job_id, phone, email, employment_type, clerk_user_id, can_access_portal, portal_invite_sent_at, portal_invite_email')
+    .select('id, name, initials, role, status, current_job_id, phone, email, employment_type, clerk_user_id, can_access_portal, portal_invite_sent_at, portal_invite_email, tech_code')
     .order('name')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

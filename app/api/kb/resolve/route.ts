@@ -12,13 +12,13 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { serviceDb, embedBatch }     from '@/lib/vectorize'
+import { isTechAuthed }              from '@/lib/tech-auth'
 
 export const maxDuration = 30
 export const dynamic     = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
-  const code = req.headers.get('x-tech-code')
-  if (!code || code !== process.env.TECH_ACCESS_CODE) {
+  if (!await isTechAuthed(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

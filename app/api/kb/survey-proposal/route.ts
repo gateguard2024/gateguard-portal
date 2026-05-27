@@ -14,6 +14,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic                      from '@anthropic-ai/sdk'
+import { isTechAuthed }               from '@/lib/tech-auth'
 
 export const maxDuration = 60
 export const dynamic     = 'force-dynamic'
@@ -197,8 +198,7 @@ function buildWorkItems(devices: SurveyDevice[]): SowWorkItem[] {
 // ─── Route ────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  const code = req.headers.get('x-tech-code')
-  if (!code || code !== process.env.TECH_ACCESS_CODE) {
+  if (!await isTechAuthed(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

@@ -12,15 +12,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth }                       from '@clerk/nextjs/server'
 import Anthropic                      from '@anthropic-ai/sdk'
-
-function isTechAuthed(req: NextRequest): boolean {
-  const code      = req.headers.get('x-tech-code')
-  const validCode = process.env.TECH_ACCESS_CODE
-  return !!(validCode && code && code === validCode)
-}
+import { isTechAuthed }               from '@/lib/tech-auth'
 
 export async function POST(req: NextRequest) {
-  const techOk = isTechAuthed(req)
+  const techOk = await isTechAuthed(req)
   if (!techOk) {
     let userId: string | null = null
     try { const s = await auth(); userId = s.userId } catch { /* no clerk */ }

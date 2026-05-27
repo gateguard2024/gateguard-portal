@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth }                      from '@clerk/nextjs/server'
 import { createClient }              from '@supabase/supabase-js'
+import { isTechAuthed }              from '@/lib/tech-auth'
 
 function serviceDb() {
   return createClient(
@@ -18,15 +19,9 @@ function serviceDb() {
   )
 }
 
-function isTechAuthed(req: NextRequest): boolean {
-  const code      = req.headers.get('x-tech-code')
-  const validCode = process.env.TECH_ACCESS_CODE
-  return !!(validCode && code && code === validCode)
-}
-
 export async function GET(req: NextRequest) {
   // Tech code checked first — if valid, skip Clerk entirely
-  const techOk = isTechAuthed(req)
+  const techOk = await isTechAuthed(req)
   if (!techOk) {
     // Clerk path — try auth(), fail gracefully if Clerk wasn't initialized
     let userId: string | null = null

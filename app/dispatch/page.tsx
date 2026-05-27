@@ -10,7 +10,10 @@ import {
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { List, Search, Route } = require("lucide-react") as any;
-import { SkeletonRow } from '@/components/ui/SkeletonRow';
+import { SkeletonRow }  from '@/components/ui/SkeletonRow'
+import { TopBar }       from '@/components/layout/TopBar'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Copy, LayoutList, LayoutGrid, Flame } = require('lucide-react') as any;
 import {
   DndContext,
   DragOverlay,
@@ -69,6 +72,7 @@ interface Tech {
   can_access_portal?:    boolean;
   portal_invite_sent_at?: string | null;
   schedule?:             TechSchedule | null;
+  tech_code?:            string | null;
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -1023,15 +1027,16 @@ function techStreak(techId: string): number {
   return Math.abs(h) % 13 // 0-12
 }
 
-function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete, onEditSchedule, hasLiveGPS }: {
-  tech:            Tech;
-  jobs:            Job[];
-  onStatusChange:  (id: string, status: TechStatus) => void;
-  onInvite:        (tech: Tech) => void;
-  canDelete:       boolean;
-  onDelete:        (id: string) => void;
-  onEditSchedule:  (tech: Tech) => void;
-  hasLiveGPS?:     boolean;
+function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete, onEditSchedule, hasLiveGPS, onGenerateCode }: {
+  tech:             Tech;
+  jobs:             Job[];
+  onStatusChange:   (id: string, status: TechStatus) => void;
+  onInvite:         (tech: Tech) => void;
+  canDelete:        boolean;
+  onDelete:         (id: string) => void;
+  onEditSchedule:   (tech: Tech) => void;
+  hasLiveGPS?:      boolean;
+  onGenerateCode?:  (techId: string) => void;
 }) {
   const conf = techStatusConfig[tech.status] ?? techStatusConfig['Offline'];
   const currentJob = jobs.find(j => j.id === tech.currentJobId);
@@ -1055,7 +1060,7 @@ function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete, on
         <div className="relative shrink-0">
           <div className={cn(
             "w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white",
-            tech.status === "Offline" ? "bg-slate-400" : "bg-[#2563EB]"
+            tech.status === "Offline" ? "bg-slate-400" : "bg-[#6B7EFF]"
           )}>
             {tech.initials}
           </div>
@@ -1130,6 +1135,39 @@ function TechRow({ tech, jobs, onStatusChange, onInvite, canDelete, onDelete, on
             <p className="text-[10px] text-emerald-600 w-full text-right">Portal ✓</p>
           )}
         </div>
+      </div>
+
+      {/* /tech access code row */}
+      <div className="mt-2 flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-1.5 border border-slate-100">
+        <span className="text-[9px] font-medium text-slate-400 shrink-0">/tech</span>
+        {tech.tech_code ? (
+          <>
+            <span className="font-mono text-[10px] text-slate-700 flex-1 tracking-widest">{tech.tech_code}</span>
+            <button
+              onClick={() => { void navigator.clipboard.writeText(tech.tech_code ?? '') }}
+              className="p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
+              title="Copy code"
+            >
+              <Copy size={10} />
+            </button>
+            <button
+              onClick={() => onGenerateCode?.(tech.id)}
+              className="text-[9px] font-medium text-[#6B7EFF] hover:underline shrink-0"
+            >
+              Regen
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="text-[9px] italic text-slate-400 flex-1">No code set</span>
+            <button
+              onClick={() => onGenerateCode?.(tech.id)}
+              className="text-[9px] font-semibold text-[#6B7EFF] hover:underline shrink-0"
+            >
+              Generate →
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1414,6 +1452,11 @@ export default function DispatchPage() {
   const [newJobOpen,  setNewJobOpen]  = useState(false);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [viewMode,    setViewMode]    = useState<"board" | "calendar">("board");
+  const [boardLayout, setBoardLayout] = useState<"list" | "board">(() => {
+    if (typeof window !== 'undefined') return (localStorage.getItem('gg_dispatch_layout') as 'list' | 'board') ?? 'list'
+    return 'list'
+  });
+  const [mobileTab,   setMobileTab]   = useState<"jobs" | "schedule" | "roster">("jobs");
   const [weekStart,   setWeekStart]   = useState<Date>(() => getMondayOf(new Date()));
   const [showAddTech, setShowAddTech]     = useState(false);
   const [newTechForm, setNewTechForm]     = useState({ name: '', role: 'Tech', phone: '', email: '', employment_type: 'employee' });
@@ -1663,6 +1706,7 @@ export default function DispatchPage() {
         employment_type:      raw.employment_type ?? 'employee',
         can_access_portal:    raw.can_access_portal ?? false,
         portal_invite_sent_at: raw.portal_invite_sent_at ?? null,
+        tech_code:            raw.tech_code ?? null,
       };
       setTechs(prev => [...prev, technician]);
       setShowAddTech(false);
@@ -1723,6 +1767,24 @@ export default function DispatchPage() {
     setJobs(prev => [job, ...prev]);
   };
 
+  const handleGenerateTechCode = async (techId: string) => {
+    const tech = techs.find(t => t.id === techId);
+    if (!tech) return;
+    // Build code: GG-{INITIALS}-{4 random digits}
+    const digits = String(Math.floor(1000 + Math.random() * 9000));
+    const code   = `GG-${tech.initials}-${digits}`;
+    try {
+      await fetch(`/api/dispatch/technicians/${techId}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ tech_code: code }),
+      });
+      setTechs(prev => prev.map(t => t.id === techId ? { ...t, tech_code: code } : t));
+    } catch {
+      // non-fatal — show nothing, user can retry
+    }
+  };
+
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long", month: "long", day: "numeric", year: "numeric",
   });
@@ -1733,14 +1795,14 @@ export default function DispatchPage() {
   const completedToday  = jobs.filter(j => j.status === "Done").length;
 
   const stats = [
-    { label: "Active Jobs",      value: String(activeJobs),                   icon: Zap,          color: "text-blue-600",   bg: "bg-blue-50"   },
-    { label: "Available Techs",  value: `${availableTechs}/${techs.length}`,   icon: Users,        color: "text-emerald-600", bg: "bg-emerald-50" },
-    { label: "In Transit",       value: String(inTransit),                    icon: Navigation,   color: "text-amber-600",  bg: "bg-amber-50"  },
-    { label: "Completed Today",  value: String(completedToday),               icon: CheckCircle2, color: "text-violet-600", bg: "bg-violet-50" },
+    { label: "Active Jobs",      value: String(activeJobs),                   icon: Zap,          color: "text-[#6B7EFF]",   bg: "bg-[#6B7EFF]/10" },
+    { label: "Available Techs",  value: `${availableTechs}/${techs.length}`,   icon: Users,        color: "text-emerald-600", bg: "bg-emerald-50"   },
+    { label: "In Transit",       value: String(inTransit),                    icon: Navigation,   color: "text-amber-600",   bg: "bg-amber-50"     },
+    { label: "Completed Today",  value: String(completedToday),               icon: CheckCircle2, color: "text-violet-600",  bg: "bg-violet-50"    },
   ];
 
   return (
-    <div className="min-h-screen bg-[#f0f2f5] p-6 space-y-6">
+    <div className="flex flex-col min-h-full bg-[#F8FAFC]">
       <NewJobSlideOver
         open={newJobOpen}
         onClose={() => setNewJobOpen(false)}
@@ -1811,104 +1873,87 @@ export default function DispatchPage() {
         />
       )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Dispatcher</h1>
-          <p className="text-sm text-slate-500 mt-0.5">{today}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* View toggle */}
-          <div className="flex items-center bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
-            <button
-              onClick={() => setViewMode("board")}
-              className={cn(
-                "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors",
-                viewMode === "board"
-                  ? "bg-[#6B7EFF] text-white"
-                  : "text-slate-600 hover:bg-slate-50"
-              )}
-            >
-              <List size={14} />
-              Board
+      {/* Header — matches site TopBar pattern */}
+      <TopBar
+        title="Dispatcher"
+        subtitle={today}
+        actions={
+          <div className="flex items-center gap-2">
+            {/* Board / Calendar toggle */}
+            <div className="hidden lg:flex items-center bg-white/10 border border-white/15 rounded-lg overflow-hidden">
+              <button
+                onClick={() => setViewMode("board")}
+                className={cn("inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors",
+                  viewMode === "board" ? "bg-[#6B7EFF] text-white" : "text-slate-300 hover:text-white")}
+              >
+                <List size={14} /> Board
+              </button>
+              <button
+                onClick={() => setViewMode("calendar")}
+                className={cn("inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors",
+                  viewMode === "calendar" ? "bg-[#6B7EFF] text-white" : "text-slate-300 hover:text-white")}
+              >
+                <Calendar size={14} /> Calendar
+              </button>
+            </div>
+            {viewMode === "board" && (
+              <button
+                onClick={() => { setShowMap(v => !v); if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } }}
+                className={cn("hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors",
+                  showMap ? "bg-[#6B7EFF] text-white border-[#6B7EFF]" : "bg-white/10 text-slate-300 border-white/15 hover:text-white")}
+              >
+                <MapPin size={14} /> Map
+              </button>
+            )}
+            {viewMode === "board" && (
+              <button
+                onClick={async () => {
+                  setOptimizing(true); setOptimizeResults(null);
+                  try { const res = await fetch('/api/dispatch/optimize', { method: 'POST' }); const json = await res.json(); setOptimizeResults(json.suggestions ?? []); }
+                  catch { setOptimizeResults([]); } finally { setOptimizing(false); }
+                }}
+                disabled={optimizing}
+                className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-60"
+              >
+                <Route size={14} /> {optimizing ? "Optimizing…" : "Optimize"}
+              </button>
+            )}
+            <button onClick={fetchData} className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-white/10 text-slate-300 border border-white/15 rounded-lg hover:text-white transition-colors">
+              <RefreshCw size={14} className={cn(loading && "animate-spin")} />
             </button>
             <button
-              onClick={() => setViewMode("calendar")}
-              className={cn(
-                "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors",
-                viewMode === "calendar"
-                  ? "bg-[#6B7EFF] text-white"
-                  : "text-slate-600 hover:bg-slate-50"
-              )}
+              onClick={() => setNewJobOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-white bg-[#6B7EFF] rounded-lg hover:bg-[#5a6df0] transition-colors"
             >
-              <Calendar size={14} />
-              Calendar
+              <Plus size={14} /> New Job
             </button>
           </div>
-          {viewMode === "board" && (
-            <button
-              onClick={() => {
-                setShowMap(v => !v);
-                if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
-              }}
-              className={cn(
-                "inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border transition-colors shadow-sm",
-                showMap
-                  ? "bg-[#6B7EFF] text-white border-[#6B7EFF]"
-                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-              )}
-            >
-              <MapPin size={15} />
-              Map
-            </button>
-          )}
-          {viewMode === "board" && (
-            <button
-              onClick={async () => {
-                setOptimizing(true);
-                setOptimizeResults(null);
-                try {
-                  const res  = await fetch('/api/dispatch/optimize', { method: 'POST' });
-                  const json = await res.json();
-                  setOptimizeResults(json.suggestions ?? []);
-                } catch { setOptimizeResults([]); }
-                finally { setOptimizing(false); }
-              }}
-              disabled={optimizing}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-60"
-            >
-              <Route size={15} />
-              {optimizing ? "Optimizing…" : "Optimize Routes"}
-            </button>
-          )}
-          <button
-            onClick={fetchData}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
-          >
-            <RefreshCw size={15} className={cn(loading && "animate-spin")} />
-            Refresh
-          </button>
-          <button
-            onClick={() => setNewJobOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#2563EB] rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-          >
-            <Plus size={15} />
-            New Job
-          </button>
-        </div>
+        }
+      />
+
+      {/* Mobile tab bar */}
+      <div className="lg:hidden flex border-b border-border bg-card">
+        {(["jobs","schedule","roster"] as const).map(tab => (
+          <button key={tab} onClick={() => setMobileTab(tab)}
+            className={cn("flex-1 py-2.5 text-xs font-semibold capitalize transition-colors border-b-2",
+              mobileTab === tab ? "border-[#6B7EFF] text-[#6B7EFF]" : "border-transparent text-muted-foreground")}
+          >{tab}</button>
+        ))}
       </div>
 
+      <div className="p-4 lg:p-6 space-y-4 lg:space-y-6 flex-1">
+
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className={cn("grid gap-3 lg:gap-4", mobileTab === "jobs" || mobileTab === "schedule" ? "grid-cols-2 lg:grid-cols-4" : "hidden lg:grid lg:grid-cols-4")}>
         {stats.map((s) => (
-          <div key={s.label} className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm text-slate-500 font-medium">{s.label}</span>
-              <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", s.bg)}>
-                <s.icon size={16} className={s.color} />
+          <div key={s.label} className="bg-card border border-border rounded-xl p-3 lg:p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-semibold text-muted-foreground">{s.label}</span>
+              <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center", s.bg)}>
+                <s.icon size={14} className={s.color} />
               </div>
             </div>
-            <p className={cn("text-3xl font-bold", s.color)}>
+            <p className="text-xl lg:text-2xl font-bold text-foreground leading-tight">
               {loading ? "—" : s.value}
             </p>
           </div>
@@ -1978,78 +2023,152 @@ export default function DispatchPage() {
           />
         )
       ) : (
-        <div className="flex gap-5 items-start">
+        <div className={cn("flex gap-5 items-start", mobileTab === "roster" && "lg:flex hidden")}>
           {/* Kanban Board + Map column */}
-          <div className="flex-[2] min-w-0 flex flex-col gap-5">
-          {/* Kanban Board */}
-          <div className="min-w-0">
+          <div className={cn("min-w-0 flex flex-col gap-5", mobileTab === "jobs" ? "flex-1 lg:flex-[2]" : "hidden lg:flex lg:flex-[2]")}>
+          {/* Kanban / List Panel */}
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            {/* Panel header with List/Board toggle */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <h2 className="text-sm font-semibold text-foreground">Work Orders</h2>
+              <div className="flex items-center gap-3">
+                <span className="hidden lg:block text-[11px] text-muted-foreground">{jobs.filter(j=>j.status!=='Done').length} active</span>
+                <div className="flex items-center bg-muted rounded-lg p-0.5 gap-0.5">
+                  <button
+                    onClick={() => { setBoardLayout('list'); localStorage.setItem('gg_dispatch_layout','list'); }}
+                    className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all",
+                      boardLayout === 'list' ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
+                  >
+                    <LayoutList size={12} /> List
+                  </button>
+                  <button
+                    onClick={() => { setBoardLayout('board'); localStorage.setItem('gg_dispatch_layout','board'); }}
+                    className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all",
+                      boardLayout === 'board' ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
+                  >
+                    <LayoutGrid size={12} /> Board
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter pills (mobile: shown here; desktop: shown in panel) */}
+            <div className="flex gap-2 px-4 py-2.5 border-b border-border overflow-x-auto">
+              {(['All','Pending','Assigned','En Route','On Site','In Progress','Done'] as const).map(f => {
+                const count = f === 'All' ? jobs.length : jobs.filter(j => j.status === f).length;
+                return (
+                  <button key={f} className={cn(
+                    "flex-shrink-0 text-[10px] font-semibold px-2.5 py-1 rounded-full border transition-colors whitespace-nowrap",
+                    f === 'All' ? "bg-[#6B7EFF] text-white border-[#6B7EFF]" : "bg-card text-muted-foreground border-border hover:border-[#6B7EFF]/40"
+                  )}>
+                    {f} <span className="opacity-70">({count})</span>
+                  </button>
+                );
+              })}
+            </div>
+
             {loading ? (
-              <div className="bg-white border border-border rounded-xl overflow-hidden">
-                <SkeletonRow rows={5} cols={4} />
+              <SkeletonRow rows={5} cols={4} />
+            ) : boardLayout === 'list' ? (
+              /* ── LIST VIEW ──────────────────────────────────── */
+              <div className="divide-y divide-border">
+                {jobs.map(job => {
+                  const priorityStripe = job.priority === 'urgent' ? 'border-l-red-500' : job.priority === 'normal' ? 'border-l-amber-400' : 'border-l-emerald-400';
+                  const statusColors: Record<string,string> = {
+                    Pending:      'bg-slate-100 text-slate-600',
+                    Assigned:     'bg-blue-50 text-blue-700',
+                    'En Route':   'bg-violet-50 text-violet-700',
+                    'On Site':    'bg-amber-50 text-amber-700',
+                    'In Progress':'bg-orange-50 text-orange-700',
+                    Done:         'bg-emerald-50 text-emerald-700',
+                  };
+                  const assignedTech = techs.find(t => t.id === job.assignedTechId);
+                  const isDone = job.status === 'Done';
+                  return (
+                    <div key={job.id}
+                      className={cn("flex items-center gap-3 px-4 py-3 border-l-[3px] hover:bg-muted/50 cursor-pointer transition-colors", priorityStripe, isDone && "opacity-60")}
+                      onClick={() => setSelectedJob(job)}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="font-mono text-[10px] text-muted-foreground">{job.woNumber}</span>
+                          {job.priority === 'urgent' && <span className="text-[9px] font-semibold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">Urgent</span>}
+                        </div>
+                        <p className="text-sm font-medium text-foreground truncate">{job.property}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className={cn("text-[9px] px-1.5 py-0.5 rounded font-medium",jobTypeConfig[job.jobType]?.color ?? 'bg-slate-100 text-slate-600')}>{job.jobType}</span>
+                          {job.eta && job.eta !== 'TBD' && <span className="text-[10px] text-muted-foreground">{job.eta}</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        {assignedTech ? (
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-6 h-6 rounded-full bg-[#6B7EFF]/10 text-[#6B7EFF] text-[9px] font-bold flex items-center justify-center">{assignedTech.initials}</div>
+                            <span className="hidden lg:block text-xs text-muted-foreground">{assignedTech.name.split(' ')[0]}</span>
+                          </div>
+                        ) : (
+                          <button
+                            className="text-[10px] text-[#6B7EFF] font-medium hover:underline"
+                            onClick={e => { e.stopPropagation(); }}
+                          >Assign</button>
+                        )}
+                        <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full", statusColors[job.status] ?? 'bg-slate-100 text-slate-600')}>{job.status}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+                {jobs.length === 0 && (
+                  <div className="py-12 text-center text-sm text-muted-foreground">No work orders</div>
+                )}
               </div>
             ) : (
-              <DndContext
-                sensors={sensors}
-                onDragStart={e => setActiveJobId(String(e.active.id))}
-                onDragEnd={handleDragEnd}
-                onDragCancel={() => setActiveJobId(null)}
-              >
-                <div className="grid grid-cols-6 gap-3">
-                  {COLUMNS.map((col) => {
-                    const colJobs = jobs.filter(j => j.status === col.status);
-                    return (
-                      <DroppableColumn
-                        key={col.status}
-                        status={col.status}
-                        label={col.label}
-                        accent={col.accent}
-                        bg={col.bg}
-                        count={colJobs.length}
-                      >
-                        {colJobs.map(job => (
-                          <JobCard
-                            key={job.id}
-                            job={job}
-                            techs={techs}
-                            onStatusChange={(id, s) => handleJobStatusChange(id, s as JobStatus)}
-                            onSelect={setSelectedJob}
-                            onAssign={handleAssignTech}
-                            isDragging={activeJobId === job.id}
-                          />
-                        ))}
-                        {colJobs.length === 0 && (
-                          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground/50 border-2 border-dashed border-slate-200 rounded-xl">
-                            <p className="text-xs">No jobs</p>
-                          </div>
-                        )}
-                      </DroppableColumn>
-                    );
-                  })}
-                </div>
-                <DragOverlay>
-                  {activeJobId ? (() => {
-                    const job = jobs.find(j => j.id === activeJobId);
-                    if (!job) return null;
-                    const typeConf = jobTypeConfig[job.jobType] ?? jobTypeConfig.Repair;
-                    return (
-                      <div className={cn(
-                        "bg-white rounded-xl border-l-4 shadow-2xl p-3.5 w-64 opacity-95 rotate-1",
-                        job.priority === "urgent"    ? "border-l-red-500"
-                        : job.priority === "normal" ? "border-l-amber-400"
-                        : "border-l-emerald-400"
-                      )}>
-                        <p className="text-[10px] font-mono text-slate-400">{job.woNumber}</p>
-                        <p className="text-sm font-semibold text-slate-800">{job.property}</p>
-                        <span className={cn("inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full mt-1.5", typeConf.color)}>
-                          {jobTypeIcon[job.jobType]}{typeConf.label}
-                        </span>
+              /* ── BOARD VIEW (3 columns: Open / Active / Done) ── */
+              <div className="p-3 grid grid-cols-3 gap-3">
+                {[
+                  { label: 'Open',   statuses: ['Pending','Assigned'] as JobStatus[],                    accentColor: '#f59e0b' },
+                  { label: 'Active', statuses: ['En Route','On Site','In Progress'] as JobStatus[],       accentColor: '#6B7EFF' },
+                  { label: 'Done',   statuses: ['Done'] as JobStatus[],                                   accentColor: '#10b981' },
+                ].map(group => {
+                  const groupJobs = jobs.filter(j => group.statuses.includes(j.status));
+                  return (
+                    <div key={group.label}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</span>
+                        <span className="text-[10px] font-medium text-muted-foreground bg-muted border border-border rounded-full px-2 py-0.5">{groupJobs.length}</span>
                       </div>
-                    );
-                  })() : null}
-                </DragOverlay>
-              </DndContext>
+                      <div className="h-0.5 rounded-full mb-3" style={{background: group.accentColor}} />
+                      {groupJobs.map(job => {
+                        const priorityBorder = job.priority === 'urgent' ? 'border-l-red-500' : job.priority === 'normal' ? 'border-l-amber-400' : 'border-l-emerald-400';
+                        const assignedTech = techs.find(t => t.id === job.assignedTechId);
+                        return (
+                          <div key={job.id}
+                            className={cn("bg-card border border-border rounded-lg p-2.5 mb-2 border-l-[3px] cursor-pointer hover:border-[#6B7EFF]/30 transition-colors", priorityBorder)}
+                            onClick={() => setSelectedJob(job)}
+                          >
+                            <p className="font-mono text-[9px] text-muted-foreground mb-1">{job.woNumber}</p>
+                            <p className="text-xs font-semibold text-foreground mb-1.5 leading-tight">{job.property}</p>
+                            <div className="flex items-center justify-between">
+                              {assignedTech ? (
+                                <div className="flex items-center gap-1">
+                                  <div className="w-4 h-4 rounded-full bg-[#6B7EFF]/10 text-[#6B7EFF] text-[8px] font-bold flex items-center justify-center">{assignedTech.initials}</div>
+                                  <span className="text-[9px] text-muted-foreground">{assignedTech.name.split(' ')[0]}</span>
+                                </div>
+                              ) : <span className="text-[9px] text-muted-foreground">Unassigned</span>}
+                              <span className={cn("text-[9px] font-medium px-1.5 py-0.5 rounded",jobTypeConfig[job.jobType]?.color)}>{job.jobType}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {groupJobs.length === 0 && (
+                        <div className="border-2 border-dashed border-border rounded-lg py-6 text-center text-[10px] text-muted-foreground/50">Empty</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             )}
-          </div>{/* end kanban inner div */}
+          </div>{/* end board/list panel */}
+
 
           {/* Mapbox Map Panel */}
           {showMap && (
@@ -2086,37 +2205,73 @@ export default function DispatchPage() {
           )}
           </div>{/* end flex-[2] flex-col */}
 
-          {/* Tech Roster */}
-          <div className="flex-[1] min-w-0 bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-            <div className="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between">
+          {/* Tech Roster — mobile: full screen on Roster tab; desktop: right sidebar */}
+          <div className={cn("min-w-0 bg-card border border-border rounded-xl overflow-hidden", mobileTab === "roster" ? "flex-1 lg:flex-[1]" : "hidden lg:block lg:flex-[1]")}>
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-semibold text-slate-800">Tech Roster</h2>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <h2 className="text-sm font-semibold text-foreground">Tech Roster</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
                   {loading ? "…" : `${techs.length} technician${techs.length !== 1 ? 's' : ''}`}
                 </p>
               </div>
               <button
                 onClick={() => { setShowAddTech(true); setAddTechError(null); }}
-                className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#2563EB] text-white hover:bg-blue-700 transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#6B7EFF] text-white hover:bg-[#5a6df0] transition-colors"
                 title="Add technician"
               >
                 <Plus size={14} />
               </button>
             </div>
 
+            {/* Leaderboard — this week */}
+            {!loading && techs.length > 0 && (
+              <div>
+                <div className="px-4 py-2 bg-muted/50 border-b border-border">
+                  <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">This week's leaderboard</p>
+                </div>
+                {[...techs]
+                  .sort((a, b) => techStreak(b.id) - techStreak(a.id))
+                  .slice(0, 3)
+                  .map((tech, i) => {
+                    const rankColors = ['text-amber-500', 'text-slate-400', 'text-amber-700'];
+                    const jobCount   = (techStreak(tech.id) * 1.4 + 3) | 0;
+                    return (
+                      <div key={tech.id} className={cn("flex items-center gap-2.5 px-4 py-2.5 border-b border-border/50", i === 0 && "bg-amber-50/40 dark:bg-amber-950/10")}>
+                        <span className={cn("text-sm font-bold w-4 text-center", rankColors[i])}>{i + 1}</span>
+                        <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0", tech.status === 'Offline' ? 'bg-slate-400' : 'bg-[#6B7EFF]')}>
+                          {tech.initials}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-foreground truncate">{tech.name}</p>
+                          <p className="text-[10px] text-muted-foreground">{tech.role}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-sm font-bold text-[#6B7EFF]">{jobCount}</p>
+                          <p className="text-[9px] text-muted-foreground">jobs</p>
+                        </div>
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <Flame size={11} className="text-orange-400" />
+                          <span className="text-[10px] font-semibold text-orange-400">{techStreak(tech.id)}d</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+
             {/* Add tech form */}
             {showAddTech && (
-              <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50">
-                <p className="text-xs font-semibold text-slate-600 mb-2">Add to roster</p>
+              <div className="px-4 py-3 border-b border-border bg-muted/30">
+                <p className="text-xs font-semibold text-foreground mb-2">Add to roster</p>
                 <div className="space-y-2">
                   <input
-                    className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full text-sm border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-card"
                     placeholder="Full name *"
                     value={newTechForm.name}
                     onChange={e => setNewTechForm(f => ({ ...f, name: e.target.value }))}
                   />
                   <select
-                    className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                    className="w-full text-sm border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-card"
                     value={newTechForm.role}
                     onChange={e => setNewTechForm(f => ({ ...f, role: e.target.value }))}
                   >
@@ -2127,19 +2282,19 @@ export default function DispatchPage() {
                     <option value="Apprentice">Apprentice</option>
                   </select>
                   <input
-                    className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full text-sm border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-card"
                     placeholder="Phone"
                     value={newTechForm.phone}
                     onChange={e => setNewTechForm(f => ({ ...f, phone: e.target.value }))}
                   />
                   <input
-                    className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full text-sm border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-card"
                     placeholder="Email (for portal invite)"
                     value={newTechForm.email}
                     onChange={e => setNewTechForm(f => ({ ...f, email: e.target.value }))}
                   />
                   <select
-                    className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                    className="w-full text-sm border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF] bg-card"
                     value={newTechForm.employment_type}
                     onChange={e => setNewTechForm(f => ({ ...f, employment_type: e.target.value }))}
                   >
@@ -2148,17 +2303,12 @@ export default function DispatchPage() {
                   </select>
                   {addTechError && <p className="text-xs text-red-500">{addTechError}</p>}
                   <div className="flex gap-2">
-                    <button
-                      onClick={handleAddTech}
-                      disabled={addTechSaving}
-                      className="flex-1 text-xs bg-[#2563EB] text-white py-1.5 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
-                    >
+                    <button onClick={handleAddTech} disabled={addTechSaving}
+                      className="flex-1 text-xs bg-[#6B7EFF] text-white py-1.5 rounded-lg font-medium hover:bg-[#5a6df0] disabled:opacity-50">
                       {addTechSaving ? 'Adding…' : 'Add to Roster'}
                     </button>
-                    <button
-                      onClick={() => { setShowAddTech(false); setNewTechForm({ name: '', role: 'Tech', phone: '', email: '', employment_type: 'employee' }); }}
-                      className="flex-1 text-xs border border-slate-200 text-slate-600 py-1.5 rounded-lg hover:bg-slate-50"
-                    >
+                    <button onClick={() => { setShowAddTech(false); setNewTechForm({ name: '', role: 'Tech', phone: '', email: '', employment_type: 'employee' }); }}
+                      className="flex-1 text-xs border border-border text-muted-foreground py-1.5 rounded-lg hover:bg-muted">
                       Cancel
                     </button>
                   </div>
@@ -2166,15 +2316,19 @@ export default function DispatchPage() {
               </div>
             )}
 
-            <div className="divide-y divide-slate-50">
+            <div className="px-3 py-1.5 bg-muted/50 border-b border-border">
+              <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">Access codes · /tech login</p>
+            </div>
+
+            <div className="divide-y divide-border">
               {loading ? (
-                <div className="flex items-center justify-center py-8 text-slate-400 text-sm">
+                <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">
                   <RefreshCw size={14} className="animate-spin mr-1.5" /> Loading…
                 </div>
               ) : techs.length === 0 ? (
-                <div className="text-center text-sm text-slate-400 py-8">
+                <div className="text-center text-sm text-muted-foreground py-8">
                   <p>No technicians yet</p>
-                  <button onClick={() => setShowAddTech(true)} className="text-xs text-[#2563EB] hover:underline mt-1">Add your first tech →</button>
+                  <button onClick={() => setShowAddTech(true)} className="text-xs text-[#6B7EFF] hover:underline mt-1">Add your first tech →</button>
                 </div>
               ) : (
                 techs.map(tech => (
@@ -2188,6 +2342,7 @@ export default function DispatchPage() {
                     onDelete={handleDeleteTech}
                     onEditSchedule={t => setScheduleTech(t)}
                     hasLiveGPS={fleetLocations.some(f => f.tech_id === tech.id && new Date(f.updated_at).getTime() > Date.now() - 15 * 60 * 1000)}
+                    onGenerateCode={handleGenerateTechCode}
                   />
                 ))
               )}
@@ -2196,6 +2351,7 @@ export default function DispatchPage() {
         </div>
       )}
 
+      </div>{/* end p-4/p-6 wrapper */}
     </div>
   );
 }

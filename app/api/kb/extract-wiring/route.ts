@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth }                       from '@clerk/nextjs/server'
 import { serviceDb }                  from '@/lib/vectorize'
 import Anthropic                      from '@anthropic-ai/sdk'
+import { isTechAuthed }               from '@/lib/tech-auth'
 
 export const maxDuration = 60
 export const dynamic     = 'force-dynamic'
@@ -57,8 +58,7 @@ export async function POST(req: NextRequest) {
   // Accept both Clerk session and tech code
   let authed = false
   try { const s = await auth(); if (s.userId) authed = true } catch { /**/ }
-  const techCode = req.headers.get('x-tech-code')
-  if (techCode && techCode === process.env.TECH_ACCESS_CODE) authed = true
+  if (!authed) authed = await isTechAuthed(req)
   if (!authed) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {

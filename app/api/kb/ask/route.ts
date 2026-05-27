@@ -9,18 +9,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth }                       from '@clerk/nextjs/server'
 import Anthropic                      from '@anthropic-ai/sdk'
 import { searchKnowledge, serviceDb } from '@/lib/vectorize'
+import { isTechAuthed }               from '@/lib/tech-auth'
 
 export const maxDuration = 60   // Vercel Pro: up to 60s. Prevents silent timeout at step 3-4.
 export const dynamic     = 'force-dynamic'
 
-function isTechAuthed(req: NextRequest): boolean {
-  const code      = req.headers.get('x-tech-code')
-  const validCode = process.env.TECH_ACCESS_CODE
-  return !!(validCode && code && code === validCode)
-}
-
 export async function POST(req: NextRequest) {
-  const techOk = isTechAuthed(req)
+  const techOk = await isTechAuthed(req)
   let userId: string | null = null
   if (!techOk) {
     try { const s = await auth(); userId = s.userId } catch { /* no clerk session */ }
