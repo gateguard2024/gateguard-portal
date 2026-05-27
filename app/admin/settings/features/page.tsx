@@ -3,11 +3,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { TopBar } from '@/components/layout/TopBar'
 import {
-  CheckCircle2, AlertCircle, Loader2, Save, Info,
+  CheckCircle2, AlertCircle, Loader2, Info,
   Settings, Package, Shield, DollarSign,
 } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ShieldCheck, ToggleLeft, ToggleRight, ExternalLink } = require('lucide-react') as any
+const { Save, ShieldCheck, ToggleLeft, ToggleRight, ExternalLink } = require('lucide-react') as any
 
 /* ─── Types ──────────────────────────────────────────────── */
 type AccessLevel = 'none' | 'view' | 'edit'
