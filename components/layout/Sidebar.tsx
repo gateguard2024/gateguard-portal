@@ -162,14 +162,14 @@ const NAV_SECTIONS: NavSection[] = [
 ];
 
 const aiAgents = [
-  { name: "ARIA",    role: "Lead Intel",     color: "#6B7EFF", active: true,  href: "/aria" },
-  { name: "TRINITY", role: "Voice",          color: "#0B7285", active: true,  href: "/trinity" },
-  { name: "SCOUT",   role: "Market",         color: "#7C3AED", active: true,  href: null },
-  { name: "BEACON",  role: "Client Comms",   color: "#B45309", active: false, href: null },
-  { name: "FORGE",   role: "Quote Builder",  color: "#0B7285", active: true,  href: null },
-  { name: "ATLAS",   role: "DirecTV",        color: "#3B5BDB", active: true,  href: "/directv" },
-  { name: "SAGE",    role: "Training",       color: "#15803D", active: false, href: null },
-  { name: "RELAY",   role: "Tier-1 Support", color: "#6B7EFF", active: false, href: null },
+  { name: "ARIA",    role: "Lead Intel",     color: "#6B7EFF", active: true,  href: "/aria",       featureKey: "ai.aria"    },
+  { name: "TRINITY", role: "Voice",          color: "#0B7285", active: true,  href: "/trinity",    featureKey: "ai.trinity" },
+  { name: "SCOUT",   role: "Market",         color: "#7C3AED", active: true,  href: "/scout",      featureKey: "ai.scout"   },
+  { name: "BEACON",  role: "Client Comms",   color: "#B45309", active: false, href: "/beacon",     featureKey: "ai.beacon"  },
+  { name: "FORGE",   role: "Quote Builder",  color: "#0B7285", active: true,  href: "/quotes/new", featureKey: "ai.forge"   },
+  { name: "ATLAS",   role: "DirecTV",        color: "#3B5BDB", active: true,  href: "/directv",    featureKey: "ai.atlas"   },
+  { name: "SAGE",    role: "Training",       color: "#15803D", active: false, href: "/training",   featureKey: "ai.sage"    },
+  { name: "RELAY",   role: "Tier-1 Support", color: "#6B7EFF", active: false, href: "/relay",      featureKey: "ai.relay"   },
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -300,6 +300,14 @@ export function Sidebar() {
     "/playbooks":              "internal.playbooks",
     "/marketing/coop":         "internal.coop",
     "/portal":                 "internal.portals",
+    // AI Agents
+    "/aria":                   "ai.aria",
+    "/trinity":                "ai.trinity",
+    "/scout":                  "ai.scout",
+    "/beacon":                 "ai.beacon",
+    "/quotes/new":             "ai.forge",
+    "/directv":                "ai.atlas",
+    "/relay":                  "ai.relay",
   };
 
   const isFeatureVisible = (href: string): boolean => {
@@ -476,6 +484,8 @@ export function Sidebar() {
           {armyExpanded && (
             <div className="mt-1 space-y-0.5 pb-1">
               {aiAgents.map(agent => {
+                // Feature flag gate for AI agents
+                if (agent.featureKey && Object.keys(featureFlags).length > 0 && featureFlags[agent.featureKey] === "none") return null;
                 const Wrapper = agent.href ? Link : ("div" as React.ElementType);
                 return (
                   <Wrapper
@@ -505,6 +515,54 @@ export function Sidebar() {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Admin quick-links (corporate only) ───────────────────────────── */}
+      {!collapsed && showAdmin && (
+        <div className="mx-3 mt-2 shrink-0">
+          <p className="text-[8px] font-bold uppercase tracking-[0.18em] text-white/30 px-1 mb-1">Access Control</p>
+          <div className="flex gap-1">
+            <Link
+              href="/admin/settings/features"
+              className={cn(
+                "flex-1 flex flex-col items-center gap-0.5 py-2 rounded-lg transition-colors text-center",
+                pathname.startsWith("/admin/settings/features")
+                  ? "bg-brand-400/20 text-brand-400"
+                  : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
+              )}
+              title="Feature Settings — Global tier defaults"
+            >
+              <Settings size={13} />
+              <span className="text-[8px] font-semibold leading-tight">Features</span>
+            </Link>
+            <Link
+              href="/admin/dealers"
+              className={cn(
+                "flex-1 flex flex-col items-center gap-0.5 py-2 rounded-lg transition-colors text-center",
+                pathname.startsWith("/admin/dealers")
+                  ? "bg-brand-400/20 text-brand-400"
+                  : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
+              )}
+              title="Dealers — Per-org feature overrides"
+            >
+              <Users size={13} />
+              <span className="text-[8px] font-semibold leading-tight">Dealers</span>
+            </Link>
+            <Link
+              href="/admin/users"
+              className={cn(
+                "flex-1 flex flex-col items-center gap-0.5 py-2 rounded-lg transition-colors text-center",
+                pathname.startsWith("/admin/users")
+                  ? "bg-brand-400/20 text-brand-400"
+                  : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
+              )}
+              title="Platform Users — Per-user feature access"
+            >
+              <UserCheck size={13} />
+              <span className="text-[8px] font-semibold leading-tight">Users</span>
+            </Link>
+          </div>
         </div>
       )}
 

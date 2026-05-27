@@ -3,11 +3,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { TopBar } from '@/components/layout/TopBar'
 import {
-  CheckCircle2, AlertCircle, Loader2, Info,
-  Settings, Package, Shield, DollarSign,
+  CheckCircle2, AlertCircle, Loader2, Info, ChevronDown, ChevronRight,
 } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Save, ShieldCheck, ToggleLeft, ToggleRight, ExternalLink } = require('lucide-react') as any
+const { Save, ToggleLeft, ToggleRight, Settings2 } = require('lucide-react') as any
 
 /* ─── Types ──────────────────────────────────────────────── */
 type AccessLevel = 'none' | 'view' | 'edit'
@@ -28,19 +27,19 @@ interface Feature {
 }
 
 const ORG_TIERS = [
-  { id: 'master_agent',       label: 'Master Agent'   },
-  { id: 'master_dealer',      label: 'MSO'            },
-  { id: 'full_dealer',        label: 'Full Dealer'    },
-  { id: 'service_dealer',     label: 'Service Dealer' },
-  { id: 'install_contractor', label: 'Install Co.'    },
-  { id: 'sales_partner',      label: 'Sales Partner'  },
+  { id: 'master_agent',       label: 'Master Agent',   short: 'MA'  },
+  { id: 'master_dealer',      label: 'MSO',            short: 'MSO' },
+  { id: 'full_dealer',        label: 'Full Dealer',    short: 'FD'  },
+  { id: 'service_dealer',     label: 'Service Dealer', short: 'SD'  },
+  { id: 'install_contractor', label: 'Install Co.',    short: 'IC'  },
+  { id: 'sales_partner',      label: 'Sales Partner',  short: 'SP'  },
 ]
 
-const ACCESS_OPTIONS: { value: AccessLevel; label: string; color: string }[] = [
-  { value: 'none', label: 'None',  color: 'bg-slate-100 text-slate-500' },
-  { value: 'view', label: 'View',  color: 'bg-amber-100 text-amber-700' },
-  { value: 'edit', label: 'Edit',  color: 'bg-emerald-100 text-emerald-700' },
-]
+const LEVEL_STYLES: Record<AccessLevel, string> = {
+  none: 'bg-slate-100 text-slate-500',
+  view: 'bg-amber-100 text-amber-700',
+  edit: 'bg-emerald-100 text-emerald-700',
+}
 
 /* ─── Group features by section ──────────────────────────── */
 function groupBySection(features: Feature[]): Map<string, { label: string; items: Feature[] }> {
@@ -52,22 +51,120 @@ function groupBySection(features: Feature[]): Map<string, { label: string; items
   return map
 }
 
-/* ─── Access level selector ──────────────────────────────── */
-function AccessSelector({ value, onChange }: { value: AccessLevel; onChange: (v: AccessLevel) => void }) {
+/* ─── Compact tier select ────────────────────────────────── */
+function TierSelect({ value, onChange }: { value: AccessLevel; onChange: (v: AccessLevel) => void }) {
   return (
-    <div className="flex gap-0.5">
-      {ACCESS_OPTIONS.map(opt => (
-        <button
-          key={opt.value}
-          onClick={() => onChange(opt.value)}
-          className={`px-2 py-1 text-[10px] font-semibold rounded transition-all ${
-            value === opt.value ? opt.color : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
-          }`}
-        >
-          {opt.label}
-        </button>
-      ))}
+    <div className={`relative inline-flex items-center rounded-md px-2 py-1 text-[11px] font-semibold cursor-pointer ${LEVEL_STYLES[value]}`}>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value as AccessLevel)}
+        className="absolute inset-0 opacity-0 cursor-pointer w-full"
+      >
+        <option value="none">None</option>
+        <option value="view">View</option>
+        <option value="edit">Edit</option>
+      </select>
+      <span className="capitalize">{value === 'none' ? 'None' : value === 'view' ? 'View' : 'Edit'}</span>
+      <ChevronDown size={9} className="ml-1 opacity-60" />
     </div>
+  )
+}
+
+/* ─── Feature row ────────────────────────────────────────── */
+function FeatureRow({
+  f,
+  isDirty,
+  onTierChange,
+  onPatch,
+}: {
+  f: Feature
+  isDirty: boolean
+  onTierChange: (tier: string, level: AccessLevel) => void
+  onPatch: (patch: Partial<Feature>) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <>
+      {/* Main row */}
+      <div className={`grid grid-cols-[1fr_repeat(6,82px)_36px] gap-2 px-5 py-3 border-b border-slate-50 items-center hover:bg-slate-50/60 transition-colors ${isDirty ? 'bg-amber-50/40' : ''}`}>
+        {/* Feature name + description */}
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-slate-800 truncate">{f.label}</span>
+            {isDirty && <div className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />}
+            {f.is_beta && (
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-600 uppercase tracking-wide">Beta</span>
+            )}
+            {f.is_paid && (
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-100 text-sky-600 uppercase tracking-wide">Paid</span>
+            )}
+          </div>
+          {f.description && (
+            <span className="text-[11px] text-slate-400 truncate block mt-0.5">{f.description}</span>
+          )}
+        </div>
+
+        {/* Per-tier selects */}
+        {ORG_TIERS.map(tier => (
+          <div key={tier.id} className="flex justify-center">
+            <TierSelect
+              value={(f.tier_defaults ?? {})[tier.id] as AccessLevel ?? 'none'}
+              onChange={v => onTierChange(tier.id, v)}
+            />
+          </div>
+        ))}
+
+        {/* Expand settings */}
+        <button
+          onClick={() => setExpanded(e => !e)}
+          className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${expanded ? 'bg-slate-200 text-slate-600' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'}`}
+          title="Stripe / Paid / Beta settings"
+        >
+          <Settings2 size={13} />
+        </button>
+      </div>
+
+      {/* Expanded settings row */}
+      {expanded && (
+        <div className="grid grid-cols-[1fr_240px_80px_80px] gap-4 px-5 py-3 bg-slate-50 border-b border-slate-100 items-center">
+          <div className="text-[11px] text-slate-500 italic">Extended settings for <span className="font-medium text-slate-700">{f.label}</span></div>
+
+          {/* Stripe product ID */}
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">Stripe ID</label>
+            <input
+              value={f.stripe_product_id ?? ''}
+              onChange={e => onPatch({ stripe_product_id: e.target.value || null })}
+              placeholder="prod_..."
+              className="flex-1 text-xs border border-slate-200 rounded px-2 py-1 font-mono focus:outline-none focus:ring-1 focus:ring-brand-400 text-slate-600 bg-white"
+            />
+          </div>
+
+          {/* Paid toggle */}
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Paid</label>
+            <button onClick={() => onPatch({ is_paid: !f.is_paid })}>
+              {f.is_paid
+                ? <ToggleRight size={20} className="text-brand-400" />
+                : <ToggleLeft  size={20} className="text-slate-300" />
+              }
+            </button>
+          </div>
+
+          {/* Beta toggle */}
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Beta</label>
+            <button onClick={() => onPatch({ is_beta: !f.is_beta })}>
+              {f.is_beta
+                ? <ToggleRight size={20} className="text-amber-500" />
+                : <ToggleLeft  size={20} className="text-slate-300" />
+              }
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
@@ -79,6 +176,7 @@ export default function GlobalFeaturesPage() {
   const [saving, setSaving]         = useState(false)
   const [saved, setSaved]           = useState(false)
   const [error, setError]           = useState<string | null>(null)
+  const [collapsed, setCollapsed]   = useState<Set<string>>(new Set())
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -113,6 +211,7 @@ export default function GlobalFeaturesPage() {
     setSaving(true)
     setError(null)
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const updates = Array.from(dirty.entries()).map(([key, patch]) => ({ key, ...patch }))
       const res = await fetch('/api/admin/features', {
         method: 'PATCH',
@@ -120,16 +219,26 @@ export default function GlobalFeaturesPage() {
         body: JSON.stringify({ updates }),
       })
       const data = await res.json()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const failed = (data.results ?? []).filter((r: any) => !r.ok)
       if (failed.length > 0) throw new Error(`${failed.length} item(s) failed to save`)
       setDirty(new Map())
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Save failed')
     } finally {
       setSaving(false)
     }
+  }
+
+  const toggleSection = (key: string) => {
+    setCollapsed(s => {
+      const next = new Set(s)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
   }
 
   const sections = groupBySection(features)
@@ -138,7 +247,7 @@ export default function GlobalFeaturesPage() {
     <div className="flex flex-col min-h-full bg-[#F8FAFC]">
       <TopBar
         title="Feature Settings"
-        subtitle="Global defaults · tier access levels · Stripe subscription hooks"
+        subtitle="Global tier defaults · Stripe subscription hooks"
         actions={
           <button
             onClick={() => void handleSave()}
@@ -150,7 +259,7 @@ export default function GlobalFeaturesPage() {
             }`}
           >
             {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <CheckCircle2 size={14} /> : <Save size={14} />}
-            {saved ? 'Saved!' : `Save${dirty.size > 0 ? ` (${dirty.size} change${dirty.size !== 1 ? 's' : ''})` : ''}`}
+            {saved ? 'Saved!' : `Save${dirty.size > 0 ? ` (${dirty.size})` : ''}`}
           </button>
         }
       />
@@ -166,10 +275,10 @@ export default function GlobalFeaturesPage() {
         <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-6 flex items-start gap-2 text-sm text-blue-700">
           <Info size={15} className="mt-0.5 shrink-0" />
           <div>
-            <span className="font-semibold">Tier defaults</span> set what new dealers get automatically based on their org tier.
-            Individual orgs can be overridden from their Dealer detail → Features tab.
-            Users can be further restricted (never elevated) from Platform Users.
-            <span className="ml-1 font-medium">Stripe IDs</span> will auto-gate features once subscriptions are wired.
+            <span className="font-semibold">Tier defaults</span> set what new dealers get automatically.
+            Override per org on the <span className="font-medium">Dealer detail → Features tab</span>.
+            Users can be further restricted from <span className="font-medium">Platform Users</span>.
+            Click <Settings2 size={11} className="inline mx-0.5" /> on any row to set Stripe ID, Paid, or Beta flags.
           </div>
         </div>
 
@@ -178,85 +287,53 @@ export default function GlobalFeaturesPage() {
             <Loader2 size={24} className="animate-spin text-slate-400" />
           </div>
         ) : (
-          <div className="space-y-6">
-            {Array.from(sections.entries()).map(([sectionKey, { label, items }]) => (
-              <div key={sectionKey} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                {/* Section header */}
-                <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 bg-slate-50">
-                  <h3 className="text-sm font-semibold text-slate-700">{label}</h3>
-                  <span className="text-xs text-slate-400">{items.length} feature{items.length !== 1 ? 's' : ''}</span>
-                </div>
-
-                {/* Column headers */}
-                <div className="grid grid-cols-[200px_1fr_repeat(6,80px)_120px_60px_60px] gap-2 px-5 py-2 border-b border-slate-100 bg-slate-50/50">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Feature</span>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Description</span>
-                  {ORG_TIERS.map(t => (
-                    <span key={t.id} className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">{t.label}</span>
-                  ))}
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Stripe ID</span>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Paid</span>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Beta</span>
-                </div>
-
-                {/* Feature rows */}
-                {items.map(f => (
-                  <div
-                    key={f.key}
-                    className={`grid grid-cols-[200px_1fr_repeat(6,80px)_120px_60px_60px] gap-2 px-5 py-3 border-b border-slate-50 items-center hover:bg-slate-50/50 transition-colors ${
-                      dirty.has(f.key) ? 'bg-amber-50/30' : ''
-                    }`}
+          <div className="space-y-4">
+            {Array.from(sections.entries()).map(([sectionKey, { label, items }]) => {
+              const isCollapsed = collapsed.has(sectionKey)
+              const dirtyCount = items.filter(f => dirty.has(f.key)).length
+              return (
+                <div key={sectionKey} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                  {/* Section header — clickable to collapse */}
+                  <button
+                    onClick={() => toggleSection(sectionKey)}
+                    className="w-full flex items-center justify-between px-5 py-3 border-b border-slate-100 bg-slate-50 hover:bg-slate-100/60 transition-colors"
                   >
-                    {/* Label */}
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-sm font-medium text-slate-800 truncate">{f.label}</span>
-                      {dirty.has(f.key) && <div className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />}
+                    <div className="flex items-center gap-3">
+                      {isCollapsed ? <ChevronRight size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                      <h3 className="text-sm font-semibold text-slate-700">{label}</h3>
+                      {dirtyCount > 0 && (
+                        <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-600">{dirtyCount} unsaved</span>
+                      )}
                     </div>
+                    <span className="text-xs text-slate-400">{items.length} feature{items.length !== 1 ? 's' : ''}</span>
+                  </button>
 
-                    {/* Description */}
-                    <span className="text-xs text-slate-400 truncate">{f.description ?? '—'}</span>
-
-                    {/* Per-tier access selectors */}
-                    {ORG_TIERS.map(tier => (
-                      <div key={tier.id} className="flex justify-center">
-                        <AccessSelector
-                          value={(f.tier_defaults ?? {})[tier.id] as AccessLevel ?? 'none'}
-                          onChange={v => setTierDefault(f.key, tier.id, v)}
-                        />
+                  {!isCollapsed && (
+                    <>
+                      {/* Column headers */}
+                      <div className="grid grid-cols-[1fr_repeat(6,82px)_36px] gap-2 px-5 py-2 border-b border-slate-100 bg-slate-50/50">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Feature</span>
+                        {ORG_TIERS.map(t => (
+                          <span key={t.id} className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">{t.short}</span>
+                        ))}
+                        <span />
                       </div>
-                    ))}
 
-                    {/* Stripe product ID */}
-                    <input
-                      value={f.stripe_product_id ?? ''}
-                      onChange={e => markDirty(f.key, { stripe_product_id: e.target.value || null })}
-                      placeholder="prod_..."
-                      className="w-full text-xs border border-slate-200 rounded px-2 py-1 font-mono focus:outline-none focus:ring-1 focus:ring-brand-400 text-slate-600"
-                    />
-
-                    {/* Paid toggle */}
-                    <div className="flex justify-center">
-                      <button onClick={() => markDirty(f.key, { is_paid: !f.is_paid })}>
-                        {f.is_paid
-                          ? <ToggleRight size={20} className="text-brand-400" />
-                          : <ToggleLeft  size={20} className="text-slate-300" />
-                        }
-                      </button>
-                    </div>
-
-                    {/* Beta toggle */}
-                    <div className="flex justify-center">
-                      <button onClick={() => markDirty(f.key, { is_beta: !f.is_beta })}>
-                        {f.is_beta
-                          ? <ToggleRight size={20} className="text-amber-500" />
-                          : <ToggleLeft  size={20} className="text-slate-300" />
-                        }
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ))}
+                      {/* Feature rows */}
+                      {items.map(f => (
+                        <FeatureRow
+                          key={f.key}
+                          f={f}
+                          isDirty={dirty.has(f.key)}
+                          onTierChange={(tier, level) => setTierDefault(f.key, tier, level)}
+                          onPatch={patch => markDirty(f.key, patch)}
+                        />
+                      ))}
+                    </>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
