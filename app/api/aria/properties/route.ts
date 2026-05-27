@@ -182,10 +182,14 @@ export async function POST(req: NextRequest) {
         })
 
       // Bump the counter separately for existing rows
-      await supabase.rpc('increment_aria_property_research_count', {
-        p_name: upsertData.property_name,
-        p_addr: upsertData.address,
-      }).then(() => {}).catch(() => {})
+      void (async () => {
+        try {
+          await supabase.rpc('increment_aria_property_research_count', {
+            p_name: upsertData.property_name,
+            p_addr: upsertData.address,
+          })
+        } catch (_) {}
+      })()
 
       if (!upsertErr) upserted++
     }
@@ -204,8 +208,11 @@ export async function POST(req: NextRequest) {
           { onConflict: 'slug', ignoreDuplicates: false }
         )
       // Increment detection count
-      await supabase.rpc('increment_aria_tech_provider_count', { p_slug: slug })
-        .then(() => {}).catch(() => {})
+      void (async () => {
+        try {
+          await supabase.rpc('increment_aria_tech_provider_count', { p_slug: slug })
+        } catch (_) {}
+      })()
     }
 
     return NextResponse.json({ upserted, tech_providers_seen: techProviderUpdates.size })

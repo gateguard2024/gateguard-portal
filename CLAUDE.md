@@ -1,6 +1,6 @@
 # GateGuard Portal — Claude Context (Active Reference)
 
-> Last trimmed: May 27, 2026 (session 5). Full sprint history, /tech docs, SARA Plus intel → CLAUDE.archive.md
+> Last trimmed: May 27, 2026 (session 6). Full sprint history, /tech docs, SARA Plus intel → CLAUDE.archive.md
 
 ---
 
@@ -151,28 +151,40 @@
 ### ARIA — Lead Intelligence
 | File | Purpose |
 |------|---------|
-| `app/aria/page.tsx` | Full redesign: split list+detail layout, TopBar, `#F8FAFC` bg, 4 tabs (Property / Decision Maker / Intel / SCOUT), mobile 4-tab + bottom nav |
-| `app/api/aria/research/route.ts` | Base research: 9 Tavily + Nominatim + FCC + SEC EDGAR + Wayback, Claude Haiku synthesis |
-| `app/api/aria/research/deep/route.ts` | Deep research: 12-15 Tavily + EDGAR + PUC + city permits + ISP press + Apollo + Proxycurl + PDL; Claude Sonnet synthesis; behavioral profile + pitch strategy + freshness score |
+| `app/aria/page.tsx` | Full redesign: split list+detail layout, TopBar, `#F8FAFC` bg, 4 tabs (Property / Decision Maker / Intel / SCOUT), Intel DB panel, mobile 4-tab + bottom nav |
+| `app/api/aria/research/deep/route.ts` | Single unified search: 12-15 Tavily + EDGAR + PUC + city permits + ISP press + Apollo + Proxycurl + PDL; Executive Truth Loop; Claude Sonnet synthesis; behavioral profile + pitch strategy + freshness score; auto-upserts to `aria_properties` after synthesis |
 | `app/api/aria/searches/route.ts` | GET saved searches (scoped to org) + DELETE |
 | `app/api/aria/searches/[id]/import/route.ts` | POST: stamp `assigned_to_user_id` + `assigned_to_name` + 7-day `temp_hold_expires_at` on import |
 | `app/api/aria/scout/launch/route.ts` | POST: launch SCOUT outreach for imported lead IDs |
 | `app/api/aria/usage/route.ts` | GET: my/org/hierarchy search counts |
+| `app/api/aria/properties/route.ts` | GET (paginated + filterable intel DB) + POST (batch upsert from deep route) |
+| `app/api/aria/properties/[id]/route.ts` | GET single + PATCH sales cycle fields (stage, notes, rep, contact date) |
 | `supabase/migrations/094_aria_ownership.sql` | `show_leads.assigned_to_user_id`, `assigned_to_name`, `temp_hold_expires_at` |
+| `supabase/migrations/098_aria_intelligence_db.sql` | `aria_properties` (persistent, never deleted) + `aria_tech_providers` (auto-growing catalog) + RPCs |
 
-**ARIA page design notes:**
-- `deepMode` state (`boolean`) — Base calls `/api/aria/research`, Deep calls `/api/aria/research/deep`
-- Left panel (260px): search input + Base/Deep mode toggle + Launch ARIA button + prospect list (running search → shows there too) + example queries + saved searches when idle
+**ARIA page design notes (session 6 — single-search architecture):**
+- **No more Base/Deep split** — one search type, always calls `/api/aria/research/deep` with `{ query }`
+- Left panel (260px): search input + Launch ARIA button + prospect list + Re-run (↺) button on saved searches + example queries + saved searches when idle
 - Right panel: `activeTab` state (`'property' | 'dm' | 'intel' | 'scout'`) — 4 tabs in detail header
+- **Intel DB button** in TopBar (Globe icon + count badge) — toggles `IntelDBPanel` in right panel
+- `IntelDBPanel`: search/filter bar (All / Critical / Expiring / SARA), property list with score + stage + expiry badges, detail panel with full proptech + connectivity + sales notes editor + stage selector + Re-research button
 - Pipeline animation: 5-phase pipeline shown in right panel during `isRunning`; phases animate with `PHASE_DURATIONS` + `aria-fill` / `aria-shimmer` keyframes
 - Mobile: `mobileTab` state (`'list' | 'property' | 'dm' | 'scout'`), bottom nav 4 tabs fixed at 56px
 - `require()` needed for `LayoutList, ArrowLeft`
 
-**ARIA deep engine (May 2026):**
-- Model: `claude-sonnet-4-6` (upgraded from Haiku)
-- New APIs (graceful fallback if keys absent): Apollo (`APOLLO_API_KEY`), Prospeo (`PROSPEO_API_KEY`), Proxycurl (`PROXYCURL_API_KEY`), PDL (`PDL_API_KEY`)
-- Apollo: `apolloSearchContacts()` finds VP/Asset Manager contacts at management company; result injected into synthesis prompt as `apolloBlock`
-- New synthesis fields: `behavioral_profile` (personality_type, decision_style, risk_tolerance, communication_pref), `pitch_strategy` (primary_hook, avoid_topics, best_time_to_call, social_proof), `freshness_score` (1-5), `buying_trends`
+**ARIA deep engine (session 6 upgrade):**
+- Model: `claude-sonnet-4-6`
+- APIs (graceful fallback if keys absent): Apollo (`APOLLO_API_KEY`), Prospeo (`PROSPEO_API_KEY`), Proxycurl (`PROXYCURL_API_KEY`), PDL (`PDL_API_KEY`)
+- Executive Truth Loop: Apollo wide net → ProxyCurl live LinkedIn validation → compare `ends_at: null` (current) vs expired
+- New searches: temporal resident reviews (date-filtered, site-targeted), vendor footprint (uses live `mdu_providers` names from DB)
+- Post-synthesis: non-blocking upsert to `aria_properties` + auto-catalog new tech providers into `aria_tech_providers`
+- Prior contract findings from `aria_contract_findings` injected at start of synthesis
+- Route accepts `{ query }` (not `{ property_name }`) — page always sends raw query string
+
+**ARIA Intelligence Database (migration 098):**
+- `aria_properties`: one row per property (upserted by every ARIA search, NEVER deleted by app). Fields: full property intel, proptech stack (gate/access/intercom/camera arrays), DM chain, behavioral_profile, pitch_strategy, `contract_expiry_year` (auto-extracted from bulk_agreements + contract_window), `sales_stage`, `sales_notes`, `assigned_rep`, `times_researched` counter
+- `aria_tech_providers`: auto-growing catalog for gate/access/intercom/camera/lock/app vendors. 50+ seeded. `displacement_target` flag. `times_detected` counter increments with each ARIA search that finds them
+- Future: query `?expiry_before=2027` to surface properties with agreements expiring in the next N years
 
 ### /tech Field Tool
 | File | Purpose |
@@ -233,6 +245,7 @@
 | `app/api/crm/opportunities/route.ts` | GET (list) + POST (create) — returns `records`, `grouped`, `pipelineTotal`, `counts` |
 | `app/api/crm/leads/route.ts` | GET + POST |
 | `app/api/crm/activities/route.ts` | GET + POST |
+| `app/api/crm/activities/[id]/route.ts` | PATCH (subject, body, type, due_at, outcome, duration_mins, completed_at / completed bool) + DELETE |
 | `app/api/crm/assignable-orgs/route.ts` | Returns orgs the current user can assign leads/opps to |
 
 **CRM design notes:**
@@ -345,6 +358,10 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 - `training_progress` + `dealer_scorecards` — training/scorecard (migration 021)
 - `floor_plans` + `floor_plan_devices` + esign tables — Design section (migration 071)
 - `service_catalog` + enrollment tables — Service Marketplace (migration 070)
+- `aria_properties` — persistent property intel DB (migration 098). Never deleted by app. Upserted by every ARIA deep search. Unique on `(lower(property_name), lower(address))`. Fields: full proptech stack, DM chain, behavioral_profile, pitch_strategy, `contract_expiry_year`, `sales_stage`, `sales_notes`, `times_researched`
+- `aria_tech_providers` — auto-growing gate/access/intercom/camera/lock/app vendor catalog (migration 098). 50+ seeded. `displacement_target` flag. `times_detected` counter
+- `mdu_providers` — ISP + video provider reference table (migration 071). 40+ seeded national/specialist/regional providers
+- `mdu_provider_detections` — confirmed/suspected ISP/video provider at a specific property (migration 071)
 
 ---
 
@@ -352,11 +369,13 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 
 | Migration | What | Status |
 |-----------|------|--------|
-| 097 | document_signatures.document_html TEXT column | Run on beta then prod |
-| 096 | organizations.entity_type TEXT column | Run on beta then prod |
-| 095b | AI agent features + dealer.feature_settings in feature_catalog (ON CONFLICT UPDATE) | Run on beta then prod |
-| 094 | show_leads: assigned_to_user_id, assigned_to_name, temp_hold_expires_at | Run on beta then prod |
-| 093 | technicians.tech_code column + unique index (per-tech /tech login) | Run on beta then prod |
+| 098 | `aria_properties` (persistent intel DB) + `aria_tech_providers` (auto-growing catalog) + RPCs | ✅ beta + prod |
+| 097 | document_signatures.document_html TEXT column | ✅ beta + prod |
+| 096 | organizations.entity_type TEXT column | ✅ beta + prod |
+| 095b | AI agent features + dealer.feature_settings in feature_catalog (ON CONFLICT UPDATE) | ✅ beta + prod |
+| 095 | feature_catalog, org_feature_flags, user_feature_access | ✅ beta + prod |
+| 094 | show_leads: assigned_to_user_id, assigned_to_name, temp_hold_expires_at | ✅ beta + prod |
+| 093 | technicians.tech_code column + unique index (per-tech /tech login) | ✅ beta + prod |
 | 091 | Quote v2 columns (whats_included, agreement_html, attachments, signed_at, accepted_by_rep, etc.) | ✅ beta + prod |
 | 071 | Floor plans + e-sign tables | Run on beta before design pages persist |
 | 070 | Service catalog + enrollments | Run on beta before /services enrollment persists |
@@ -442,14 +461,17 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 
 **Feature hierarchy:** GateGuard sets tier_defaults in feature_catalog → org override in org_feature_flags → user override in user_feature_access. User ≤ org ≤ tier_default. MSO/Full Dealer can set ≤ their own effective level. None = hidden from sidebar entirely.
 
-### Pending — Migrations to Run (push + run SQL)
-- Run `096_org_entity_type.sql` on beta + prod: `ALTER TABLE public.organizations ADD COLUMN IF NOT EXISTS entity_type TEXT;`
-- Run `097_sig_document_html.sql` on beta + prod: `ALTER TABLE public.document_signatures ADD COLUMN IF NOT EXISTS document_html TEXT;`
-- Run `093_tech_code.sql` on beta + prod: `technicians.tech_code` column + unique partial index
-- Run `094_aria_ownership.sql` on beta + prod: `show_leads` ownership + temp hold columns
-- Run `095_feature_flags.sql` on beta + prod: `feature_catalog`, `org_feature_flags`, `user_feature_access`
-- Run `095b_ai_agent_features.sql` on beta + prod (INSERT with ON CONFLICT UPDATE — safe to run anytime)
-- Clear git lock: `rm -f .git/HEAD.lock .git/index.lock` then push all pending commits
+### Completed — May 27, 2026 (session 6) — ARIA Intelligence DB + Single Search Mode
+- ✅ ARIA page (`app/aria/page.tsx`) — removed Base/Deep toggle; all searches always use deep route with `{ query }`; added ↺ Re-run button on SavedSearchRow; added Intel DB panel (Globe button, count badge) with search/filter + property list + sales notes editor + stage selector + Re-research button
+- ✅ Migration 098 (`supabase/migrations/098_aria_intelligence_db.sql`) — `aria_properties` persistent intelligence table (never deleted, upserted on every search); `aria_tech_providers` auto-growing vendor catalog (50+ seeded); `increment_*` RPCs for atomic counters; GRANT blocks; deployed beta + prod
+- ✅ `app/api/aria/properties/route.ts` — GET (paginated, filterable by stage/urgency/sara/expiry/search) + POST (batch upsert from deep route, extracts `contract_expiry_year`, auto-catalogs tech providers)
+- ✅ `app/api/aria/properties/[id]/route.ts` — GET single + PATCH sales cycle fields only
+- ✅ `app/api/aria/research/deep/route.ts` — post-synthesis non-blocking upsert to `aria_properties`; Executive Truth Loop (Apollo → ProxyCurl validation); temporal resident review searches; vendor footprint using live DB provider names; Haiku sentiment pre-pass; accepts `{ query }` not `{ property_name }`
+- ✅ `app/api/crm/activities/[id]/route.ts` — PATCH (edit subject/body/type/due_at/outcome/duration_mins/completed) + DELETE; inline edit UI on opportunity detail with complete/edit/delete icon buttons
+- ✅ GCal push fix (`app/api/calendar/google/sync/route.ts`) — todos scoped to current user, per-item error capture + diagnostics, WO end time = start + 1hr (was zero-duration, rejected by Google)
+
+### Pending — Migrations to Run
+- All migrations 093–098 are now deployed on beta + prod ✅
 
 ### Pending — CPQ Phase 2
 - Add `unit_cost` column to `quote_line_items` (migration 092) — enables real margin vs. estimated
