@@ -1,6 +1,6 @@
 # GateGuard Portal — Claude Context (Active Reference)
 
-> Last trimmed: May 27, 2026. Full sprint history, /tech docs, SARA Plus intel → CLAUDE.archive.md
+> Last trimmed: May 27, 2026 (session 5). Full sprint history, /tech docs, SARA Plus intel → CLAUDE.archive.md
 
 ---
 
@@ -192,6 +192,28 @@
 | `components/layout/PortalShell.tsx` | Wraps all portal pages; detects standalone (tech/proposal/approve) |
 | `components/layout/NexusAssistant.tsx` | Floating AI PA — alerts + chat |
 
+### Calendar
+| File | Purpose |
+|------|---------|
+| `app/calendar/page.tsx` | Full calendar — month/week/day grid, event detail popover, right sidebar (today's schedule + open To-Dos), GCal sync status |
+| `app/api/calendar/events/route.ts` | GET all events: todos, work_orders, work_order_phases, pm_schedules, gcal_events, crm_activities |
+| `app/api/calendar/google/status/route.ts` | GET GCal connection status — reads `gcal_refresh_token` + `gcal_last_synced_at` from `user_settings` |
+| `app/api/calendar/google/sync/route.ts` | POST: pull GCal events → `gcal_events`; push portal todos/WOs → GCal; returns `diagnostics[]` |
+| `app/api/calendar/google/connect/route.ts` | OAuth redirect to Google Calendar |
+| `app/api/calendar/google/callback/route.ts` | OAuth callback — stores refresh token in `user_settings.gcal_refresh_token` |
+
+**Calendar event types + colors:**
+- `todo` — brand blue `#6B7EFF`
+- `work_order` — emerald `#059669`
+- `work_order_phase` — orange `#C2410C`
+- `pm_schedule` — teal `#0B7285`
+- `gcal` — purple `#7C3AED`
+- `crm_activity` — varies by activity type (call=teal, email=blue, meeting=purple, task=amber, note=slate)
+
+**gcal_events schema (migration 053):** `start_time timestamptz`, `end_time timestamptz`, `is_all_day boolean` — NOT `start_date`/`end_date` strings. Always write timestamptz columns when upserting.
+
+**user_settings schema (migration 053):** One row per user (`user_id` PK). GCal columns: `gcal_refresh_token TEXT`, `gcal_last_synced_at TIMESTAMPTZ`. NOT a key-value table — never query with `.eq('key', '...')`.
+
 ### Surveys
 | File | Purpose |
 |------|---------|
@@ -375,6 +397,20 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 - ✅ Migration 094 (`supabase/migrations/094_aria_ownership.sql`) — `show_leads.assigned_to_user_id`, `assigned_to_name`, `temp_hold_expires_at` + indexes
 - ✅ ARIA import route (`app/api/aria/searches/[id]/import/route.ts`) — stamps ownership + 7-day temp hold on every imported lead
 
+### Completed — May 27, 2026 (session 5) — Google Calendar, Todos, Dealer Resume Flow, Email Fix
+- ✅ Fixed build error: `Eye, EyeOff` moved from named imports to `require()` block in `dealers/new/page.tsx`
+- ✅ Fixed build error: `auth()` → `getCurrentUser()` in `app/api/admin/users/route.ts` POST handler (auth import removed in earlier session, POST still referenced it)
+- ✅ Google Calendar status route (`app/api/calendar/google/status/route.ts`) — fixed: was using KV-style `.eq('key', 'google_calendar_refresh_token')` on `user_settings`; rewrote to `.select('gcal_refresh_token, gcal_last_synced_at').eq('user_id', user.id).maybeSingle()` matching actual migration 053 schema
+- ✅ Google Calendar sync route (`app/api/calendar/google/sync/route.ts`) — full rewrite fixing 3 bugs: (1) token read was KV lookup, (2) gcal_events upsert wrote `start_date`/`end_date` (columns don't exist) → now `start_time`/`end_time` timestamptz + `is_all_day`, (3) push tracking used fake KV rows → now uses `gcal_events.source_type`/`source_id`; added `diagnostics: string[]` array in response; all upserts now `await`ed with error checking; `getAccessToken()` returns descriptive `{ token, error }` object
+- ✅ Calendar events route (`app/api/calendar/events/route.ts`) — fixed gcal token check (KV → column), fixed gcal_events query (`start_date` → `start_time`), added CRM activities (`crm_activities` by `due_at` range), work order phases (`work_order_phases` by `scheduled_date`), PM schedules (`pm_schedules` by `next_due_at`)
+- ✅ Calendar page (`app/calendar/page.tsx`) — updated `CalendarEvent` type + `colorForType()` / `bgForType()` / `badgeLabel` / `typeLabel` for 3 new event types: `work_order_phase` (orange), `pm_schedule` (teal), `crm_activity` (violet); legend updated; "View opportunity" action button in CRM event popover
+- ✅ Todos API (`app/api/todos/route.ts`) — added `unscheduled=true` param (filters `due_date IS NULL`), `limit` param; changed return to include both `{ todos: data, records: data }` keys — calendar sidebar reads `d.records`, was always empty before
+- ✅ Dealer onboarding resume flow — `dealers/new/page.tsx` reads `?resume=ORG_ID` param via `useSearchParams`; `useEffect` fetches existing org + signatures and pre-fills all `WizardState` fields; auto-advances to correct incomplete step (no NDA → step 3; no parent_org_id → step 4; no commission → step 5; no agreement → step 6; no contact_email → step 7; else → step 8); loading spinner while fetching
+- ✅ Dealer list page (`app/admin/dealers/page.tsx`) — last column: incomplete dealers (onboarding_complete = false) show amber "Resume →" link to `/admin/dealers/new?resume=${org.id}` instead of plain ChevronRight
+- ✅ Dealer detail page (`app/admin/dealers/[id]/page.tsx`) — amber "Onboarding incomplete" banner below breadcrumb with "Resume Onboarding →" link when `!org.onboarding_complete`
+- ✅ NDA template (`lib/nda-template.ts`) — full rewrite to v2: added §3 Legally Compelled Disclosure, §5 IT Backup Exception, §6 Mutual Non-Solicitation (12 months); bulleted obligations; "AS IS" disclaimer; "without the necessity of posting a bond"; state + federal venue in Fulton County; sections renumbered 1–9; merge vars unchanged
+- ✅ Signatures send route (`app/api/signatures/send/route.ts`) — fixed silent email failure: (1) added RESEND_API_KEY existence check returning 503 before send attempt, (2) destructure + check `const { error: emailError } = await resend.emails.send(...)` and return 502 with descriptive message if delivery fails, (3) fixed from address `mail.gateguard.co` → `gateguard.co` (verified domain); success response now includes `email_sent: true`
+
 ### Completed — May 27, 2026 (session 4) — Dealer Onboarding Fixes + Security + Document Flow
 - ✅ Feature Settings page UX redesign — replaced 3-button toggle groups with compact color-coded `<select>` dropdowns; Stripe ID / Paid / Beta collapsed into expandable ⚙ row per feature; sections now collapsible with unsaved-change count badge
 - ✅ Migration 095b (`supabase/migrations/095b_ai_agent_features.sql`) — 8 AI Army agents added to `feature_catalog` (ai.aria, ai.trinity, ai.scout, ai.beacon, ai.forge, ai.atlas, ai.sage, ai.relay) + missing `dealer.feature_settings` key; uses `ON CONFLICT DO UPDATE`
@@ -409,6 +445,9 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 ### Pending — Migrations to Run (push + run SQL)
 - Run `096_org_entity_type.sql` on beta + prod: `ALTER TABLE public.organizations ADD COLUMN IF NOT EXISTS entity_type TEXT;`
 - Run `097_sig_document_html.sql` on beta + prod: `ALTER TABLE public.document_signatures ADD COLUMN IF NOT EXISTS document_html TEXT;`
+- Run `093_tech_code.sql` on beta + prod: `technicians.tech_code` column + unique partial index
+- Run `094_aria_ownership.sql` on beta + prod: `show_leads` ownership + temp hold columns
+- Run `095_feature_flags.sql` on beta + prod: `feature_catalog`, `org_feature_flags`, `user_feature_access`
 - Run `095b_ai_agent_features.sql` on beta + prod (INSERT with ON CONFLICT UPDATE — safe to run anytime)
 - Clear git lock: `rm -f .git/HEAD.lock .git/index.lock` then push all pending commits
 
