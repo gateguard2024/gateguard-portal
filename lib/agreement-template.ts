@@ -245,7 +245,7 @@ Based on the selected tier above, the following financial terms, hardware discou
 
   • Hardware Purchase Discount: {{HARDWARE_DISCOUNT_PERCENTAGE}}% off Gate Guard's then-current standard MSRP.
   • Software/Subscription Split: Dealer retains {{SOFTWARE_MRR_PERCENTAGE}}% of monthly recurring revenue (MRR) collected from the End User.
-  • Master Agent Override (If Applicable): ${{MASTER_AGENT_OVERRIDE_AMOUNT}} per unit/month.
+  • Master Agent Override (If Applicable): \${{MASTER_AGENT_OVERRIDE_AMOUNT}} per unit/month.
   • Installation/Setup Fees: Dealer retains {{INSTALL_FEE_PERCENTAGE}}% of standard installation fees.
 
 3. TIER-SPECIFIC OBLIGATIONS & NOTES
