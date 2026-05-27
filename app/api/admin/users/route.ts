@@ -111,8 +111,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = await auth()
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const caller = await getCurrentUser()
 
     const { email, role, full_name } = await req.json()
     if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 })
@@ -123,7 +122,7 @@ export async function POST(req: NextRequest) {
     const invitation = await client.invitations.createInvitation({
       emailAddress: email,
       redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://portal.gateguard.co'}/sign-up`,
-      publicMetadata: { role: role ?? 'viewer', invited_by: userId },
+      publicMetadata: { role: role ?? 'viewer', invited_by: caller.id },
     })
 
     // Pre-create permissions row in Supabase (will be linked when user signs up)
