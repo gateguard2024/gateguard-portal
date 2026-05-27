@@ -163,12 +163,15 @@ function AvatarStack({ seed, count = 2 }: { seed: string; count?: number }) {
 function EventCard({
   event,
   onClick,
+  onDragStartEvent,
 }: {
   event: CalendarEvent;
   onClick: (event: CalendarEvent, el: HTMLElement) => void;
+  onDragStartEvent?: (event: CalendarEvent) => void;
 }) {
   const { MoreHorizontal } = require("lucide-react") as any; // eslint-disable-line @typescript-eslint/no-explicit-any
   const color = colorForType(event.type);
+  const isDraggable = event.type === "todo" || event.type === "work_order";
   const badgeLabel = event.priority === "urgent"
     ? "Urgent"
     : event.type === "gcal"
@@ -185,8 +188,10 @@ function EventCard({
 
   return (
     <button
+      draggable={isDraggable}
+      onDragStart={isDraggable ? (e) => { e.stopPropagation(); onDragStartEvent?.(event); } : undefined}
       className="w-full text-left rounded-lg overflow-hidden transition-opacity hover:opacity-90 focus:outline-none"
-      style={{ backgroundColor: color }}
+      style={{ backgroundColor: color, cursor: isDraggable ? "grab" : "pointer" }}
       onClick={(e) => onClick(event, e.currentTarget)}
       title={event.title}
     >
@@ -226,11 +231,18 @@ function EventPopover({
   event,
   anchor,
   onClose,
+  onReschedule,
+  onUnschedule,
 }: {
   event: CalendarEvent;
   anchor: { top: number; left: number };
   onClose: () => void;
+  onReschedule: (id: string, type: CalendarEvent["type"], newDate: string) => Promise<void>;
+  onUnschedule: (id: string, type: CalendarEvent["type"]) => Promise<void>;
 }) {
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [saving, setSaving] = useState(false);
+
   const typeLabel =
     event.type === "todo"            ? "To-Do"
     : event.type === "work_order"    ? "Work Order"
@@ -240,10 +252,26 @@ function EventPopover({
     : "Google Calendar";
 
   const color = colorForType(event.type);
+  const canMove = event.type === "todo" || event.type === "work_order";
+
+  async function handleReschedule(date: string) {
+    if (!date) return;
+    setSaving(true);
+    await onReschedule(event.id, event.type, date);
+    setSaving(false);
+    onClose();
+  }
+
+  async function handleUnschedule() {
+    setSaving(true);
+    await onUnschedule(event.id, event.type);
+    setSaving(false);
+    onClose();
+  }
 
   return (
     <div
-      className="fixed z-50 bg-white border border-border rounded-xl p-4 w-64"
+      className="fixed z-50 bg-white border border-border rounded-xl p-4 w-64 shadow-lg"
       style={{ top: anchor.top, left: anchor.left }}
     >
       {/* Header */}
@@ -285,10 +313,13 @@ function EventPopover({
           </button>
         )}
         {event.type === "work_order" && (
-          <button className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-foreground hover:bg-orange-50 transition-colors text-left">
+          <a
+            href={event.link ?? "/dispatch"}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-foreground hover:bg-orange-50 transition-colors"
+          >
             <CalendarDays size={12} className="text-orange-600 shrink-0" />
             View work order
-          </button>
+          </a>
         )}
         {event.type === "crm_activity" && (
           <a
@@ -299,21 +330,55 @@ function EventPopover({
             {event.opportunity_name ? `View: ${event.opportunity_name}` : "View opportunity"}
           </a>
         )}
-        <button className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-foreground hover:bg-accent transition-colors text-left">
-          <RefreshCw size={12} className="text-muted-foreground shrink-0" />
-          Reschedule
-        </button>
-        <button className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-foreground hover:bg-accent transition-colors text-left">
-          <CalendarClock size={12} className="text-muted-foreground shrink-0" />
-          Send message
-        </button>
-        {event.link && (
+        {event.link && event.type === "todo" && (
           <a
             href={event.link}
             className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#6B7EFF] hover:bg-[#6B7EFF]/5 transition-colors"
           >
             Open detail →
           </a>
+        )}
+
+        {/* Reschedule — only for todos + work orders */}
+        {canMove && !showDatePicker && (
+          <button
+            onClick={() => setShowDatePicker(true)}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-foreground hover:bg-accent transition-colors text-left"
+          >
+            <RefreshCw size={12} className="text-muted-foreground shrink-0" />
+            Reschedule to different date
+          </button>
+        )}
+        {canMove && showDatePicker && (
+          <div className="px-2.5 py-2 rounded-lg bg-accent">
+            <p className="text-[10px] text-muted-foreground mb-1.5 font-medium">Pick a new date:</p>
+            <input
+              type="date"
+              defaultValue={event.date}
+              autoFocus
+              className="w-full text-xs border border-border rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]"
+              onChange={(e) => { if (e.target.value) void handleReschedule(e.target.value); }}
+              disabled={saving}
+            />
+            <button
+              onClick={() => setShowDatePicker(false)}
+              className="text-[10px] text-muted-foreground mt-1 hover:text-foreground"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {/* Unschedule — move back to sidebar queue */}
+        {canMove && (
+          <button
+            onClick={() => { void handleUnschedule(); }}
+            disabled={saving}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:bg-red-50 hover:text-red-600 transition-colors text-left"
+          >
+            <Link2Off size={12} className="shrink-0" />
+            {saving ? "Saving…" : "Remove from calendar"}
+          </button>
         )}
       </div>
     </div>
@@ -502,6 +567,8 @@ function CalendarPage() {
   const [lastSynced, setLastSynced]           = useState<string | null>(null);
   const [activeEvent, setActiveEvent]         = useState<CalendarEvent | null>(null);
   const [popoverAnchor, setPopoverAnchor]     = useState<{ top: number; left: number } | null>(null);
+  const [syncError, setSyncError]             = useState<string | null>(null);
+  const [quickAddSaving, setQuickAddSaving]   = useState(false);
 
   // Unscheduled panel
   const [unscheduledTodos, setUnscheduledTodos]   = useState<UnscheduledTodo[]>([]);
@@ -618,15 +685,78 @@ function CalendarPage() {
   // ── GCal sync ─────────────────────────────────────────────────────────────────
   async function handleSync() {
     setSyncing(true);
+    setSyncError(null);
     try {
       const res = await fetch("/api/calendar/google/sync", { method: "POST" });
+      const d   = await res.json() as { synced_at?: string; error?: string; diagnostics?: string[] };
       if (res.ok) {
-        const d = await res.json() as { synced_at?: string };
         if (d.synced_at) setLastSynced(d.synced_at);
         await fetchEvents();
+      } else {
+        const detail = d.diagnostics ? `${d.error} (${d.diagnostics.slice(-1)[0]})` : d.error;
+        setSyncError(detail ?? "Sync failed — check Google Calendar credentials in Vercel env vars.");
       }
+    } catch {
+      setSyncError("Network error during sync.");
     } finally {
       setSyncing(false);
+    }
+  }
+
+  // ── Reschedule / Unschedule calendar events ───────────────────────────────────
+  async function rescheduleEvent(id: string, type: CalendarEvent["type"], newDate: string) {
+    try {
+      if (type === "todo") {
+        await fetch(`/api/todos/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ due_date: newDate }),
+        });
+      } else if (type === "work_order") {
+        await fetch(`/api/maintenance/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scheduled_date: newDate }),
+        });
+      }
+      await fetchEvents();
+    } catch { /* ignore */ }
+  }
+
+  async function unscheduleEvent(id: string, type: CalendarEvent["type"]) {
+    try {
+      if (type === "todo") {
+        await fetch(`/api/todos/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ due_date: null }),
+        });
+      } else if (type === "work_order") {
+        await fetch(`/api/maintenance/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scheduled_date: null }),
+        });
+      }
+      await Promise.all([fetchEvents(), fetchUnscheduled()]);
+    } catch { /* ignore */ }
+  }
+
+  // ── Quick-add todo ────────────────────────────────────────────────────────────
+  async function handleQuickAdd() {
+    const title = quickAdd.trim();
+    if (!title) return;
+    setQuickAddSaving(true);
+    try {
+      await fetch("/api/todos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, status: "open", priority: "medium" }),
+      });
+      setQuickAdd("");
+      await fetchUnscheduled();
+    } catch { /* ignore */ } finally {
+      setQuickAddSaving(false);
     }
   }
 
@@ -669,6 +799,12 @@ function CalendarPage() {
   // ── Drag-and-drop ─────────────────────────────────────────────────────────────
   function handleDragStart(type: "todo" | "wo", id: string) {
     dragItem.current = { type, id };
+  }
+
+  function handleDragStartEvent(event: CalendarEvent) {
+    // Dragging an event already on the calendar — treat same as sidebar drag
+    if (event.type === "todo")       dragItem.current = { type: "todo", id: event.id };
+    if (event.type === "work_order") dragItem.current = { type: "wo",   id: event.id };
   }
 
   async function handleDropOnDay(dateStr: string) {
@@ -762,7 +898,7 @@ function CalendarPage() {
                   onDrop={() => { void handleDropOnDay(dateStr); }}
                 >
                   {hourEvents.map((ev) => (
-                    <EventCard key={ev.id} event={ev} onClick={handleEventClick} />
+                    <EventCard key={ev.id} event={ev} onClick={handleEventClick} onDragStartEvent={handleDragStartEvent} />
                   ))}
                 </div>
               </div>
@@ -821,10 +957,10 @@ function CalendarPage() {
                 onDrop={() => { void handleDropOnDay(dateStr); }}
               >
                 {allDay.map((ev) => (
-                  <EventCard key={ev.id} event={ev} onClick={handleEventClick} />
+                  <EventCard key={ev.id} event={ev} onClick={handleEventClick} onDragStartEvent={handleDragStartEvent} />
                 ))}
                 {timed.map((ev) => (
-                  <EventCard key={ev.id} event={ev} onClick={handleEventClick} />
+                  <EventCard key={ev.id} event={ev} onClick={handleEventClick} onDragStartEvent={handleDragStartEvent} />
                 ))}
               </div>
             );
@@ -885,7 +1021,7 @@ function CalendarPage() {
                 </div>
                 <div className="space-y-0.5">
                   {visible.map((ev) => (
-                    <EventCard key={ev.id} event={ev} onClick={handleEventClick} />
+                    <EventCard key={ev.id} event={ev} onClick={handleEventClick} onDragStartEvent={handleDragStartEvent} />
                   ))}
                   {overflow > 0 && (
                     <p className="text-[9px] font-medium text-muted-foreground px-1">+{overflow} more</p>
@@ -907,6 +1043,15 @@ function CalendarPage() {
         title="Calendar"
         subtitle="Your schedule, to-dos, and work orders in one view"
       />
+
+      {/* Sync error banner */}
+      {syncError && (
+        <div className="mx-6 mt-4 flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+          <span className="text-red-500 text-sm shrink-0">⚠</span>
+          <p className="text-sm text-red-700 flex-1">{syncError}</p>
+          <button onClick={() => setSyncError(null)} className="text-red-400 hover:text-red-600 text-xs">✕</button>
+        </div>
+      )}
 
       {/* GCal connection banner */}
       {!gcalConnected && (
@@ -1162,18 +1307,26 @@ function CalendarPage() {
           {/* Quick-add bar */}
           <div className="px-3 py-2.5 border-t border-white/10" style={{ backgroundColor: "#0C111D" }}>
             <div className="flex items-center gap-2 rounded-lg px-2.5 py-1.5" style={{ backgroundColor: "#151f2e", border: "0.5px solid rgba(255,255,255,0.1)" }}>
-              <Plus size={12} className="text-white/30 shrink-0" />
+              <Plus size={12} className={`shrink-0 ${quickAddSaving ? "text-[#6B7EFF] animate-spin" : "text-white/30"}`} />
               <input
                 value={quickAdd}
                 onChange={(e) => setQuickAdd(e.target.value)}
-                placeholder={`Quick add — e.g. "Call John Thu 2pm"`}
+                placeholder={`Add task — type name, press Enter`}
                 className="flex-1 bg-transparent text-xs text-white/80 placeholder:text-white/25 outline-none"
+                disabled={quickAddSaving}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && quickAdd.trim()) {
-                    setQuickAdd("");
-                  }
+                  if (e.key === "Enter") { void handleQuickAdd(); }
                 }}
               />
+              {quickAdd.trim() && (
+                <button
+                  onClick={() => { void handleQuickAdd(); }}
+                  disabled={quickAddSaving}
+                  className="text-[9px] font-bold text-[#6B7EFF] hover:text-[#a8b4ff] transition-colors"
+                >
+                  Add
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1190,6 +1343,8 @@ function CalendarPage() {
             event={activeEvent}
             anchor={popoverAnchor}
             onClose={() => { setActiveEvent(null); setPopoverAnchor(null); }}
+            onReschedule={rescheduleEvent}
+            onUnschedule={unscheduleEvent}
           />
         </>
       )}
