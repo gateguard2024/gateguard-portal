@@ -6,7 +6,7 @@ import {
   Building2, User, MapPin, CheckCircle2,
   ExternalLink, Star, Copy, Send,
   Loader2, Shield, Package, Wifi, AlertCircle,
-  ChevronRight, TrendingUp, Globe, Clock, Download, Trash2, Check, Search,
+  ChevronRight, TrendingUp, Globe, Clock, Download, Trash2, Check, Search, RefreshCw,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { LayoutList, ArrowLeft } = require("lucide-react") as any;
@@ -265,7 +265,6 @@ function scoreBg(score: number) {
 
 export default function ARIAPage() {
   const [query, setQuery]                   = useState("");
-  const [deepMode, setDeepMode]             = useState(false);
   const [phase, setPhase]                   = useState(0);
   const [synthStep, setSynthStep]           = useState(0);
   const [results, setResults]               = useState<ResearchResult | null>(null);
@@ -287,9 +286,19 @@ export default function ARIAPage() {
     hierarchy:   { org_id: string; org_name: string; org_tier: string; own_count: number; child_count: number; total_count: number; depth: number }[];
     corporate_total: number;
   } | null>(null);
+  const [dbTotal, setDbTotal]               = useState<number>(0);
+  const [dbView, setDbView]                 = useState(false);
+  const [dbProps, setDbProps]               = useState<any[]>([]);
+  const [dbLoading, setDbLoading]           = useState(false);
+  const [dbSearch, setDbSearch]             = useState('');
+  const [dbFilter, setDbFilter]             = useState<'all'|'critical'|'expiring'|'sara'>('all');
+  const [dbSelected, setDbSelected]         = useState<any | null>(null);
+  const [savingNote, setSavingNote]         = useState(false);
+  const [noteText, setNoteText]             = useState('');
+  const [noteStage, setNoteStage]           = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Load saved searches + usage stats on mount
+  // Load saved searches, usage stats, and DB total on mount
   useEffect(() => {
     fetch('/api/aria/searches')
       .then(r => r.ok ? r.json() : { searches: [] })
@@ -299,7 +308,50 @@ export default function ARIAPage() {
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d && !d.error) setUsageStats(d); })
       .catch(() => {});
+    fetch('/api/aria/properties?limit=1')
+      .then(r => r.ok ? r.json() : { total: 0 })
+      .then(d => setDbTotal(d.total ?? 0))
+      .catch(() => {});
   }, []);
+
+  const loadDbProperties = useCallback(async (search = '', filter: typeof dbFilter = 'all') => {
+    setDbLoading(true);
+    try {
+      const params = new URLSearchParams({ limit: '100', order_by: 'last_researched_at' });
+      if (search) params.set('search', search);
+      if (filter === 'critical') params.set('urgency', 'critical');
+      if (filter === 'sara')     params.set('sara', 'true');
+      if (filter === 'expiring') { params.set('expiry_before', String(new Date().getFullYear() + 2)); params.set('expiry_after', String(new Date().getFullYear())); }
+      const r = await fetch(`/api/aria/properties?${params}`);
+      const d = await r.json();
+      setDbProps(d.properties ?? []);
+      setDbTotal(d.total ?? 0);
+    } catch { /* fail silently */ } finally {
+      setDbLoading(false);
+    }
+  }, []);
+
+  async function savePropertyNote() {
+    if (!dbSelected) return;
+    setSavingNote(true);
+    try {
+      const body: Record<string, string> = {};
+      if (noteText)  body.sales_notes  = noteText;
+      if (noteStage) body.sales_stage  = noteStage;
+      const r = await fetch(`/api/aria/properties/${dbSelected.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const d = await r.json();
+      if (!d.error) {
+        setDbSelected(d);
+        setDbProps(prev => prev.map(p => p.id === d.id ? d : p));
+        setNoteText('');
+        setNoteStage('');
+      }
+    } catch { /* fail silently */ } finally {
+      setSavingNote(false);
+    }
+  }
 
   const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -312,8 +364,7 @@ export default function ARIAPage() {
     setActiveTab('property');
     setPhase(1);
 
-    const endpoint = deepMode ? '/api/aria/research/deep' : '/api/aria/research';
-    const apiPromise = fetch(endpoint, {
+    const apiPromise = fetch('/api/aria/research/deep', {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query: query.trim() }),
@@ -352,7 +403,7 @@ export default function ARIAPage() {
       setError(e.message || "Research failed — check ANTHROPIC_API_KEY and try again");
       setPhase(0);
     }
-  }, [query, phase, deepMode]);
+  }, [query, phase]);
 
   async function importSearch(id: string) {
     setImporting(id);
@@ -428,7 +479,29 @@ export default function ARIAPage() {
   // ── TopBar actions ─────────────────────────────────────────────────────────
   const topbarActions = (
     <div className="flex items-center gap-2">
-      {usageStats && (
+      {/* Intelligence DB toggle */}
+      <button
+        onClick={() => {
+          if (!dbView) { setDbView(true); loadDbProperties(); }
+          else setDbView(false);
+        }}
+        className={cn(
+          "hidden lg:flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium border transition-all",
+          dbView
+            ? "bg-[#6B7EFF] text-white border-[#6B7EFF]"
+            : "bg-white text-gray-600 border-gray-200 hover:border-[#6B7EFF]/50"
+        )}
+      >
+        <Globe size={11} />
+        Intel DB
+        {dbTotal > 0 && (
+          <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full",
+            dbView ? "bg-white/20 text-white" : "bg-[#6B7EFF]/10 text-[#6B7EFF]")}>
+            {dbTotal}
+          </span>
+        )}
+      </button>
+      {usageStats && !dbView && (
         <div className="hidden lg:flex items-center gap-3 mr-2 text-xs text-gray-500">
           <span className="flex items-center gap-1">
             <TrendingUp size={11} className="text-[#6B7EFF]" />
@@ -534,13 +607,23 @@ export default function ARIAPage() {
             {expDays <= 3 && <span className="text-[9px] text-amber-500">⚠ {expDays}d</span>}
           </div>
         </div>
-        <button
-          onClick={() => deleteSearch(s.id)}
-          disabled={deleting === s.id}
-          className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 p-1 rounded transition-all disabled:opacity-40 shrink-0"
-        >
-          {deleting === s.id ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}
-        </button>
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0">
+          <button
+            onClick={() => { setQuery(s.query); setTimeout(() => runARIA(), 50); }}
+            title="Re-run with fresh data"
+            disabled={isRunning}
+            className="text-gray-300 hover:text-[#6B7EFF] p-1 rounded transition-colors disabled:opacity-30"
+          >
+            <RefreshCw size={10} />
+          </button>
+          <button
+            onClick={() => deleteSearch(s.id)}
+            disabled={deleting === s.id}
+            className="text-gray-300 hover:text-red-400 p-1 rounded transition-colors disabled:opacity-40"
+          >
+            {deleting === s.id ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}
+          </button>
+        </div>
       </div>
     );
   }
@@ -1071,7 +1154,7 @@ export default function ARIAPage() {
         <div className="w-full max-w-sm space-y-3">
           <div className="flex items-center gap-2 mb-5">
             <Loader2 size={14} className="text-[#6B7EFF] animate-spin" />
-            <span className="text-xs font-semibold text-gray-600">Running ARIA{deepMode ? ' Deep' : ''} intelligence pipeline...</span>
+            <span className="text-xs font-semibold text-gray-600">Running ARIA Intelligence Pipeline...</span>
           </div>
           {PHASES.map((p) => {
             const Icon = p.icon;
@@ -1119,6 +1202,233 @@ export default function ARIAPage() {
     );
   }
 
+  // ── Intelligence DB panel ─────────────────────────────────────────────────
+  function IntelDBPanel() {
+    const STAGES: Record<string, { label: string; color: string }> = {
+      prospect:    { label: 'Prospect',     color: 'bg-gray-100 text-gray-600' },
+      contacted:   { label: 'Contacted',    color: 'bg-blue-100 text-blue-700' },
+      proposal:    { label: 'Proposal',     color: 'bg-violet-100 text-violet-700' },
+      negotiation: { label: 'Negotiating',  color: 'bg-amber-100 text-amber-700' },
+      won:         { label: 'Won',          color: 'bg-emerald-100 text-emerald-700' },
+      lost:        { label: 'Lost',         color: 'bg-red-100 text-red-600' },
+      'no-contact':{ label: 'No contact',   color: 'bg-gray-100 text-gray-400' },
+    };
+
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        {/* Header + filters */}
+        <div className="bg-white border-b border-gray-200 px-5 py-3">
+          <div className="flex items-center gap-3 mb-3">
+            <Globe size={14} className="text-[#6B7EFF]" />
+            <h2 className="text-sm font-bold text-gray-900">Intelligence Database</h2>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#6B7EFF]/10 text-[#6B7EFF] font-bold">{dbTotal} properties</span>
+            <span className="ml-auto text-[10px] text-gray-400">Grows automatically — never deleted</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
+              <Search size={12} className="text-gray-400 shrink-0" />
+              <input
+                value={dbSearch}
+                onChange={e => { setDbSearch(e.target.value); loadDbProperties(e.target.value, dbFilter); }}
+                placeholder="Search properties, management companies..."
+                className="flex-1 text-xs bg-transparent text-gray-800 placeholder:text-gray-400 outline-none"
+              />
+            </div>
+            {(['all','critical','expiring','sara'] as const).map(f => (
+              <button key={f} onClick={() => { setDbFilter(f); loadDbProperties(dbSearch, f); }}
+                className={cn("text-[11px] px-2.5 py-1.5 rounded-lg border font-medium capitalize transition-all",
+                  dbFilter === f ? "bg-[#6B7EFF] text-white border-[#6B7EFF]" : "bg-white text-gray-500 border-gray-200 hover:border-[#6B7EFF]/40"
+                )}>
+                {f === 'expiring' ? '📅 Expiring' : f === 'sara' ? '🎯 SARA' : f === 'critical' ? '🔴 Critical' : 'All'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex-1 flex overflow-hidden">
+          {/* Property list */}
+          <div className="w-72 border-r border-gray-200 bg-white overflow-y-auto shrink-0">
+            {dbLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 size={20} className="text-[#6B7EFF] animate-spin" />
+              </div>
+            ) : dbProps.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-gray-400 gap-2 px-4 text-center">
+                <Globe size={24} className="opacity-30" />
+                <p className="text-sm font-medium">No properties yet</p>
+                <p className="text-xs">Run ARIA searches — every discovered property is saved here automatically.</p>
+              </div>
+            ) : (
+              <div className="p-2">
+                {dbProps.map(p => {
+                  const stageInfo = STAGES[p.sales_stage] ?? STAGES.prospect;
+                  return (
+                    <button key={p.id}
+                      onClick={() => { setDbSelected(p); setNoteText(p.sales_notes ?? ''); setNoteStage(p.sales_stage ?? 'prospect'); }}
+                      className={cn(
+                        "w-full text-left p-3 rounded-xl border mb-1.5 transition-all",
+                        dbSelected?.id === p.id ? "border-[#6B7EFF]/50 bg-[#6B7EFF]/5" : "border-gray-200 hover:border-[#6B7EFF]/30"
+                      )}>
+                      <div className="flex items-start gap-2">
+                        <div className="w-6 h-6 rounded-md flex items-center justify-center text-white text-[9px] font-bold shrink-0"
+                          style={scoreBg(p.buy_score ?? 0)}>{p.buy_score ?? '?'}</div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] font-semibold text-gray-900 truncate leading-tight">{p.property_name}</p>
+                          <p className="text-[9px] text-gray-400 truncate mt-0.5">{(p.address ?? '').split(',').slice(0,2).join(',')}</p>
+                          <div className="flex items-center gap-1 mt-1 flex-wrap">
+                            <span className={cn("text-[8px] font-medium px-1.5 py-0.5 rounded-full", stageInfo.color)}>{stageInfo.label}</span>
+                            {p.sara_signals && <span className="text-[8px] font-bold px-1 py-0.5 rounded bg-purple-100 text-purple-700">SARA</span>}
+                            {p.contract_expiry_year && <span className="text-[8px] text-amber-600 font-medium">📅 {p.contract_expiry_year}</span>}
+                            {p.times_researched > 1 && <span className="text-[8px] text-gray-400">{p.times_researched}× researched</span>}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Property detail */}
+          <div className="flex-1 overflow-y-auto p-5">
+            {!dbSelected ? (
+              <div className="flex items-center justify-center h-full text-gray-400">
+                <p className="text-sm">Select a property to view intel + update sales notes</p>
+              </div>
+            ) : (
+              <div className="space-y-4 max-w-2xl">
+                {/* Header */}
+                <div className="bg-white rounded-xl border border-gray-200 p-4">
+                  <div className="flex items-start gap-3">
+                    <div>
+                      <h3 className="text-sm font-bold text-gray-900">{dbSelected.property_name}</h3>
+                      <p className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1">
+                        <MapPin size={9} /> {dbSelected.address}
+                      </p>
+                    </div>
+                    <div className="ml-auto flex flex-col items-end gap-1">
+                      <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-sm"
+                        style={scoreBg(dbSelected.buy_score ?? 0)}>{dbSelected.buy_score ?? '?'}</div>
+                      <span className="text-[9px] text-gray-400">{formatAge(dbSelected.last_researched_at)}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 mt-3">
+                    {dbSelected.management_company && <span className="text-[9px] px-2 py-0.5 rounded-full border border-gray-200 text-gray-600">{dbSelected.management_company}</span>}
+                    {dbSelected.owner_entity && <span className="text-[9px] px-2 py-0.5 rounded-full border border-blue-200 bg-blue-50 text-blue-700">{dbSelected.owner_entity}</span>}
+                    {dbSelected.sara_signals && <span className="text-[9px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 border border-purple-200 font-semibold">🎯 SARA Bridge</span>}
+                    {dbSelected.contract_expiry_year && (
+                      <span className={cn("text-[9px] px-2 py-0.5 rounded-full border font-semibold",
+                        dbSelected.contract_expiry_year <= new Date().getFullYear() + 1
+                          ? "bg-red-50 border-red-200 text-red-700"
+                          : "bg-amber-50 border-amber-200 text-amber-700"
+                      )}>📅 Contract exp. ~{dbSelected.contract_expiry_year}</span>
+                    )}
+                    {dbSelected.times_researched > 1 && <span className="text-[9px] px-2 py-0.5 rounded-full border border-gray-200 text-gray-500">{dbSelected.times_researched}× researched</span>}
+                  </div>
+                </div>
+
+                {/* Connectivity */}
+                {((dbSelected.isp_providers?.length ?? 0) > 0 || (dbSelected.video_providers?.length ?? 0) > 0) && (
+                  <div className="bg-white rounded-xl border border-gray-200 p-4">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Connectivity intel</p>
+                    {dbSelected.isp_providers?.length > 0 && (
+                      <div className="mb-2">
+                        <p className="text-[9px] text-gray-400 mb-1">ISP</p>
+                        <div className="flex flex-wrap gap-1">
+                          {dbSelected.isp_providers.map((isp: string) => <span key={isp} className="text-[10px] px-2 py-0.5 rounded font-medium bg-blue-50 text-blue-700 border border-blue-100">{isp}</span>)}
+                        </div>
+                      </div>
+                    )}
+                    {dbSelected.video_providers?.length > 0 && (
+                      <div>
+                        <p className="text-[9px] text-gray-400 mb-1">Video</p>
+                        <div className="flex flex-wrap gap-1">
+                          {dbSelected.video_providers.map((v: string) => <span key={v} className="text-[10px] px-2 py-0.5 rounded font-medium bg-violet-50 text-violet-700 border border-violet-100">{v}</span>)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* PropTech */}
+                {(dbSelected.gate_operators?.length > 0 || dbSelected.access_control?.length > 0 || dbSelected.intercoms?.length > 0 || dbSelected.cameras?.length > 0) && (
+                  <div className="bg-white rounded-xl border border-gray-200 p-4">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-violet-700 mb-3">PropTech stack</p>
+                    <div className="flex flex-wrap gap-x-6 gap-y-2">
+                      {[
+                        { label: '🚧 Gates',  arr: dbSelected.gate_operators,  cls: 'bg-orange-50 text-orange-700 border-orange-200' },
+                        { label: '🔑 Access', arr: dbSelected.access_control,   cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+                        { label: '📟 Intercom', arr: dbSelected.intercoms,      cls: 'bg-violet-50 text-violet-700 border-violet-200' },
+                        { label: '📷 Cameras', arr: dbSelected.cameras,         cls: 'bg-slate-50 text-slate-700 border-slate-200' },
+                      ].filter(x => x.arr?.length > 0).map(cat => (
+                        <div key={cat.label}>
+                          <p className="text-[9px] text-gray-400 mb-1">{cat.label}</p>
+                          <div className="flex flex-wrap gap-1">
+                            {cat.arr.map((v: string) => <span key={v} className={cn("text-[9px] px-1.5 py-0.5 rounded font-medium border", cat.cls)}>{v}</span>)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sales cycle updater */}
+                <div className="bg-white rounded-xl border border-gray-200 p-4">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Sales notes</p>
+                  <div className="flex items-center gap-2 mb-3">
+                    <p className="text-xs text-gray-500 shrink-0">Stage:</p>
+                    <select
+                      value={noteStage || dbSelected.sales_stage || 'prospect'}
+                      onChange={e => setNoteStage(e.target.value)}
+                      className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 outline-none focus:border-[#6B7EFF]"
+                    >
+                      {Object.entries(STAGES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                    </select>
+                    {dbSelected.last_contacted_at && (
+                      <span className="text-[10px] text-gray-400 ml-auto">Last contact: {formatAge(dbSelected.last_contacted_at)}</span>
+                    )}
+                  </div>
+                  <textarea
+                    value={noteText !== '' ? noteText : (dbSelected.sales_notes ?? '')}
+                    onChange={e => setNoteText(e.target.value)}
+                    placeholder="Add sales notes, meeting outcomes, key intel from prospect calls..."
+                    rows={4}
+                    className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2.5 text-gray-700 placeholder:text-gray-400 resize-none outline-none focus:border-[#6B7EFF] mb-2"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={savePropertyNote}
+                      disabled={savingNote}
+                      className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg text-white font-medium disabled:opacity-60"
+                      style={{ background: '#6B7EFF' }}
+                    >
+                      {savingNote ? <Loader2 size={11} className="animate-spin" /> : <><Check size={11} /> Save notes</>}
+                    </button>
+                    <button
+                      onClick={() => { setQuery(dbSelected.property_name); setDbView(false); setTimeout(() => runARIA(), 100); }}
+                      className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+                    >
+                      <RefreshCw size={11} /> Re-research
+                    </button>
+                  </div>
+                </div>
+
+                {/* Pitch strategy if available */}
+                {dbSelected.pitch_strategy?.primary_hook && (
+                  <div className="bg-white rounded-xl border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700 mb-2">Recommended pitch hook</p>
+                    <p className="text-xs text-amber-900 leading-relaxed italic">&ldquo;{dbSelected.pitch_strategy.primary_hook}&rdquo;</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -1149,18 +1459,6 @@ export default function ARIAPage() {
               />
               {isRunning && <Loader2 size={11} className="text-[#6B7EFF] animate-spin shrink-0" />}
             </div>
-            <div className="flex gap-1.5 mb-2">
-              <button
-                onClick={() => setDeepMode(false)}
-                className={cn("flex-1 py-1.5 rounded-lg text-[11px] font-medium border transition-all",
-                  !deepMode ? "bg-[#6B7EFF] text-white border-[#6B7EFF]" : "bg-white text-gray-500 border-gray-200 hover:border-[#6B7EFF]/40"
-                )}>Base</button>
-              <button
-                onClick={() => setDeepMode(true)}
-                className={cn("flex-1 py-1.5 rounded-lg text-[11px] font-medium border transition-all",
-                  deepMode ? "bg-[#6B7EFF] text-white border-[#6B7EFF]" : "bg-white text-gray-500 border-gray-200 hover:border-[#6B7EFF]/40"
-                )}>Deep</button>
-            </div>
             <button
               onClick={runARIA}
               disabled={isRunning || !query.trim()}
@@ -1178,7 +1476,7 @@ export default function ARIAPage() {
                 <div className="flex items-center gap-1.5 mb-2 px-1">
                   <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{results.prospects.length} targets found</span>
                   {results.query_interpretation && (
-                    <span className="ml-auto text-[9px] text-[#6B7EFF] font-medium truncate max-w-[100px]">{deepMode ? 'Deep' : 'Base'}</span>
+                    <span className="ml-auto text-[9px] text-[#6B7EFF] font-medium truncate max-w-[120px]">ARIA Intelligence</span>
                   )}
                 </div>
                 {results.prospects.map((p, i) => (
@@ -1218,7 +1516,9 @@ export default function ARIAPage() {
 
         {/* Right panel */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {isRunning ? (
+          {dbView ? (
+            <IntelDBPanel />
+          ) : isRunning ? (
             <PipelinePanel />
           ) : error ? (
             <div className="flex items-center justify-center h-full">
@@ -1279,14 +1579,6 @@ export default function ARIAPage() {
               style={{ background: isRunning ? "#9CA3AF" : "#6B7EFF" }}>
               {isRunning ? <Loader2 size={11} className="animate-spin" /> : <Zap size={11} />}
             </button>
-          </div>
-          <div className="flex gap-1.5 mt-2">
-            <button onClick={() => setDeepMode(false)}
-              className={cn("flex-1 py-1.5 rounded-lg text-[10px] font-medium border",
-                !deepMode ? "bg-[#6B7EFF] text-white border-[#6B7EFF]" : "bg-white text-gray-500 border-gray-200")}>Base</button>
-            <button onClick={() => setDeepMode(true)}
-              className={cn("flex-1 py-1.5 rounded-lg text-[10px] font-medium border",
-                deepMode ? "bg-[#6B7EFF] text-white border-[#6B7EFF]" : "bg-white text-gray-500 border-gray-200")}>Deep</button>
           </div>
         </div>
 

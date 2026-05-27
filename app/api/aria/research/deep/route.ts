@@ -53,23 +53,30 @@ interface TavilyResponse {
   answer?: string
 }
 
-async function tavilySearch(query: string, maxResults = 5, source = 'web'): Promise<TavilyResult[]> {
+async function tavilySearch(
+  query: string,
+  maxResults = 5,
+  source = 'web',
+  search_time?: 'day' | 'week' | 'month' | 'year',
+): Promise<TavilyResult[]> {
   if (!process.env.TAVILY_API_KEY) return []
   try {
+    const body: Record<string, unknown> = {
+      query,
+      search_depth: 'basic',
+      max_results: maxResults,
+      include_answer: false,
+      include_raw_content: false,
+      include_images: false,
+    }
+    if (search_time) body.search_time = search_time
     const res = await fetch('https://api.tavily.com/search', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${process.env.TAVILY_API_KEY}`,
       },
-      body: JSON.stringify({
-        query,
-        search_depth: 'basic',
-        max_results: maxResults,
-        include_answer: false,
-        include_raw_content: false,
-        include_images: false,
-      }),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(12000),
     })
     if (!res.ok) return []
@@ -392,7 +399,12 @@ interface ProxycurlProfile {
   full_name?: string
   headline?: string
   occupation?: string
-  experiences?: Array<{ company?: string; title?: string; starts_at?: { year?: number } }>
+  experiences?: Array<{
+    company?: string
+    title?: string
+    starts_at?: { year?: number } | null
+    ends_at?: { year?: number } | null   // null = current position
+  }>
   email?: string
   personal_email?: string
 }
@@ -460,6 +472,229 @@ async function pdlEnrichPerson(
     return data?.data ?? null
   } catch {
     return null
+  }
+}
+
+// ─── Temporal resident review search ─────────────────────────────────────
+// Date-filtered searches on apartment review platforms and Reddit.
+// The "year" search_time filter discards stale content, so a 2023 review
+// about AT&T no longer poisons the result when Gigstreem took over in 2025.
+
+async function searchResidentReviewsTemporal(
+  propertyName: string,
+  location: string,
+): Promise<TavilyResult[]> {
+  if (!process.env.TAVILY_API_KEY) return []
+  const queries: Array<[string, 'year' | undefined]> = [
+    // ApartmentRatings — most explicit about telecom and gate/security
+    [`"${propertyName}" internet OR wifi OR "internet provider" OR gate OR "access control" site:apartmentratings.com`, 'year'],
+    // Reddit communities — tenants complain about ISP contracts immediately after switches
+    [`"${propertyName}" ${location} internet provider wifi site:reddit.com`, 'year'],
+    // Any review site — recent provider switch signal
+    [`"${propertyName}" "switched" OR "changed" internet OR wifi provider OR "Gigstreem" OR "managed wifi"`, 'year'],
+    // ApartmentList + Apartments.com — amenity listings are updated when deals change
+    [`"${propertyName}" ${location} "internet included" OR "wifi included" OR "bulk internet" site:apartmentlist.com OR site:apartments.com`, undefined],
+  ]
+  const results = await Promise.all(
+    queries.map(([q, t]) => tavilySearch(q, 5, 'resident-review', t))
+  )
+  return results.flat()
+}
+
+// ─── Vendor footprint search ──────────────────────────────────────────────
+// Managed-WiFi and regional ISPs frequently list their property clients
+// as case studies on their own websites. This is the strongest possible
+// confirmation of a bulk deal — the vendor is advertising it themselves.
+// e.g. gigstreem.com/northland/wharf-7 = slam-dunk confirmation.
+
+async function searchVendorFootprint(
+  propertyName: string,
+  managementCompany: string,
+  location: string,
+  dbProviderNames: string[] = [],
+): Promise<TavilyResult[]> {
+  if (!process.env.TAVILY_API_KEY) return []
+
+  // Merge live DB names with hardcoded fallback list
+  // The DB has 40+ providers; use first 20 in keyword queries (URL length limit)
+  const fallbackProviders = [
+    'Gigstreem', 'Managed WiFi', 'managed internet', 'SpectrumU',
+    'Hotwire', 'Vyve', 'Sonic', 'WideOpenWest', 'WOW', 'TDS Telecom',
+    'Metronet', 'Brightspeed', 'Astound', 'Pavlov Media', 'Single Digits',
+    'MDU internet', 'community wifi', 'property-wide wifi', 'bulk wifi',
+    'Boingo', 'Zentro', 'Dojo Networks', 'Launch Broadband',
+  ]
+
+  // Prefer DB names (live, authoritative) over fallback list
+  const allProviders = dbProviderNames.length > 0
+    ? [...new Set([...dbProviderNames, ...fallbackProviders])]
+    : fallbackProviders
+
+  // Use first 12 names for the main query string (keep URL reasonable)
+  const providerKeywords = allProviders.slice(0, 12).join(' OR ')
+
+  // Build site: constraints from known provider domains (from DB slug patterns)
+  const knownDomains = [
+    'gigstreem.com', 'spectrumu.com', 'pavlovmedia.com', 'singledigits.com',
+    'hotwire.net', 'zentro.com', 'dojonetworks.com', 'boingo.com',
+    'spotonnetworks.com', 'aerwave.com', 'launchbroadband.com',
+  ].slice(0, 5).map(d => `site:${d}`).join(' OR ')
+
+  const queries = [
+    // Vendor lists this specific property as a case study on their own site (HIGHEST CONFIDENCE)
+    `"${propertyName}" ${providerKeywords}`,
+    // Management company + vendor partnership
+    managementCompany
+      ? `"${managementCompany}" ${providerKeywords} "case study" OR "partnership" OR "community" OR "units"`
+      : `"${propertyName}" ${location} "managed wifi" OR "bulk internet" case study OR partnership`,
+    // Vendor's own website — vendor-confirmed is highest confidence
+    `"${propertyName}" OR "${managementCompany || propertyName}" ${knownDomains}`,
+  ]
+
+  const results = await Promise.all(
+    queries.map(q => tavilySearch(q, 5, 'vendor-footprint'))
+  )
+  return results.flat()
+}
+
+// ─── Executive Truth Loop: ProxyCurl DM validation ───────────────────────
+// Apollo returns the C-suite by title keyword, but its data can lag 6-12 months.
+// Pattern: founder/chairman (Lawrence) and active CEO (Matthew) both match "CEO"
+// in Apollo. ProxyCurl pulls the live LinkedIn "Experience" section and checks
+// who holds "Present" status. The validated list overwrites stale Apollo data.
+
+interface ValidatedDM {
+  name: string
+  currentTitle: string
+  company: string
+  email?: string
+  linkedinUrl?: string
+  confidence: 'proxycurl-verified' | 'apollo-only'
+  isActiveCEO: boolean     // "Chief Executive" + no ends_at
+  isFormerOrAdvisory: boolean // has ends_at or Founder/Chairman title
+}
+
+async function proxycurlValidateDMs(
+  apolloContacts: ApolloEnrichment[],
+): Promise<ValidatedDM[]> {
+  const validated: ValidatedDM[] = []
+
+  // Validate up to 3 contacts with LinkedIn URLs via ProxyCurl
+  const withLinkedIn = apolloContacts.filter(c => c.linkedin_url).slice(0, 3)
+  const withoutLinkedIn = apolloContacts.filter(c => !c.linkedin_url)
+
+  let profiles: Array<ProxycurlProfile | null> = []
+
+  if (process.env.PROXYCURL_API_KEY && withLinkedIn.length > 0) {
+    const settled = await Promise.allSettled(
+      withLinkedIn.map(c => proxycurlProfile(c.linkedin_url!))
+    )
+    profiles = settled.map(r => (r.status === 'fulfilled' ? r.value : null))
+  }
+
+  for (let i = 0; i < withLinkedIn.length; i++) {
+    const c = withLinkedIn[i]
+    const p = profiles[i]
+
+    if (p) {
+      // Find the current (no ends_at) experience
+      const currentExp = (p.experiences ?? []).find(e => e.ends_at === null || e.ends_at === undefined)
+      const currentTitle = currentExp?.title ?? p.occupation ?? c.title ?? ''
+      const currentCompany = currentExp?.company ?? c.organization?.name ?? ''
+
+      const titleLower = currentTitle.toLowerCase()
+      const isActiveCEO = (titleLower.includes('chief executive') || titleLower.includes('ceo')) && !currentExp?.ends_at
+      const isFormerOrAdvisory =
+        titleLower.includes('founder') || titleLower.includes('chairman') ||
+        titleLower.includes('advisor') || titleLower.includes('emeritus') ||
+        !!(p.experiences ?? []).find(e => e.ends_at !== null && e.ends_at !== undefined && (e.title ?? '').toLowerCase().includes('ceo'))
+
+      validated.push({
+        name:               p.full_name ?? c.name ?? 'Unknown',
+        currentTitle,
+        company:            currentCompany,
+        email:              p.email ?? p.personal_email ?? c.email,
+        linkedinUrl:        c.linkedin_url,
+        confidence:         'proxycurl-verified',
+        isActiveCEO,
+        isFormerOrAdvisory,
+      })
+    } else {
+      // ProxyCurl failed — fall back to Apollo
+      const titleLower = (c.title ?? '').toLowerCase()
+      validated.push({
+        name:               c.name ?? 'Unknown',
+        currentTitle:       c.title ?? '',
+        company:            c.organization?.name ?? '',
+        email:              c.email,
+        linkedinUrl:        c.linkedin_url,
+        confidence:         'apollo-only',
+        isActiveCEO:        titleLower.includes('ceo') || titleLower.includes('chief executive'),
+        isFormerOrAdvisory: titleLower.includes('founder') || titleLower.includes('chairman'),
+      })
+    }
+  }
+
+  // Add contacts without LinkedIn as apollo-only
+  for (const c of withoutLinkedIn) {
+    const titleLower = (c.title ?? '').toLowerCase()
+    validated.push({
+      name:               c.name ?? 'Unknown',
+      currentTitle:       c.title ?? '',
+      company:            c.organization?.name ?? '',
+      email:              c.email,
+      confidence:         'apollo-only',
+      isActiveCEO:        titleLower.includes('ceo') || titleLower.includes('chief executive'),
+      isFormerOrAdvisory: titleLower.includes('founder') || titleLower.includes('chairman'),
+    })
+  }
+
+  return validated
+}
+
+// ─── Review sentiment pre-pass (Haiku) ───────────────────────────────────
+// Fast Haiku call on resident review snippets to extract structured signals
+// BEFORE Claude Sonnet sees them. Turns raw review text into a clean block:
+// "Provider switched from AT&T to Gigstreem in early 2025 — tenant complaints
+//  about connectivity ongoing. Gate intercom mentioned as broken."
+// This dramatically improves Sonnet synthesis accuracy on provider intel.
+
+async function extractReviewSentiment(
+  reviewResults: TavilyResult[],
+  anthropicClient: Anthropic,
+): Promise<string> {
+  const usable = reviewResults
+    .filter(r => r.content && r.content.length > 60)
+    .slice(0, 8)
+  if (usable.length === 0) return ''
+
+  const snippets = usable
+    .map((r, i) => `[Review ${i + 1}] ${r.title}\n${r.content.slice(0, 320)}`)
+    .join('\n\n')
+
+  try {
+    const msg = await anthropicClient.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 450,
+      messages: [{
+        role: 'user',
+        content: `Analyze these resident reviews and extract ONLY concrete factual signals:
+1. Current internet provider(s) mentioned by name — especially small/regional ones
+2. Any provider SWITCH or CHANGE mentioned (with approximate date if given)
+3. Gate, intercom, or access control system mentions (brand names or problems)
+4. Sentiment about connectivity: positive / negative / mixed
+5. Any "only option" or "no choice" language suggesting a bulk/exclusive deal
+
+Reviews:
+${snippets}
+
+Respond as 4-6 bullet points. Quote exact provider names. If a switch happened, note "Switched FROM [X] TO [Y] [approx date]". If no signal found for a category, skip it.`,
+      }],
+    })
+    const text = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
+    return text ? `\n\nRESIDENT REVIEW SIGNALS (extracted from ${usable.length} recent reviews):\n${text}\n` : ''
+  } catch {
+    return ''
   }
 }
 
@@ -602,27 +837,41 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'TAVILY_API_KEY not configured' }, { status: 503 })
     }
 
-    const { property_name, address, management_company, city, state } = await req.json()
-    if (!property_name) return NextResponse.json({ error: 'property_name required' }, { status: 400 })
+    const raw = await req.json()
+    // Accept both raw query (from UI) and structured fields (from API)
+    const property_name: string   = raw.property_name || raw.query || ''
+    const address: string         = raw.address || ''
+    const management_company: string = raw.management_company || ''
+    const city: string            = raw.city || ''
+    const state: string           = raw.state || ''
+
+    if (!property_name) return NextResponse.json({ error: 'property_name or query required' }, { status: 400 })
 
     const location = [city, state].filter(Boolean).join(', ') || address || ''
     const mgmt = management_company || ''
 
-    // ── Prefetch MDU provider DB + cached detections (parallel, non-blocking) ──
-    let mduProviderSlugsDeep: Array<{ name: string; slug: string; property_page_pattern: string | null }> = []
+    // ── Prefetch MDU provider DB + cached detections + prior contract findings ──
+    let mduProviderSlugsDeep: Array<{ name: string; slug: string; property_page_pattern: string | null; operator_page_pattern: string | null; notes: string | null }> = []
+    let mduAllProviderNames: string[] = []  // all active provider names for dynamic vendor searches
     let cachedDetectionsBlockDeep = ''
+    let priorFindingsBlock = ''
 
     await Promise.allSettled([
+      // Fetch providers with URL patterns for slug searches
       (async () => {
         try {
           const { data: providers } = await supabaseDeep
             .from('mdu_providers')
-            .select('name, slug, property_page_pattern, operator_page_pattern')
+            .select('name, slug, property_page_pattern, operator_page_pattern, notes')
             .eq('active', true)
-            .or('property_page_pattern.not.is.null,operator_page_pattern.not.is.null')
-          if (providers) mduProviderSlugsDeep = providers as any[]
+          if (providers) {
+            mduProviderSlugsDeep = (providers as any[]).filter(p => p.property_page_pattern || p.operator_page_pattern)
+            // All names for dynamic vendor footprint queries
+            mduAllProviderNames = (providers as any[]).map(p => p.name)
+          }
         } catch { /* non-blocking */ }
       })(),
+      // Check cached provider detections for this property
       (async () => {
         try {
           const { data: detections } = await supabaseDeep
@@ -643,6 +892,29 @@ export async function POST(req: NextRequest) {
               return `• ${prov?.name ?? 'Unknown'} (${prov?.provider_type ?? 'isp'}): ${d.confidence} [${d.source_type}]${expiry}${snippet}`
             })
             cachedDetectionsBlockDeep = `\n\nGATEGUARD CACHED PROVIDER DETECTIONS for "${property_name}":\n${lines.join('\n')}\n`
+          }
+        } catch { /* non-blocking */ }
+      })(),
+      // Check aria_contract_findings for previously confirmed contracts at this property
+      (async () => {
+        try {
+          const { data: findings } = await supabaseDeep
+            .from('aria_contract_findings')
+            .select('provider_name, agreement_type, service_type, expiry_year, expiry_date, confidence, source_type, source_snippet')
+            .or(`property_name.ilike.%${property_name}%${address ? `,property_address.ilike.%${address}%` : ''}`)
+            .in('confidence', ['confirmed', 'high', 'medium-high'])
+            .order('created_at', { ascending: false })
+            .limit(10)
+
+          if (findings && findings.length > 0) {
+            const lines = findings.map((f: any) => {
+              const expiry = f.expiry_date
+                ? ` (expires ${f.expiry_date})`
+                : f.expiry_year ? ` (expires ~${f.expiry_year})` : ''
+              const snippet = f.source_snippet ? `: "${f.source_snippet.slice(0, 100)}"` : ''
+              return `• ${f.provider_name} — ${f.agreement_type} ${f.service_type}${expiry} [${f.confidence}] [${f.source_type}]${snippet}`
+            })
+            priorFindingsBlock = `\n\nGATEGUARD PRIOR CONTRACT FINDINGS for "${property_name}" (previously confirmed — treat as high-confidence baseline):\n${lines.join('\n')}\n`
           }
         } catch { /* non-blocking */ }
       })(),
@@ -677,6 +949,10 @@ export async function POST(req: NextRequest) {
       permitResults,
       // Group E — ISP press releases
       ispPressResults,
+      // Group F — Temporal resident reviews (date-filtered, site-targeted) — NEW
+      temporalReviewResults,
+      // Group G — Vendor footprint (managed-wifi / regional ISP case study pages) — NEW
+      vendorFootprintResults,
     ] = await Promise.all([
       // 1. ISP service at this property — general availability + resident experience
       tavilySearch(`"${property_name}" ${location} internet provider ISP service`, 5, 'web'),
@@ -713,11 +989,8 @@ export async function POST(req: NextRequest) {
       tavilySearch(`"${property_name}" ${location} "asset manager" OR "portfolio manager" OR "ownership" OR "acquired" OR "owner" OR "investment" multifamily`, 4, 'web'),
 
       // Group A+: Provider slug pages — check known MDU ISP property/operator portals
-      // e.g. gigstreem.com/amli-marina-del-rey or pavlovmedia.com/property-name
-      // Run the top 6 providers with URL patterns in parallel
       (async () => {
         if (!process.env.TAVILY_API_KEY || mduProviderSlugsDeep.length === 0) return [] as TavilyResult[]
-        const propSlug = property_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
         const slugSearches = mduProviderSlugsDeep
           .filter((p: any) => p.property_page_pattern || p.operator_page_pattern)
           .slice(0, 6)
@@ -745,48 +1018,75 @@ export async function POST(req: NextRequest) {
 
       // Group E: ISP MDU press releases (targeted Tavily)
       searchISPPressReleases(property_name, mgmt, location),
+
+      // Group F: Temporal resident reviews — last 12 months, site-targeted (NEW)
+      searchResidentReviewsTemporal(property_name, location),
+
+      // Group G: Vendor footprint — uses live mdu_providers names from DB (NEW)
+      // If provider DB loaded, build dynamic query; otherwise fall back to hardcoded list
+      searchVendorFootprint(property_name, mgmt, location, mduAllProviderNames),
     ])
 
-    // ── Optional enrichment APIs (Apollo, PDL) — non-blocking ──────────
-    // These run in parallel with the Tavily/EDGAR pipeline. Each gracefully
-    // returns empty if the API key is not configured.
+    // ── Executive Truth Loop: Apollo → ProxyCurl validation → PDL enrichment ──
+    // Step 1: Apollo wide net — find VP/Asset Manager/Director/CEO at mgmt company
+    // Step 2: ProxyCurl validates each contact's current LinkedIn title in real-time
+    //         Catches stale Apollo data (e.g., Founder/Chairman still tagged as CEO)
+    // Step 3: PDL enriches the best verified DM for behavioral/psychographic profile
 
-    const [apolloContacts, pdlDMProfile] = await Promise.all([
-      // Apollo — find VP-level contacts at the management company
-      mgmt
-        ? apolloSearchContacts(
-            mgmt,
-            ['Vice President', 'Asset Manager', 'Regional Manager', 'Director', 'Portfolio Manager', 'Property Manager'],
-            location,
-          )
-        : Promise.resolve([]),
+    const apolloContacts = mgmt
+      ? await apolloSearchContacts(
+          mgmt,
+          ['Chief Executive Officer', 'CEO', 'President', 'Vice President', 'Asset Manager',
+           'Regional Manager', 'Director', 'Portfolio Manager', 'Property Manager'],
+          location,
+        )
+      : []
 
-      // PDL — behavioral enrichment for the likely decision maker
-      // We don't have a name yet at deep-research stage, so skip if no DM signal in sources
-      // (PDL is called again from the main research route once DM name is known)
-      Promise.resolve(null as PDLPerson | null),
-    ])
+    // Step 2: ProxyCurl validation — verify current titles, detect chairman/advisor vs. active CEO
+    const validatedDMs = await proxycurlValidateDMs(apolloContacts)
 
-    // Build Apollo contact block for synthesis prompt
+    // Step 3: PDL enrichment for the highest-confidence active decision maker
+    const primaryDM = validatedDMs.find(d => d.isActiveCEO && d.confidence === 'proxycurl-verified')
+      ?? validatedDMs.find(d => d.isActiveCEO)
+      ?? validatedDMs.find(d => !d.isFormerOrAdvisory)
+      ?? null
+
+    const pdlDMProfile = primaryDM
+      ? await pdlEnrichPerson(primaryDM.name, primaryDM.company, primaryDM.email)
+      : null
+
+    // Build verified DM block for synthesis prompt
     let apolloBlock = ''
-    if (apolloContacts.length > 0) {
-      const contactLines = apolloContacts
-        .filter((c: ApolloEnrichment) => c.title || c.name)
-        .map((c: ApolloEnrichment) => `• ${c.name ?? 'Unknown'} — ${c.title ?? ''} at ${c.organization?.name ?? mgmt}${c.email ? ` <${c.email}>` : ''}${c.linkedin_url ? ` [LinkedIn: ${c.linkedin_url}]` : ''}`)
-        .join('\n')
-      if (contactLines) {
-        apolloBlock = `\n\nAPOLLO CONTACT INTELLIGENCE for "${mgmt}":\n${contactLines}\n`
+    if (validatedDMs.length > 0) {
+      const activeLines = validatedDMs
+        .filter(d => !d.isFormerOrAdvisory)
+        .map(d => {
+          const badge = d.confidence === 'proxycurl-verified' ? '[VERIFIED via LinkedIn]' : '[Apollo only]'
+          const emailStr = d.email ? ` <${d.email}>` : ''
+          const liStr = d.linkedinUrl ? ` 🔗 ${d.linkedinUrl}` : ''
+          return `• ${d.name} — ${d.currentTitle} at ${d.company}${emailStr}${liStr} ${badge}`
+        })
+      const advisoryLines = validatedDMs
+        .filter(d => d.isFormerOrAdvisory)
+        .map(d => `• ${d.name} — ${d.currentTitle} [FORMER/ADVISORY — do not cold-call as DM]`)
+
+      if (activeLines.length > 0 || advisoryLines.length > 0) {
+        apolloBlock = `\n\nEXECUTIVE TRUTH LOOP RESULTS for "${mgmt}" (ProxyCurl-verified where available):\n`
+        if (activeLines.length > 0) apolloBlock += `ACTIVE DECISION MAKERS:\n${activeLines.join('\n')}\n`
+        if (advisoryLines.length > 0) apolloBlock += `FORMER/ADVISORY (stale Apollo data — exclude from DM recommendation):\n${advisoryLines.join('\n')}\n`
       }
     }
 
     // ── Merge + label all sources ────────────────────────────────────────
-    // EDGAR, PUC, permit, and ISP press sources get higher base weight
+    // EDGAR, PUC, permit, ISP press, vendor footprint, and verified reviews get higher weight
     const tavilyAll = [
       ...ispResults, ...bulkResults, ...mgmtResults, ...redditResults,
       ...gateResults, ...proptechResults, ...residentTechResults,
       ...mgmtProptechResults, ...localIspResults, ...ownershipResults,
       ...(Array.isArray(providerSlugResultsDeep) ? providerSlugResultsDeep : []),
       ...pucResults, ...permitResults, ...ispPressResults,
+      ...temporalReviewResults,      // date-filtered resident reviews
+      ...vendorFootprintResults,     // vendor case study pages
     ]
 
     // Convert EDGAR results to TavilyResult shape for unified deduplication
@@ -800,7 +1100,7 @@ export async function POST(req: NextRequest) {
 
     const allResults = [...edgarAsResults, ...tavilyAll]
 
-    // Deduplicate + rank — EDGAR gets score boost to always appear in top results
+    // Deduplicate + rank — EDGAR, vendor footprint, recent reviews rank highest
     const seenUrls = new Set<string>()
     const uniqueResults = allResults
       .filter(r => {
@@ -809,15 +1109,20 @@ export async function POST(req: NextRequest) {
         return r.score > 0.25
       })
       .sort((a, b) => {
-        // provider-slug, EDGAR, PUC, permit sources rank first regardless of Tavily score
         const deepBoostSources: Record<string, number> = {
-          'provider-slug': 0.4, EDGAR: 0.3, PUC: 0.3, CityPermit: 0.3, 'ISP-Press': 0.25,
+          'vendor-footprint': 0.45, // vendor's own site = highest confirmation
+          'provider-slug':    0.40,
+          EDGAR:              0.30,
+          PUC:                0.30,
+          CityPermit:         0.30,
+          'ISP-Press':        0.25,
+          'resident-review':  0.20, // date-filtered reviews rank above generic web
         }
         const aBoost = deepBoostSources[a.source ?? ''] ?? 0
         const bBoost = deepBoostSources[b.source ?? ''] ?? 0
         return (b.score + bBoost) - (a.score + aBoost)
       })
-      .slice(0, 20) // top 20 — more sources = more accurate synthesis
+      .slice(0, 22) // slightly wider window to capture vendor + review sources
 
     if (uniqueResults.length === 0) {
       return NextResponse.json({
@@ -829,6 +1134,14 @@ export async function POST(req: NextRequest) {
         sources: [],
       })
     }
+
+    // ── Haiku sentiment pre-pass on review snippets ──────────────────────
+    // Run before Sonnet synthesis so the main prompt includes structured signals
+    // rather than raw review text — cheaper and more accurate for Sonnet
+    const reviewSnippets = uniqueResults.filter(r =>
+      r.source === 'resident-review' || (r.source === 'web' && (r.url.includes('apartmentratings') || r.url.includes('reddit') || r.url.includes('yelp')))
+    )
+    const reviewSentimentBlock = await extractReviewSentiment(reviewSnippets, anthropic)
 
     // ── Format excerpts with source type labels ──────────────────────────
     const excerptBlock = uniqueResults.map((r, i) => {
@@ -903,17 +1216,23 @@ FRESHNESS SCORE:
 Location: ${location}
 Management Company: ${mgmt || 'unknown'}
 ${sourcesSummary}
-${cachedDetectionsBlockDeep}${apolloBlock}
-Intelligence excerpts (${uniqueResults.length} sources across EDGAR, PUC, city permits, ISP press releases, provider slug pages, and web):
+${priorFindingsBlock}${cachedDetectionsBlockDeep}${apolloBlock}${reviewSentimentBlock}
+Intelligence excerpts (${uniqueResults.length} sources across EDGAR, PUC, city permits, ISP press releases, provider slug pages, vendor footprint pages, and resident reviews):
 ${excerptBlock}
 
 Extract all intelligence and call the aria_deep_intel_result tool.
 
-CRITICAL REMINDER: Return bulk_agreements = [] if no property-specific evidence exists in these sources. Never infer from market patterns. Prioritize local/regional ISP names from listing sites over national carrier assumptions. EDGAR sources override all other confidence levels. [PROVIDER-SLUG-PAGE] source = ISP's own property portal page — treat as confirmed evidence (highest confidence).
+CRITICAL REMINDERS:
+- [VENDOR-FOOTPRINT] source = the ISP/vendor's OWN website listing this property — treat as CONFIRMED (highest confidence, override all other sources).
+- [EDGAR] SEC filings = primary source for ownership and bulk deals.
+- Return bulk_agreements = [] if no property-specific evidence exists. Never infer from market patterns.
+- Prioritize local/regional ISP names (Gigstreem, Hotwire, Pavlov, etc.) over national carrier assumptions.
+- RESIDENT REVIEW SIGNALS block above = Haiku-extracted summary of tenant reviews — use it to confirm or refute bulk deal findings.
+- EXECUTIVE TRUTH LOOP: Use the verified DM list above. Any contact tagged [FORMER/ADVISORY] must NOT be recommended as the primary contact — name their replacement.
 
-For behavioral_profile: use Apollo contact titles/seniority + ownership structure to infer personality_type and decision_style. Asset managers at PE firms = analytical + data-driven. Regional VPs at large management cos = driver + relationship-driven.
-For pitch_strategy: build a primary_hook from the strongest signal found (contract expiry > aging tech > acquisition signal > general pain).
-For freshness_score: rate 1-5 based on how recent and specific the signals are.
+For behavioral_profile: use ProxyCurl-verified title/seniority. Titles matter: "Asset Manager" at PE firm = analytical+data-driven. "VP Operations" at management co = driver+cost-conscious.
+For pitch_strategy.primary_hook: reference the specific vendor/provider found in the vendor footprint or EDGAR source if available. "I saw Gigstreem lists your property on their case study page — that contract typically runs 3-5 years; if you're approaching year 3+, there may be a decision window."
+For freshness_score: resident reviews from last 12 months = +1 point. Vendor footprint page = +2 (they're actively advertising this deal right now).
 For buying_trends: include any portfolio-level news or capex signals for the management company or owner.`,
       }],
     })
@@ -934,13 +1253,17 @@ For buying_trends: include any portfolio-level news or capex signals for the man
 
     // Surface which premium intelligence sources contributed
     const intelligenceSources = {
-      edgar:        edgarResults.length > 0,
-      puc:          pucResults.length > 0,
-      permits:      permitResults.length > 0,
-      isp_press:    ispPressResults.length > 0,
-      listing_sites: localIspResults.some(r => r.score > 0.4),
-      apollo:       apolloContacts.length > 0,
-      pdl:          pdlDMProfile !== null,
+      edgar:            edgarResults.length > 0,
+      puc:              pucResults.length > 0,
+      permits:          permitResults.length > 0,
+      isp_press:        ispPressResults.length > 0,
+      listing_sites:    localIspResults.some(r => r.score > 0.4),
+      vendor_footprint: vendorFootprintResults.length > 0,
+      resident_reviews: temporalReviewResults.length > 0,
+      apollo:           apolloContacts.length > 0,
+      proxycurl_verified: validatedDMs.some(d => d.confidence === 'proxycurl-verified'),
+      pdl:              pdlDMProfile !== null,
+      dm_verified_count: validatedDMs.filter(d => !d.isFormerOrAdvisory).length,
     }
 
     // Log deep search usage (non-blocking)
@@ -1002,6 +1325,63 @@ For buying_trends: include any portfolio-level news or capex signals for the man
         } catch { /* non-blocking */ }
       })()
     }
+
+    // ── Persist to aria_properties intelligence DB (non-blocking) ────────────
+    void (async () => {
+      try {
+        // Build a prospect-shaped object matching what /api/aria/properties POST expects
+        const prospectPayload = {
+          property: {
+            name:                property_name,
+            address:             address || location || property_name,
+            units:               null,
+            property_type:       null,
+            class:               null,
+            year_built:          null,
+            management_company:  mgmt || null,
+            owner_entity:        intel.ownership?.owner_entity ?? null,
+            isp_providers:       intel.isp_providers ?? [],
+            video_providers:     intel.video_providers ?? [],
+            bulk_agreements:     intel.bulk_agreements ?? [],
+            _fcc_verified:       intelligenceSources.edgar || intelligenceSources.permits,
+            proptech:            intel.proptech ?? {},
+          },
+          decision_maker: intel.ownership?.asset_manager ?? {},
+          decision_maker_chain: [],
+          ownership: intel.ownership ? {
+            owner_entity:     intel.ownership.owner_entity ?? null,
+            owner_type:       intel.ownership.owner_type ?? null,
+            portfolio_size:   intel.ownership.portfolio_size ?? null,
+            acquisition_year: intel.ownership.acquisition_year ?? null,
+            capex_signal:     intel.ownership.capex_signal ?? null,
+          } : null,
+          pain_signals: [],
+          profile: {
+            buy_score:           intel.freshness_score ? Math.round(intel.freshness_score * 1.5 + 2) : 5,
+            urgency:             'medium',
+            primary_concern:     intel.key_finding?.slice(0, 80) ?? null,
+            current_vendor:      (intel.bulk_agreements?.[0] as any)?.provider ?? null,
+            contract_window:     (intel.bulk_agreements?.[0] as any)?.expiry_estimate ?? null,
+            communication_style: intel.behavioral_profile?.communication_pref ?? null,
+          },
+          behavioral_profile: intel.behavioral_profile ?? null,
+          pitch_strategy:     intel.pitch_strategy ?? null,
+          freshness_score:    intel.freshness_score ?? null,
+          scout_brief: {
+            primary_contact: intel.ownership?.asset_manager?.name ?? mgmt ?? property_name,
+            outreach_angle: intel.atlas_opportunity ? 'contract_window' : 'tech_displacement',
+            contract_window_urgency: 'medium' as const,
+            key_data_points: intel.key_finding ? [intel.key_finding] : [],
+          },
+        }
+
+        await fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/api/aria/properties`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prospects: [prospectPayload] }),
+        })
+      } catch { /* non-blocking, never fail the main response */ }
+    })()
 
     return NextResponse.json({ ...intel, sources, intelligence_sources: intelligenceSources })
 
