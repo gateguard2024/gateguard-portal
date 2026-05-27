@@ -19,7 +19,7 @@ export async function GET(
   const { data: sig, error } = await supabase
     .from('document_signatures')
     .select(
-      'id, document_type, document_version, document_url, signer_name, signer_email, signer_title, signer_company, status, expires_at, sent_by_name'
+      'id, document_type, document_version, document_url, document_html, signer_name, signer_email, signer_title, signer_company, status, expires_at, sent_by_name'
     )
     .eq('token', params.token)
     .single()

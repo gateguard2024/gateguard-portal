@@ -3,8 +3,9 @@
  * POST /api/admin/users  — invite a new user via Clerk invitation
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { auth, clerkClient } from '@clerk/nextjs/server'
+import { clerkClient } from '@clerk/nextjs/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentUser } from '@/lib/current-user'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,49 +16,96 @@ export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const { userId } = await auth()
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const caller = await getCurrentUser()
 
-    // Get all users from Clerk
+    // Must be authenticated and at an org tier that manages other users
+    if (!caller.id || caller.id === 'system') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    // Only corporate, master_agent, master_dealer, full_dealer can access user management
+    if (
+      !caller.isCorporate &&
+      !caller.isMasterAgent &&
+      !caller.isMasterDealer &&
+      !caller.isFullDealer
+    ) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    // Build the set of org IDs this caller is allowed to see users for
+    // Corporate → all orgs (no filter). Others → own org + direct child orgs only.
+    let permittedOrgIds: string[] | null = null
+    if (!caller.isCorporate && caller.org_id) {
+      const { data: childOrgs } = await supabase
+        .from('organizations')
+        .select('id')
+        .eq('parent_org_id', caller.org_id)
+
+      permittedOrgIds = [
+        caller.org_id,
+        ...((childOrgs ?? []) as { id: string }[]).map(o => o.id),
+      ]
+    }
+
     const client = await clerkClient()
-    const { data: clerkUsers } = await client.users.getUserList({ limit: 100 })
 
-    // Get all permissions from Supabase
+    // Fetch Clerk users — use a higher limit; filter in-memory by org scope
+    const { data: clerkUsers } = await client.users.getUserList({ limit: 500 })
+
+    // Get all permissions from Supabase (scoped if needed)
     const { data: perms } = await supabase
       .from('user_permissions')
       .select('*')
 
-    const permsMap = Object.fromEntries(
-      (perms || []).map((p: any) => [p.clerk_user_id, p])
-    )
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const permsMap = Object.fromEntries((perms ?? []).map((p: any) => [p.clerk_user_id, p]))
 
-    const users = clerkUsers.map((u) => ({
-      id: u.id,
-      email: u.emailAddresses[0]?.emailAddress ?? '',
-      full_name: `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim(),
-      image_url: u.imageUrl,
-      created_at: new Date(u.createdAt).toISOString(),
-      last_sign_in: u.lastSignInAt ? new Date(u.lastSignInAt).toISOString() : null,
-      permissions: permsMap[u.id] ?? null,
-    }))
+    const users = clerkUsers
+      .filter(u => {
+        // Corporate sees everyone
+        if (!permittedOrgIds) return true
+        // Others: only users whose org_id is in their permitted subtree
+        const userOrgId = u.publicMetadata?.org_id as string | undefined
+        // If user has no org assigned, only corporate can see them
+        if (!userOrgId) return false
+        return permittedOrgIds.includes(userOrgId)
+      })
+      .map(u => ({
+        id: u.id,
+        email: u.emailAddresses[0]?.emailAddress ?? '',
+        full_name: `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim(),
+        image_url: u.imageUrl,
+        created_at: new Date(u.createdAt).toISOString(),
+        last_sign_in: u.lastSignInAt ? new Date(u.lastSignInAt).toISOString() : null,
+        org_id:   (u.publicMetadata?.org_id  as string) ?? null,
+        org_tier: (u.publicMetadata?.org_tier as string) ?? null,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        permissions: permsMap[u.id] ?? null,
+      }))
 
-    // Also include pending invitations
-    const { data: invitations } = await client.invitations.getInvitationList({ status: 'pending' })
-    const pending = (invitations || []).map((inv: any) => ({
-      id: `inv_${inv.id}`,
-      email: inv.emailAddress,
-      full_name: '— Invited',
-      image_url: null,
-      created_at: new Date(inv.createdAt).toISOString(),
-      last_sign_in: null,
-      status: 'pending_invite',
-      permissions: null,
-    }))
+    // Pending invitations — only corporate or the inviting org can see them
+    // (Clerk doesn't store which org invited them, so corporate sees all; others see none)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let pending: any[] = []
+    if (caller.isCorporate) {
+      const { data: invitations } = await client.invitations.getInvitationList({ status: 'pending' })
+      pending = (invitations ?? []).map((inv: any) => ({
+        id:          `inv_${inv.id}`,
+        email:       inv.emailAddress,
+        full_name:   '— Invited',
+        image_url:   null,
+        created_at:  new Date(inv.createdAt).toISOString(),
+        last_sign_in: null,
+        status:      'pending_invite',
+        permissions: null,
+      }))
+    }
 
     return NextResponse.json({ users, pending })
-  } catch (err: any) {
-    console.error('[admin/users GET]', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Unknown error'
+    console.error('[admin/users GET]', msg)
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
 

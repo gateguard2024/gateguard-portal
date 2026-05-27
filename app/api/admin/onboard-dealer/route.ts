@@ -350,10 +350,18 @@ export async function POST(req: NextRequest) {
   }, { status: 201 })
 }
 
-// GET /api/admin/onboard-dealer — list all dealer orgs for the admin view
+// Tier rank — lower number = higher in hierarchy
+const TIER_RANK: Record<string, number> = {
+  corporate: 0, master_agent: 1, master_dealer: 2,
+  full_dealer: 3, service_dealer: 4, install_contractor: 4, sales_partner: 4, client: 5,
+}
+
+// GET /api/admin/onboard-dealer — list dealer orgs scoped to caller's hierarchy
 export async function GET(req: NextRequest) {
   const caller = await getCurrentUser()
-  if (!caller.isCorporate && !caller.isMasterAgent) {
+
+  // Corporate, master_agent, and master_dealer can list dealers
+  if (!caller.isCorporate && !caller.isMasterAgent && !caller.isMasterDealer) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -362,19 +370,26 @@ export async function GET(req: NextRequest) {
   const q      = searchParams.get('q')
   const parent = searchParams.get('parent_org_id')
 
+  // Callers can only see tiers strictly below their own rank
+  const callerRank  = TIER_RANK[caller.org_tier ?? 'corporate'] ?? 0
+  const ALL_DEALER_TIERS = ['master_agent', 'master_dealer', 'full_dealer', 'service_dealer', 'install_contractor', 'sales_partner']
+  const visibleTiers = caller.isCorporate
+    ? ALL_DEALER_TIERS
+    : ALL_DEALER_TIERS.filter(t => (TIER_RANK[t] ?? 99) > callerRank)
+
   let query = supabase
     .from('organizations')
     .select('id, name, org_tier, tier_label, parent_org_id, license_number, service_area_states, tech_count, onboarded_at, created_at, is_active, onboarding_complete, contact_name, contact_email, contact_phone, partner_docs')
-    .in('org_tier', ['master_agent', 'master_dealer', 'full_dealer', 'service_dealer', 'install_contractor', 'sales_partner'])
+    .in('org_tier', visibleTiers)
     .order('onboarded_at', { ascending: false, nullsFirst: false })
 
   if (tier)   query = query.eq('org_tier', tier)
-  if (parent) query = query.eq('parent_id', parent)
+  if (parent) query = query.eq('parent_org_id', parent)  // fix: was parent_id
   if (q)      query = query.ilike('name', `%${q}%`)
 
-  // Master agents only see their own subtree
+  // Non-corporate users only see orgs where they are the direct parent
   if (!caller.isCorporate && caller.org_id) {
-    query = query.eq('parent_id', caller.org_id)
+    query = query.eq('parent_org_id', caller.org_id)  // fix: was parent_id
   }
 
   const { data, error } = await query

@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
       document_type,
       document_version,
       document_url,
+      document_html,   // editable document text sent from wizard
       opportunity_id,
       lead_id,
       org_id,
@@ -93,6 +94,7 @@ export async function POST(req: NextRequest) {
         sent_by_name:     caller.name,
         expires_at:       expiresAt,
         advance_stage:    advance_stage ?? null,
+        document_html:    document_html ?? null,
         status:           'pending',
       })
       .select()

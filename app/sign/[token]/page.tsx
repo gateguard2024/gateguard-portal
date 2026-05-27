@@ -22,6 +22,7 @@ interface SigRecord {
   document_type: string
   document_version: string | null
   document_url: string | null
+  document_html: string | null
   signer_name: string | null
   signer_email: string
   signer_title: string | null
@@ -195,6 +196,44 @@ export default function SignPage() {
             <span>Review Document (PDF)</span>
             <span style={{ color: '#64748B', fontSize: 11 }}>↗</span>
           </a>
+        </div>
+      )}
+
+      {/* Inline document text — shown when no PDF but document_html is stored */}
+      {!sig?.document_url && sig?.document_html && (
+        <div style={{ marginBottom: 28 }}>
+          <p style={{ margin: '0 0 10px', color: '#94A3B8', fontSize: 12, fontWeight: 600, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+            Document Text — Please Read Before Signing
+          </p>
+          <div
+            style={{
+              background: '#0C111D',
+              border: '1px solid #1E2A45',
+              borderRadius: 10,
+              padding: '20px 24px',
+              maxHeight: 420,
+              overflowY: 'auto',
+              fontFamily: 'Georgia, serif',
+              fontSize: 13,
+              lineHeight: 1.75,
+              color: '#CBD5E1',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }}
+          >
+            {sig.document_html}
+          </div>
+        </div>
+      )}
+
+      {/* No document at all */}
+      {!sig?.document_url && !sig?.document_html && (
+        <div style={{ marginBottom: 24, background: '#1E2A45', border: '1px solid #334155', borderRadius: 8, padding: '14px 18px' }}>
+          <p style={{ margin: 0, color: '#94A3B8', fontSize: 13 }}>
+            The document text will be provided separately. Please contact{' '}
+            <a href="mailto:rfeldman@gateguard.co" style={{ color: '#6B7EFF' }}>rfeldman@gateguard.co</a>{' '}
+            if you have not received it.
+          </p>
         </div>
       )}
 

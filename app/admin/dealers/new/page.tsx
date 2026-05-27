@@ -8,8 +8,10 @@ import {
   CheckCircle2, MapPin, Phone, Mail, Globe, Layers,
   Star, Wrench, TrendingUp, ClipboardList, Zap, FileText,
   AlertCircle, Copy, ExternalLink, Hash, Info,
-  Search, X, Loader2, Clock, RefreshCw, Upload, Plus, Trash2,
+  Search, X, Loader2, Clock, RefreshCw, Upload, Plus, Trash2, Eye, EyeOff,
 } from 'lucide-react'
+import { NDA_TEMPLATE } from '@/lib/nda-template'
+import { AGREEMENT_TEMPLATE } from '@/lib/agreement-template'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { DollarSign, Hammer, UserCheck, UserPlus, ShieldCheck } = require('lucide-react') as any
 
@@ -549,6 +551,14 @@ export default function NewDealerPage() {
   const [refreshingAgreement, setRefreshingAgreement] = useState(false)
   const [countersigningNda, setCountersigningNda]         = useState(false)
   const [countersigningAgreement, setCountersigningAgreement] = useState(false)
+  // Document preview + edit state
+  const TODAY_FORMATTED = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  const [ndaEffectiveDate, setNdaEffectiveDate]   = useState(TODAY_FORMATTED)
+  const [ndaText, setNdaText]                     = useState('')   // populated on step 3 mount
+  const [ndaPreviewOpen, setNdaPreviewOpen]       = useState(false)
+  const [agrEffectiveDate, setAgrEffectiveDate]   = useState(TODAY_FORMATTED)
+  const [agrText, setAgrText]                     = useState('')   // populated on step 6 mount
+  const [agrPreviewOpen, setAgrPreviewOpen]       = useState(false)
 
   const set = (field: keyof WizardState, val: any) =>
     setForm(f => ({ ...f, [field]: val }))
@@ -559,6 +569,41 @@ export default function NewDealerPage() {
         ? f.service_area_states.filter(x => x !== s)
         : [...f.service_area_states, s],
     }))
+
+  /* ── Build NDA text from current form + effective date ── */
+  const buildNdaText = (effectiveDate: string) => NDA_TEMPLATE
+    .replace(/\{\{EFFECTIVE_DATE\}\}/g, effectiveDate || TODAY_FORMATTED)
+    .replace(/\{\{DEALER_LEGAL_NAME\}\}/g, form.org_name || '(Dealer Name)')
+    .replace(/\{\{DEALER_STATE_AND_ENTITY_TYPE\}\}/g,
+      [form.state, form.entity_type].filter(Boolean).join(' ') || '(State Entity Type)')
+    .replace(/\{\{DEALER_ADDRESS\}\}/g,
+      [form.address, form.city, form.state, form.zip].filter(Boolean).join(', ') || '(Dealer Address)')
+
+  /* ── Build Agreement text from current form + effective date ── */
+  const buildAgreementText = (effectiveDate: string) => {
+    const tierKey = form.org_tier as string
+    const territory = form.service_area_states.join(', ') || '(All licensed states)'
+    const hw = '40'; const sw = '30'; const install = '100'
+    return AGREEMENT_TEMPLATE
+      .replace(/\{\{EFFECTIVE_DATE\}\}/g, effectiveDate || TODAY_FORMATTED)
+      .replace(/\{\{DEALER_LEGAL_NAME\}\}/g, form.org_name || '(Dealer Name)')
+      .replace(/\{\{DEALER_STATE_AND_ENTITY_TYPE\}\}/g,
+        [form.state, form.entity_type].filter(Boolean).join(' ') || '(State Entity Type)')
+      .replace(/\{\{DEALER_ADDRESS\}\}/g,
+        [form.address, form.city, form.state, form.zip].filter(Boolean).join(', ') || '(Dealer Address)')
+      .replace(/\{\{APPROVED_TERRITORY\}\}/g, territory)
+      .replace(/\{\{CHECKBOX_FULL_DEALER\}\}/g,          tierKey === 'full_dealer'        ? 'X' : ' ')
+      .replace(/\{\{CHECKBOX_SERVICE_DEALER\}\}/g,        tierKey === 'service_dealer'     ? 'X' : ' ')
+      .replace(/\{\{CHECKBOX_INSTALLING_CONTRACTOR\}\}/g, tierKey === 'install_contractor' ? 'X' : ' ')
+      .replace(/\{\{CHECKBOX_SALES_PARTNER\}\}/g,         tierKey === 'sales_partner'      ? 'X' : ' ')
+      .replace(/\{\{CHECKBOX_MSO\}\}/g,                   tierKey === 'master_dealer'      ? 'X' : ' ')
+      .replace(/\{\{CHECKBOX_MASTER_AGENT\}\}/g,          tierKey === 'master_agent'       ? 'X' : ' ')
+      .replace(/\{\{HARDWARE_DISCOUNT_PERCENTAGE\}\}/g, hw)
+      .replace(/\{\{SOFTWARE_MRR_PERCENTAGE\}\}/g, sw)
+      .replace(/\{\{MASTER_AGENT_OVERRIDE_AMOUNT\}\}/g, '0.50')
+      .replace(/\{\{INSTALL_FEE_PERCENTAGE\}\}/g, install)
+      .replace(/\{\{DYNAMIC_TIER_NOTES\}\}/g, '')
+  }
 
   /* ── Commission step skip ── */
   const advance = async () => {
@@ -618,6 +663,8 @@ export default function NewDealerPage() {
   const sendNda = async () => {
     if (!form.draft_org_id || !form.org_email.trim()) return
     setSendingNda(true)
+    // Use edited text if preview was opened, otherwise generate fresh
+    const docText = ndaText || buildNdaText(ndaEffectiveDate)
     try {
       const res = await fetch('/api/signatures/send', {
         method: 'POST',
@@ -628,6 +675,7 @@ export default function NewDealerPage() {
           signer_name:    form.org_name,
           signer_email:   form.org_email.trim(),
           signer_company: form.org_name,
+          document_html:  docText,
         }),
       })
       const json = await res.json()
@@ -645,6 +693,7 @@ export default function NewDealerPage() {
     if (!form.draft_org_id || !form.org_email.trim()) return
     setSendingAgreement(true)
     const docType = TIER_DOC_TYPES[form.org_tier as string] ?? 'dealer_agreement'
+    const docText = agrText || buildAgreementText(agrEffectiveDate)
     try {
       const res = await fetch('/api/signatures/send', {
         method: 'POST',
@@ -655,6 +704,7 @@ export default function NewDealerPage() {
           signer_name:    form.org_name,
           signer_email:   form.org_email.trim(),
           signer_company: form.org_name,
+          document_html:  docText,
         }),
       })
       const json = await res.json()
@@ -1042,26 +1092,68 @@ export default function NewDealerPage() {
       {step === 3 && (
         <div>
           <h2 className="text-lg font-semibold text-slate-900 mb-1">Non-Disclosure Agreement</h2>
-          <p className="text-sm text-slate-500 mb-2">
-            Send the Mutual NDA to <span className="font-medium text-slate-700">{form.org_email}</span> for signature.
-            Both parties must sign before you can proceed to relationships.
+          <p className="text-sm text-slate-500 mb-4">
+            Review, edit, then send the Mutual NDA to{' '}
+            <span className="font-medium text-slate-700">{form.org_email || '(no email)'}</span> for signature.
           </p>
 
           {!form.org_email.trim() && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5 flex items-start gap-2">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4 flex items-start gap-2">
               <AlertCircle size={15} className="text-amber-600 shrink-0 mt-0.5" />
               <p className="text-sm text-amber-700">No org email set — go back to Step 2 and enter a contact email.</p>
             </div>
           )}
 
-          {/* NDA summary */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-5 space-y-2 text-xs text-slate-600">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Document Details</p>
-            <div className="flex justify-between"><span className="text-slate-400">Between</span><span className="font-medium">Gate Guard, LLC &amp; {form.org_name || '(dealer)'}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">Entity type</span><span className="font-medium">{form.state ? `${form.state} ` : ''}{form.entity_type}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">Term</span><span className="font-medium">3 years · Trade Secrets survive in perpetuity</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">Governing law</span><span className="font-medium">Georgia · Fulton County</span></div>
-          </div>
+          {/* Effective date + preview toggle */}
+          {!form.nda_sent && (
+            <div className="bg-white border border-slate-200 rounded-xl p-4 mb-4 space-y-3">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Document Settings</p>
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <label className="block text-xs text-slate-500 mb-1">Effective Date</label>
+                  <input
+                    type="text"
+                    value={ndaEffectiveDate}
+                    onChange={e => {
+                      setNdaEffectiveDate(e.target.value)
+                      if (ndaPreviewOpen) setNdaText(buildNdaText(e.target.value))
+                    }}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-400"
+                    placeholder="e.g. May 27, 2026"
+                  />
+                </div>
+                <button
+                  onClick={() => {
+                    if (!ndaPreviewOpen) setNdaText(buildNdaText(ndaEffectiveDate))
+                    setNdaPreviewOpen(v => !v)
+                  }}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-sm font-medium text-slate-600 transition-colors mt-4"
+                >
+                  {ndaPreviewOpen ? <EyeOff size={14} /> : <Eye size={14} />}
+                  {ndaPreviewOpen ? 'Hide' : 'Preview & Edit'}
+                </button>
+              </div>
+
+              {/* Editable NDA body */}
+              {ndaPreviewOpen && (
+                <div className="mt-2">
+                  <p className="text-xs text-slate-400 mb-1.5">
+                    Edit the document below before sending. Changes are saved locally and sent with the document.
+                  </p>
+                  <textarea
+                    value={ndaText}
+                    onChange={e => setNdaText(e.target.value)}
+                    rows={22}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-xs font-mono leading-relaxed focus:outline-none focus:ring-1 focus:ring-brand-400 text-slate-700 bg-slate-50 resize-y"
+                    spellCheck={false}
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    {ndaText.length} characters · The signer will see this exact text on their signing page.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           <SigningPanel
             docType="nda"
@@ -1082,7 +1174,7 @@ export default function NewDealerPage() {
           {form.nda_status !== 'fully_executed' && (
             <div className="mt-4 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-start gap-2 text-sm text-blue-700">
               <Info size={15} className="mt-0.5 shrink-0" />
-              <span>Step 4 (Relationships) unlocks once both parties have signed the NDA. Use the Check Status button after the dealer signs.</span>
+              <span>Step 4 (Relationships) unlocks once both parties have signed. Use Check Status after the dealer signs.</span>
             </div>
           )}
         </div>
@@ -1255,19 +1347,62 @@ export default function NewDealerPage() {
       {step === 6 && (
         <div>
           <h2 className="text-lg font-semibold text-slate-900 mb-1">Authorized Dealer Agreement</h2>
-          <p className="text-sm text-slate-500 mb-2">
-            Send the {DOC_LABELS[TIER_DOC_TYPES[form.org_tier as string] ?? 'dealer_agreement']} to{' '}
-            <span className="font-medium text-slate-700">{form.org_email}</span> for signature.
+          <p className="text-sm text-slate-500 mb-4">
+            Review, edit, then send the{' '}
+            {DOC_LABELS[TIER_DOC_TYPES[form.org_tier as string] ?? 'dealer_agreement']} to{' '}
+            <span className="font-medium text-slate-700">{form.org_email || '(no email)'}</span> for signature.
           </p>
 
-          {/* Agreement summary */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-5 space-y-2 text-xs text-slate-600">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Document Details</p>
-            <div className="flex justify-between"><span className="text-slate-400">Document</span><span className="font-medium">{DOC_LABELS[TIER_DOC_TYPES[form.org_tier as string] ?? 'dealer_agreement']}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">Includes</span><span className="font-medium">Exhibit A — Tier &amp; Commission Addendum</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">Term</span><span className="font-medium">1 year · auto-renewing</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">Pricing</span><span className="font-medium">References then-current Price List</span></div>
-          </div>
+          {/* Effective date + preview toggle */}
+          {!form.agreement_sent && (
+            <div className="bg-white border border-slate-200 rounded-xl p-4 mb-4 space-y-3">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Document Settings</p>
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <label className="block text-xs text-slate-500 mb-1">Effective Date</label>
+                  <input
+                    type="text"
+                    value={agrEffectiveDate}
+                    onChange={e => {
+                      setAgrEffectiveDate(e.target.value)
+                      if (agrPreviewOpen) setAgrText(buildAgreementText(e.target.value))
+                    }}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-400"
+                    placeholder="e.g. May 27, 2026"
+                  />
+                </div>
+                <button
+                  onClick={() => {
+                    if (!agrPreviewOpen) setAgrText(buildAgreementText(agrEffectiveDate))
+                    setAgrPreviewOpen(v => !v)
+                  }}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-sm font-medium text-slate-600 transition-colors mt-4"
+                >
+                  {agrPreviewOpen ? <EyeOff size={14} /> : <Eye size={14} />}
+                  {agrPreviewOpen ? 'Hide' : 'Preview & Edit'}
+                </button>
+              </div>
+
+              {/* Editable Agreement body */}
+              {agrPreviewOpen && (
+                <div className="mt-2">
+                  <p className="text-xs text-slate-400 mb-1.5">
+                    Edit the agreement below before sending. The signer will see this exact text.
+                  </p>
+                  <textarea
+                    value={agrText}
+                    onChange={e => setAgrText(e.target.value)}
+                    rows={28}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-xs font-mono leading-relaxed focus:outline-none focus:ring-1 focus:ring-brand-400 text-slate-700 bg-slate-50 resize-y"
+                    spellCheck={false}
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    {agrText.length} characters · Includes Exhibit A — Tier &amp; Commission Addendum
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           <SigningPanel
             docType={TIER_DOC_TYPES[form.org_tier as string] ?? 'dealer_agreement'}

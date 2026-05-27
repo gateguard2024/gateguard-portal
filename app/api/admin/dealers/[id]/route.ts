@@ -35,6 +35,29 @@ export async function GET(
     return NextResponse.json({ error: 'Dealer not found' }, { status: 404 })
   }
 
+  // Hierarchy check: non-corporate callers can only view orgs within their subtree.
+  // Direct child: org.parent_org_id === caller.org_id
+  // Grandchild:   org's parent's parent_org_id === caller.org_id
+  if (!caller.isCorporate && caller.org_id) {
+    const isDirect = org.parent_org_id === caller.org_id
+    const isOwn    = org.id === caller.org_id
+    if (!isDirect && !isOwn) {
+      // Check one more level (grandchild)
+      let isGrandchild = false
+      if (org.parent_org_id) {
+        const { data: parentOrg } = await supabase
+          .from('organizations')
+          .select('parent_org_id')
+          .eq('id', org.parent_org_id)
+          .single()
+        isGrandchild = parentOrg?.parent_org_id === caller.org_id
+      }
+      if (!isGrandchild) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+    }
+  }
+
   // Commission config
   const { data: commissionConfig } = await supabase
     .from('commission_config')
@@ -119,11 +142,26 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   const caller = await getCurrentUser()
-  if (!caller.isCorporate && !caller.isMasterAgent) {
-    return NextResponse.json({ error: 'Forbidden — corporate admin only' }, { status: 403 })
+  if (!caller.isCorporate && !caller.isMasterAgent && !caller.isMasterDealer) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const { id } = params
+
+  // Subtree check: non-corporate callers can only update orgs they own
+  if (!caller.isCorporate && caller.org_id) {
+    const { data: targetOrg } = await supabase
+      .from('organizations')
+      .select('id, parent_org_id')
+      .eq('id', id)
+      .single()
+
+    const isDirect = targetOrg?.parent_org_id === caller.org_id
+    const isOwn    = targetOrg?.id === caller.org_id
+    if (!isDirect && !isOwn) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+  }
 
   let body: Record<string, unknown>
   try {
