@@ -1,5 +1,5 @@
 # NEXUS — GateGuard Dealer Portal User Manual
-### Version 13 · Updated May 27, 2026
+### Version 14 · Updated May 27, 2026
 
 > **NEXUS** is the GateGuard internal name for the Dealer Portal at [portal.gateguard.co](https://portal.gateguard.co). It is the command center for dealer ops: onboarding, quoting, field service, billing, compliance, AI diagnostics, and more.
 
@@ -17,6 +17,7 @@
 6. [Sites](#6-sites)
 7. [Work Orders](#7-work-orders)
 7a. [Dispatcher](#7a-dispatcher)
+7b. [ARIA — Lead Intelligence Engine](#7b-aria--lead-intelligence-engine)
 8. [Field Tech Tool (/tech)](#8-field-tech-tool-tech)
 9. [Site Surveys](#9-site-surveys)
 10. [Billing & Invoices](#10-billing--invoices)
@@ -462,6 +463,79 @@ On screens narrower than `lg`, the dispatcher collapses into a **3-tab layout**:
 | **Roster** | Tech leaderboard + all tech cards + access codes |
 
 The tab bar is pinned below the TopBar. Active tab has a `#6B7EFF` underline indicator.
+
+---
+
+## 7b. ARIA — Lead Intelligence Engine
+
+**Route:** `/aria`
+
+ARIA (Account Research Intelligence Agent) researches multifamily properties, maps decision maker hierarchies, mines intent signals from across the web, and builds SCOUT outreach packets — all from a single search query.
+
+### Layout
+
+The ARIA page uses a **split list + tabbed detail** design:
+
+- **Left panel (260px):** Search input, Base/Deep mode toggle, Launch ARIA button, and the prospect list. When idle it shows recent searches and example queries. During a search it shows the 5-phase pipeline animation.
+- **Right panel:** Detail view for the selected prospect with 4 tabs.
+
+On **mobile**, a bottom navigation bar switches between List, Property, Decision Maker, and SCOUT tabs.
+
+### Search modes
+
+| Mode | Description |
+|------|-------------|
+| **Base** | 9 Tavily web searches + FCC Broadband + SEC EDGAR + Wayback Machine. Fast (~20–30s). Good for initial prospecting. |
+| **Deep** | All base sources + city permits + state PUC dockets + ISP press releases + Apollo contact search. Claude Sonnet synthesis. Slower (~35–55s) but dramatically richer output including behavioral profiles and pitch strategy. |
+
+### Prospect list (left panel)
+
+Each prospect card shows:
+- **Buy score** (0–10) — color coded: green ≥8, amber ≥6, brand blue otherwise
+- Property name + abbreviated address
+- Tag chips: unit count, class, SARA Signal badge (purple), Critical/High urgency badges
+
+Click any card to open it in the right detail panel.
+
+### Detail tabs
+
+| Tab | What it shows |
+|-----|--------------|
+| **Property** | Property details (units, type, class, year built, occupancy), financial & ownership info (REIT/PE owner, acquisition year, CapEx signal), ISP/video providers (FCC-verified or AI-estimated), bulk agreements, PropTech stack (gates, access control, intercoms, cameras, smart locks, resident apps) with SARA Bridge badge if DoorKing + DirecTV detected |
+| **Decision maker** | Primary contact (name, title, best email format, phone, tenure, LinkedIn), plus full DM hierarchy chain (Owner → Asset Manager → Regional VP → Property Manager) with hooks pulled from LinkedIn activity |
+| **Intel** | ARIA buy score gauge, urgency badge, profile fields (primary concern, current vendor, contract window, comm style), and all intent signals found online with source labels (Resident Complaint, Property Listing, Financial Filing, etc.) |
+| **SCOUT** | SCOUT handoff packet — outreach angle, contract window urgency, key intel data points. Copy Brief button. Import to Leads + Launch SCOUT Campaign buttons. |
+
+### Deep mode output (additional fields)
+
+When using Deep mode, the detail panel also receives:
+- **Behavioral profile** — personality type (analytical/driver/expressive/amiable), decision style, risk tolerance, and preferred communication channel
+- **Pitch strategy** — primary opening hook personalized to the property's strongest pain signal, topics to avoid, best time to call, and a social proof reference
+- **Freshness score** — 1–5 rating on how actionable the intel is (5 = SEC filing or contract expiry within 90 days)
+- **Buying trends** — portfolio-level capex news or management company signals
+
+### Ownership + temp hold
+
+When a rep imports a search into Leads:
+- Each lead is stamped with the rep's `assigned_to_user_id` and `assigned_to_name`
+- A **7-day temp hold** (`temp_hold_expires_at`) prevents other reps from claiming the same leads while the rep is actively working them
+
+### Pipeline animation
+
+During a search, the right panel shows 5 animated phases:
+1. Property Intel
+2. Decision Maker
+3. Intent Signals
+4. AI Profiling
+5. Intel Synthesis (holds until API responds — cycling status messages keep it alive)
+
+### SCOUT integration
+
+After importing leads from ARIA, the SCOUT tab provides a one-click **Launch SCOUT Campaign** button that sends SCOUT outreach emails to all imported leads from that search. Status shows `X sent / Y skipped`.
+
+### Recent searches
+
+ARIA auto-saves all searches for 30 days. The left panel lists them when idle. Clicking a saved search restores the prospect list and detail view instantly — no need to re-run.
 
 ---
 

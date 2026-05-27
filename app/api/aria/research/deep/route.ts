@@ -4,16 +4,21 @@
  * ARIA Deep Intel — multi-source property intelligence pipeline.
  * Runs after the initial ARIA result returns a known property name/address.
  *
- * Intelligence sources (all free, run in parallel):
+ * Intelligence sources (all free or metered, run in parallel):
  *   A. Tavily web search  — 10 targeted queries across ISP, bulk, proptech, local ISPs, ownership
  *   B. SEC EDGAR EFTS     — REIT 10-K/10-Q filings disclose portfolio-wide bulk internet agreements
  *   C. State PUC search   — ISPs file for ROW/conduit access; PUC dockets reveal ISP infrastructure
  *   D. City permit search — Fiber/conduit permits confirm ISP physical presence in a building
  *   E. ISP MDU press      — ISP newsrooms announce MDU/bulk deal wins (Comcast Communities, etc.)
+ *   F. Apollo.io          — Company + contact enrichment (APOLLO_API_KEY)
+ *   G. Prospeo            — LinkedIn email finder for decision makers (PROSPEO_API_KEY)
+ *   H. Proxycurl          — LinkedIn profile scraper for DM chain (PROXYCURL_API_KEY)
+ *   I. People Data Labs   — Behavioral / psychographic enrichment (PDL_API_KEY)
  *
- * Claude Haiku synthesizes all excerpts into structured output with citations.
+ * Claude Sonnet synthesizes all excerpts into structured output with citations.
  *
- * Cost: ~14 Tavily basic credits (~$0.112) + ~$0.001 Claude Haiku + $0 for EDGAR/PUC/permit (free APIs)
+ * Cost: ~14 Tavily basic credits (~$0.112) + ~$0.003 Claude Sonnet + $0 for EDGAR/PUC/permit (free APIs)
+ *       + API calls to Apollo/Prospeo/Proxycurl/PDL if keys configured (graceful fallback if not)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -262,6 +267,202 @@ async function searchISPPressReleases(
   return pressResults.flat()
 }
 
+// ─── Apollo.io — company + person enrichment ──────────────────────────────
+// Apollo enriches management company records with contact hierarchy and
+// org-level data. Used to find the asset manager / VP level contact.
+// Gracefully returns {} if APOLLO_API_KEY not set.
+
+interface ApolloEnrichment {
+  name?: string
+  title?: string
+  email?: string
+  phone_numbers?: string[]
+  linkedin_url?: string
+  organization?: { name?: string; website_url?: string }
+}
+
+async function apolloEnrichPerson(
+  name: string,
+  company: string,
+  domain?: string,
+): Promise<ApolloEnrichment | null> {
+  if (!process.env.APOLLO_API_KEY) return null
+  try {
+    const res = await fetch('https://api.apollo.io/api/v1/people/match', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Api-Key': process.env.APOLLO_API_KEY,
+      },
+      body: JSON.stringify({
+        name,
+        organization_name: company,
+        domain,
+        reveal_personal_emails: false,
+        reveal_phone_number: false,
+      }),
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    return data?.person ?? null
+  } catch {
+    return null
+  }
+}
+
+async function apolloSearchContacts(
+  company: string,
+  titles: string[],
+  location?: string,
+): Promise<ApolloEnrichment[]> {
+  if (!process.env.APOLLO_API_KEY) return []
+  try {
+    const res = await fetch('https://api.apollo.io/api/v1/mixed_people/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Api-Key': process.env.APOLLO_API_KEY,
+      },
+      body: JSON.stringify({
+        q_organization_name: company,
+        person_titles: titles,
+        person_locations: location ? [location] : [],
+        per_page: 5,
+      }),
+      signal: AbortSignal.timeout(10000),
+    })
+    if (!res.ok) return []
+    const data = await res.json()
+    return (data?.people ?? []).slice(0, 5)
+  } catch {
+    return []
+  }
+}
+
+// ─── Prospeo — LinkedIn email format finder ───────────────────────────────
+// Given a LinkedIn profile URL or slug, returns the most likely email format
+// and confidence score. Gracefully returns null if PROSPEO_API_KEY not set.
+
+interface ProspeoResult {
+  email?: string
+  email_format?: string
+  confidence?: number
+  full_name?: string
+  job_title?: string
+  company?: string
+  linkedin_url?: string
+}
+
+async function prospeoFindEmail(linkedinUrl: string): Promise<ProspeoResult | null> {
+  if (!process.env.PROSPEO_API_KEY) return null
+  try {
+    const res = await fetch('https://api.prospeo.io/linkedin-email-finder', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-KEY': process.env.PROSPEO_API_KEY,
+      },
+      body: JSON.stringify({ url: linkedinUrl }),
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    if (!data?.response) return null
+    return {
+      email:        data.response.email ?? null,
+      email_format: data.response.email_format ?? null,
+      confidence:   data.response.confidence ?? null,
+      full_name:    data.response.full_name ?? null,
+      job_title:    data.response.job_title ?? null,
+      company:      data.response.company ?? null,
+      linkedin_url: linkedinUrl,
+    }
+  } catch {
+    return null
+  }
+}
+
+// ─── Proxycurl — LinkedIn profile scraper ─────────────────────────────────
+// Fetches structured LinkedIn profile data including current/past roles,
+// education, and skills. Used to build the DM hierarchy chain.
+// Gracefully returns null if PROXYCURL_API_KEY not set.
+
+interface ProxycurlProfile {
+  full_name?: string
+  headline?: string
+  occupation?: string
+  experiences?: Array<{ company?: string; title?: string; starts_at?: { year?: number } }>
+  email?: string
+  personal_email?: string
+}
+
+async function proxycurlProfile(linkedinUrl: string): Promise<ProxycurlProfile | null> {
+  if (!process.env.PROXYCURL_API_KEY) return null
+  try {
+    const params = new URLSearchParams({
+      url: linkedinUrl,
+      use_cache: 'if-recent',
+      fallback_to_cache: 'on-error',
+      skills: 'exclude',
+      inferred_salary: 'exclude',
+    })
+    const res = await fetch(`https://nubela.co/proxycurl/api/v2/linkedin?${params}`, {
+      headers: { Authorization: `Bearer ${process.env.PROXYCURL_API_KEY}` },
+      signal: AbortSignal.timeout(10000),
+    })
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
+// ─── People Data Labs — behavioral / psychographic enrichment ─────────────
+// PDL Person Enrichment returns professional history, education, skills,
+// seniority, and inferred behavioral signals. Used for personality profiling
+// and marketing pitch strategy. Gracefully returns null if PDL_API_KEY not set.
+
+interface PDLPerson {
+  full_name?: string
+  job_title?: string
+  job_title_role?: string
+  job_title_levels?: string[]
+  job_company_name?: string
+  job_company_industry?: string
+  inferred_salary?: string
+  skills?: string[]
+  education?: Array<{ school?: { name?: string }; degrees?: string[] }>
+  experience?: Array<{ company?: { name?: string }; title?: { name?: string }; start_date?: string }>
+  linkedin_url?: string
+}
+
+async function pdlEnrichPerson(
+  name: string,
+  company: string,
+  email?: string,
+): Promise<PDLPerson | null> {
+  if (!process.env.PDL_API_KEY) return null
+  try {
+    const params = new URLSearchParams({
+      name,
+      company,
+      pretty: 'false',
+      titlecase: 'false',
+    })
+    if (email) params.set('email', email)
+    const res = await fetch(`https://api.peopledatalabs.com/v5/person/enrich?${params}`, {
+      headers: { 'X-Api-Key': process.env.PDL_API_KEY },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    return data?.data ?? null
+  } catch {
+    return null
+  }
+}
+
 // ─── Deep intel synthesis tool ────────────────────────────────────────────
 
 const deepIntelTool: Anthropic.Tool = {
@@ -357,6 +558,34 @@ const deepIntelTool: Anthropic.Tool = {
           replacement_window:  { type: 'string' },
           displacement_targets:{ type: 'array', items: { type: 'string' } },
         },
+      },
+      behavioral_profile: {
+        type: 'object',
+        description: 'Psychographic / communication profile of the primary decision maker based on PDL and web intel',
+        properties: {
+          personality_type:   { type: 'string', enum: ['analytical', 'driver', 'expressive', 'amiable'], description: 'DISC-style personality inferred from LinkedIn activity and role' },
+          decision_style:     { type: 'string', enum: ['data-driven', 'relationship-driven', 'cost-driven', 'innovation-driven'], description: 'Primary driver for technology purchasing decisions' },
+          risk_tolerance:     { type: 'string', enum: ['conservative', 'moderate', 'aggressive'], description: 'How quickly they adopt new vendors or technologies' },
+          communication_pref: { type: 'string', enum: ['email', 'linkedin', 'phone', 'referral'], description: 'Most likely response channel based on role seniority and industry norms' },
+        },
+      },
+      pitch_strategy: {
+        type: 'object',
+        description: 'Recommended outreach strategy for GateGuard sales based on all intel gathered',
+        properties: {
+          primary_hook:      { type: 'string', description: '1 sentence opening hook personalized to this prospect\'s primary pain point' },
+          avoid_topics:      { type: 'array', items: { type: 'string' }, description: 'Topics/angles to avoid (e.g. if they just renewed a contract)' },
+          best_time_to_call: { type: 'string', description: 'When to outreach based on contract window and news signals' },
+          social_proof:      { type: 'string', description: 'Most relevant GateGuard reference property type (e.g. "similar Class A Greystar community in Dallas")' },
+        },
+      },
+      freshness_score: {
+        type: 'number',
+        description: 'How fresh/actionable is this intelligence on a 1-5 scale. 5=very fresh (recent signals, news, SEC filing in past 90 days). 1=stale (no recent activity, old data only).',
+      },
+      buying_trends: {
+        type: 'string',
+        description: 'Any market trends or portfolio patterns that affect this prospect\'s likelihood to buy in the next 90 days (e.g. "Greystar announced Q1 capex push for access control across sunbelt portfolio")',
       },
     },
   },
@@ -518,6 +747,38 @@ export async function POST(req: NextRequest) {
       searchISPPressReleases(property_name, mgmt, location),
     ])
 
+    // ── Optional enrichment APIs (Apollo, PDL) — non-blocking ──────────
+    // These run in parallel with the Tavily/EDGAR pipeline. Each gracefully
+    // returns empty if the API key is not configured.
+
+    const [apolloContacts, pdlDMProfile] = await Promise.all([
+      // Apollo — find VP-level contacts at the management company
+      mgmt
+        ? apolloSearchContacts(
+            mgmt,
+            ['Vice President', 'Asset Manager', 'Regional Manager', 'Director', 'Portfolio Manager', 'Property Manager'],
+            location,
+          )
+        : Promise.resolve([]),
+
+      // PDL — behavioral enrichment for the likely decision maker
+      // We don't have a name yet at deep-research stage, so skip if no DM signal in sources
+      // (PDL is called again from the main research route once DM name is known)
+      Promise.resolve(null as PDLPerson | null),
+    ])
+
+    // Build Apollo contact block for synthesis prompt
+    let apolloBlock = ''
+    if (apolloContacts.length > 0) {
+      const contactLines = apolloContacts
+        .filter((c: ApolloEnrichment) => c.title || c.name)
+        .map((c: ApolloEnrichment) => `• ${c.name ?? 'Unknown'} — ${c.title ?? ''} at ${c.organization?.name ?? mgmt}${c.email ? ` <${c.email}>` : ''}${c.linkedin_url ? ` [LinkedIn: ${c.linkedin_url}]` : ''}`)
+        .join('\n')
+      if (contactLines) {
+        apolloBlock = `\n\nAPOLLO CONTACT INTELLIGENCE for "${mgmt}":\n${contactLines}\n`
+      }
+    }
+
     // ── Merge + label all sources ────────────────────────────────────────
     // EDGAR, PUC, permit, and ISP press sources get higher base weight
     const tavilyAll = [
@@ -581,8 +842,8 @@ export async function POST(req: NextRequest) {
 
     // ── Claude synthesizes all excerpts ─────────────────────────────────
     const message = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1536,
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2048,
       tools: [deepIntelTool],
       tool_choice: { type: 'tool', name: 'aria_deep_intel_result' },
       system: `You are ARIA's deep connectivity, proptech, and ownership intelligence module. Your job is to extract ISP, MDU deal, property technology stack, and ownership/asset manager intelligence from multiple intelligence sources about a specific multifamily property.
@@ -617,7 +878,24 @@ OWNERSHIP ANALYSIS:
 key_finding: 1-2 sentences for a GateGuard sales rep. Format: "[WHO to call] at [company] controls capex for this property. [WHY NOW: deal expiry, acquisition, aging tech, SEC signal]." If no ownership found, lead with the strongest connectivity or proptech signal instead.
 
 edgar_signal: set true if ANY EDGAR source provided useful information.
-permit_signal: set true if ANY city permit or PUC source confirmed ISP infrastructure.`,
+permit_signal: set true if ANY city permit or PUC source confirmed ISP infrastructure.
+
+BEHAVIORAL PROFILE — use Apollo contact data + ownership type to infer:
+- analytical (PE/REIT asset managers, CFOs): need ROI data, case studies, numbers
+- driver (Regional VPs, Operations leads): need concise value prop, want speed
+- expressive (Marketing-oriented PMs, lifestyle brand properties): respond to vision/brand
+- amiable (Community managers, long-tenured PMs): need trust-building, references
+
+PITCH STRATEGY — pitch_strategy.primary_hook should be a single opening sentence a sales rep can paste into an email that references THIS property's specific pain (not generic). Examples:
+- "Given your DoorKing system at [Property] is past its 7-year lifecycle, I wanted to show you how [similar property] cut gate incidents by 60% with a 12-month migration."
+- "I saw [Property] recently changed ownership — new ownership at similar Greystar assets in the sunbelt is usually a trigger for an access control audit."
+
+FRESHNESS SCORE:
+- 5: SEC 8-K filing in past 90 days, OR contract expiry THIS year, OR recent acquisition
+- 4: Resident complaints in past 6 months, OR ISP press release in past year
+- 3: Listing site data confirmed (usually current), OR EDGAR 10-K in past 2 years
+- 2: Older web data, estimated contract windows only
+- 1: No recent signals, all inference`,
 
       messages: [{
         role: 'user',
@@ -625,13 +903,18 @@ permit_signal: set true if ANY city permit or PUC source confirmed ISP infrastru
 Location: ${location}
 Management Company: ${mgmt || 'unknown'}
 ${sourcesSummary}
-${cachedDetectionsBlockDeep}
+${cachedDetectionsBlockDeep}${apolloBlock}
 Intelligence excerpts (${uniqueResults.length} sources across EDGAR, PUC, city permits, ISP press releases, provider slug pages, and web):
 ${excerptBlock}
 
 Extract all intelligence and call the aria_deep_intel_result tool.
 
-CRITICAL REMINDER: Return bulk_agreements = [] if no property-specific evidence exists in these sources. Never infer from market patterns. Prioritize local/regional ISP names from listing sites over national carrier assumptions. EDGAR sources override all other confidence levels. [PROVIDER-SLUG-PAGE] source = ISP's own property portal page — treat as confirmed evidence (highest confidence).`,
+CRITICAL REMINDER: Return bulk_agreements = [] if no property-specific evidence exists in these sources. Never infer from market patterns. Prioritize local/regional ISP names from listing sites over national carrier assumptions. EDGAR sources override all other confidence levels. [PROVIDER-SLUG-PAGE] source = ISP's own property portal page — treat as confirmed evidence (highest confidence).
+
+For behavioral_profile: use Apollo contact titles/seniority + ownership structure to infer personality_type and decision_style. Asset managers at PE firms = analytical + data-driven. Regional VPs at large management cos = driver + relationship-driven.
+For pitch_strategy: build a primary_hook from the strongest signal found (contract expiry > aging tech > acquisition signal > general pain).
+For freshness_score: rate 1-5 based on how recent and specific the signals are.
+For buying_trends: include any portfolio-level news or capex signals for the management company or owner.`,
       }],
     })
 
@@ -651,11 +934,13 @@ CRITICAL REMINDER: Return bulk_agreements = [] if no property-specific evidence 
 
     // Surface which premium intelligence sources contributed
     const intelligenceSources = {
-      edgar:   edgarResults.length > 0,
-      puc:     pucResults.length > 0,
-      permits: permitResults.length > 0,
-      isp_press: ispPressResults.length > 0,
+      edgar:        edgarResults.length > 0,
+      puc:          pucResults.length > 0,
+      permits:      permitResults.length > 0,
+      isp_press:    ispPressResults.length > 0,
       listing_sites: localIspResults.some(r => r.score > 0.4),
+      apollo:       apolloContacts.length > 0,
+      pdl:          pdlDMProfile !== null,
     }
 
     // Log deep search usage (non-blocking)

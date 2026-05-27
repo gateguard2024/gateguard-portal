@@ -148,6 +148,32 @@
 - `isTechAuthed()` checks global `TECH_ACCESS_CODE` env var first (fast, no DB), then queries `technicians.tech_code` — no changes needed in `/tech/page.tsx`
 - Migration 093 must run before Generate Code flow works
 
+### ARIA — Lead Intelligence
+| File | Purpose |
+|------|---------|
+| `app/aria/page.tsx` | Full redesign: split list+detail layout, TopBar, `#F8FAFC` bg, 4 tabs (Property / Decision Maker / Intel / SCOUT), mobile 4-tab + bottom nav |
+| `app/api/aria/research/route.ts` | Base research: 9 Tavily + Nominatim + FCC + SEC EDGAR + Wayback, Claude Haiku synthesis |
+| `app/api/aria/research/deep/route.ts` | Deep research: 12-15 Tavily + EDGAR + PUC + city permits + ISP press + Apollo + Proxycurl + PDL; Claude Sonnet synthesis; behavioral profile + pitch strategy + freshness score |
+| `app/api/aria/searches/route.ts` | GET saved searches (scoped to org) + DELETE |
+| `app/api/aria/searches/[id]/import/route.ts` | POST: stamp `assigned_to_user_id` + `assigned_to_name` + 7-day `temp_hold_expires_at` on import |
+| `app/api/aria/scout/launch/route.ts` | POST: launch SCOUT outreach for imported lead IDs |
+| `app/api/aria/usage/route.ts` | GET: my/org/hierarchy search counts |
+| `supabase/migrations/094_aria_ownership.sql` | `show_leads.assigned_to_user_id`, `assigned_to_name`, `temp_hold_expires_at` |
+
+**ARIA page design notes:**
+- `deepMode` state (`boolean`) — Base calls `/api/aria/research`, Deep calls `/api/aria/research/deep`
+- Left panel (260px): search input + Base/Deep mode toggle + Launch ARIA button + prospect list (running search → shows there too) + example queries + saved searches when idle
+- Right panel: `activeTab` state (`'property' | 'dm' | 'intel' | 'scout'`) — 4 tabs in detail header
+- Pipeline animation: 5-phase pipeline shown in right panel during `isRunning`; phases animate with `PHASE_DURATIONS` + `aria-fill` / `aria-shimmer` keyframes
+- Mobile: `mobileTab` state (`'list' | 'property' | 'dm' | 'scout'`), bottom nav 4 tabs fixed at 56px
+- `require()` needed for `LayoutList, ArrowLeft`
+
+**ARIA deep engine (May 2026):**
+- Model: `claude-sonnet-4-6` (upgraded from Haiku)
+- New APIs (graceful fallback if keys absent): Apollo (`APOLLO_API_KEY`), Prospeo (`PROSPEO_API_KEY`), Proxycurl (`PROXYCURL_API_KEY`), PDL (`PDL_API_KEY`)
+- Apollo: `apolloSearchContacts()` finds VP/Asset Manager contacts at management company; result injected into synthesis prompt as `apolloBlock`
+- New synthesis fields: `behavioral_profile` (personality_type, decision_style, risk_tolerance, communication_pref), `pitch_strategy` (primary_hook, avoid_topics, best_time_to_call, social_proof), `freshness_score` (1-5), `buying_trends`
+
 ### /tech Field Tool
 | File | Purpose |
 |------|---------|
@@ -263,6 +289,7 @@ When embedding `{{MERGE_VAR}}` placeholders inside a TypeScript backtick string,
 
 | Migration | What | Status |
 |-----------|------|--------|
+| 094 | show_leads: assigned_to_user_id, assigned_to_name, temp_hold_expires_at | Run on beta then prod |
 | 093 | technicians.tech_code column + unique index (per-tech /tech login) | Run on beta then prod |
 | 091 | Quote v2 columns (whats_included, agreement_html, attachments, signed_at, accepted_by_rep, etc.) | ✅ beta + prod |
 | 071 | Floor plans + e-sign tables | Run on beta before design pages persist |
@@ -290,7 +317,7 @@ When embedding `{{MERGE_VAR}}` placeholders inside a TypeScript backtick string,
 - ✅ Scenario Gallery (`/quotes/new`) — 6-card intent-driven gallery replacing 3-card picker; `loadTemplate()` pre-populates line item builder; `SCENARIO_TEMPLATES` + `CPQ_DEPS` at module scope
 - ✅ CPQ Quote Builder (`/quotes/[id]`) — dependency engine (amber warnings for missing required items), margin engine (hardware ~47% / MRR ~75%), Internal Financial Summary sidebar (donut ring), approval gateway (Send locked below 25% margin → "Request VP Approval"), Internal/Proposal View toggle
 
-### Completed — May 27, 2026
+### Completed — May 27, 2026 (session 2)
 - ✅ Tactical Hub Dashboard (`app/page.tsx`) — full rewrite: 4 grouped KPI cards (Revenue & Pipeline, Ops Health, Account Growth, Critical Alerts), 3-col EOS + Team Performance section (Q2 Rocks / XP leaderboard / Active Challenges + Scorecard), All Accounts table with "+ Add to L10" row action, System & Alerts ops panel (alerts feed + quick actions + platform status), "+ Post Update" button in header
 - ✅ TopBar on Quotes & Proposals page — added `<TopBar>` import + replaced inline `<h1>` header; "+ New Quote" passed via `actions` prop; `flex flex-col min-h-full` wrapper added to match site pattern
 - ✅ PWA upgrade — `logo.png` resized → new `icon-192.png` + `icon-512.png`; `manifest.json` updated (name: "GateGuard Nexus", short_name: "Nexus", start_url: "/", theme_color: `#1c1917`, bg: `#F8FAFC`); `layout.tsx` updated (apple icon, appleWebApp title "Nexus", `viewportFit: 'cover'`, `maximumScale: 1`, theme color matches manifest)
@@ -299,6 +326,10 @@ When embedding `{{MERGE_VAR}}` placeholders inside a TypeScript backtick string,
 - ✅ Dispatch page enterprise redesign (`app/dispatch/page.tsx`) — TopBar header, `#F8FAFC` bg, portal card style, `#6B7EFF` throughout; Work Orders panel with list/board toggle (localStorage persisted); Tech Roster with leaderboard (top 3 by streak), per-tech `/tech` access codes (Generate/Regen/Copy); mobile 3-tab layout (Jobs / Schedule / Roster)
 - ✅ `lib/tech-auth.ts` — shared `isTechAuthed()` helper: checks global `TECH_ACCESS_CODE` env var first, then `technicians.tech_code` in DB; all 7 `/api/kb/*` routes migrated to use it
 - ✅ Migration 093 (`supabase/migrations/093_tech_code.sql`) — `technicians.tech_code TEXT` column + unique partial index; run on beta then prod
+- ✅ ARIA page full redesign (`app/aria/page.tsx`) — split list+detail layout, TopBar, `#F8FAFC` bg, 4-tab detail panel (Property / Decision Maker / Intel / SCOUT), pipeline animation in right panel, mobile 4-tab + fixed bottom nav
+- ✅ ARIA deep engine upgrade (`app/api/aria/research/deep/route.ts`) — Claude Sonnet synthesis, Apollo contact search, behavioral_profile + pitch_strategy + freshness_score + buying_trends output fields, graceful API fallback for all 4 new APIs
+- ✅ Migration 094 (`supabase/migrations/094_aria_ownership.sql`) — `show_leads.assigned_to_user_id`, `assigned_to_name`, `temp_hold_expires_at` + indexes
+- ✅ ARIA import route (`app/api/aria/searches/[id]/import/route.ts`) — stamps ownership + 7-day temp hold on every imported lead
 
 ### Pending — CPQ Phase 2
 - Add `unit_cost` column to `quote_line_items` (migration 092) — enables real margin vs. estimated
@@ -321,7 +352,11 @@ When embedding `{{MERGE_VAR}}` placeholders inside a TypeScript backtick string,
 - `RESEND_API_KEY` — must be set on Vercel beta + prod for email
 - `STRIPE_SECRET_KEY` + `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` — billing payment links
 - `NEXT_PUBLIC_MAPBOX_TOKEN` — map/dispatch/site pins
-- `TAVILY_API_KEY` — ARIA Deep Intel web search
+- `TAVILY_API_KEY` — ARIA Base + Deep Intel web search
+- `APOLLO_API_KEY` — ARIA Deep: contact enrichment at management company
+- `PROSPEO_API_KEY` — ARIA Deep: LinkedIn email format finder
+- `PROXYCURL_API_KEY` — ARIA Deep: LinkedIn profile scraper
+- `PDL_API_KEY` — ARIA Deep: behavioral/psychographic enrichment
 
 ### Feature backlog
 - Photo evidence on work orders

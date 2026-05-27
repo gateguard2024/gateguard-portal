@@ -7,7 +7,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { auth } from '@clerk/nextjs/server'
+import { auth, currentUser } from '@clerk/nextjs/server'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,6 +22,17 @@ export async function POST(
   try {
     const { userId } = await auth()
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // Resolve user display name for ownership stamping
+    const clerkUser = await currentUser()
+    const userName = clerkUser
+      ? [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ') ||
+        clerkUser.emailAddresses?.[0]?.emailAddress ||
+        userId
+      : userId
+
+    // 7-day temp hold window — leads reserved for the importing rep
+    const tempHoldExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
 
     // Load the saved search
     const { data: search, error: searchErr } = await supabase
@@ -167,6 +178,10 @@ export async function POST(
           property_intel_source: 'aria',
           scout_status: 'queued',
           scout_enrolled_at: new Date().toISOString(),
+          // Ownership + temp hold (migration 094)
+          assigned_to_user_id: userId,
+          assigned_to_name: userName,
+          temp_hold_expires_at: tempHoldExpiresAt,
         }
       })
 
