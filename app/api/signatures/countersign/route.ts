@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
     void (async () => {
       try {
         await resend.emails.send({
-          from:    'GateGuard <documents@mail.gateguard.co>',
+          from:    'GateGuard <documents@gateguard.co>',
           to:      sig.signer_email,
           subject: `✅ Fully Executed: ${docLabel}`,
           html: `
