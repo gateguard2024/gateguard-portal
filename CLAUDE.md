@@ -267,6 +267,47 @@ When embedding `{{MERGE_VAR}}` placeholders inside a TypeScript backtick string,
 
 ---
 
+## MIGRATION RULES — ALWAYS FOLLOW
+
+### Supabase Data API grant requirement (enforced October 30, 2026)
+
+Every migration that runs `CREATE TABLE` **must** include an explicit GRANT block immediately after the table definition. Without it, the table won't be accessible via PostgREST, GraphQL, or `supabase-js` after October 30, 2026.
+
+**Standard pattern — copy into every new CREATE TABLE migration:**
+
+```sql
+-- Grant Data API access (required — Supabase enforces this Oct 30 2026)
+GRANT ALL ON TABLE public.new_table_name TO postgres, anon, authenticated, service_role;
+```
+
+If the table has a sequence (serial / bigserial / identity columns), also add:
+
+```sql
+GRANT ALL ON SEQUENCE public.new_table_name_id_seq TO postgres, anon, authenticated, service_role;
+```
+
+Rules:
+- `ALTER TABLE` migrations do **not** need a GRANT (existing table permissions are unchanged)
+- `CREATE INDEX` migrations do **not** need a GRANT
+- Only `CREATE TABLE` requires it
+- Always add the GRANT immediately after the CREATE TABLE statement in the same migration file
+
+**Example — correct migration structure:**
+
+```sql
+-- Migration 095: example new table
+CREATE TABLE IF NOT EXISTS public.example_table (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Grant Data API access (required — Supabase enforces this Oct 30 2026)
+GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, service_role;
+```
+
+---
+
 ## DATABASE — KEY TABLES
 
 - `organizations` — 6-tier hierarchy: corporate → master_agent → master_dealer → (sales/install_dealer/service_dealer) → client
