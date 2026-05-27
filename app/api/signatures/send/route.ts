@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { error: emailError } = await resend.emails.send({
-      from:    'GateGuard <documents@mail.gateguard.co>',
+      from:    'GateGuard <documents@gateguard.co>',
       to:      signer_email,
       subject: `Action Required: Please sign your ${docLabel}`,
       html: `
