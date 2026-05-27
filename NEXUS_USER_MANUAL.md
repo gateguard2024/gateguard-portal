@@ -1,768 +1,994 @@
-# NEXUS — GateGuard Dealer Portal User Manual
-### Version 14 · Updated May 27, 2026
+# NEXUS — GateGuard Dealer Portal
+## Complete User Manual
 
-> **NEXUS** is the GateGuard internal name for the Dealer Portal at [portal.gateguard.co](https://portal.gateguard.co). It is the command center for dealer ops: onboarding, quoting, field service, billing, compliance, AI diagnostics, and more.
+**Version 15 · Updated May 27, 2026**
+**Portal:** [portal.gateguard.co](https://portal.gateguard.co)
+
+---
+
+> **What is NEXUS?**
+> NEXUS is the GateGuard command center for your entire dealer operation. From onboarding a new dealer to closing a quote, dispatching a technician, and reviewing invoices — everything lives here. This manual walks you through every section step by step.
 
 ---
 
 ## Table of Contents
 
-1. [Roles & Access](#1-roles--access)
-2. [Navigation](#2-navigation)
-2a. [Nexus Dashboard (Home)](#2a-nexus-dashboard-home)
-2b. [CRM Dashboard](#2b-crm-dashboard)
-3. [Admin — Dealer Onboarding](#3-admin--dealer-onboarding)
-4. [Admin — Dealer Detail & Compliance](#4-admin--dealer-detail--compliance)
-5. [Quotes](#5-quotes)
-6. [Sites](#6-sites)
-7. [Work Orders](#7-work-orders)
-7a. [Dispatcher](#7a-dispatcher)
-7b. [ARIA — Lead Intelligence Engine](#7b-aria--lead-intelligence-engine)
-8. [Field Tech Tool (/tech)](#8-field-tech-tool-tech)
-9. [Site Surveys](#9-site-surveys)
-10. [Billing & Invoices](#10-billing--invoices)
-11. [NEXUS AI Assistant](#11-nexus-ai-assistant)
-12. [Map View](#12-map-view)
-13. [Training & Scorecards](#13-training--scorecards)
-14. [TRINITY Voice AI](#14-trinity-voice-ai)
-15. [Service Marketplace](#15-service-marketplace)
-16. [Settings & Permissions](#16-settings--permissions)
+1. [Getting Started — Login & Navigation](#1-getting-started)
+2. [Dashboard — Your Command Center](#2-dashboard)
+3. [Dealer Onboarding — Adding a New Dealer](#3-dealer-onboarding)
+4. [Dealer Detail & Compliance](#4-dealer-detail--compliance)
+5. [Feature Settings — Controlling What Each Tier Sees](#5-feature-settings)
+6. [Platform Users — Managing User Access](#6-platform-users)
+7. [CRM — Leads & Opportunities](#7-crm)
+8. [ARIA — AI Lead Intelligence](#8-aria)
+9. [Quotes & Proposals](#9-quotes--proposals)
+10. [Sites & Properties](#10-sites--properties)
+11. [Dispatch & Work Orders](#11-dispatch--work-orders)
+12. [Field Tech Tool (/tech)](#12-field-tech-tool)
+13. [Site Surveys](#13-site-surveys)
+14. [AI Agents (AI Army)](#14-ai-agents)
+15. [Billing & Invoices](#15-billing--invoices)
+16. [Map View](#16-map-view)
+17. [Training & Scorecards](#17-training--scorecards)
+18. [Installing NEXUS on Your Phone (PWA)](#18-installing-nexus-on-your-phone)
+19. [Support & Troubleshooting](#19-support--troubleshooting)
 
 ---
 
-## 1. Roles & Access
+## 1. Getting Started
 
-NEXUS uses **Clerk** for authentication with four portal roles:
+### 1.1 Signing In
 
-| Role | What they can do |
+1. Open your browser and go to **portal.gateguard.co**
+2. Enter your GateGuard email address and password
+3. Click **Sign In**
+4. If you have two-factor authentication enabled, enter your code when prompted
+
+> **First time?** Check your email for a portal invite from GateGuard. Click the link in the email — it takes you directly to the sign-up page where you create your password.
+
+### 1.2 Understanding Your Role
+
+Your access level depends on the role assigned to your account. There are two layers:
+
+**Portal Role** (what actions you can take):
+
+| Role | What you can do |
+|------|----------------|
+| **Admin** | Everything — onboard dealers, countersign documents, manage all orgs |
+| **Supervisor** | Manage dealers and sites in your territory |
+| **Agent** | Create and edit quotes, work orders, surveys |
+| **Dealer** | View your own org's data — sites, quotes, work orders, invoices |
+
+**Org Tier** (where you sit in the dealer hierarchy):
+
+| Tier | Who this is |
+|------|------------|
+| **GateGuard Corporate** | GateGuard internal team — sees everything |
+| **Master Agent** | Recruits and manages dealer networks |
+| **MSO (Master System Operator)** | Billing entity for a property portfolio |
+| **Full Dealer** | Sells, installs, and services |
+| **Service Dealer** | Ongoing service and maintenance only |
+| **Install Contractor** | Installation and commissioning only |
+| **Sales Partner** | Brings leads and earns lifetime commission |
+
+> **Important:** You can only see dealers, users, and data at your own org tier or below — never above. A Full Dealer cannot see MSO-level data.
+
+### 1.3 Navigating the Portal
+
+The **left sidebar** is your main navigation. It is organized into sections:
+
+- Click a section header to expand or collapse it
+- The section you are currently in stays expanded automatically
+- Your active page is highlighted with a blue indicator
+- On mobile, tap the menu icon to open the sidebar
+
+**Quick links at the top of the sidebar (admin accounts only):**
+- **Features** → Global tier defaults
+- **Dealers** → Dealer list and per-org settings
+- **Users** → Platform user management
+
+**AI Army** (expandable panel in the sidebar):
+Shows your 8 AI agents with a green dot indicating which are live. Click any agent name to open that tool.
+
+---
+
+## 2. Dashboard
+
+**Route:** `/` (Home)
+
+The Dashboard is the first screen you see after logging in. It gives you a live snapshot of your operation.
+
+### 2.1 KPI Cards
+
+Four cards across the top of the screen. Each shows a primary metric, a sparkline chart, and a trend delta:
+
+| Card | What it measures |
 |------|-----------------|
-| `admin` | Full access — onboard dealers, countersign docs, manage all orgs/sites/quotes |
-| `supervisor` | Manage dealers and sites in their territory; no global admin controls |
-| `agent` | Read/write access to quotes, work orders, surveys — no dealer management |
-| `dealer` | Access to their own org's sites, quotes, work orders, invoices |
+| **Revenue & Pipeline** | Active monthly recurring revenue + open quote pipeline |
+| **Ops Health** | Cameras and doors online vs. total + open work orders |
+| **Account Growth** | Total active accounts + new activations this month |
+| **Critical Alerts** | Unresolved alerts requiring attention |
 
-The `/tech` field tool uses a separate `x-tech-code` header (no Clerk login required) — intended for technicians in the field who scan a QR code.
+On mobile, only the primary metric shows. The full detail appears on desktop.
 
----
+### 2.2 EOS + Team Performance
 
-## 2. Navigation
+Three panels below the KPI cards:
 
-The left sidebar is NEXUS's primary navigation. Sections are grouped by function:
+**Q2 Rocks** — Your six quarterly company goals with status badges (On Track / At Risk / Off Track). Links to the full EOS section.
 
-| Section | Route | Who sees it |
-|---------|-------|------------|
-| Dashboard | `/` | All roles |
-| Dealers | `/admin/dealers` | admin, supervisor |
-| Sites | `/sites` | All roles |
-| Quotes | `/quotes` | All roles |
-| Work Orders | `/work-orders` | All roles |
-| Surveys | `/survey` | All roles |
-| Map | `/map` | All roles |
-| Billing | `/billing` | admin, supervisor |
-| Training | `/training` | All roles |
-| Scorecard | `/scorecard` | All roles |
-| TRINITY | `/trinity` | admin, supervisor |
-| Service Marketplace | `/services` | All roles |
-| Settings | `/settings` | All roles |
-| Field Tech Tool | `/tech` | No Clerk — tech code only |
-| NEXUS AI | Floating button (all pages) | All roles |
+**Team Performance** — Your XP level, streak days, and the current leaderboard showing the top 3 performers.
 
----
+**Challenges + Scorecard** — Active challenges with progress bars and weekly Scorecard metrics (New Opportunities, Proposals Sent, Active Dealers, Installed Properties, Uptime).
 
-## 2a. Nexus Dashboard (Home)
+### 2.3 All Accounts Table
 
-**Route:** `/`
+The bottom-left shows your most recently added accounts. Each row has:
+- Account name with status indicator
+- Organization tier (color-coded pill)
+- Date added *(desktop only)*
+- Hover actions: **+ Add to L10**, view, and settings
 
-The **Tactical Hub Dashboard** is the portal's command center — a single-screen operational overview designed to surface the numbers that matter, your EOS pulse, and team momentum without navigating away.
+### 2.4 System & Alerts Panel
 
-### Header
-The top bar shows **"Nexus Dashboard"** with the GateGuard subtitle. An **AI Search bar** (same engine as the rest of the portal) sits inline next to a **"+ Post Update"** button for quick team communications.
-
-### 4 KPI Cards
-
-| Card | Primary Metric | Secondary (desktop) | Source |
-|------|---------------|---------------------|--------|
-| **Revenue & Pipeline** | Monthly MRR ($94.2k) | Open quote pipeline | DEMO / Live when quotes table connected |
-| **Ops Health** | Cameras online (115/138) | Doors/Gates status + open WOs | DEMO / Live WOs |
-| **Account Growth** | Active accounts | DTV Activations | Live (Supabase org count) |
-| **Critical Alerts** | Alert count | Link to /alerts | DEMO |
-
-On mobile, each card shows only the primary metric + a one-line sub. Secondary metrics and dividers are hidden (`hidden lg:flex`) — no overflow or wrapping.
-
-### EOS + Team Performance (3 cards)
-
-**Q2 2026 Rocks** — All six quarterly Rocks with color-coded status badges (On Track / At Risk / Off Track). Count badge shows X/6 on track. Links to `/eos`. Next L10 meeting time shown at bottom.
-
-**Team Performance** — Russel F.'s XP progress bar (current XP / next level threshold), 12-day streak, level badge. June Leaderboard shows top 3 (RF / Nicole G. / Jake T.) with XP counts.
-
-**Active Challenges + Scorecard Pulse** — Three active challenges with progress bars and XP reward callouts. Below a divider, the Scorecard Pulse shows each weekly metric (New Opps, Proposals Sent, Active Dealers, Installed Props, Portal Uptime) with a green/red dot vs. goal.
-
-On mobile all three cards stack single-column — full width, easy to scroll.
-
-### All Accounts Table
-Shows up to 12 most recent accounts (live from Supabase when connected, static fallback if not). Columns:
-- Account name (with green status dot)
-- Tier pill (color-coded: Client / MSO / Sales Partner / etc.)
-- Added date *(desktop only — `hidden lg:table-cell`)*
-- Row actions: **"+ Add to L10"** button + Eye + Settings *(desktop only — appear on hover)*
-
-On mobile: Account + Tier only. Taps navigate to the customer detail page.
-
-### System & Alerts Operations Panel
-Stacks three mini-cards in the right column:
-
-1. **Alerts** — last 4 alert events with type dot (red/amber/green) and time ago
-2. **Quick Actions** — 2×2 grid: New Quote · Work Order · Add Account · View SOC
-3. **Platform Status** — EagleEye API, Brivo API, DirecTV ATLAS, Supabase, Vercel Edge — all with operational status dot
-
-On mobile this panel stacks below the Accounts table, full width.
+Bottom-right column shows three mini-sections:
+1. **Recent alerts** — last 4 system events with timestamp
+2. **Quick Actions** — one-click: New Quote, New Work Order, Add Account, View SOC
+3. **Platform Status** — live status of connected APIs (EagleEye, Brivo, DirecTV, Supabase, Vercel)
 
 ---
 
-## 2b. CRM Dashboard
-
-**Route:** `/crm` · Opportunities: `/crm/opportunities` · Leads: `/crm/leads`
-
-The CRM is the Sales & Marketing hub — pipeline management, inbound leads, activity tracking, and AI-assisted deal intelligence in one view.
-
-### Global Filter Bar
-A sticky bar beneath the top navigation exposes three filters: **Date Range**, **Region**, and **Rep**. These scope the view without navigating away. A "Clear" link appears when any filter is active.
-
-### KPI Cards
-Four summary cards across the top of the dashboard:
-
-| Card | What it shows |
-|------|--------------|
-| Total Pipeline | Sum of all open opportunity amounts · bar sparkline · quarter-over-quarter delta |
-| Open Opportunities | Count of active (non-won/lost) opps · bar sparkline · QoQ delta |
-| Closed Won (Month) | Revenue closed this calendar month vs. target · bar sparkline |
-| Inbound Leads | Total lead count · line sparkline · QoQ delta |
-
-Each card links to the relevant filtered view.
-
-### My Pipeline — Funnel with Proportional Bars
-Each active stage (Meet & Present → Survey Request → Propose → Negotiate) is displayed as a row with a horizontal bar sized proportionally to that stage's total dollar value. Clicking any row navigates to `/crm/opportunities?stage=<stage>`. The total open pipeline is shown at the bottom.
-
-**Pipeline Forecast & Goal Tracking chart** sits below the funnel. A stacked area chart shows projected pipeline by rep/region/source over time vs. a dashed target line. Color-coded legend: Rep (`#6B7EFF`), Rep2 (violet), Survey Region (amber), Walk in on site (slate).
-
-### Today's Activity
-Upcoming and overdue activities (calls, emails, meetings, tasks) due within 24 hours. Each row shows:
-- **Type icon** (phone/email/meeting/task) in a color-coded rounded square
-- Subject and associated opportunity name
-- Scheduled time
-- **Hover quick-actions:** Reply (↩), Take Note (📋), Mark Complete (☑) — appear on row hover
-
-Click "+ Log" to log a new activity (call, email, meeting, task, or note).
-
-### Open Opportunities Table
-Sortable table showing the top 10 open opportunities, ordered by **most recent activity** (`updated_at`, falling back to `created_at`). Columns: Name / Account, Stage (colored pill), Amount, Close Date, AI Deal Score.
-
-**AI Deal Score** — a deterministic score (0–99) computed client-side from each opportunity's ID hash and pipeline stage. Color-coded badge: green (≥70 = high confidence), amber (50–69 = moderate), red (<50 = needs attention). No API call required. Helps reps instantly prioritize where to focus.
-
-Links to `/crm/opportunities/[id]` for each row.
-
-### My Leads
-Live feed of inbound leads (pulsing `#6B7EFF` dot indicates real-time). Shows contact name, property/company, email, lead source tag, and assignment status.
-
-**Assignment logic:**
-- If `assigned_dealer` is set → shows the dealer name in an emerald badge
-- If unassigned and user has assign permission → shows `+ Assign` button with inline dealer input
-- If unassigned and user cannot assign → shows "New" amber badge
-
-**Hover quick-actions:** Mail, Phone, Calendar buttons appear on each lead row. Clicking any of these does not navigate away from the page.
-
-"View all →" links to `/crm/leads`.
-
----
-
-## 3. Admin — Dealer Onboarding
+## 3. Dealer Onboarding
 
 **Route:** `/admin/dealers/new`
 
-The Dealer Onboarding Wizard creates a new dealer organization and admin user in one flow. It has **7 steps**:
+Use this wizard to set up a new dealer organization from scratch. The wizard has **9 steps** and takes about 10 minutes to complete.
 
-### Step 1 — Organization Info
-- Organization name (legal entity name — used in contracts)
-- Primary phone, primary email, physical address
-- License number (low-voltage or contracting)
-- Entity type (LLC, corporation, S corp, partnership, sole proprietorship, limited partnership)
+> **Before you start:** Have the dealer's legal name, address, primary contact email, and their preferred entity type ready.
 
-### Step 2 — Dealer Tier
-Select the dealer's operational role in the Gate Guard network:
+### Step 1 — Choose Dealer Tier
 
-| Tier | Role |
-|------|------|
-| **Full Dealer** | Sell, install, and service. Sets commission templates. Full margin splits. |
-| **Service Dealer** | Primary ongoing service contact for assigned properties. Day-to-day work orders. |
-| **Installing Contractor** | Installation and commissioning only. Paid from one-time setup fees only. |
-| **Sales Partner** | Brings leads, closes sales. Lifetime recurring commission. No install/service. |
-| **MSO (Master System Operator)** | Billing entity for a property portfolio. Manages affiliated dealers beneath them. |
-| **Master Agent** | Recruits and oversees dealers. Earns per-unit/month override across their network. |
+Select which type of dealer this organization is:
 
-### Step 3 — NDA & Agreement
-Preview both documents before sending. Includes:
-- **Mutual Non-Disclosure Agreement** — 3-year term, Trade Secrets survive in perpetuity, Georgia/Fulton County governing law, ESIGN Act and UETA validity
-- **Authorized Dealer & Reseller Agreement** — full agreement + Exhibit A (tier checkboxes, commission percentages, SLA notes)
+| Option | Choose this when... |
+|--------|-------------------|
+| **Full Dealership** | They will sell, install, AND service properties |
+| **Service Dealer** | They will handle ongoing maintenance only |
+| **Installing Contractor** | They are installing equipment but not selling |
+| **Sales Partner** | They bring leads and close deals — no field work |
+| **MSO** | They are a billing/management umbrella for other dealers |
+| **Master Agent** | They recruit and manage a network of dealers |
 
-A toggle lets you enable or disable automatic sending. If enabled, signing links are emailed to the dealer's primary email upon launch.
+Click the card that matches, then click **Next →**
 
-### Step 4 — Relationships
-Assign the new dealer's parent organization (which Master Dealer or MSO they report to, if applicable).
+### Step 2 — Organization Info
 
-### Step 5 — Commission (tiers with revenue splits only)
-Set hardware discount %, software MRR %, and install fee %. Skipped for Sales Partner and Installing Contractor tiers. Values are populated as merge variables into Exhibit A of the Agreement.
+Fill in the dealer's company details:
 
-### Step 6 — Admin User
-Create the first user account for the dealer. Provide name and email — a Clerk invite is sent automatically.
+1. **Organization Name** — Enter the full legal name exactly as it appears on their business registration (this goes into the NDA and Agreement)
+2. **Entity Type** — Select from the dropdown: LLC, Corporation, S Corp, etc.
+3. **License Number** — Their low-voltage or contractor license number
+4. **Service Area States** — Click each state they operate in (you can select multiple)
+5. **Number of Technicians** — Approximate team size
+6. **Address** — Street, City, State, ZIP
+7. **Phone** — Primary business phone
+8. **Email** — Primary contact email (signing links will be sent here)
+9. **Website** — Optional
 
-### Step 7 — Review
-Full summary before launch. Click **Launch** to:
-1. Create the organization in Supabase
-2. Create the admin user + send Clerk invite
-3. Fire NDA + Agreement signing emails via Resend (if Step 3 enabled)
+Click **Next →** — the system creates a draft org record at this point.
+
+### Step 3 — Non-Disclosure Agreement (NDA)
+
+This step sends the Mutual NDA to the dealer for signature. Before sending:
+
+**Review the document:**
+1. Check that the **Effective Date** field shows the correct date (defaults to today — click to change)
+2. Click **Preview & Edit** to open the full NDA text
+3. Read through the document — all merge fields (dealer name, address, entity type) are pre-filled from Step 2
+4. If any text needs to change, edit directly in the text box
+5. Click **Preview & Edit** again to close the preview
+
+**Send the NDA:**
+1. Verify the dealer's email address shown at the top is correct
+2. Click **Send for Signature** in the signing panel
+3. The dealer will receive an email with a link to review and sign
+4. The status updates to **Pending**
+
+**After the dealer signs:**
+1. You'll receive a notification email
+2. Return to this step and click **Check Status** to refresh
+3. Status changes to **Counterparty Signed**
+4. Click **Countersign** to add GateGuard's signature — this completes the NDA
+5. Status becomes **Fully Executed** and Step 4 unlocks
+
+> **Tip:** You can skip NDA signing for now and come back to it from the dealer's detail page under the Compliance tab. However, Step 4 (Relationships) will not unlock until both parties have signed.
+
+### Step 4 — Org Relationships
+
+Map this dealer to their parent organization:
+
+- **Master Agent** — The Master Agent who recruited this dealer (earns $0.50/unit/month)
+- **MSO** — The Master System Operator this dealer operates under
+- **Full Dealership** — For Service Dealers, Install Contractors, and Sales Partners only — their direct parent dealer
+
+Use the search box to find and select each organization. All fields are optional — you can assign relationships later from the dealer's detail page.
+
+Click **Next →**
+
+### Step 5 — Commission Configuration
+
+*(Only shown for Full Dealer, Service Dealer, MSO, and Master Agent tiers)*
+
+Set the revenue split for this dealer:
+
+- **Hardware Discount %** — How much below list price they buy hardware (e.g., 40%)
+- **Software MRR %** — Their share of monthly recurring revenue (e.g., 30%)
+- **Notes** — Any special commission terms
+
+These numbers are automatically filled into Exhibit A of the Dealer Agreement.
+
+Click **Next →**
+
+### Step 6 — Authorized Dealer Agreement
+
+This step sends the tier-appropriate agreement for signature. The process is identical to Step 3:
+
+1. Check or adjust the **Effective Date**
+2. Click **Preview & Edit** to review the full agreement text (includes Exhibit A with your commission settings from Step 5)
+3. Edit any terms if needed
+4. Click **Send for Signature**
+5. After the dealer signs, click **Countersign** to fully execute
+
+Click **Next →** once the agreement is fully executed (or skip to complete later).
+
+### Step 7 — Users
+
+Set up the dealer's first portal account:
+
+1. **First Name** and **Last Name** of the primary admin
+2. **Email Address** — A portal invite will be sent to this address when you launch in Step 9
+3. **Portal Role** — Typically `admin` for the owner or `dealer` for a standard user
+4. Optional: Add technicians by clicking **+ Add Technician** and filling in their info
+
+Click **Next →**
+
+### Step 8 — Compliance Docs
+
+Upload or mark the status of required compliance documents:
+
+- **Certificate of Insurance (COI)** — Upload the PDF or set status to Pending/On File
+- **W-9** — Same
+- **Contractor License** — Same; add expiration date if applicable
+- **Background Check Acknowledgment** — Checkbox confirming you have completed background screening
+
+All of these can be updated later from the dealer's Compliance tab.
+
+Click **Next →**
+
+### Step 9 — Review & Launch
+
+A full summary of everything you've entered. Review carefully:
+
+- Org name, tier, and contact details
+- Assigned relationships
+- Commission rates
+- Admin user email
+- Document sending status
+
+When everything looks correct, click **🚀 Launch Dealer**. This:
+1. Activates the draft org record
+2. Sends the Clerk portal invite to the admin user's email
+3. Fires any pending document emails
+
+> **The dealer will receive their portal invite email within a few minutes.** They click the link, set a password, and they're in.
 
 ---
 
-## 4. Admin — Dealer Detail & Compliance
+## 4. Dealer Detail & Compliance
 
 **Route:** `/admin/dealers/[id]`
 
-The dealer detail page has several tabs. The **Compliance** tab is the document lifecycle hub.
+Click any dealer in the Dealers list to open their detail page. The page is organized into tabs.
+
+### Overview Tab
+
+Shows the dealer's core information:
+- Legal name, entity type, tier
+- Contact info
+- Service area states
+- Active sites count, open work orders, technician count
 
 ### Compliance Tab
 
-Displays a card for each document type relevant to the dealer's tier:
-- Mutual NDA
-- Tier-appropriate Agreement (Dealer Agreement, Service Agreement, Install Partner Agreement, Sales Partner Agreement, Master Agent Agreement)
+The Compliance tab manages the full document lifecycle for this dealer.
 
-Each card shows:
-- **Status badge** — Not Sent · Pending · Counterparty Signed · Fully Executed
-- **Signer info** — email, name, signed date
-- **Sent by** — Gate Guard team member who sent it
+**Document cards** show the current status of each required document:
 
-**Action buttons (context-aware):**
+| Status | What it means |
+|--------|--------------|
+| **Not Sent** | No signing link has been sent yet |
+| **Pending** | Link sent — waiting for the dealer to sign |
+| **Counterparty Signed** | Dealer has signed — your countersignature is needed |
+| **Fully Executed** | Both parties have signed — document is complete |
 
-| Status | Available actions |
-|--------|-----------------|
-| Not sent (org has email) | "Send for Signature" |
-| Not sent (no email) | "Add org email to send" |
-| Pending | "Awaiting signature" badge + "Resend" link |
-| Counterparty Signed | **"Countersign"** emerald button |
-| Fully Executed | "Fully executed" badge |
-| Any | "Manual upload" border button |
+**Actions available:**
 
-### Countersigning
-When a dealer has signed (status = `counterparty_signed`), the **Countersign** button appears. Clicking it:
-1. Records Russel Feldman as countersigner (CEO)
-2. Sets `countersigned_at` timestamp
-3. Marks `fully_executed: true` on the signature record
+- **Send for Signature** — Generates a new signing link and emails it to the dealer
+- **Resend** — If the dealer lost their link, click Resend to send a new one
+- **Countersign** — Appears when the dealer has signed. Click to add GateGuard's signature. This immediately marks the document as Fully Executed.
+- **Manual Upload** — Upload a pre-signed PDF (for paper agreements)
 
-### E-Sign Lifecycle (under the hood)
+### Features Tab
+
+Control which portal features this specific dealer organization can access. See [Section 5](#5-feature-settings) for how the feature system works.
+
+**Reading the Features tab:**
+- Each feature row shows the feature name, the **Tier Default** access level (inherited from Feature Settings), and the **Override** selector
+- Set the override to None / View / Edit to customize access for this org
+- Toggle **Promo** to grant temporary access to a paid feature for free
+- Set an **Expiry Date** if the access is time-limited (e.g., a 30-day trial)
+- Click **Save Changes** when done
+
+---
+
+## 5. Feature Settings
+
+**Route:** `/admin/settings/features`
+**Who can access:** GateGuard Corporate admins only
+
+Feature Settings is the global control panel for what each dealer tier can see across the portal. Every portal feature — every page in the sidebar — is listed here with access controls per tier.
+
+### How the Feature System Works
+
+Access is controlled at three levels, in order of priority:
+
 ```
-onboard-dealer API
-  → sendDoc('nda')           — creates document_signatures row + Resend email
-  → sendDoc('agreement')     — same for tier-appropriate agreement
-
-Dealer receives email → clicks link → /sign/[token]
-  → types full name → clicks "Sign"
-  → rfeldman@gateguard.co receives notification email
-
-Admin sees "Counterparty Signed" in Compliance tab
-  → clicks "Countersign" → fully_executed = true
+1. Global Tier Default  (Feature Settings page — you set this)
+       ↓
+2. Per-Org Override     (Dealer Detail → Features tab)
+       ↓
+3. Per-User Override    (Platform Users → Feature Access tab)
 ```
 
----
+A user can never have MORE access than their org, and an org can never have MORE access than the global tier default.
 
-## 5. Quotes & Proposals
+**Access levels:**
 
-**Route:** `/quotes` · New quote: `/quotes/new`
+| Level | What the user sees |
+|-------|-------------------|
+| **None** | Feature is completely hidden from sidebar — doesn't exist to them |
+| **View** | Feature is visible and readable — no create/edit/delete |
+| **Edit** | Full access — create, edit, delete |
 
-The Quotes & Proposals section uses the standard NEXUS dark top bar (same as Dashboard and CRM) with the "+ New Quote" button in the top-right action area.
+### Reading the Feature Settings Page
 
-### Quotes Dashboard (`/quotes`)
+Features are grouped into sections (Sales & Marketing, Field & Tech, AI Agents, etc.). Each section is collapsible — click the header to expand or collapse it.
 
-The Quotes list page is an enterprise pipeline view with four main sections:
+**Columns:**
+- **Feature** — Feature name and description
+- **MA / MSO / FD / SD / IC / SP** — Access level for each org tier (Master Agent, MSO, Full Dealer, Service Dealer, Install Contractor, Sales Partner)
 
-**KPI Cards (top row)** — three metric cards each with an inline sparkline chart and a delta trend badge:
-- **Active MRR** — total monthly recurring from accepted quotes; green bar sparkline
-- **Pipeline MRR** — MRR from quotes that are sent or viewed (in-flight); blue line sparkline
-- **Dealer Override MRR** — your commission from accepted deals; purple dashed sparkline with green target line
+The colored dropdowns show the current access level:
+- **Grey (None)** — Hidden from this tier
+- **Amber (View)** — Read-only for this tier
+**Green (Edit)** — Full access for this tier
 
-**Quotes Pipeline** — horizontal bar funnel showing Draft → Sent → Viewed → Accepted. Each stage bar is proportionally sized to that stage's MRR. Click any stage row to filter the table to that status only.
+### How to Change a Tier's Access to a Feature
 
-**Open Quotes table (left)** — columns: Quote #, Property, Status badge, Setup total, Monthly, Date. Row hover reveals Eye (view), Edit, Copy link, and More actions. Filter tabs above the table (All · Draft · Sent · Viewed · Accepted · Declined) each show a live count badge. Search bar accepts quote number or property name.
+1. Navigate to **Dealer Network → Feature Settings** in the sidebar (or use the **Features** quick link in the Access Control strip)
+2. Find the feature you want to change (use browser Ctrl+F to search)
+3. Click the dropdown in the tier column you want to change
+4. Select **None**, **View**, or **Edit**
+5. A small amber dot appears next to the feature name — indicating unsaved changes
+6. When you're done making changes, click **Save (X)** in the top-right corner
+7. All changes save together in one action
 
-**Deal Velocity panel (right)** — 280px fixed panel showing:
-- **Quote Conversion funnel** — proportional bars for Created → Sent → Viewed → Accepted with real counts
-- **Deal Velocity metrics** — Avg. Time to Sent, Avg. Time to View, Avg. Time to Accept
-- **Win Rate** — progress bar: accepted quotes ÷ total, shown as a percentage
+### Extended Settings (Stripe / Paid / Beta)
 
-### Scenario Gallery — Creating a Quote (`/quotes/new`)
+Each feature has a gear icon (⚙) on the right. Click it to expand:
+- **Stripe ID** — Enter a `prod_...` Stripe product ID to gate this feature behind a subscription
+- **Paid** — Toggle on to mark this feature as a paid add-on
+- **Beta** — Toggle on to show a "Beta" badge next to the feature name
 
-The new quote screen is an intent-driven **Scenario Gallery** — six pre-built starting points that skip the blank canvas entirely. Clicking a card pre-populates the line item builder with a realistic bill of materials for that scenario type.
+### Sections That Can Be Collapsed
 
-| Scenario | Best For |
-|----------|----------|
-| **Multi-Family Smart Core** | MDU smart locks, resident app, network — most common |
-| **Premium Gate & Access** | Vehicular barrier, call box, cameras, 24/7 monitoring |
-| **Custom Package Mgmt** | Luxor lockers, cloud sync, package room install |
-| **Comprehensive Security** | Brivo access control, cameras, alarm, AI monitoring |
-| **Device-Only Hardware** | One-time hardware/labor only — no recurring MRR |
-| **AI Voice Import (Beta)** | Upload site-walk audio → AI drafts BOM automatically |
-
-After selecting a scenario, the rep lands on the **Line Item Builder** at Step 1 (Client Info) with hardware and services pre-loaded. Items can be added, removed, or repriced before saving.
-
-Two additional entry points are at the bottom of the gallery: **Survey Wizard** (step-by-step site config) and **Import Site Survey** (pulls BOM from a completed field survey — recommended fastest path).
-
-### Advanced Quote Builder (`/quotes/[id]`)
-
-The internal quote editor is a full CPQ (Configure, Price, Quote) workspace with three key engines:
-
-**CPQ Dependency Engine** — If a line item requires another item to function (e.g., Luxor Cloud Sync requires Network Backhaul Install), an amber warning banner appears above the line items table. This prevents reps from selling physically impossible solutions. Dependencies are defined by item SKU.
-
-**Margin Engine & Approval Gateway** — Every quote computes a blended margin estimate in real time (hardware ~47%, MRR services ~75%). The margin is shown as a donut ring in the **Internal Financial Summary** sidebar. If the blended margin drops below 25%, the "Send to Client" button locks and changes to "Request VP Approval" — preventing below-threshold deals from going out without a management review.
-
-**Internal Financial Summary (sidebar)** — Shows:
-- Blended margin % as a color-coded donut (green ≥40%, amber ≥25%, red <25%)
-- Estimated setup revenue vs. cost
-- MRR revenue vs. cost
-- Auto-Approved or Approval Required badge
-
-**View Mode Toggle (top bar)** — Switch between Internal View (full cost/margin data visible) and Proposal View (opens the client-facing branded proposal in a new tab — no internal costs shown).
-
-**Top Bar Action Logic:**
-- **Auto-Approved** (margin ≥ 25%) → green badge + blue "Send to Client" button active
-- **Approval Required** (margin < 25%) → amber badge + amber "Request VP Approval" button (disabled)
-
-**Line Items table** — Grouped by section (Hardware & Labor, MRR, etc.). Optional items are flagged with `is_optional` — they appear as client-selectable toggles on the proposal page.
-
-### Customer-Facing Pages (no auth, no sidebar)
-
-| Route | Purpose |
-|-------|---------|
-| `/quotes/[id]/proposal` | Branded proposal — client reads scope, toggles optional add-ons, views live investment summary |
-| `/quotes/[id]/approve` | Approval + e-signature page — client signs, triggers acceptance flow |
-
-### Quote Status Flow
-`draft` → `sent` → `viewed` → `accepted` / `declined` → `expired`
-
-### CPQ Phase 2 (coming tomorrow)
-- `unit_cost` column on line items (migration 092) — enables real margin vs. estimated
-- Inline margin % editing per line item
-- Interactive proposal add-on toggles with live total recalculation
-- Full scenario test walkthroughs: 92 W. Paces, gate-only, device-only
+Click any section header to collapse it — useful when you're focused on one area.
 
 ---
 
-## 6. Sites
+## 6. Platform Users
 
-**Route:** `/sites` · Detail: `/sites/[id]`
+**Route:** `/admin/users`
+**Who can access:** Corporate, Master Agent, MSO, and Full Dealer admins
 
-Sites are installed properties — apartment communities, HOAs, commercial buildings. Each site record tracks:
-- Physical address + Mapbox pin
-- Assigned dealers: Master Dealer, Install Dealer, Service Dealer
-- Installed equipment inventory
-- Linked work orders, invoices, permits
+### 6.1 Viewing Users
 
-Site detail tabs typically include: Overview, Equipment, Work Orders, Invoices, Permits, (upcoming: Service Analytics).
+The user list shows all portal users in your organization and any orgs you manage. Each row shows:
+- Name and email
+- Org tier and role
+- Last sign-in date
+- Status (Active / Pending invite)
 
----
+> **Note:** You will only see users at your org tier or below. You cannot view users from orgs above you in the hierarchy.
 
-## 7. Work Orders
+### 6.2 Inviting a New User
 
-**Route:** `/work-orders`
+1. Click **+ Invite User** in the top-right corner
+2. Enter the user's email address
+3. Select their **Portal Role** (Admin, Supervisor, Agent, or Dealer)
+4. Click **Send Invite**
 
-Field service management:
-- Create work orders linked to a site
-- Assign to technicians
-- Track status: Open → In Progress → Complete
-- Technician receives notification
-- (Planned) Photo evidence upload per work order
-- (Planned) SMS threads via Twilio ↔ WO ID
+The user receives an email with a link to set their password and access the portal.
 
----
+### 6.3 Managing a User's Access
 
-## 7a. Dispatcher
+Click any user in the list to open their detail panel on the right side. Two tabs appear:
 
-**Route:** `/dispatch`
+**Role & Modules tab:**
+- Change the user's portal role (Admin / Supervisor / Agent / Dealer)
+- Assign them to a specific organization
 
-The Dispatcher is the field operations command center — assign techs to jobs, track work order status in real time, manage your tech roster, and view the day's schedule from one screen.
-
-### Header
-The top bar matches the portal-wide dark TopBar pattern. Title: **"Dispatcher"** with today's date as subtitle. Action buttons in the top-right: List/Board view toggle, Map (links to `/map`), Route Optimize, Refresh, and **"+ New Job"** (opens the Add Job modal). On mobile, less-critical actions are hidden to keep the bar clean.
-
-### KPI Cards (4 across)
-| Card | What it shows |
-|------|--------------|
-| **Open Jobs** | Count of jobs not yet complete |
-| **Active Techs** | Techs currently On Site or Driving |
-| **Scheduled Today** | Jobs with today's ETA |
-| **Completed** | Jobs resolved today |
-
-On mobile, KPI cards show only on the Jobs and Schedule tabs (hidden on Roster tab to save space).
-
-### Work Orders Panel
-
-#### View Toggle — List / Board
-A toggle in the panel header switches between two layouts, persisted to `localStorage` (`gg_dispatch_layout`):
-
-**List view** — Full-width table rows. Each row shows:
-- Priority stripe (red = urgent, amber = normal, slate = scheduled)
-- WO number + job title
-- Property name + assigned tech
-- ETA + job type chip
-- Status badge (color-coded: Pending / Assigned / En Route / On Site / In Progress / Done)
-
-**Board view** — 3-column Kanban: **Open**, **Active**, **Done**. Drag-and-drop not active (status updates via the job detail modal). Cards show property, tech avatar, job type chip, and ETA.
-
-**Filter pills** below the toggle let you scope to: All, Urgent, Today, Unassigned.
-
-### Schedule Timeline
-A horizontal timeline view showing each tech's day in hourly blocks. Color-coded by job type. Clicking a block opens the job detail.
-
-On mobile the Schedule is a separate tab (see Mobile Layout below).
-
-### Tech Roster
-
-#### Leaderboard
-The top of the roster panel shows the **Top 3 Techs** this month, sorted by streak score (deterministic hash — no live stat required). Each entry shows:
-- Rank (1st / 2nd / 3rd) with trophy color (gold / silver / bronze)
-- Tech name + initials avatar
-- Jobs completed count + 🔥 streak badge
-
-#### Tech Cards
-Below the leaderboard, every tech on the team gets a card showing:
-- Status badge (Available / On Site / Driving / Offline) — color dot + pill
-- Role and employment type (Employee / Contractor)
-- Current job assignment
-- Portal access status + invite button
-- Work schedule (recurring days or specific dates)
-- **/tech Access Code row** — see below
-
-#### /tech Access Codes (Per-Tech Login)
-
-Each technician can have a unique `GG-{INITIALS}-{4digits}` code that grants them access to the `/tech` field tool (no Clerk account required). This is separate from the global `TECH_ACCESS_CODE` env var.
-
-| Button | What it does |
-|--------|-------------|
-| **Generate →** | Creates a new code, stores it in `technicians.tech_code` via `PATCH /api/dispatch/technicians/[id]` |
-| **Regen** | Replaces the existing code with a new one (old code stops working immediately) |
-| **Copy icon** | Copies the code to clipboard so you can paste it to the tech via SMS/WhatsApp |
-
-The tech enters their code on the `/tech` login screen. Both their personal code and the global admin code are valid.
-
-> **Requires:** Migration 093 must be run on Supabase before Generate/Regen works (`technicians.tech_code` column).
-
-### Mobile Layout
-On screens narrower than `lg`, the dispatcher collapses into a **3-tab layout**:
-
-| Tab | What's shown |
-|-----|-------------|
-| **Jobs** | KPI cards + Work Orders panel (list view) |
-| **Schedule** | Timeline view |
-| **Roster** | Tech leaderboard + all tech cards + access codes |
-
-The tab bar is pinned below the TopBar. Active tab has a `#6B7EFF` underline indicator.
+**Feature Access tab:**
+- View every portal feature and the user's current access level
+- The **Org Cap** column shows the maximum access allowed by their org's settings — you cannot grant higher than this
+- Click any row's dropdown to override access for this specific user
+- Greyed-out options are above the org cap — they cannot be selected
+- Click **Save Feature Access** when done
 
 ---
 
-## 7b. ARIA — Lead Intelligence Engine
+## 7. CRM
+
+**Route:** `/crm`
+
+The CRM is your sales pipeline and lead management hub.
+
+### 7.1 Dashboard Overview
+
+**Four KPI cards** at the top:
+- Total Pipeline value (all open opportunities)
+- Open Opportunities count
+- Closed Won this month
+- Inbound Leads total
+
+Each card has a sparkline chart and a quarter-over-quarter delta badge.
+
+**My Pipeline funnel** — horizontal bars showing the dollar value at each stage (Meet & Present → Survey Request → Propose → Negotiate). Click any stage bar to filter the table below to that stage only.
+
+### 7.2 Working with Opportunities
+
+**To create a new opportunity:**
+1. Click **+ New Opportunity** in the top right
+2. Enter the property name and contact info
+3. Set the estimated deal amount and close date
+4. Select the stage
+5. Click **Save**
+
+**To update an opportunity:**
+1. Click the opportunity name in the table
+2. The detail page opens with all fields editable
+3. Update the stage, amount, notes, or contact
+4. Log a call, email, or meeting using the activity buttons
+
+**AI Deal Score** — Each opportunity shows a score from 0–99 in a colored badge. This is automatically calculated based on deal stage and activity. Green (70+) = high confidence. Amber (50–69) = needs attention. Red (below 50) = at risk.
+
+### 7.3 Working with Leads
+
+**Route:** `/crm/leads`
+
+Inbound leads appear here in real time. Each lead shows:
+- Contact name and property
+- Lead source (conference, website, referral, etc.)
+- Assignment status
+
+**To assign a lead:**
+1. Click **+ Assign** on any unassigned lead
+2. Type the dealer name or search for them
+3. Click **Assign** — the lead is now in that dealer's queue
+
+**Hover actions on each lead row:**
+- **Mail** — Opens a draft email to the contact
+- **Phone** — Shows the phone number
+- **Calendar** — Opens the scheduling flow
+
+---
+
+## 8. ARIA — AI Lead Intelligence
 
 **Route:** `/aria`
 
-ARIA (Account Research Intelligence Agent) researches multifamily properties, maps decision maker hierarchies, mines intent signals from across the web, and builds SCOUT outreach packets — all from a single search query.
+ARIA researches multifamily properties and builds detailed intelligence profiles — decision maker contacts, tech stack, budget signals, and a recommended pitch strategy.
 
-### Layout
+### 8.1 Running a Search
 
-The ARIA page uses a **split list + tabbed detail** design:
+1. Type a property name, address, or management company in the search box on the left panel
+2. Choose your research depth:
+   - **Base** — Fast (20–30 seconds). Good for initial screening.
+   - **Deep** — Slower (35–55 seconds). Adds contact enrichment, behavioral profiles, and pitch strategy.
+3. Click **Launch ARIA**
+4. Watch the 5-phase animation as ARIA works (Property Intel → Decision Maker → Intent Signals → AI Profiling → Synthesis)
+5. Results appear in the list on the left — click any property to open its detail
 
-- **Left panel (260px):** Search input, Base/Deep mode toggle, Launch ARIA button, and the prospect list. When idle it shows recent searches and example queries. During a search it shows the 5-phase pipeline animation.
-- **Right panel:** Detail view for the selected prospect with 4 tabs.
+### 8.2 Reading a Property Profile
 
-On **mobile**, a bottom navigation bar switches between List, Property, Decision Maker, and SCOUT tabs.
+The detail view has four tabs:
 
-### Search modes
+**Property tab:**
+- Unit count, class, year built, occupancy
+- Current owner (REIT, PE fund, management company)
+- ISP providers, existing tech stack (gate systems, access control, cameras)
+- CapEx signals — any renovation, sale, or refinancing activity detected
 
-| Mode | Description |
-|------|-------------|
-| **Base** | 9 Tavily web searches + FCC Broadband + SEC EDGAR + Wayback Machine. Fast (~20–30s). Good for initial prospecting. |
-| **Deep** | All base sources + city permits + state PUC dockets + ISP press releases + Apollo contact search. Claude Sonnet synthesis. Slower (~35–55s) but dramatically richer output including behavioral profiles and pitch strategy. |
+**Decision Maker tab:**
+- Primary contact name, title, email format, LinkedIn
+- Full hierarchy: Owner → Asset Manager → Regional VP → Property Manager
+- Conversation hooks from their recent LinkedIn activity
 
-### Prospect list (left panel)
+**Intel tab:**
+- ARIA buy score (0–10) with urgency badge
+- Intent signals with source labels (resident complaints, property listings, financial filings)
+- Current vendor and contract window
 
-Each prospect card shows:
-- **Buy score** (0–10) — color coded: green ≥8, amber ≥6, brand blue otherwise
-- Property name + abbreviated address
-- Tag chips: unit count, class, SARA Signal badge (purple), Critical/High urgency badges
+**SCOUT tab:**
+- Recommended outreach angle
+- Key talking points
+- **Import to Leads** — Adds this property to your CRM leads list
+- **Launch SCOUT Campaign** — Sends automated SCOUT outreach emails
 
-Click any card to open it in the right detail panel.
+### 8.3 Deep Mode Additional Output
 
-### Detail tabs
+When you run a Deep search, the Intel tab also shows:
+- **Behavioral profile** — How this decision maker thinks and communicates (analytical, driver, expressive, or amiable style)
+- **Pitch strategy** — Specific opening hook for this property, topics to avoid, best time to call
+- **Freshness score** — How actionable is this intel right now (1–5, where 5 = contract expiring within 90 days)
 
-| Tab | What it shows |
-|-----|--------------|
-| **Property** | Property details (units, type, class, year built, occupancy), financial & ownership info (REIT/PE owner, acquisition year, CapEx signal), ISP/video providers (FCC-verified or AI-estimated), bulk agreements, PropTech stack (gates, access control, intercoms, cameras, smart locks, resident apps) with SARA Bridge badge if DoorKing + DirecTV detected |
-| **Decision maker** | Primary contact (name, title, best email format, phone, tenure, LinkedIn), plus full DM hierarchy chain (Owner → Asset Manager → Regional VP → Property Manager) with hooks pulled from LinkedIn activity |
-| **Intel** | ARIA buy score gauge, urgency badge, profile fields (primary concern, current vendor, contract window, comm style), and all intent signals found online with source labels (Resident Complaint, Property Listing, Financial Filing, etc.) |
-| **SCOUT** | SCOUT handoff packet — outreach angle, contract window urgency, key intel data points. Copy Brief button. Import to Leads + Launch SCOUT Campaign buttons. |
+### 8.4 Saved Searches
 
-### Deep mode output (additional fields)
-
-When using Deep mode, the detail panel also receives:
-- **Behavioral profile** — personality type (analytical/driver/expressive/amiable), decision style, risk tolerance, and preferred communication channel
-- **Pitch strategy** — primary opening hook personalized to the property's strongest pain signal, topics to avoid, best time to call, and a social proof reference
-- **Freshness score** — 1–5 rating on how actionable the intel is (5 = SEC filing or contract expiry within 90 days)
-- **Buying trends** — portfolio-level capex news or management company signals
-
-### Ownership + temp hold
-
-When a rep imports a search into Leads:
-- Each lead is stamped with the rep's `assigned_to_user_id` and `assigned_to_name`
-- A **7-day temp hold** (`temp_hold_expires_at`) prevents other reps from claiming the same leads while the rep is actively working them
-
-### Pipeline animation
-
-During a search, the right panel shows 5 animated phases:
-1. Property Intel
-2. Decision Maker
-3. Intent Signals
-4. AI Profiling
-5. Intel Synthesis (holds until API responds — cycling status messages keep it alive)
-
-### SCOUT integration
-
-After importing leads from ARIA, the SCOUT tab provides a one-click **Launch SCOUT Campaign** button that sends SCOUT outreach emails to all imported leads from that search. Status shows `X sent / Y skipped`.
-
-### Recent searches
-
-ARIA auto-saves all searches for 30 days. The left panel lists them when idle. Clicking a saved search restores the prospect list and detail view instantly — no need to re-run.
+ARIA saves every search automatically for 30 days. When you open ARIA without searching, recent searches appear in the left panel. Click any saved search to restore the full results instantly.
 
 ---
 
-## 8. Field Tech Tool (/tech)
+## 9. Quotes & Proposals
+
+**Route:** `/quotes`
+
+### 9.1 Quotes Dashboard
+
+The Quotes list page shows your full pipeline at a glance:
+
+- **Three KPI sparklines** at the top: Active MRR, Pipeline MRR, Dealer Override MRR
+- **Pipeline funnel** — horizontal bars per stage (Draft → Sent → Viewed → Accepted); click a stage to filter the table
+- **Quotes table** on the left with filter tabs (All / Draft / Sent / Viewed / Accepted / Declined)
+- **Deal Velocity panel** on the right — conversion funnel, avg. time to close, win rate
+
+### 9.2 Creating a New Quote
+
+1. Click **+ New Quote** in the top right corner
+2. The **Scenario Gallery** opens — six pre-built starting templates:
+
+| Scenario | Best For |
+|----------|----------|
+| Multi-Family Smart Core | MDU with smart locks, app, and network |
+| Premium Gate & Access | Vehicular barrier, call box, cameras, monitoring |
+| Custom Package Management | Luxor lockers and cloud sync |
+| Comprehensive Security | Brivo access control, cameras, full monitoring |
+| Device-Only Hardware | One-time hardware sale, no MRR |
+| AI Voice Import (Beta) | Upload a site-walk recording, AI drafts the BOM |
+
+3. Click a scenario card — the builder opens with pre-loaded line items
+4. Or scroll down and click **Survey Wizard** to build from a step-by-step property survey
+5. Or click **Import Site Survey** to pull a BOM from an existing survey
+
+### 9.3 Building a Quote
+
+Inside the quote builder (`/quotes/[id]`):
+
+**Line items table:**
+- Add items by clicking **+ Add Line Item**
+- Set quantity, unit price, and whether each item is one-time or recurring
+- Optional items can be flagged — they appear as toggles on the client-facing proposal
+
+**Dependency warnings (amber banner):**
+If a line item requires another item to work, a warning appears. Example: "Luxor Cloud Sync requires Network Backhaul Install." Resolve these before sending.
+
+**Internal Financial Summary (right sidebar):**
+- Shows blended margin % as a color-coded donut ring
+- Green = 40%+ margin · Amber = 25–39% · Red = below 25%
+- If margin drops below 25%, the Send button locks and changes to "Request VP Approval"
+
+**View Mode toggle (top bar):**
+Switch between **Internal View** (full cost and margin data) and **Proposal View** (opens the client-facing branded proposal in a new tab — no internal costs visible).
+
+### 9.4 Sending a Quote to a Client
+
+1. Open the quote and confirm the margin is green (auto-approved)
+2. Click **Send to Client** — this changes the status to Sent and opens the proposal link
+3. Copy the proposal link and share it with the client, OR the system can email it directly
+4. When the client opens it, status changes to Viewed
+5. When the client signs, status changes to Accepted
+
+### 9.5 Client-Facing Pages
+
+These pages require no login — share the links directly with clients:
+
+| Page | What the client sees |
+|------|---------------------|
+| `/quotes/[id]/proposal` | Branded proposal — scope, optional add-ons with live total, investment summary |
+| `/quotes/[id]/approve` | Approval and e-signature page |
+
+---
+
+## 10. Sites & Properties
+
+**Route:** `/sites`
+
+Sites are installed or prospective properties in your portfolio.
+
+### 10.1 Viewing Sites
+
+Each site card in the list shows:
+- Property name and address
+- Assigned dealers (install, service)
+- Number of active work orders
+- System health status
+
+Click any site to open its detail page.
+
+### 10.2 Site Detail Page
+
+The detail page is organized into tabs:
+
+- **Overview** — Address, map pin, assigned dealers, equipment summary
+- **Equipment** — Full inventory of installed devices
+- **Work Orders** — All service history for this property
+- **Invoices** — Billing history
+- **Permits** — Compliance and permit tracking
+
+---
+
+## 11. Dispatch & Work Orders
+
+**Route:** `/dispatch`
+
+The Dispatcher is field operations command center.
+
+### 11.1 Creating a Work Order
+
+1. Click **+ New Job** in the top right corner
+2. Select the property (site)
+3. Assign a technician
+4. Set job type (installation, service call, inspection, etc.)
+5. Set priority and ETA
+6. Click **Create**
+
+The technician receives a notification.
+
+### 11.2 Tracking Work Orders
+
+**List view** — All work orders in a table. Each row shows priority (colored stripe), property, assigned tech, ETA, and status badge.
+
+**Board view** — Kanban columns: Open / Active / Done. Click the toggle in the panel header to switch. Your preference is saved automatically.
+
+**Filter pills:** All · Urgent · Today · Unassigned — click to scope the view.
+
+### 11.3 Schedule Timeline
+
+Click the **Schedule** tab (or panel on desktop) to see each technician's day as a horizontal timeline. Each block is a job, color-coded by type. Click any block to open the job detail.
+
+### 11.4 Managing Your Tech Roster
+
+The Tech Roster panel shows all technicians with their current status and recent performance.
+
+**Top 3 leaderboard** — Sorted by streak score, showing gold/silver/bronze ranked techs with their completion counts.
+
+**Tech cards** — Each technician has a card showing:
+- Current status (Available / On Site / Driving / Offline)
+- Current assigned job
+- Portal account status
+
+### 11.5 Generating Tech Access Codes
+
+Each technician needs a unique code to use the `/tech` field tool. Here's how to set one up:
+
+1. Find the technician's card in the Tech Roster
+2. In the **/tech Access Code** row, click **Generate →**
+3. A code in `GG-{INITIALS}-{4digits}` format is created (e.g., `GG-JT-4821`)
+4. Click the **copy icon** to copy it to your clipboard
+5. Text or message the code to the technician — they enter it on the `/tech` login screen
+
+To replace a lost or compromised code:
+1. Click **Regen** on the tech's card
+2. A new code is generated immediately — the old one stops working
+
+> **Note:** Migration 093 must be run on Supabase before this feature works.
+
+### 11.6 Mobile Layout
+
+On a phone or tablet, the dispatcher shows three tabs at the bottom:
+- **Jobs** — Work orders list
+- **Schedule** — Timeline view
+- **Roster** — Tech leaderboard and cards
+
+---
+
+## 12. Field Tech Tool
 
 **Route:** `/tech`
+**Access:** No portal login required — use your tech access code
 
-A standalone tool for technicians in the field — no Clerk login. Access via `x-tech-code` header or QR code.
+The Tech Tool is a mobile-optimized diagnostic and reference tool for technicians in the field.
 
-**Auth:** Two code types are accepted:
-- **Global code** — `TECH_ACCESS_CODE` env var (admin/fallback, all techs share it)
-- **Per-tech code** — `GG-{INITIALS}-{4digits}` generated from the Dispatcher roster (each tech has their own; managed from `/dispatch`)
+### 12.1 Logging In
 
-Features:
-- **Device selector** — choose from 27 supported Gate Guard devices
-- **Wiring Diagram** — SVG renderer pulls static wiring maps + Supabase `device_suggestions`; shows terminal-to-terminal connections
-- **Cable Guide** — CAT, 2-wire series, and 2-wire parallel cable guides
-- **AI Diagnostic** — natural language troubleshooting powered by Claude Haiku; searches KB articles + suggests solutions
-- **Site Survey** — capture device inventory per site; generates AI SOW + BOM; can create a quote directly
-- **Resolution capture** — techs log what fixed the issue → feeds the learning loop
+1. Go to **portal.gateguard.co/tech** on any phone or tablet
+2. Enter your tech access code (e.g., `GG-JT-4821`) — your dispatcher provides this
+3. You're in — no email or password needed
 
-Access is intentionally design-free (mobile-first, high contrast) for outdoor/field use.
+### 12.2 What the Tech Tool Includes
+
+**Device Selector** — Choose the gate controller, access control panel, or device you're working on from a list of 27 supported devices.
+
+**Wiring Diagram** — Visual diagram showing every terminal connection for that device. Terminals are labeled and color-coded. Pull up the diagram before running wire to avoid mistakes.
+
+**Cable Guide** — Reference for CAT cable, 2-wire series, and 2-wire parallel cable runs. Shows correct gauge, max distance, and termination instructions.
+
+**AI Diagnostic** — Describe the problem in plain English (e.g., "Gate opens but won't close" or "Keypad shows ERR-3 after power cycle"). The AI searches the knowledge base and returns step-by-step troubleshooting instructions.
+
+**Site Survey** — Capture device inventory for a new installation:
+1. Select the site (or create a new one)
+2. Add each device you're installing
+3. Add notes
+4. The portal generates an AI Scope of Work and Bill of Materials from your survey
+5. The survey can be converted into a quote directly
+
+**Resolution Log** — After fixing an issue, log what solved it. This feeds into the AI's knowledge base for future diagnostics.
 
 ---
 
-## 9. Site Surveys
+## 13. Site Surveys
 
 **Route:** `/survey`
 
-Pre-installation site assessment tool. Techs or sales reps capture:
-- Site type and access control context
-- Device inventory (gates, cameras, readers, intercoms, etc.)
-- Site notes
+Site surveys are pre-installation assessments, typically done during a sales visit or before quoting.
 
-After capture, one click generates:
-- **AI Scope of Work (SOW)** — via Claude Haiku, formatted for the proposal
-- **Bill of Materials (BOM)** — itemized equipment list
+### 13.1 Starting a Survey
 
-"Create Quote" converts the survey into a full quote with pre-populated line items.
+1. Click **+ New Survey**
+2. Select or search for the property
+3. Choose the survey type (New Install / Upgrade / Assessment)
+4. Walk through the sections, adding the devices and conditions you observe:
+   - Gate types and counts
+   - Camera locations
+   - Access control panels
+   - Network infrastructure
+   - Special conditions or notes
+
+### 13.2 Generating the SOW and BOM
+
+After completing the survey:
+1. Click **Generate AI Documents**
+2. Claude AI processes your device list and notes
+3. Within 15–30 seconds you get:
+   - **Scope of Work (SOW)** — Professional write-up of the full project scope
+   - **Bill of Materials (BOM)** — Itemized equipment list with quantities
+
+### 13.3 Creating a Quote from a Survey
+
+1. Review the SOW and BOM
+2. Click **Create Quote**
+3. The quote builder opens with all items pre-loaded
+4. Adjust pricing and add any additional line items
+5. Send to the client
 
 ---
 
-## 10. Billing & Invoices
+## 14. AI Agents
+
+NEXUS includes 8 named AI agents, each built for a specific function. The AI Army panel in the sidebar shows all 8 with a green (live) or grey (coming soon) dot.
+
+| Agent | What it does | Status |
+|-------|-------------|--------|
+| **ARIA** | Lead intelligence — researches properties, finds decision makers, builds SCOUT outreach packets | Live |
+| **TRINITY** | Voice AI — handles inbound and outbound calls for lead qualification | Live |
+| **SCOUT** | Market intelligence — automated territory and competitive sweeps | Live |
+| **BEACON** | Client communications — AI-drafted follow-ups, proposals, and touchpoints | Coming soon |
+| **FORGE** | Quote builder AI — scenario templates, dependency checking, margin engine | Live |
+| **ATLAS** | DirecTV for Business — quoting and provisioning automation | Live |
+| **SAGE** | Training coach — adaptive learning and certification prep | Coming soon |
+| **RELAY** | Tier-1 support — handles routine dealer and tech queries | Coming soon |
+
+> **Access to each agent is controlled by Feature Settings.** If you don't see an agent in the sidebar, your org tier may not have access to it. Contact your GateGuard admin.
+
+---
+
+## 15. Billing & Invoices
 
 **Route:** `/billing`
 
-- View all invoices across the dealer network
-- Create invoices with line items (QB-style product picker — Task #234 in progress)
-- Mark as Paid
-- Stripe payment links — customers pay online; status updates automatically
-- Commission payouts — tracked per dealer, per activated unit
-- (Planned) Monthly client report auto-PDF
+### 15.1 Viewing Invoices
+
+The billing page shows all invoices across your dealer network. Filter by:
+- Status (Draft / Sent / Paid / Overdue)
+- Dealer
+- Date range
+
+Click any invoice to open the detail view.
+
+### 15.2 Creating an Invoice
+
+1. Click **+ New Invoice**
+2. Select the property or dealer this invoice is for
+3. Add line items (hardware, labor, MRR, services)
+4. Set the due date
+5. Click **Send Invoice** — this generates a Stripe payment link and emails it to the client
+
+### 15.3 Marking as Paid
+
+When a client pays:
+- If they paid online via the Stripe link → status updates automatically
+- If they paid by check or ACH → click **Mark as Paid** on the invoice and enter the payment date
 
 ---
 
-## 11. NEXUS AI Assistant
-
-**Floating button** — available on all portal pages
-
-NEXUS is the portal's AI command center. Current capabilities:
-- **Alerts** — surface outstanding items: unsigned docs, overdue work orders, pending approvals
-- **Chat** — natural language questions about portal data
-- **Planned (Task #163):** Write and update To-Dos + Work Orders via chat
-
-Powered by Claude Haiku (`claude-haiku-4-5-20251001`).
-
-**ARIA** (Lead Intel), **FORGE** (Quote Builder), **BEACON** (Client Comms), **SAGE** (Training), and **RELAY** (Tier-1 Support) are named AI agents within NEXUS serving specific functions.
-
----
-
-## 12. Map View
+## 16. Map View
 
 **Route:** `/map`
 
-Mapbox GL JS v3.3.0-powered map showing all active sites as pins. Clicking a pin opens the site detail panel. Used in the dispatch/SOC split-view as well.
+An interactive Mapbox map showing all your installed and prospective properties as pins.
 
-Requires: `NEXT_PUBLIC_MAPBOX_TOKEN` env var.
+**Reading the map:**
+- **Blue pins** — Active installed sites
+- **Green pins** — Sites with no open issues
+- **Red pins** — Sites with active alerts or overdue work orders
 
----
+**Click any pin** to open a summary card with the property name, assigned dealers, and quick links to the site detail and active work orders.
 
-## 13. Training & Scorecards
+The Map is also used in the Dispatcher view and the SOC split-screen.
 
-**Routes:** `/training` · `/scorecard`
-
-- **Training** — dealer-facing learning modules; progress tracked in `training_progress` table
-- **Scorecard** — EOS-style weekly dealer performance metrics (`dealer_scorecards` table)
-
-Migration 021 must be run before these pages persist data.
+> **Requires:** `NEXT_PUBLIC_MAPBOX_TOKEN` environment variable — contact your GateGuard admin if the map doesn't load.
 
 ---
 
-## 14. TRINITY Voice AI
+## 17. Training & Scorecards
 
-**Route:** `/trinity`
+**Training route:** `/training`
+**Scorecard route:** `/scorecard`
 
-TRINITY is Gate Guard's inbound/outbound voice AI agent. The `/trinity` page is the call log and management interface. Call records stored in `trinity_calls` table (migration 062).
+### 17.1 Training
 
-> **Note:** The voice agent is named TRINITY (not ECHO). This is reflected in Sidebar.tsx.
+The Training section provides dealer-facing learning modules:
+- Platform training (how to use NEXUS)
+- Product training (gate systems, access control, cameras)
+- Sales training (demos, objection handling, closing)
 
----
+Progress is tracked per user. Completions are recognized in the EOS Team Performance panel on the Dashboard.
 
-## 15. Service Marketplace
+### 17.2 Scorecard
 
-**Route:** `/services`
+The Scorecard shows weekly EOS metrics for your dealer network:
 
-Dealers can enroll sites in Gate Guard's managed service programs. Uses `service_catalog` and enrollment tables (migration 070).
+| Metric | What it tracks |
+|--------|---------------|
+| New Opportunities | Opps created this week vs. goal |
+| Proposals Sent | Quotes sent to clients vs. goal |
+| Active Dealers | Dealers with portal activity vs. goal |
+| Installed Properties | New sites activated vs. goal |
+| Portal Uptime | System health percentage |
 
----
-
-## 16. Settings & Permissions
-
-**Route:** `/settings`
-
-- **User settings** — notification preferences, Google Calendar OAuth (requires migration 053)
-- **Team** — manage portal users, assign roles
-- **Integrations** — connect external services
-
----
-
-## Document Templates
-
-Gate Guard maintains active document templates in the `document_templates` Supabase table. Each template has a `document_type` and a PDF URL. The onboarding flow looks up the active PDF for each doc type when sending signing links.
-
-| `document_type` | Document |
-|----------------|----------|
-| `nda` | Mutual Non-Disclosure Agreement |
-| `dealer_agreement` | Authorized Dealer & Reseller Agreement (Full Dealer, MSO, Master Agent) |
-| `service_agreement` | Service Dealer Agreement |
-| `install_partner_agreement` | Installing Contractor Agreement |
-| `sales_partner_agreement` | Sales Partner Agreement |
-| `master_agent_agreement` | Master Agent Agreement |
+Each metric shows a green ✓ or red ✗ vs. its goal, consistent with EOS Scorecard format. Reviewed weekly at L10.
 
 ---
 
-## Dealer Tier → Agreement Mapping
+## 18. Installing NEXUS on Your Phone
 
-| Tier | Agreement sent at onboarding |
-|------|------------------------------|
-| full_dealer | dealer_agreement |
-| master_dealer / MSO | dealer_agreement |
-| service_dealer | service_agreement |
-| install_contractor | install_partner_agreement |
-| sales_partner | sales_partner_agreement |
-| master_agent | master_agent_agreement |
+NEXUS is a Progressive Web App (PWA) — you can install it on your home screen like a native app. No app store required.
 
-All tiers receive the **NDA** in addition to their tier-specific agreement.
+### Installing on iPhone
 
----
+1. Open **portal.gateguard.co** in **Safari** (must be Safari, not Chrome)
+2. Tap the **Share** button — the box with an upward arrow at the bottom of the screen
+3. Scroll down in the share sheet and tap **Add to Home Screen**
+4. The name will pre-fill as "Nexus" — tap **Add** in the top right
+5. The GateGuard shield icon appears on your home screen
 
-## Key Environment Variables
-
-| Variable | Purpose |
-|----------|---------|
-| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk auth (public) |
-| `CLERK_SECRET_KEY` | Clerk auth (server) |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (client) |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role (server API routes) |
-| `RESEND_API_KEY` | Transactional email (signing links, notifications) |
-| `STRIPE_SECRET_KEY` | Invoice payment links |
-| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe (client) |
-| `NEXT_PUBLIC_MAPBOX_TOKEN` | Map view + site pins + dispatch |
-| `TECH_ACCESS_CODE` | /tech field tool door code |
-| `ANTHROPIC_API_KEY` | Claude Haiku (KB, diagnostics, surveys, NEXUS) |
-| `OPENAI_API_KEY` | text-embedding-3-small (KB PDF embeddings) |
-| `TAVILY_API_KEY` | ARIA Deep Intel web search (pending) |
-
----
-
-## Git & Deployment
-
-```bash
-# After every code push:
-git push origin main && git push origin main:beta
-```
-
-| Branch | Environment | URL |
-|--------|-------------|-----|
-| `main` | Production | portal.gateguard.co |
-| `beta` | Beta | beta.portal.gateguard.co |
-
-Always test on beta first. Never push DB migrations to prod before beta is confirmed.
-
----
-
-## PWA — Installing NEXUS as a Native App
-
-NEXUS is a Progressive Web App (PWA). On both iOS and Android you can install it to your home screen for a full native-app experience — no app store required.
-
-### Installing on iPhone / iPad
-1. Open **portal.gateguard.co** in Safari
-2. Tap the **Share** button (box with arrow) in the Safari toolbar
-3. Scroll down and tap **"Add to Home Screen"**
-4. Name it **"Nexus"** → tap **Add**
-
-The GateGuard shield icon will appear on your home screen. Tapping it opens NEXUS in standalone mode (no Safari chrome, full screen).
+Tap the icon to open NEXUS in full-screen mode — no browser address bar, no tabs.
 
 ### Installing on Android
-1. Open **portal.gateguard.co** in Chrome
-2. Tap the **⋮** menu → **"Add to Home Screen"** (or Chrome may show an install banner automatically)
-3. Tap **Add**
 
-### PWA Details
-| Setting | Value |
-|---------|-------|
-| App name | GateGuard Nexus |
-| Short name | Nexus |
-| Home screen icon | GateGuard shield logo (192×192 + 512×512) |
-| Start URL | `/` (Dashboard) |
-| Display mode | Standalone (no browser chrome) |
-| Theme color | Dark bar (`#1c1917`) matching the portal top bar |
-| Orientation | Any (portrait + landscape) |
+1. Open **portal.gateguard.co** in **Chrome**
+2. Tap the **⋮ menu** (three dots) in the top right corner
+3. Tap **Add to Home Screen**
+4. Tap **Add** to confirm
+5. The icon appears on your home screen
 
-### Mobile Layout
-The portal is fully responsive. On screens narrower than `lg` (1024px):
-- KPI cards show 2-column compact format (primary metric only; secondary metrics hidden)
-- EOS + Team + Challenges sections stack single-column
-- Accounts table shows Account + Tier only (date and actions hidden)
-- CRM rows collapse to single column
-- Quotes KPI cards collapse to single column
+Chrome may also show an automatic install banner at the bottom of the screen — tap it if you see it.
 
-Desktop layout is completely unchanged.
+### Mobile-Specific Layout
+
+On a phone or tablet, the portal adapts automatically:
+- The sidebar collapses — tap the menu icon to open it
+- KPI cards show a compact one-metric format
+- Tables hide less-critical columns (dates, hover actions)
+- Dispatcher, ARIA, and other multi-panel pages use bottom tab navigation
 
 ---
 
-## Support
+## 19. Support & Troubleshooting
 
-Internal: rfeldman@gateguard.co  
-Portal: portal.gateguard.co  
-SOC: ggsoc.com (separate app — do not confuse)
+### Common Issues
+
+**"This page shows a 404 error"**
+The feature may not be deployed yet or your account may not have access. Check with your admin.
+
+**"I can't see a feature I should have access to"**
+Feature visibility is controlled by your org tier. Ask your GateGuard admin to check Feature Settings or your org's Features tab.
+
+**"The map isn't loading"**
+The Mapbox token may not be configured. Contact rfeldman@gateguard.co.
+
+**"I'm not receiving portal invite or signing emails"**
+Check your spam folder. Email is sent via Resend from `documents@mail.gateguard.co`. If it's not there, ask your admin to resend.
+
+**"The tech tool is rejecting my access code"**
+Your code may have been regenerated. Ask your dispatcher to copy your current code from the Tech Roster and send it to you again.
+
+**"My session keeps expiring"**
+Click your avatar in the bottom-left corner of the sidebar and select **Refresh Session**.
+
+### Signing Document Issues
+
+**"The dealer hasn't received their signing email"**
+1. Go to the dealer's Compliance tab
+2. Find the document with Pending status
+3. Click **Resend** to generate a new link and email
+
+**"The dealer signed but the portal still shows Pending"**
+1. Go to Step 3 (NDA) or Step 6 (Agreement) in the dealer's onboarding, or open the Compliance tab
+2. Click **Check Status** to refresh from the database
+3. If the dealer has signed, status will update to Counterparty Signed
+
+### Contact
+
+**Internal:** rfeldman@gateguard.co
+**Portal:** portal.gateguard.co
+**SOC (separate app):** ggsoc.com
+
+---
+
+## Appendix: Document Types & Tier Mapping
+
+Every dealer receives two documents at onboarding:
+1. **Mutual Non-Disclosure Agreement (NDA)** — all tiers
+2. **A tier-specific agreement** — see table below
+
+| Dealer Tier | Agreement Sent |
+|-------------|---------------|
+| Full Dealer | Authorized Dealer & Reseller Agreement |
+| MSO | Authorized Dealer & Reseller Agreement |
+| Master Agent | Master Agent Agreement |
+| Service Dealer | Service Dealer Agreement |
+| Install Contractor | Installation Partner Agreement |
+| Sales Partner | Sales Partner Agreement |
+
+Both documents are editable before sending. The effective date defaults to today but can be changed. After the dealer signs, a GateGuard countersignature is required to make the document fully executed.
+
+---
+
+## Appendix: Org Tier Hierarchy
+
+```
+GateGuard Corporate
+    └── Master Agent
+            └── MSO (Master System Operator)
+                    └── Full Dealer
+                            ├── Service Dealer
+                            ├── Install Contractor
+                            └── Sales Partner
+```
+
+Each tier can only see orgs and users at their own level or below. Data flows down — not up.
+
+---
+
+*NEXUS User Manual · GateGuard, LLC · 980 Hammond Drive, Suite 200, Atlanta, GA 30328*
+*For internal and dealer use only · Last updated May 27, 2026*

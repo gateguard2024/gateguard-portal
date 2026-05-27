@@ -330,6 +330,9 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 
 | Migration | What | Status |
 |-----------|------|--------|
+| 097 | document_signatures.document_html TEXT column | Run on beta then prod |
+| 096 | organizations.entity_type TEXT column | Run on beta then prod |
+| 095b | AI agent features + dealer.feature_settings in feature_catalog (ON CONFLICT UPDATE) | Run on beta then prod |
 | 094 | show_leads: assigned_to_user_id, assigned_to_name, temp_hold_expires_at | Run on beta then prod |
 | 093 | technicians.tech_code column + unique index (per-tech /tech login) | Run on beta then prod |
 | 091 | Quote v2 columns (whats_included, agreement_html, attachments, signed_at, accepted_by_rep, etc.) | ✅ beta + prod |
@@ -372,6 +375,24 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 - ✅ Migration 094 (`supabase/migrations/094_aria_ownership.sql`) — `show_leads.assigned_to_user_id`, `assigned_to_name`, `temp_hold_expires_at` + indexes
 - ✅ ARIA import route (`app/api/aria/searches/[id]/import/route.ts`) — stamps ownership + 7-day temp hold on every imported lead
 
+### Completed — May 27, 2026 (session 4) — Dealer Onboarding Fixes + Security + Document Flow
+- ✅ Feature Settings page UX redesign — replaced 3-button toggle groups with compact color-coded `<select>` dropdowns; Stripe ID / Paid / Beta collapsed into expandable ⚙ row per feature; sections now collapsible with unsaved-change count badge
+- ✅ Migration 095b (`supabase/migrations/095b_ai_agent_features.sql`) — 8 AI Army agents added to `feature_catalog` (ai.aria, ai.trinity, ai.scout, ai.beacon, ai.forge, ai.atlas, ai.sage, ai.relay) + missing `dealer.feature_settings` key; uses `ON CONFLICT DO UPDATE`
+- ✅ Sidebar Access Control quick-link strip — "Access Control" section with Features / Dealers / Users icon buttons, visible to corporate users only, above main nav; AI Army agents now feature-gated via `featureFlags` map; all 8 agent hrefs wired; `HREF_TO_FEATURE` updated for AI agent keys
+- ✅ Migration 096 (`supabase/migrations/096_org_entity_type.sql`) — `ALTER TABLE organizations ADD COLUMN entity_type TEXT` to fix "Could not find 'entity_type' column" error in onboarding
+- ✅ API security: org hierarchy scoping across 3 routes:
+  - `onboard-dealer GET`: fixed `parent_id` → `parent_org_id` bug; extended auth to `master_dealer`; `TIER_RANK` map ensures callers can only see tiers strictly below their own
+  - `admin/users GET`: added `getCurrentUser()` auth gate (was open to any logged-in user); non-corporate users see only users in their org + direct child orgs; pending invitations corporate-only
+  - `dealers/[id] GET+PATCH`: subtree check — non-corporate blocked if requested org is not own, direct child, or grandchild
+- ✅ Migration 097 (`supabase/migrations/097_sig_document_html.sql`) — `ALTER TABLE document_signatures ADD COLUMN document_html TEXT`
+- ✅ NDA + Agreement editable preview in wizard (Step 3 + Step 6):
+  - Effective Date field (defaults to today, editable)
+  - "Preview & Edit" toggle opens full rendered document in an editable `<textarea>`; merge vars pre-filled from form data
+  - Edited text passed to `/api/signatures/send` as `document_html`
+  - Send route stores `document_html` in `document_signatures`
+  - Sign page (`/sign/[token]`) displays `document_html` inline when no PDF URL; signer sees the exact reviewed text
+- ✅ Agreement preview (Step 6) — same pattern as NDA; 28-row textarea with full Agreement + Exhibit A text
+
 ### Completed — May 27, 2026 (session 3) — Feature Flag System
 - ✅ Migration 095 (`supabase/migrations/095_feature_flags.sql`) — 3 new tables: `feature_catalog` (41 seeded features), `org_feature_flags`, `user_feature_access`; all with GRANT blocks
 - ✅ API: `GET/PATCH /api/admin/features` — corporate-only global catalog management (tier_defaults, paid/beta flags, Stripe ID)
@@ -384,6 +405,12 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 - ✅ Sidebar feature gating (`components/layout/Sidebar.tsx`) — fetches `/api/user-features/me` on mount; `isFeatureVisible()` hides items with `none` access; `HREF_TO_FEATURE` map covers all 41 features; "Feature Settings" nav item added to Dealer Network section (corporate/admin only)
 
 **Feature hierarchy:** GateGuard sets tier_defaults in feature_catalog → org override in org_feature_flags → user override in user_feature_access. User ≤ org ≤ tier_default. MSO/Full Dealer can set ≤ their own effective level. None = hidden from sidebar entirely.
+
+### Pending — Migrations to Run (push + run SQL)
+- Run `096_org_entity_type.sql` on beta + prod: `ALTER TABLE public.organizations ADD COLUMN IF NOT EXISTS entity_type TEXT;`
+- Run `097_sig_document_html.sql` on beta + prod: `ALTER TABLE public.document_signatures ADD COLUMN IF NOT EXISTS document_html TEXT;`
+- Run `095b_ai_agent_features.sql` on beta + prod (INSERT with ON CONFLICT UPDATE — safe to run anytime)
+- Clear git lock: `rm -f .git/HEAD.lock .git/index.lock` then push all pending commits
 
 ### Pending — CPQ Phase 2
 - Add `unit_cost` column to `quote_line_items` (migration 092) — enables real margin vs. estimated
