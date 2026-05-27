@@ -11,17 +11,22 @@ const inter = Inter({ subsets: ["latin"], weight: ["300","400","500","600","700"
 export const metadata: Metadata = {
   title: { default: "GateGuard Nexus", template: "%s — GateGuard Nexus" },
   description: "The operating system for multifamily access and channel dealer networks.",
-  icons: { icon: "/favicon.ico" },
+  icons: { icon: "/favicon.ico", apple: "/icon-192.png" },
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'GG Tech',
+    title: 'Nexus',
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0B1728',
+  themeColor: '#1c1917',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

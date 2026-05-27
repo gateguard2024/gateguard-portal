@@ -208,7 +208,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* ── 4 Grouped KPI Cards ─────────────────────────────────────────── */}
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
 
           {/* Revenue & Pipeline */}
           <div className="bg-card border border-border rounded-xl p-4 hover:border-brand-400/20 transition-colors">
@@ -322,7 +322,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* ── EOS Heartbeat + Team Performance ──────────────────────────── */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
 
           {/* Q2 Rocks */}
           <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -452,10 +452,10 @@ export default async function DashboardPage() {
         </div>
 
         {/* ── Bottom Row: Accounts + System & Alerts ──────────────────────── */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
 
           {/* All Accounts — 2/3 */}
-          <div className="col-span-2 bg-card border border-border rounded-xl overflow-hidden">
+          <div className="lg:col-span-2 bg-card border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-3 border-b border-border">
               <div className="flex items-center gap-2">
                 <Network size={13} className="text-[#6B7EFF]" />

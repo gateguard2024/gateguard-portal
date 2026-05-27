@@ -328,7 +328,7 @@ export default function QuotesPage() {
       <div className="p-6 space-y-6 max-w-[1400px] mx-auto w-full">
 
       {/* ── KPI Cards ── */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <KpiCard
           label="Active MRR"
           value={formatCurrency(totalMRR)}

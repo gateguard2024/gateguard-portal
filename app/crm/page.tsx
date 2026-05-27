@@ -602,7 +602,7 @@ export default function CRMPage() {
 
       <div className="px-6 py-6 space-y-6">
         {/* ROW 1 — KPI Cards (all clickable / drillable) */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Link href="/crm/opportunities">
             <KpiCard
               icon={<TrendingUp size={18} className="text-[#6B7EFF]" />}
@@ -658,7 +658,7 @@ export default function CRMPage() {
         </div>
 
         {/* ROW 2 — Pipeline + Activity */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* My Pipeline */}
           <div className="bg-white rounded-xl border border-border p-5 flex flex-col">
             <div className="flex items-center justify-between mb-4">
@@ -820,7 +820,7 @@ export default function CRMPage() {
         </div>
 
         {/* ROW 3 — Open Opps + Show Leads */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Open Opportunities Table */}
           <div className="bg-white rounded-xl border border-border p-5 flex flex-col">
             <div className="flex items-center justify-between mb-4">
@@ -1076,7 +1076,7 @@ export default function CRMPage() {
               </div>
               <div className="px-5 py-5 space-y-4">
                 {/* Type picker */}
-                <div className="grid grid-cols-5 gap-2">
+                <div className="grid grid-cols-5 gap-2 sm:grid-cols-5">
                   {([
                     { type: "call",    icon: <Phone size={14} />,         label: "Call" },
                     { type: "email",   icon: <Mail size={14} />,          label: "Email" },
@@ -1175,7 +1175,7 @@ export default function CRMPage() {
                   onChange={e => setNewLeadForm(f => ({ ...f, property_name: e.target.value }))}
                   className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1">Email</label>
                   <input type="email" placeholder="name@company.com" value={newLeadForm.email}
@@ -1195,7 +1195,7 @@ export default function CRMPage() {
                   onChange={e => setNewLeadForm(f => ({ ...f, contact_title: e.target.value }))}
                   className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1">City</label>
                   <input type="text" placeholder="Atlanta" value={newLeadForm.city}

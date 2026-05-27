@@ -629,7 +629,7 @@ function ItemFormPanel({
           </Field>
 
           {/* Qty + Price + Unit */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
             <Field label="Qty" required>
               <input type="number" value={form.qty} onChange={e => set({ qty: parseInt(e.target.value) || 1 })} min={1}
                 className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-brand-400" />
@@ -1352,7 +1352,7 @@ function NewQuotePage() {
         </div>
 
         {/* Bottom row — other entry points */}
-        <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
           <button
             type="button"
             onClick={() => setAppMode('wizard')}
