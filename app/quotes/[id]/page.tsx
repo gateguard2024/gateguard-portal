@@ -714,6 +714,18 @@ function SvcPickerPanel({ quoteId, units, onAdded, onClose }: { quoteId:string; 
   );
 }
 
+// ── CPQ dependency rules ───────────────────────────────────────────────────────
+// Maps item SKU → list of required item descriptions (must also be in quote)
+const CPQ_DEPS: Record<string, string[]> = {
+  'tpl-luxor-cloud':  ['Network Backhaul Install'],
+  'tpl-lpr-camera':   ['Network Backhaul Install', 'Video Monitoring — AI'],
+  'ac-2-hw':          ['Network Backhaul Install'],
+  'SL-001':           ['Network Backhaul Install'],
+};
+
+// Margin approval threshold — below this % triggers approval gate
+const MARGIN_APPROVAL_THRESHOLD = 25;
+
 // ── Agreement templates ────────────────────────────────────────────────────────
 
 const AGREEMENT_TYPES = [
@@ -869,6 +881,9 @@ export default function QuoteDetailPage() {
   const [showSurveyPicker, setShowSurveyPicker] = useState<boolean>(false);
   const [linkedSurvey,    setLinkedSurvey]   = useState<SurveyOption | null>(null);
   const [showSvcPicker,   setShowSvcPicker]  = useState<boolean>(false);
+
+  // CPQ / dual-view state
+  const [viewMode,        setViewMode]       = useState<'internal' | 'presentation'>('internal');
 
   const fetchQuote = useCallback(async () => {
     setLoading(true); setError(null);
@@ -1254,6 +1269,30 @@ export default function QuoteDetailPage() {
   const grandTotal= subtotal - discAmt + taxAmt;
   const deposit   = grandTotal * (depPct / 100);
 
+  // ── CPQ + Margin engine ─────────────────────────────────────────────────────
+  // Estimated blended margin: hardware ~47%, MRR services ~75% — rough until unit_cost column exists
+  const estHardwareCost = subtotal * 0.53;     // 47% margin assumption
+  const estMrrCost      = mrrTotal * 0.25;     // 75% margin assumption
+  const estBlendedRevenue = subtotal + mrrTotal;
+  const estBlendedCost    = estHardwareCost + estMrrCost;
+  const estBlendedMargin  = estBlendedRevenue > 0
+    ? Math.round(((estBlendedRevenue - estBlendedCost) / estBlendedRevenue) * 100)
+    : 0;
+  const marginApproved    = estBlendedMargin >= MARGIN_APPROVAL_THRESHOLD;
+
+  // CPQ dependency check — find items that require other items not in quote
+  const cpqWarnings: { item: string; requires: string[] }[] = [];
+  for (const item of items) {
+    const sku = item.sku ?? '';
+    const required = CPQ_DEPS[sku] ?? [];
+    if (required.length === 0) continue;
+    const itemDescriptions = items.map(i => i.description.toLowerCase());
+    const missing = required.filter(req => !itemDescriptions.some(d => d.includes(req.toLowerCase())));
+    if (missing.length > 0) {
+      cpqWarnings.push({ item: item.description, requires: missing });
+    }
+  }
+
   async function savePaymentPlan() {
     setSavingPlan(true);
     try {
@@ -1314,6 +1353,20 @@ export default function QuoteDetailPage() {
         <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border', cfg.color)}>
           <Icon size={11} /> {cfg.label}
         </span>
+
+        {/* Approval badge */}
+        {quote.status === 'draft' && (
+          marginApproved ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <CheckCircle2 size={10} /> Auto-Approved
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+              <AlertTriangle size={10} /> Approval Required
+            </span>
+          )
+        )}
+
         {quote.survey_id && (
           <Link href={`/survey`} className="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 transition-colors">
             <ArrowUpRight size={11} /> From Survey
@@ -1322,17 +1375,53 @@ export default function QuoteDetailPage() {
 
         <div className="flex-1" />
 
+        {/* View mode toggle */}
+        <div className="flex items-center bg-gray-100 rounded-lg p-0.5 mr-2">
+          <button
+            onClick={() => setViewMode('internal')}
+            className={cn(
+              'flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+              viewMode === 'internal'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            )}
+          >
+            <SlidersHorizontal size={11} /> Internal View
+          </button>
+          <Link
+            href={`/quotes/${id}/proposal`}
+            target="_blank"
+            className={cn(
+              'flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+              'text-gray-500 hover:text-gray-700'
+            )}
+          >
+            <Eye size={11} /> Proposal View
+          </Link>
+        </div>
+
         {/* Action bar */}
         <div className="flex items-center gap-2">
           {quote.status === 'draft' && (
-            <button
-              onClick={() => patchStatus('sent')}
-              disabled={actioning === 'sent'}
-              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
-            >
-              {actioning === 'sent' ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-              Send to Client
-            </button>
+            marginApproved ? (
+              <button
+                onClick={() => patchStatus('sent')}
+                disabled={actioning === 'sent'}
+                className="flex items-center gap-1.5 px-4 py-2 bg-[#6B7EFF] text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
+              >
+                {actioning === 'sent' ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                Send to Client
+              </button>
+            ) : (
+              <button
+                disabled
+                className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white text-sm font-medium rounded-lg opacity-80 cursor-not-allowed"
+                title={`Blended margin ${estBlendedMargin}% is below the ${MARGIN_APPROVAL_THRESHOLD}% threshold`}
+              >
+                <AlertTriangle size={13} />
+                Request VP Approval
+              </button>
+            )
           )}
           {(quote.status === 'sent' || quote.status === 'viewed') && (
             <>
@@ -1462,6 +1551,26 @@ export default function QuoteDetailPage() {
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* CPQ Dependency Warnings */}
+          {cpqWarnings.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={14} className="text-amber-600 shrink-0" />
+                <p className="text-xs font-semibold text-amber-800">CPQ Dependency Warning</p>
+              </div>
+              {cpqWarnings.map((w, i) => (
+                <div key={i} className="ml-5 text-xs text-amber-700">
+                  <span className="font-medium">{w.item}</span> requires:{' '}
+                  {w.requires.map((r, j) => (
+                    <span key={j} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-100 border border-amber-300 font-medium mx-0.5">
+                      {r}
+                    </span>
+                  ))}
+                </div>
+              ))}
             </div>
           )}
 
@@ -1631,6 +1740,76 @@ export default function QuoteDetailPage() {
                   <span>${fmt(mrrTotal)}<span className="text-xs font-normal text-gray-400">/mo</span></span>
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Internal Financial Summary */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <DollarSign size={14} className="text-[#6B7EFF]" />
+                <h2 className="text-sm font-semibold text-gray-900">Internal Financial Summary</h2>
+              </div>
+              <span className="text-[10px] text-gray-400 uppercase tracking-widest">Est.</span>
+            </div>
+
+            {/* Margin donut / ring */}
+            <div className="flex items-center gap-3 py-1">
+              <div className="relative w-16 h-16 shrink-0">
+                <svg viewBox="0 0 36 36" className="w-16 h-16 -rotate-90">
+                  <circle cx="18" cy="18" r="15.9" fill="none" stroke="#f1f5f9" strokeWidth="3" />
+                  <circle
+                    cx="18" cy="18" r="15.9" fill="none"
+                    stroke={estBlendedMargin >= 40 ? '#10b981' : estBlendedMargin >= 25 ? '#f59e0b' : '#ef4444'}
+                    strokeWidth="3"
+                    strokeDasharray={`${estBlendedMargin} ${100 - estBlendedMargin}`}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className={`text-sm font-bold ${estBlendedMargin >= 40 ? 'text-emerald-600' : estBlendedMargin >= 25 ? 'text-amber-600' : 'text-red-600'}`}>
+                    {estBlendedMargin}%
+                  </span>
+                </div>
+              </div>
+              <div className="text-xs text-gray-500 leading-relaxed">
+                <p className="font-semibold text-gray-800">{estBlendedMargin}% Blended Margin</p>
+                <p>Est. ${Math.round(estBlendedRevenue).toLocaleString()} total revenue</p>
+                <p>Est. ${Math.round(estBlendedCost).toLocaleString()} total cost</p>
+              </div>
+            </div>
+
+            {/* Breakdown rows */}
+            <div className="space-y-1.5 text-xs border-t border-gray-100 pt-3">
+              <div className="flex justify-between text-gray-600">
+                <span>Setup Revenue</span>
+                <span className="font-medium text-gray-900">${fmt(subtotal)}</span>
+              </div>
+              <div className="flex justify-between text-gray-600">
+                <span>Est. Setup Cost</span>
+                <span className="text-rose-500">-${fmt(estHardwareCost)}</span>
+              </div>
+              <div className="flex justify-between text-gray-600">
+                <span>MRR Revenue</span>
+                <span className="font-medium text-violet-600">${fmt(mrrTotal)}/mo</span>
+              </div>
+              <div className="flex justify-between text-gray-600">
+                <span>Est. MRR Cost</span>
+                <span className="text-rose-500">-${fmt(estMrrCost)}/mo</span>
+              </div>
+            </div>
+
+            {/* Approval status */}
+            <div className={cn(
+              'flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold border',
+              marginApproved
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : 'bg-amber-50 text-amber-700 border-amber-200'
+            )}>
+              {marginApproved
+                ? <><CheckCircle2 size={12} /> Auto-Approved · Meets margin requirements</>
+                : <><AlertTriangle size={12} /> Below {MARGIN_APPROVAL_THRESHOLD}% threshold · VP approval required</>
+              }
             </div>
           </div>
 

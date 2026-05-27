@@ -19,7 +19,7 @@ import {
 } from '@/types/quote';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Layers, SlidersHorizontal, ClipboardList, ArrowUpRight } = require('lucide-react') as any;
+const { Layers, SlidersHorizontal, ClipboardList, ArrowUpRight, Package, ShieldCheck, Mic2 } = require('lucide-react') as any;
 
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
 type AppMode = 'pick' | 'wizard' | 'line_item' | 'survey_import';
@@ -111,6 +111,111 @@ const SVC_CATALOG: CatalogService[] = [
   { id:'en-1',   name:'Solstice Energy Sharing',    provider:'Solstice Power',    category:'Energy',           emoji:'☀️', color:'#F59E0B', billing_type:'per_unit',     base_price:2,     unit_label:'unit',     dealer_commission_pct:8,  gg_commission_pct:2,  description:'Community solar — residents get 10–15% off electricity.' },
 ];
 const SVC_CATEGORIES = ['All','TV','Internet','Video Monitoring','Package Lockers','Access Control','Smart Locks','Security','Network Mgmt','Energy'];
+
+/* ─── Scenario Gallery Templates ─────────────────────────────────────────────── */
+interface ScenarioTemplate {
+  id:          string;
+  title:       string;
+  subtitle:    string;
+  description: string;
+  icon:        React.ElementType;
+  accent:      string;
+  badge?:      string;
+  items:       Omit<NewLineItem, '_id'>[];
+}
+
+// CPQ dependency map — itemId → required item titles
+const CPQ_DEPS: Record<string, string[]> = {
+  'tpl-luxor-cloud':   ['Network Backhaul Install'],
+  'tpl-lpr-camera':    ['Network Backhaul Install', 'Video Monitoring — AI'],
+  'tpl-brivo-acs':     ['Network Backhaul Install'],
+};
+
+const SCENARIO_TEMPLATES: ScenarioTemplate[] = [
+  {
+    id:          'multi-family-smart-core',
+    title:       'Multi-Family Smart Core',
+    subtitle:    'Smart locks, thermostats, sensors, and basic network setup.',
+    description: 'Smart locks, access control, resident app, and core network for MDU properties.',
+    icon:        Building2,
+    accent:      '#6B7EFF',
+    badge:       'Most Popular',
+    items: [
+      { description:'Yale Smart Lock (Z-Wave)', qty:1, unit_price:285, unit:'each', is_recurring:false, section_name:'Hardware & Labor', item_type:'equipment', is_optional:false, category:'Smart Locks', notes:'', product_id:null, image_url:null, model_number:'YRD226', sku:'SL-001', package_tier:null },
+      { description:'Network Backhaul Install', qty:1, unit_price:1200, unit:'each', is_recurring:false, section_name:'Hardware & Labor', item_type:'labor', is_optional:false, category:'Network', notes:'Required for smart lock cloud sync', product_id:null, image_url:null, model_number:null, sku:'NET-001', package_tier:null },
+      { description:'Resident Smart Lock App', qty:1, unit_price:2.50, unit:'/mo', is_recurring:true, section_name:'MRR', item_type:'service', is_optional:true, category:'Smart Locks', notes:'Per-unit pricing — multiply by unit count', product_id:null, image_url:null, model_number:null, sku:'SL-APP-001', package_tier:null },
+      { description:'GateGuard Access Plan', qty:1, unit_price:5.00, unit:'/mo', is_recurring:true, section_name:'MRR', item_type:'service', is_optional:false, category:'Access Control', notes:'Core GateGuard platform fee per unit', product_id:null, image_url:null, model_number:null, sku:'ac-1', package_tier:null },
+    ],
+  },
+  {
+    id:          'premium-gate-access',
+    title:       'Premium Gate & Access',
+    subtitle:    'Barrier, call box, cameras, and monitoring service plans.',
+    description: 'Gate operators, vehicular access, call box, cameras with 24/7 monitoring.',
+    icon:        Shield,
+    accent:      '#7c3aed',
+    items: [
+      { description:'LiftMaster LA412DC Dual Gate Operator', qty:1, unit_price:2800, unit:'each', is_recurring:false, section_name:'Hardware & Labor', item_type:'equipment', is_optional:false, category:'Gate Operators', notes:'', product_id:null, image_url:null, model_number:'LA412DC', sku:'GO-001', package_tier:null },
+      { description:'DoorKing 1812 Call Box', qty:1, unit_price:1350, unit:'each', is_recurring:false, section_name:'Hardware & Labor', item_type:'equipment', is_optional:false, category:'Access Control', notes:'', product_id:null, image_url:null, model_number:'1812-080', sku:'CB-001', package_tier:null },
+      { description:'Entry Camera (4K PoE)', qty:2, unit_price:765, unit:'each', is_recurring:false, section_name:'Hardware & Labor', item_type:'equipment', is_optional:false, category:'Cameras', notes:'', product_id:null, image_url:null, model_number:null, sku:'CAM-001', package_tier:null },
+      { description:'Gate Operator Installation & Programming', qty:1, unit_price:1200, unit:'lot', is_recurring:false, section_name:'Hardware & Labor', item_type:'labor', is_optional:false, category:'Labor', notes:'', product_id:null, image_url:null, model_number:null, sku:'LAB-001', package_tier:null },
+      { description:'Video Monitoring — Remote', qty:1, unit_price:395, unit:'/mo', is_recurring:true, section_name:'MRR', item_type:'service', is_optional:false, category:'Video Monitoring', notes:'24/7 live monitoring with human response', product_id:null, image_url:null, model_number:null, sku:'vm-1', package_tier:null },
+    ],
+  },
+  {
+    id:          'custom-package-mgmt',
+    title:       'Custom Package Mgmt',
+    subtitle:    'Luxor lockers, package room sensors, layout consulting.',
+    description: 'Smart locker system with cloud sync, resident app notifications, and install.',
+    icon:        Package,
+    accent:      '#f97316',
+    items: [
+      { description:'Luxer One Smart Locker System', qty:1, unit_price:8500, unit:'lot', is_recurring:false, section_name:'Hardware & Labor', item_type:'equipment', is_optional:false, category:'Package Lockers', notes:'Hardware + installation included', product_id:null, image_url:null, model_number:null, sku:'pl-1-hw', package_tier:null },
+      { description:'Network Backhaul Install', qty:1, unit_price:900, unit:'each', is_recurring:false, section_name:'Hardware & Labor', item_type:'labor', is_optional:false, category:'Network', notes:'Required for Luxor Cloud Sync', product_id:null, image_url:null, model_number:null, sku:'NET-001', package_tier:null },
+      { description:'Luxor Locker Cloud Sync', qty:1, unit_price:149, unit:'/mo', is_recurring:true, section_name:'MRR', item_type:'service', is_optional:true, category:'Package Lockers', notes:'GateGuard Cloud Sync requires smart-enabled Luxor Locker Cloud Sync', product_id:null, image_url:null, model_number:null, sku:'tpl-luxor-cloud', package_tier:null },
+      { description:'Package Locker — Standard Plan', qty:1, unit_price:149, unit:'/mo', is_recurring:true, section_name:'MRR', item_type:'service', is_optional:false, category:'Package Lockers', notes:'', product_id:null, image_url:null, model_number:null, sku:'pl-1', package_tier:null },
+    ],
+  },
+  {
+    id:          'comprehensive-security',
+    title:       'Comprehensive Security',
+    subtitle:    'Access control, alarm systems, and 2-way voice add-ons.',
+    description: 'Full-stack: access control, intrusion, cameras, monitoring, and voice intercom.',
+    icon:        ShieldCheck,
+    accent:      '#0369a1',
+    items: [
+      { description:'Brivo ACS300 Access Controller', qty:1, unit_price:1800, unit:'each', is_recurring:false, section_name:'Hardware & Labor', item_type:'equipment', is_optional:false, category:'Access Control', notes:'', product_id:null, image_url:null, model_number:'ACS300', sku:'ac-2-hw', package_tier:null },
+      { description:'Network Backhaul Install', qty:1, unit_price:1200, unit:'each', is_recurring:false, section_name:'Hardware & Labor', item_type:'labor', is_optional:false, category:'Network', notes:'Required for Brivo cloud connectivity', product_id:null, image_url:null, model_number:null, sku:'NET-001', package_tier:null },
+      { description:'IP Camera — Indoor/Outdoor', qty:4, unit_price:765, unit:'each', is_recurring:false, section_name:'Hardware & Labor', item_type:'equipment', is_optional:false, category:'Cameras', notes:'', product_id:null, image_url:null, model_number:null, sku:'CAM-002', package_tier:null },
+      { description:'Brivo Cloud Access Control', qty:1, unit_price:3, unit:'/mo', is_recurring:true, section_name:'MRR', item_type:'service', is_optional:false, category:'Access Control', notes:'Per door/month', product_id:null, image_url:null, model_number:null, sku:'ac-2', package_tier:null },
+      { description:'ADT Commercial Security Monitoring', qty:1, unit_price:89, unit:'/mo', is_recurring:true, section_name:'MRR', item_type:'service', is_optional:true, category:'Security', notes:'', product_id:null, image_url:null, model_number:null, sku:'sec-1', package_tier:null },
+      { description:'Video Monitoring — AI Analytics', qty:1, unit_price:18, unit:'/mo', is_recurring:true, section_name:'MRR', item_type:'service', is_optional:true, category:'Video Monitoring', notes:'AI analytics — loitering, LPR, crowd', product_id:null, image_url:null, model_number:null, sku:'vm-2', package_tier:null },
+    ],
+  },
+  {
+    id:          'device-only-hardware',
+    title:       'Device-Only Hardware',
+    subtitle:    'Hardware and installation labor only. No recurring MRR.',
+    description: 'Cameras, switches, gate hardware, and labor. One-time setup, no monthly fees.',
+    icon:        Network,
+    accent:      '#64748b',
+    items: [
+      { description:'Entry Camera (4K PoE)', qty:2, unit_price:765, unit:'each', is_recurring:false, section_name:'Hardware & Labor', item_type:'equipment', is_optional:false, category:'Cameras', notes:'', product_id:null, image_url:null, model_number:null, sku:'CAM-001', package_tier:null },
+      { description:'8-Port PoE Network Switch', qty:1, unit_price:480, unit:'each', is_recurring:false, section_name:'Hardware & Labor', item_type:'equipment', is_optional:false, category:'Network', notes:'', product_id:null, image_url:null, model_number:null, sku:'SW-008', package_tier:null },
+      { description:'Cable Runs & Low-Voltage Labor', qty:1, unit_price:1800, unit:'lot', is_recurring:false, section_name:'Hardware & Labor', item_type:'labor', is_optional:false, category:'Labor', notes:'', product_id:null, image_url:null, model_number:null, sku:'LAB-002', package_tier:null },
+    ],
+  },
+  {
+    id:          'ai-voice-import',
+    title:       'AI Voice Import (Beta)',
+    subtitle:    'Upload site-walk audio. AI drafts an initial bill of materials.',
+    description: 'Upload site-walk audio or notes — AI drafts your BOM automatically.',
+    icon:        Mic2,
+    accent:      '#10b981',
+    badge:       'Beta',
+    items: [], // handled separately — routes to survey_import
+  },
+];
 
 /* ─── Constants ──────────────────────────────────────────────────────────────── */
 const WIZARD_STEPS = [
@@ -854,6 +959,21 @@ function NewQuotePage() {
   const setProp = (key: keyof QuoteProperty) => (val: string) =>
     setProperty(p => ({ ...p, [key]: key === 'units' ? parseInt(val) || 0 : val }));
 
+  /* ── Load scenario template → pre-populate line item builder ─────────────── */
+  function loadTemplate(scenario: ScenarioTemplate) {
+    if (scenario.id === 'ai-voice-import') {
+      setAppMode('survey_import');
+      return;
+    }
+    const items: NewLineItem[] = scenario.items.map(item => ({
+      ...item,
+      _id: `tpl_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    }));
+    setLiItems(items);
+    setLiStep(1); // start at Client Info so rep can set property name
+    setAppMode('line_item');
+  }
+
   const lineItems = calculateLineItems(survey, property);
   const totals    = calculateTotals(lineItems, property, meta.discount_percent, meta.deposit_percent || 50, meta.discount_mode, meta.discount_amount, meta.mrr_discount, meta.mrr_discount_mode, meta.rampUp ?? false);
 
@@ -1147,70 +1267,123 @@ function NewQuotePage() {
   }
 
   /* ══════════════════════════════════════════════════════════════════════════
-     MODE PICKER
+     SCENARIO GALLERY (intent-driven starting point)
   ══════════════════════════════════════════════════════════════════════════ */
   if (appMode === 'pick') {
     return (
-      <div className="p-6 max-w-2xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">New Quote</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Choose how you want to build this proposal</p>
+      <div className="p-6 max-w-5xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Create a New Quote & Proposal</h1>
+            <p className="text-sm text-slate-400 mt-0.5">Select a starting scenario to pre-populate required hardware and service bundles.</p>
+          </div>
+          {/* Escape hatch — blank builder */}
+          <button
+            type="button"
+            onClick={() => setAppMode('line_item')}
+            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            Blank Builder
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {/* Line-item builder */}
-          <button type="button" onClick={() => setAppMode('line_item')}
-            className="text-left p-6 bg-card border-2 border-border hover:border-brand-400/50 rounded-2xl transition-all group">
-            <div className="w-10 h-10 rounded-xl bg-brand-400/10 flex items-center justify-center mb-4 group-hover:bg-brand-400/20 transition-colors">
-              <Layers className="w-5 h-5 text-brand-400" />
+        {/* 3-col scenario grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {SCENARIO_TEMPLATES.map(scenario => {
+            const Icon = scenario.icon;
+            return (
+              <button
+                key={scenario.id}
+                type="button"
+                onClick={() => loadTemplate(scenario)}
+                className="group text-left bg-white border border-slate-200 hover:border-slate-300 hover:shadow-md rounded-2xl p-5 transition-all flex flex-col gap-3"
+              >
+                {/* Icon + badge row */}
+                <div className="flex items-start justify-between">
+                  <div
+                    className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+                    style={{ background: `${scenario.accent}15` }}
+                  >
+                    <Icon className="w-5 h-5" style={{ color: scenario.accent }} />
+                  </div>
+                  {scenario.badge && (
+                    <span
+                      className="text-[10px] font-semibold px-2 py-0.5 rounded-full border"
+                      style={{ color: scenario.accent, borderColor: `${scenario.accent}40`, background: `${scenario.accent}10` }}
+                    >
+                      {scenario.badge}
+                    </span>
+                  )}
+                </div>
+
+                {/* Title + subtitle */}
+                <div>
+                  <p className="text-sm font-semibold text-slate-800 leading-tight">{scenario.title}</p>
+                  <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">{scenario.subtitle}</p>
+                </div>
+
+                {/* Preview items */}
+                {scenario.items.length > 0 && (
+                  <div className="space-y-0.5">
+                    {scenario.items.slice(0, 3).map((item, i) => (
+                      <p key={i} className="text-[10px] text-slate-400 truncate">
+                        · {item.description}
+                      </p>
+                    ))}
+                    {scenario.items.length > 3 && (
+                      <p className="text-[10px] text-slate-300">+ {scenario.items.length - 3} more items</p>
+                    )}
+                  </div>
+                )}
+
+                {/* CTA */}
+                <div
+                  className="mt-auto flex items-center gap-1 text-xs font-semibold pt-1 group-hover:gap-2 transition-all"
+                  style={{ color: scenario.accent }}
+                >
+                  <span>{scenario.id === 'ai-voice-import' ? 'Upload Audio' : 'Start Build'}</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Bottom row — other entry points */}
+        <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={() => setAppMode('wizard')}
+            className="flex items-center gap-3 p-4 bg-white border border-slate-200 hover:border-slate-300 rounded-xl transition-all text-left group"
+          >
+            <div className="w-9 h-9 rounded-lg bg-violet-50 flex items-center justify-center shrink-0">
+              <SlidersHorizontal className="w-4 h-4 text-violet-500" />
             </div>
-            <p className="text-base font-semibold text-foreground mb-1">Line Item Builder</p>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Add items from the product catalog or manually. Full control over sections, packages, optional items, and pricing. Best for custom installs.
-            </p>
-            <div className="mt-4 flex items-center gap-1.5 text-brand-400 text-xs font-medium">
-              <span>Start building</span>
-              <ChevronRight className="w-3.5 h-3.5" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-slate-700">Survey Wizard</p>
+              <p className="text-xs text-slate-400 truncate">Step-by-step site config — pricing auto-calculates</p>
             </div>
+            <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-400 ml-auto shrink-0 transition-colors" />
           </button>
 
-          {/* Survey wizard */}
-          <button type="button" onClick={() => setAppMode('wizard')}
-            className="text-left p-6 bg-card border-2 border-border hover:border-violet-400/50 rounded-2xl transition-all group">
-            <div className="w-10 h-10 rounded-xl bg-violet-400/10 flex items-center justify-center mb-4 group-hover:bg-violet-400/20 transition-colors">
-              <SlidersHorizontal className="w-5 h-5 text-violet-400" />
+          <button
+            type="button"
+            onClick={() => setAppMode('survey_import')}
+            className="flex items-center gap-3 p-4 bg-white border border-slate-200 hover:border-slate-300 rounded-xl transition-all text-left group"
+          >
+            <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
+              <ClipboardList className="w-4 h-4 text-emerald-500" />
             </div>
-            <p className="text-base font-semibold text-foreground mb-1">Survey Wizard</p>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Walk through access tier, network, cameras, and add-ons. Pricing auto-calculates from your survey inputs. Best for standard residential installs.
-            </p>
-            <div className="mt-4 flex items-center gap-1.5 text-violet-400 text-xs font-medium">
-              <span>Start wizard</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </div>
-          </button>
-
-          {/* From Site Survey */}
-          <button type="button" onClick={() => setAppMode('survey_import')}
-            className="text-left p-6 bg-card border-2 border-border hover:border-emerald-400/50 rounded-2xl transition-all group sm:col-span-2">
-            <div className="flex items-start gap-4">
-              <div className="w-10 h-10 rounded-xl bg-emerald-400/10 flex items-center justify-center shrink-0 group-hover:bg-emerald-400/20 transition-colors">
-                <ClipboardList className="w-5 h-5 text-emerald-400" />
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm font-semibold text-slate-700">Import Site Survey</p>
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">Recommended</span>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <p className="text-base font-semibold text-foreground">From Site Survey</p>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-400/10 text-emerald-400 border border-emerald-400/20 font-medium">Recommended</span>
-                </div>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  Import a completed survey — property info, SOW, and BOM auto-fill your quote. Fastest path to a sent quote.
-                </p>
-                <div className="mt-3 flex items-center gap-1.5 text-emerald-400 text-xs font-medium">
-                  <span>Pick a survey</span>
-                  <ArrowUpRight className="w-3.5 h-3.5" />
-                </div>
-              </div>
+              <p className="text-xs text-slate-400 truncate">BOM + SOW auto-fill from completed survey</p>
             </div>
+            <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-400 ml-auto shrink-0 transition-colors" />
           </button>
         </div>
       </div>
