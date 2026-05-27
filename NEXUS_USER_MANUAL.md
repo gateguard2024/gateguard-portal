@@ -1,5 +1,5 @@
 # NEXUS — GateGuard Dealer Portal User Manual
-### Version 12 · Updated May 27, 2026
+### Version 13 · Updated May 27, 2026
 
 > **NEXUS** is the GateGuard internal name for the Dealer Portal at [portal.gateguard.co](https://portal.gateguard.co). It is the command center for dealer ops: onboarding, quoting, field service, billing, compliance, AI diagnostics, and more.
 
@@ -16,6 +16,7 @@
 5. [Quotes](#5-quotes)
 6. [Sites](#6-sites)
 7. [Work Orders](#7-work-orders)
+7a. [Dispatcher](#7a-dispatcher)
 8. [Field Tech Tool (/tech)](#8-field-tech-tool-tech)
 9. [Site Surveys](#9-site-surveys)
 10. [Billing & Invoices](#10-billing--invoices)
@@ -380,11 +381,99 @@ Field service management:
 
 ---
 
+## 7a. Dispatcher
+
+**Route:** `/dispatch`
+
+The Dispatcher is the field operations command center — assign techs to jobs, track work order status in real time, manage your tech roster, and view the day's schedule from one screen.
+
+### Header
+The top bar matches the portal-wide dark TopBar pattern. Title: **"Dispatcher"** with today's date as subtitle. Action buttons in the top-right: List/Board view toggle, Map (links to `/map`), Route Optimize, Refresh, and **"+ New Job"** (opens the Add Job modal). On mobile, less-critical actions are hidden to keep the bar clean.
+
+### KPI Cards (4 across)
+| Card | What it shows |
+|------|--------------|
+| **Open Jobs** | Count of jobs not yet complete |
+| **Active Techs** | Techs currently On Site or Driving |
+| **Scheduled Today** | Jobs with today's ETA |
+| **Completed** | Jobs resolved today |
+
+On mobile, KPI cards show only on the Jobs and Schedule tabs (hidden on Roster tab to save space).
+
+### Work Orders Panel
+
+#### View Toggle — List / Board
+A toggle in the panel header switches between two layouts, persisted to `localStorage` (`gg_dispatch_layout`):
+
+**List view** — Full-width table rows. Each row shows:
+- Priority stripe (red = urgent, amber = normal, slate = scheduled)
+- WO number + job title
+- Property name + assigned tech
+- ETA + job type chip
+- Status badge (color-coded: Pending / Assigned / En Route / On Site / In Progress / Done)
+
+**Board view** — 3-column Kanban: **Open**, **Active**, **Done**. Drag-and-drop not active (status updates via the job detail modal). Cards show property, tech avatar, job type chip, and ETA.
+
+**Filter pills** below the toggle let you scope to: All, Urgent, Today, Unassigned.
+
+### Schedule Timeline
+A horizontal timeline view showing each tech's day in hourly blocks. Color-coded by job type. Clicking a block opens the job detail.
+
+On mobile the Schedule is a separate tab (see Mobile Layout below).
+
+### Tech Roster
+
+#### Leaderboard
+The top of the roster panel shows the **Top 3 Techs** this month, sorted by streak score (deterministic hash — no live stat required). Each entry shows:
+- Rank (1st / 2nd / 3rd) with trophy color (gold / silver / bronze)
+- Tech name + initials avatar
+- Jobs completed count + 🔥 streak badge
+
+#### Tech Cards
+Below the leaderboard, every tech on the team gets a card showing:
+- Status badge (Available / On Site / Driving / Offline) — color dot + pill
+- Role and employment type (Employee / Contractor)
+- Current job assignment
+- Portal access status + invite button
+- Work schedule (recurring days or specific dates)
+- **/tech Access Code row** — see below
+
+#### /tech Access Codes (Per-Tech Login)
+
+Each technician can have a unique `GG-{INITIALS}-{4digits}` code that grants them access to the `/tech` field tool (no Clerk account required). This is separate from the global `TECH_ACCESS_CODE` env var.
+
+| Button | What it does |
+|--------|-------------|
+| **Generate →** | Creates a new code, stores it in `technicians.tech_code` via `PATCH /api/dispatch/technicians/[id]` |
+| **Regen** | Replaces the existing code with a new one (old code stops working immediately) |
+| **Copy icon** | Copies the code to clipboard so you can paste it to the tech via SMS/WhatsApp |
+
+The tech enters their code on the `/tech` login screen. Both their personal code and the global admin code are valid.
+
+> **Requires:** Migration 093 must be run on Supabase before Generate/Regen works (`technicians.tech_code` column).
+
+### Mobile Layout
+On screens narrower than `lg`, the dispatcher collapses into a **3-tab layout**:
+
+| Tab | What's shown |
+|-----|-------------|
+| **Jobs** | KPI cards + Work Orders panel (list view) |
+| **Schedule** | Timeline view |
+| **Roster** | Tech leaderboard + all tech cards + access codes |
+
+The tab bar is pinned below the TopBar. Active tab has a `#6B7EFF` underline indicator.
+
+---
+
 ## 8. Field Tech Tool (/tech)
 
 **Route:** `/tech`
 
 A standalone tool for technicians in the field — no Clerk login. Access via `x-tech-code` header or QR code.
+
+**Auth:** Two code types are accepted:
+- **Global code** — `TECH_ACCESS_CODE` env var (admin/fallback, all techs share it)
+- **Per-tech code** — `GG-{INITIALS}-{4digits}` generated from the Dispatcher roster (each tech has their own; managed from `/dispatch`)
 
 Features:
 - **Device selector** — choose from 27 supported Gate Guard devices
