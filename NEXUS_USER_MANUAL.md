@@ -242,30 +242,60 @@ The Quotes list page is an enterprise pipeline view with four main sections:
 - **Deal Velocity metrics** — Avg. Time to Sent, Avg. Time to View, Avg. Time to Accept
 - **Win Rate** — progress bar: accepted quotes ÷ total, shown as a percentage
 
-### Creating a Quote
+### Scenario Gallery — Creating a Quote (`/quotes/new`)
 
-Two modes (accessible from `/quotes/new`):
+The new quote screen is an intent-driven **Scenario Gallery** — six pre-built starting points that skip the blank canvas entirely. Clicking a card pre-populates the line item builder with a realistic bill of materials for that scenario type.
 
-**Line Item Builder** — start from scratch. Add sections (equipment, labor, recurring) and individual line items manually.
+| Scenario | Best For |
+|----------|----------|
+| **Multi-Family Smart Core** | MDU smart locks, resident app, network — most common |
+| **Premium Gate & Access** | Vehicular barrier, call box, cameras, 24/7 monitoring |
+| **Custom Package Mgmt** | Luxor lockers, cloud sync, package room install |
+| **Comprehensive Security** | Brivo access control, cameras, alarm, AI monitoring |
+| **Device-Only Hardware** | One-time hardware/labor only — no recurring MRR |
+| **AI Voice Import (Beta)** | Upload site-walk audio → AI drafts BOM automatically |
 
-**Survey Wizard** — import device data from a completed site survey. Automatically generates line items from the survey's bill of materials.
+After selecting a scenario, the rep lands on the **Line Item Builder** at Step 1 (Client Info) with hardware and services pre-loaded. Items can be added, removed, or repriced before saving.
 
-### Quote Editor (`/quotes/[id]`)
+Two additional entry points are at the bottom of the gallery: **Survey Wizard** (step-by-step site config) and **Import Site Survey** (pulls BOM from a completed field survey — recommended fastest path).
 
-- **Sections** — group line items under headers (e.g., "Hardware," "Installation," "Monthly Recurring")
-- **Optional items** — mark line items as optional; they appear as selectable add-ons in the proposal
-- **Pricing sidebar** — live subtotal, discount, tax, total
-- **Proposal v2 panels** — What's Included, Agreement HTML, Attachments, signature capture
+### Advanced Quote Builder (`/quotes/[id]`)
+
+The internal quote editor is a full CPQ (Configure, Price, Quote) workspace with three key engines:
+
+**CPQ Dependency Engine** — If a line item requires another item to function (e.g., Luxor Cloud Sync requires Network Backhaul Install), an amber warning banner appears above the line items table. This prevents reps from selling physically impossible solutions. Dependencies are defined by item SKU.
+
+**Margin Engine & Approval Gateway** — Every quote computes a blended margin estimate in real time (hardware ~47%, MRR services ~75%). The margin is shown as a donut ring in the **Internal Financial Summary** sidebar. If the blended margin drops below 25%, the "Send to Client" button locks and changes to "Request VP Approval" — preventing below-threshold deals from going out without a management review.
+
+**Internal Financial Summary (sidebar)** — Shows:
+- Blended margin % as a color-coded donut (green ≥40%, amber ≥25%, red <25%)
+- Estimated setup revenue vs. cost
+- MRR revenue vs. cost
+- Auto-Approved or Approval Required badge
+
+**View Mode Toggle (top bar)** — Switch between Internal View (full cost/margin data visible) and Proposal View (opens the client-facing branded proposal in a new tab — no internal costs shown).
+
+**Top Bar Action Logic:**
+- **Auto-Approved** (margin ≥ 25%) → green badge + blue "Send to Client" button active
+- **Approval Required** (margin < 25%) → amber badge + amber "Request VP Approval" button (disabled)
+
+**Line Items table** — Grouped by section (Hardware & Labor, MRR, etc.). Optional items are flagged with `is_optional` — they appear as client-selectable toggles on the proposal page.
 
 ### Customer-Facing Pages (no auth, no sidebar)
 
 | Route | Purpose |
 |-------|---------|
-| `/quotes/[id]/proposal` | Branded proposal view — customer reads scope + pricing |
-| `/quotes/[id]/approve` | Approval page — customer signs digitally, triggers acceptance flow |
+| `/quotes/[id]/proposal` | Branded proposal — client reads scope, toggles optional add-ons, views live investment summary |
+| `/quotes/[id]/approve` | Approval + e-signature page — client signs, triggers acceptance flow |
 
 ### Quote Status Flow
 `draft` → `sent` → `viewed` → `accepted` / `declined` → `expired`
+
+### CPQ Phase 2 (coming tomorrow)
+- `unit_cost` column on line items (migration 092) — enables real margin vs. estimated
+- Inline margin % editing per line item
+- Interactive proposal add-on toggles with live total recalculation
+- Full scenario test walkthroughs: 92 W. Paces, gate-only, device-only
 
 ---
 
