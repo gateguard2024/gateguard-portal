@@ -211,113 +211,99 @@ export default async function DashboardPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
 
           {/* Revenue & Pipeline */}
-          <div className="bg-card border border-border rounded-xl p-4 hover:border-brand-400/20 transition-colors">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Revenue &amp; Pipeline</p>
-              <div className="p-2 rounded-lg bg-[#6B7EFF]/10">
-                <TrendingUp size={13} className="text-[#6B7EFF]" />
+          <div className="bg-card border border-border rounded-xl p-3 lg:p-4 hover:border-brand-400/20 transition-colors">
+            <div className="flex items-center justify-between mb-2 lg:mb-3">
+              <div className="flex items-center gap-1.5">
+                <div className="p-1.5 lg:p-2 rounded-lg bg-[#6B7EFF]/10 shrink-0">
+                  <TrendingUp size={12} className="text-[#6B7EFF]" />
+                </div>
+                <p className="text-[10px] font-semibold text-muted-foreground leading-tight">Revenue</p>
               </div>
+              <span className="text-[9px] px-1 py-0.5 rounded bg-emerald-400/10 text-emerald-600 font-semibold uppercase tracking-wide hidden lg:inline">demo</span>
             </div>
-            <div className="flex gap-4">
+            <p className="text-lg lg:text-xl font-bold text-foreground leading-tight">$94.2k</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Monthly MRR</p>
+            {/* Desktop: show pipeline metric */}
+            <div className="hidden lg:flex items-center gap-3 mt-2 pt-2 border-t border-border/50">
               <div>
-                <p className="text-xl font-bold text-foreground leading-tight">$94.2k</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Monthly MRR</p>
-              </div>
-              <div className="w-px bg-border" />
-              <div>
-                <p className="text-xl font-bold text-foreground leading-tight">
-                  {isQuoteLive ? quotePipeline : "$51.4k"}
-                </p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  {isQuoteLive ? `${quoteCount} open quotes` : "Pipeline"}
-                </p>
+                <p className="text-sm font-bold text-foreground">{isQuoteLive ? quotePipeline : "$51.4k"}</p>
+                <p className="text-[10px] text-muted-foreground">{isQuoteLive ? `${quoteCount} open quotes` : "Pipeline"}</p>
               </div>
             </div>
-            <div className="flex items-center gap-1.5 mt-2.5">
-              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-400/10 text-emerald-600 font-semibold uppercase tracking-wide">demo</span>
-              <span className="text-[10px] text-muted-foreground/70">+12% MRR vs last month</span>
-            </div>
+            <p className="text-[10px] text-muted-foreground/60 mt-1.5 lg:hidden">+12% vs last mo</p>
           </div>
 
           {/* Assets & Ops Health */}
-          <div className="bg-card border border-border rounded-xl p-4 hover:border-brand-400/20 transition-colors">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Assets &amp; Ops Health</p>
-              <div className="p-2 rounded-lg bg-emerald-400/10">
-                <ShieldCheck size={13} className="text-emerald-500" />
+          <div className="bg-card border border-border rounded-xl p-3 lg:p-4 hover:border-brand-400/20 transition-colors">
+            <div className="flex items-center justify-between mb-2 lg:mb-3">
+              <div className="flex items-center gap-1.5">
+                <div className="p-1.5 lg:p-2 rounded-lg bg-emerald-400/10 shrink-0">
+                  <ShieldCheck size={12} className="text-emerald-500" />
+                </div>
+                <p className="text-[10px] font-semibold text-muted-foreground leading-tight">Ops Health</p>
               </div>
+              <span className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground/60 font-semibold uppercase tracking-wide hidden lg:inline">demo</span>
             </div>
-            <div className="flex gap-3">
+            <p className="text-lg lg:text-xl font-bold text-foreground leading-tight">115/138</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Cameras online</p>
+            {/* Desktop: show doors + WOs */}
+            <div className="hidden lg:flex gap-3 mt-2 pt-2 border-t border-border/50">
               <div>
-                <p className="text-xl font-bold text-foreground leading-tight">115/138</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Cameras</p>
+                <p className="text-sm font-bold text-foreground">All on</p>
+                <p className="text-[10px] text-muted-foreground">Doors / Gates</p>
               </div>
               <div className="w-px bg-border" />
               <div>
-                <p className="text-xl font-bold text-foreground leading-tight">All on</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Doors / Gates</p>
-              </div>
-              <div className="w-px bg-border" />
-              <div>
-                <p className="text-xl font-bold text-foreground leading-tight">
-                  {isWOLive ? String(openWOCount) : "6"}
-                </p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Open WOs</p>
+                <p className="text-sm font-bold text-foreground">{isWOLive ? String(openWOCount) : "6"}</p>
+                <p className="text-[10px] text-muted-foreground">Open WOs</p>
               </div>
             </div>
-            <div className="flex items-center gap-1.5 mt-2.5">
-              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground/60 font-semibold uppercase tracking-wide">demo</span>
-              <span className="text-[10px] text-muted-foreground/70">23 cameras offline · 2 properties</span>
-            </div>
+            <p className="text-[10px] text-muted-foreground/60 mt-1.5 lg:hidden">23 offline · {isWOLive ? String(openWOCount) : "6"} WOs</p>
           </div>
 
           {/* Account Growth */}
-          <div className="bg-card border border-border rounded-xl p-4 hover:border-brand-400/20 transition-colors">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Account Growth</p>
-              <div className="p-2 rounded-lg bg-[#6B7EFF]/10">
-                <Users size={13} className="text-[#6B7EFF]" />
+          <div className="bg-card border border-border rounded-xl p-3 lg:p-4 hover:border-brand-400/20 transition-colors">
+            <div className="flex items-center justify-between mb-2 lg:mb-3">
+              <div className="flex items-center gap-1.5">
+                <div className="p-1.5 lg:p-2 rounded-lg bg-[#6B7EFF]/10 shrink-0">
+                  <Users size={12} className="text-[#6B7EFF]" />
+                </div>
+                <p className="text-[10px] font-semibold text-muted-foreground leading-tight">Accounts</p>
               </div>
-            </div>
-            <div className="flex gap-4">
-              <div>
-                <p className="text-xl font-bold text-foreground leading-tight">
-                  {isActiveAccountsLive && activeAccountsCount > 0
-                    ? String(activeAccountsCount)
-                    : "37"}
-                </p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Active Accounts</p>
-              </div>
-              <div className="w-px bg-border" />
-              <div>
-                <p className="text-xl font-bold text-foreground leading-tight">1,284</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">DTV Activations</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5 mt-2.5">
               {isActiveAccountsLive ? (
-                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-400/10 text-emerald-600 font-semibold uppercase tracking-wide">live</span>
+                <span className="text-[9px] px-1 py-0.5 rounded bg-emerald-400/10 text-emerald-600 font-semibold uppercase tracking-wide hidden lg:inline">live</span>
               ) : (
-                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground/60 font-semibold uppercase tracking-wide">demo</span>
+                <span className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground/60 font-semibold uppercase tracking-wide hidden lg:inline">demo</span>
               )}
-              <span className="text-[10px] text-muted-foreground/70">91.4% ARS · 78.2% ABP</span>
             </div>
+            <p className="text-lg lg:text-xl font-bold text-foreground leading-tight">
+              {isActiveAccountsLive && activeAccountsCount > 0 ? String(activeAccountsCount) : "37"}
+            </p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Active accounts</p>
+            {/* Desktop: show DTV */}
+            <div className="hidden lg:flex items-center gap-3 mt-2 pt-2 border-t border-border/50">
+              <div>
+                <p className="text-sm font-bold text-foreground">1,284</p>
+                <p className="text-[10px] text-muted-foreground">DTV Activations</p>
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground/60 mt-1.5 lg:hidden">1,284 DTV · 91.4% ARS</p>
           </div>
 
           {/* Critical Alerts */}
-          <div className="bg-card border border-border rounded-xl p-4 hover:border-red-400/20 transition-colors">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Critical Alerts</p>
-              <div className="p-2 rounded-lg bg-red-400/10">
-                <AlertTriangle size={13} className="text-red-400" />
+          <div className="bg-card border border-border rounded-xl p-3 lg:p-4 hover:border-red-400/20 transition-colors">
+            <div className="flex items-center justify-between mb-2 lg:mb-3">
+              <div className="flex items-center gap-1.5">
+                <div className="p-1.5 lg:p-2 rounded-lg bg-red-400/10 shrink-0">
+                  <AlertTriangle size={12} className="text-red-400" />
+                </div>
+                <p className="text-[10px] font-semibold text-muted-foreground leading-tight">Alerts</p>
               </div>
+              <span className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground/60 font-semibold uppercase tracking-wide hidden lg:inline">demo</span>
             </div>
-            <p className="text-3xl font-bold text-red-400 leading-tight">3</p>
-            <p className="text-[10px] text-muted-foreground mt-1">1 camera offline · 1 forced entry</p>
-            <div className="flex items-center gap-1.5 mt-2.5">
-              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground/60 font-semibold uppercase tracking-wide">demo</span>
-              <Link href="/alerts" className="text-[10px] text-[#6B7EFF] hover:underline">View all alerts</Link>
-            </div>
+            <p className="text-2xl lg:text-3xl font-bold text-red-400 leading-tight">3</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Active alerts</p>
+            <Link href="/alerts" className="text-[10px] text-[#6B7EFF] mt-1.5 block">View all →</Link>
           </div>
         </div>
 
@@ -473,10 +459,10 @@ export default async function DashboardPage() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border bg-background/20">
-                    <th className="text-left px-5 py-2.5 text-muted-foreground font-medium">Account</th>
+                    <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Account</th>
                     <th className="text-left px-3 py-2.5 text-muted-foreground font-medium">Tier</th>
-                    <th className="text-left px-3 py-2.5 text-muted-foreground font-medium">Added</th>
-                    <th className="px-3 py-2.5" />
+                    <th className="text-left px-3 py-2.5 text-muted-foreground font-medium hidden lg:table-cell">Added</th>
+                    <th className="px-3 py-2.5 hidden lg:table-cell" />
                   </tr>
                 </thead>
                 <tbody>
@@ -488,7 +474,7 @@ export default async function DashboardPage() {
                       : "—";
                     return (
                       <tr key={a.id} className="border-b border-border/40 hover:bg-accent/20 transition-colors cursor-pointer group">
-                        <td className="px-5 py-2.5">
+                        <td className="px-4 py-2.5">
                           <div className="flex items-center gap-2">
                             <span className="w-1.5 h-1.5 rounded-full shrink-0 status-online" />
                             <span className="font-medium text-foreground group-hover:text-[#6B7EFF] transition-colors">{a.name}</span>
@@ -497,8 +483,8 @@ export default async function DashboardPage() {
                         <td className="px-3 py-2.5">
                           <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${tierCls}`}>{tierLabel}</span>
                         </td>
-                        <td className="px-3 py-2.5 text-muted-foreground">{addedStr}</td>
-                        <td className="px-3 py-2.5">
+                        <td className="px-3 py-2.5 text-muted-foreground hidden lg:table-cell">{addedStr}</td>
+                        <td className="px-3 py-2.5 hidden lg:table-cell">
                           <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button className="text-[9px] px-2 py-1 rounded border border-[#6B7EFF]/40 text-[#6B7EFF] bg-[#6B7EFF]/5 hover:bg-[#6B7EFF]/10 transition-colors font-medium">
                               + Add to L10
