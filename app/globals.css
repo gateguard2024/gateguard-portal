@@ -46,22 +46,22 @@
 }
 
 /* ===================================================
-   Card elevation — deep shadow for dark backdrop
-   White top-edge highlight creates lifted tile effect
+   Card elevation — soft shadow for near-white backdrop
+   White tiles pop against the light blue-gray ground
    =================================================== */
 .bg-card {
   box-shadow:
-    0 6px 24px rgba(0, 0, 0, 0.45),
-    0 1px 4px rgba(0, 0, 0, 0.30),
-    0 1px 0px rgba(255, 255, 255, 0.06) inset;
+    0 1px 3px rgba(0, 0, 0, 0.07),
+    0 4px 16px rgba(0, 0, 0, 0.06),
+    0 0 0 1px rgba(148, 163, 184, 0.10);
 }
 
 /* ===================================================
-   Portal main content — warm graphite backdrop
-   Cards float as white tiles over this dark ground
+   Portal main content — near-white light backdrop
+   Cards float as white tiles over this light ground
    =================================================== */
 main.portal-main {
-  background: linear-gradient(135deg, #1c1917 0%, #27241f 60%, #1c1917 100%);
+  background: linear-gradient(135deg, #EEF2F8 0%, #E8EEF6 60%, #EEF2F8 100%);
   min-height: 100vh;
 }
 
