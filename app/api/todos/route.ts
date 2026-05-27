@@ -16,14 +16,17 @@ export async function GET(req: NextRequest) {
   try {
     const caller = await getCurrentUser()
     const { searchParams } = new URL(req.url)
-    const view   = searchParams.get('view') ?? 'mine'
-    const status = searchParams.get('status')
+    const view        = searchParams.get('view') ?? 'mine'
+    const status      = searchParams.get('status')
+    const unscheduled = searchParams.get('unscheduled') === 'true'
+    const limit       = parseInt(searchParams.get('limit') ?? '200', 10)
 
     let query = supabase
       .from('todos')
       .select(`*, todo_attachments(id, name, url, size_bytes, mime_type, created_at)`)
       .order('due_date', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: false })
+      .limit(limit)
 
     if (view === 'mine') {
       query = query.or(`created_by.eq.${caller.id},assigned_to.eq.${caller.id}`)
@@ -38,10 +41,14 @@ export async function GET(req: NextRequest) {
 
     if (status) query = query.eq('status', status)
 
+    // unscheduled=true → only todos without a due_date
+    if (unscheduled) query = query.is('due_date', null)
+
     const { data, error } = await query
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    return NextResponse.json({ todos: data ?? [] })
+    // Return both keys so callers expecting either shape work
+    return NextResponse.json({ todos: data ?? [], records: data ?? [] })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error: msg }, { status: 500 })
