@@ -11,7 +11,7 @@ const supabase = createClient(
 
 export interface CalendarEvent {
   id: string
-  type: 'todo' | 'work_order' | 'gcal'
+  type: 'todo' | 'work_order' | 'work_order_phase' | 'pm_schedule' | 'gcal' | 'crm_activity'
   title: string
   date: string       // YYYY-MM-DD
   time?: string      // HH:MM if has time
@@ -20,6 +20,7 @@ export interface CalendarEvent {
   color: string      // hex
   link?: string      // portal deep link
   gcal_event_id?: string
+  opportunity_name?: string
 }
 
 // GET /api/calendar/events?year=2026&month=5
@@ -85,6 +86,92 @@ export async function GET(req: NextRequest) {
         status: wo.status ?? 'open',
         color:  '#F59E0B',
         link:   `/maintenance/${wo.id}`,
+      })
+    }
+
+    // ── Work Order Phases ─────────────────────────────────────────────────────
+    const { data: woPhases } = await supabase
+      .from('work_order_phases')
+      .select('id, name, scheduled_date, work_order_id, work_orders(title)')
+      .not('scheduled_date', 'is', null)
+      .gte('scheduled_date', startDate)
+      .lte('scheduled_date', endDate)
+      .order('scheduled_date', { ascending: true })
+
+    for (const phase of woPhases ?? []) {
+      events.push({
+        id:     phase.id,
+        type:   'work_order_phase',
+        title:  phase.name ?? 'Work Order Phase',
+        date:   phase.scheduled_date,
+        status: 'scheduled',
+        color:  '#C2410C',   // orange-700 — distinct from WO orange-600
+        link:   phase.work_order_id ? `/maintenance/${phase.work_order_id}` : '/maintenance',
+      })
+    }
+
+    // ── PM Schedules ──────────────────────────────────────────────────────────
+    const { data: pmRows } = await supabase
+      .from('pm_schedules')
+      .select('id, schedule_type, next_due_at, site_id, sites(name)')
+      .eq('is_active', true)
+      .not('next_due_at', 'is', null)
+      .gte('next_due_at', `${startDate}T00:00:00`)
+      .lte('next_due_at', `${endDate}T23:59:59`)
+      .order('next_due_at', { ascending: true })
+
+    for (const pm of pmRows ?? []) {
+      const dueIso  = pm.next_due_at as string
+      const dateStr = dueIso.split('T')[0]
+      const siteName = (pm as any).sites?.name ?? null
+
+      events.push({
+        id:     pm.id,
+        type:   'pm_schedule',
+        title:  siteName ? `PM: ${siteName}` : `PM: ${pm.schedule_type ?? 'Maintenance'}`,
+        date:   dateStr,
+        status: 'scheduled',
+        color:  '#0B7285',   // teal
+        link:   pm.site_id ? `/sites/${pm.site_id}` : '/dispatch',
+      })
+    }
+
+    // ── CRM Activities ────────────────────────────────────────────────────────
+    // due_at is a timestamptz — filter by the month range
+    const { data: activities } = await supabase
+      .from('crm_activities')
+      .select('id, type, subject, due_at, completed_at, opportunity_id, opportunities(name)')
+      .not('due_at', 'is', null)
+      .gte('due_at', `${startDate}T00:00:00`)
+      .lte('due_at', `${endDate}T23:59:59`)
+      .is('completed_at', null)          // only incomplete activities
+      .order('due_at', { ascending: true })
+
+    // Activity type → colour mapping
+    const ACTIVITY_COLORS: Record<string, string> = {
+      call:    '#0B7285',
+      email:   '#6B7EFF',
+      meeting: '#7C3AED',
+      task:    '#F59E0B',
+      note:    '#64748B',
+    }
+
+    for (const act of activities ?? []) {
+      const dueIso  = act.due_at as string
+      const dateStr = dueIso.split('T')[0]
+      const timePart = dueIso.includes('T') ? dueIso.split('T')[1]?.substring(0, 5) : undefined
+      const oppName  = (act as any).opportunities?.name ?? null
+
+      events.push({
+        id:               act.id,
+        type:             'crm_activity',
+        title:            act.subject ?? 'CRM Activity',
+        date:             dateStr,
+        time:             timePart,
+        status:           'open',
+        color:            ACTIVITY_COLORS[act.type] ?? '#7C3AED',
+        link:             act.opportunity_id ? `/crm/opportunities/${act.opportunity_id}` : '/crm',
+        opportunity_name: oppName,
       })
     }
 

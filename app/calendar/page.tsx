@@ -16,7 +16,7 @@ const { CalendarDays, CalendarClock, Link2Off, GripVertical, Timer, Zap } = requ
 
 interface CalendarEvent {
   id: string;
-  type: "todo" | "work_order" | "gcal";
+  type: "todo" | "work_order" | "work_order_phase" | "pm_schedule" | "gcal" | "crm_activity";
   title: string;
   date: string;       // YYYY-MM-DD
   time?: string;      // HH:MM
@@ -25,6 +25,7 @@ interface CalendarEvent {
   color: string;
   link?: string;
   gcal_event_id?: string;
+  opportunity_name?: string;
 }
 
 interface UnscheduledTodo {
@@ -63,14 +64,20 @@ const MONTH_NAMES = [
 // ─── Color helpers ────────────────────────────────────────────────────────────
 
 function colorForType(type: CalendarEvent["type"]): string {
-  if (type === "work_order") return "#EA580C";
-  if (type === "gcal")       return "#15803d";
+  if (type === "work_order")       return "#EA580C";
+  if (type === "work_order_phase") return "#C2410C";
+  if (type === "pm_schedule")      return "#0B7285";
+  if (type === "gcal")             return "#15803d";
+  if (type === "crm_activity")     return "#7C3AED";
   return "#6B7EFF";
 }
 
 function bgForType(type: CalendarEvent["type"]): string {
-  if (type === "work_order") return "bg-orange-600";
-  if (type === "gcal")       return "bg-emerald-700";
+  if (type === "work_order")       return "bg-orange-600";
+  if (type === "work_order_phase") return "bg-orange-700";
+  if (type === "pm_schedule")      return "bg-teal-700";
+  if (type === "gcal")             return "bg-emerald-700";
+  if (type === "crm_activity")     return "bg-violet-700";
   return "bg-[#6B7EFF]";
 }
 
@@ -168,6 +175,12 @@ function EventCard({
     ? "Personal"
     : event.type === "work_order"
     ? "Work Order"
+    : event.type === "work_order_phase"
+    ? "WO Phase"
+    : event.type === "pm_schedule"
+    ? "PM"
+    : event.type === "crm_activity"
+    ? "CRM"
     : null;
 
   return (
@@ -219,11 +232,12 @@ function EventPopover({
   onClose: () => void;
 }) {
   const typeLabel =
-    event.type === "todo"
-      ? "To-Do"
-      : event.type === "work_order"
-      ? "Work Order"
-      : "Google Calendar";
+    event.type === "todo"            ? "To-Do"
+    : event.type === "work_order"    ? "Work Order"
+    : event.type === "work_order_phase" ? "WO Phase"
+    : event.type === "pm_schedule"   ? "PM Schedule"
+    : event.type === "crm_activity"  ? "CRM Activity"
+    : "Google Calendar";
 
   const color = colorForType(event.type);
 
@@ -275,6 +289,15 @@ function EventPopover({
             <CalendarDays size={12} className="text-orange-600 shrink-0" />
             View work order
           </button>
+        )}
+        {event.type === "crm_activity" && (
+          <a
+            href={event.link ?? "/crm"}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-foreground hover:bg-violet-50 transition-colors"
+          >
+            <span style={{ color: "#7C3AED", flexShrink: 0 }}>↗</span>
+            {event.opportunity_name ? `View: ${event.opportunity_name}` : "View opportunity"}
+          </a>
         )}
         <button className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-foreground hover:bg-accent transition-colors text-left">
           <RefreshCw size={12} className="text-muted-foreground shrink-0" />
@@ -1004,6 +1027,18 @@ function CalendarPage() {
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-sm bg-orange-600 inline-block" />
               Work Orders
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm bg-orange-700 inline-block" />
+              WO Phases
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm bg-teal-700 inline-block" />
+              PM Schedule
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm bg-violet-700 inline-block" />
+              CRM Activities
             </span>
             {gcalConnected && (
               <span className="flex items-center gap-1.5">
