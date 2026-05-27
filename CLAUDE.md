@@ -132,6 +132,22 @@
 - Internal Financial Summary sidebar card: SVG donut ring (green ≥40%, amber ≥25%, red <25%), revenue/cost rows, approval badge
 - Auto-Approved badge (emerald) or Approval Required badge (amber) in top bar breadcrumb row
 
+### Dispatch
+| File | Purpose |
+|------|---------|
+| `app/dispatch/page.tsx` | Dispatcher page — TopBar, KPI cards, Work Orders (list/board toggle), Tech Roster (leaderboard + per-tech codes), Schedule timeline; mobile 3-tab layout |
+| `app/api/dispatch/technicians/route.ts` | GET (list, includes tech_code) + POST (add tech) |
+| `app/api/dispatch/technicians/[id]/route.ts` | PATCH (update any field incl. tech_code) + DELETE |
+| `lib/tech-auth.ts` | Shared `isTechAuthed(req)` — global env var OR per-tech DB code lookup |
+
+**Dispatch design notes:**
+- `boardLayout` state (`'list' | 'board'`) persisted to `localStorage` key `gg_dispatch_layout`
+- `mobileTab` state (`'jobs' | 'schedule' | 'roster'`) controls mobile tab visibility
+- Leaderboard: top 3 techs sorted by `techStreak(techId)` hash function (deterministic, 0–12 range)
+- Per-tech codes: `GG-{INITIALS}-{4digits}` format; Generate/Regen calls `PATCH /api/dispatch/technicians/[id]` with `{ tech_code: code }`; Copy uses `navigator.clipboard.writeText()`
+- `isTechAuthed()` checks global `TECH_ACCESS_CODE` env var first (fast, no DB), then queries `technicians.tech_code` — no changes needed in `/tech/page.tsx`
+- Migration 093 must run before Generate Code flow works
+
 ### /tech Field Tool
 | File | Purpose |
 |------|---------|
@@ -203,7 +219,7 @@
 
 **Safe named imports** (always fine): Plus, X, Check, Clock, Calendar, Search, ChevronLeft/Right/Down/Up, Users, Mail, Phone, Wrench, Shield, Building2, MapPin, User, Settings, Home, FileText, Download, Upload, Eye, EyeOff, Loader, Loader2, RefreshCw, Save, Trash2, AlertTriangle, Info, Bell, Menu, Filter, MoreVertical, MoreHorizontal, Package, Globe, Link, Send, MessageSquare, Star, Key, Copy, ExternalLink, Wifi, CheckCircle2, XCircle, Activity, WifiOff, ArrowRight, Hash, Zap, Layers, TrendingUp, ClipboardList
 
-**Always use require()**: Edit2, Edit3, Timer, Tag, Inbox, ArrowUpRight, ArrowLeft, Camera, DoorOpen, BookOpen, Cpu, BarChart3, DollarSign, Network, Tv, Archive, ShieldCheck, AlertCircle, Paperclip, PhoneCall, PhoneIncoming, PhoneOutgoing, Video, StickyNote, CheckSquare, Grid3X3, Truck, RotateCcw, Image, Target, Palette, Radio, GitBranch, SlidersHorizontal, Map, TrendingDown, CreditCard, Hammer, Server, Pen, Upload, ListChecks, UserCheck, Shield (when used as require)
+**Always use require()**: Edit2, Edit3, Timer, Tag, Inbox, ArrowUpRight, ArrowLeft, Camera, DoorOpen, BookOpen, Cpu, BarChart3, DollarSign, Network, Tv, Archive, ShieldCheck, AlertCircle, Paperclip, PhoneCall, PhoneIncoming, PhoneOutgoing, Video, StickyNote, CheckSquare, Grid3X3, Truck, RotateCcw, Image, Target, Palette, Radio, GitBranch, SlidersHorizontal, Map, TrendingDown, CreditCard, Hammer, Server, Pen, Upload, ListChecks, UserCheck, Shield (when used as require), LayoutList, LayoutGrid, Flame, Copy (when used as require)
 
 ```typescript
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -247,6 +263,7 @@ When embedding `{{MERGE_VAR}}` placeholders inside a TypeScript backtick string,
 
 | Migration | What | Status |
 |-----------|------|--------|
+| 093 | technicians.tech_code column + unique index (per-tech /tech login) | Run on beta then prod |
 | 091 | Quote v2 columns (whats_included, agreement_html, attachments, signed_at, accepted_by_rep, etc.) | ✅ beta + prod |
 | 071 | Floor plans + e-sign tables | Run on beta before design pages persist |
 | 070 | Service catalog + enrollments | Run on beta before /services enrollment persists |
@@ -279,6 +296,9 @@ When embedding `{{MERGE_VAR}}` placeholders inside a TypeScript backtick string,
 - ✅ PWA upgrade — `logo.png` resized → new `icon-192.png` + `icon-512.png`; `manifest.json` updated (name: "GateGuard Nexus", short_name: "Nexus", start_url: "/", theme_color: `#1c1917`, bg: `#F8FAFC`); `layout.tsx` updated (apple icon, appleWebApp title "Nexus", `viewportFit: 'cover'`, `maximumScale: 1`, theme color matches manifest)
 - ✅ Responsive grid fixes (desktop unchanged, all via `lg:`/`sm:` prefixes) — `app/page.tsx`, `app/crm/page.tsx`, `app/quotes/page.tsx`, `app/quotes/new/page.tsx`
 - ✅ Mobile dashboard fix — compact KPI card format on mobile (icon + label + primary metric + 1-line sub); secondary metrics/dividers hidden with `hidden lg:flex`; accounts table "Added" + actions columns hidden with `hidden lg:table-cell`; EOS/Team stacks single col on mobile
+- ✅ Dispatch page enterprise redesign (`app/dispatch/page.tsx`) — TopBar header, `#F8FAFC` bg, portal card style, `#6B7EFF` throughout; Work Orders panel with list/board toggle (localStorage persisted); Tech Roster with leaderboard (top 3 by streak), per-tech `/tech` access codes (Generate/Regen/Copy); mobile 3-tab layout (Jobs / Schedule / Roster)
+- ✅ `lib/tech-auth.ts` — shared `isTechAuthed()` helper: checks global `TECH_ACCESS_CODE` env var first, then `technicians.tech_code` in DB; all 7 `/api/kb/*` routes migrated to use it
+- ✅ Migration 093 (`supabase/migrations/093_tech_code.sql`) — `technicians.tech_code TEXT` column + unique partial index; run on beta then prod
 
 ### Pending — CPQ Phase 2
 - Add `unit_cost` column to `quote_line_items` (migration 092) — enables real margin vs. estimated
