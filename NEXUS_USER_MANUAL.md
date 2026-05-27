@@ -1,0 +1,407 @@
+# NEXUS — GateGuard Dealer Portal User Manual
+### Version 10 · Updated May 26, 2026
+
+> **NEXUS** is the GateGuard internal name for the Dealer Portal at [portal.gateguard.co](https://portal.gateguard.co). It is the command center for dealer ops: onboarding, quoting, field service, billing, compliance, AI diagnostics, and more.
+
+---
+
+## Table of Contents
+
+1. [Roles & Access](#1-roles--access)
+2. [Navigation](#2-navigation)
+3. [Admin — Dealer Onboarding](#3-admin--dealer-onboarding)
+4. [Admin — Dealer Detail & Compliance](#4-admin--dealer-detail--compliance)
+5. [Quotes](#5-quotes)
+6. [Sites](#6-sites)
+7. [Work Orders](#7-work-orders)
+8. [Field Tech Tool (/tech)](#8-field-tech-tool-tech)
+9. [Site Surveys](#9-site-surveys)
+10. [Billing & Invoices](#10-billing--invoices)
+11. [NEXUS AI Assistant](#11-nexus-ai-assistant)
+12. [Map View](#12-map-view)
+13. [Training & Scorecards](#13-training--scorecards)
+14. [TRINITY Voice AI](#14-trinity-voice-ai)
+15. [Service Marketplace](#15-service-marketplace)
+16. [Settings & Permissions](#16-settings--permissions)
+
+---
+
+## 1. Roles & Access
+
+NEXUS uses **Clerk** for authentication with four portal roles:
+
+| Role | What they can do |
+|------|-----------------|
+| `admin` | Full access — onboard dealers, countersign docs, manage all orgs/sites/quotes |
+| `supervisor` | Manage dealers and sites in their territory; no global admin controls |
+| `agent` | Read/write access to quotes, work orders, surveys — no dealer management |
+| `dealer` | Access to their own org's sites, quotes, work orders, invoices |
+
+The `/tech` field tool uses a separate `x-tech-code` header (no Clerk login required) — intended for technicians in the field who scan a QR code.
+
+---
+
+## 2. Navigation
+
+The left sidebar is NEXUS's primary navigation. Sections are grouped by function:
+
+| Section | Route | Who sees it |
+|---------|-------|------------|
+| Dashboard | `/` | All roles |
+| Dealers | `/admin/dealers` | admin, supervisor |
+| Sites | `/sites` | All roles |
+| Quotes | `/quotes` | All roles |
+| Work Orders | `/work-orders` | All roles |
+| Surveys | `/survey` | All roles |
+| Map | `/map` | All roles |
+| Billing | `/billing` | admin, supervisor |
+| Training | `/training` | All roles |
+| Scorecard | `/scorecard` | All roles |
+| TRINITY | `/trinity` | admin, supervisor |
+| Service Marketplace | `/services` | All roles |
+| Settings | `/settings` | All roles |
+| Field Tech Tool | `/tech` | No Clerk — tech code only |
+| NEXUS AI | Floating button (all pages) | All roles |
+
+---
+
+## 3. Admin — Dealer Onboarding
+
+**Route:** `/admin/dealers/new`
+
+The Dealer Onboarding Wizard creates a new dealer organization and admin user in one flow. It has **7 steps**:
+
+### Step 1 — Organization Info
+- Organization name (legal entity name — used in contracts)
+- Primary phone, primary email, physical address
+- License number (low-voltage or contracting)
+- Entity type (LLC, corporation, S corp, partnership, sole proprietorship, limited partnership)
+
+### Step 2 — Dealer Tier
+Select the dealer's operational role in the Gate Guard network:
+
+| Tier | Role |
+|------|------|
+| **Full Dealer** | Sell, install, and service. Sets commission templates. Full margin splits. |
+| **Service Dealer** | Primary ongoing service contact for assigned properties. Day-to-day work orders. |
+| **Installing Contractor** | Installation and commissioning only. Paid from one-time setup fees only. |
+| **Sales Partner** | Brings leads, closes sales. Lifetime recurring commission. No install/service. |
+| **MSO (Master System Operator)** | Billing entity for a property portfolio. Manages affiliated dealers beneath them. |
+| **Master Agent** | Recruits and oversees dealers. Earns per-unit/month override across their network. |
+
+### Step 3 — NDA & Agreement
+Preview both documents before sending. Includes:
+- **Mutual Non-Disclosure Agreement** — 3-year term, Trade Secrets survive in perpetuity, Georgia/Fulton County governing law, ESIGN Act and UETA validity
+- **Authorized Dealer & Reseller Agreement** — full agreement + Exhibit A (tier checkboxes, commission percentages, SLA notes)
+
+A toggle lets you enable or disable automatic sending. If enabled, signing links are emailed to the dealer's primary email upon launch.
+
+### Step 4 — Relationships
+Assign the new dealer's parent organization (which Master Dealer or MSO they report to, if applicable).
+
+### Step 5 — Commission (tiers with revenue splits only)
+Set hardware discount %, software MRR %, and install fee %. Skipped for Sales Partner and Installing Contractor tiers. Values are populated as merge variables into Exhibit A of the Agreement.
+
+### Step 6 — Admin User
+Create the first user account for the dealer. Provide name and email — a Clerk invite is sent automatically.
+
+### Step 7 — Review
+Full summary before launch. Click **Launch** to:
+1. Create the organization in Supabase
+2. Create the admin user + send Clerk invite
+3. Fire NDA + Agreement signing emails via Resend (if Step 3 enabled)
+
+---
+
+## 4. Admin — Dealer Detail & Compliance
+
+**Route:** `/admin/dealers/[id]`
+
+The dealer detail page has several tabs. The **Compliance** tab is the document lifecycle hub.
+
+### Compliance Tab
+
+Displays a card for each document type relevant to the dealer's tier:
+- Mutual NDA
+- Tier-appropriate Agreement (Dealer Agreement, Service Agreement, Install Partner Agreement, Sales Partner Agreement, Master Agent Agreement)
+
+Each card shows:
+- **Status badge** — Not Sent · Pending · Counterparty Signed · Fully Executed
+- **Signer info** — email, name, signed date
+- **Sent by** — Gate Guard team member who sent it
+
+**Action buttons (context-aware):**
+
+| Status | Available actions |
+|--------|-----------------|
+| Not sent (org has email) | "Send for Signature" |
+| Not sent (no email) | "Add org email to send" |
+| Pending | "Awaiting signature" badge + "Resend" link |
+| Counterparty Signed | **"Countersign"** emerald button |
+| Fully Executed | "Fully executed" badge |
+| Any | "Manual upload" border button |
+
+### Countersigning
+When a dealer has signed (status = `counterparty_signed`), the **Countersign** button appears. Clicking it:
+1. Records Russel Feldman as countersigner (CEO)
+2. Sets `countersigned_at` timestamp
+3. Marks `fully_executed: true` on the signature record
+
+### E-Sign Lifecycle (under the hood)
+```
+onboard-dealer API
+  → sendDoc('nda')           — creates document_signatures row + Resend email
+  → sendDoc('agreement')     — same for tier-appropriate agreement
+
+Dealer receives email → clicks link → /sign/[token]
+  → types full name → clicks "Sign"
+  → rfeldman@gateguard.co receives notification email
+
+Admin sees "Counterparty Signed" in Compliance tab
+  → clicks "Countersign" → fully_executed = true
+```
+
+---
+
+## 5. Quotes
+
+**Route:** `/quotes` · New quote: `/quotes/new`
+
+### Creating a Quote
+
+Two modes:
+
+**Line Item Builder** — start from scratch. Add sections (equipment, labor, recurring) and individual line items manually.
+
+**Survey Wizard** — import device data from a completed site survey. Automatically generates line items from the survey's bill of materials.
+
+### Quote Editor (`/quotes/[id]`)
+
+- **Sections** — group line items under headers (e.g., "Hardware," "Installation," "Monthly Recurring")
+- **Optional items** — mark line items as optional; they appear as selectable add-ons in the proposal
+- **Pricing sidebar** — live subtotal, discount, tax, total
+- **Proposal v2 panels** — What's Included, Agreement HTML, Attachments, signature capture
+
+### Customer-Facing Pages (no auth, no sidebar)
+
+| Route | Purpose |
+|-------|---------|
+| `/quotes/[id]/proposal` | Branded proposal view — customer reads scope + pricing |
+| `/quotes/[id]/approve` | Approval page — customer signs digitally, triggers acceptance flow |
+
+### Quote Status Flow
+`draft` → `sent` → `approved` / `declined` → `invoiced`
+
+---
+
+## 6. Sites
+
+**Route:** `/sites` · Detail: `/sites/[id]`
+
+Sites are installed properties — apartment communities, HOAs, commercial buildings. Each site record tracks:
+- Physical address + Mapbox pin
+- Assigned dealers: Master Dealer, Install Dealer, Service Dealer
+- Installed equipment inventory
+- Linked work orders, invoices, permits
+
+Site detail tabs typically include: Overview, Equipment, Work Orders, Invoices, Permits, (upcoming: Service Analytics).
+
+---
+
+## 7. Work Orders
+
+**Route:** `/work-orders`
+
+Field service management:
+- Create work orders linked to a site
+- Assign to technicians
+- Track status: Open → In Progress → Complete
+- Technician receives notification
+- (Planned) Photo evidence upload per work order
+- (Planned) SMS threads via Twilio ↔ WO ID
+
+---
+
+## 8. Field Tech Tool (/tech)
+
+**Route:** `/tech`
+
+A standalone tool for technicians in the field — no Clerk login. Access via `x-tech-code` header or QR code.
+
+Features:
+- **Device selector** — choose from 27 supported Gate Guard devices
+- **Wiring Diagram** — SVG renderer pulls static wiring maps + Supabase `device_suggestions`; shows terminal-to-terminal connections
+- **Cable Guide** — CAT, 2-wire series, and 2-wire parallel cable guides
+- **AI Diagnostic** — natural language troubleshooting powered by Claude Haiku; searches KB articles + suggests solutions
+- **Site Survey** — capture device inventory per site; generates AI SOW + BOM; can create a quote directly
+- **Resolution capture** — techs log what fixed the issue → feeds the learning loop
+
+Access is intentionally design-free (mobile-first, high contrast) for outdoor/field use.
+
+---
+
+## 9. Site Surveys
+
+**Route:** `/survey`
+
+Pre-installation site assessment tool. Techs or sales reps capture:
+- Site type and access control context
+- Device inventory (gates, cameras, readers, intercoms, etc.)
+- Site notes
+
+After capture, one click generates:
+- **AI Scope of Work (SOW)** — via Claude Haiku, formatted for the proposal
+- **Bill of Materials (BOM)** — itemized equipment list
+
+"Create Quote" converts the survey into a full quote with pre-populated line items.
+
+---
+
+## 10. Billing & Invoices
+
+**Route:** `/billing`
+
+- View all invoices across the dealer network
+- Create invoices with line items (QB-style product picker — Task #234 in progress)
+- Mark as Paid
+- Stripe payment links — customers pay online; status updates automatically
+- Commission payouts — tracked per dealer, per activated unit
+- (Planned) Monthly client report auto-PDF
+
+---
+
+## 11. NEXUS AI Assistant
+
+**Floating button** — available on all portal pages
+
+NEXUS is the portal's AI command center. Current capabilities:
+- **Alerts** — surface outstanding items: unsigned docs, overdue work orders, pending approvals
+- **Chat** — natural language questions about portal data
+- **Planned (Task #163):** Write and update To-Dos + Work Orders via chat
+
+Powered by Claude Haiku (`claude-haiku-4-5-20251001`).
+
+**ARIA** (Lead Intel), **FORGE** (Quote Builder), **BEACON** (Client Comms), **SAGE** (Training), and **RELAY** (Tier-1 Support) are named AI agents within NEXUS serving specific functions.
+
+---
+
+## 12. Map View
+
+**Route:** `/map`
+
+Mapbox GL JS v3.3.0-powered map showing all active sites as pins. Clicking a pin opens the site detail panel. Used in the dispatch/SOC split-view as well.
+
+Requires: `NEXT_PUBLIC_MAPBOX_TOKEN` env var.
+
+---
+
+## 13. Training & Scorecards
+
+**Routes:** `/training` · `/scorecard`
+
+- **Training** — dealer-facing learning modules; progress tracked in `training_progress` table
+- **Scorecard** — EOS-style weekly dealer performance metrics (`dealer_scorecards` table)
+
+Migration 021 must be run before these pages persist data.
+
+---
+
+## 14. TRINITY Voice AI
+
+**Route:** `/trinity`
+
+TRINITY is Gate Guard's inbound/outbound voice AI agent. The `/trinity` page is the call log and management interface. Call records stored in `trinity_calls` table (migration 062).
+
+> **Note:** The voice agent is named TRINITY (not ECHO). This is reflected in Sidebar.tsx.
+
+---
+
+## 15. Service Marketplace
+
+**Route:** `/services`
+
+Dealers can enroll sites in Gate Guard's managed service programs. Uses `service_catalog` and enrollment tables (migration 070).
+
+---
+
+## 16. Settings & Permissions
+
+**Route:** `/settings`
+
+- **User settings** — notification preferences, Google Calendar OAuth (requires migration 053)
+- **Team** — manage portal users, assign roles
+- **Integrations** — connect external services
+
+---
+
+## Document Templates
+
+Gate Guard maintains active document templates in the `document_templates` Supabase table. Each template has a `document_type` and a PDF URL. The onboarding flow looks up the active PDF for each doc type when sending signing links.
+
+| `document_type` | Document |
+|----------------|----------|
+| `nda` | Mutual Non-Disclosure Agreement |
+| `dealer_agreement` | Authorized Dealer & Reseller Agreement (Full Dealer, MSO, Master Agent) |
+| `service_agreement` | Service Dealer Agreement |
+| `install_partner_agreement` | Installing Contractor Agreement |
+| `sales_partner_agreement` | Sales Partner Agreement |
+| `master_agent_agreement` | Master Agent Agreement |
+
+---
+
+## Dealer Tier → Agreement Mapping
+
+| Tier | Agreement sent at onboarding |
+|------|------------------------------|
+| full_dealer | dealer_agreement |
+| master_dealer / MSO | dealer_agreement |
+| service_dealer | service_agreement |
+| install_contractor | install_partner_agreement |
+| sales_partner | sales_partner_agreement |
+| master_agent | master_agent_agreement |
+
+All tiers receive the **NDA** in addition to their tier-specific agreement.
+
+---
+
+## Key Environment Variables
+
+| Variable | Purpose |
+|----------|---------|
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk auth (public) |
+| `CLERK_SECRET_KEY` | Clerk auth (server) |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (client) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role (server API routes) |
+| `RESEND_API_KEY` | Transactional email (signing links, notifications) |
+| `STRIPE_SECRET_KEY` | Invoice payment links |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe (client) |
+| `NEXT_PUBLIC_MAPBOX_TOKEN` | Map view + site pins + dispatch |
+| `TECH_ACCESS_CODE` | /tech field tool door code |
+| `ANTHROPIC_API_KEY` | Claude Haiku (KB, diagnostics, surveys, NEXUS) |
+| `OPENAI_API_KEY` | text-embedding-3-small (KB PDF embeddings) |
+| `TAVILY_API_KEY` | ARIA Deep Intel web search (pending) |
+
+---
+
+## Git & Deployment
+
+```bash
+# After every code push:
+git push origin main && git push origin main:beta
+```
+
+| Branch | Environment | URL |
+|--------|-------------|-----|
+| `main` | Production | portal.gateguard.co |
+| `beta` | Beta | beta.portal.gateguard.co |
+
+Always test on beta first. Never push DB migrations to prod before beta is confirmed.
+
+---
+
+## Support
+
+Internal: rfeldman@gateguard.co  
+Portal: portal.gateguard.co  
+SOC: ggsoc.com (separate app — do not confuse)

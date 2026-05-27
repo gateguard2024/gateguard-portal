@@ -1,6 +1,6 @@
 # GateGuard Portal — Claude Context (Active Reference)
 
-> Last trimmed: May 2026. Full sprint history, /tech docs, SARA Plus intel → CLAUDE.archive.md
+> Last trimmed: May 26, 2026. Full sprint history, /tech docs, SARA Plus intel → CLAUDE.archive.md
 
 ---
 
@@ -65,6 +65,7 @@
 ## DESIGN SYSTEM
 
 - **Portal:** light theme, `#F8FAFC` bg, `#6B7EFF` brand blue, dark sidebar `#0C111D`
+- **Sidebar gradient (May 2026):** `radial-gradient(ellipse at 50% 68%, #0d2150 0%, #060e28 38%, #020810 68%, #000306 100%)` — applied as inline style on `<aside>` in Sidebar.tsx; replaces flat `bg-[hsl(var(--sidebar-bg))]`
 - **Tech tool:** two-tone — `#0B1728` dark navy topBar + `#FFFFFF` cards on `#EEF2FF` bg
 - **Fonts:** Inter (portal) + IBM Plex Mono (tech tool headers, chips)
 - **Step colors:** blue=VERIFY, amber=ACTION, green=RESOLVED, red=ESCALATE, purple=MEASURE
@@ -113,6 +114,24 @@
 | `app/api/surveys/[id]/generate/route.ts` | Claude Haiku → SOW + BOM from devices |
 | `app/api/surveys/[id]/create-quote/route.ts` | Creates quote + line items from survey |
 
+### Dealer Onboarding
+| File | Purpose |
+|------|---------|
+| `app/admin/dealers/new/page.tsx` | 7-step onboarding wizard (org info → tier → NDA → relationships → commission → admin user → review) |
+| `app/admin/dealers/[id]/page.tsx` | Dealer detail page — includes Compliance tab with e-sign doc cards + countersign flow |
+| `app/api/admin/onboard-dealer/route.ts` | Creates org + admin user + fires NDA + Agreement signing emails via Resend |
+
+### E-Sign / Document Compliance
+| File | Purpose |
+|------|---------|
+| `lib/nda-template.ts` | Mutual NDA template — merge vars + `buildNdaHtml()` builder |
+| `lib/agreement-template.ts` | Full Dealer & Reseller Agreement + Exhibit A — merge vars, `buildAgreementText()`, `buildAgreementVarsFromOrg()` helper |
+| `app/sign/[token]/page.tsx` | Public token-based signing page — typed signature + IP capture; sends notification to rfeldman@gateguard.co on sign |
+| `app/api/signatures/send/route.ts` | Creates `document_signatures` record + sends signing link via Resend (supports `org_id`) |
+| `app/api/signatures/[token]/sign/route.ts` | Records counterparty signature, updates status → `counterparty_signed` |
+| `app/api/signatures/countersign/route.ts` | Gate Guard countersignature — sets `countersigned_at`, `fully_executed: true` |
+| `app/api/signatures/by-record/route.ts` | GET all sigs for an org: `/api/signatures/by-record?org_id=X` |
+
 ---
 
 ## CRITICAL BUILD GOTCHAS
@@ -136,6 +155,10 @@ void (async () => { try { await supabase.from('table').select() } catch (_) {} }
 
 ### lib/current-user.ts
 `getCurrentUser()` must extract `const id = user.id` before the return statement.
+
+### Backtick template literals — `${{VAR}}` pitfall
+When embedding `{{MERGE_VAR}}` placeholders inside a TypeScript backtick string, the sequence `${{` is parsed as a template interpolation start. TypeScript sees `${` and tries to evaluate `{VAR_NAME}` as an object shorthand — causing a build error.
+**Fix:** escape the dollar sign: `` \${{MASTER_AGENT_OVERRIDE_AMOUNT}} `` → produces literal `${{MASTER_AGENT_OVERRIDE_AMOUNT}}` in the output string.
 
 ---
 
@@ -175,11 +198,19 @@ void (async () => { try { await supabase.from('table').select() } catch (_) {} }
 
 ## PENDING TASKS (prioritized)
 
+### Completed this sprint (May 26, 2026)
+- ✅ NDA template (`lib/nda-template.ts`) — Mutual NDA with 4 merge vars, 3-year term, Trade Secrets survive in perpetuity
+- ✅ Agreement template (`lib/agreement-template.ts`) — Full Dealer & Reseller Agreement + Exhibit A; no hardcoded prices; references "then-current Price List"; `buildAgreementVarsFromOrg()` auto-fills from org tier + commission config
+- ✅ Dealer onboarding wizard expanded to 7 steps — added Step 3 (NDA + Agreement preview + send toggle), `entity_type` field in Step 2, step numbering updated throughout
+- ✅ `onboard-dealer` API route upgraded — fires real NDA + tier-appropriate Agreement signing emails on dealer creation; `sendDoc()` helper creates `document_signatures` record + Resend email
+- ✅ Compliance tab on dealer detail page — live e-sign status cards for NDA + Agreement; "Send for Signature," "Resend," "Countersign," "Manual upload" actions; countersign flow POSTs to `/api/signatures/countersign`
+- ✅ Sidebar gradient — Gemini-style deep radial navy-to-black glow applied to `<aside>` in Sidebar.tsx
+- ✅ CLAUDE.md updated (this file) + NEXUS_USER_MANUAL.md created
+
 ### Active (in progress)
 - Task #207 — Upgrade floor plans to Mapbox satellite backdrop
 - Task #234 — Upgrade invoice modal: QB-style product picker + Mark as Paid
-- Task #240 — Update NEXUS User Manual v10 with per-tech login system
-- Task #253 — CLAUDE.md trim ✅ (this file)
+- Task #240 — NEXUS User Manual v10 ✅ created as NEXUS_USER_MANUAL.md in repo root
 
 ### High priority next
 - Task #50 — Client portal at portal.gateguard.co/[site-slug] (property manager dashboard)

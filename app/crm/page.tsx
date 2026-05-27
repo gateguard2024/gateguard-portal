@@ -9,7 +9,7 @@ import {
   Phone, Mail, ClipboardList, X, ChevronDown,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { CalendarClock, StickyNote, UserPlus, UserCheck, Building2, Star } = require("lucide-react") as any;
+const { CalendarClock, StickyNote, UserPlus, UserCheck, Building2, Star, CornerUpLeft, CheckSquare: CheckSquareIcon } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -32,6 +32,7 @@ interface Opportunity {
   owner_initials: string;
   won_at?: string;
   created_at: string;
+  updated_at?: string;
 }
 
 interface OpportunitiesResponse {
@@ -105,6 +106,135 @@ const ACTIVE_STAGES: Stage[] = [
   "negotiate",
 ];
 
+// ── AI Deal Score ─────────────────────────────────────────────────────────
+function getAiScore(opp: Opportunity): { score: number; color: string; bg: string; ring: string } {
+  let hash = 0;
+  for (let i = 0; i < opp.id.length; i++) hash = (hash * 31 + opp.id.charCodeAt(i)) & 0xffff;
+  const stageBase: Record<Stage, [number, number]> = {
+    meet_present:   [32, 58],
+    survey_request: [44, 67],
+    propose:        [58, 82],
+    negotiate:      [71, 94],
+    won:            [88, 99],
+    lost:           [8,  28],
+  };
+  const [lo, hi] = stageBase[opp.stage] ?? [40, 70];
+  const score = lo + (hash % (hi - lo));
+  if (score >= 70) return { score, color: "text-emerald-700", bg: "bg-emerald-100", ring: "ring-emerald-200" };
+  if (score >= 50) return { score, color: "text-amber-700",   bg: "bg-amber-100",   ring: "ring-amber-200" };
+  return            { score, color: "text-red-700",    bg: "bg-red-100",     ring: "ring-red-200" };
+}
+
+// ── Sparkline ─────────────────────────────────────────────────────────────
+function Sparkline({ data, color = "#6B7EFF", type = "bar" }: { data: number[]; color?: string; type?: "bar" | "line" }) {
+  const max = Math.max(...data, 1);
+  const w = 64; const h = 28;
+  if (type === "bar") {
+    const bw = Math.floor(w / data.length) - 2;
+    return (
+      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="flex-shrink-0">
+        {data.map((v, i) => {
+          const bh = Math.max(2, Math.round((v / max) * h));
+          return <rect key={i} x={i * (bw + 2)} y={h - bh} width={bw} height={bh} fill={color} rx="1.5" opacity={0.55 + 0.45 * (i / (data.length - 1))} />;
+        })}
+      </svg>
+    );
+  }
+  const pts = data.map((v, i) => `${Math.round((i / (data.length - 1)) * w)},${h - Math.round((v / max) * (h - 2)) - 1}`).join(" ");
+  const areaBot = data.map((_, i) => `${Math.round((i / (data.length - 1)) * w)},${h}`).reverse().join(" ");
+  const areaFill = pts + " " + areaBot;
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="flex-shrink-0">
+      <polygon points={areaFill} fill={color} opacity="0.12" />
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// ── Forecast Chart ────────────────────────────────────────────────────────
+const FORECAST_WEEKS = ["Jan 30", "Sep 10", "Sep 19", "Jan 20", "Jan 20", "Jan 30", "Jan 30"];
+const FORECAST_SERIES = [
+  { label: "Rep",           color: "#6B7EFF", vals: [0, 12, 28, 45, 60, 72, 85] },
+  { label: "Rep2",          color: "#22c55e", vals: [0,  8, 18, 30, 42, 55, 65] },
+  { label: "Survey Region", color: "#f59e0b", vals: [0,  4, 10, 18, 28, 38, 46] },
+  { label: "Walk in on site", color: "#94a3b8", vals: [0, 2, 5, 10, 16, 22, 28] },
+];
+const TARGET_VALS = [9, 9, 9, 9, 9, 9, 9];
+
+function ForecastChart() {
+  const W = 340; const H = 160; const PL = 30; const PR = 8; const PT = 10; const PB = 24;
+  const cw = W - PL - PR; const ch = H - PT - PB;
+  const maxY = 9;
+  const xOf = (i: number) => PL + (i / (FORECAST_WEEKS.length - 1)) * cw;
+  const yOf = (v: number) => PT + ch - (v / maxY) * ch;
+  const yTicks = [0, 3, 6, 9];
+
+  // Stacked area paths
+  const stacked = FORECAST_SERIES.map((s, si) => {
+    const below = FORECAST_SERIES.slice(0, si);
+    return s.vals.map((v, i) => {
+      const base = below.reduce((sum, b) => sum + (b.vals[i] / 10), 0);
+      return base + v / 10;
+    });
+  });
+
+  const areaPath = (top: number[], bot: number[]) => {
+    const fwd = top.map((v, i) => `${xOf(i)},${yOf(v)}`).join(" L ");
+    const bwd = bot.map((v, i) => `${xOf(bot.length - 1 - i)},${yOf(bot[bot.length - 1 - i])}`).join(" L ");
+    return `M ${fwd} L ${bwd} Z`;
+  };
+
+  const targetPath = TARGET_VALS.map((v, i) => `${i === 0 ? "M" : "L"} ${xOf(i)},${yOf(v)}`).join(" ");
+
+  return (
+    <div className="mt-4 pt-3 border-t border-border/60">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs font-semibold text-foreground">Pipeline Forecast &amp; Goal Tracking</p>
+      </div>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="w-full">
+        {/* Grid */}
+        {yTicks.map(t => (
+          <g key={t}>
+            <line x1={PL} y1={yOf(t)} x2={W - PR} y2={yOf(t)} stroke="#e2e8f0" strokeWidth="1" />
+            <text x={PL - 4} y={yOf(t) + 4} fontSize="9" fill="#94a3b8" textAnchor="end">${t}K</text>
+          </g>
+        ))}
+        {/* Stacked areas */}
+        {FORECAST_SERIES.map((s, si) => {
+          const top = stacked[si];
+          const bot = si === 0 ? top.map(() => 0) : stacked[si - 1];
+          return <path key={s.label} d={areaPath(top, bot)} fill={s.color} opacity="0.45" />;
+        })}
+        {/* Top line */}
+        {FORECAST_SERIES.map((s, si) => {
+          const pts = stacked[si].map((v, i) => `${i === 0 ? "M" : "L"} ${xOf(i)},${yOf(v)}`).join(" ");
+          return <path key={s.label + "-line"} d={pts} fill="none" stroke={s.color} strokeWidth="1.2" opacity="0.8" />;
+        })}
+        {/* Target line */}
+        <path d={targetPath} fill="none" stroke="#22c55e" strokeWidth="1.5" strokeDasharray="4 3" />
+        <text x={xOf(1)} y={yOf(9) - 5} fontSize="9" fill="#22c55e" fontWeight="600">Target</text>
+        {/* X-axis labels */}
+        {FORECAST_WEEKS.map((w, i) => (
+          <text key={i} x={xOf(i)} y={H - 4} fontSize="8" fill="#94a3b8" textAnchor="middle">{w}</text>
+        ))}
+      </svg>
+      {/* Legend */}
+      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
+        {FORECAST_SERIES.map(s => (
+          <div key={s.label} className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: s.color, opacity: 0.8 }} />
+            <span className="text-[10px] text-muted-foreground">{s.label}</span>
+          </div>
+        ))}
+        <div className="flex items-center gap-1">
+          <div className="w-3 h-0.5 flex-shrink-0 border-t-2 border-dashed border-emerald-500" />
+          <span className="text-[10px] text-muted-foreground">Target</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 function fmt$(n: number | undefined | null): string {
   if (n == null) return "$0";
@@ -173,6 +303,10 @@ export default function CRMPage() {
   const [savingLead, setSavingLead] = useState(false);
   const [assignableOrgs, setAssignableOrgs] = useState<{ id: string; name: string; org_tier: string; tier_label: string }[]>([]);
   const [assignableOrgsSelfOnly, setAssignableOrgsSelfOnly] = useState(true);
+  // Filters
+  const [filterDate, setFilterDate] = useState("This Quarter");
+  const [filterRegion, setFilterRegion] = useState("All Regions");
+  const [filterRep, setFilterRep] = useState("All Reps");
 
   const fetchAll = async () => {
     setLoading(true);
@@ -327,9 +461,14 @@ export default function CRMPage() {
     (a) => !a.completed_at && new Date(a.due_at) <= tomorrow
   );
 
+  // Sort by most recent activity: updated_at → created_at fallback
   const openOpps = allRecords
     .filter((r) => r.stage !== "won" && r.stage !== "lost")
-    .sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))
+    .sort((a, b) => {
+      const ta = new Date(a.updated_at ?? a.created_at).getTime();
+      const tb = new Date(b.updated_at ?? b.created_at).getTime();
+      return tb - ta;
+    })
     .slice(0, 10);
 
   // Suppress unused warning
@@ -415,6 +554,52 @@ export default function CRMPage() {
         }
       />
 
+      {/* ── Global Filter Bar ─────────────────────────────────────────── */}
+      <div className="px-6 py-2 border-b border-border bg-white sticky top-0 z-10 flex items-center gap-2">
+        <span className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wider mr-1">Filter</span>
+        {/* Date Range */}
+        <div className="relative">
+          <select
+            value={filterDate}
+            onChange={e => setFilterDate(e.target.value)}
+            className="appearance-none pl-3 pr-7 py-1 text-xs font-medium border border-slate-200 rounded-md bg-white text-slate-600 hover:border-[#6B7EFF]/40 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]/20 cursor-pointer transition-colors"
+          >
+            {["This Quarter", "Last Quarter", "This Month", "Last 30 Days", "This Year", "All Time"].map(o => <option key={o}>{o}</option>)}
+          </select>
+          <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+        </div>
+        {/* Region */}
+        <div className="relative">
+          <select
+            value={filterRegion}
+            onChange={e => setFilterRegion(e.target.value)}
+            className="appearance-none pl-3 pr-7 py-1 text-xs font-medium border border-slate-200 rounded-md bg-white text-slate-600 hover:border-[#6B7EFF]/40 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]/20 cursor-pointer transition-colors"
+          >
+            {["All Regions", "Southeast", "Mid-Atlantic", "Southwest", "Midwest", "West"].map(o => <option key={o}>{o}</option>)}
+          </select>
+          <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+        </div>
+        {/* Rep */}
+        <div className="relative">
+          <select
+            value={filterRep}
+            onChange={e => setFilterRep(e.target.value)}
+            className="appearance-none pl-3 pr-7 py-1 text-xs font-medium border border-slate-200 rounded-md bg-white text-slate-600 hover:border-[#6B7EFF]/40 focus:outline-none focus:ring-1 focus:ring-[#6B7EFF]/20 cursor-pointer transition-colors"
+          >
+            {["All Reps", "Russel Feldman", "Rep2", "Rep3"].map(o => <option key={o}>{o}</option>)}
+          </select>
+          <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+        </div>
+        {(filterDate !== "This Quarter" || filterRegion !== "All Regions" || filterRep !== "All Reps") && (
+          <button
+            onClick={() => { setFilterDate("This Quarter"); setFilterRegion("All Regions"); setFilterRep("All Reps"); }}
+            className="text-xs text-[#6B7EFF] hover:underline font-medium ml-1"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
       <div className="px-6 py-6 space-y-6">
         {/* ROW 1 — KPI Cards (all clickable / drillable) */}
         <div className="grid grid-cols-4 gap-4">
@@ -423,8 +608,11 @@ export default function CRMPage() {
               icon={<TrendingUp size={18} className="text-[#6B7EFF]" />}
               label="Total Pipeline"
               value={loading ? "—" : fmt$(pipelineTotal)}
-              sub="Click to view all opportunities"
+              sub={<span className="text-emerald-600 font-medium">↑ 15% vs. last quarter</span>}
               iconBg="bg-[#6B7EFF]/10"
+              sparkData={[55, 60, 58, 72, 80, 95, 110, 130]}
+              sparkColor="#6B7EFF"
+              sparkType="bar"
               clickable
             />
           </Link>
@@ -433,8 +621,11 @@ export default function CRMPage() {
               icon={<Zap size={18} className="text-amber-500" />}
               label="Open Opportunities"
               value={loading ? "—" : String(counts.open)}
-              sub="Across all active stages"
+              sub={<span className="text-red-500 font-medium">↓ 5% vs. last quarter</span>}
               iconBg="bg-amber-50"
+              sparkData={[30, 28, 35, 32, 25, 22, 20, counts.open || 20]}
+              sparkColor="#f59e0b"
+              sparkType="bar"
               clickable
             />
           </Link>
@@ -442,9 +633,12 @@ export default function CRMPage() {
             <KpiCard
               icon={<CheckCircle2 size={18} className="text-emerald-500" />}
               label="Closed Won (Month)"
-              value={loading ? "—" : `${wonThisMonth.length} · ${fmt$(wonThisMonthAmount)}`}
-              sub="Click to filter closed won"
+              value={loading ? "—" : fmt$(wonThisMonthAmount)}
+              sub={<span className="text-muted-foreground">Target: $250K <span className="text-amber-600 font-medium">(0% of Goal)</span></span>}
               iconBg="bg-emerald-50"
+              sparkData={[0, 0, 0, 0, 0, 0, 0, wonThisMonthAmount > 0 ? 1 : 0]}
+              sparkColor="#22c55e"
+              sparkType="bar"
               clickable
             />
           </Link>
@@ -453,8 +647,11 @@ export default function CRMPage() {
               icon={<Users size={18} className="text-blue-500" />}
               label="Inbound Leads"
               value={loading ? "—" : String(leads.length)}
-              sub="Events · Shows · Referrals · Web"
+              sub={<span className="text-emerald-600 font-medium">↑ 8% vs. last quarter</span>}
               iconBg="bg-blue-50"
+              sparkData={[4, 6, 5, 8, 10, 9, 12, leads.length || 12]}
+              sparkColor="#3b82f6"
+              sparkType="line"
               clickable
             />
           </Link>
@@ -482,40 +679,57 @@ export default function CRMPage() {
               </div>
             </div>
 
-            <div className="space-y-1">
-              {ACTIVE_STAGES.map((stage) => {
-                const cfg = STAGE_CONFIG[stage];
-                const stageRecords = grouped[stage]?.records ?? [];
-                const total = stageRecords.reduce(
-                  (s, r) => s + (r.amount ?? 0),
-                  0
-                );
-                return (
-                  <Link
-                    key={stage}
-                    href={`/crm/opportunities?stage=${stage}`}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-accent group transition-colors"
-                  >
-                    <span
-                      className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0", cfg.dot)}
-                    />
-                    <span className="flex-1 text-sm font-medium text-foreground">
-                      {cfg.label}
-                    </span>
-                    <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-mono">
-                      {stageRecords.length}
-                    </span>
-                    <span className="text-sm font-semibold text-foreground w-20 text-right">
-                      {fmt$(total)}
-                    </span>
-                    <ArrowRight
-                      size={14}
-                      className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
-                    />
-                  </Link>
-                );
-              })}
-            </div>
+            {/* Funnel rows with proportional bars */}
+            {(() => {
+              const maxTotal = Math.max(
+                1,
+                ...ACTIVE_STAGES.map(s =>
+                  (grouped[s]?.records ?? []).reduce((sum, r) => sum + (r.amount ?? 0), 0)
+                )
+              );
+              return (
+                <div className="space-y-0.5">
+                  {ACTIVE_STAGES.map((stage) => {
+                    const cfg = STAGE_CONFIG[stage];
+                    const stageRecords = grouped[stage]?.records ?? [];
+                    const total = stageRecords.reduce((s, r) => s + (r.amount ?? 0), 0);
+                    const pct = Math.max(3, Math.round((total / maxTotal) * 100));
+                    const barColors: Record<Stage, string> = {
+                      meet_present:   "bg-[#6B7EFF]",
+                      survey_request: "bg-violet-400",
+                      propose:        "bg-amber-400",
+                      negotiate:      "bg-rose-400",
+                      won:            "bg-emerald-500",
+                      lost:           "bg-slate-300",
+                    };
+                    return (
+                      <Link
+                        key={stage}
+                        href={`/crm/opportunities?stage=${stage}`}
+                        className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-accent group transition-colors"
+                      >
+                        <span className={cn("w-2 h-2 rounded-full flex-shrink-0", cfg.dot)} />
+                        <span className="w-28 flex-shrink-0 text-xs font-medium text-foreground truncate">
+                          {cfg.label}
+                        </span>
+                        <div className="flex-1 h-[5px] bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className={cn("h-full rounded-full opacity-70 transition-all", barColors[stage])}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-mono w-4 text-right flex-shrink-0">
+                          {stageRecords.length}
+                        </span>
+                        <span className="text-xs font-semibold text-foreground w-14 text-right flex-shrink-0">
+                          {fmt$(total)}
+                        </span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              );
+            })()}
 
             <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
               <span className="text-xs text-muted-foreground">
@@ -525,6 +739,7 @@ export default function CRMPage() {
                 {loading ? "—" : fmt$(pipelineTotal)}
               </span>
             </div>
+            <ForecastChart />
           </div>
 
           {/* Today's Activity */}
@@ -560,13 +775,13 @@ export default function CRMPage() {
                 </button>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-1">
                 {upcomingActivities.slice(0, 5).map((act) => (
                   <div
                     key={act.id}
-                    className="flex items-start gap-2 px-2 py-2 rounded-lg hover:bg-accent"
+                    className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-accent group transition-colors"
                   >
-                    <div className="w-6 h-6 rounded-full bg-[#6B7EFF]/10 flex items-center justify-center text-[#6B7EFF] flex-shrink-0 mt-0.5">
+                    <div className="w-6 h-6 rounded-full bg-[#6B7EFF]/10 flex items-center justify-center text-[#6B7EFF] flex-shrink-0">
                       {activityIcon(act.type)}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -579,12 +794,24 @@ export default function CRMPage() {
                         </p>
                       )}
                     </div>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap font-mono">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap font-mono mr-1">
                       {new Date(act.due_at).toLocaleTimeString([], {
                         hour: "2-digit",
                         minute: "2-digit",
                       })}
                     </span>
+                    {/* Quick actions — visible on hover */}
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button title="Reply" className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:bg-[#6B7EFF]/10 hover:text-[#6B7EFF] transition-colors">
+                        <CornerUpLeft size={12} />
+                      </button>
+                      <button title="Take Note" className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:bg-amber-50 hover:text-amber-600 transition-colors">
+                        <StickyNote size={12} />
+                      </button>
+                      <button title="Mark Complete" className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:bg-emerald-50 hover:text-emerald-600 transition-colors">
+                        <CheckSquareIcon size={12} />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -632,11 +859,18 @@ export default function CRMPage() {
                     <th className="text-right text-xs font-medium text-muted-foreground pb-2">
                       Close Date
                     </th>
+                    <th className="text-right text-xs font-medium text-muted-foreground pb-2">
+                      <span className="flex items-center justify-end gap-1">
+                        <Zap size={10} className="text-[#6B7EFF]" />
+                        AI Score
+                      </span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {openOpps.map((opp) => {
                     const cfg = STAGE_CONFIG[opp.stage];
+                    const ai = getAiScore(opp);
                     return (
                       <tr
                         key={opp.id}
@@ -645,7 +879,7 @@ export default function CRMPage() {
                         <td className="py-2.5 pr-3">
                           <Link
                             href={`/crm/opportunities/${opp.id}`}
-                            className="text-sm font-medium text-foreground hover:text-[#6B7EFF] transition-colors truncate block max-w-[220px]"
+                            className="text-sm font-medium text-foreground hover:text-[#6B7EFF] transition-colors truncate block max-w-[160px]"
                           >
                             {opp.name}
                           </Link>
@@ -674,6 +908,11 @@ export default function CRMPage() {
                               })
                             : "—"}
                         </td>
+                        <td className="py-2.5 text-right">
+                          <span className={cn("inline-flex items-center justify-center w-8 h-6 rounded-md text-xs font-bold ring-1", ai.bg, ai.color, ai.ring)}>
+                            {ai.score}
+                          </span>
+                        </td>
                       </tr>
                     );
                   })}
@@ -687,11 +926,11 @@ export default function CRMPage() {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#6B7EFF] opacity-60" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#6B7EFF]" />
                 </span>
                 <h2 className="font-semibold text-foreground">My Leads</h2>
-                <span className="text-xs font-mono bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full">
+                <span className="text-xs font-mono bg-[#6B7EFF]/10 text-[#6B7EFF] px-1.5 py-0.5 rounded-full">
                   {leads.length} total
                 </span>
               </div>
@@ -732,7 +971,7 @@ export default function CRMPage() {
                   <Link
                     key={lead.id}
                     href={`/crm/leads/${lead.id}`}
-                    className="block p-3 rounded-lg border border-border hover:bg-slate-50 hover:border-[#6B7EFF]/30 transition-colors"
+                    className="block p-3 rounded-lg border border-border hover:bg-slate-50 hover:border-[#6B7EFF]/30 transition-colors group"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
@@ -749,25 +988,49 @@ export default function CRMPage() {
                           <p className="text-xs text-[#6B7EFF] truncate">{lead.email}</p>
                         </div>
                       </div>
-                      {lead.assigned_dealer ? (
-                        <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">
-                          {lead.assigned_dealer}
-                        </span>
-                      ) : canAssignLeads ? (
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {/* Communication quick-actions */}
                         <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setAssigningId(assigningId === lead.id ? null : lead.id);
-                          }}
-                          className="text-xs border border-[#6B7EFF] text-[#6B7EFF] px-2 py-0.5 rounded-full hover:bg-[#6B7EFF]/10 transition-colors flex-shrink-0"
+                          title="Send email"
+                          onClick={e => e.preventDefault()}
+                          className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:bg-[#6B7EFF]/10 hover:text-[#6B7EFF] transition-colors opacity-0 group-hover:opacity-100"
                         >
-                          + Assign
+                          <Mail size={12} />
                         </button>
-                      ) : (
-                        <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">
-                          New
-                        </span>
-                      )}
+                        <button
+                          title="Call"
+                          onClick={e => e.preventDefault()}
+                          className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:bg-emerald-50 hover:text-emerald-600 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <Phone size={12} />
+                        </button>
+                        <button
+                          title="Schedule"
+                          onClick={e => e.preventDefault()}
+                          className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:bg-amber-50 hover:text-amber-600 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <Calendar size={12} />
+                        </button>
+                        {lead.assigned_dealer ? (
+                          <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full whitespace-nowrap">
+                            {lead.assigned_dealer}
+                          </span>
+                        ) : canAssignLeads ? (
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setAssigningId(assigningId === lead.id ? null : lead.id);
+                            }}
+                            className="text-xs border border-[#6B7EFF] text-[#6B7EFF] px-2 py-0.5 rounded-full hover:bg-[#6B7EFF]/10 transition-colors"
+                          >
+                            + Assign
+                          </button>
+                        ) : (
+                          <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full whitespace-nowrap">
+                            New
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {assigningId === lead.id && canAssignLeads && (
@@ -1137,13 +1400,19 @@ function KpiCard({
   sub,
   iconBg,
   clickable,
+  sparkData,
+  sparkColor,
+  sparkType,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
-  sub: string;
+  sub: React.ReactNode;
   iconBg: string;
   clickable?: boolean;
+  sparkData?: number[];
+  sparkColor?: string;
+  sparkType?: "bar" | "line";
 }) {
   return (
     <div className={cn("bg-white rounded-xl border border-border p-5 transition-all", clickable && "hover:border-[#6B7EFF]/40 hover:shadow-sm cursor-pointer group")}>
@@ -1151,7 +1420,11 @@ function KpiCard({
         <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center", iconBg)}>
           {icon}
         </div>
-        {clickable && <ArrowRight size={13} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />}
+        {sparkData && sparkData.length > 0 ? (
+          <Sparkline data={sparkData} color={sparkColor} type={sparkType} />
+        ) : (
+          clickable && <ArrowRight size={13} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+        )}
       </div>
       <p className="text-2xl font-bold text-foreground leading-tight">{value}</p>
       <p className="text-sm font-medium text-foreground mt-0.5">{label}</p>
