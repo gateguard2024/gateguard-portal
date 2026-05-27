@@ -19,7 +19,7 @@ import { TopBar } from '@/components/layout/TopBar'
 
 /* ─── Types ──────────────────────────────────────────────── */
 interface PartnerDoc {
-  type: 'w9' | '1099' | 'coi' | 'license' | 'nda' | 'agreement' | 'background_check'
+  type: 'w9' | 'coi' | 'license' | 'nda' | 'agreement' | 'background_check' | 'sales_training_cert' | 'tech1_cert' | 'tech2_cert' | 'tech3_cert'
   label: string
   status: 'missing' | 'pending' | 'on_file' | 'expired'
   url?: string
@@ -114,13 +114,16 @@ const TIER_CONFIG: Record<string, { label: string; icon: any; color: string; bg:
 
 /* ─── Document config ────────────────────────────────────── */
 const DOC_CONFIGS: Array<{ type: PartnerDoc['type']; label: string; hasExpiry: boolean }> = [
-  { type: 'w9',               label: 'W-9',                      hasExpiry: false },
-  { type: '1099',             label: '1099',                     hasExpiry: false },
-  { type: 'coi',              label: 'Certificate of Insurance', hasExpiry: true  },
-  { type: 'license',          label: 'License',                  hasExpiry: true  },
-  { type: 'nda',              label: 'NDA',                      hasExpiry: false },
-  { type: 'agreement',        label: 'Dealer Agreement',         hasExpiry: false },
-  { type: 'background_check', label: 'Background Check',        hasExpiry: true  },
+  { type: 'w9',                  label: 'W-9',                      hasExpiry: false },
+  { type: 'coi',                 label: 'Certificate of Insurance', hasExpiry: true  },
+  { type: 'license',             label: 'State License',            hasExpiry: true  },
+  { type: 'nda',                 label: 'NDA',                      hasExpiry: false },
+  { type: 'agreement',           label: 'Dealer Agreement',         hasExpiry: false },
+  { type: 'background_check',    label: 'Background Check',         hasExpiry: true  },
+  { type: 'sales_training_cert', label: 'Sales Training Cert',      hasExpiry: true  },
+  { type: 'tech1_cert',          label: 'Tech 1 Certification',     hasExpiry: true  },
+  { type: 'tech2_cert',          label: 'Tech 2 Certification',     hasExpiry: true  },
+  { type: 'tech3_cert',          label: 'Tech 3 Certification',     hasExpiry: true  },
 ]
 
 /* ─── Helpers ────────────────────────────────────────────── */
