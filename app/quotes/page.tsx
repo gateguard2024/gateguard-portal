@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
+import { TopBar } from '@/components/layout/TopBar';
 import {
   FileText, Plus, Search, Send, Eye, CheckCircle2,
   XCircle, Clock, Copy, MoreHorizontal, Settings,
@@ -307,23 +308,24 @@ export default function QuotesPage() {
     { key: 'declined', label: 'Declined' },
   ];
 
-  return (
-    <div className="p-6 space-y-6 max-w-[1400px] mx-auto">
+  const newQuoteAction = (
+    <Link
+      href="/quotes/new"
+      className="flex items-center gap-2 bg-[#6B7EFF] hover:bg-[#5a6df0] text-white font-semibold px-4 py-2 rounded-lg transition-colors text-sm"
+    >
+      <Plus className="w-4 h-4" />
+      New Quote
+    </Link>
+  );
 
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Quotes & Proposals</h1>
-          <p className="text-sm text-slate-400 mt-0.5">Build proposals, track pipeline, close deals</p>
-        </div>
-        <Link
-          href="/quotes/new"
-          className="flex items-center gap-2 bg-[#6B7EFF] hover:bg-[#5a6df0] text-white font-semibold px-4 py-2 rounded-lg transition-colors text-sm shadow-sm"
-        >
-          <Plus className="w-4 h-4" />
-          New Quote
-        </Link>
-      </div>
+  return (
+    <div className="flex flex-col min-h-full">
+      <TopBar
+        title="Quotes & Proposals"
+        subtitle="Build proposals, track pipeline, close deals"
+        actions={newQuoteAction}
+      />
+      <div className="p-6 space-y-6 max-w-[1400px] mx-auto w-full">
 
       {/* ── KPI Cards ── */}
       <div className="grid grid-cols-3 gap-4">
@@ -559,6 +561,7 @@ export default function QuotesPage() {
 
         {/* ── Right: Deal Velocity ── */}
         <DealVelocityPanel quotes={quotes} />
+      </div>
       </div>
     </div>
   );
