@@ -96,6 +96,22 @@
 - DealVelocityPanel: conversion funnel bars, avg time to Sent/View/Accept metric cards, win rate progress bar
 - Filter tabs: underline style with live count badges, not button-group style
 
+**Quotes new page design notes (`/quotes/new`):**
+- `SCENARIO_TEMPLATES` array (module scope) defines 6 CPQ starting scenarios with pre-built `items[]`
+- `CPQ_DEPS` map (module scope) defines SKU → required item descriptions for dependency checks
+- `loadTemplate(scenario)` pre-populates `liItems`, sets `liStep(1)`, switches to `line_item` mode
+- AI Voice Import card routes to `survey_import` mode instead of builder
+- 3-col grid on lg screens; bottom row has Survey Wizard + Import Survey fallbacks
+- `Package, ShieldCheck, Mic2` added to the require() import block
+
+**Quote builder design notes (`/quotes/[id]`):**
+- `CPQ_DEPS` (module scope) maps item SKU → required descriptions; builder shows amber warning if missing
+- `MARGIN_APPROVAL_THRESHOLD = 25` — below this %, Send locks → "Request VP Approval"
+- Estimated blended margin: hardware `subtotal * 0.53` cost assumption (47% margin), MRR `mrrTotal * 0.25` (75% margin) — replace with real `unit_cost` once migration 092 runs
+- `viewMode` state (`'internal' | 'presentation'`) — toggle in top bar; Proposal View opens `/quotes/[id]/proposal` in new tab
+- Internal Financial Summary sidebar card: SVG donut ring (green ≥40%, amber ≥25%, red <25%), revenue/cost rows, approval badge
+- Auto-Approved badge (emerald) or Approval Required badge (amber) in top bar breadcrumb row
+
 ### /tech Field Tool
 | File | Purpose |
 |------|---------|
@@ -235,11 +251,19 @@ When embedding `{{MERGE_VAR}}` placeholders inside a TypeScript backtick string,
 - ✅ CLAUDE.md updated (this file) + NEXUS_USER_MANUAL.md created
 - ✅ CRM dashboard enterprise redesign — `app/crm/page.tsx`: global filter bar (Date Range / Region / Rep), KPI sparklines (line + bar SVG), horizontal proportional funnel bars on pipeline, Pipeline Forecast & Goal Tracking stacked area chart, AI Deal Score column on Open Opportunities (deterministic hash of opp ID + stage → green/amber/red), activity quick-actions (Reply/Note/Complete on hover), lead communication icons (Mail/Phone/Calendar on hover), Open Opportunities sorted by `updated_at → created_at`, My Leads checks `assigned_dealer` before showing `+ Assign`, all accents `#6B7EFF`
 - ✅ Quotes page enterprise redesign — `app/quotes/page.tsx`: KPI sparkline cards (Active MRR bar, Pipeline MRR line, Dealer Override target/dashed) with delta trend badges, horizontal bar funnel replacing 4-box chevron pipeline, 2-column bottom layout (quotes table left + Deal Velocity panel right), filter tabs with live counts per status, row hover actions (Eye/Edit/Copy/More), Deal Velocity panel shows quote conversion funnel bars + avg time metrics + win rate progress bar; all accents `#6B7EFF`, white card design system
+- ✅ Scenario Gallery (`app/quotes/new/page.tsx`) — replaced 3-card picker with 6-card intent-driven gallery: Multi-Family Smart Core, Premium Gate & Access, Custom Package Mgmt, Comprehensive Security, Device-Only Hardware, AI Voice Import (Beta). Each card pre-populates line item builder with CPQ-correct starter items via `loadTemplate()`. Bottom row preserves Survey Wizard + Import Survey entry points. `CPQ_DEPS` map and `SCENARIO_TEMPLATES` array defined at module scope.
+- ✅ CPQ Quote Builder (`app/quotes/[id]/page.tsx`) — added: CPQ dependency engine (checks item SKUs against `CPQ_DEPS`, surfaces amber warning banner for missing required items), margin estimation engine (hardware ~47% / MRR ~75% blended estimate), Internal Financial Summary sidebar card (margin donut ring, revenue/cost breakdown, approval badge), approval gateway (Send to Client locked → "Request VP Approval" when margin < 25%), Internal View / Proposal View toggle in top bar
+
+### Pending for tomorrow (CPQ Phase 2)
+- Add `unit_cost` column to `quote_line_items` table (migration) — enables real margin vs. estimated
+- Make margin % column editable inline on line item table
+- Wire up `isOptionalForClient` toggle column in builder table (already exists as `is_optional` in DB)
+- Test full scenario walkthroughs: 92 W. Paces (Multi-Family), gate-only property, device-only deal
+- Interactive Public Proposal (`/quotes/[id]/proposal`) — add client toggle add-ons + dynamic total recalc
 
 ### Active (in progress)
 - Task #207 — Upgrade floor plans to Mapbox satellite backdrop
 - Task #234 — Upgrade invoice modal: QB-style product picker + Mark as Paid
-- Task #240 — NEXUS User Manual v10 ✅ created as NEXUS_USER_MANUAL.md in repo root
 
 ### High priority next
 - Task #50 — Client portal at portal.gateguard.co/[site-slug] (property manager dashboard)
