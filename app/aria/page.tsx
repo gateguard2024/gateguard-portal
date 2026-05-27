@@ -989,7 +989,7 @@ export default function ARIAPage() {
                 {scoutLoading === savedSearchId ? <Loader2 size={11} className="animate-spin" /> : <><Zap size={11} /> Launch SCOUT</>}
               </button>
             )}
-            {scoutResult[savedSearchId] && (
+            {savedSearchId && scoutResult[savedSearchId] && (
               <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
                 <Check size={11} /> SCOUT launched · {scoutResult[savedSearchId].sent} sent
               </span>
