@@ -8,12 +8,12 @@ import {
   CheckCircle2, MapPin, Phone, Mail, Globe, Layers,
   Star, Wrench, TrendingUp, ClipboardList, Zap, FileText,
   AlertCircle, Copy, ExternalLink, Hash, Info,
-  Search, X, Loader2, Clock, RefreshCw, Upload, Plus, Trash2, Eye, EyeOff,
+  Search, X, Loader2, Clock, RefreshCw, Upload, Plus, Trash2,
 } from 'lucide-react'
 import { NDA_TEMPLATE } from '@/lib/nda-template'
 import { AGREEMENT_TEMPLATE } from '@/lib/agreement-template'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { DollarSign, Hammer, UserCheck, UserPlus, ShieldCheck } = require('lucide-react') as any
+const { DollarSign, Hammer, UserCheck, UserPlus, ShieldCheck, Eye, EyeOff } = require('lucide-react') as any
 
 /* ─── Types ──────────────────────────────────────────────── */
 type OrgTier =
