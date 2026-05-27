@@ -11,45 +11,20 @@ const supabase = createClient(
 
 // GET /api/calendar/google/status
 // Returns { connected: boolean, last_synced: string | null }
-// Checks both user_settings (legacy calendar OAuth) and message_channels
-// (caldav channel created via Messages → Channel Management).
 export async function GET() {
   try {
     const user = await getCurrentUser()
 
-    // ── Source 1: legacy user_settings token ──────────────────────────────
-    const { data: tokenRow } = await supabase
+    // user_settings is a structured table (one row per user, not key-value).
+    // Columns: gcal_refresh_token, gcal_last_synced_at
+    const { data: settingsRow } = await supabase
       .from('user_settings')
-      .select('value')
+      .select('gcal_refresh_token, gcal_last_synced_at')
       .eq('user_id', user.id)
-      .eq('key', 'google_calendar_refresh_token')
-      .single()
-
-    const connectedLegacy = !!(tokenRow?.value)
-
-    // ── Source 2: message_channels caldav entry ────────────────────────────
-    const { data: channelRow } = await supabase
-      .from('message_channels')
-      .select('id, oauth_refresh_token, oauth_access_token')
-      .eq('user_id', user.id)
-      .eq('channel_type', 'caldav')
-      .eq('is_active', true)
       .maybeSingle()
 
-    const connectedChannel = !!(channelRow?.oauth_refresh_token || channelRow?.oauth_access_token)
-
-    const connected = connectedLegacy || connectedChannel
-
-    let last_synced: string | null = null
-    if (connectedLegacy) {
-      const { data: syncRow } = await supabase
-        .from('user_settings')
-        .select('value')
-        .eq('user_id', user.id)
-        .eq('key', 'google_calendar_last_synced')
-        .single()
-      last_synced = syncRow?.value ?? null
-    }
+    const connected = !!(settingsRow?.gcal_refresh_token)
+    const last_synced = settingsRow?.gcal_last_synced_at ?? null
 
     return NextResponse.json({ connected, last_synced })
   } catch {

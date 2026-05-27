@@ -88,37 +88,40 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // ── Google Calendar events (if token stored) ──────────────────────────────
-    const hasGCal = !!(process.env.GOOGLE_CALENDAR_CLIENT_ID && process.env.GOOGLE_CALENDAR_CLIENT_SECRET)
-    if (hasGCal) {
-      const { data: tokenRow } = await supabase
-        .from('user_settings')
-        .select('value')
+    // ── Google Calendar events (pulled from gcal_events cache) ───────────────
+    // Check connection via the structured user_settings row (not KV)
+    const { data: settingsRow } = await supabase
+      .from('user_settings')
+      .select('gcal_refresh_token')
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    if (settingsRow?.gcal_refresh_token) {
+      // gcal_events uses start_time as a timestamptz column — filter by day range
+      const { data: gcalRows } = await supabase
+        .from('gcal_events')
+        .select('gcal_event_id, title, start_time, end_time, is_all_day, status')
         .eq('user_id', user.id)
-        .eq('key', 'google_calendar_refresh_token')
-        .single()
+        .gte('start_time', `${startDate}T00:00:00`)
+        .lte('start_time', `${endDate}T23:59:59`)
+        .order('start_time', { ascending: true })
 
-      if (tokenRow?.value) {
-        // Fetch cached gcal events for this month
-        const { data: gcalRows } = await supabase
-          .from('gcal_events')
-          .select('gcal_event_id, title, start_date, start_time, end_date, status')
-          .eq('user_id', user.id)
-          .gte('start_date', startDate)
-          .lte('start_date', endDate)
+      for (const ge of gcalRows ?? []) {
+        // Extract YYYY-MM-DD and HH:MM from the timestamptz
+        const startIso  = ge.start_time as string
+        const dateStr   = startIso.split('T')[0]
+        const timePart  = ge.is_all_day ? undefined : startIso.split('T')[1]?.substring(0, 5)
 
-        for (const ge of gcalRows ?? []) {
-          events.push({
-            id:            ge.gcal_event_id,
-            type:          'gcal',
-            title:         ge.title ?? '(No title)',
-            date:          ge.start_date,
-            time:          ge.start_time ?? undefined,
-            status:        ge.status ?? 'confirmed',
-            color:         '#10B981',
-            gcal_event_id: ge.gcal_event_id,
-          })
-        }
+        events.push({
+          id:            ge.gcal_event_id,
+          type:          'gcal',
+          title:         ge.title ?? '(No title)',
+          date:          dateStr,
+          time:          timePart,
+          status:        ge.status ?? 'confirmed',
+          color:         '#10B981',
+          gcal_event_id: ge.gcal_event_id,
+        })
       }
     }
 

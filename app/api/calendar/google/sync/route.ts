@@ -9,7 +9,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// ── Helper: get a fresh access token using the stored refresh token ────────────
+// ── Helper: get a fresh access token using the stored refresh token ──────────
 async function getAccessToken(refreshToken: string): Promise<string | null> {
   const clientId     = process.env.GOOGLE_CALENDAR_CLIENT_ID
   const clientSecret = process.env.GOOGLE_CALENDAR_CLIENT_SECRET
@@ -36,35 +36,23 @@ async function getAccessToken(refreshToken: string): Promise<string | null> {
   }
 }
 
-// ── Helper: format a date as YYYY-MM-DD ───────────────────────────────────────
-function toDateStr(isoString: string): string {
-  return isoString.split('T')[0]
-}
-
-function toTimeStr(isoString: string): string | null {
-  const parts = isoString.split('T')
-  if (parts.length < 2) return null
-  return parts[1].substring(0, 5) // HH:MM
-}
-
 // POST /api/calendar/google/sync — bidirectional sync
 export async function POST() {
   try {
     const user = await getCurrentUser()
 
-    // Get stored refresh token
-    const { data: tokenRow } = await supabase
+    // ── Get stored refresh token (user_settings is a structured row, not KV) ──
+    const { data: settingsRow } = await supabase
       .from('user_settings')
-      .select('value')
+      .select('gcal_refresh_token')
       .eq('user_id', user.id)
-      .eq('key', 'google_calendar_refresh_token')
-      .single()
+      .maybeSingle()
 
-    if (!tokenRow?.value) {
+    if (!settingsRow?.gcal_refresh_token) {
       return NextResponse.json({ error: 'Google Calendar not connected' }, { status: 400 })
     }
 
-    const accessToken = await getAccessToken(tokenRow.value)
+    const accessToken = await getAccessToken(settingsRow.gcal_refresh_token)
     if (!accessToken) {
       return NextResponse.json({ error: 'Failed to refresh Google access token' }, { status: 401 })
     }
@@ -76,7 +64,7 @@ export async function POST() {
     const timeMin = now.toISOString()
     const timeMax = future.toISOString()
 
-    // ── PULL: fetch events from Google Calendar ────────────────────────────────
+    // ── PULL: fetch events from Google Calendar ──────────────────────────────
     const gcalRes = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
       new URLSearchParams({
@@ -86,9 +74,7 @@ export async function POST() {
         orderBy:      'startTime',
         maxResults:   '250',
       }).toString(),
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      }
+      { headers: { Authorization: `Bearer ${accessToken}` } }
     )
 
     let pulledCount = 0
@@ -97,16 +83,24 @@ export async function POST() {
         items?: Array<{
           id: string
           summary?: string
+          description?: string
+          location?: string
           start?: { dateTime?: string; date?: string }
           end?:   { dateTime?: string; date?: string }
           status?: string
+          htmlLink?: string
+          organizer?: { email?: string }
+          attendees?: Array<{ email: string; displayName?: string; responseStatus?: string }>
         }>
       }
 
       for (const item of gcalData.items ?? []) {
-        const startRaw  = item.start?.dateTime ?? item.start?.date ?? ''
-        const startDate = toDateStr(startRaw)
-        const startTime = item.start?.dateTime ? toTimeStr(item.start.dateTime) : null
+        const isAllDay   = !!item.start?.date && !item.start?.dateTime
+        // Use date-only events as midnight UTC timestamps for storage
+        const startIso   = item.start?.dateTime ?? (item.start?.date ? `${item.start.date}T00:00:00Z` : null)
+        const endIso     = item.end?.dateTime   ?? (item.end?.date   ? `${item.end.date}T00:00:00Z`   : null)
+
+        if (!startIso || !endIso) continue
 
         void (async () => {
           try {
@@ -114,16 +108,20 @@ export async function POST() {
               .from('gcal_events')
               .upsert(
                 {
-                  user_id:       user.id,
-                  gcal_event_id: item.id,
-                  title:         item.summary ?? '(No title)',
-                  start_date:    startDate,
-                  start_time:    startTime,
-                  end_date:      item.end?.dateTime
-                    ? toDateStr(item.end.dateTime)
-                    : (item.end?.date ?? startDate),
-                  status:        item.status ?? 'confirmed',
-                  synced_at:     new Date().toISOString(),
+                  user_id:         user.id,
+                  gcal_event_id:   item.id,
+                  gcal_calendar_id: 'primary',
+                  title:            item.summary ?? '(No title)',
+                  description:      item.description ?? null,
+                  location:         item.location ?? null,
+                  start_time:       startIso,
+                  end_time:         endIso,
+                  is_all_day:       isAllDay,
+                  status:           item.status ?? 'confirmed',
+                  html_link:        item.htmlLink ?? null,
+                  organizer_email:  item.organizer?.email ?? null,
+                  attendees:        item.attendees ?? null,
+                  synced_at:        new Date().toISOString(),
                 },
                 { onConflict: 'user_id,gcal_event_id' }
               )
@@ -133,7 +131,7 @@ export async function POST() {
       }
     }
 
-    // ── PUSH: to-dos and WOs → Google Calendar ─────────────────────────────────
+    // ── PUSH: to-dos and WOs → Google Calendar ───────────────────────────────
     let pushedCount = 0
 
     const nowDate    = now.toISOString().split('T')[0]
@@ -156,47 +154,46 @@ export async function POST() {
         .in('status', ['open', 'assigned', 'in_progress']),
     ])
 
-    // Push todos to GCal
+    // Push todos to GCal — check gcal_events for existing push via source_type/source_id
     for (const todo of todos ?? []) {
-      // Check if we already have a gcal event id stored for this todo
       const { data: existing } = await supabase
-        .from('user_settings')
-        .select('value')
+        .from('gcal_events')
+        .select('gcal_event_id')
         .eq('user_id', user.id)
-        .eq('key', `gcal_todo_${todo.id}`)
-        .single()
+        .eq('source_type', 'todo')
+        .eq('source_id', todo.id)
+        .maybeSingle()
+
+      const endDate = todo.due_date
+      // GCal all-day end date is exclusive, add 1 day
+      const endDateExclusive = new Date(new Date(todo.due_date).getTime() + 86400000)
+        .toISOString().split('T')[0]
 
       const eventBody = {
         summary:     `[TODO] ${todo.title}`,
         description: `GateGuard To-Do | Priority: ${todo.priority ?? 'medium'} | Status: ${todo.status}`,
         start:       { date: todo.due_date },
-        end:         { date: todo.due_date },
+        end:         { date: endDateExclusive },
       }
 
-      if (existing?.value) {
-        // Update existing event
+      if (existing?.gcal_event_id) {
+        // Update existing GCal event
         await fetch(
-          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${existing.value}`,
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${existing.gcal_event_id}`,
           {
             method:  'PUT',
-            headers: {
-              Authorization:  `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(eventBody),
+            headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+            body:    JSON.stringify(eventBody),
           }
         )
       } else {
-        // Create new event
+        // Create new GCal event and store the mapping in gcal_events
         const createRes = await fetch(
           'https://www.googleapis.com/calendar/v3/calendars/primary/events',
           {
             method:  'POST',
-            headers: {
-              Authorization:  `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(eventBody),
+            headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+            body:    JSON.stringify(eventBody),
           }
         )
         if (createRes.ok) {
@@ -204,12 +201,19 @@ export async function POST() {
           if (created.id) {
             void (async () => {
               try {
-                await supabase
-                  .from('user_settings')
-                  .upsert(
-                    { user_id: user.id, key: `gcal_todo_${todo.id}`, value: created.id },
-                    { onConflict: 'user_id,key' }
-                  )
+                await supabase.from('gcal_events').insert({
+                  user_id:          user.id,
+                  gcal_event_id:    created.id,
+                  gcal_calendar_id: 'primary',
+                  title:            `[TODO] ${todo.title}`,
+                  start_time:       `${todo.due_date}T00:00:00Z`,
+                  end_time:         `${endDateExclusive}T00:00:00Z`,
+                  is_all_day:       true,
+                  status:           'confirmed',
+                  source_type:      'todo',
+                  source_id:        todo.id,
+                  synced_at:        new Date().toISOString(),
+                })
               } catch (_) { /* non-blocking */ }
             })()
           }
@@ -221,41 +225,41 @@ export async function POST() {
     // Push work orders to GCal
     for (const wo of wos ?? []) {
       const { data: existingWo } = await supabase
-        .from('user_settings')
-        .select('value')
+        .from('gcal_events')
+        .select('gcal_event_id')
         .eq('user_id', user.id)
-        .eq('key', `gcal_wo_${wo.id}`)
-        .single()
+        .eq('source_type', 'work_order')
+        .eq('source_id', wo.id)
+        .maybeSingle()
 
+      const isAllDay      = !wo.scheduled_time
       const startDateTime = wo.scheduled_time
         ? `${wo.scheduled_date}T${wo.scheduled_time}:00`
         : wo.scheduled_date
-      const isAllDay = !wo.scheduled_time
+      const endDateExclusive = new Date(new Date(wo.scheduled_date).getTime() + 86400000)
+        .toISOString().split('T')[0]
 
       const eventBody = isAllDay
         ? {
             summary:     `[WO] ${wo.title}`,
             description: `GateGuard Work Order | Status: ${wo.status}`,
             start:       { date: wo.scheduled_date },
-            end:         { date: wo.scheduled_date },
+            end:         { date: endDateExclusive },
           }
         : {
             summary:     `[WO] ${wo.title}`,
             description: `GateGuard Work Order | Status: ${wo.status}`,
-            start:       { dateTime: startDateTime, timeZone: 'America/New_York' },
-            end:         { dateTime: startDateTime, timeZone: 'America/New_York' },
+            start:       { dateTime: `${startDateTime}`, timeZone: 'America/New_York' },
+            end:         { dateTime: `${startDateTime}`, timeZone: 'America/New_York' },
           }
 
-      if (existingWo?.value) {
+      if (existingWo?.gcal_event_id) {
         await fetch(
-          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${existingWo.value}`,
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${existingWo.gcal_event_id}`,
           {
             method:  'PUT',
-            headers: {
-              Authorization:  `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(eventBody),
+            headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+            body:    JSON.stringify(eventBody),
           }
         )
       } else {
@@ -263,11 +267,8 @@ export async function POST() {
           'https://www.googleapis.com/calendar/v3/calendars/primary/events',
           {
             method:  'POST',
-            headers: {
-              Authorization:  `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(eventBody),
+            headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+            body:    JSON.stringify(eventBody),
           }
         )
         if (createRes.ok) {
@@ -275,12 +276,23 @@ export async function POST() {
           if (created.id) {
             void (async () => {
               try {
-                await supabase
-                  .from('user_settings')
-                  .upsert(
-                    { user_id: user.id, key: `gcal_wo_${wo.id}`, value: created.id },
-                    { onConflict: 'user_id,key' }
-                  )
+                await supabase.from('gcal_events').insert({
+                  user_id:          user.id,
+                  gcal_event_id:    created.id,
+                  gcal_calendar_id: 'primary',
+                  title:            `[WO] ${wo.title}`,
+                  start_time:       isAllDay
+                    ? `${wo.scheduled_date}T00:00:00Z`
+                    : new Date(`${startDateTime}`).toISOString(),
+                  end_time:         isAllDay
+                    ? `${endDateExclusive}T00:00:00Z`
+                    : new Date(`${startDateTime}`).toISOString(),
+                  is_all_day:       isAllDay,
+                  status:           'confirmed',
+                  source_type:      'work_order',
+                  source_id:        wo.id,
+                  synced_at:        new Date().toISOString(),
+                })
               } catch (_) { /* non-blocking */ }
             })()
           }
@@ -289,22 +301,22 @@ export async function POST() {
       pushedCount++
     }
 
-    // Update last_synced_at
+    // ── Update gcal_last_synced_at on the user_settings row ─────────────────
     void (async () => {
       try {
         await supabase
           .from('user_settings')
           .upsert(
-            { user_id: user.id, key: 'google_calendar_last_synced', value: new Date().toISOString() },
-            { onConflict: 'user_id,key' }
+            { user_id: user.id, gcal_last_synced_at: new Date().toISOString() },
+            { onConflict: 'user_id' }
           )
       } catch (_) { /* non-blocking */ }
     })()
 
     return NextResponse.json({
-      success: true,
-      pulled:  pulledCount,
-      pushed:  pushedCount,
+      success:   true,
+      pulled:    pulledCount,
+      pushed:    pushedCount,
       synced_at: new Date().toISOString(),
     })
   } catch (err: unknown) {
