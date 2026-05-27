@@ -359,9 +359,19 @@ export default function PartnerNetworkPage() {
                       )}
                     </td>
 
-                    {/* Arrow */}
+                    {/* Resume / Arrow */}
                     <td className="px-4 py-3.5 text-right">
-                      <ChevronRight size={17} className="text-slate-300 group-hover:text-brand-400 transition-colors ml-auto" />
+                      {!org.onboarding_complete ? (
+                        <Link
+                          href={`/admin/dealers/new?resume=${org.id}`}
+                          onClick={e => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 text-[10px] font-semibold hover:bg-amber-200 transition-colors whitespace-nowrap"
+                        >
+                          Resume →
+                        </Link>
+                      ) : (
+                        <ChevronRight size={17} className="text-slate-300 group-hover:text-brand-400 transition-colors ml-auto" />
+                      )}
                     </td>
                   </tr>
                 )

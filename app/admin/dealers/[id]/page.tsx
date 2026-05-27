@@ -1156,6 +1156,25 @@ export default function DealerDetailPage() {
           <span className="text-foreground font-medium">{org.name}</span>
         </div>
 
+        {/* Onboarding incomplete banner */}
+        {!org.onboarding_complete && (
+          <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+            <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-amber-800">Onboarding incomplete</p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                This dealer was created but the onboarding wizard was not finished. Resume to complete setup.
+              </p>
+            </div>
+            <Link
+              href={`/admin/dealers/new?resume=${org.id}`}
+              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 transition-colors"
+            >
+              Resume Onboarding →
+            </Link>
+          </div>
+        )}
+
         {/* Header card */}
         <div className="bg-card border border-border rounded-xl p-6">
           <div className="flex items-start gap-4">

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   ChevronLeft, ChevronRight, Building2, Users, Shield,
@@ -538,8 +538,12 @@ function ReviewCard({ icon: Icon, color, bg, title, children }: {
 /* ─── Main wizard ────────────────────────────────────────── */
 export default function NewDealerPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const resumeId = searchParams.get('resume')
+
   const [step, setStep]           = useState(1)
   const [form, setForm]           = useState<WizardState>(EMPTY)
+  const [resumeLoading, setResumeLoading] = useState(!!resumeId)
   const [creatingDraft, setCreatingDraft] = useState(false)
   const [activating, setActivating]       = useState(false)
   const [result, setResult]       = useState<any>(null)
@@ -562,6 +566,89 @@ export default function NewDealerPage() {
 
   const set = (field: keyof WizardState, val: any) =>
     setForm(f => ({ ...f, [field]: val }))
+
+  // ── Resume existing onboarding ────────────────────────────────────────────
+  useEffect(() => {
+    if (!resumeId) return
+    ;(async () => {
+      setResumeLoading(true)
+      try {
+        // 1. Fetch the org record
+        const orgRes = await fetch(`/api/admin/dealers/${resumeId}`)
+        if (!orgRes.ok) throw new Error('Could not load dealer record')
+        const { org, commissionConfig } = await orgRes.json()
+
+        // 2. Fetch existing signatures for this org
+        const sigRes = await fetch(`/api/signatures/by-record?org_id=${resumeId}`)
+        const sigData = sigRes.ok ? await sigRes.json() : { signatures: [] }
+        const sigs: any[] = sigData.signatures ?? []
+        const ndaSig      = sigs.find((s: any) => s.document_type === 'nda')
+        const agrSig      = sigs.find((s: any) => s.document_type !== 'nda' && s.document_type !== undefined)
+
+        // 3. Pre-fill form from org data
+        const prefilled: WizardState = {
+          ...EMPTY,
+          draft_org_id:        org.id,
+          org_tier:            org.org_tier ?? '',
+          org_name:            org.name ?? '',
+          entity_type:         org.entity_type ?? 'limited liability company',
+          license_number:      org.license_number ?? '',
+          service_area_states: org.service_area_states ?? [],
+          tech_count:          org.tech_count != null ? String(org.tech_count) : '',
+          address:             org.address ?? '',
+          city:                org.city ?? '',
+          state:               org.state ?? '',
+          zip:                 org.zip ?? '',
+          org_phone:           org.phone ?? '',
+          org_email:           org.email ?? '',
+          website:             org.website ?? '',
+          // Relationships
+          parent_org_id:       org.parent_org_id ?? '',
+          // Commission
+          sales_partner_rate:  commissionConfig?.sales_partner_rate != null ? String(commissionConfig.sales_partner_rate) : '1.00',
+          service_dealer_rate: commissionConfig?.service_dealer_rate != null ? String(commissionConfig.service_dealer_rate) : '3.00',
+          commission_notes:    commissionConfig?.notes ?? '',
+          // NDA
+          nda_sent:        !!ndaSig,
+          nda_sig_id:      ndaSig?.id ?? '',
+          nda_status:      ndaSig?.status ?? '',
+          nda_signed_name: ndaSig?.signer_name ?? '',
+          // Agreement
+          agreement_sent:        !!agrSig,
+          agreement_sig_id:      agrSig?.id ?? '',
+          agreement_status:      agrSig?.status ?? '',
+          agreement_signed_name: agrSig?.signer_name ?? '',
+          // Compliance
+          coi_status:         org.partner_docs?.find((d: any) => d.type === 'coi')?.status ?? 'missing',
+          coi_url:            org.partner_docs?.find((d: any) => d.type === 'coi')?.url ?? '',
+          coi_expires_at:     org.partner_docs?.find((d: any) => d.type === 'coi')?.expires_at ?? '',
+          w9_status:          org.partner_docs?.find((d: any) => d.type === 'w9')?.status ?? 'missing',
+          w9_url:             org.partner_docs?.find((d: any) => d.type === 'w9')?.url ?? '',
+          license_status:     org.partner_docs?.find((d: any) => d.type === 'license')?.status ?? 'missing',
+          license_url:        org.partner_docs?.find((d: any) => d.type === 'license')?.url ?? '',
+          license_expires_at: org.partner_docs?.find((d: any) => d.type === 'license')?.expires_at ?? '',
+          bg_ack:             false,
+        }
+        setForm(prefilled)
+
+        // 4. Jump to the furthest incomplete step
+        let resumeStep = 3   // default: NDA
+        if (!prefilled.nda_sent)        resumeStep = 3
+        else if (!prefilled.parent_org_id) resumeStep = 4
+        else if (!commissionConfig)     resumeStep = 5
+        else if (!prefilled.agreement_sent) resumeStep = 6
+        else if (!org.contact_email)    resumeStep = 7
+        else                            resumeStep = 8
+
+        setStep(resumeStep)
+      } catch (e: any) {
+        setError(e.message ?? 'Failed to load dealer for resume')
+      } finally {
+        setResumeLoading(false)
+      }
+    })()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeId])
 
   const toggleState = (s: string) =>
     setForm(f => ({
@@ -845,6 +932,18 @@ export default function NewDealerPage() {
 
   const selectedTier = TIERS.find(t => t.id === form.org_tier)
   const access = form.org_tier ? TIER_ACCESS[form.org_tier as string] : null
+
+  /* ── Resume loading screen ── */
+  if (resumeLoading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC' }}>
+        <div className="text-center">
+          <Loader2 size={32} className="animate-spin text-brand-400 mx-auto mb-3" />
+          <p className="text-sm text-slate-500">Loading dealer record…</p>
+        </div>
+      </div>
+    )
+  }
 
   /* ── Success screen (step 10) ── */
   if (step === 10 && result) {
