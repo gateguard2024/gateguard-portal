@@ -280,11 +280,16 @@ export function Sidebar() {
   };
 
   return (
-    <aside className={cn(
-      "h-screen flex flex-col shrink-0 z-40 transition-all duration-200",
-      "bg-[hsl(var(--sidebar-bg))] border-r border-[hsl(var(--sidebar-border))]",
-      collapsed ? "w-16" : "w-64"
-    )}>
+    <aside
+      className={cn(
+        "h-screen flex flex-col shrink-0 z-40 transition-all duration-200",
+        "border-r border-[hsl(var(--sidebar-border))]",
+        collapsed ? "w-16" : "w-64"
+      )}
+      style={{
+        background: "radial-gradient(ellipse at 50% 68%, #0d2150 0%, #060e28 38%, #020810 68%, #000306 100%)",
+      }}
+    >
 
       {/* ── Logo + collapse toggle ─────────────────────────────────────────── */}
       <div className="flex items-center gap-3 px-4 h-14 border-b border-[hsl(var(--sidebar-border))] shrink-0">
