@@ -1,5 +1,5 @@
 # NEXUS — GateGuard Dealer Portal User Manual
-### Version 10 · Updated May 26, 2026
+### Version 11 · Updated May 26, 2026
 
 > **NEXUS** is the GateGuard internal name for the Dealer Portal at [portal.gateguard.co](https://portal.gateguard.co). It is the command center for dealer ops: onboarding, quoting, field service, billing, compliance, AI diagnostics, and more.
 
@@ -9,6 +9,7 @@
 
 1. [Roles & Access](#1-roles--access)
 2. [Navigation](#2-navigation)
+2a. [CRM Dashboard](#2a-crm-dashboard)
 3. [Admin — Dealer Onboarding](#3-admin--dealer-onboarding)
 4. [Admin — Dealer Detail & Compliance](#4-admin--dealer-detail--compliance)
 5. [Quotes](#5-quotes)
@@ -62,6 +63,62 @@ The left sidebar is NEXUS's primary navigation. Sections are grouped by function
 | Settings | `/settings` | All roles |
 | Field Tech Tool | `/tech` | No Clerk — tech code only |
 | NEXUS AI | Floating button (all pages) | All roles |
+
+---
+
+## 2a. CRM Dashboard
+
+**Route:** `/crm` · Opportunities: `/crm/opportunities` · Leads: `/crm/leads`
+
+The CRM is the Sales & Marketing hub — pipeline management, inbound leads, activity tracking, and AI-assisted deal intelligence in one view.
+
+### Global Filter Bar
+A sticky bar beneath the top navigation exposes three filters: **Date Range**, **Region**, and **Rep**. These scope the view without navigating away. A "Clear" link appears when any filter is active.
+
+### KPI Cards
+Four summary cards across the top of the dashboard:
+
+| Card | What it shows |
+|------|--------------|
+| Total Pipeline | Sum of all open opportunity amounts · bar sparkline · quarter-over-quarter delta |
+| Open Opportunities | Count of active (non-won/lost) opps · bar sparkline · QoQ delta |
+| Closed Won (Month) | Revenue closed this calendar month vs. target · bar sparkline |
+| Inbound Leads | Total lead count · line sparkline · QoQ delta |
+
+Each card links to the relevant filtered view.
+
+### My Pipeline — Funnel with Proportional Bars
+Each active stage (Meet & Present → Survey Request → Propose → Negotiate) is displayed as a row with a horizontal bar sized proportionally to that stage's total dollar value. Clicking any row navigates to `/crm/opportunities?stage=<stage>`. The total open pipeline is shown at the bottom.
+
+**Pipeline Forecast & Goal Tracking chart** sits below the funnel. A stacked area chart shows projected pipeline by rep/region/source over time vs. a dashed target line. Color-coded legend: Rep (`#6B7EFF`), Rep2 (violet), Survey Region (amber), Walk in on site (slate).
+
+### Today's Activity
+Upcoming and overdue activities (calls, emails, meetings, tasks) due within 24 hours. Each row shows:
+- **Type icon** (phone/email/meeting/task) in a color-coded rounded square
+- Subject and associated opportunity name
+- Scheduled time
+- **Hover quick-actions:** Reply (↩), Take Note (📋), Mark Complete (☑) — appear on row hover
+
+Click "+ Log" to log a new activity (call, email, meeting, task, or note).
+
+### Open Opportunities Table
+Sortable table showing the top 10 open opportunities, ordered by **most recent activity** (`updated_at`, falling back to `created_at`). Columns: Name / Account, Stage (colored pill), Amount, Close Date, AI Deal Score.
+
+**AI Deal Score** — a deterministic score (0–99) computed client-side from each opportunity's ID hash and pipeline stage. Color-coded badge: green (≥70 = high confidence), amber (50–69 = moderate), red (<50 = needs attention). No API call required. Helps reps instantly prioritize where to focus.
+
+Links to `/crm/opportunities/[id]` for each row.
+
+### My Leads
+Live feed of inbound leads (pulsing `#6B7EFF` dot indicates real-time). Shows contact name, property/company, email, lead source tag, and assignment status.
+
+**Assignment logic:**
+- If `assigned_dealer` is set → shows the dealer name in an emerald badge
+- If unassigned and user has assign permission → shows `+ Assign` button with inline dealer input
+- If unassigned and user cannot assign → shows "New" amber badge
+
+**Hover quick-actions:** Mail, Phone, Calendar buttons appear on each lead row. Clicking any of these does not navigate away from the page.
+
+"View all →" links to `/crm/leads`.
 
 ---
 
@@ -163,13 +220,31 @@ Admin sees "Counterparty Signed" in Compliance tab
 
 ---
 
-## 5. Quotes
+## 5. Quotes & Proposals
 
 **Route:** `/quotes` · New quote: `/quotes/new`
 
+### Quotes Dashboard (`/quotes`)
+
+The Quotes list page is an enterprise pipeline view with four main sections:
+
+**KPI Cards (top row)** — three metric cards each with an inline sparkline chart and a delta trend badge:
+- **Active MRR** — total monthly recurring from accepted quotes; green bar sparkline
+- **Pipeline MRR** — MRR from quotes that are sent or viewed (in-flight); blue line sparkline
+- **Dealer Override MRR** — your commission from accepted deals; purple dashed sparkline with green target line
+
+**Quotes Pipeline** — horizontal bar funnel showing Draft → Sent → Viewed → Accepted. Each stage bar is proportionally sized to that stage's MRR. Click any stage row to filter the table to that status only.
+
+**Open Quotes table (left)** — columns: Quote #, Property, Status badge, Setup total, Monthly, Date. Row hover reveals Eye (view), Edit, Copy link, and More actions. Filter tabs above the table (All · Draft · Sent · Viewed · Accepted · Declined) each show a live count badge. Search bar accepts quote number or property name.
+
+**Deal Velocity panel (right)** — 280px fixed panel showing:
+- **Quote Conversion funnel** — proportional bars for Created → Sent → Viewed → Accepted with real counts
+- **Deal Velocity metrics** — Avg. Time to Sent, Avg. Time to View, Avg. Time to Accept
+- **Win Rate** — progress bar: accepted quotes ÷ total, shown as a percentage
+
 ### Creating a Quote
 
-Two modes:
+Two modes (accessible from `/quotes/new`):
 
 **Line Item Builder** — start from scratch. Add sections (equipment, labor, recurring) and individual line items manually.
 
@@ -190,7 +265,7 @@ Two modes:
 | `/quotes/[id]/approve` | Approval page — customer signs digitally, triggers acceptance flow |
 
 ### Quote Status Flow
-`draft` → `sent` → `approved` / `declined` → `invoiced`
+`draft` → `sent` → `viewed` → `accepted` / `declined` → `expired`
 
 ---
 

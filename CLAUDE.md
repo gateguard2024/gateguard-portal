@@ -78,6 +78,7 @@
 ### Quotes
 | File | Purpose |
 |------|---------|
+| `app/quotes/page.tsx` | List page — KPI sparklines, bar funnel pipeline, 2-col layout (table + Deal Velocity), filter tabs with counts |
 | `app/quotes/new/page.tsx` | Mode picker: Line Item Builder + Survey Wizard |
 | `app/quotes/[id]/page.tsx` | Full editor: sections, optional items, pricing sidebar, proposal v2 panels |
 | `app/quotes/[id]/proposal/page.tsx` | Customer-facing proposal (no auth, no sidebar) |
@@ -87,6 +88,13 @@
 | `app/api/quotes/[id]/items/route.ts` | GET + POST line items |
 | `app/api/quotes/[id]/items/[itemId]/route.ts` | PATCH + DELETE single item |
 | `app/api/quotes/[id]/public/route.ts` | No-auth: approve/decline/sign |
+
+**Quotes list design notes:**
+- KPI sparklines: Active MRR (bar/green), Pipeline MRR (line/brand blue), Dealer Override (dashed/purple with green target line) — delta trend badges below each
+- Pipeline funnel: horizontal bar per stage (Draft→Sent→Viewed→Accepted), clickable to filter table, proportional width to stage MRR
+- 2-col bottom: `grid-cols-[1fr_280px]` — quotes table left, DealVelocityPanel right
+- DealVelocityPanel: conversion funnel bars, avg time to Sent/View/Accept metric cards, win rate progress bar
+- Filter tabs: underline style with live count badges, not button-group style
 
 ### /tech Field Tool
 | File | Purpose |
@@ -113,6 +121,25 @@
 | `app/api/surveys/route.ts` | GET + POST (Clerk auth OR x-tech-code) |
 | `app/api/surveys/[id]/generate/route.ts` | Claude Haiku → SOW + BOM from devices |
 | `app/api/surveys/[id]/create-quote/route.ts` | Creates quote + line items from survey |
+
+### CRM
+| File | Purpose |
+|------|---------|
+| `app/crm/page.tsx` | CRM dashboard — KPI sparklines, funnel bars, forecast chart, AI Deal Scores, filter bar, activity quick-actions, lead comms icons |
+| `app/crm/opportunities/page.tsx` | Full opportunities list (stage filter via `?stage=` param) |
+| `app/crm/opportunities/[id]/page.tsx` | Opportunity detail |
+| `app/crm/leads/page.tsx` | Full leads list |
+| `app/crm/leads/[id]/page.tsx` | Lead detail + assign flow |
+| `app/api/crm/opportunities/route.ts` | GET (list) + POST (create) — returns `records`, `grouped`, `pipelineTotal`, `counts` |
+| `app/api/crm/leads/route.ts` | GET + POST |
+| `app/api/crm/activities/route.ts` | GET + POST |
+| `app/api/crm/assignable-orgs/route.ts` | Returns orgs the current user can assign leads/opps to |
+
+**CRM design notes:**
+- Open Opportunities sort: `updated_at → created_at` fallback (most recent activity first)
+- AI Deal Score: deterministic from `opp.id` hash + stage band — no API call needed
+- `Opportunity` interface includes `updated_at?: string` for sort
+- Filter bar state is local only (Date Range, Region, Rep) — not yet wired to API filters
 
 ### Dealer Onboarding
 | File | Purpose |
@@ -198,7 +225,7 @@ When embedding `{{MERGE_VAR}}` placeholders inside a TypeScript backtick string,
 
 ## PENDING TASKS (prioritized)
 
-### Completed this sprint (May 26, 2026)
+### Completed this sprint (May 26, 2026 — continued)
 - ✅ NDA template (`lib/nda-template.ts`) — Mutual NDA with 4 merge vars, 3-year term, Trade Secrets survive in perpetuity
 - ✅ Agreement template (`lib/agreement-template.ts`) — Full Dealer & Reseller Agreement + Exhibit A; no hardcoded prices; references "then-current Price List"; `buildAgreementVarsFromOrg()` auto-fills from org tier + commission config
 - ✅ Dealer onboarding wizard expanded to 7 steps — added Step 3 (NDA + Agreement preview + send toggle), `entity_type` field in Step 2, step numbering updated throughout
@@ -206,6 +233,8 @@ When embedding `{{MERGE_VAR}}` placeholders inside a TypeScript backtick string,
 - ✅ Compliance tab on dealer detail page — live e-sign status cards for NDA + Agreement; "Send for Signature," "Resend," "Countersign," "Manual upload" actions; countersign flow POSTs to `/api/signatures/countersign`
 - ✅ Sidebar gradient — Gemini-style deep radial navy-to-black glow applied to `<aside>` in Sidebar.tsx
 - ✅ CLAUDE.md updated (this file) + NEXUS_USER_MANUAL.md created
+- ✅ CRM dashboard enterprise redesign — `app/crm/page.tsx`: global filter bar (Date Range / Region / Rep), KPI sparklines (line + bar SVG), horizontal proportional funnel bars on pipeline, Pipeline Forecast & Goal Tracking stacked area chart, AI Deal Score column on Open Opportunities (deterministic hash of opp ID + stage → green/amber/red), activity quick-actions (Reply/Note/Complete on hover), lead communication icons (Mail/Phone/Calendar on hover), Open Opportunities sorted by `updated_at → created_at`, My Leads checks `assigned_dealer` before showing `+ Assign`, all accents `#6B7EFF`
+- ✅ Quotes page enterprise redesign — `app/quotes/page.tsx`: KPI sparkline cards (Active MRR bar, Pipeline MRR line, Dealer Override target/dashed) with delta trend badges, horizontal bar funnel replacing 4-box chevron pipeline, 2-column bottom layout (quotes table left + Deal Velocity panel right), filter tabs with live counts per status, row hover actions (Eye/Edit/Copy/More), Deal Velocity panel shows quote conversion funnel bars + avg time metrics + win rate progress bar; all accents `#6B7EFF`, white card design system
 
 ### Active (in progress)
 - Task #207 — Upgrade floor plans to Mapbox satellite backdrop
