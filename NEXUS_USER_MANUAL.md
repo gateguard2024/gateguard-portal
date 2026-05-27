@@ -1,13 +1,13 @@
 # NEXUS — GateGuard Dealer Portal
 ## Complete User Manual
 
-**Version 15 · Updated May 27, 2026**
+**Version 16 · Updated May 27, 2026**
 **Portal:** [portal.gateguard.co](https://portal.gateguard.co)
 
 ---
 
 > **What is NEXUS?**
-> NEXUS is the GateGuard command center for your entire dealer operation. From onboarding a new dealer to closing a quote, dispatching a technician, and reviewing invoices — everything lives here. This manual walks you through every section step by step.
+> NEXUS is the GateGuard command center for your entire dealer operation. From onboarding a new dealer to closing a quote, dispatching a technician, scheduling via Google Calendar, and reviewing invoices — everything lives here. This manual walks you through every section step by step.
 
 ---
 
@@ -24,14 +24,15 @@
 9. [Quotes & Proposals](#9-quotes--proposals)
 10. [Sites & Properties](#10-sites--properties)
 11. [Dispatch & Work Orders](#11-dispatch--work-orders)
-12. [Field Tech Tool (/tech)](#12-field-tech-tool)
-13. [Site Surveys](#13-site-surveys)
-14. [AI Agents (AI Army)](#14-ai-agents)
-15. [Billing & Invoices](#15-billing--invoices)
-16. [Map View](#16-map-view)
-17. [Training & Scorecards](#17-training--scorecards)
-18. [Installing NEXUS on Your Phone (PWA)](#18-installing-nexus-on-your-phone)
-19. [Support & Troubleshooting](#19-support--troubleshooting)
+12. [Calendar & Google Calendar Sync](#12-calendar--google-calendar-sync)
+13. [Field Tech Tool (/tech)](#13-field-tech-tool)
+14. [Site Surveys](#14-site-surveys)
+15. [AI Agents (AI Army)](#15-ai-agents)
+16. [Billing & Invoices](#16-billing--invoices)
+17. [Map View](#17-map-view)
+18. [Training & Scorecards](#18-training--scorecards)
+19. [Installing NEXUS on Your Phone (PWA)](#19-installing-nexus-on-your-phone)
+20. [Support & Troubleshooting](#20-support--troubleshooting)
 
 ---
 
@@ -146,6 +147,15 @@ Use this wizard to set up a new dealer organization from scratch. The wizard has
 
 > **Before you start:** Have the dealer's legal name, address, primary contact email, and their preferred entity type ready.
 
+### Resuming an Incomplete Onboarding
+
+If you started onboarding a dealer and didn't finish, you don't need to start over. There are two ways to resume:
+
+- **From the Dealers list:** Incomplete dealers show an amber **Resume →** link in the last column. Click it to jump back into the wizard at the step where you left off.
+- **From the Dealer Detail page:** An amber banner at the top of the page reads "Onboarding incomplete" with a **Resume Onboarding →** button.
+
+The wizard automatically detects which step is incomplete and drops you there — all previously entered information is pre-filled.
+
 ### Step 1 — Choose Dealer Tier
 
 Select which type of dealer this organization is:
@@ -183,7 +193,7 @@ This step sends the Mutual NDA to the dealer for signature. Before sending:
 
 **Review the document:**
 1. Check that the **Effective Date** field shows the correct date (defaults to today — click to change)
-2. Click **Preview & Edit** to open the full NDA text
+2. Click **Preview & Edit** to open the full NDA text in an editable box
 3. Read through the document — all merge fields (dealer name, address, entity type) are pre-filled from Step 2
 4. If any text needs to change, edit directly in the text box
 5. Click **Preview & Edit** again to close the preview
@@ -191,11 +201,11 @@ This step sends the Mutual NDA to the dealer for signature. Before sending:
 **Send the NDA:**
 1. Verify the dealer's email address shown at the top is correct
 2. Click **Send for Signature** in the signing panel
-3. The dealer will receive an email with a link to review and sign
+3. The dealer will receive an email from `documents@gateguard.co` with a link to review and sign
 4. The status updates to **Pending**
 
 **After the dealer signs:**
-1. You'll receive a notification email
+1. You'll receive a notification email at rfeldman@gateguard.co
 2. Return to this step and click **Check Status** to refresh
 3. Status changes to **Counterparty Signed**
 4. Click **Countersign** to add GateGuard's signature — this completes the NDA
@@ -298,6 +308,8 @@ Shows the dealer's core information:
 - Service area states
 - Active sites count, open work orders, technician count
 
+If onboarding is incomplete, an amber banner appears at the top of the page with a **Resume Onboarding →** button.
+
 ### Compliance Tab
 
 The Compliance tab manages the full document lifecycle for this dealer.
@@ -371,7 +383,7 @@ Features are grouped into sections (Sales & Marketing, Field & Tech, AI Agents, 
 The colored dropdowns show the current access level:
 - **Grey (None)** — Hidden from this tier
 - **Amber (View)** — Read-only for this tier
-**Green (Edit)** — Full access for this tier
+- **Green (Edit)** — Full access for this tier
 
 ### How to Change a Tier's Access to a Feature
 
@@ -389,10 +401,6 @@ Each feature has a gear icon (⚙) on the right. Click it to expand:
 - **Stripe ID** — Enter a `prod_...` Stripe product ID to gate this feature behind a subscription
 - **Paid** — Toggle on to mark this feature as a paid add-on
 - **Beta** — Toggle on to show a "Beta" badge next to the feature name
-
-### Sections That Can Be Collapsed
-
-Click any section header to collapse it — useful when you're focused on one area.
 
 ---
 
@@ -490,6 +498,14 @@ Inbound leads appear here in real time. Each lead shows:
 - **Mail** — Opens a draft email to the contact
 - **Phone** — Shows the phone number
 - **Calendar** — Opens the scheduling flow
+
+### 7.4 CRM Activities on the Calendar
+
+Any activity you log against an opportunity (call, email, meeting, task) with a due date will automatically appear on the Calendar page. Activities show as color-coded events:
+- Call = teal
+- Email = brand blue
+- Meeting = purple
+- Task = amber
 
 ---
 
@@ -700,8 +716,6 @@ To replace a lost or compromised code:
 1. Click **Regen** on the tech's card
 2. A new code is generated immediately — the old one stops working
 
-> **Note:** Migration 093 must be run on Supabase before this feature works.
-
 ### 11.6 Mobile Layout
 
 On a phone or tablet, the dispatcher shows three tabs at the bottom:
@@ -711,20 +725,79 @@ On a phone or tablet, the dispatcher shows three tabs at the bottom:
 
 ---
 
-## 12. Field Tech Tool
+## 12. Calendar & Google Calendar Sync
+
+**Route:** `/calendar`
+
+The Calendar shows every scheduled event across your portal — work orders, site surveys, CRM activities, preventive maintenance schedules, your To-Dos, and your personal Google Calendar events — all in one place.
+
+### 12.1 Event Types and Color Coding
+
+| Color | Event Type | Where it comes from |
+|-------|-----------|-------------------|
+| **Blue** | To-Do | Created in the To-Dos section |
+| **Green** | Work Order | Dispatch |
+| **Orange** | WO Phase | Work order phase with scheduled date |
+| **Teal** | PM Schedule | Preventive maintenance recurring tasks |
+| **Purple** | Google Calendar | Synced from your personal GCal |
+| **Varies** | CRM Activity | Logged in CRM (call/email/meeting/task/note) |
+
+### 12.2 Navigating the Calendar
+
+**View controls (top right):** Switch between Month, Week, and Day views using the buttons. Use the left/right arrows to move forward or backward in time.
+
+**Clicking an event:** Opens a detail popover with the event title, time, type badge, and relevant quick actions (view work order, view opportunity, etc.).
+
+**Right sidebar (desktop):** Shows two panels:
+- **Today's Schedule** — All events for today in time order
+- **Open To-Dos** — Your incomplete to-dos without a due date
+
+### 12.3 Connecting Google Calendar
+
+To sync your Google Calendar with NEXUS:
+
+1. Go to `/calendar`
+2. Click **Connect Google Calendar** in the top bar (or in Settings)
+3. You are redirected to Google's OAuth page — sign in with your Google account
+4. Grant the calendar read/write permissions
+5. You're redirected back to NEXUS — Google Calendar is now connected
+
+Once connected, your GCal events appear as purple blocks on the calendar. The sync runs automatically. To manually force a sync, click the **Sync** button in the calendar header.
+
+### 12.4 What Gets Synced
+
+**From NEXUS → Google Calendar:**
+- Your open To-Dos that have a due date are pushed to Google Calendar as events
+- Work orders assigned to you are pushed as all-day events on their scheduled date
+
+**From Google Calendar → NEXUS:**
+- All GCal events in your connected calendar are pulled and displayed in the NEXUS calendar view
+- This is read-only — editing a GCal event must be done in Google Calendar
+
+### 12.5 Sync Troubleshooting
+
+If GCal shows as connected but events aren't appearing:
+
+1. Click the **Sync** button in the calendar header — check if an error appears
+2. The sync response includes a diagnostics readout. If you see an error like "No refresh token found," try disconnecting and reconnecting your Google account
+3. Make sure the Google account you connected has calendar events in the date range you're viewing
+
+---
+
+## 13. Field Tech Tool
 
 **Route:** `/tech`
 **Access:** No portal login required — use your tech access code
 
 The Tech Tool is a mobile-optimized diagnostic and reference tool for technicians in the field.
 
-### 12.1 Logging In
+### 13.1 Logging In
 
 1. Go to **portal.gateguard.co/tech** on any phone or tablet
 2. Enter your tech access code (e.g., `GG-JT-4821`) — your dispatcher provides this
 3. You're in — no email or password needed
 
-### 12.2 What the Tech Tool Includes
+### 13.2 What the Tech Tool Includes
 
 **Device Selector** — Choose the gate controller, access control panel, or device you're working on from a list of 27 supported devices.
 
@@ -745,13 +818,13 @@ The Tech Tool is a mobile-optimized diagnostic and reference tool for technician
 
 ---
 
-## 13. Site Surveys
+## 14. Site Surveys
 
 **Route:** `/survey`
 
 Site surveys are pre-installation assessments, typically done during a sales visit or before quoting.
 
-### 13.1 Starting a Survey
+### 14.1 Starting a Survey
 
 1. Click **+ New Survey**
 2. Select or search for the property
@@ -763,7 +836,7 @@ Site surveys are pre-installation assessments, typically done during a sales vis
    - Network infrastructure
    - Special conditions or notes
 
-### 13.2 Generating the SOW and BOM
+### 14.2 Generating the SOW and BOM
 
 After completing the survey:
 1. Click **Generate AI Documents**
@@ -772,7 +845,7 @@ After completing the survey:
    - **Scope of Work (SOW)** — Professional write-up of the full project scope
    - **Bill of Materials (BOM)** — Itemized equipment list with quantities
 
-### 13.3 Creating a Quote from a Survey
+### 14.3 Creating a Quote from a Survey
 
 1. Review the SOW and BOM
 2. Click **Create Quote**
@@ -782,7 +855,7 @@ After completing the survey:
 
 ---
 
-## 14. AI Agents
+## 15. AI Agents
 
 NEXUS includes 8 named AI agents, each built for a specific function. The AI Army panel in the sidebar shows all 8 with a green (live) or grey (coming soon) dot.
 
@@ -801,11 +874,11 @@ NEXUS includes 8 named AI agents, each built for a specific function. The AI Arm
 
 ---
 
-## 15. Billing & Invoices
+## 16. Billing & Invoices
 
 **Route:** `/billing`
 
-### 15.1 Viewing Invoices
+### 16.1 Viewing Invoices
 
 The billing page shows all invoices across your dealer network. Filter by:
 - Status (Draft / Sent / Paid / Overdue)
@@ -814,7 +887,7 @@ The billing page shows all invoices across your dealer network. Filter by:
 
 Click any invoice to open the detail view.
 
-### 15.2 Creating an Invoice
+### 16.2 Creating an Invoice
 
 1. Click **+ New Invoice**
 2. Select the property or dealer this invoice is for
@@ -822,7 +895,7 @@ Click any invoice to open the detail view.
 4. Set the due date
 5. Click **Send Invoice** — this generates a Stripe payment link and emails it to the client
 
-### 15.3 Marking as Paid
+### 16.3 Marking as Paid
 
 When a client pays:
 - If they paid online via the Stripe link → status updates automatically
@@ -830,7 +903,7 @@ When a client pays:
 
 ---
 
-## 16. Map View
+## 17. Map View
 
 **Route:** `/map`
 
@@ -849,12 +922,12 @@ The Map is also used in the Dispatcher view and the SOC split-screen.
 
 ---
 
-## 17. Training & Scorecards
+## 18. Training & Scorecards
 
 **Training route:** `/training`
 **Scorecard route:** `/scorecard`
 
-### 17.1 Training
+### 18.1 Training
 
 The Training section provides dealer-facing learning modules:
 - Platform training (how to use NEXUS)
@@ -863,7 +936,7 @@ The Training section provides dealer-facing learning modules:
 
 Progress is tracked per user. Completions are recognized in the EOS Team Performance panel on the Dashboard.
 
-### 17.2 Scorecard
+### 18.2 Scorecard
 
 The Scorecard shows weekly EOS metrics for your dealer network:
 
@@ -879,7 +952,7 @@ Each metric shows a green ✓ or red ✗ vs. its goal, consistent with EOS Score
 
 ---
 
-## 18. Installing NEXUS on Your Phone
+## 19. Installing NEXUS on Your Phone
 
 NEXUS is a Progressive Web App (PWA) — you can install it on your home screen like a native app. No app store required.
 
@@ -913,7 +986,7 @@ On a phone or tablet, the portal adapts automatically:
 
 ---
 
-## 19. Support & Troubleshooting
+## 20. Support & Troubleshooting
 
 ### Common Issues
 
@@ -927,13 +1000,16 @@ Feature visibility is controlled by your org tier. Ask your GateGuard admin to c
 The Mapbox token may not be configured. Contact rfeldman@gateguard.co.
 
 **"I'm not receiving portal invite or signing emails"**
-Check your spam folder. Email is sent via Resend from `documents@mail.gateguard.co`. If it's not there, ask your admin to resend.
+Check your spam folder. Email is sent from `documents@gateguard.co`. If it's not there, ask your admin to resend from the dealer's Compliance tab.
 
 **"The tech tool is rejecting my access code"**
 Your code may have been regenerated. Ask your dispatcher to copy your current code from the Tech Roster and send it to you again.
 
 **"My session keeps expiring"**
 Click your avatar in the bottom-left corner of the sidebar and select **Refresh Session**.
+
+**"Google Calendar is connected but no events are showing"**
+Click the **Sync** button in the calendar header to force a manual sync. If events still don't appear, disconnect and reconnect your Google account — go to Settings → Calendar → Disconnect, then reconnect.
 
 ### Signing Document Issues
 
@@ -946,6 +1022,9 @@ Click your avatar in the bottom-left corner of the sidebar and select **Refresh 
 1. Go to Step 3 (NDA) or Step 6 (Agreement) in the dealer's onboarding, or open the Compliance tab
 2. Click **Check Status** to refresh from the database
 3. If the dealer has signed, status will update to Counterparty Signed
+
+**"I started onboarding a dealer but didn't finish — how do I pick up where I left off?"**
+Find the dealer in the Dealers list. Incomplete dealers show an amber **Resume →** link in the last column. Click it to jump back into the wizard at the correct step with all previously entered data pre-filled.
 
 ### Contact
 
@@ -970,7 +1049,7 @@ Every dealer receives two documents at onboarding:
 | Install Contractor | Installation Partner Agreement |
 | Sales Partner | Sales Partner Agreement |
 
-Both documents are editable before sending. The effective date defaults to today but can be changed. After the dealer signs, a GateGuard countersignature is required to make the document fully executed.
+Both documents are editable before sending. The effective date defaults to today but can be changed. After the dealer signs, a GateGuard countersignature is required to make the document fully executed. All signing emails come from `documents@gateguard.co`.
 
 ---
 
