@@ -182,7 +182,8 @@ export async function POST() {
         .not('due_date', 'is', null)
         .gte('due_date', nowDate)
         .lte('due_date', futureDate)
-        .in('status', ['open', 'in_progress']),
+        .in('status', ['open', 'in_progress'])
+        .or(`assigned_to.eq.${user.id},created_by.eq.${user.id}`),
       supabase
         .from('work_orders')
         .select('id, title, scheduled_date, scheduled_time, status')
@@ -192,142 +193,180 @@ export async function POST() {
         .in('status', ['open', 'assigned', 'in_progress']),
     ])
 
+    diagnostics.push(`push_query: ${todos?.length ?? 0} todos, ${wos?.length ?? 0} WOs in window`)
+
+    let pushErrors = 0
+
     // Push todos
     for (const todo of todos ?? []) {
-      const { data: existing } = await supabase
-        .from('gcal_events')
-        .select('gcal_event_id')
-        .eq('user_id', user.id)
-        .eq('source_type', 'todo')
-        .eq('source_id', todo.id)
-        .maybeSingle()
+      try {
+        const { data: existing } = await supabase
+          .from('gcal_events')
+          .select('gcal_event_id')
+          .eq('user_id', user.id)
+          .eq('source_type', 'todo')
+          .eq('source_id', todo.id)
+          .maybeSingle()
 
-      const endDateExclusive = new Date(new Date(todo.due_date).getTime() + 86400000)
-        .toISOString().split('T')[0]
+        const endDateExclusive = new Date(new Date(todo.due_date).getTime() + 86400000)
+          .toISOString().split('T')[0]
 
-      const eventBody = {
-        summary:     `[TODO] ${todo.title}`,
-        description: `GateGuard To-Do | Priority: ${todo.priority ?? 'medium'} | Status: ${todo.status}`,
-        start:       { date: todo.due_date },
-        end:         { date: endDateExclusive },
-      }
+        const eventBody = {
+          summary:     `[TODO] ${todo.title}`,
+          description: `GateGuard To-Do | Priority: ${todo.priority ?? 'medium'} | Status: ${todo.status}`,
+          start:       { date: todo.due_date },
+          end:         { date: endDateExclusive },
+        }
 
-      if (existing?.gcal_event_id) {
-        await fetch(
-          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${existing.gcal_event_id}`,
-          {
-            method:  'PUT',
-            headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-            body:    JSON.stringify(eventBody),
+        if (existing?.gcal_event_id) {
+          const putRes = await fetch(
+            `https://www.googleapis.com/calendar/v3/calendars/primary/events/${existing.gcal_event_id}`,
+            {
+              method:  'PUT',
+              headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+              body:    JSON.stringify(eventBody),
+            }
+          )
+          if (putRes.ok) {
+            pushedCount++
+          } else {
+            const errText = await putRes.text()
+            diagnostics.push(`todo PUT failed (${putRes.status}): ${errText.slice(0, 120)}`)
+            pushErrors++
           }
-        )
-      } else {
-        const createRes = await fetch(
-          'https://www.googleapis.com/calendar/v3/calendars/primary/events',
-          {
-            method:  'POST',
-            headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-            body:    JSON.stringify(eventBody),
-          }
-        )
-        if (createRes.ok) {
-          const created = await createRes.json() as { id?: string }
-          if (created.id) {
-            await supabase.from('gcal_events').insert({
-              user_id:          user.id,
-              gcal_event_id:    created.id,
-              gcal_calendar_id: 'primary',
-              title:            `[TODO] ${todo.title}`,
-              start_time:       `${todo.due_date}T00:00:00Z`,
-              end_time:         `${endDateExclusive}T00:00:00Z`,
-              is_all_day:       true,
-              status:           'confirmed',
-              source_type:      'todo',
-              source_id:        todo.id,
-              synced_at:        new Date().toISOString(),
-            })
+        } else {
+          const createRes = await fetch(
+            'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+            {
+              method:  'POST',
+              headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+              body:    JSON.stringify(eventBody),
+            }
+          )
+          if (createRes.ok) {
+            const created = await createRes.json() as { id?: string }
+            if (created.id) {
+              await supabase.from('gcal_events').insert({
+                user_id:          user.id,
+                gcal_event_id:    created.id,
+                gcal_calendar_id: 'primary',
+                title:            `[TODO] ${todo.title}`,
+                start_time:       `${todo.due_date}T00:00:00Z`,
+                end_time:         `${endDateExclusive}T00:00:00Z`,
+                is_all_day:       true,
+                status:           'confirmed',
+                source_type:      'todo',
+                source_id:        todo.id,
+                synced_at:        new Date().toISOString(),
+              })
+              pushedCount++
+            }
+          } else {
+            const errText = await createRes.text()
+            diagnostics.push(`todo POST failed (${createRes.status}): ${errText.slice(0, 120)}`)
+            pushErrors++
           }
         }
+      } catch (e) {
+        diagnostics.push(`todo push exception: ${String(e).slice(0, 80)}`)
+        pushErrors++
       }
-      pushedCount++
     }
 
     // Push work orders
     for (const wo of wos ?? []) {
-      const { data: existingWo } = await supabase
-        .from('gcal_events')
-        .select('gcal_event_id')
-        .eq('user_id', user.id)
-        .eq('source_type', 'work_order')
-        .eq('source_id', wo.id)
-        .maybeSingle()
+      try {
+        const { data: existingWo } = await supabase
+          .from('gcal_events')
+          .select('gcal_event_id')
+          .eq('user_id', user.id)
+          .eq('source_type', 'work_order')
+          .eq('source_id', wo.id)
+          .maybeSingle()
 
-      const isAllDay      = !wo.scheduled_time
-      const startDateTime = wo.scheduled_time
-        ? `${wo.scheduled_date}T${wo.scheduled_time}:00`
-        : wo.scheduled_date
-      const endDateExclusive = new Date(new Date(wo.scheduled_date).getTime() + 86400000)
-        .toISOString().split('T')[0]
+        const isAllDay = !wo.scheduled_time
+        // For timed events: startDateTime, endDateTime = start + 1 hour
+        const startDateTime = wo.scheduled_time
+          ? `${wo.scheduled_date}T${wo.scheduled_time}:00`
+          : wo.scheduled_date
+        const endDateExclusive = new Date(new Date(wo.scheduled_date).getTime() + 86400000)
+          .toISOString().split('T')[0]
+        const endDateTime = wo.scheduled_time
+          ? new Date(new Date(`${wo.scheduled_date}T${wo.scheduled_time}:00`).getTime() + 3600000).toISOString()
+          : null
 
-      const eventBody = isAllDay
-        ? {
-            summary:     `[WO] ${wo.title}`,
-            description: `GateGuard Work Order | Status: ${wo.status}`,
-            start:       { date: wo.scheduled_date },
-            end:         { date: endDateExclusive },
-          }
-        : {
-            summary:     `[WO] ${wo.title}`,
-            description: `GateGuard Work Order | Status: ${wo.status}`,
-            start:       { dateTime: startDateTime, timeZone: 'America/New_York' },
-            end:         { dateTime: startDateTime, timeZone: 'America/New_York' },
-          }
+        const eventBody = isAllDay
+          ? {
+              summary:     `[WO] ${wo.title}`,
+              description: `GateGuard Work Order | Status: ${wo.status}`,
+              start:       { date: wo.scheduled_date },
+              end:         { date: endDateExclusive },
+            }
+          : {
+              summary:     `[WO] ${wo.title}`,
+              description: `GateGuard Work Order | Status: ${wo.status}`,
+              start:       { dateTime: new Date(startDateTime).toISOString(), timeZone: 'America/New_York' },
+              end:         { dateTime: endDateTime!, timeZone: 'America/New_York' },
+            }
 
-      if (existingWo?.gcal_event_id) {
-        await fetch(
-          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${existingWo.gcal_event_id}`,
-          {
-            method:  'PUT',
-            headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-            body:    JSON.stringify(eventBody),
+        if (existingWo?.gcal_event_id) {
+          const putRes = await fetch(
+            `https://www.googleapis.com/calendar/v3/calendars/primary/events/${existingWo.gcal_event_id}`,
+            {
+              method:  'PUT',
+              headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+              body:    JSON.stringify(eventBody),
+            }
+          )
+          if (putRes.ok) {
+            pushedCount++
+          } else {
+            const errText = await putRes.text()
+            diagnostics.push(`wo PUT failed (${putRes.status}): ${errText.slice(0, 120)}`)
+            pushErrors++
           }
-        )
-      } else {
-        const createRes = await fetch(
-          'https://www.googleapis.com/calendar/v3/calendars/primary/events',
-          {
-            method:  'POST',
-            headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-            body:    JSON.stringify(eventBody),
-          }
-        )
-        if (createRes.ok) {
-          const created = await createRes.json() as { id?: string }
-          if (created.id) {
-            await supabase.from('gcal_events').insert({
-              user_id:          user.id,
-              gcal_event_id:    created.id,
-              gcal_calendar_id: 'primary',
-              title:            `[WO] ${wo.title}`,
-              start_time:       isAllDay
-                ? `${wo.scheduled_date}T00:00:00Z`
-                : new Date(startDateTime).toISOString(),
-              end_time:         isAllDay
-                ? `${endDateExclusive}T00:00:00Z`
-                : new Date(startDateTime).toISOString(),
-              is_all_day:       isAllDay,
-              status:           'confirmed',
-              source_type:      'work_order',
-              source_id:        wo.id,
-              synced_at:        new Date().toISOString(),
-            })
+        } else {
+          const createRes = await fetch(
+            'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+            {
+              method:  'POST',
+              headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+              body:    JSON.stringify(eventBody),
+            }
+          )
+          if (createRes.ok) {
+            const created = await createRes.json() as { id?: string }
+            if (created.id) {
+              const startIso = isAllDay ? `${wo.scheduled_date}T00:00:00Z` : new Date(startDateTime).toISOString()
+              const endIso   = isAllDay ? `${endDateExclusive}T00:00:00Z` : endDateTime!
+              await supabase.from('gcal_events').insert({
+                user_id:          user.id,
+                gcal_event_id:    created.id,
+                gcal_calendar_id: 'primary',
+                title:            `[WO] ${wo.title}`,
+                start_time:       startIso,
+                end_time:         endIso,
+                is_all_day:       isAllDay,
+                status:           'confirmed',
+                source_type:      'work_order',
+                source_id:        wo.id,
+                synced_at:        new Date().toISOString(),
+              })
+              pushedCount++
+            }
+          } else {
+            const errText = await createRes.text()
+            diagnostics.push(`wo POST failed (${createRes.status}): ${errText.slice(0, 120)}`)
+            pushErrors++
           }
         }
+      } catch (e) {
+        diagnostics.push(`wo push exception: ${String(e).slice(0, 80)}`)
+        pushErrors++
       }
-      pushedCount++
     }
 
-    diagnostics.push(`push: ${pushedCount} processed`)
+    diagnostics.push(`push: ${pushedCount} succeeded, ${pushErrors} errors`)
 
     // ── Update gcal_last_synced_at ────────────────────────────────────────────
     await supabase
@@ -338,11 +377,12 @@ export async function POST() {
       )
 
     return NextResponse.json({
-      success:    true,
-      pulled:     pulledCount,
+      success:     true,
+      pulled:      pulledCount,
       pull_errors: pullErrors,
-      pushed:     pushedCount,
-      synced_at:  new Date().toISOString(),
+      pushed:      pushedCount,
+      push_errors: pushErrors,
+      synced_at:   new Date().toISOString(),
       diagnostics,
     })
   } catch (err: unknown) {

@@ -11,7 +11,7 @@ import {
   ChevronLeft, Trash2, RefreshCw, MapPin,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { CalendarClock, StickyNote, Pencil, AlertCircle } = require("lucide-react") as any;
+const { CalendarClock, StickyNote, Pencil, AlertCircle, Edit2, CheckSquare, Square } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -399,6 +399,14 @@ export default function OpportunityDetailPage() {
   const [eventForm, setEventForm] = useState({ subject: "", date: "", time: "", notes: "" });
   const [emailForm, setEmailForm] = useState({ to: "", subject: "", body: "" });
   const [activitySaving, setActivitySaving] = useState(false);
+
+  // Inline activity edit
+  const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
+  const [editActForm, setEditActForm] = useState({
+    subject: "", body: "", type: "note" as ActivityType, due_at: "", outcome: "",
+  });
+  const [editActSaving, setEditActSaving] = useState(false);
+
   const [emailSending, setEmailSending] = useState(false);
   const [emailSendError, setEmailSendError] = useState<string | null>(null);
 
@@ -838,6 +846,71 @@ export default function OpportunityDetailPage() {
       setLogActOutcome("");
     } finally {
       setLogActSaving(false);
+    }
+  };
+
+  // ── Activity edit/delete/complete handlers ────────────────────────────────
+  const startEditActivity = (act: Activity) => {
+    setEditingActivityId(act.id);
+    setEditActForm({
+      subject: act.subject ?? "",
+      body:    act.body    ?? "",
+      type:    act.type,
+      due_at:  act.due_at ? act.due_at.slice(0, 16) : "",
+      outcome: act.outcome ?? "",
+    });
+  };
+
+  const saveActivityEdit = async () => {
+    if (!editingActivityId) return;
+    setEditActSaving(true);
+    try {
+      const res = await fetch(`/api/crm/activities/${editingActivityId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject: editActForm.subject.trim(),
+          body:    editActForm.body.trim() || null,
+          type:    editActForm.type,
+          due_at:  editActForm.due_at ? new Date(editActForm.due_at).toISOString() : null,
+          outcome: editActForm.outcome.trim() || null,
+        }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setOpp(prev => prev ? {
+          ...prev,
+          activities: (prev.activities ?? []).map(a => a.id === editingActivityId ? { ...a, ...updated } : a),
+        } : prev);
+        setEditingActivityId(null);
+      }
+    } finally {
+      setEditActSaving(false);
+    }
+  };
+
+  const deleteActivity = async (actId: string) => {
+    await fetch(`/api/crm/activities/${actId}`, { method: "DELETE" });
+    setOpp(prev => prev ? {
+      ...prev,
+      activities: (prev.activities ?? []).filter(a => a.id !== actId),
+    } : prev);
+  };
+
+  const toggleActivityComplete = async (act: Activity) => {
+    const nowIso = new Date().toISOString();
+    const newCompleted = act.completed_at ? null : nowIso;
+    const res = await fetch(`/api/crm/activities/${act.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ completed_at: newCompleted }),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      setOpp(prev => prev ? {
+        ...prev,
+        activities: (prev.activities ?? []).map(a => a.id === act.id ? { ...a, ...updated } : a),
+      } : prev);
     }
   };
 
@@ -1513,71 +1586,188 @@ export default function OpportunityDetailPage() {
                     <div
                       key={act.id}
                       className={cn(
-                        "flex items-start gap-3 px-4 py-3 bg-white rounded-xl border transition-colors",
+                        "bg-white rounded-xl border transition-colors",
                         act.type === "email" && act.email_status === "received"
                           ? "border-emerald-200 bg-emerald-50/30"
+                          : act.completed_at
+                          ? "border-border opacity-60"
                           : "border-border"
                       )}
                     >
-                      <div
-                        className={cn(
-                          "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5",
-                          activityTypeColor(act.type)
-                        )}
-                      >
-                        <ActivityIcon type={act.type} size={14} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-semibold text-foreground">{act.subject}</p>
-                          {/* Email status badges */}
-                          {act.type === "email" && act.email_status === "received" && (
-                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
-                              ↙ INBOUND
-                            </span>
+                      {/* Main row */}
+                      <div className="flex items-start gap-3 px-4 py-3">
+                        <div
+                          className={cn(
+                            "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5",
+                            activityTypeColor(act.type)
                           )}
-                          {act.type === "email" && act.sent_via_resend && act.email_status === "sent" && !act.opened_at && (
-                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                              ✓ SENT
-                            </span>
+                        >
+                          <ActivityIcon type={act.type} size={14} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className={cn("text-sm font-semibold text-foreground", act.completed_at && "line-through text-muted-foreground")}>
+                              {act.subject}
+                            </p>
+                            {act.completed_at && (
+                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                                ✓ DONE
+                              </span>
+                            )}
+                            {/* Email status badges */}
+                            {act.type === "email" && act.email_status === "received" && (
+                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                                ↙ INBOUND
+                              </span>
+                            )}
+                            {act.type === "email" && act.sent_via_resend && act.email_status === "sent" && !act.opened_at && (
+                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                                ✓ SENT
+                              </span>
+                            )}
+                            {act.type === "email" && act.opened_at && (
+                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700">
+                                👁 OPENED {act.open_count && act.open_count > 1 ? `×${act.open_count}` : ""}
+                              </span>
+                            )}
+                            {act.type === "email" && act.email_status === "failed" && (
+                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">
+                                ✗ FAILED
+                              </span>
+                            )}
+                          </div>
+                          {act.type === "email" && act.to_email && act.email_status !== "received" && (
+                            <p className="text-[10px] text-muted-foreground">To: {act.to_email}</p>
+                          )}
+                          {act.type === "email" && act.from_email && act.email_status === "received" && (
+                            <p className="text-[10px] text-muted-foreground">From: {act.from_email}</p>
                           )}
                           {act.type === "email" && act.opened_at && (
-                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700">
-                              👁 OPENED {act.open_count && act.open_count > 1 ? `×${act.open_count}` : ""}
+                            <p className="text-[10px] text-violet-600 font-medium">
+                              Opened {timeAgo(act.opened_at)}
+                            </p>
+                          )}
+                          {act.body && editingActivityId !== act.id && (
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{act.body}</p>
+                          )}
+                          {act.outcome && editingActivityId !== act.id && (
+                            <span className="inline-block mt-1 text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono">
+                              {act.outcome}
                             </span>
                           )}
-                          {act.type === "email" && act.email_status === "failed" && (
-                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">
-                              ✗ FAILED
-                            </span>
+                          {act.due_at && editingActivityId !== act.id && (
+                            <p className="text-[10px] text-muted-foreground mt-1">
+                              Due: {new Date(act.due_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                            </p>
+                          )}
+                          {act.created_by_name && (
+                            <p className="text-[10px] text-muted-foreground mt-1">{act.created_by_name}</p>
                           )}
                         </div>
-                        {act.type === "email" && act.to_email && act.email_status !== "received" && (
-                          <p className="text-[10px] text-muted-foreground">To: {act.to_email}</p>
-                        )}
-                        {act.type === "email" && act.from_email && act.email_status === "received" && (
-                          <p className="text-[10px] text-muted-foreground">From: {act.from_email}</p>
-                        )}
-                        {act.type === "email" && act.opened_at && (
-                          <p className="text-[10px] text-violet-600 font-medium">
-                            Opened {timeAgo(act.opened_at)}
-                          </p>
-                        )}
-                        {act.body && (
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{act.body}</p>
-                        )}
-                        {act.outcome && (
-                          <span className="inline-block mt-1 text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono">
-                            {act.outcome}
+                        {/* Action buttons + timestamp */}
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <span className="text-xs text-muted-foreground whitespace-nowrap font-mono mr-1">
+                            {timeAgo(act.created_at)}
                           </span>
-                        )}
-                        {act.created_by_name && (
-                          <p className="text-[10px] text-muted-foreground mt-1">{act.created_by_name}</p>
-                        )}
+                          {/* Complete/reopen toggle */}
+                          <button
+                            onClick={() => toggleActivityComplete(act)}
+                            title={act.completed_at ? "Reopen" : "Mark complete"}
+                            className={cn(
+                              "p-1 rounded hover:bg-slate-100 transition-colors",
+                              act.completed_at ? "text-emerald-600" : "text-muted-foreground"
+                            )}
+                          >
+                            {act.completed_at
+                              ? <CheckSquare size={14} />
+                              : <Square size={14} />
+                            }
+                          </button>
+                          {/* Edit */}
+                          <button
+                            onClick={() => editingActivityId === act.id ? setEditingActivityId(null) : startEditActivity(act)}
+                            title="Edit"
+                            className="p-1 rounded hover:bg-slate-100 transition-colors text-muted-foreground hover:text-foreground"
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                          {/* Delete */}
+                          <button
+                            onClick={() => deleteActivity(act.id)}
+                            title="Delete"
+                            className="p-1 rounded hover:bg-red-50 transition-colors text-muted-foreground hover:text-red-500"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </div>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0 font-mono">
-                        {timeAgo(act.created_at)}
-                      </span>
+
+                      {/* Inline edit panel */}
+                      {editingActivityId === act.id && (
+                        <div className="border-t border-border px-4 py-3 space-y-3 bg-slate-50/60 rounded-b-xl">
+                          <div className="flex gap-2">
+                            <select
+                              value={editActForm.type}
+                              onChange={e => setEditActForm(f => ({ ...f, type: e.target.value as ActivityType }))}
+                              className="text-xs border border-border rounded-lg px-2 py-1.5 bg-white text-foreground"
+                            >
+                              {(["call", "email", "meeting", "task", "note"] as ActivityType[]).map(t => (
+                                <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+                              ))}
+                            </select>
+                            <input
+                              className="flex-1 text-sm border border-border rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-brand/30"
+                              value={editActForm.subject}
+                              onChange={e => setEditActForm(f => ({ ...f, subject: e.target.value }))}
+                              placeholder="Subject"
+                            />
+                          </div>
+                          <textarea
+                            className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-brand/30 resize-none"
+                            rows={3}
+                            value={editActForm.body}
+                            onChange={e => setEditActForm(f => ({ ...f, body: e.target.value }))}
+                            placeholder="Notes / body"
+                          />
+                          <div className="flex gap-2">
+                            <div className="flex-1">
+                              <label className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wide block mb-1">Due / Scheduled</label>
+                              <input
+                                type="datetime-local"
+                                className="w-full text-xs border border-border rounded-lg px-2 py-1.5 bg-white focus:outline-none"
+                                value={editActForm.due_at}
+                                onChange={e => setEditActForm(f => ({ ...f, due_at: e.target.value }))}
+                              />
+                            </div>
+                            {(editActForm.type === "call" || editActForm.type === "meeting") && (
+                              <div className="flex-1">
+                                <label className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wide block mb-1">Outcome</label>
+                                <input
+                                  className="w-full text-xs border border-border rounded-lg px-2 py-1.5 bg-white focus:outline-none"
+                                  value={editActForm.outcome}
+                                  onChange={e => setEditActForm(f => ({ ...f, outcome: e.target.value }))}
+                                  placeholder="e.g. Connected, No answer…"
+                                />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => setEditingActivityId(null)}
+                              className="px-3 py-1.5 text-xs rounded-lg border border-border text-muted-foreground hover:bg-slate-100 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={saveActivityEdit}
+                              disabled={editActSaving || !editActForm.subject.trim()}
+                              className="px-3 py-1.5 text-xs rounded-lg bg-brand text-white font-semibold hover:bg-brand/90 transition-colors disabled:opacity-50"
+                            >
+                              {editActSaving ? "Saving…" : "Save"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))
                 )}
