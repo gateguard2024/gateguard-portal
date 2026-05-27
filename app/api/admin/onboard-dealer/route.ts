@@ -229,15 +229,15 @@ export async function POST(req: NextRequest) {
   })
 
   // ── Step 4: Send NDA + Agreement via token-based e-sign system ────────
-  // Non-blocking — org creation is not affected if email delivery fails.
+  // Awaited so errors surface in the response — org creation already succeeded.
   const agreementDocType = TIER_DOC_TYPES[org_tier] ?? 'dealer_agreement'
   const signerName       = `${admin_first_name.trim()} ${admin_last_name.trim()}`
   const baseUrl          = process.env.NEXT_PUBLIC_APP_URL ?? 'https://portal.gateguard.co'
   const expiresAt        = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
   let docs_sent = false
+  let docs_error: string | null = null
 
-  void (async () => {
-    try {
+  try {
       // Helper: create document_signature record + send signing email
       const sendDoc = async (documentType: string) => {
         const token = crypto.randomBytes(32).toString('hex')
@@ -325,11 +325,11 @@ export async function POST(req: NextRequest) {
 
       await sendDoc('nda')
       await sendDoc(agreementDocType)
-    } catch (emailErr) {
+      docs_sent = true
+  } catch (emailErr: any) {
       console.error('[onboard-dealer] Doc e-sign send error:', emailErr)
-    }
-  })()
-  docs_sent = true
+      docs_error = emailErr?.message ?? String(emailErr)
+  }
 
   return NextResponse.json({
     ok:            true,
@@ -338,9 +338,10 @@ export async function POST(req: NextRequest) {
     invite_status,
     admin_email,
     docs_sent,
+    docs_error,
     docs_note: docs_sent
       ? `NDA and ${DOC_LABELS[agreementDocType] ?? agreementDocType} signing links sent to ${admin_email}`
-      : 'No document emails sent',
+      : `Document emails NOT sent — error: ${docs_error ?? 'unknown'}`,
     message: invite_status === 'invited'
       ? `Invite sent to ${admin_email}. Their portal access will activate when they accept.`
       : invite_status === 'existing_user'
