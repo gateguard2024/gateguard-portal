@@ -108,7 +108,17 @@ export async function POST(req: NextRequest) {
     const docLabel   = DOC_LABELS[document_type] ?? document_type
     const signerFirst = (signer_name ?? 'there').split(' ')[0]
 
-    await resend.emails.send({
+    if (!process.env.RESEND_API_KEY) {
+      console.error('[signatures/send] RESEND_API_KEY env var is not set')
+      return NextResponse.json({
+        error: 'Email service not configured — RESEND_API_KEY is missing. The signing record was created but the email was not sent.',
+        signature_id: sig.id,
+        token,
+        email_sent: false,
+      }, { status: 503 })
+    }
+
+    const { error: emailError } = await resend.emails.send({
       from:    'GateGuard <documents@mail.gateguard.co>',
       to:      signer_email,
       subject: `Action Required: Please sign your ${docLabel}`,
@@ -174,7 +184,17 @@ export async function POST(req: NextRequest) {
 </html>`,
     })
 
-    return NextResponse.json({ ok: true, signature_id: sig.id, token }, { status: 201 })
+    if (emailError) {
+      console.error('[signatures/send] Resend delivery error:', emailError)
+      return NextResponse.json({
+        error: `Email delivery failed: ${(emailError as { message?: string }).message ?? JSON.stringify(emailError)}. The signing record was created (ID: ${sig.id}) but the email was not sent.`,
+        signature_id: sig.id,
+        token,
+        email_sent: false,
+      }, { status: 502 })
+    }
+
+    return NextResponse.json({ ok: true, signature_id: sig.id, token, email_sent: true }, { status: 201 })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error: msg }, { status: 500 })
