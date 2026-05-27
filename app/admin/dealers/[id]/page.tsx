@@ -245,6 +245,20 @@ interface DocSlideOverState {
   notes: string
 }
 
+interface SigRecord {
+  id: string
+  document_type: string
+  status: string
+  signer_email: string
+  signed_name: string | null
+  signed_at: string | null
+  countersigned_at: string | null
+  expires_at: string
+  sent_by_name: string | null
+}
+
+const E_SIGN_DOC_TYPES = new Set(['nda', 'agreement'])
+
 function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
   const docs: PartnerDoc[] = org.partner_docs ?? []
   const docMap = new Map<string, PartnerDoc>()
@@ -254,7 +268,63 @@ function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
     open: false, docType: null,
     status: 'missing', url: '', expires_at: '', notes: '',
   })
-  const [saving, setSaving] = useState(false)
+  const [saving, setSaving]       = useState(false)
+  const [sigs, setSigs]           = useState<SigRecord[]>([])
+  const [sendingDoc, setSendingDoc] = useState<string | null>(null)
+  const [countersigning, setCountersigning] = useState<string | null>(null)
+  const [countersignName] = useState('Russel Feldman')
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const r = await fetch(`/api/signatures/by-record?org_id=${org.id}`)
+        const data = await r.json()
+        setSigs(data.signatures ?? [])
+      } catch (_) {}
+    })()
+  }, [org.id])
+
+  const latestSig = (docType: string) =>
+    sigs.filter(s => s.document_type === docType).sort((a, b) =>
+      new Date(b.expires_at).getTime() - new Date(a.expires_at).getTime()
+    )[0] ?? null
+
+  const handleSendDoc = async (docType: string, email: string) => {
+    if (!email) return
+    setSendingDoc(docType)
+    try {
+      await fetch('/api/signatures/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          document_type: docType,
+          org_id:        org.id,
+          signer_email:  email,
+          signer_company: org.name,
+        }),
+      })
+      // Refresh signatures
+      const r = await fetch(`/api/signatures/by-record?org_id=${org.id}`)
+      const data = await r.json()
+      setSigs(data.signatures ?? [])
+    } catch (_) {}
+    finally { setSendingDoc(null) }
+  }
+
+  const handleCountersign = async (sigId: string) => {
+    setCountersigning(sigId)
+    try {
+      await fetch('/api/signatures/countersign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signature_id: sigId, countersigned_name: countersignName, countersigned_title: 'CEO' }),
+      })
+      const r = await fetch(`/api/signatures/by-record?org_id=${org.id}`)
+      const data = await r.json()
+      setSigs(data.signatures ?? [])
+    } catch (_) {}
+    finally { setCountersigning(null) }
+  }
 
   const openSlide = (type: PartnerDoc['type']) => {
     const existing = docMap.get(type)
@@ -360,7 +430,7 @@ function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
                   <p className="text-xs text-muted-foreground italic border-l-2 border-border pl-2">{doc.notes}</p>
                 )}
 
-                <div className="flex items-center gap-2 pt-1">
+                <div className="flex items-center gap-2 pt-1 flex-wrap">
                   {doc?.url && (
                     <a
                       href={doc.url}
@@ -368,15 +438,72 @@ function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
                       rel="noopener noreferrer"
                       className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border text-xs font-medium text-foreground hover:bg-accent transition-colors"
                     >
-                      <ExternalLink size={11} /> View Document
+                      <ExternalLink size={11} /> View
                     </a>
                   )}
+                  {/* E-sign controls for NDA and agreement */}
+                  {(cfg.type === 'nda' || cfg.type === 'agreement') && (() => {
+                    const sig = latestSig(cfg.type === 'agreement' ? 'dealer_agreement' : cfg.type)
+                      ?? latestSig(cfg.type === 'agreement' ? 'service_agreement' : cfg.type)
+                      ?? latestSig(cfg.type === 'agreement' ? 'master_agent_agreement' : cfg.type)
+                    const sigEmail = org.email ?? org.contact_email ?? ''
+                    if (sig?.status === 'counterparty_signed') {
+                      return (
+                        <button
+                          onClick={() => { void handleCountersign(sig.id) }}
+                          disabled={countersigning === sig.id}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                        >
+                          {countersigning === sig.id ? <Loader2 size={11} className="animate-spin" /> : <CheckCircle2 size={11} />}
+                          Countersign
+                        </button>
+                      )
+                    }
+                    if (sig?.status === 'pending') {
+                      return (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-amber-600 font-medium flex items-center gap-1">
+                            <Clock size={10} /> Awaiting signature
+                          </span>
+                          {sigEmail && (
+                            <button
+                              onClick={() => { void handleSendDoc(cfg.type === 'agreement' ? 'dealer_agreement' : cfg.type, sigEmail) }}
+                              disabled={sendingDoc === cfg.type}
+                              className="flex items-center gap-1 px-2 py-1 rounded border border-slate-200 text-[10px] text-slate-500 hover:bg-slate-50 transition-colors"
+                            >
+                              Resend
+                            </button>
+                          )}
+                        </div>
+                      )
+                    }
+                    if (sig?.status === 'fully_executed') {
+                      return (
+                        <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
+                          <CheckCircle2 size={10} /> Fully executed
+                        </span>
+                      )
+                    }
+                    // Not yet sent
+                    return sigEmail ? (
+                      <button
+                        onClick={() => { void handleSendDoc(cfg.type === 'agreement' ? 'dealer_agreement' : cfg.type, sigEmail) }}
+                        disabled={sendingDoc === cfg.type}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                      >
+                        {sendingDoc === cfg.type ? <Loader2 size={11} className="animate-spin" /> : <Mail size={11} />}
+                        Send for Signature
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 italic">Add org email to send</span>
+                    )
+                  })()}
                   <button
                     onClick={() => openSlide(cfg.type)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-brand-400 text-white text-xs font-semibold hover:bg-brand-500 transition-colors"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border text-xs font-medium text-foreground hover:bg-accent transition-colors"
                   >
                     <Upload size={11} />
-                    {doc?.url ? 'Update' : 'Upload / Update'}
+                    {doc?.url ? 'Update' : 'Manual upload'}
                   </button>
                 </div>
               </div>

@@ -34,14 +34,34 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { clerkClient } from '@clerk/nextjs/server'
 import { getCurrentUser, OrgTier, PortalRole } from '@/lib/current-user'
-import { sendEmail } from '@/lib/email-sender'
-import { generateNdaEmail, generateAgreementEmail } from '@/lib/email-templates'
+import { Resend } from 'resend'
+import crypto from 'crypto'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+const resend = new Resend(process.env.RESEND_API_KEY)
 export const dynamic = 'force-dynamic'
+
+/** Document type for each tier */
+const TIER_DOC_TYPES: Record<string, string> = {
+  master_agent:       'master_agent_agreement',
+  master_dealer:      'dealer_agreement',
+  full_dealer:        'dealer_agreement',
+  service_dealer:     'service_agreement',
+  install_contractor: 'install_partner_agreement',
+  sales_partner:      'sales_partner_agreement',
+}
+
+const DOC_LABELS: Record<string, string> = {
+  nda:                        'Mutual Non-Disclosure Agreement',
+  master_agent_agreement:     'Master Agent Agreement',
+  dealer_agreement:           'Authorized Dealer & Reseller Agreement',
+  service_agreement:          'Service Partner Agreement',
+  install_partner_agreement:  'Installation Partner Agreement',
+  sales_partner_agreement:    'Sales Partner Agreement',
+}
 
 const VALID_DEALER_TIERS: OrgTier[] = [
   'master_agent', 'master_dealer', 'full_dealer',
@@ -84,11 +104,15 @@ export async function POST(req: NextRequest) {
     tech_count,
     address, city, state, zip,
     phone, email: org_email, website,
+    entity_type,
     admin_first_name,
     admin_last_name,
     admin_email,
     admin_role = 'admin',
     send_invite = true,
+    sales_partner_rate,
+    service_dealer_rate,
+    commission_notes,
   } = body
 
   // ── Validation ──────────────────────────────────────────────────────
@@ -204,48 +228,108 @@ export async function POST(req: NextRequest) {
     ip_address: req.headers.get('x-forwarded-for') ?? null,
   })
 
-  // ── Step 4: Fire-and-forget NDA + Agreement emails ─────────────────
-  // Non-blocking — dealer creation is not affected if email delivery fails.
-  const docConfig = TIER_DOC_MAP[org_tier]
+  // ── Step 4: Send NDA + Agreement via token-based e-sign system ────────
+  // Non-blocking — org creation is not affected if email delivery fails.
+  const agreementDocType = TIER_DOC_TYPES[org_tier] ?? 'dealer_agreement'
+  const signerName       = `${admin_first_name.trim()} ${admin_last_name.trim()}`
+  const baseUrl          = process.env.NEXT_PUBLIC_APP_URL ?? 'https://portal.gateguard.co'
+  const expiresAt        = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
   let docs_sent = false
-  if (docConfig && admin_email) {
-    const recipientName = `${admin_first_name.trim()} ${admin_last_name.trim()}`
-    const senderName = 'Russel Feldman'
-    const ndaUrl = `https://portal.gateguard.co/sign/nda?dealer=${encodeURIComponent(org.id)}`
-    const agreementUrl = `https://portal.gateguard.co/sign/agreement?dealer=${encodeURIComponent(org.id)}`
 
-    void (async () => {
-      try {
-        await sendEmail({
-          to: admin_email,
-          subject: `Action Required: NDA-${docConfig.ndaType} for ${org_name.trim()}`,
-          html: generateNdaEmail({
-            recipientName,
-            orgName: org_name.trim(),
-            ndaType: docConfig.ndaType,
-            signUrl: ndaUrl,
-            senderName,
-          }),
-          replyTo: 'rfeldman@gateguard.co',
+  void (async () => {
+    try {
+      // Helper: create document_signature record + send signing email
+      const sendDoc = async (documentType: string) => {
+        const token = crypto.randomBytes(32).toString('hex')
+        const docLabel = DOC_LABELS[documentType] ?? documentType
+
+        // Auto-lookup template URL from document_templates table
+        const { data: tpl } = await supabase
+          .from('document_templates')
+          .select('public_url, version')
+          .eq('document_type', documentType)
+          .eq('is_active', true)
+          .neq('public_url', 'PLACEHOLDER_UPDATE_AFTER_UPLOAD')
+          .maybeSingle()
+
+        await supabase.from('document_signatures').insert({
+          token,
+          org_id:          org.id,
+          document_type:   documentType,
+          document_version: tpl?.version ?? 'v1.0',
+          document_url:    tpl?.public_url ?? null,
+          signer_name:     signerName,
+          signer_email:    admin_email,
+          signer_company:  org_name.trim(),
+          sent_by:         caller.id,
+          sent_by_name:    caller.name,
+          expires_at:      expiresAt,
+          status:          'pending',
         })
-        await sendEmail({
-          to: admin_email,
-          subject: `Action Required: ${docConfig.agreementType} for ${org_name.trim()}`,
-          html: generateAgreementEmail({
-            recipientName,
-            orgName: org_name.trim(),
-            agreementType: docConfig.agreementType,
-            signUrl: agreementUrl,
-            senderName,
-          }),
+
+        const signUrl    = `${baseUrl}/sign/${token}`
+        const signerFirst = admin_first_name.trim()
+
+        await resend.emails.send({
+          from:    'GateGuard <documents@mail.gateguard.co>',
+          to:      admin_email,
           replyTo: 'rfeldman@gateguard.co',
+          subject: `Action Required: Please sign your ${docLabel}`,
+          html: `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#0C111D;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="max-width:560px;margin:40px auto;background:#131B2E;border:1px solid #1E2A45;border-radius:16px;overflow:hidden;">
+    <div style="background:linear-gradient(135deg,#6B7EFF20,#0B1728);padding:32px 32px 24px;border-bottom:1px solid #1E2A45;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+        <div style="width:36px;height:36px;background:#6B7EFF;border-radius:8px;display:flex;align-items:center;justify-content:center;">
+          <span style="color:white;font-weight:bold;font-size:14px;">GG</span>
+        </div>
+        <span style="color:#6B7EFF;font-size:13px;font-weight:600;letter-spacing:0.5px;">GATEGUARD NEXUS</span>
+      </div>
+      <h1 style="margin:0;color:#F8FAFC;font-size:22px;font-weight:700;">Document Ready to Sign</h1>
+      <p style="margin:8px 0 0;color:#94A3B8;font-size:14px;">${docLabel}</p>
+    </div>
+    <div style="padding:32px;">
+      <p style="margin:0 0 16px;color:#CBD5E1;font-size:15px;">Hi ${signerFirst},</p>
+      <p style="margin:0 0 24px;color:#94A3B8;font-size:14px;line-height:1.6;">
+        ${caller.name} at GateGuard has sent you a <strong style="color:#CBD5E1;">${docLabel}</strong> for ${org_name.trim()}.
+        Please click below to review and add your electronic signature.
+      </p>
+      <div style="text-align:center;margin:32px 0;">
+        <a href="${signUrl}" style="display:inline-block;background:#6B7EFF;color:white;text-decoration:none;padding:14px 36px;border-radius:10px;font-weight:600;font-size:15px;">
+          Review &amp; Sign →
+        </a>
+      </div>
+      <div style="background:#0C111D;border:1px solid #1E2A45;border-radius:10px;padding:16px;margin-bottom:24px;">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr><td style="color:#64748B;font-size:12px;padding:4px 0;width:40%;">Document</td><td style="color:#CBD5E1;font-size:12px;">${docLabel}</td></tr>
+          <tr><td style="color:#64748B;font-size:12px;padding:4px 0;">Organization</td><td style="color:#CBD5E1;font-size:12px;">${org_name.trim()}</td></tr>
+          <tr><td style="color:#64748B;font-size:12px;padding:4px 0;">Sent by</td><td style="color:#CBD5E1;font-size:12px;">${caller.name} · GateGuard</td></tr>
+          <tr><td style="color:#64748B;font-size:12px;padding:4px 0;">Expires</td><td style="color:#CBD5E1;font-size:12px;">${new Date(expiresAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</td></tr>
+        </table>
+      </div>
+      <p style="margin:0;color:#64748B;font-size:12px;line-height:1.6;">
+        Questions? Contact <a href="mailto:rfeldman@gateguard.co" style="color:#6B7EFF;">rfeldman@gateguard.co</a>
+      </p>
+    </div>
+    <div style="padding:16px 32px;border-top:1px solid #1E2A45;text-align:center;">
+      <p style="margin:0;color:#475569;font-size:11px;">GateGuard · The OS for Multifamily Access · Electronic signatures are binding under ESIGN Act &amp; UETA</p>
+    </div>
+  </div>
+</body>
+</html>`,
         })
-      } catch (emailErr) {
-        console.error('[onboard-dealer] Doc email send error:', emailErr)
       }
-    })()
-    docs_sent = true
-  }
+
+      await sendDoc('nda')
+      await sendDoc(agreementDocType)
+    } catch (emailErr) {
+      console.error('[onboard-dealer] Doc e-sign send error:', emailErr)
+    }
+  })()
+  docs_sent = true
 
   return NextResponse.json({
     ok:            true,
@@ -255,8 +339,8 @@ export async function POST(req: NextRequest) {
     admin_email,
     docs_sent,
     docs_note: docs_sent
-      ? `NDA-${docConfig?.ndaType} and ${docConfig?.agreementType} queued for ${admin_email}`
-      : 'No document emails sent (tier not mapped)',
+      ? `NDA and ${DOC_LABELS[agreementDocType] ?? agreementDocType} signing links sent to ${admin_email}`
+      : 'No document emails sent',
     message: invite_status === 'invited'
       ? `Invite sent to ${admin_email}. Their portal access will activate when they accept.`
       : invite_status === 'existing_user'

@@ -6,7 +6,7 @@ import Link from 'next/link'
 import {
   ChevronLeft, ChevronRight, Building2, Users, Shield,
   CheckCircle2, MapPin, Phone, Mail, Globe, Layers,
-  Star, Wrench, TrendingUp, ClipboardList, Zap,
+  Star, Wrench, TrendingUp, ClipboardList, Zap, FileText,
   AlertCircle, Copy, ExternalLink, Hash, Info,
   Search, X, Loader2,
 } from 'lucide-react'
@@ -30,6 +30,7 @@ interface WizardState {
   org_tier: OrgTier | ''
   // Step 2 — Org info
   org_name: string
+  entity_type: string       // e.g. "limited liability company"
   license_number: string
   service_area_states: string[]
   tech_count: string
@@ -40,16 +41,18 @@ interface WizardState {
   org_phone: string
   org_email: string
   website: string
-  // Step 3 — Relationships
+  // Step 3 — NDA (preview; sent after org creation)
+  send_nda: boolean
+  // Step 4 — Relationships
   parent_org_id: string
   parent_org_name: string   // display only
   master_agent_id: string
   master_dealer_id: string
-  // Step 4 — Commission config (for full_dealer / master_dealer)
+  // Step 5 — Commission config (for full_dealer / master_dealer)
   sales_partner_rate: string
   service_dealer_rate: string
   commission_notes: string
-  // Step 5 — Primary admin
+  // Step 6 — Primary admin
   admin_first_name: string
   admin_last_name: string
   admin_email: string
@@ -59,14 +62,25 @@ interface WizardState {
 
 const EMPTY: WizardState = {
   org_tier: '',
-  org_name: '', license_number: '', service_area_states: [], tech_count: '',
+  org_name: '', entity_type: 'limited liability company',
+  license_number: '', service_area_states: [], tech_count: '',
   address: '', city: '', state: '', zip: '', org_phone: '', org_email: '', website: '',
+  send_nda: true,
   parent_org_id: '', parent_org_name: '',
   master_agent_id: '', master_dealer_id: '',
   sales_partner_rate: '1.00', service_dealer_rate: '3.00', commission_notes: '',
   admin_first_name: '', admin_last_name: '', admin_email: '',
   admin_role: 'admin', send_invite: true,
 }
+
+const ENTITY_TYPES = [
+  'limited liability company',
+  'corporation',
+  'S corporation',
+  'partnership',
+  'sole proprietorship',
+  'limited partnership',
+]
 
 /* ─── Tier config (7 tiers) ──────────────────────────────── */
 const TIERS: {
@@ -172,10 +186,11 @@ const ROLE_OPTIONS: { id: PortalRole; label: string; desc: string }[] = [
 const STEPS = [
   { n: 1, label: 'Dealer Type'   },
   { n: 2, label: 'Org Info'      },
-  { n: 3, label: 'Relationships' },
-  { n: 4, label: 'Commission'    },
-  { n: 5, label: 'Admin User'    },
-  { n: 6, label: 'Review'        },
+  { n: 3, label: 'NDA'           },
+  { n: 4, label: 'Relationships' },
+  { n: 5, label: 'Commission'    },
+  { n: 6, label: 'Admin User'    },
+  { n: 7, label: 'Review'        },
 ]
 
 function StepBar({ current }: { current: number }) {
@@ -385,21 +400,16 @@ export default function NewDealerPage() {
 
   /* ── Skip commission step for tiers that don't need it ── */
   const advance = () => {
-    if (step === 3 && !COMMISSION_TIERS.has(form.org_tier as string)) {
-      setStep(5) // skip commission step
-    } else if (step === 5 && !COMMISSION_TIERS.has(form.org_tier as string)) {
-      // came from step 3 skip — go to review (6)
-      setStep(6)
+    if (step === 4 && !COMMISSION_TIERS.has(form.org_tier as string)) {
+      setStep(6) // skip commission (step 5)
     } else {
       setStep(s => s + 1)
     }
   }
 
   const retreat = () => {
-    if (step === 5 && !COMMISSION_TIERS.has(form.org_tier as string)) {
-      setStep(3) // back to relationships, skipping commission
-    } else if (step === 6 && !COMMISSION_TIERS.has(form.org_tier as string)) {
-      setStep(5)
+    if (step === 6 && !COMMISSION_TIERS.has(form.org_tier as string)) {
+      setStep(4) // back to relationships, skipping commission
     } else {
       setStep(s => Math.max(1, s - 1))
     }
@@ -409,9 +419,10 @@ export default function NewDealerPage() {
   const canAdvance = (): boolean => {
     if (step === 1) return !!form.org_tier
     if (step === 2) return !!form.org_name.trim()
-    if (step === 3) return true  // relationships are optional
-    if (step === 4) return commissionPoolError(form) === null
-    if (step === 5) return !!(form.admin_first_name.trim() && form.admin_last_name.trim() && form.admin_email.includes('@'))
+    if (step === 3) return !form.send_nda || !!form.org_email.trim()  // need email if sending NDA
+    if (step === 4) return true  // relationships are optional
+    if (step === 5) return commissionPoolError(form) === null
+    if (step === 6) return !!(form.admin_first_name.trim() && form.admin_last_name.trim() && form.admin_email.includes('@'))
     return true
   }
 
@@ -425,6 +436,7 @@ export default function NewDealerPage() {
         body: JSON.stringify({
           org_name:            form.org_name.trim(),
           org_tier:            form.org_tier,
+          entity_type:         form.entity_type || 'limited liability company',
           parent_org_id:       form.parent_org_id || null,
           master_agent_id:     form.master_agent_id || null,
           master_dealer_id:    form.master_dealer_id || null,
@@ -456,7 +468,7 @@ export default function NewDealerPage() {
       const json = await res.json()
       if (!res.ok && res.status !== 207) throw new Error(json.error ?? 'Onboarding failed')
       setResult(json)
-      setStep(7)  // success screen
+      setStep(8)  // success screen
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -467,7 +479,7 @@ export default function NewDealerPage() {
   const selectedTier = TIERS.find(t => t.id === form.org_tier)
 
   /* ── Success screen ── */
-  if (step === 7 && result) {
+  if (step === 8 && result) {
     return (
       <div className="max-w-2xl mx-auto p-8">
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 text-center">
@@ -649,7 +661,7 @@ export default function NewDealerPage() {
           </p>
 
           <div className="space-y-5">
-            <Field label="Company Name" required>
+            <Field label="Company Legal Name" required hint="Enter the full legal name exactly as it appears on your business registration">
               <Input
                 value={form.org_name}
                 onChange={e => set('org_name', e.target.value)}
@@ -657,6 +669,20 @@ export default function NewDealerPage() {
                 autoFocus
               />
             </Field>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Entity Type" required hint="Used in legal agreements">
+                <select
+                  value={form.entity_type}
+                  onChange={e => set('entity_type', e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-white"
+                >
+                  {ENTITY_TYPES.map(et => (
+                    <option key={et} value={et}>{et.charAt(0).toUpperCase() + et.slice(1)}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
 
             <div className="grid grid-cols-2 gap-4">
               <Field label="License Number">
@@ -733,8 +759,105 @@ export default function NewDealerPage() {
         </div>
       )}
 
-      {/* ── Step 3: Relationships ────────────────────────────────────── */}
+      {/* ── Step 3: NDA ─────────────────────────────────────────────── */}
       {step === 3 && (
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900 mb-1">Non-Disclosure Agreement</h2>
+          <p className="text-sm text-slate-500 mb-6">
+            A Mutual NDA and Authorized Dealer Agreement will be sent to the admin's email address for
+            electronic signature when you launch the account.
+          </p>
+
+          {/* NDA summary card */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-5">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-10 h-10 bg-indigo-50 rounded-lg flex items-center justify-center shrink-0">
+                <FileText size={18} className="text-indigo-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-slate-900 text-sm">Mutual Non-Disclosure Agreement</p>
+                <p className="text-xs text-slate-500 mt-0.5">Dealer Program · Gate Guard, LLC</p>
+              </div>
+            </div>
+            <div className="space-y-2 text-xs text-slate-600">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Between</span>
+                <span className="font-medium">Gate Guard, LLC &amp; {form.org_name || '(dealer)'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Entity type</span>
+                <span className="font-medium">{form.state ? `${form.state} ` : ''}{form.entity_type}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Term</span>
+                <span className="font-medium">3 years · Trade Secrets survive in perpetuity</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Governing law</span>
+                <span className="font-medium">Georgia · Fulton County</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Agreement summary card */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-5">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center shrink-0">
+                <FileText size={18} className="text-emerald-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-slate-900 text-sm">Authorized Dealer &amp; Reseller Agreement</p>
+                <p className="text-xs text-slate-500 mt-0.5">Including Exhibit A — Tier &amp; Commission Addendum</p>
+              </div>
+            </div>
+            <div className="space-y-2 text-xs text-slate-600">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Term</span>
+                <span className="font-medium">1 year · auto-renewing</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Pricing</span>
+                <span className="font-medium">References then-current Price List (no hardcoded rates)</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Exhibit A</span>
+                <span className="font-medium">Tier checkboxes + commission % auto-filled from portal</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Org email check */}
+          {!form.org_email.trim() && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5 flex items-start gap-2">
+              <AlertCircle size={15} className="text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-sm text-amber-700">
+                No org email set — go back to Step 2 and enter a contact email, or the documents
+                will be sent to the admin email you provide in Step 6.
+              </p>
+            </div>
+          )}
+
+          {/* Send toggle */}
+          <label className="flex items-start gap-3 cursor-pointer bg-white border border-slate-200 rounded-xl p-4">
+            <input
+              type="checkbox"
+              checked={form.send_nda}
+              onChange={e => set('send_nda', e.target.checked)}
+              className="mt-0.5 w-4 h-4 rounded border-slate-300 text-brand-400 focus:ring-brand-400"
+            />
+            <div>
+              <span className="text-sm font-medium text-slate-800">Send NDA &amp; Agreement for signature upon launch</span>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Both documents will be emailed to {form.org_email.trim() || '(admin email — set in Step 6)'} as separate signing links.
+                Uncheck to send manually from the dealer's compliance tab later.
+              </p>
+            </div>
+          </label>
+        </div>
+      )}
+
+      {/* ── Step 4: Relationships ────────────────────────────────────── */}
+      {step === 4 && (
         <div>
           <h2 className="text-lg font-semibold text-slate-900 mb-1">Org Relationships</h2>
           <p className="text-sm text-slate-500 mb-5">
@@ -808,8 +931,8 @@ export default function NewDealerPage() {
         </div>
       )}
 
-      {/* ── Step 4: Commission Config ───────────────────────────────── */}
-      {step === 4 && (
+      {/* ── Step 5: Commission Config ───────────────────────────────── */}
+      {step === 5 && (
         <div>
           <h2 className="text-lg font-semibold text-slate-900 mb-1">Commission Configuration</h2>
           <p className="text-sm text-slate-500 mb-5">
@@ -944,8 +1067,8 @@ export default function NewDealerPage() {
         </div>
       )}
 
-      {/* ── Step 5: Primary admin user ──────────────────────────────── */}
-      {step === 5 && (
+      {/* ── Step 6: Primary admin user ──────────────────────────────── */}
+      {step === 6 && (
         <div>
           <h2 className="text-lg font-semibold text-slate-900 mb-1">Primary Admin User</h2>
           <p className="text-sm text-slate-500 mb-6">
@@ -1036,8 +1159,8 @@ export default function NewDealerPage() {
         </div>
       )}
 
-      {/* ── Step 6: Review ───────────────────────────────────────────── */}
-      {step === 6 && (
+      {/* ── Step 7: Review ───────────────────────────────────────────── */}
+      {step === 7 && (
         <div>
           <h2 className="text-lg font-semibold text-slate-900 mb-1">Review & Launch</h2>
           <p className="text-sm text-slate-500 mb-6">Confirm everything below, then hit Launch to create the dealer account.</p>
@@ -1130,7 +1253,7 @@ export default function NewDealerPage() {
           <ChevronLeft size={16} /> Back
         </button>
 
-        {step < 6 ? (
+        {step < 7 ? (
           <button
             onClick={advance}
             disabled={!canAdvance()}
