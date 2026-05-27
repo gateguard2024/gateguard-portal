@@ -1,6 +1,6 @@
 # GateGuard Portal — Claude Context (Active Reference)
 
-> Last trimmed: May 26, 2026. Full sprint history, /tech docs, SARA Plus intel → CLAUDE.archive.md
+> Last trimmed: May 27, 2026. Full sprint history, /tech docs, SARA Plus intel → CLAUDE.archive.md
 
 ---
 
@@ -74,6 +74,26 @@
 ---
 
 ## KEY SOURCE FILES
+
+### Dashboard
+| File | Purpose |
+|------|---------|
+| `app/page.tsx` | Tactical Hub Dashboard — 4 KPI cards, EOS + Team section, All Accounts table, System & Alerts ops panel |
+
+**Dashboard design notes (`app/page.tsx`):**
+- Server component — Supabase fetches: active account count, quote pipeline, open work orders, account rows (12 most recent)
+- **4 grouped KPI cards:** Revenue & Pipeline, Ops Health, Account Growth, Critical Alerts — `grid-cols-2 lg:grid-cols-4`
+  - Mobile: compact (icon + label header + one primary metric + 1-line sub). Secondary metrics hidden with `hidden lg:flex`
+  - Desktop: full rich layout with dividers, secondary metrics, demo/live badges
+- **EOS + Team Performance (3-col → single col mobile):** Q2 Rocks with per-rock status badges | Team XP (progress bar, streak, leaderboard) | Active Challenges + Scorecard Pulse — `grid-cols-1 lg:grid-cols-3`
+- **Bottom row (2/3 + 1/3 → stacked mobile):** All Accounts table (`lg:col-span-2`) + System & Alerts ops panel — `grid-cols-1 lg:grid-cols-3`
+  - Table hides "Added" date + row actions on mobile: `hidden lg:table-cell`
+  - Row hover: "+ Add to L10" button + Eye + Settings
+- **System & Alerts panel:** Alerts feed + Quick Actions grid (New Quote / Work Order / Add Account / View SOC) + Platform Status — all in one right column
+- **Header:** TopBar with "+ Post Update" button inline next to AISearch
+- Static data: `q2Rocks`, `scorecardPulse`, `teamLeaderboard`, `activeChallenges`, `notifications`
+- Derived: `rocksOnTrack`, `myXP`, `xpNext`, `xpPct`
+- lucide require(): `ShieldCheck, Target, Trophy`
 
 ### Quotes
 | File | Purpose |
@@ -241,25 +261,31 @@ When embedding `{{MERGE_VAR}}` placeholders inside a TypeScript backtick string,
 
 ## PENDING TASKS (prioritized)
 
-### Completed this sprint (May 26, 2026 — continued)
+### Completed — May 26, 2026
 - ✅ NDA template (`lib/nda-template.ts`) — Mutual NDA with 4 merge vars, 3-year term, Trade Secrets survive in perpetuity
-- ✅ Agreement template (`lib/agreement-template.ts`) — Full Dealer & Reseller Agreement + Exhibit A; no hardcoded prices; references "then-current Price List"; `buildAgreementVarsFromOrg()` auto-fills from org tier + commission config
-- ✅ Dealer onboarding wizard expanded to 7 steps — added Step 3 (NDA + Agreement preview + send toggle), `entity_type` field in Step 2, step numbering updated throughout
-- ✅ `onboard-dealer` API route upgraded — fires real NDA + tier-appropriate Agreement signing emails on dealer creation; `sendDoc()` helper creates `document_signatures` record + Resend email
-- ✅ Compliance tab on dealer detail page — live e-sign status cards for NDA + Agreement; "Send for Signature," "Resend," "Countersign," "Manual upload" actions; countersign flow POSTs to `/api/signatures/countersign`
-- ✅ Sidebar gradient — Gemini-style deep radial navy-to-black glow applied to `<aside>` in Sidebar.tsx
-- ✅ CLAUDE.md updated (this file) + NEXUS_USER_MANUAL.md created
-- ✅ CRM dashboard enterprise redesign — `app/crm/page.tsx`: global filter bar (Date Range / Region / Rep), KPI sparklines (line + bar SVG), horizontal proportional funnel bars on pipeline, Pipeline Forecast & Goal Tracking stacked area chart, AI Deal Score column on Open Opportunities (deterministic hash of opp ID + stage → green/amber/red), activity quick-actions (Reply/Note/Complete on hover), lead communication icons (Mail/Phone/Calendar on hover), Open Opportunities sorted by `updated_at → created_at`, My Leads checks `assigned_dealer` before showing `+ Assign`, all accents `#6B7EFF`
-- ✅ Quotes page enterprise redesign — `app/quotes/page.tsx`: KPI sparkline cards (Active MRR bar, Pipeline MRR line, Dealer Override target/dashed) with delta trend badges, horizontal bar funnel replacing 4-box chevron pipeline, 2-column bottom layout (quotes table left + Deal Velocity panel right), filter tabs with live counts per status, row hover actions (Eye/Edit/Copy/More), Deal Velocity panel shows quote conversion funnel bars + avg time metrics + win rate progress bar; all accents `#6B7EFF`, white card design system
-- ✅ Scenario Gallery (`app/quotes/new/page.tsx`) — replaced 3-card picker with 6-card intent-driven gallery: Multi-Family Smart Core, Premium Gate & Access, Custom Package Mgmt, Comprehensive Security, Device-Only Hardware, AI Voice Import (Beta). Each card pre-populates line item builder with CPQ-correct starter items via `loadTemplate()`. Bottom row preserves Survey Wizard + Import Survey entry points. `CPQ_DEPS` map and `SCENARIO_TEMPLATES` array defined at module scope.
-- ✅ CPQ Quote Builder (`app/quotes/[id]/page.tsx`) — added: CPQ dependency engine (checks item SKUs against `CPQ_DEPS`, surfaces amber warning banner for missing required items), margin estimation engine (hardware ~47% / MRR ~75% blended estimate), Internal Financial Summary sidebar card (margin donut ring, revenue/cost breakdown, approval badge), approval gateway (Send to Client locked → "Request VP Approval" when margin < 25%), Internal View / Proposal View toggle in top bar
+- ✅ Agreement template (`lib/agreement-template.ts`) — Full Dealer & Reseller Agreement + Exhibit A; no hardcoded prices; `buildAgreementVarsFromOrg()` auto-fills from org tier + commission config
+- ✅ Dealer onboarding wizard expanded to 7 steps — added Step 3 (NDA + Agreement preview + send toggle), `entity_type` field in Step 2
+- ✅ `onboard-dealer` API route upgraded — fires NDA + Agreement signing emails via Resend on dealer creation
+- ✅ Compliance tab on dealer detail page — live e-sign status cards + Send / Resend / Countersign / Manual upload actions
+- ✅ Sidebar gradient — Gemini-style deep radial navy-to-black glow in Sidebar.tsx
+- ✅ CRM dashboard enterprise redesign — global filter bar, KPI sparklines, pipeline funnel, forecast area chart, AI Deal Scores, activity quick-actions, lead comms icons
+- ✅ Quotes page enterprise redesign — KPI sparklines, bar funnel, 2-col layout (table + Deal Velocity panel), filter tabs with live counts
+- ✅ Scenario Gallery (`/quotes/new`) — 6-card intent-driven gallery replacing 3-card picker; `loadTemplate()` pre-populates line item builder; `SCENARIO_TEMPLATES` + `CPQ_DEPS` at module scope
+- ✅ CPQ Quote Builder (`/quotes/[id]`) — dependency engine (amber warnings for missing required items), margin engine (hardware ~47% / MRR ~75%), Internal Financial Summary sidebar (donut ring), approval gateway (Send locked below 25% margin → "Request VP Approval"), Internal/Proposal View toggle
 
-### Pending for tomorrow (CPQ Phase 2)
-- Add `unit_cost` column to `quote_line_items` table (migration) — enables real margin vs. estimated
-- Make margin % column editable inline on line item table
-- Wire up `isOptionalForClient` toggle column in builder table (already exists as `is_optional` in DB)
+### Completed — May 27, 2026
+- ✅ Tactical Hub Dashboard (`app/page.tsx`) — full rewrite: 4 grouped KPI cards (Revenue & Pipeline, Ops Health, Account Growth, Critical Alerts), 3-col EOS + Team Performance section (Q2 Rocks / XP leaderboard / Active Challenges + Scorecard), All Accounts table with "+ Add to L10" row action, System & Alerts ops panel (alerts feed + quick actions + platform status), "+ Post Update" button in header
+- ✅ TopBar on Quotes & Proposals page — added `<TopBar>` import + replaced inline `<h1>` header; "+ New Quote" passed via `actions` prop; `flex flex-col min-h-full` wrapper added to match site pattern
+- ✅ PWA upgrade — `logo.png` resized → new `icon-192.png` + `icon-512.png`; `manifest.json` updated (name: "GateGuard Nexus", short_name: "Nexus", start_url: "/", theme_color: `#1c1917`, bg: `#F8FAFC`); `layout.tsx` updated (apple icon, appleWebApp title "Nexus", `viewportFit: 'cover'`, `maximumScale: 1`, theme color matches manifest)
+- ✅ Responsive grid fixes (desktop unchanged, all via `lg:`/`sm:` prefixes) — `app/page.tsx`, `app/crm/page.tsx`, `app/quotes/page.tsx`, `app/quotes/new/page.tsx`
+- ✅ Mobile dashboard fix — compact KPI card format on mobile (icon + label + primary metric + 1-line sub); secondary metrics/dividers hidden with `hidden lg:flex`; accounts table "Added" + actions columns hidden with `hidden lg:table-cell`; EOS/Team stacks single col on mobile
+
+### Pending — CPQ Phase 2
+- Add `unit_cost` column to `quote_line_items` (migration 092) — enables real margin vs. estimated
+- Make margin % column editable inline per line item
+- Wire up `isOptionalForClient` toggle column in builder table (`is_optional` already in DB)
 - Test full scenario walkthroughs: 92 W. Paces (Multi-Family), gate-only property, device-only deal
-- Interactive Public Proposal (`/quotes/[id]/proposal`) — add client toggle add-ons + dynamic total recalc
+- Interactive Public Proposal (`/quotes/[id]/proposal`) — client toggle add-ons + dynamic total recalc
 
 ### Active (in progress)
 - Task #207 — Upgrade floor plans to Mapbox satellite backdrop
@@ -278,7 +304,6 @@ When embedding `{{MERGE_VAR}}` placeholders inside a TypeScript backtick string,
 - `TAVILY_API_KEY` — ARIA Deep Intel web search
 
 ### Feature backlog
-- PWA manifest for /tech (Add to Home Screen)
 - Photo evidence on work orders
 - EOS persistence (Rocks/Scorecard/Issues/To-Dos → Supabase)
 - LPR integration (Eagle Eye LPR → Brivo credential or gate relay)

@@ -1,5 +1,5 @@
 # NEXUS — GateGuard Dealer Portal User Manual
-### Version 11 · Updated May 26, 2026
+### Version 12 · Updated May 27, 2026
 
 > **NEXUS** is the GateGuard internal name for the Dealer Portal at [portal.gateguard.co](https://portal.gateguard.co). It is the command center for dealer ops: onboarding, quoting, field service, billing, compliance, AI diagnostics, and more.
 
@@ -9,7 +9,8 @@
 
 1. [Roles & Access](#1-roles--access)
 2. [Navigation](#2-navigation)
-2a. [CRM Dashboard](#2a-crm-dashboard)
+2a. [Nexus Dashboard (Home)](#2a-nexus-dashboard-home)
+2b. [CRM Dashboard](#2b-crm-dashboard)
 3. [Admin — Dealer Onboarding](#3-admin--dealer-onboarding)
 4. [Admin — Dealer Detail & Compliance](#4-admin--dealer-detail--compliance)
 5. [Quotes](#5-quotes)
@@ -66,7 +67,57 @@ The left sidebar is NEXUS's primary navigation. Sections are grouped by function
 
 ---
 
-## 2a. CRM Dashboard
+## 2a. Nexus Dashboard (Home)
+
+**Route:** `/`
+
+The **Tactical Hub Dashboard** is the portal's command center — a single-screen operational overview designed to surface the numbers that matter, your EOS pulse, and team momentum without navigating away.
+
+### Header
+The top bar shows **"Nexus Dashboard"** with the GateGuard subtitle. An **AI Search bar** (same engine as the rest of the portal) sits inline next to a **"+ Post Update"** button for quick team communications.
+
+### 4 KPI Cards
+
+| Card | Primary Metric | Secondary (desktop) | Source |
+|------|---------------|---------------------|--------|
+| **Revenue & Pipeline** | Monthly MRR ($94.2k) | Open quote pipeline | DEMO / Live when quotes table connected |
+| **Ops Health** | Cameras online (115/138) | Doors/Gates status + open WOs | DEMO / Live WOs |
+| **Account Growth** | Active accounts | DTV Activations | Live (Supabase org count) |
+| **Critical Alerts** | Alert count | Link to /alerts | DEMO |
+
+On mobile, each card shows only the primary metric + a one-line sub. Secondary metrics and dividers are hidden (`hidden lg:flex`) — no overflow or wrapping.
+
+### EOS + Team Performance (3 cards)
+
+**Q2 2026 Rocks** — All six quarterly Rocks with color-coded status badges (On Track / At Risk / Off Track). Count badge shows X/6 on track. Links to `/eos`. Next L10 meeting time shown at bottom.
+
+**Team Performance** — Russel F.'s XP progress bar (current XP / next level threshold), 12-day streak, level badge. June Leaderboard shows top 3 (RF / Nicole G. / Jake T.) with XP counts.
+
+**Active Challenges + Scorecard Pulse** — Three active challenges with progress bars and XP reward callouts. Below a divider, the Scorecard Pulse shows each weekly metric (New Opps, Proposals Sent, Active Dealers, Installed Props, Portal Uptime) with a green/red dot vs. goal.
+
+On mobile all three cards stack single-column — full width, easy to scroll.
+
+### All Accounts Table
+Shows up to 12 most recent accounts (live from Supabase when connected, static fallback if not). Columns:
+- Account name (with green status dot)
+- Tier pill (color-coded: Client / MSO / Sales Partner / etc.)
+- Added date *(desktop only — `hidden lg:table-cell`)*
+- Row actions: **"+ Add to L10"** button + Eye + Settings *(desktop only — appear on hover)*
+
+On mobile: Account + Tier only. Taps navigate to the customer detail page.
+
+### System & Alerts Operations Panel
+Stacks three mini-cards in the right column:
+
+1. **Alerts** — last 4 alert events with type dot (red/amber/green) and time ago
+2. **Quick Actions** — 2×2 grid: New Quote · Work Order · Add Account · View SOC
+3. **Platform Status** — EagleEye API, Brivo API, DirecTV ATLAS, Supabase, Vercel Edge — all with operational status dot
+
+On mobile this panel stacks below the Accounts table, full width.
+
+---
+
+## 2b. CRM Dashboard
 
 **Route:** `/crm` · Opportunities: `/crm/opportunities` · Leads: `/crm/leads`
 
@@ -223,6 +274,8 @@ Admin sees "Counterparty Signed" in Compliance tab
 ## 5. Quotes & Proposals
 
 **Route:** `/quotes` · New quote: `/quotes/new`
+
+The Quotes & Proposals section uses the standard NEXUS dark top bar (same as Dashboard and CRM) with the "+ New Quote" button in the top-right action area.
 
 ### Quotes Dashboard (`/quotes`)
 
@@ -502,6 +555,46 @@ git push origin main && git push origin main:beta
 | `beta` | Beta | beta.portal.gateguard.co |
 
 Always test on beta first. Never push DB migrations to prod before beta is confirmed.
+
+---
+
+## PWA — Installing NEXUS as a Native App
+
+NEXUS is a Progressive Web App (PWA). On both iOS and Android you can install it to your home screen for a full native-app experience — no app store required.
+
+### Installing on iPhone / iPad
+1. Open **portal.gateguard.co** in Safari
+2. Tap the **Share** button (box with arrow) in the Safari toolbar
+3. Scroll down and tap **"Add to Home Screen"**
+4. Name it **"Nexus"** → tap **Add**
+
+The GateGuard shield icon will appear on your home screen. Tapping it opens NEXUS in standalone mode (no Safari chrome, full screen).
+
+### Installing on Android
+1. Open **portal.gateguard.co** in Chrome
+2. Tap the **⋮** menu → **"Add to Home Screen"** (or Chrome may show an install banner automatically)
+3. Tap **Add**
+
+### PWA Details
+| Setting | Value |
+|---------|-------|
+| App name | GateGuard Nexus |
+| Short name | Nexus |
+| Home screen icon | GateGuard shield logo (192×192 + 512×512) |
+| Start URL | `/` (Dashboard) |
+| Display mode | Standalone (no browser chrome) |
+| Theme color | Dark bar (`#1c1917`) matching the portal top bar |
+| Orientation | Any (portrait + landscape) |
+
+### Mobile Layout
+The portal is fully responsive. On screens narrower than `lg` (1024px):
+- KPI cards show 2-column compact format (primary metric only; secondary metrics hidden)
+- EOS + Team + Challenges sections stack single-column
+- Accounts table shows Account + Tier only (date and actions hidden)
+- CRM rows collapse to single column
+- Quotes KPI cards collapse to single column
+
+Desktop layout is completely unchanged.
 
 ---
 
