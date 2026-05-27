@@ -582,8 +582,265 @@ function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
   )
 }
 
+/* ─── Features tab ───────────────────────────────────────── */
+type AccessLevel = 'none' | 'view' | 'edit'
+
+interface OrgFeature {
+  key:           string
+  label:         string
+  section:       string
+  section_label: string
+  sort_order:    number
+  tier_default:  AccessLevel
+  access_level:  AccessLevel
+  is_overridden: boolean
+  override: {
+    access_level: AccessLevel
+    is_promo:     boolean
+    promo_reason: string | null
+    expires_at:   string | null
+    notes:        string | null
+  } | null
+}
+
+const ACCESS_OPTIONS: { value: AccessLevel; label: string; color: string }[] = [
+  { value: 'none', label: 'None',  color: 'bg-slate-100 text-slate-500' },
+  { value: 'view', label: 'View',  color: 'bg-amber-100 text-amber-700' },
+  { value: 'edit', label: 'Edit',  color: 'bg-emerald-100 text-emerald-700' },
+]
+
+function OrgAccessSelector({ value, onChange }: { value: AccessLevel; onChange: (v: AccessLevel) => void }) {
+  return (
+    <div className="flex gap-0.5">
+      {ACCESS_OPTIONS.map(opt => (
+        <button
+          key={opt.value}
+          onClick={() => onChange(opt.value)}
+          className={`px-2 py-1 text-[10px] font-semibold rounded transition-all ${
+            value === opt.value ? opt.color : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function groupFeaturesBySection(features: OrgFeature[]): Map<string, { label: string; items: OrgFeature[] }> {
+  const map = new Map<string, { label: string; items: OrgFeature[] }>()
+  for (const f of features) {
+    if (!map.has(f.section)) map.set(f.section, { label: f.section_label, items: [] })
+    map.get(f.section)!.items.push(f)
+  }
+  return map
+}
+
+function FeaturesTab({ org }: { org: Org }) {
+  const [features, setFeatures]   = useState<OrgFeature[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [dirty, setDirty]         = useState<Map<string, Partial<OrgFeature & { is_promo: boolean; expires_at: string; notes: string }>>>(new Map())
+  const [saving, setSaving]       = useState(false)
+  const [saved, setSaved]         = useState(false)
+  const [error, setError]         = useState<string | null>(null)
+
+  useEffect(() => {
+    void (async () => {
+      setLoading(true)
+      try {
+        const res  = await fetch(`/api/admin/org-features/${org.id}`)
+        const data = await res.json()
+        setFeatures(data.features ?? [])
+      } catch { setError('Failed to load features') }
+      finally { setLoading(false) }
+    })()
+  }, [org.id])
+
+  const markDirty = (key: string, patch: Record<string, unknown>) => {
+    setDirty(d => {
+      const next = new Map(d)
+      next.set(key, { ...(next.get(key) ?? {}), ...patch })
+      return next
+    })
+    setFeatures(fs => fs.map(f => {
+      if (f.key !== key) return f
+      const newLevel = (patch.access_level as AccessLevel | undefined) ?? f.access_level
+      return {
+        ...f,
+        access_level:  newLevel,
+        is_overridden: newLevel !== f.tier_default || !!(patch.is_promo ?? f.override?.is_promo),
+        override: {
+          access_level: newLevel,
+          is_promo:     (patch.is_promo as boolean | undefined) ?? f.override?.is_promo ?? false,
+          promo_reason: (patch.promo_reason as string | null | undefined) ?? f.override?.promo_reason ?? null,
+          expires_at:   (patch.expires_at as string | null | undefined) ?? f.override?.expires_at ?? null,
+          notes:        (patch.notes as string | null | undefined) ?? f.override?.notes ?? null,
+        },
+      }
+    }))
+  }
+
+  const handleSave = async () => {
+    if (dirty.size === 0) return
+    setSaving(true)
+    setError(null)
+    try {
+      const updates = Array.from(dirty.entries()).map(([key, patch]) => ({
+        feature_key:  key,
+        access_level: (patch as OrgFeature).access_level ?? 'none',
+        is_promo:     (patch as Record<string, unknown>).is_promo ?? false,
+        expires_at:   (patch as Record<string, unknown>).expires_at ?? null,
+        notes:        (patch as Record<string, unknown>).notes ?? null,
+      }))
+      const res  = await fetch(`/api/admin/org-features/${org.id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ updates }),
+      })
+      const data = await res.json()
+      const failed = (data.results ?? []).filter((r: Record<string, unknown>) => !r.ok)
+      if (failed.length > 0) throw new Error(`${failed.length} item(s) failed to save`)
+      setDirty(new Map())
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err: unknown) {
+      setError((err as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const sections = groupFeaturesBySection(features)
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 size={22} className="animate-spin text-slate-400" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm flex items-center gap-2">
+          <AlertTriangle size={14} className="shrink-0" /> {error}
+        </div>
+      )}
+
+      {/* Info + save bar */}
+      <div className="flex items-center justify-between gap-4 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+        <p className="text-sm text-blue-700">
+          <span className="font-semibold">Overrides</span> apply to {org.name} only.
+          Tier defaults (from global settings) are shown in grey. Set to <span className="font-semibold">None</span> to hide a section from this org's sidebar entirely.
+        </p>
+        <button
+          onClick={() => { void handleSave() }}
+          disabled={dirty.size === 0 || saving}
+          className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+            dirty.size > 0
+              ? 'bg-brand-400 text-white hover:bg-brand-500'
+              : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+          }`}
+        >
+          {saving ? <Loader2 size={13} className="animate-spin" /> : saved ? <CheckCircle2 size={13} /> : <Save size={13} />}
+          {saved ? 'Saved!' : `Save${dirty.size > 0 ? ` (${dirty.size})` : ''}`}
+        </button>
+      </div>
+
+      {/* Feature sections */}
+      {Array.from(sections.entries()).map(([sectionKey, { label, items }]) => (
+        <div key={sectionKey} className="bg-card border border-border rounded-xl overflow-hidden">
+          {/* Section header */}
+          <div className="flex items-center justify-between px-5 py-2.5 border-b border-border bg-slate-50">
+            <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider">{label}</h3>
+            <span className="text-[10px] text-slate-400">{items.length} feature{items.length !== 1 ? 's' : ''}</span>
+          </div>
+
+          {/* Column headers */}
+          <div className="grid grid-cols-[1fr_120px_80px_80px_1fr] gap-3 px-5 py-1.5 border-b border-slate-100 bg-slate-50/50">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Feature</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Access Level</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Tier Default</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Promo</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Expiry / Notes</span>
+          </div>
+
+          {items.map(f => {
+            const isDirty   = dirty.has(f.key)
+            const isPromo   = f.override?.is_promo ?? false
+            const expiresAt = f.override?.expires_at ?? ''
+            const notes     = f.override?.notes ?? ''
+            const tierColor = f.tier_default === 'edit' ? 'text-emerald-600' : f.tier_default === 'view' ? 'text-amber-600' : 'text-slate-400'
+
+            return (
+              <div
+                key={f.key}
+                className={`grid grid-cols-[1fr_120px_80px_80px_1fr] gap-3 px-5 py-3 border-b border-slate-50 items-center hover:bg-slate-50/50 transition-colors ${
+                  isDirty ? 'bg-amber-50/30' : ''
+                }`}
+              >
+                {/* Label */}
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm font-medium text-foreground truncate">{f.label}</span>
+                  {f.is_overridden && !isDirty && (
+                    <span className="text-[9px] font-bold bg-brand-50 text-brand-400 px-1.5 py-0.5 rounded-full uppercase tracking-wide shrink-0">Override</span>
+                  )}
+                  {isDirty && <div className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />}
+                </div>
+
+                {/* Access level selector */}
+                <div className="flex justify-center">
+                  <OrgAccessSelector
+                    value={f.access_level}
+                    onChange={v => markDirty(f.key, { access_level: v })}
+                  />
+                </div>
+
+                {/* Tier default (read-only badge) */}
+                <div className="flex justify-center">
+                  <span className={`text-[10px] font-semibold capitalize ${tierColor}`}>
+                    {f.tier_default}
+                  </span>
+                </div>
+
+                {/* Promo toggle */}
+                <div className="flex justify-center">
+                  <button onClick={() => markDirty(f.key, { is_promo: !isPromo })}>
+                    {isPromo
+                      ? <ToggleRight size={18} className="text-brand-400" />
+                      : <ToggleLeft  size={18} className="text-slate-300" />
+                    }
+                  </button>
+                </div>
+
+                {/* Expiry + Notes */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={expiresAt.slice(0, 10)}
+                    onChange={e => markDirty(f.key, { expires_at: e.target.value || null })}
+                    placeholder="No expiry"
+                    className="w-32 text-[11px] border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-400 text-slate-600"
+                  />
+                  <input
+                    value={notes}
+                    onChange={e => markDirty(f.key, { notes: e.target.value || null })}
+                    placeholder="Notes…"
+                    className="flex-1 text-[11px] border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-400 text-slate-600"
+                  />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /* ─── Main page ──────────────────────────────────────────── */
-type TabKey = 'overview' | 'properties' | 'work_orders' | 'commissions' | 'compliance' | 'reps' | 'activity'
+type TabKey = 'overview' | 'properties' | 'work_orders' | 'commissions' | 'compliance' | 'features' | 'reps' | 'activity'
 
 const TAB_LABELS: Record<TabKey, string> = {
   overview:     'Overview',
@@ -591,6 +848,7 @@ const TAB_LABELS: Record<TabKey, string> = {
   work_orders:  'Work Orders',
   commissions:  'Commissions',
   compliance:   'Compliance',
+  features:     'Features',
   reps:         'Reps',
   activity:     'Activity Log',
 }
@@ -1210,6 +1468,11 @@ export default function DealerDetailPage() {
         {/* ── Compliance ──────────────────────────────────────── */}
         {tab === 'compliance' && (
           <ComplianceTab org={org} onSaved={() => { void load() }} />
+        )}
+
+        {/* ── Features ────────────────────────────────────────── */}
+        {tab === 'features' && (
+          <FeaturesTab org={org} />
         )}
 
         {/* ── Reps ────────────────────────────────────────────── */}

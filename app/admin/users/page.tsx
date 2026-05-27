@@ -259,6 +259,64 @@ function Checkbox({ checked, onChange, disabled, danger }: {
   );
 }
 
+// ── Feature access types ────────────────────────────────────────────────────
+
+type FeatureAccessLevel = 'none' | 'view' | 'edit'
+
+interface UserFeatureRow {
+  key:           string
+  label:         string
+  section:       string
+  section_label: string
+  sort_order:    number
+  org_level:     FeatureAccessLevel
+  user_override: FeatureAccessLevel | null
+  access_level:  FeatureAccessLevel
+}
+
+const FA_OPTIONS: { value: FeatureAccessLevel; label: string; color: string }[] = [
+  { value: 'none', label: 'None',  color: 'bg-slate-100 text-slate-500' },
+  { value: 'view', label: 'View',  color: 'bg-amber-100 text-amber-700' },
+  { value: 'edit', label: 'Edit',  color: 'bg-emerald-100 text-emerald-700' },
+]
+
+function FeatureAccessSelector({ value, onChange, orgLevel }: {
+  value: FeatureAccessLevel
+  onChange: (v: FeatureAccessLevel) => void
+  orgLevel: FeatureAccessLevel
+}) {
+  const ACCESS_RANK: Record<string, number> = { none: 0, view: 1, edit: 2 }
+  return (
+    <div className="flex gap-0.5">
+      {FA_OPTIONS.map(opt => {
+        const overCap = ACCESS_RANK[opt.value] > ACCESS_RANK[orgLevel]
+        return (
+          <button
+            key={opt.value}
+            onClick={() => !overCap && onChange(opt.value)}
+            title={overCap ? `Org cap: ${orgLevel}` : undefined}
+            className={`px-2 py-1 text-[10px] font-semibold rounded transition-all ${
+              overCap ? 'opacity-30 cursor-not-allowed bg-slate-50 text-slate-300' :
+              value === opt.value ? opt.color : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+            }`}
+          >
+            {opt.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function groupUserFeaturesBySection(features: UserFeatureRow[]): Map<string, { label: string; items: UserFeatureRow[] }> {
+  const map = new Map<string, { label: string; items: UserFeatureRow[] }>()
+  for (const f of features) {
+    if (!map.has(f.section)) map.set(f.section, { label: f.section_label, items: [] })
+    map.get(f.section)!.items.push(f)
+  }
+  return map
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────
 
 export default function AdminUsersPage() {
@@ -276,6 +334,15 @@ export default function AdminUsersPage() {
   const [inviting, setInviting]         = useState(false);
   const [inviteSuccess, setInviteSuccess] = useState(false);
   const [error, setError]               = useState<string | null>(null);
+  // Feature access tab
+  const [rightTab, setRightTab]         = useState<'permissions' | 'features'>('permissions');
+  const [userFeatures, setUserFeatures] = useState<UserFeatureRow[]>([]);
+  const [featDirty, setFeatDirty]       = useState<Map<string, FeatureAccessLevel>>(new Map());
+  const [featOrgId, setFeatOrgId]       = useState<string | null>(null);
+  const [featLoading, setFeatLoading]   = useState(false);
+  const [featSaving, setFeatSaving]     = useState(false);
+  const [featSaved, setFeatSaved]       = useState(false);
+  const [featError, setFeatError]       = useState<string | null>(null);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -302,6 +369,55 @@ export default function AdminUsersPage() {
     setSelectedUser(user);
     setEditPerms(user.permissions ?? DEFAULT_PERMISSIONS(user.email, user.id));
     setSaved(false);
+    setFeatDirty(new Map());
+    setFeatSaved(false);
+    setFeatError(null);
+    // Derive org_id from user permissions or fall back
+    const orgId = (user.permissions as (Permissions & { org_id?: string }) | null)?.org_id ?? null;
+    setFeatOrgId(orgId);
+    if (orgId) loadUserFeatures(user.id, orgId);
+    else { setUserFeatures([]); }
+  };
+
+  const loadUserFeatures = (userId: string, orgId: string) => {
+    setFeatLoading(true);
+    void (async () => {
+      try {
+        const res = await fetch(`/api/admin/user-features/${userId}?org_id=${orgId}`);
+        const data = await res.json();
+        setUserFeatures(data.features ?? []);
+      } catch { setFeatError('Failed to load feature access') }
+      finally { setFeatLoading(false) }
+    })();
+  };
+
+  const markFeatDirty = (key: string, level: FeatureAccessLevel) => {
+    setFeatDirty(d => { const n = new Map(d); n.set(key, level); return n; });
+    setUserFeatures(fs => fs.map(f => f.key === key ? { ...f, user_override: level, access_level: level } : f));
+  };
+
+  const saveFeatureAccess = async () => {
+    if (!selectedUser || !featOrgId || featDirty.size === 0) return;
+    setFeatSaving(true);
+    setFeatError(null);
+    try {
+      const updates = Array.from(featDirty.entries()).map(([feature_key, access_level]) => ({ feature_key, access_level }));
+      const res = await fetch(`/api/admin/user-features/${selectedUser.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ org_id: featOrgId, updates }),
+      });
+      const data = await res.json();
+      const failed = (data.results ?? []).filter((r: Record<string, unknown>) => !r.ok);
+      if (failed.length > 0) throw new Error(`${failed.length} item(s) failed`);
+      setFeatDirty(new Map());
+      setFeatSaved(true);
+      setTimeout(() => setFeatSaved(false), 3000);
+    } catch (err: unknown) {
+      setFeatError((err as Error).message);
+    } finally {
+      setFeatSaving(false);
+    }
   };
 
   // Apply a role preset
@@ -480,6 +596,7 @@ export default function AdminUsersPage() {
                   </div>
                 </div>
 
+                {rightTab === 'permissions' && (
                 <div className="flex items-center gap-2">
                   <button
                     onClick={savePermissions}
@@ -497,10 +614,125 @@ export default function AdminUsersPage() {
                     {saved ? "Saved!" : saving ? "Saving…" : "Save Permissions"}
                   </button>
                 </div>
+                )}
               </div>
 
+              {/* Tab switcher */}
+              <div className="mt-4 flex gap-0.5 border-b border-border -mx-6 px-6">
+                {(['permissions', 'features'] as const).map(t => (
+                  <button
+                    key={t}
+                    onClick={() => setRightTab(t)}
+                    className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors capitalize ${
+                      rightTab === t
+                        ? 'border-[#6B7EFF] text-[#6B7EFF]'
+                        : 'border-transparent text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {t === 'permissions' ? 'Role & Modules' : 'Feature Access'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* ── Feature Access panel ─────────────────────────────── */}
+            {rightTab === 'features' && (
+              <div className="px-6 py-5 space-y-4">
+                {featError && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm flex items-center gap-2">
+                    <AlertCircle size={14} className="shrink-0" /> {featError}
+                  </div>
+                )}
+                {!featOrgId ? (
+                  <div className="bg-amber-50 border border-amber-200 text-amber-700 rounded-xl px-4 py-3 text-sm">
+                    No org associated with this user. Feature access is org-scoped — assign the user to an org first.
+                  </div>
+                ) : featLoading ? (
+                  <div className="flex items-center justify-center py-16">
+                    <RefreshCw size={20} className="animate-spin text-slate-400" />
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between gap-4 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+                      <p className="text-sm text-blue-700">
+                        <span className="font-semibold">User overrides</span> cap at the org level — you can't grant more than the org has.
+                        Grey options = blocked by org cap.
+                      </p>
+                      <button
+                        onClick={() => { void saveFeatureAccess(); }}
+                        disabled={featDirty.size === 0 || featSaving}
+                        className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                          featDirty.size > 0
+                            ? 'bg-[#6B7EFF] text-white hover:bg-[#5a6de8]'
+                            : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                        }`}
+                      >
+                        {featSaving ? <RefreshCw size={13} className="animate-spin" /> : featSaved ? <Check size={13} /> : <Shield size={13} />}
+                        {featSaved ? 'Saved!' : `Save${featDirty.size > 0 ? ` (${featDirty.size})` : ''}`}
+                      </button>
+                    </div>
+
+                    {Array.from(groupUserFeaturesBySection(userFeatures).entries()).map(([sKey, { label, items }]) => (
+                      <div key={sKey} className="bg-white border border-border rounded-xl overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-slate-50">
+                          <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider">{label}</h3>
+                          <span className="text-[10px] text-slate-400">{items.length}</span>
+                        </div>
+                        <div className="grid grid-cols-[1fr_120px_80px] gap-3 px-4 py-1.5 border-b border-slate-100 bg-slate-50/50">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Feature</span>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">User Access</span>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Org Cap</span>
+                        </div>
+                        {items.map(f => {
+                          const isDirty = featDirty.has(f.key)
+                          const orgColor = f.org_level === 'edit' ? 'text-emerald-600' : f.org_level === 'view' ? 'text-amber-600' : 'text-slate-400'
+                          return (
+                            <div key={f.key} className={`grid grid-cols-[1fr_120px_80px] gap-3 px-4 py-2.5 border-b border-slate-50 items-center hover:bg-slate-50/50 transition-colors ${isDirty ? 'bg-amber-50/40' : ''}`}>
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-sm font-medium text-foreground truncate">{f.label}</span>
+                                {f.user_override !== null && !isDirty && (
+                                  <span className="text-[9px] font-bold bg-brand-50 text-brand-400 px-1.5 py-0.5 rounded-full uppercase tracking-wide shrink-0">Override</span>
+                                )}
+                                {isDirty && <div className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />}
+                              </div>
+                              <div className="flex justify-center">
+                                <FeatureAccessSelector
+                                  value={f.access_level}
+                                  onChange={v => markFeatDirty(f.key, v)}
+                                  orgLevel={f.org_level}
+                                />
+                              </div>
+                              <div className="flex justify-center">
+                                <span className={`text-[10px] font-semibold capitalize ${orgColor}`}>{f.org_level}</span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ))}
+
+                    {/* Bottom save */}
+                    <div className="flex justify-end pb-4">
+                      <button
+                        onClick={() => { void saveFeatureAccess(); }}
+                        disabled={featDirty.size === 0 || featSaving}
+                        className="flex items-center gap-2 px-6 py-2.5 text-sm font-semibold bg-[#6B7EFF] text-white rounded-lg hover:bg-[#5a6de8] transition-colors disabled:opacity-50"
+                      >
+                        {featSaving ? <RefreshCw size={14} className="animate-spin" /> : <Shield size={14} />}
+                        {featSaved ? 'Saved!' : 'Save Feature Access'}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ── Role presets + checkbox permissions panel ─────────── */}
+            {rightTab === 'permissions' && (
+            <div className="px-6 py-5 space-y-5">
+
               {/* Role presets */}
-              <div className="mt-4">
+              <div className="bg-white border border-border rounded-xl p-4">
                 <p className="text-xs font-semibold text-muted-foreground mb-2">Quick Role Preset</p>
                 <div className="flex flex-wrap gap-2">
                   {Object.keys(ROLE_PRESETS).map(role => {
@@ -525,10 +757,6 @@ export default function AdminUsersPage() {
                   Presets auto-fill checkboxes below — you can still customise individually after applying.
                 </p>
               </div>
-            </div>
-
-            {/* Permission sections */}
-            <div className="px-6 py-5 space-y-5">
 
               {/* Active toggle */}
               <div className="bg-white border border-border rounded-xl p-4 flex items-center justify-between">
@@ -623,6 +851,7 @@ export default function AdminUsersPage() {
                 </button>
               </div>
             </div>
+            )}
           </div>
         ) : (
           /* Empty state */

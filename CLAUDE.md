@@ -372,6 +372,19 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 - ✅ Migration 094 (`supabase/migrations/094_aria_ownership.sql`) — `show_leads.assigned_to_user_id`, `assigned_to_name`, `temp_hold_expires_at` + indexes
 - ✅ ARIA import route (`app/api/aria/searches/[id]/import/route.ts`) — stamps ownership + 7-day temp hold on every imported lead
 
+### Completed — May 27, 2026 (session 3) — Feature Flag System
+- ✅ Migration 095 (`supabase/migrations/095_feature_flags.sql`) — 3 new tables: `feature_catalog` (41 seeded features), `org_feature_flags`, `user_feature_access`; all with GRANT blocks
+- ✅ API: `GET/PATCH /api/admin/features` — corporate-only global catalog management (tier_defaults, paid/beta flags, Stripe ID)
+- ✅ API: `GET/PATCH /api/admin/org-features/[orgId]` — per-org feature overrides with hierarchy enforcement (caller can't grant > own level)
+- ✅ API: `GET/PATCH /api/admin/user-features/[userId]` — per-user feature overrides, org-capped; requires `org_id` query param
+- ✅ API: `GET /api/user-features/me` — lightweight endpoint returning current user's effective `Record<featureKey, 'none'|'view'|'edit'>` for sidebar filtering; corporate users get `edit` on everything; others: tier_defaults → org_feature_flags (expires_at filtered) → user_feature_access
+- ✅ Global Feature Settings (`app/admin/settings/features/page.tsx`) — GateGuard admin page; features grouped by section; per-tier access selectors (None/View/Edit); paid/beta toggles; Stripe product ID field; dirty tracking with amber dot indicators; save button with change count
+- ✅ Features tab on dealer detail page (`app/admin/dealers/[id]/page.tsx`) — new `FeaturesTab` component + `'features'` tab key; calls `GET/PATCH /api/admin/org-features/[orgId]`; shows tier-inherited default, access level selector, promo toggle, expiry date, notes; dirty tracking + save
+- ✅ Platform Users page upgraded (`app/admin/users/page.tsx`) — "Role & Modules" + "Feature Access" tab switcher in right panel; `FeatureAccessSelector` component caps options at org level (greyed out above cap); feature save calls `PATCH /api/admin/user-features/[userId]`
+- ✅ Sidebar feature gating (`components/layout/Sidebar.tsx`) — fetches `/api/user-features/me` on mount; `isFeatureVisible()` hides items with `none` access; `HREF_TO_FEATURE` map covers all 41 features; "Feature Settings" nav item added to Dealer Network section (corporate/admin only)
+
+**Feature hierarchy:** GateGuard sets tier_defaults in feature_catalog → org override in org_feature_flags → user override in user_feature_access. User ≤ org ≤ tier_default. MSO/Full Dealer can set ≤ their own effective level. None = hidden from sidebar entirely.
+
 ### Pending — CPQ Phase 2
 - Add `unit_cost` column to `quote_line_items` (migration 092) — enables real margin vs. estimated
 - Make margin % column editable inline per line item

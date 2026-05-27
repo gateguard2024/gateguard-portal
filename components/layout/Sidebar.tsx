@@ -136,8 +136,9 @@ const NAV_SECTIONS: NavSection[] = [
     icon: UserCheck,
     color: "#7C3AED",
     items: [
-      { label: "Dealers",         href: "/admin/dealers",     icon: Users,         description: "Onboard and manage dealer orgs", badge: "Admin" },
-      { label: "Platform Users",  href: "/admin/users",       icon: Shield,        description: "Set module permissions per user", badge: "Admin" },
+      { label: "Dealers",         href: "/admin/dealers",          icon: Users,         description: "Onboard and manage dealer orgs", badge: "Admin" },
+      { label: "Platform Users",  href: "/admin/users",            icon: Shield,        description: "Set module permissions per user", badge: "Admin" },
+      { label: "Feature Settings",href: "/admin/settings/features",icon: Settings,      description: "Global tier defaults + Stripe hooks", badge: "Admin" },
       { label: "Compliance",    href: "/compliance",        icon: ShieldCheck,   description: "Permits, certs, expiry alerts" },
       { label: "Territory Map", href: "/map",               icon: Map,           description: "Property pins by health status" },
       { label: "Scorecard",     href: "/scorecard",         icon: Star,          description: "Dealer performance metrics" },
@@ -238,6 +239,77 @@ export function Sidebar() {
   const showSecurity     = isCorporate || isMasterDealer || isFullDealer;
   const showIntelligence = isCorporate || isMasterDealer || isFullDealer || isMasterAgent;
   const showDesign       = isCorporate || isMasterDealer || isFullDealer || isInstallContractor || isServiceDealer;
+
+  // ─── Feature flag filtering ─────────────────────────────────────────────
+  const [featureFlags, setFeatureFlags] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res  = await fetch("/api/user-features/me");
+        const data = await res.json();
+        setFeatureFlags(data.features ?? {});
+      } catch (_) { /* silently skip — show all items if unavailable */ }
+    })();
+  }, []);
+
+  // href → feature key lookup (derived from feature_catalog seed)
+  const HREF_TO_FEATURE: Record<string, string> = {
+    "/":                       "dashboard",
+    "/crm":                    "sales.crm",
+    "/quotes":                 "sales.quotes",
+    "/survey":                 "sales.survey",
+    "/services":               "sales.services",
+    "/reps":                   "sales.reps",
+    "/marketing":              "sales.marketing",
+    "/eos":                    "business.eos",
+    "/customers":              "business.customers",
+    "/sites":                  "business.properties",
+    "/billing":                "business.billing",
+    "/expenses":               "business.expenses",
+    "/revenue":                "business.revenue",
+    "/contracts":              "documents.contracts",
+    "/renewals":               "documents.renewals",
+    "/vendor-compliance":      "documents.vendor_compliance",
+    "/incidents":              "field.incidents",
+    "/tech":                   "field.tech_tool",
+    "/kb":                     "field.kb",
+    "/products":               "field.products",
+    "/maintenance":            "field.work_orders",
+    "/dispatch":               "field.dispatch",
+    "/inventory":              "field.inventory",
+    "/subcontractors":         "field.subcontractors",
+    "/design/floor-plans":     "design.floor_plans",
+    "/design/system":          "design.system_design",
+    "/design/as-builts":       "design.as_builts",
+    "/design/esign":           "design.esign",
+    "/cameras":                "systems.cameras",
+    "/access":                 "systems.access_control",
+    "/network":                "systems.networks",
+    "https://ggsoc.com":       "systems.soc",
+    "/admin/dealers":               "dealer.dealers",
+    "/admin/users":                 "dealer.platform_users",
+    "/admin/settings/features":     "dealer.feature_settings",
+    "/compliance":             "dealer.compliance",
+    "/map":                    "dealer.territory_map",
+    "/scorecard":              "dealer.scorecard",
+    "/quests":                 "dealer.quests",
+    "/reviews":                "dealer.reviews",
+    "/training":               "dealer.training",
+    "/marketing/website":      "dealer.dealer_sites",
+    "/playbooks":              "internal.playbooks",
+    "/marketing/coop":         "internal.coop",
+    "/portal":                 "internal.portals",
+  };
+
+  const isFeatureVisible = (href: string): boolean => {
+    const key = HREF_TO_FEATURE[href];
+    if (!key) return true; // no flag → show by default
+    if (Object.keys(featureFlags).length === 0) return true; // not loaded yet → show all
+    const level = featureFlags[key];
+    if (!level) return true; // feature not in catalog → show
+    return level !== "none"; // hide only if explicitly none
+  };
 
   const activeAgentCount = aiAgents.filter(a => a.active).length;
 
@@ -564,6 +636,9 @@ export function Sidebar() {
                     if (item.href === "/admin"            && !showAdmin)      return null;
                     if (item.href === "/admin/users"      && !showAdmin)      return null;
                     if (item.href === "/playbooks"        && !isCorporate)    return null;
+                    if (item.href === "/admin/settings/features" && !showAdmin) return null;
+                    // Feature flag gate: hide items the org/user has no access to
+                    if (!isFeatureVisible(item.href)) return null;
 
                     const Icon = item.icon;
                     const isActive = !item.external && (
