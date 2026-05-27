@@ -136,7 +136,8 @@ const NAV_SECTIONS: NavSection[] = [
     icon: UserCheck,
     color: "#7C3AED",
     items: [
-      { label: "Dealers",       href: "/admin/dealers",     icon: Users,         description: "Onboard and manage dealer orgs", badge: "Admin" },
+      { label: "Dealers",         href: "/admin/dealers",     icon: Users,         description: "Onboard and manage dealer orgs", badge: "Admin" },
+      { label: "Platform Users",  href: "/admin/users",       icon: Shield,        description: "Set module permissions per user", badge: "Admin" },
       { label: "Compliance",    href: "/compliance",        icon: ShieldCheck,   description: "Permits, certs, expiry alerts" },
       { label: "Territory Map", href: "/map",               icon: Map,           description: "Property pins by health status" },
       { label: "Scorecard",     href: "/scorecard",         icon: Star,          description: "Dealer performance metrics" },
