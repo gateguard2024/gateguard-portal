@@ -503,7 +503,15 @@ export async function POST(req: NextRequest) {
     const allResults = [...edgarAsResults, ...tavilyAll]
 
     const seenUrls = new Set<string>()
-    const uniqueResults = allResults.filter(r => { if (seenUrls.has(r.url)) return false; seenUrls.add(r.url); return r.score > 0.25 }).sort((a, b) => b.score - a.score).slice(0, 22)
+    const deepBoostSources: Record<string, number> = {
+      'vendor-footprint': 0.45, 'provider-slug': 0.40,
+      'EDGAR': 0.30, 'PUC': 0.30, 'CityPermit': 0.30,
+      'ISP-Press': 0.25, 'resident-review': 0.20,
+    }
+    const uniqueResults = allResults
+      .filter(r => { if (seenUrls.has(r.url)) return false; seenUrls.add(r.url); return r.score > 0.25 })
+      .sort((a, b) => (b.score + (deepBoostSources[b.source ?? ''] ?? 0)) - (a.score + (deepBoostSources[a.source ?? ''] ?? 0)))
+      .slice(0, 22)
 
     if (uniqueResults.length === 0) {
       return NextResponse.json({ error: 'No data found.' }, { status: 404 })
@@ -511,6 +519,19 @@ export async function POST(req: NextRequest) {
 
     const reviewSnippets = uniqueResults.filter(r => r.source === 'resident-review' || (r.source === 'web' && (r.url.includes('apartmentratings') || r.url.includes('reddit'))))
     const reviewSentimentBlock = await extractReviewSentiment(reviewSnippets, anthropic)
+
+    // Build source summary for user prompt context
+    const sourcesSummary = [
+      edgarResults.length > 0    ? `[EDGAR: ${edgarResults.length} SEC filing(s)]` : null,
+      pucResults.length > 0      ? `[PUC: ${pucResults.length} utility filing(s)]` : null,
+      permitResults.length > 0   ? `[CityPermit: ${permitResults.length} permit(s)]` : null,
+      ispPressResults.length > 0 ? `[ISP-Press: ${ispPressResults.length} press result(s)]` : null,
+      vendorFootprintResults.length > 0 ? `[VENDOR-FOOTPRINT: ${vendorFootprintResults.length} vendor listing(s)]` : null,
+      temporalReviewResults.length > 0  ? `[RESIDENT-REVIEWS: ${temporalReviewResults.length} review(s)]` : null,
+      apolloContacts.length > 0         ? `[APOLLO: ${apolloContacts.length} contact(s)]` : null,
+      validatedDMs.length > 0           ? `[PROXYCURL-VERIFIED: ${validatedDMs.length} DM(s) validated]` : null,
+    ].filter(Boolean).join(' | ')
+
     const excerptBlock = uniqueResults.map((r, i) => `[Source ${i + 1}] [${r.source?.toUpperCase()}] ${r.title}\nURL: ${r.url}\n${r.content.slice(0, 500)}`).join('\n\n---\n\n')
 
     const message = await anthropic.messages.create({
@@ -531,19 +552,76 @@ CRITICAL — always populate these fields when any evidence exists:
 • pain_signals: concrete resident complaints about gates, internet, packages
 • extracted_contacts: any human names, emails, or LinkedIn URLs found in text associated with regional/asset/property management
 
+SOURCE HIERARCHY — trust these in order:
+1. [EDGAR] SEC filings — PRIMARY SOURCE. REITs disclose material bulk service agreements by name. Highest confidence.
+2. [PUC] State Public Utility Commission filings — ISP ROW/conduit applications confirm physical presence. High confidence.
+3. [CITYPERMIT] City permit records — ISP fiber/conduit permits confirm infrastructure installation. High confidence.
+4. [ISP-PRESS] ISP press releases / partner portal announcements — ISPs announce MDU wins. Medium-high confidence.
+5. [VENDOR-FOOTPRINT] ISP/vendor's own website listing this property — treat as CONFIRMED (override all other sources).
+6. [LISTING-SITE] Apartment listing amenity descriptions — "Internet by X" is reliable. Medium-high confidence.
+7. [WEB] General web content — Reddit, reviews, news. Medium confidence.
+
+BULK AGREEMENT EXTRACTION — CRITICAL ACCURACY RULES:
+⚠ NEVER guess the bulk provider based on which ISP is largest or most well-known in an area.
+⚠ Local/regional ISPs (Gigstreem, Sonic, Hotwire, WideOpenWest, Vyve, IgLou, Pavlov, etc.) frequently have MDU deals — trust them over national carrier assumptions.
+⚠ If any source names a small/unfamiliar ISP as the building's provider, TRUST IT over a national carrier.
+⚠ Return bulk_agreements = [] if no property-specific evidence exists. Never infer from market patterns.
+Confidence rules: high=EDGAR/PUC/permit confirms OR explicit "internet included"; medium=listing site/ISP press implies; low=inferred from patterns
+
 CRITICAL ENTITY RESOLUTION RULES:
 1. NEVER confuse a Management Company or Owner (e.g. Northland, Greystar, Starwood) with an Internet Service Provider. "Northland Internet" is a hallucination — if managed by Northland and uses Gigstreem, the ISP is Gigstreem, full stop.
 2. DirecTV, DISH, Spectrum video → record as video_provider AND bulk_agreement with service_type "video".
 3. If a listing says "gated community", "controlled access", or "callbox" with no brand, put "Unknown (gated)" in proptech.access_control. Named brands (DoorKing, ButterflyMX, Brivo) always override.
-4. isp_providers must contain only actual ISPs. Management company names never belong here.`,
+4. isp_providers must contain only actual ISPs. Management company names never belong here.
+
+OWNERSHIP ANALYSIS: EDGAR is the gold standard for REIT ownership. Populate sec_filing_ref if EDGAR confirmed.
+key_finding: "[WHO to call] at [company] controls capex. [WHY NOW: deal expiry, acquisition, aging tech, SEC signal]."
+
+BEHAVIORAL PROFILE: analytical (PE/REIT, CFOs), driver (Regional VPs), expressive (Marketing PMs), amiable (Community managers)
+PITCH STRATEGY: primary_hook = single opening sentence referencing THIS property's specific pain.
+
+FRESHNESS SCORE (1–5): 5=SEC 8-K in 90d or contract expiry this year; 4=resident complaints 6mo or ISP press 1yr; 3=listing confirmed or EDGAR 10-K 2yr; 2=older web data; 1=all inference
+edgar_signal: true if ANY EDGAR source was useful. permit_signal: true if ANY city permit/PUC confirms ISP infrastructure.`,
       messages: [{
         role: 'user',
-        content: `Property: ${property_name}\nLocation: ${location}\nManagement Company: ${mgmt || 'unknown'}\n${priorFindingsBlock}${cachedDetectionsBlockDeep}${apolloBlock}${reviewSentimentBlock}\nIntelligence excerpts:\n${excerptBlock}`
+        content: `Property: ${property_name}\nLocation: ${location}\nManagement Company: ${mgmt || 'unknown'}\nSources retrieved: ${sourcesSummary || 'web only'}\n${priorFindingsBlock}${cachedDetectionsBlockDeep}${apolloBlock}${reviewSentimentBlock}
+CRITICAL REMINDERS:
+- [VENDOR-FOOTPRINT] source = the ISP/vendor's OWN website listing this property — treat as CONFIRMED (highest confidence, overrides all other sources).
+- [EDGAR] SEC filings = primary source for ownership and bulk deals.
+- Return bulk_agreements = [] if no property-specific evidence exists. Never infer from market patterns.
+- Prioritize local/regional ISP names (Gigstreem, Hotwire, Pavlov, WOW, Vyve, etc.) over national carrier assumptions.
+- RESIDENT REVIEW SIGNALS block = Haiku-extracted summary — use it to confirm or refute bulk deal findings.
+- EXECUTIVE TRUTH LOOP: Use the verified DM list. Any contact tagged [FORMER/ADVISORY] must NOT be recommended as primary contact.
+
+Intelligence excerpts:\n${excerptBlock}`
       }],
     })
 
     const toolBlock = message.content.find(b => b.type === 'tool_use') as Anthropic.ToolUseBlock | undefined
     if (!toolBlock) throw new Error('No synthesis result from Claude')
+
+    // ── Source metadata for response ─────────────────────────────────────────
+    const sources = uniqueResults.slice(0, 8).map(r => ({
+      title: r.title,
+      url: r.url,
+      excerpt: r.content.slice(0, 200),
+      score: r.score,
+      type: r.source ?? 'web',
+    }))
+
+    const intelligenceSources = {
+      edgar:              edgarResults.length > 0,
+      puc:                pucResults.length > 0,
+      permits:            permitResults.length > 0,
+      isp_press:          ispPressResults.length > 0,
+      listing_sites:      localIspResults.some((r: TavilyResult) => r.score > 0.4),
+      vendor_footprint:   vendorFootprintResults.length > 0,
+      resident_reviews:   temporalReviewResults.length > 0,
+      apollo:             apolloContacts.length > 0,
+      proxycurl_verified: validatedDMs.some(d => d.confidence === 'proxycurl-verified'),
+      pdl:                pdlDMProfile !== null,
+      dm_verified_count:  validatedDMs.filter(d => !d.isFormerOrAdvisory).length,
+    }
 
     // ── THE CRITICAL SANITIZATION LAYER ──────────────────────────────────────
     const rawData = toolBlock.input as Record<string, any>;
@@ -655,7 +733,47 @@ CRITICAL ENTITY RESOLUTION RULES:
       if (searchRow?.id) savedSearchId = searchRow.id;
     } catch { /* best-effort — don't block the response */ }
 
-    // Persist to Intel DB
+    // ── Persist mdu_provider_detections (non-blocking) ──────────────────────
+    const bulkAgreementsForDetection: any[] = rawData.bulk_agreements ?? []
+    if (bulkAgreementsForDetection.length > 0) {
+      void (async () => {
+        try {
+          const { data: allProviders } = await supabaseDeep
+            .from('mdu_providers')
+            .select('id, name')
+            .eq('active', true)
+          if (!allProviders) return
+          const rows = bulkAgreementsForDetection
+            .filter((a: any) => ['high', 'confirmed', 'medium'].includes(a.confidence ?? ''))
+            .map((a: any) => {
+              const provName = (a.provider ?? '').toLowerCase()
+              const matched = (allProviders as any[]).find(
+                p => p.name.toLowerCase().includes(provName) || provName.includes(p.name.toLowerCase())
+              )
+              if (!matched) return null
+              const yearMatch = (a.expiry_estimate ?? '').match(/20\d{2}/)
+              return {
+                provider_id: matched.id,
+                property_name: property_name || null,
+                property_address: address || null,
+                confidence: a.confidence === 'confirmed' ? 'confirmed' : (a.confidence === 'high' ? 'high' : 'medium'),
+                source_type: a.evidence_source ?? 'aria',
+                source_snippet: a.evidence ? (a.evidence as string).slice(0, 250) : null,
+                contract_end_year: yearMatch ? parseInt(yearMatch[0], 10) : null,
+                verified_by: 'aria',
+              }
+            })
+            .filter(Boolean)
+          if (rows.length > 0) {
+            await supabaseDeep
+              .from('mdu_provider_detections')
+              .upsert(rows, { onConflict: 'provider_id,property_name', ignoreDuplicates: false })
+          }
+        } catch { /* non-blocking */ }
+      })()
+    }
+
+    // ── Persist to Intel DB (non-blocking) ───────────────────────────────────
     void (async () => {
       try {
         await fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/api/aria/properties`, {
@@ -672,6 +790,8 @@ CRITICAL ENTITY RESOLUTION RULES:
       query_interpretation: "ARIA Deep OSINT Aggregation",
       prospects: [prospectPayload],
       savedSearchId,
+      sources,
+      intelligence_sources: intelligenceSources,
       fccVerified: edgarResults.length > 0 || permitResults.length > 0,
       webIntelligence: true
     })
