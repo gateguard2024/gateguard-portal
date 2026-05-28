@@ -295,6 +295,11 @@ const deepIntelTool: Anthropic.Tool = {
       },
       key_finding: { type: 'string' },
       confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+      // ── Basic property facts ─────────────────────────────────────────
+      units: { type: 'number', description: 'Total number of apartment units/homes. Extract from listing sites, property databases, or any source mentioning unit count.' },
+      year_built: { type: 'number', description: 'Year the property was built or major renovation year.' },
+      property_class: { type: 'string', enum: ['A', 'B', 'C'], description: 'Property class: A=luxury/Class A, B=mid-range, C=workforce/older.' },
+      property_type: { type: 'string', description: 'e.g. multifamily, senior-living, student, mixed-use, garden-style, mid-rise, high-rise, townhome' },
       atlas_opportunity: { type: 'boolean' },
       edgar_signal: { type: 'boolean' },
       permit_signal: { type: 'boolean' },
@@ -418,7 +423,7 @@ export async function POST(req: NextRequest) {
     const [
       ispResults, bulkResults, mgmtResults, redditResults, gateResults, proptechResults, residentTechResults,
       mgmtProptechResults, localIspResults, ownershipResults, providerSlugResultsDeep, edgarResults, pucResults,
-      permitResults, ispPressResults, temporalReviewResults, vendorFootprintResults
+      permitResults, ispPressResults, temporalReviewResults, vendorFootprintResults, propertyFactsResults
     ] = await Promise.all([
       tavilySearch(`"${property_name}" ${location} internet provider ISP service`, 5, 'web'),
       tavilySearch(`"${property_name}" "internet included" OR "bulk internet" OR "fiber included" OR "Comcast included" OR "Spectrum included" OR "AT&T included" OR "preferred provider" OR "gigastream" OR "sonic" OR "hotwire" OR "vyve" OR "local internet"`, 5, 'web'),
@@ -447,6 +452,9 @@ export async function POST(req: NextRequest) {
       searchISPPressReleases(property_name, mgmt, location),
       searchResidentReviewsTemporal(property_name, location),
       searchVendorFootprint(property_name, mgmt, location, mduAllProviderNames),
+      // ── Property facts: units, year built, class ───────────────────
+      tavilySearch(`"${property_name}" ${location} apartment units "bedroom" OR "bath" OR "sq ft" OR "year built" OR "built in"`, 5, 'property-facts'),
+      // (propertyFactsResults is the last element)
     ])
 
     const apolloContacts = mgmt ? await apolloSearchContacts(mgmt, ['Chief Executive Officer', 'CEO', 'President', 'Vice President', 'Asset Manager', 'Regional Manager', 'Director', 'Portfolio Manager', 'Property Manager'], location) : []
@@ -464,6 +472,7 @@ export async function POST(req: NextRequest) {
       ...ispResults, ...bulkResults, ...mgmtResults, ...redditResults, ...gateResults, ...proptechResults, ...residentTechResults,
       ...mgmtProptechResults, ...localIspResults, ...ownershipResults, ...(Array.isArray(providerSlugResultsDeep) ? providerSlugResultsDeep : []),
       ...pucResults, ...permitResults, ...ispPressResults, ...temporalReviewResults, ...vendorFootprintResults,
+      ...(Array.isArray(propertyFactsResults) ? propertyFactsResults : []),
     ]
 
     const edgarAsResults: TavilyResult[] = edgarResults.map(e => ({ title: e.title, url: e.url, content: `[SEC EDGAR — PRIMARY SOURCE] ${e.content}`, score: e.score, source: e.source }))
@@ -485,7 +494,19 @@ export async function POST(req: NextRequest) {
       max_tokens: 2048,
       tools: [deepIntelTool],
       tool_choice: { type: 'tool', name: 'aria_deep_intel_result' },
-      system: `You are ARIA's deep connectivity, proptech, and ownership intelligence module. Extact all details into the tool.`,
+      system: `You are ARIA's deep property intelligence module. Extract ALL available details into the tool schema.
+
+CRITICAL — always populate these fields when any evidence exists:
+• units: total apartment count (look for "X units", "X homes", "X-unit community", "X apartment homes")
+• year_built: construction or renovation year
+• property_class: A/B/C based on amenities, rent tier, and age
+• property_type: multifamily / senior-living / student / mixed-use / garden-style / mid-rise / high-rise
+• isp_providers, bulk_agreements: any internet/video provider mentioned
+• proptech fields: any gate, intercom, access control, camera, lock brand found
+• ownership.owner_entity: REIT, PE firm, or private owner name
+• pain_signals: concrete resident complaints about gates, internet, packages
+
+Never leave units null if any source mentions a number of apartments or homes.`,
       messages: [{
         role: 'user',
         content: `Property: ${property_name}\nLocation: ${location}\nManagement Company: ${mgmt || 'unknown'}\n${priorFindingsBlock}${cachedDetectionsBlockDeep}${apolloBlock}${reviewSentimentBlock}\nIntelligence excerpts:\n${excerptBlock}`
@@ -506,10 +527,10 @@ export async function POST(req: NextRequest) {
       property: {
         name: property_name,
         address: address || location || property_name,
-        units: null,
-        property_type: rawData.ownership?.owner_type ?? 'Multifamily',
-        class: null,
-        year_built: null,
+        units: rawData.units ?? null,
+        property_type: rawData.property_type ?? 'multifamily',
+        class: rawData.property_class ?? null,
+        year_built: rawData.year_built ?? null,
         management_company: mgmt || 'Unknown',
         owner_entity: rawData.ownership?.owner_entity ?? 'Unknown',
         isp_providers: rawData.isp_providers ?? [],
