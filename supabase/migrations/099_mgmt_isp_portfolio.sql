@@ -24,8 +24,8 @@ CREATE TABLE IF NOT EXISTS public.mgmt_isp_portfolio (
 );
 
 -- Grant Data API access (required — Supabase enforces this Oct 30 2026)
+-- No sequence grant needed — id is UUID (gen_random_uuid()), not serial
 GRANT ALL ON TABLE public.mgmt_isp_portfolio TO postgres, anon, authenticated, service_role;
-GRANT ALL ON SEQUENCE public.mgmt_isp_portfolio_id_seq TO postgres, anon, authenticated, service_role;
 
 -- Index for fast lookup by management company name
 CREATE INDEX IF NOT EXISTS idx_mgmt_isp_portfolio_company
