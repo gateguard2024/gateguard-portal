@@ -634,6 +634,27 @@ CRITICAL ENTITY RESOLUTION RULES:
       },
     }
 
+    // ── Save to aria_searches (Recent Memory + savedSearchId) ────────────────
+    let savedSearchId: string | undefined;
+    try {
+      const portalUser = await getCurrentUser();
+      const { data: searchRow } = await supabaseDeep
+        .from('aria_searches')
+        .insert({
+          query: property_name,
+          query_interpretation: 'ARIA Deep Intel',
+          results: { mode: 'deep', prospects: [prospectPayload], fccVerified: edgarResults.length > 0 || permitResults.length > 0, webIntelligence: true },
+          search_type: 'deep',
+          user_id: userId,
+          user_name: portalUser.name,
+          user_email: portalUser.email,
+          org_id: portalUser.org_id ?? null,
+        })
+        .select('id')
+        .single();
+      if (searchRow?.id) savedSearchId = searchRow.id;
+    } catch { /* best-effort — don't block the response */ }
+
     // Persist to Intel DB
     void (async () => {
       try {
@@ -649,7 +670,8 @@ CRITICAL ENTITY RESOLUTION RULES:
     return NextResponse.json({
       mode: "deep",
       query_interpretation: "ARIA Deep OSINT Aggregation",
-      prospects: [prospectPayload], 
+      prospects: [prospectPayload],
+      savedSearchId,
       fccVerified: edgarResults.length > 0 || permitResults.length > 0,
       webIntelligence: true
     })

@@ -304,6 +304,7 @@ export default function ARIAPage() {
   const [savingNote, setSavingNote]         = useState(false);
   const [noteText, setNoteText]             = useState('');
   const [noteStage, setNoteStage]           = useState('');
+  const [pendingRerun, setPendingRerun]     = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -363,7 +364,7 @@ export default function ARIAPage() {
   const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
   const runARIA = useCallback(async () => {
-    if (!query.trim() || phase > 0) return;
+    if (!query.trim() || (phase >= 1 && phase <= 5)) return;
     setError(null);
     setResults(null);
     setSavedSearchId(null);
@@ -411,6 +412,14 @@ export default function ARIAPage() {
       setPhase(0);
     }
   }, [query, phase]);
+
+  // Trigger re-run after state reset (used by "Fetch Latest Intel" in IntelDBPanel)
+  useEffect(() => {
+    if (pendingRerun && phase === 0) {
+      setPendingRerun(false);
+      runARIA();
+    }
+  }, [pendingRerun, phase, runARIA]);
 
   async function importSearch(id: string) {
     setImporting(id);
@@ -1398,7 +1407,7 @@ export default function ARIAPage() {
                       {savingNote ? <Loader2 size={14} className="animate-spin" /> : <><Check size={14} /> Commit Update</>}
                     </button>
                     <button
-                      onClick={() => { setQuery(dbSelected.property_name); setDbView(false); setTimeout(() => runARIA(), 100); }}
+                      onClick={() => { setQuery(dbSelected.property_name); setDbView(false); setPhase(0); setResults(null); setSavedSearchId(null); setPendingRerun(true); }}
                       className="flex items-center gap-2 text-xs px-5 py-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-bold transition-all shadow-sm"
                     >
                       <RefreshCw size={14} /> Fetch Latest Intel
