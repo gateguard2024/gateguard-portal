@@ -1,6 +1,6 @@
 /**
  * GET  /api/aria/properties — paginated list of all discovered properties
- *   ?limit=50&offset=0&stage=prospect&urgency=high&expiry_before=2027&search=greystar
+ * ?limit=50&offset=0&stage=prospect&urgency=high&expiry_before=2027&search=greystar
  * POST /api/aria/properties — internal upsert called by the deep research route
  */
 import { NextRequest, NextResponse } from 'next/server'
@@ -73,10 +73,12 @@ export async function POST(req: NextRequest) {
     const techProviderUpdates: Map<string, { category: string; names: string[] }> = new Map()
 
     for (const p of prospects) {
+      // Robust fallbacks to prevent mapping errors from partial AI payloads
       const prop    = p.property ?? {}
       const dm      = p.decision_maker ?? {}
       const profile = p.profile ?? {}
       const pt      = prop.proptech ?? {}
+      const own     = p.ownership ?? {}
 
       // Collect new tech providers discovered (for auto-catalog growth)
       const techCategories: [string, string[]][] = [
@@ -88,8 +90,10 @@ export async function POST(req: NextRequest) {
         ['resident_app',   pt.resident_apps      ?? []],
         ['package',        pt.package_solutions  ?? []],
       ]
+      
       for (const [cat, vendors] of techCategories) {
         for (const vendor of vendors) {
+          if (!vendor) continue; // Skip empty strings
           const slug = vendor.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
           if (!techProviderUpdates.has(slug)) {
             techProviderUpdates.set(slug, { category: cat, names: [vendor] })
@@ -100,14 +104,16 @@ export async function POST(req: NextRequest) {
       // Extract contract expiry year from bulk_agreements or contract_window
       let contractExpiryYear: number | null = null
       const bulkAgreements: any[] = prop.bulk_agreements ?? []
+      
       for (const agreement of bulkAgreements) {
-        const expiry = agreement.expiry_estimate ?? ''
+        const expiry = agreement?.expiry_estimate ?? ''
         const yearMatch = expiry.match(/\b(202\d|203\d)\b/)
         if (yearMatch) {
           const y = parseInt(yearMatch[1])
           if (!contractExpiryYear || y < contractExpiryYear) contractExpiryYear = y
         }
       }
+      
       // Also try contract_window field like "Q1 2026", "mid-2027", "18 months"
       if (!contractExpiryYear && profile.contract_window) {
         const cw = profile.contract_window as string
@@ -128,12 +134,12 @@ export async function POST(req: NextRequest) {
         occupancy:             prop.occupancy ?? null,
         management_company:    prop.management_company ?? null,
         owner_entity:          prop.owner_entity ?? null,
-        owner_type:            p.ownership?.owner_type ?? null,
-        portfolio_size:        p.ownership?.portfolio_size ?? null,
-        acquisition_year:      p.ownership?.acquisition_year ? parseInt(p.ownership.acquisition_year) : null,
-        hold_period:           p.ownership?.hold_period ?? null,
-        capex_signal:          p.ownership?.capex_signal ?? null,
-        dnb_duns:              p.ownership?.dnb_duns ?? null,
+        owner_type:            own.owner_type ?? null,
+        portfolio_size:        own.portfolio_size ?? null,
+        acquisition_year:      own.acquisition_year ? parseInt(own.acquisition_year) : null,
+        hold_period:           own.hold_period ?? null,
+        capex_signal:          own.capex_signal ?? null,
+        dnb_duns:              own.dnb_duns ?? null,
         isp_providers:         prop.isp_providers ?? null,
         video_providers:       prop.video_providers ?? null,
         bulk_agreements:       bulkAgreements.length ? bulkAgreements : null,
@@ -172,8 +178,6 @@ export async function POST(req: NextRequest) {
         updated_at:            new Date().toISOString(),
       }
 
-      // Use a raw RPC for the increment + upsert since Supabase JS can't do
-      // "increment times_researched only on conflict"
       const { error: upsertErr } = await supabase
         .from('aria_properties')
         .upsert(upsertData, {

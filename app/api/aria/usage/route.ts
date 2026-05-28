@@ -4,21 +4,9 @@
  * Returns ARIA search usage stats with hierarchical rollup.
  * The rollup mirrors GateGuard's org tree:
  *
- *   User search count
- *   → rolls up to their org
- *   → rolls up to parent org (master dealer, master agent, corporate)
- *
- * Example:
- *   Sales rep searched 4×, dealer owner searched 4× → dealership = 8
- *   3 dealerships under master agent (24) + master agent searched 10× = 34 corporate
- *
- * Response shape:
- *   {
- *     my_searches: { total, base, deep, today, this_week, this_month },
- *     my_org:      { org_id, org_name, total, base, deep, this_week, this_month, top_users[] },
- *     hierarchy:   { org_id, org_name, org_tier, own_count, child_count, total_count }[],
- *     corporate_total: number,
- *   }
+ * User search count
+ * → rolls up to their org
+ * → rolls up to parent org (master dealer, master agent, corporate)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -44,9 +32,10 @@ export async function GET(_req: NextRequest) {
 
     if (user?.id) {
       const now = new Date()
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
-      const weekStart  = new Date(now.getTime() - 7  * 24 * 60 * 60 * 1000).toISOString()
-      const monthStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString()
+      // Use standard UTC offsets to prevent local timezone bugs
+      const todayStart = new Date(now.setUTCHours(0, 0, 0, 0)).toISOString()
+      const weekStart  = new Date(Date.now() - 7  * 24 * 60 * 60 * 1000).toISOString()
+      const monthStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
 
       const { data: myRows } = await supabase
         .from('aria_searches')
@@ -107,18 +96,15 @@ export async function GET(_req: NextRequest) {
     }
 
     // ── 3. Hierarchy rollup — walk the org tree upward then downward ──────────
-    // Pull all orgs in the scope (this org + ancestors + children) with their counts
     const hierarchy: {
       org_id: string; org_name: string; org_tier: string
       own_count: number; child_count: number; total_count: number
       depth: number
     }[] = []
 
-    // Get all org IDs in scope (own_id + all ancestor + child org IDs)
     const allScopeIds = scope.ids ?? (orgId ? [orgId] : [])
 
     if (allScopeIds.length > 0) {
-      // Per-org counts from aria_searches
       const { data: countRows } = await supabase
         .from('aria_searches')
         .select('org_id')
@@ -129,7 +115,6 @@ export async function GET(_req: NextRequest) {
         if (r.org_id) countMap[r.org_id] = (countMap[r.org_id] ?? 0) + 1
       })
 
-      // Get org metadata for all scoped IDs
       const { data: orgs } = await supabase
         .from('organizations')
         .select('id, name, org_tier, parent_org_id')
@@ -137,7 +122,6 @@ export async function GET(_req: NextRequest) {
         .order('org_tier')
 
       if (orgs) {
-        // Build parent→children map
         const childrenOf: Record<string, string[]> = {}
         orgs.forEach(o => {
           if (o.parent_org_id) {
@@ -145,7 +129,6 @@ export async function GET(_req: NextRequest) {
           }
         })
 
-        // Recursively sum children
         function subtreeCount(id: string): number {
           const own = countMap[id] ?? 0
           const children = childrenOf[id] ?? []
@@ -158,7 +141,7 @@ export async function GET(_req: NextRequest) {
         }
 
         orgs.sort((a, b) => (tierOrder[a.org_tier ?? ''] ?? 9) - (tierOrder[b.org_tier ?? ''] ?? 9))
-          .forEach((o, i) => {
+          .forEach((o) => {
             const own   = countMap[o.id] ?? 0
             const total = subtreeCount(o.id)
             hierarchy.push({
@@ -174,22 +157,20 @@ export async function GET(_req: NextRequest) {
       }
     }
 
-    // ── 4. Corporate total — sum of all search rows (GG Corporate only) ───────
-    // For dealers/reps, this is their own hierarchy total
-    const corporateTotal = hierarchy.reduce((max, row) => {
-      // The top of their visible hierarchy = row with no parent in scope
-      return row.depth === 0 ? row.total_count : max
-    }, hierarchy.find(r => !allScopeIds.includes(/* eslint-disable @typescript-eslint/no-explicit-any */ '' as any))?.total_count ?? (hierarchy[0]?.total_count ?? 0))
+    // ── 4. Corporate total ────────────────────────────────────────────────────
+    // Cleanly find the top-most node in the visible hierarchy to establish the total
+    const rootNode = hierarchy.sort((a, b) => a.depth - b.depth)[0];
+    const corporateTotal = rootNode?.total_count ?? myOrg.total;
 
     return NextResponse.json({
       my_searches:     mySearches,
       my_org:          myOrg,
       hierarchy,
-      corporate_total: hierarchy[0]?.total_count ?? myOrg.total,
+      corporate_total: corporateTotal,
     })
 
-  } catch (err: any) {
-    console.error('[aria/usage]', err.message)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Failed to fetch usage metrics'
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

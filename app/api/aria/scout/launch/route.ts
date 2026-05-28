@@ -2,20 +2,7 @@
  * POST /api/aria/scout/launch
  *
  * SCOUT — AI-powered outreach launcher.
- * Takes ARIA-imported leads (with stored email_variants in property_intel)
- * and sends the best personalized email via Resend, then:
- *   1. Logs the send to campaign_sends
- *   2. Sets show_leads.scout_status = 'sent'
- *   3. Logs a crm_activity on the lead
- *
- * When the recipient opens the email, the existing Resend webhook fires →
- * sets campaign_sends.opened_at → we update scout_status = 'opened' so
- * NEXUS can alert the rep.
- *
- * Request body:
- *   lead_ids   string[]   show_lead UUIDs to enroll (without 'show_' prefix)
- *   from_name  string?    Sender display name (default: "Russel Feldman")
- *   from_email string?    Sender address  (default: rfeldman@gateguard.co)
+ * Takes ARIA-imported leads and sends the best personalized email via Resend.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -38,7 +25,6 @@ const DEFAULT_FROM_EMAIL = 'rfeldman@gateguard.co'
 // ─── HTML email wrapper ────────────────────────────────────────────────────
 
 function buildScoutHtml(body: string, subject: string): string {
-  // Convert plain-text body to basic HTML paragraphs
   const paragraphs = body
     .split('\n\n')
     .filter(Boolean)
@@ -110,7 +96,6 @@ export async function POST(req: NextRequest) {
     const senderName  = from_name  ?? DEFAULT_FROM_NAME
     const senderEmail = from_email ?? DEFAULT_FROM_EMAIL
 
-    // ── Fetch the leads ────────────────────────────────────────────────
     const { data: leads, error: fetchErr } = await supabase
       .from('show_leads')
       .select('id, name, email, property_name, property_intel, scout_status')
@@ -127,44 +112,40 @@ export async function POST(req: NextRequest) {
     }> = []
 
     for (const lead of (leads ?? [])) {
-      // Skip leads with no email
       if (!lead.email) {
         results.push({ lead_id: lead.id, property_name: lead.property_name, status: 'skipped', reason: 'no email' })
         continue
       }
-      // Skip already sent
-      if (lead.scout_status === 'sent' || lead.scout_status === 'opened' || lead.scout_status === 'replied') {
+      if (['sent', 'opened', 'replied'].includes(lead.scout_status)) {
         results.push({ lead_id: lead.id, property_name: lead.property_name, status: 'skipped', reason: `already ${lead.scout_status}` })
         continue
       }
 
-      // Pick best email variant from property_intel (highest predicted_reply_rate)
       const intel = lead.property_intel as any ?? {}
-      const variants: Array<{ angle: string; subject: string; body: string; predicted_reply_rate: number }> =
-        intel.email_variants ?? []
+      const variants: Array<{ angle: string; subject: string; body: string; predicted_reply_rate: number }> = intel.email_variants ?? []
 
       let subject: string
       let body: string
 
       if (variants.length > 0) {
-        // Use the highest predicted reply rate variant
-        const best = variants.reduce((a, b) =>
-          (b.predicted_reply_rate ?? 0) > (a.predicted_reply_rate ?? 0) ? b : a
-        )
+        const best = variants.reduce((a, b) => (b.predicted_reply_rate ?? 0) > (a.predicted_reply_rate ?? 0) ? b : a)
         subject = best.subject
         body    = best.body
       } else {
-        // Fallback: generate a generic personalized email from property intel
-        const propName   = lead.property_name ?? 'your property'
-        const units      = intel.buy_score ? `(buy score ${intel.buy_score}/10)` : ''
-        const concern    = intel.primary_concern ? `We noticed ${intel.primary_concern?.toLowerCase()} is a priority at ${propName}.` : ''
-        const vendor     = intel.current_vendor   ? `We work alongside or can replace ${intel.current_vendor} systems.` : ''
+        // AI-Powered Fallback: Leverage the Triangulated OSINT
+        const propName = lead.property_name ?? 'your property'
+        const hook = intel.pitch_strategy?.primary_hook || 
+                     intel.scout_brief?.key_data_points?.[0] || 
+                     `We noticed access control and telecom infrastructure is a priority at ${propName}.`
+                     
+        const vendor = intel.current_vendor && intel.current_vendor !== 'Unknown' 
+                     ? `We work alongside or can completely replace legacy ${intel.current_vendor} systems.` 
+                     : `We work alongside or replace legacy systems to handle everything: gates, cameras, resident access, and ongoing service.`
 
         subject = `Quick question about access control at ${propName}`
-        body    = `Hi ${lead.name?.split(' ')[0] ?? 'there'},\n\n${concern ? concern + '\n\n' : ''}I wanted to reach out about GateGuard — we're a managed access control platform built specifically for multifamily. ${vendor}\n\nWe handle everything: gates, cameras, resident access, and ongoing service — all on one flat monthly fee per unit. Most property managers see an immediate lift in resident satisfaction and a reduction in maintenance calls.\n\nWould you be open to a 15-minute call to see if it's a fit for ${propName}? ${units}\n\nBest,\n${senderName}`
+        body    = `Hi ${lead.name?.split(' ')[0] ?? 'there'},\n\n${hook}\n\nI wanted to reach out about GateGuard — we're a managed access control platform built specifically for multifamily. ${vendor} We operate on one flat monthly fee per unit.\n\nMost property managers see an immediate lift in resident satisfaction and a reduction in maintenance calls.\n\nWould you be open to a 15-minute call to see if it's a fit for ${propName}?\n\nBest,\n${senderName}`
       }
 
-      // ── Send via Resend ────────────────────────────────────────────
       try {
         const { data: emailData, error: emailErr } = await resend.emails.send({
           from:    `${senderName} <${senderEmail}>`,
@@ -179,7 +160,6 @@ export async function POST(req: NextRequest) {
 
         const resendId = (emailData as any)?.id ?? null
 
-        // ── Log to campaign_sends ───────────────────────────────────
         await supabase.from('campaign_sends').insert({
           show_lead_id:      lead.id,
           lead_email:        lead.email,
@@ -190,16 +170,11 @@ export async function POST(req: NextRequest) {
           sent_at:           new Date().toISOString(),
         })
 
-        // ── Update lead scout_status ────────────────────────────────
-        await supabase
-          .from('show_leads')
-          .update({
-            scout_status:  'sent',
-            scout_sent_at: new Date().toISOString(),
-          })
-          .eq('id', lead.id)
+        await supabase.from('show_leads').update({
+          scout_status:  'sent',
+          scout_sent_at: new Date().toISOString(),
+        }).eq('id', lead.id)
 
-        // ── Log to crm_activities ───────────────────────────────────
         await supabase.from('crm_activities').insert({
           show_lead_id: lead.id,
           type:         'email',
@@ -215,7 +190,6 @@ export async function POST(req: NextRequest) {
         results.push({ lead_id: lead.id, property_name: lead.property_name, status: 'sent', resend_id: resendId })
 
       } catch (sendErr: any) {
-        // Log failure to campaign_sends but don't abort the whole batch
         await supabase.from('campaign_sends').insert({
           show_lead_id:  lead.id,
           lead_email:    lead.email,
