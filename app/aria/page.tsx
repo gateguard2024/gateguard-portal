@@ -628,7 +628,7 @@ export default function ARIAPage() {
         </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0">
           <button
-            onClick={() => { setQuery(s.query); setTimeout(() => runARIA(), 50); }}
+            onClick={() => { setQuery(s.query); setPhase(0); setResults(null); setSavedSearchId(null); setPendingRerun(true); }}
             title="Re-run with fresh data"
             disabled={isRunning}
             className="text-slate-400 hover:text-[#6B7EFF] p-1 rounded transition-colors disabled:opacity-30"

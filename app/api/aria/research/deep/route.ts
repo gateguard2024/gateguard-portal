@@ -536,7 +536,7 @@ export async function POST(req: NextRequest) {
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 2500,
+      max_tokens: 4000,
       tools: [deepIntelTool],
       tool_choice: { type: 'tool', name: 'aria_deep_intel_result' },
       system: `You are ARIA's elite PropTech OSINT intelligence module. Extract ALL available details into the tool schema. Your job is precise data extraction — never hallucinate.
@@ -727,6 +727,7 @@ Intelligence excerpts:\n${excerptBlock}`
           user_name: portalUser.name,
           user_email: portalUser.email,
           org_id: portalUser.org_id ?? null,
+          expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
         })
         .select('id')
         .single();
