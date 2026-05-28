@@ -673,7 +673,7 @@ export default function ARIAPage() {
                  </div>
                  <div className="flex flex-col">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Buy Score</span>
-                    <span className="text-xs font-bold text-slate-800 capitalize">{p.profile?.urgency || 'Unknown'} Urgency</span>
+                    <span className="text-xs font-bold text-slate-800 capitalize">{p.profile?.urgency || 'medium'} Urgency</span>
                  </div>
               </div>
             </div>
@@ -749,17 +749,19 @@ export default function ARIAPage() {
             ].map(({ label, val }) => (
               <div key={label} className="flex items-center justify-between text-xs">
                 <span className="text-slate-400">{label}</span>
-                <span className="font-bold text-slate-800 capitalize">{val || 'Unknown'}</span>
+                <span className={`font-bold capitalize ${val != null && val !== '' && val !== 'null' ? 'text-slate-800' : 'text-slate-300'}`}>
+                  {val != null && val !== '' && val !== 'null' ? String(val) : '—'}
+                </span>
               </div>
             ))}
             <div className="pt-3 border-t border-slate-100 space-y-2">
               <div>
                 <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Management</p>
-                <p className="text-xs font-bold text-slate-700 mt-1">{p.property?.management_company || 'Unknown'}</p>
+                <p className="text-xs font-bold text-slate-700 mt-1">{p.property?.management_company || '—'}</p>
               </div>
               <div>
                 <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Owner entity</p>
-                <p className="text-[11px] text-slate-500 mt-1">{p.property?.owner_entity || 'Unknown'}</p>
+                <p className="text-[11px] text-slate-500 mt-1">{p.property?.owner_entity || '—'}</p>
               </div>
               {p.ownership?.dnb_duns && p.ownership.dnb_duns !== 'unknown' && (
                 <div>
@@ -929,9 +931,9 @@ export default function ARIAPage() {
               {getInitials(p.decision_maker?.name)}
             </div>
             <div>
-              <p className="text-base font-bold text-slate-900 tracking-tight">{p.decision_maker?.name || 'Unknown'}</p>
-              <p className="text-xs font-medium text-slate-500 mt-0.5">{p.decision_maker?.title || 'Unknown Title'}</p>
-              <p className="text-[11px] text-slate-400">{p.decision_maker?.company || 'Unknown Company'}</p>
+              <p className="text-base font-bold text-slate-900 tracking-tight">{p.decision_maker?.name || '—'}</p>
+              <p className="text-xs font-medium text-slate-500 mt-0.5">{p.decision_maker?.title || 'Contact pending'}</p>
+              <p className="text-[11px] text-slate-400">{p.decision_maker?.company || p.property?.management_company || '—'}</p>
             </div>
           </div>
           <div className="space-y-3 text-xs border-t border-slate-100 pt-4 bg-slate-50/50 -mx-5 px-5 -mb-5 pb-5 rounded-b-2xl">
@@ -1036,12 +1038,16 @@ export default function ARIAPage() {
             
             <div className="space-y-1.5">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Clock size={12}/> Contract Window</p>
-              <p className="text-sm text-slate-800 leading-relaxed font-medium">{p.profile?.contract_window || 'Unknown'}</p>
+              <p className={`text-sm leading-relaxed font-medium ${p.profile?.contract_window ? 'text-slate-800' : 'text-slate-300'}`}>
+                {p.profile?.contract_window || 'Not detected'}
+              </p>
             </div>
 
             <div className="space-y-1.5">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Globe size={12}/> Incumbent Vendor</p>
-              <p className="text-sm text-slate-800 leading-relaxed font-medium">{p.profile?.current_vendor || 'Unknown'}</p>
+              <p className={`text-sm leading-relaxed font-medium ${p.profile?.current_vendor ? 'text-slate-800' : 'text-slate-300'}`}>
+                {p.profile?.current_vendor || 'Not detected'}
+              </p>
             </div>
 
             <div className="space-y-1.5">
@@ -1124,7 +1130,7 @@ export default function ARIAPage() {
               </div>
               <span className={cn("text-[11px] font-bold px-3 py-1.5 rounded-lg uppercase tracking-wide shadow-sm border",
                 URGENCY_PILL[p.scout_brief?.contract_window_urgency] || "bg-slate-100 text-slate-600 border-slate-200")}>
-                {p.scout_brief?.contract_window_urgency || 'unknown'} URGENCY
+                {p.scout_brief?.contract_window_urgency || 'medium'} URGENCY
               </span>
               <div className="ml-auto flex items-center gap-2 text-[11px] font-mono text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
                 <User size={12} /> Target: <span className="text-slate-800 font-bold">{p.scout_brief?.primary_contact || 'Unknown'}</span>
