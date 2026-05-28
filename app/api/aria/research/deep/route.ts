@@ -273,10 +273,30 @@ const deepIntelTool: Anthropic.Tool = {
   description: 'Return the structured deep connectivity, proptech, and ownership intelligence for this property.',
   input_schema: {
     type: 'object' as const,
-    required: ['isp_providers', 'video_providers', 'bulk_agreements', 'key_finding', 'confidence', 'proptech', 'pain_signals'],
+    required: ['property_details', 'isp_providers', 'video_providers', 'bulk_agreements', 'extracted_contacts', 'key_finding', 'confidence', 'proptech', 'pain_signals'],
     properties: {
-      isp_providers: { type: 'array', items: { type: 'string' } },
-      video_providers: { type: 'array', items: { type: 'string' } },
+      property_details: {
+        type: 'object',
+        description: 'Fundamental physical and demographic stats of the property',
+        properties: {
+          units: { type: 'number' },
+          year_built: { type: 'number' },
+          management_company: { type: 'string' },
+          property_type: { type: 'string' },
+          class: { type: 'string', description: 'Asset class, e.g. A, B, C' },
+          occupancy: { type: 'string' }
+        }
+      },
+      isp_providers: { 
+        type: 'array', 
+        items: { type: 'string' }, 
+        description: 'Strictly internet service providers (e.g. Gigstreem, Comcast, AT&T). DO NOT include management companies here.' 
+      },
+      video_providers: { 
+        type: 'array', 
+        items: { type: 'string' }, 
+        description: 'Strictly video/TV providers (e.g. DirecTV, Spectrum).' 
+      },
       bulk_agreements: {
         type: 'array',
         items: {
@@ -292,6 +312,14 @@ const deepIntelTool: Anthropic.Tool = {
             evidence_source: { type: 'string' },
           },
         },
+      },
+      extracted_contacts: {
+        type: 'array',
+        description: 'Decision makers (Asset Managers, Regional VPs, Property Managers) found in the text or Truth Loop.',
+        items: {
+          type: 'object',
+          properties: { name: { type: 'string' }, title: { type: 'string' }, company: { type: 'string' }, email: { type: 'string' }, linkedin_slug: { type: 'string' } }
+        }
       },
       key_finding: { type: 'string' },
       confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
@@ -312,10 +340,6 @@ const deepIntelTool: Anthropic.Tool = {
           acquisition_year: { type: 'string' },
           capex_signal:     { type: 'string' },
           sec_filing_ref:   { type: 'string' },
-          asset_manager: {
-            type: 'object',
-            properties: { name: { type: 'string' }, title: { type: 'string' }, company: { type: 'string' }, linkedin_slug: { type: 'string' }, email: { type: 'string' } },
-          },
         },
       },
       proptech: {
@@ -491,22 +515,27 @@ export async function POST(req: NextRequest) {
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
+      max_tokens: 2500,
       tools: [deepIntelTool],
       tool_choice: { type: 'tool', name: 'aria_deep_intel_result' },
-      system: `You are ARIA's deep property intelligence module. Extract ALL available details into the tool schema.
+      system: `You are ARIA's elite PropTech OSINT intelligence module. Extract ALL available details into the tool schema. Your job is precise data extraction — never hallucinate.
 
 CRITICAL — always populate these fields when any evidence exists:
-• units: total apartment count (look for "X units", "X homes", "X-unit community", "X apartment homes")
-• year_built: construction or renovation year
-• property_class: A/B/C based on amenities, rent tier, and age
-• property_type: multifamily / senior-living / student / mixed-use / garden-style / mid-rise / high-rise
-• isp_providers, bulk_agreements: any internet/video provider mentioned
+• property_details.units: total apartment/home count — look for "X units", "X homes", "X-unit community", "X apartment homes". Never leave null if any source mentions unit count.
+• property_details.year_built: construction or major renovation year
+• property_details.class: A/B/C based on amenities, rent tier, and age
+• property_details.property_type: multifamily / senior-living / student / mixed-use / garden-style / mid-rise / high-rise
+• isp_providers, video_providers, bulk_agreements: any internet/video provider mentioned
 • proptech fields: any gate, intercom, access control, camera, lock brand found
 • ownership.owner_entity: REIT, PE firm, or private owner name
 • pain_signals: concrete resident complaints about gates, internet, packages
+• extracted_contacts: any human names, emails, or LinkedIn URLs found in text associated with regional/asset/property management
 
-Never leave units null if any source mentions a number of apartments or homes.`,
+CRITICAL ENTITY RESOLUTION RULES:
+1. NEVER confuse a Management Company or Owner (e.g. Northland, Greystar, Starwood) with an Internet Service Provider. "Northland Internet" is a hallucination — if managed by Northland and uses Gigstreem, the ISP is Gigstreem, full stop.
+2. DirecTV, DISH, Spectrum video → record as video_provider AND bulk_agreement with service_type "video".
+3. If a listing says "gated community", "controlled access", or "callbox" with no brand, put "Unknown (gated)" in proptech.access_control. Named brands (DoorKing, ButterflyMX, Brivo) always override.
+4. isp_providers must contain only actual ISPs. Management company names never belong here.`,
       messages: [{
         role: 'user',
         content: `Property: ${property_name}\nLocation: ${location}\nManagement Company: ${mgmt || 'unknown'}\n${priorFindingsBlock}${cachedDetectionsBlockDeep}${apolloBlock}${reviewSentimentBlock}\nIntelligence excerpts:\n${excerptBlock}`
@@ -519,19 +548,20 @@ Never leave units null if any source mentions a number of apartments or homes.`,
     // ── THE CRITICAL SANITIZATION LAYER ──────────────────────────────────────
     const rawData = toolBlock.input as Record<string, any>;
     
-    // Set fallback primary contact
-    const primaryContactName = rawData.ownership?.asset_manager?.name ?? validatedDMs[0]?.name ?? mgmt ?? property_name;
+    // Combine API contacts (ProxyCurl) with AI-extracted web contacts
+    const webContact = rawData.extracted_contacts?.[0] || {};
+    const primaryContactName = validatedDMs[0]?.name || webContact.name || rawData.ownership?.asset_manager?.name || mgmt || property_name;
 
     // Force payload into the exact shape expected by the DB and UI
     const prospectPayload = {
       property: {
         name: property_name,
         address: address || location || property_name,
-        units: rawData.units ?? null,
-        property_type: rawData.property_type ?? 'multifamily',
-        class: rawData.property_class ?? null,
-        year_built: rawData.year_built ?? null,
-        management_company: mgmt || 'Unknown',
+        units: rawData.property_details?.units ?? rawData.units ?? null,
+        property_type: rawData.property_details?.property_type ?? rawData.property_type ?? 'multifamily',
+        class: rawData.property_details?.class ?? rawData.property_class ?? null,
+        year_built: rawData.property_details?.year_built ?? rawData.year_built ?? null,
+        management_company: rawData.property_details?.management_company ?? mgmt || 'Unknown',
         owner_entity: rawData.ownership?.owner_entity ?? 'Unknown',
         isp_providers: rawData.isp_providers ?? [],
         video_providers: rawData.video_providers ?? [],
@@ -553,23 +583,33 @@ Never leave units null if any source mentions a number of apartments or homes.`,
       },
       decision_maker: {
         name: primaryContactName,
-        title: rawData.ownership?.asset_manager?.title ?? validatedDMs[0]?.currentTitle ?? 'Executive',
-        company: rawData.ownership?.asset_manager?.company ?? validatedDMs[0]?.company ?? mgmt,
-        email: rawData.ownership?.asset_manager?.email ?? validatedDMs[0]?.email ?? '',
+        title: validatedDMs[0]?.currentTitle || webContact.title || 'Executive',
+        company: validatedDMs[0]?.company || webContact.company || mgmt,
+        email: validatedDMs[0]?.email || webContact.email || '',
         phone: '',
         tenure_years: 0,
         top_email_format: '',
-        linkedin_slug: validatedDMs[0]?.linkedinUrl?.split('/in/')?.[1] ?? ''
+        linkedin_slug: validatedDMs[0]?.linkedinUrl?.split('/in/')?.[1] || webContact.linkedin_slug || ''
       },
-      decision_maker_chain: validatedDMs.map(dm => ({
-        name: dm.name,
-        title: dm.currentTitle,
-        company: dm.company,
-        role_type: dm.isActiveCEO ? 'owner' : 'asset_manager',
-        email: dm.email || '',
-        top_email_format: '',
-        linkedin_slug: dm.linkedinUrl?.split('/in/')?.[1] || ''
-      })),
+      decision_maker_chain: validatedDMs.length > 0 
+        ? validatedDMs.map(dm => ({
+            name: dm.name,
+            title: dm.currentTitle,
+            company: dm.company,
+            role_type: dm.isActiveCEO ? 'owner' : 'asset_manager',
+            email: dm.email || '',
+            top_email_format: '',
+            linkedin_slug: dm.linkedinUrl?.split('/in/')?.[1] || ''
+          }))
+        : (rawData.extracted_contacts || []).map((wc: any) => ({
+            name: wc.name,
+            title: wc.title,
+            company: wc.company,
+            role_type: 'unknown',
+            email: wc.email || '',
+            top_email_format: '',
+            linkedin_slug: wc.linkedin_slug || ''
+        })),
       ownership: rawData.ownership ? {
         owner_entity: rawData.ownership.owner_entity ?? null,
         owner_type: rawData.ownership.owner_type ?? null,
