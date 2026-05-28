@@ -24,14 +24,16 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
 // ─── Tavily helper ────────────────────────────────────────────────────────
 
-interface TavilyResult { title: string; url: string; content: string; score: number; source?: string }
+interface TavilyResult { title: string; url: string; content: string; raw_content?: string; score: number; source?: string }
 interface TavilyResponse { results: TavilyResult[]; answer?: string }
 
-async function tavilySearch(query: string, maxResults = 5, source = 'web', search_time?: 'day' | 'week' | 'month' | 'year', depth: 'basic' | 'advanced' = 'basic'): Promise<TavilyResult[]> {
+async function tavilySearch(query: string, maxResults = 5, source = 'web', search_time?: 'day' | 'week' | 'month' | 'year', depth: 'basic' | 'advanced' = 'basic', rawContent = false): Promise<TavilyResult[]> {
   if (!process.env.TAVILY_API_KEY) return []
   try {
     const body: Record<string, unknown> = {
-      query, search_depth: depth, max_results: maxResults, include_answer: false, include_raw_content: false, include_images: false,
+      // rawContent=true gets full page text — required for JS-rendered listing pages
+      // where unit count / amenities are in a data table below the 400-char snippet threshold
+      query, search_depth: depth, max_results: maxResults, include_answer: false, include_raw_content: rawContent, include_images: false,
     }
     if (search_time) body.search_time = search_time
     const res = await fetch('https://api.tavily.com/search', {
@@ -538,19 +540,24 @@ async function runSiloA(
   }
 
   const searches = await Promise.all([
-    tavilySearch(`"${name}" ${locationAnchor} site:apartments.com OR site:zillow.com OR site:rentcafe.com OR site:rent.com`, 5, 'silo-a'),
-    tavilySearch(`"${name}" ${locationAnchor} "units" "year built" OR "built in" apartments management company`, 5, 'silo-a'),
+    // rawContent:true gets full page text — listing sites bury unit count in data tables below the fold
+    tavilySearch(`"${name}" ${locationAnchor} site:apartments.com OR site:zillow.com OR site:rentcafe.com OR site:rent.com`, 2, 'silo-a', undefined, 'advanced', true),
+    tavilySearch(`"${name}" ${locationAnchor} "units" "year built" OR "built in" apartments management company`, 3, 'silo-a', undefined, 'basic', true),
     tavilySearch(`"${address}" OR "${name}" ${city} ${state} "property tax" OR "county assessor" OR "tax record" units apartments`, 4, 'silo-a'),
     tavilySearch(`"${name}" ${locationAnchor} acquired purchased ownership "private equity" OR "REIT" OR "portfolio" units`, 4, 'silo-a'),
     tavilySearch(`"${name}" ${locationAnchor} apartment floor plans amenities occupancy`, 4, 'silo-a'),
-    tavilySearch(`"${name}" ${locationAnchor} site:apartmentlist.com OR site:forrent.com`, 4, 'silo-a'),
+    tavilySearch(`"${name}" ${locationAnchor} site:apartmentlist.com OR site:forrent.com`, 2, 'silo-a', undefined, 'advanced', true),
     searchEdgar(name, rawMgmt).then(r => r.map(e => ({ ...e, source: 'EDGAR' } as TavilyResult))),
   ])
   const allResults = searches.flat()
-  const usable = allResults.filter(r => r.content?.length > 40).slice(0, 16)
+  const usable = allResults.filter(r => (r.raw_content || r.content)?.length > 40).slice(0, 16)
   if (usable.length === 0) return { data: blank, results: allResults }
 
-  const snippets = usable.map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 400)}`).join('\n\n---\n\n')
+  // Use raw_content when available (full page text from listing sites); cap at 1200 chars to control tokens
+  const snippets = usable.map((r, i) => {
+    const text = r.raw_content ? r.raw_content.slice(0, 1200) : r.content.slice(0, 400)
+    return `[${i + 1}] ${r.title}\n${text}`
+  }).join('\n\n---\n\n')
   const prompt = `Extract physical property facts. Return ONLY valid JSON:
 {"corrected_name":"","address":"","city":"","state":"","units":null,"year_built":null,"property_class":null,"property_type":"","occupancy":"","management_company":"","owner_entity":"","acquisition_year":"","portfolio_size":"","isp_hints":[],"missing_fields":[]}
 RULES: units=any "X units"/"X homes" number; use null for unknown numbers; empty string for unknown text; if management_company empty but owner is a RE firm, set management_company=owner_entity; missing_fields lists what you couldn't find`
@@ -716,11 +723,14 @@ async function runGapFill(
 
   if (siloA.units === null) {
     gapFills.push((async () => {
-      const results = await tavilySearch(`"${name}" ${location} "apartment homes" OR "apartment units" total`, 4, 'gap-fill')
-      const usable = results.filter(r => r.content?.length > 40).slice(0, 6)
+      const results = await tavilySearch(`"${name}" ${location} "apartment homes" OR "apartment units" total`, 3, 'gap-fill', undefined, 'advanced', true)
+      const usable = results.filter(r => (r.raw_content || r.content)?.length > 40).slice(0, 4)
       if (usable.length === 0) return
-      const snippets = usable.map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 300)}`).join('\n\n---\n\n')
-      const prompt = `Extract ONLY the total unit count for this apartment property. Return ONLY valid JSON: {"units": null_or_integer}`
+      const snippets = usable.map((r, i) => {
+        const text = r.raw_content ? r.raw_content.slice(0, 1000) : r.content.slice(0, 400)
+        return `[${i + 1}] ${r.title}\n${text}`
+      }).join('\n\n---\n\n')
+      const prompt = `Extract ONLY the total unit count for this apartment property. Look for patterns like "287 apartment homes", "400 units", "287 homes". Return ONLY valid JSON: {"units": null_or_integer}`
       const result = await haikusExtract<{ units: number | null }>(prompt, snippets, 100, client)
       if (result?.units) siloA.units = result.units
     })())
@@ -1106,10 +1116,12 @@ ${excerptBlock}`,
     // ── Data normalization helpers ────────────────────────────────────────────
     // Haiku/Sonnet sometimes return the STRING "null", "Unknown", "N/A", "none", "0"
     // instead of JSON null. These helpers coerce them to clean null/undefined.
-    const SENTINEL_STRINGS = new Set(['null','undefined','unknown','n/a','na','none','not found','not available','','—','–','-','0'])
+    const SENTINEL_STRINGS = new Set(['null','undefined','unknown','n/a','na','none','not found','not available','','—','–','-','0','tbd','?'])
     function normStr(val: unknown): string | null {
       if (val === null || val === undefined) return null
       const s = String(val).trim()
+      // Catch <UNKNOWN>, <N/A>, <TBD> etc. — LLMs wrap placeholders in angle brackets
+      if (/^<[^>]{0,30}>$/.test(s)) return null
       return SENTINEL_STRINGS.has(s.toLowerCase()) ? null : s
     }
     function normInt(val: unknown): number | null {
@@ -1175,8 +1187,9 @@ ${excerptBlock}`,
         year_built: normInt(rawData.property_details?.year_built ?? rawData.year_built ?? updatedA.year_built),
         occupancy:  normStr(rawData.property_details?.occupancy ?? updatedA.occupancy),
         management_company: (() => {
-          const rawMgmt = normStr(rawData.property_details?.management_company ?? mgmt ?? updatedA.management_company)
-          const resolvedOwner = normStr(rawData.ownership?.owner_entity ?? owner)
+          // Priority: hint param → Silo A verified extraction → Sonnet synthesis (last, can confuse person names with company names)
+          const rawMgmt = normStr(mgmt ?? updatedA.management_company ?? rawData.property_details?.management_company)
+          const resolvedOwner = normStr(owner ?? rawData.ownership?.owner_entity)
           // Self-managed fallback: if mgmt unknown but owner is a real RE firm, use owner
           return rawMgmt || resolvedOwner || null
         })(),
