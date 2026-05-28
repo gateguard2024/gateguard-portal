@@ -1417,6 +1417,139 @@ export default function ARIAPage() {
           </div>
         </div>
       </div>
+    );
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  return (
+    <div className="flex flex-col min-h-full" style={{ background: '#F8FAFC' }}>
+      <TopBar
+        title="ARIA"
+        subtitle="Account Research Intelligence Agent"
+        actions={topbarActions}
+      />
+
+      {/* ── Desktop split layout ────────────────────────────────────────── */}
+      <div className="hidden lg:flex flex-1 overflow-hidden" style={{ height: 'calc(100vh - 57px)' }}>
+
+        {/* Left panel */}
+        <div className="flex flex-col border-r border-slate-200/60 bg-slate-50/30 shrink-0" style={{ width: 280 }}>
+          <div className="p-4 border-b border-slate-200/60 bg-white/50 backdrop-blur-sm">
+            <div className="flex items-center gap-2 bg-white border border-slate-200/60 rounded-xl px-3 py-2.5 mb-3 shadow-inner focus-within:border-[#6B7EFF]/50 focus-within:ring-2 focus-within:ring-[#6B7EFF]/10 transition-all">
+              <Search size={14} className="text-slate-400 shrink-0" />
+              <input
+                ref={inputRef}
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && !isRunning && runARIA()}
+                placeholder="Property, area, or company..."
+                className="flex-1 bg-transparent text-xs font-medium text-slate-800 placeholder:text-slate-400 outline-none"
+                disabled={isRunning}
+              />
+              {isRunning && <Loader2 size={12} className="text-[#6B7EFF] animate-spin shrink-0" />}
+            </div>
+            <button
+              onClick={runARIA}
+              disabled={isRunning || !query.trim()}
+              className="w-full py-2.5 rounded-xl text-white text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-sm hover:opacity-90"
+              style={{ background: isRunning ? "#94a3b8" : "linear-gradient(135deg, #6B7EFF 0%, #4F46E5 100%)" }}
+            >
+              {isRunning ? <><Loader2 size={12} className="animate-spin" /> Synchronizing...</> : <><Zap size={12} /> Launch ARIA</>}
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-3 py-4">
+            {isDone && results && results.prospects.length > 0 ? (
+              <div className="animate-in fade-in duration-300">
+                <div className="flex items-center gap-2 mb-4 px-1">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{results.prospects.length} targets found</span>
+                  {results.query_interpretation && (
+                    <span className="ml-auto text-[9px] text-[#6B7EFF] font-bold truncate max-w-[120px] bg-[#6B7EFF]/10 px-2 py-0.5 rounded border border-[#6B7EFF]/20">ARIA Verified</span>
+                  )}
+                </div>
+                {results.prospects.map((p, i) => (
+                  <ProspectListItem key={i} p={p} i={i} />
+                ))}
+                <button
+                  onClick={() => { setPhase(0); setResults(null); setQuery(""); setSavedSearchId(null); }}
+                  className="w-full mt-4 py-2.5 text-[11px] font-bold text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <ArrowLeft size={12} /> Clear Session
+                </button>
+              </div>
+            ) : (
+              <div className="animate-in fade-in duration-300">
+                {!isRunning && savedSearches.length > 0 && (
+                  <div className="mb-6">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-2 mb-3">Recent Memory</p>
+                    {savedSearches.map(s => <SavedSearchRow key={s.id} s={s} />)}
+                  </div>
+                )}
+                {!isRunning && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-2 mb-3">Suggested Operations</p>
+                    {EXAMPLE_QUERIES.map((q, i) => (
+                      <button key={i} onClick={() => { setQuery(q); inputRef.current?.focus(); }}
+                        className="block w-full text-left text-[11px] font-medium px-3 py-2.5 rounded-xl text-slate-500 hover:bg-white hover:text-[#6B7EFF] hover:shadow-sm border border-transparent hover:border-slate-200/60 transition-all leading-snug mb-1.5">
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right panel */}
+        <div className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: 'rgba(248, 250, 252, 0.95)' }}>
+          {dbView ? (
+            <IntelDBPanel />
+          ) : isRunning ? (
+            <PipelinePanel />
+          ) : error ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="max-w-md bg-white border border-rose-200/60 rounded-2xl p-6 flex items-start gap-4 shadow-sm">
+                <div className="p-2 bg-rose-50 rounded-lg">
+                  <AlertCircle size={20} className="text-rose-500" />
+                </div>
+                <div>
+                  <p className="text-base font-bold text-slate-900 mb-1">Telemetry Error</p>
+                  <p className="text-sm font-medium text-slate-500 leading-relaxed">{error}</p>
+                </div>
+              </div>
+            </div>
+          ) : prospect ? (
+            <div className="flex flex-col h-full overflow-hidden">
+              <DetailHeader p={prospect} />
+              <div className="flex-1 overflow-y-auto p-6 lg:p-8">
+                {activeTab === 'property' && <PropertyTab p={prospect} />}
+                {activeTab === 'dm'       && <DMTab p={prospect} />}
+                {activeTab === 'intel'    && <IntelTab p={prospect} />}
+                {activeTab === 'scout'    && <ScoutTab p={prospect} />}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full gap-5 text-slate-400">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-lg relative"
+                style={{ background: "linear-gradient(135deg, #6B7EFF 0%, #3B4FCC 100%)" }}>
+                AR
+                <div className="absolute inset-0 rounded-2xl border border-white/20" />
+              </div>
+              <div className="text-center">
+                <p className="text-base font-bold text-slate-800">ARIA Intelligence Engine</p>
+                <p className="text-sm font-medium text-slate-500 mt-1">Awaiting operational parameters.</p>
+              </div>
+              <div className="flex items-center justify-center gap-6 mt-6 pt-6 border-t border-slate-200/60 text-[11px] font-bold text-slate-400">
+                <span className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-[#6B7EFF]" /> FCC Broadband Data</span>
+                <span className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-[#6B7EFF]" /> SEC EDGAR Filings</span>
+                <span className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-[#6B7EFF]" /> 28 OSINT Sources</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* ── Mobile layout ───────────────────────────────────────────────── */}
       <div className="lg:hidden flex flex-col flex-1" style={{ paddingBottom: '56px' }}>
