@@ -185,13 +185,16 @@ async function searchResidentReviewsTemporal(propertyName: string, location: str
   // Advanced depth on review/listing sites — these are JS-rendered (React SPAs).
   // 'advanced' uses Tavily's headless browser and sees dynamic content like
   // mandatory fee line items, actual review text, and "Technology Package" charges.
+  //
+  // IMPORTANT: All queries include `location` to prevent short property names like "Wharf 7"
+  // from matching unrelated properties in other countries (UK "Wharf 7", AU "The Reserve", etc.)
   const queries: Array<[string, 'year' | undefined, 'basic' | 'advanced']> = [
-    [`"${propertyName}" internet OR wifi OR "internet provider" OR gate OR "access control" site:apartmentratings.com`, 'year', 'advanced'],
-    [`"${propertyName}" site:yelp.com reviews internet wifi provider fee`, undefined, 'advanced'],
+    [`"${propertyName}" ${location} internet OR wifi OR "internet provider" OR gate OR "access control" site:apartmentratings.com`, 'year', 'advanced'],
+    [`"${propertyName}" ${location} site:yelp.com reviews internet wifi provider fee`, undefined, 'advanced'],
     [`"${propertyName}" ${location} internet provider wifi "no choice" OR "forced" OR "mandatory" OR "included in rent"`, 'year', 'advanced'],
-    [`"${propertyName}" "switched" OR "changed" internet OR wifi provider OR "Gigstreem" OR "managed wifi"`, 'year', 'basic'],
+    [`"${propertyName}" ${location} "switched" OR "changed" internet OR wifi provider OR "Gigstreem" OR "managed wifi"`, 'year', 'basic'],
     // apartments.com fees/policies tab — JS-rendered, shows mandatory Technology Package fees by provider name
-    [`"${propertyName}" "technology fee" OR "wifi fee" OR "internet fee" OR "Gigstreem" OR "managed wifi" site:apartments.com OR site:apartmentlist.com`, undefined, 'advanced'],
+    [`"${propertyName}" ${location} "technology fee" OR "wifi fee" OR "internet fee" OR "Gigstreem" OR "managed wifi" site:apartments.com OR site:apartmentlist.com`, undefined, 'advanced'],
   ]
   const results = await Promise.all(queries.map(([q, t, d]) => tavilySearch(q, 5, 'resident-review', t, d)))
   return results.flat()
@@ -199,19 +202,25 @@ async function searchResidentReviewsTemporal(propertyName: string, location: str
 
 // ─── PHASE 1: Property discovery (catches typos, finds real name) ─────────
 
-async function discoverProperty(rawQuery: string): Promise<TavilyResult[]> {
+async function discoverProperty(rawQuery: string, hintCity = '', hintState = ''): Promise<TavilyResult[]> {
   if (!process.env.TAVILY_API_KEY) return []
+  // Location anchor prevents short generic names (e.g. "Wharf 7", "The Reserve") from
+  // matching unrelated properties in other countries (UK, Australia, etc.)
+  const locationAnchor = [hintCity, hintState].filter(Boolean).join(' ')
+  const usCities = 'charleston OR atlanta OR dallas OR denver OR phoenix OR austin OR raleigh OR charlotte OR nashville OR houston OR miami OR orlando OR tampa'
+  const geoHint = locationAnchor || usCities
+
   const results = await Promise.all([
-    // With quotes: exact match on real indexed name
-    tavilySearch(`"${rawQuery}" apartments address units management`, 5, 'discovery'),
+    // With quotes + location anchor: exact match on real indexed name in correct geography
+    tavilySearch(`"${rawQuery}" ${locationAnchor} apartments address units management`, 5, 'discovery'),
     // Without quotes: fuzzy, catches misspellings like "warf" → "wharf"
-    tavilySearch(`${rawQuery} apartments address units`, 5, 'discovery'),
+    tavilySearch(`${rawQuery} ${locationAnchor} apartments address units`, 5, 'discovery'),
     // Listing sites: most reliable for address, units, year built
-    tavilySearch(`"${rawQuery}" site:apartments.com OR site:zillow.com OR site:rentcafe.com OR site:rent.com OR site:apartmentfinder.com`, 5, 'listing-site'),
+    tavilySearch(`"${rawQuery}" ${locationAnchor} site:apartments.com OR site:zillow.com OR site:rentcafe.com OR site:rent.com OR site:apartmentfinder.com`, 5, 'listing-site'),
     // Ownership / acquisition press
     tavilySearch(`"${rawQuery}" OR "${rawQuery.replace(/\d+/, '').trim()}" apartment acquired ownership management company`, 4, 'discovery'),
-    // Catch alternate spellings via broad search
-    tavilySearch(`${rawQuery} apartment community charleston OR atlanta OR dallas OR denver OR phoenix OR austin OR raleigh`, 4, 'web'),
+    // Catch alternate spellings — anchor to US cities when no location hint
+    tavilySearch(`${rawQuery} apartment community ${geoHint}`, 4, 'web'),
   ])
   return results.flat()
 }
@@ -382,20 +391,26 @@ Return ONLY valid JSON — a list of up to 3 specific property names:
 
 async function searchContacts(mgmtCompany: string, owner: string, city: string, state: string): Promise<TavilyResult[]> {
   if (!process.env.TAVILY_API_KEY || (!mgmtCompany && !owner)) return []
+  // Use owner entity as fallback when management company not separately identified
+  // (self-managed PE/REIT firms like Northland, Starwood, Greystar own AND manage)
   const entity = mgmtCompany || owner
   const geo = [city, state].filter(Boolean).join(', ')
+  // Derive likely company website slug — "Northland Investment Corporation" → northlandco.com or northland.com
+  const entitySlug = entity.toLowerCase().replace(/\s+(investment|corporation|partners|residential|capital|properties|group|llc|inc|reit)\s*/gi, '').replace(/\s+/g, '')
 
   const queries = [
-    // theorg.com has org charts with names and titles
+    // theorg.com has full org charts with names and titles
     `site:theorg.com "${entity}"`,
-    // RocketReach has contact info
+    // RocketReach / ZoomInfo — direct contact data
     `"${entity}" "regional property manager" OR "community manager" OR "asset manager" site:rocketreach.co OR site:zoominfo.com`,
-    // LinkedIn people search with location
-    `"${entity}" "property manager" OR "regional manager" OR "community manager" ${geo} site:linkedin.com`,
-    // Direct contact search
-    `"${entity}" property management team ${geo} director OR manager email contact`,
-    // Northland/REIT/PE specific: their leadership page
-    `"${entity}" leadership team multifamily property management about`,
+    // LinkedIn people at this company in this market
+    `"${entity}" "property manager" OR "regional manager" OR "VP" OR "asset manager" ${geo} site:linkedin.com`,
+    // Company's own team/about page (self-managed firms publish this)
+    `"${entity}" "our team" OR "meet the team" OR "leadership" OR "management team" multifamily site:${entitySlug}.com OR "${entity}" team multifamily about`,
+    // Apollo / Hunter.io / ContactOut
+    `"${entity}" ${geo} property management executive director contact email`,
+    // Broader — finds regional staff by location even if company page is sparse
+    `"${entity}" ${city || state} "community manager" OR "regional" OR "area manager" OR "property manager" apartment`,
   ]
   const results = await Promise.all(queries.map(q => tavilySearch(q, 4, 'contact-search')))
   return results.flat()
@@ -646,8 +661,11 @@ export async function POST(req: NextRequest) {
     let portfolioIspBlock = '' // known ISP deals at management company portfolio level
 
     // ── PHASE 1: Property Discovery + DB lookups in parallel ────────────────
+    // Pass city/state from request params as location anchor (prevents UK/AU contamination on short names)
+    const hintCity = (raw.city as string) || ''
+    const hintState = (raw.state as string) || ''
     const [discoveryResults] = await Promise.all([
-      discoverProperty(rawQuery),
+      discoverProperty(rawQuery, hintCity, hintState),
       Promise.allSettled([
         (async () => {
           try {
@@ -793,7 +811,9 @@ export async function POST(req: NextRequest) {
     ])
 
     // ── PHASE 4: Contact resolution ──────────────────────────────────────────
-    const apolloContacts = mgmt ? await apolloSearchContacts(mgmt, ['Chief Executive Officer', 'CEO', 'President', 'Vice President', 'Asset Manager', 'Regional Manager', 'Regional Property Manager', 'Director', 'Portfolio Manager', 'Property Manager', 'Community Manager'], location) : []
+    // Use owner as fallback when mgmt is unknown — self-managed PE/REIT firms own AND manage
+    const apolloEntity = mgmt || owner
+    const apolloContacts = apolloEntity ? await apolloSearchContacts(apolloEntity, ['Chief Executive Officer', 'CEO', 'President', 'Vice President', 'Asset Manager', 'Regional Manager', 'Regional Property Manager', 'Director', 'Portfolio Manager', 'Property Manager', 'Community Manager'], location) : []
     const validatedDMs = await proxycurlValidateDMs(apolloContacts)
     const primaryDM = validatedDMs.find(d => d.isActiveCEO && d.confidence === 'proxycurl-verified') ?? validatedDMs.find(d => d.isActiveCEO) ?? validatedDMs.find(d => !d.isFormerOrAdvisory) ?? null
     const pdlDMProfile = primaryDM ? await pdlEnrichPerson(primaryDM.name, primaryDM.company, primaryDM.email) : null
@@ -887,6 +907,7 @@ CRITICAL ENTITY RESOLUTION RULES:
 2. DirecTV, DISH, Spectrum video → record as video_provider AND bulk_agreement with service_type "video".
 3. If a listing says "gated community", "controlled access", or "callbox" with no brand, put "Unknown (gated)" in proptech.access_control. Named brands (DoorKing, ButterflyMX, Brivo) always override.
 4. isp_providers must contain only actual ISPs. Management company names never belong here.
+5. SELF-MANAGED FIRMS: Many PE firms and REITs (Northland Investment Corporation, Starwood Capital, Greystar, etc.) both own AND manage their properties. If management_company is blank/unknown but owner_entity is a real company, set property_details.management_company = owner_entity. Do NOT leave management_company as "Unknown" when the owner is a known real estate firm that operates its own portfolio.
 
 OWNERSHIP ANALYSIS: EDGAR is the gold standard for REIT ownership. Populate sec_filing_ref if EDGAR confirmed.
 key_finding: "[WHO to call] at [company] controls capex. [WHY NOW: deal expiry, acquisition, aging tech, SEC signal]."
@@ -958,7 +979,15 @@ Intelligence excerpts:\n${excerptBlock}`
         property_type: rawData.property_details?.property_type ?? rawData.property_type ?? 'multifamily',
         class: rawData.property_details?.class ?? rawData.property_class ?? extracted.property_class ?? null,
         year_built: rawData.property_details?.year_built ?? rawData.year_built ?? extracted.year_built ?? null,
-        management_company: (rawData.property_details?.management_company ?? mgmt ?? extracted.management_company) || 'Unknown',
+        // For self-managed firms (PE/REITs): if management is unknown but owner is known, use owner as mgmt
+        management_company: (() => {
+          const rawMgmt = rawData.property_details?.management_company ?? mgmt ?? extracted.management_company
+          const resolvedOwner = rawData.ownership?.owner_entity ?? owner
+          if (!rawMgmt || rawMgmt === 'Unknown' || rawMgmt === 'unknown') {
+            return resolvedOwner || 'Unknown'
+          }
+          return rawMgmt
+        })(),
         owner_entity: rawData.ownership?.owner_entity ?? owner ?? 'Unknown',
         isp_providers: rawData.isp_providers ?? [],
         video_providers: rawData.video_providers ?? [],
