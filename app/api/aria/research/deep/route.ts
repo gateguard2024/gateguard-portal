@@ -561,7 +561,7 @@ CRITICAL ENTITY RESOLUTION RULES:
         property_type: rawData.property_details?.property_type ?? rawData.property_type ?? 'multifamily',
         class: rawData.property_details?.class ?? rawData.property_class ?? null,
         year_built: rawData.property_details?.year_built ?? rawData.year_built ?? null,
-        management_company: rawData.property_details?.management_company ?? mgmt || 'Unknown',
+        management_company: (rawData.property_details?.management_company ?? mgmt) || 'Unknown',
         owner_entity: rawData.ownership?.owner_entity ?? 'Unknown',
         isp_providers: rawData.isp_providers ?? [],
         video_providers: rawData.video_providers ?? [],
