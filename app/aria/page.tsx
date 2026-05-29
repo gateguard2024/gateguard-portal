@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Cpu, Zap, Users, Radio, Target,
   Building2, User, MapPin, CheckCircle2,
-  ExternalLink, Star, Copy, Send,
+  ExternalLink, Star, Copy, Send, Phone,
   Loader2, Shield, Package, Wifi, AlertCircle,
   ChevronRight, TrendingUp, Globe, Clock, Download, Trash2, Check, Search, RefreshCw,
 } from "lucide-react";
@@ -95,6 +95,26 @@ interface PainSignal {
   signal_type: string;
   quote: string;
   severity: "high" | "medium" | "low";
+  url?: string;
+}
+
+interface OutreachMonth {
+  theme: string;
+  actions?: string[];
+  goal?: string;
+}
+
+interface OutreachPlan {
+  month_1?: OutreachMonth;
+  month_2?: OutreachMonth;
+  month_3?: OutreachMonth;
+  month_4?: OutreachMonth;
+  month_5?: OutreachMonth;
+  month_6?: OutreachMonth;
+  total_touches?: number;
+  primary_channel?: string;
+  key_milestone?: string;
+  expected_close_quarter?: string;
 }
 
 interface Profile {
@@ -116,9 +136,16 @@ interface ScoutBrief {
 interface ScoutQueue {
   property: { name: string; address: string; city: string; state: string; units: number; class: string; management_company: string; owner_entity: string; old_name: string | null };
   pain_angles: Array<{ type: string; quote: string; severity: string }>;
-  connectivity: { isp_providers: string[]; bulk_detected: boolean; provider_confirmed: boolean; bulk_agreements: BulkAgreement[] };
-  proptech: { gate_operators: string[]; access_control: string[]; tech_generation: string };
+  connectivity: { isp_providers: string[]; bulk_detected: boolean; provider_confirmed: boolean; bulk_agreements: BulkAgreement[]; video_providers?: string[]; roe_detected?: boolean; roe_expiry_year?: number; contract_urgency?: string; contract_window?: string };
+  proptech: { gate_operators: string[]; access_control: string[]; tech_generation: string; intercoms?: string[]; cameras?: string[]; smart_locks?: string[]; displacement_targets?: string[]; sara_signals?: boolean };
   contact_chain: DecisionMakerChainItem[];
+  behavioral_profile?: Record<string, string>;
+  pitch_strategy?: { primary_hook?: string; secondary_hooks?: string[]; avoid?: string[] };
+  outreach_plan?: OutreachPlan;
+  outreach_sequence?: Array<{ touch: number; channel: string; message: string; timing: string }>;
+  market_context?: Record<string, string>;
+  objection_flags?: Record<string, boolean>;
+  key_finding?: string;
 }
 
 interface DecisionMakerChainItem {
@@ -157,6 +184,7 @@ interface Prospect {
   pitch_strategy?: { primary_hook?: string; secondary_hooks?: string[]; avoid?: string[] };
   freshness_score?: number;
   buying_trends?: string;
+  outreach_plan?: OutreachPlan;
 }
 
 interface ResearchResult {
@@ -1008,19 +1036,32 @@ export default function ARIAPage() {
               <p className="text-[10px] text-slate-400 truncate mt-0.5">{dm.company}</p>
             </div>
           </div>
-          {(dm.top_email_format || dm.email) && (
-            <div className="mt-3 pt-3 border-t border-slate-100">
-              <p className="font-mono text-[10px] text-slate-600 bg-slate-50 px-2 py-1 rounded w-fit border border-slate-100">{dm.top_email_format || dm.email}</p>
+          {(dm.top_email_format || dm.email || dm.phone) && (
+            <div className="mt-3 pt-3 border-t border-slate-100 space-y-1.5">
+              {(dm.top_email_format || dm.email) && (
+                <p className="font-mono text-[10px] text-slate-600 bg-slate-50 px-2 py-1 rounded w-fit border border-slate-100">{dm.top_email_format || dm.email}</p>
+              )}
+              {dm.phone && (
+                <div className="flex items-center gap-1.5">
+                  <Phone size={11} className="text-slate-400 shrink-0" />
+                  <span className="font-mono text-[10px] text-slate-700 font-bold">{dm.phone}</span>
+                </div>
+              )}
             </div>
           )}
           {dm.dm_hooks && dm.dm_hooks.length > 0 && dm.dm_hooks[0] !== 'no recent social activity found' && (
             <div className="mt-3 space-y-1.5 bg-slate-50/50 p-3 rounded-lg border border-slate-100">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">AI Hooks</p>
-              {(dm.dm_hooks || []).slice(0, 2).map((hook, hi) => (
+              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">AI Hooks ({dm.dm_hooks.length})</p>
+              {(dm.dm_hooks || []).map((hook, hi) => (
                 <p key={hi} className="text-[10px] text-slate-600 leading-relaxed font-medium">
                   <span className={cn("font-bold mr-1.5", meta.text)}>↳</span>{hook}
                 </p>
               ))}
+            </div>
+          )}
+          {dm.notes && (
+            <div className="mt-2 px-3 py-2 rounded-lg bg-amber-50/30 border border-amber-100">
+              <p className="text-[10px] text-amber-800 italic leading-relaxed">{dm.notes}</p>
             </div>
           )}
           {dm.linkedin_slug && (
@@ -1379,13 +1420,20 @@ export default function ARIAPage() {
   function IntelTab({ p }: { p: Prospect }) {
     const cutoff = new Date();
     cutoff.setMonth(cutoff.getMonth() - 12);
-    const filteredSignals = (p.pain_signals || []).filter(sig => {
+    const recentSignals = (p.pain_signals || []).filter(sig => {
       if (!sig.date || sig.date === 'unknown') return true;
       const d = new Date(sig.date);
       return isNaN(d.getTime()) || d >= cutoff;
-    }).slice(0, 12);
+    });
+    const olderSignals = (p.pain_signals || []).filter(sig => {
+      if (!sig.date || sig.date === 'unknown') return false;
+      const d = new Date(sig.date);
+      return !isNaN(d.getTime()) && d < cutoff;
+    });
+    const [showOlder, setShowOlder] = useState(false);
+    const filteredSignals = showOlder ? [...recentSignals, ...olderSignals] : recentSignals;
     const totalSignals = p.pain_signals?.length ?? 0;
-    const hiddenCount = totalSignals - filteredSignals.length;
+    const hiddenCount = olderSignals.length;
 
     return (
       <div className="space-y-6 max-w-4xl animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -1433,6 +1481,20 @@ export default function ARIAPage() {
                 <p className="text-sm text-slate-700 leading-relaxed font-medium">{p.buying_trends}</p>
               </div>
             )}
+
+            {p.behavioral_profile && Object.keys(p.behavioral_profile).length > 0 && (
+              <div className="col-span-2 space-y-2 pt-2 border-t border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Users size={12}/> Behavioral Profile</p>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                  {Object.entries(p.behavioral_profile).map(([key, val]) => (
+                    <div key={key}>
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">{key.replace(/_/g, ' ')}</p>
+                      <p className="text-xs font-medium text-slate-700 leading-relaxed">{String(val)}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1444,9 +1506,17 @@ export default function ARIAPage() {
               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-700">Intent Signals</h3>
               <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">Last 12 months</span>
             </div>
-            <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-1 rounded-md">
-              {filteredSignals.length} anomalies{hiddenCount > 0 ? ` (${hiddenCount} older hidden)` : ''}
-            </span>
+            <div className="flex items-center gap-2">
+              {hiddenCount > 0 && (
+                <button onClick={() => setShowOlder(v => !v)}
+                  className="text-[10px] font-bold text-[#6B7EFF] hover:text-[#3B4FCC] transition-colors underline underline-offset-2">
+                  {showOlder ? 'Hide older' : `+${hiddenCount} older`}
+                </button>
+              )}
+              <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-1 rounded-md">
+                {filteredSignals.length} total
+              </span>
+            </div>
           </div>
 
           {filteredSignals.length === 0 ? (
@@ -1473,6 +1543,13 @@ export default function ARIAPage() {
                           <span className={cn("ml-auto text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm border", sev.badge, sev.border.replace('200','100'))}>{sig.severity} Alert</span>
                         </div>
                         <p className="text-sm text-slate-700 leading-relaxed font-medium">&ldquo;{sig.quote}&rdquo;</p>
+                        {sig.url && (
+                          <a href={sig.url} target="_blank" rel="noopener noreferrer"
+                            className="mt-1.5 inline-flex items-center gap-1 text-[9px] font-mono text-slate-400 hover:text-[#6B7EFF] transition-colors truncate max-w-xs">
+                            <ExternalLink size={9} className="shrink-0" />
+                            {sig.url.replace(/^https?:\/\//, '').split('/').slice(0,2).join('/')}
+                          </a>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1594,7 +1671,7 @@ export default function ARIAPage() {
                 <div key={i} className="flex items-start gap-3 mb-2 last:mb-0">
                   <span className="text-[#6B7EFF] shrink-0">[{i+1}]</span>
                   <span className={sig.severity === 'high' ? 'text-rose-300' : sig.severity === 'medium' ? 'text-amber-300' : 'text-slate-400'}>
-                    <span className="text-slate-500">{sig.type}:</span> {sig.quote.slice(0, 100)}{sig.quote.length > 100 ? '...' : ''}
+                    <span className="text-slate-500">{sig.type}:</span> {sig.quote}
                   </span>
                 </div>
               ))}
@@ -1634,6 +1711,132 @@ export default function ARIAPage() {
                   {(c.top_email_format || c.email) && (
                     <span className="ml-auto font-mono text-slate-500 text-[10px]">{c.top_email_format || c.email}</span>
                   )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Key Finding */}
+        {sq?.key_finding && (
+          <div className="bg-amber-50/50 rounded-2xl border border-amber-200/60 p-5 shadow-sm">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700/80 mb-2 flex items-center gap-1.5">
+              <span className="font-mono text-amber-600">[KEY_FINDING]</span> Primary Intelligence
+            </p>
+            <p className="text-sm text-amber-900 leading-relaxed font-medium">{sq.key_finding}</p>
+          </div>
+        )}
+
+        {/* Behavioral Profile (from scout_queue) */}
+        {sq?.behavioral_profile && Object.keys(sq.behavioral_profile).length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
+              <span className="font-mono text-violet-500">[PROFILE]</span> Behavioral Intelligence
+            </p>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+              {Object.entries(sq.behavioral_profile).map(([key, val]) => (
+                <div key={key}>
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">{key.replace(/_/g, ' ')}</p>
+                  <p className="text-xs font-medium text-slate-700">{String(val)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Objection Flags */}
+        {sq?.objection_flags && Object.values(sq.objection_flags).some(Boolean) && (
+          <div className="bg-white rounded-2xl border border-rose-200/60 p-5 shadow-sm">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
+              <span className="font-mono text-rose-500">[OBJECTIONS]</span> Flags to Prepare For
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(sq.objection_flags).filter(([, v]) => v).map(([key]) => (
+                <span key={key} className="text-[11px] px-3 py-1.5 rounded-lg font-bold bg-rose-50 text-rose-700 border border-rose-200/60 capitalize">
+                  {key.replace(/_/g, ' ')}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 6-Month Outreach Plan */}
+        {(sq?.outreach_plan || p.outreach_plan) && (() => {
+          const plan = sq?.outreach_plan ?? p.outreach_plan;
+          if (!plan) return null;
+          const months = ([1,2,3,4,5,6] as const).map(n => ({ n, data: plan[`month_${n}` as keyof OutreachPlan] as OutreachMonth | undefined })).filter(m => m.data);
+          if (months.length === 0) return null;
+          return (
+            <div className="bg-white rounded-2xl border border-[#6B7EFF]/20 p-5 shadow-sm relative overflow-hidden">
+              <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-[#6B7EFF] to-[#A78BFA]" />
+              <div className="flex items-start justify-between mb-4">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B7EFF] flex items-center gap-1.5">
+                  <span className="font-mono">[CAMPAIGN]</span> 6-Month Outreach Plan
+                </p>
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  {plan.primary_channel && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#6B7EFF]/10 text-[#6B7EFF] border border-[#6B7EFF]/20 capitalize">{plan.primary_channel}</span>
+                  )}
+                  {plan.total_touches != null && (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">{plan.total_touches} touches</span>
+                  )}
+                  {plan.expected_close_quarter && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100">Close: {plan.expected_close_quarter}</span>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+                {months.map(({ n, data }) => data && (
+                  <div key={n} className="rounded-xl border border-slate-200/60 p-3 bg-slate-50/50 hover:bg-white hover:shadow-sm transition-all">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <span className="text-[9px] font-mono font-bold text-white bg-[#6B7EFF] px-1.5 py-0.5 rounded">M{n}</span>
+                      <span className="text-[11px] font-bold text-slate-800 leading-tight">{data.theme}</span>
+                    </div>
+                    {(data.actions || []).length > 0 && (
+                      <ul className="space-y-1 mb-2">
+                        {(data.actions || []).map((action, ai) => (
+                          <li key={ai} className="text-[10px] text-slate-600 flex items-start gap-1">
+                            <span className="text-[#6B7EFF] shrink-0 mt-0.5 font-bold">›</span>
+                            <span>{action}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {data.goal && (
+                      <p className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 mt-1">{data.goal}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {plan.key_milestone && (
+                <div className="pt-3 border-t border-slate-100 flex items-start gap-2">
+                  <Target size={13} className="text-amber-500 shrink-0 mt-0.5" />
+                  <p className="text-xs font-medium text-slate-700"><span className="font-bold text-amber-700">Key Milestone:</span> {plan.key_milestone}</p>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* Outreach Sequence — individual touches */}
+        {sq?.outreach_sequence && sq.outreach_sequence.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
+              <span className="font-mono text-emerald-600">[SEQUENCE]</span> Recommended Touch Sequence ({sq.outreach_sequence.length} touches)
+            </p>
+            <div className="space-y-2">
+              {sq.outreach_sequence.map((touch, i) => (
+                <div key={i} className="flex items-start gap-3 bg-slate-50 rounded-xl p-3 border border-slate-100">
+                  <div className="w-6 h-6 rounded-full bg-[#6B7EFF] flex items-center justify-center text-white text-[10px] font-mono font-bold shrink-0">
+                    {touch.touch ?? i+1}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-[10px] font-bold text-slate-700 capitalize">{(touch.channel || 'email').replace('_', ' ')}</span>
+                      {touch.timing && <span className="text-[9px] font-mono text-slate-400 bg-white px-1.5 py-0.5 rounded border border-slate-100">{touch.timing}</span>}
+                    </div>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">{touch.message}</p>
+                  </div>
                 </div>
               ))}
             </div>
