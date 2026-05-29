@@ -703,8 +703,8 @@ async function runStep6(
     websiteTeamResults,
     // 1e. Property-level PM — Google indexed contact pages, Apartments.com staff bio
     propertyPmResults,
-    // 1f. placeholder — Apollo enrichment runs AFTER LinkedIn names are known
-    Promise.resolve([] as TavilyResult[]),
+    // 1f. unused slot — Apollo enrichment fires after LinkedIn names are known
+    _apolloSlot,
   ] = await Promise.all([
     serperSearch(
       `"${name}" "${geo}" "community manager" OR "property manager" OR "leasing manager" site:linkedin.com`,
