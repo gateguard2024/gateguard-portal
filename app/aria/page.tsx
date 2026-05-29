@@ -9,7 +9,9 @@ import {
   ChevronRight, TrendingUp, Globe, Clock, Download, Trash2, Check, Search, RefreshCw,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { LayoutList, ArrowLeft } = require("lucide-react") as any;
+const { LayoutList, ArrowLeft, BarChart3, Edit2 } = require("lucide-react") as any;
+// Silence "unused" warnings — kept for downstream visual refinements
+void BarChart3; void Edit2;
 import { cn } from "@/lib/utils";
 import { TopBar } from "@/components/layout/TopBar";
 
@@ -163,17 +165,34 @@ interface ResearchResult {
   webIntelligence?: boolean;
 }
 
+interface Candidate {
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  units?: number;
+  year_built?: number;
+  property_class?: string;
+  management_company?: string;
+  isp_signal?: string;
+  bulk_detected?: boolean;
+  pain_brief?: string;
+  buy_score_estimate?: number;
+}
+
+type ViewMode = 'idle' | 'running' | 'candidates' | 'result';
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const PHASES = [
-  { id: 1, name: "Property Intel",  icon: Building2, sources: ["Property Records", "Market Filings", "Public Database"] },
-  { id: 2, name: "Decision Maker",  icon: Users,     sources: ["Professional Network", "Contact Intelligence", "Org Mapping"] },
-  { id: 3, name: "Intent Signals",  icon: Radio,     sources: ["Resident Intelligence", "Market Signals", "Contract Indicators"] },
-  { id: 4, name: "AI Profiling",    icon: Cpu,       sources: ["Signal Synthesis", "Buy Score Model"] },
-  { id: 5, name: "Intel Synthesis", icon: Star,      sources: ["28 OSINT Sources", "Contract DB", "SEC EDGAR"] },
+  { id: 1, name: "Listing Sites",   icon: Building2, sources: ["apartments.com", "RentCafe", "Zillow"] },
+  { id: 2, name: "Property Intel",  icon: MapPin,    sources: ["County Records", "FCC Broadband", "SEC EDGAR"] },
+  { id: 3, name: "Contact Chain",   icon: Users,     sources: ["LinkedIn", "Apollo", "NinjaPear"] },
+  { id: 4, name: "Signal Analysis", icon: Radio,     sources: ["Reddit", "Review Sites", "Pain Signals"] },
+  { id: 5, name: "AI Synthesis",    icon: Cpu,       sources: ["Claude Sonnet", "SCOUT Handoff"] },
 ];
 
-const PHASE_DURATIONS = [0, 3500, 4500, 5000, 4000];
+const PHASE_DURATIONS = [0, 4000, 5000, 5000, 4000];
 
 const SYNTHESIS_STEPS = [
   "Querying OSINT sources...",
@@ -318,7 +337,12 @@ export default function ARIAPage() {
   const [noteText, setNoteText]             = useState('');
   const [noteStage, setNoteStage]           = useState('');
   const [pendingRerun, setPendingRerun]     = useState(false);
+  const [candidates, setCandidates]         = useState<Candidate[]>([]);
+  const [queryInterpretation, setQueryInterpretation] = useState('');
+  const [viewMode, setViewMode]             = useState<ViewMode>('idle');
   const inputRef = useRef<HTMLInputElement>(null);
+  // Suppress unused warning — viewMode reserved for richer state tracking
+  void viewMode;
 
   useEffect(() => {
     fetch('/api/aria/searches')
@@ -380,9 +404,12 @@ export default function ARIAPage() {
     if (!query.trim() || (phase >= 1 && phase <= 5)) return;
     setError(null);
     setResults(null);
+    setCandidates([]);
+    setQueryInterpretation('');
     setSavedSearchId(null);
     setSelectedProspect(0);
     setActiveTab('property');
+    setViewMode('running');
     setPhase(1);
 
     const apiPromise = fetch('/api/aria/research/deep', {
@@ -410,7 +437,18 @@ export default function ARIAPage() {
       const data = await apiPromise;
       clearInterval(synthInterval);
       if (data.error) throw new Error(data.error);
+
+      // Candidate response — show grid of properties to research
+      if (data.type === 'candidates') {
+        setCandidates(data.candidates ?? []);
+        setQueryInterpretation(data.query_interpretation ?? '');
+        setViewMode('candidates');
+        setPhase(0);
+        return;
+      }
+
       setResults(data);
+      setViewMode('result');
       setPhase(6);
       if (data.savedSearchId) {
         setSavedSearchId(data.savedSearchId);
@@ -422,9 +460,21 @@ export default function ARIAPage() {
     } catch (e: any) {
       clearInterval(synthInterval);
       setError(e.message || "Research failed — check API configuration and try again");
+      setViewMode('idle');
       setPhase(0);
     }
   }, [query, phase]);
+
+  // Drill into a specific candidate from the candidate grid
+  const searchCandidate = useCallback((c: Candidate) => {
+    const q = `${c.name} ${c.city} ${c.state}`.trim();
+    setQuery(q);
+    setCandidates([]);
+    setQueryInterpretation('');
+    setViewMode('idle');
+    setPhase(0);
+    setPendingRerun(true);
+  }, []);
 
   // Trigger re-run after state reset (used by "Fetch Latest Intel" in IntelDBPanel)
   useEffect(() => {
@@ -489,6 +539,9 @@ export default function ARIAPage() {
     if (prospects.length === 0) return;
     setResults(s.results as any);
     setQuery(s.query);
+    setCandidates([]);
+    setQueryInterpretation('');
+    setViewMode('result');
     setPhase(6);
     setSavedSearchId(s.id);
     setSelectedProspect(0);
@@ -1651,6 +1704,139 @@ export default function ARIAPage() {
     );
   }
 
+  // ── Candidate grid panel ──────────────────────────────────────────────────
+  function CandidateGrid() {
+    if (candidates.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3 px-8 text-center">
+          <Search size={32} className="opacity-20" />
+          <p className="text-sm font-bold text-slate-500">No matching properties found</p>
+          <p className="text-xs font-medium">Try a more specific query — include a city, state, or property name.</p>
+          <button
+            onClick={() => { setCandidates([]); setQueryInterpretation(''); setViewMode('idle'); }}
+            className="mt-3 flex items-center gap-1.5 text-xs px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold transition-colors"
+          >
+            <ArrowLeft size={12} /> New Search
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        <div className="bg-white border-b border-slate-200/60 px-6 py-4 shadow-sm z-10">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <button
+                  onClick={() => { setCandidates([]); setQueryInterpretation(''); setViewMode('idle'); }}
+                  className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 hover:text-slate-800 transition-colors"
+                >
+                  <ArrowLeft size={12} /> New Search
+                </button>
+              </div>
+              <h2 className="text-base font-bold text-slate-900 tracking-tight">
+                Found {candidates.length} {candidates.length === 1 ? 'property' : 'properties'} matching your search
+              </h2>
+              {queryInterpretation && (
+                <p className="text-xs text-slate-500 mt-1 font-medium">{queryInterpretation}</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 max-w-6xl mx-auto">
+            {candidates.map((c, i) => {
+              const score = c.buy_score_estimate ?? 5;
+              return (
+                <div
+                  key={`${c.name}-${i}`}
+                  className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:border-[#6B7EFF] hover:shadow-md transition-all duration-200 relative group"
+                >
+                  <div className="absolute top-4 right-4">
+                    <div
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-mono font-bold shadow-sm"
+                      style={scoreBg(score)}
+                    >
+                      {score}
+                    </div>
+                  </div>
+
+                  <div className="pr-12">
+                    <h3 className="text-lg font-bold text-slate-900 leading-tight">{c.name}</h3>
+                    <p className="text-sm text-slate-500 mt-1 flex items-center gap-1.5">
+                      <MapPin size={12} className="shrink-0 opacity-70" />
+                      <span className="truncate">
+                        {[c.address, c.city, c.state].filter(Boolean).join(', ') || `${c.city || ''}, ${c.state || ''}`}
+                      </span>
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5 mt-3">
+                    {c.units && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
+                        {c.units} units
+                      </span>
+                    )}
+                    {c.year_built && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
+                        {c.year_built}
+                      </span>
+                    )}
+                    {c.property_class && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
+                        Class {c.property_class}
+                      </span>
+                    )}
+                  </div>
+
+                  {c.management_company && (
+                    <div className="flex items-center gap-1.5 mt-3 text-xs">
+                      <Building2 size={11} className="text-slate-400" />
+                      <span className="font-bold text-slate-700">{c.management_company}</span>
+                    </div>
+                  )}
+
+                  {(c.isp_signal || c.bulk_detected) && (
+                    <div className="flex items-center gap-1.5 mt-2 text-xs flex-wrap">
+                      <Wifi size={11} className="text-emerald-500" />
+                      {c.isp_signal && (
+                        <span className="font-medium text-slate-700">{c.isp_signal}</span>
+                      )}
+                      {c.bulk_detected && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          BULK DETECTED
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {c.pain_brief && (
+                    <div className="mt-3 rounded-lg bg-amber-50/50 border border-amber-200/60 px-3 py-2">
+                      <p className="text-[11px] text-amber-900 italic leading-relaxed">
+                        &ldquo;{c.pain_brief}&rdquo;
+                      </p>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => searchCandidate(c)}
+                    className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-white text-xs font-bold transition-all shadow-sm hover:opacity-90"
+                    style={{ background: '#6B7EFF' }}
+                  >
+                    <Zap size={12} /> Research This Property
+                    <ChevronRight size={12} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── Intelligence DB panel ─────────────────────────────────────────────────
   function IntelDBPanel() {
     const STAGES: Record<string, { label: string; color: string }> = {
@@ -1882,7 +2068,7 @@ export default function ARIAPage() {
                   <ProspectListItem key={i} p={p} i={i} />
                 ))}
                 <button
-                  onClick={() => { setPhase(0); setResults(null); setQuery(""); setSavedSearchId(null); }}
+                  onClick={() => { setPhase(0); setResults(null); setQuery(""); setSavedSearchId(null); setCandidates([]); setQueryInterpretation(''); setViewMode('idle'); }}
                   className="w-full mt-4 py-2.5 text-[11px] font-bold text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors flex items-center justify-center gap-1.5"
                 >
                   <ArrowLeft size={12} /> Clear Session
@@ -1918,6 +2104,8 @@ export default function ARIAPage() {
             <IntelDBPanel />
           ) : isRunning ? (
             <PipelinePanel />
+          ) : candidates.length > 0 ? (
+            <CandidateGrid />
           ) : error ? (
             <div className="flex items-center justify-center h-full">
               <div className="max-w-md bg-white border border-rose-200/60 rounded-2xl p-6 flex items-start gap-4 shadow-sm">
@@ -2001,6 +2189,8 @@ export default function ARIAPage() {
         <div className="flex-1 overflow-y-auto">
           {isRunning ? (
             <div className="p-4"><PipelinePanel /></div>
+          ) : candidates.length > 0 ? (
+            <CandidateGrid />
           ) : error ? (
             <div className="p-4">
               <div className="bg-rose-50 border border-rose-200/60 rounded-xl p-4 flex items-center gap-3">
