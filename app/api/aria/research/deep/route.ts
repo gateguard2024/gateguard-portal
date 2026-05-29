@@ -10,10 +10,10 @@
  * Step 4: ISP        — FCC API + DB portfolio + targeted ISP searches (~4s, 2 searches)
  * Step 4B: ISP Conf  — if bulk detected but provider unknown (~3s, 2 searches, conditional)
  * Step 5: PropTech   — gate/access/camera brands (~4s, 3 searches)
- * Step 6: People     — PM, regional, asset manager, Apollo (~6s, 2 searches + Apollo)
+ * Step 6: People     — PM + Regional + Asset Manager; 6 parallel sources; email construction (~8s)
  * Step 7: Synthesis  — Sonnet assembles into structured output (~8s)
  *
- * Total: ~38-48s | ~14 Tavily calls | ~$0.48/search
+ * Total: ~40-52s | ~16 searches (Tavily + Serper) | ~$0.52/search
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -31,7 +31,7 @@ export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
 // Version: Year.MonthRevision — increment revision on each engine change this month
-const ARIA_ENGINE_VERSION = 'v6.52'
+const ARIA_ENGINE_VERSION = 'v6.53'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -305,6 +305,7 @@ interface StepPropTech {
   gate_operators: string[]; access_control: string[]
   intercoms: string[]; cameras: string[]
   smart_locks: string[]; resident_apps: string[]
+  package_solutions: string[]
   tech_generation: string
 }
 interface StepContact { name: string; title: string; company: string; role_type: string; email: string; phone: string; linkedin: string }
@@ -558,7 +559,7 @@ async function runStep5(
   name: string, location: string, mgmt: string, owner: string,
   painSignals: PainSignal[], client: Anthropic
 ): Promise<StepPropTech> {
-  const blank: StepPropTech = { gate_operators: [], access_control: [], intercoms: [], cameras: [], smart_locks: [], resident_apps: [], tech_generation: 'legacy' }
+  const blank: StepPropTech = { gate_operators: [], access_control: [], intercoms: [], cameras: [], smart_locks: [], resident_apps: [], package_solutions: [], tech_generation: 'legacy' }
   const entity = mgmt || owner
   const hasGatePain = painSignals.some(s => s.type === 'gate')
 
@@ -595,92 +596,197 @@ Empty arrays for anything not found — never fabricate brand names.`,
   return extracted || blank
 }
 
-// ─── STEP 6: People ───────────────────────────────────────────────────────────
+// ─── STEP 6: People — Full contact chain (PM / Regional / Asset) ─────────────
+// Excellence standard: name + title + email + phone + LinkedIn for each level.
+// Sources (in priority order):
+//   1. Apollo — best for direct emails + phones at regional/corporate level
+//   2. Three targeted Serper LinkedIn searches (one per role tier)
+//   3. Official website team/staff page scrape
+//   4. Property-level PM contact (Google: property name + "community manager")
+//   5. Email format construction (Hunter/RocketReach pattern → build from name + domain)
+//   6. ProxyCurl validation on top Apollo contact (1 call max)
+
+function constructEmail(firstName: string, lastName: string, domain: string, format: string): string {
+  if (!firstName || !lastName || !domain) return ''
+  const f = firstName.toLowerCase().trim()
+  const l = lastName.toLowerCase().trim()
+  const fi = f[0]
+  if (!format) return `${f}.${l}@${domain}`
+  if (format.includes('first.last') || format.includes('firstname.lastname')) return `${f}.${l}@${domain}`
+  if (format.includes('flastname') || format.includes('firstlast') || format.includes('f.last')) return `${fi}${l}@${domain}`
+  if (format.includes('firstname') && !format.includes('.')) return `${f}@${domain}`
+  if (format.includes('first_last')) return `${f}_${l}@${domain}`
+  return `${f}.${l}@${domain}` // sensible default
+}
 
 async function runStep6(
   name: string, city: string, state: string, mgmt: string, owner: string,
-  emailDomain: string, painRawExcerpts: TavilyResult[], client: Anthropic
+  emailDomain: string, confirmedWebsite: string, painRawExcerpts: TavilyResult[], client: Anthropic
 ): Promise<StepPeople> {
   const blank: StepPeople = { property_manager: null, regional_manager: null, asset_manager: null, all_contacts: [], email_format: '' }
   const entity = mgmt || owner
   if (!entity) return blank
   const geo = [city, state].filter(Boolean).join(', ')
+  // Derive domain from confirmed website if emailDomain not provided by Step 1
+  const domainForEmail = emailDomain || (confirmedWebsite
+    ? confirmedWebsite.replace(/^https?:\/\//, '').replace(/\/.*/, '').replace(/^www\./, '')
+    : '')
 
-  const painSnippets = painRawExcerpts.filter(r => r.content?.length > 40).slice(0, 6)
-    .map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 300)}`).join('\n\n---\n\n')
+  const painSnippets = painRawExcerpts.filter(r => r.content?.length > 40).slice(0, 4)
+    .map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 250)}`).join('\n\n---\n\n')
 
-  const [linkedinResults, propertyPmResults, apolloContacts] = await Promise.all([
-    // Serper → Google has LinkedIn indexed far more thoroughly than Tavily's crawler
-    serperSearch(`"${entity}" "property manager" OR "community manager" OR "regional manager" OR "asset manager" site:linkedin.com ${geo}`, 6, 'serper-linkedin'),
-    tavilySearch(`"${name}" ${geo} "property manager" OR "community manager" OR "leasing manager" contact phone email name`, 3, 'people'),
+  // ── Wave 1: All searches fire in parallel ──────────────────────────────────
+  const [
+    // 1a. Serper LinkedIn — property-level (on-site PM, community manager, leasing)
+    liPropertyResults,
+    // 1b. Serper LinkedIn — management company level (regional directors, area managers)
+    liRegionalResults,
+    // 1c. Serper LinkedIn — ownership level (asset managers, VPs, portfolio managers)
+    liOwnerResults,
+    // 1d. Direct website team/contact page search
+    websiteTeamResults,
+    // 1e. Property-level PM — Google indexed contact pages, Apartments.com staff bio
+    propertyPmResults,
+    // 1f. Apollo B2B contacts — best source for direct emails
+    apolloContacts,
+  ] = await Promise.all([
+    serperSearch(
+      `"${name}" "${geo}" "community manager" OR "property manager" OR "leasing manager" site:linkedin.com`,
+      5, 'li-property'
+    ),
+    serperSearch(
+      `"${entity}" ${geo} "regional manager" OR "regional director" OR "area manager" OR "district manager" site:linkedin.com`,
+      5, 'li-regional'
+    ),
+    serperSearch(
+      `"${owner || entity}" "asset manager" OR "portfolio manager" OR "vice president" OR "managing director" site:linkedin.com`,
+      4, 'li-owner'
+    ),
+    confirmedWebsite
+      ? tavilySearch(
+          `site:${confirmedWebsite.replace(/^https?:\/\//, '').replace(/\/.*/, '')} "contact" OR "team" OR "staff" OR "community manager" OR "leasing"`,
+          3, 'website-team', 'basic', true
+        )
+      : tavilySearch(
+          `"${name}" ${geo} site "community manager" OR "property manager" contact staff team`,
+          3, 'website-team'
+        ),
+    tavilySearch(
+      `"${name}" ${geo} "community manager" OR "property manager" OR "leasing manager" name phone email contact`,
+      3, 'people'
+    ),
     apolloSearchContacts(entity, [
       'Property Manager', 'Community Manager', 'Leasing Manager',
-      'Regional Property Manager', 'Regional Manager', 'Area Manager',
-      'Asset Manager', 'Portfolio Manager', 'Vice President', 'Director',
-      'Chief Executive Officer', 'CEO', 'President',
+      'Regional Property Manager', 'Regional Manager', 'Regional Director', 'Area Manager', 'District Manager',
+      'Asset Manager', 'Portfolio Manager', 'Vice President', 'Director of Operations',
+      'Chief Executive Officer', 'CEO', 'President', 'Managing Director',
     ], geo),
   ])
 
-  // ProxyCurl: validate top Apollo contact only (1 call max)
-  const topWithLinkedin = apolloContacts.find(c => c.linkedin_url)
-  let proxyProfile: ProxycurlProfile | null = null
-  if (topWithLinkedin?.linkedin_url) proxyProfile = await proxycurlProfile(topWithLinkedin.linkedin_url)
+  // ── Email format detection (parallel — doesn't block contact discovery) ─────
+  const emailFormatP: Promise<string> = (async () => {
+    if (!domainForEmail) return ''
+    // Serper → Google finds Hunter.io / RocketReach format pages better than Tavily
+    const efResults = await serperSearch(
+      `"${domainForEmail}" email format site:hunter.io OR site:rocketreach.co OR site:emailformat.com`,
+      3, 'email-format'
+    )
+    // Fall back to Tavily if Serper didn't find it
+    const efFallback = efResults.length === 0
+      ? await tavilySearch(`"@${domainForEmail}" email "firstname.lastname" OR "first.last" OR "flastname" format`, 2, 'email-format')
+      : []
+    const efSnippets = [...efResults, ...efFallback]
+      .filter(r => r.content?.length > 20).slice(0, 4).map(r => r.content.slice(0, 250)).join('\n')
+    if (!efSnippets) return ''
+    const efResult = await haikusExtract<{ format: string }>(
+      `Find the standard email format used at domain "${domainForEmail}". Return ONLY valid JSON: {"format":""}
+Examples of format strings: "firstname.lastname@domain.com", "flastname@domain.com", "firstname@domain.com", "f.lastname@domain.com"
+Return empty string if format cannot be determined with confidence.`,
+      efSnippets, 80, client)
+    return normStr(efResult?.format) || ''
+  })()
 
-  // Email format lookup
-  let emailFormat = ''
-  if (emailDomain) {
-    const efResults = await tavilySearch(`"${emailDomain}" email format "firstname.lastname" OR "first.last" OR "flastname" site:rocketreach.co OR site:hunter.io`, 2, 'people')
-    const efSnippets = efResults.filter(r => r.content?.length > 30).slice(0, 3).map(r => r.content.slice(0, 200)).join('\n')
-    if (efSnippets) {
-      const efResult = await haikusExtract<{ format: string }>(
-        `Find the email format for domain "${emailDomain}". Return ONLY valid JSON: {"format":""}
-Examples: "firstname.lastname@domain.com", "flastname@domain.com", "firstname@domain.com"`,
-        efSnippets, 100, client)
-      emailFormat = normStr(efResult?.format) || ''
-    }
-  }
-
-  // Apollo contacts → typed
-  const apolloTyped: StepContact[] = apolloContacts.slice(0, 6).map(c => {
+  // ── Apollo contacts → typed StepContacts ────────────────────────────────────
+  const apolloTyped: StepContact[] = apolloContacts.slice(0, 8).map(c => {
     const tl = (c.title ?? '').toLowerCase()
     let role_type = 'corporate'
     if (tl.includes('property manager') || tl.includes('community manager') || tl.includes('leasing')) role_type = 'property_manager'
-    else if (tl.includes('regional') || tl.includes('area manager')) role_type = 'regional_manager'
-    else if (tl.includes('asset') || tl.includes('portfolio') || tl.includes('director') || tl.includes('vice president') || tl.includes('vp')) role_type = 'asset_manager'
+    else if (tl.includes('regional') || tl.includes('area manager') || tl.includes('district manager')) role_type = 'regional_manager'
+    else if (tl.includes('asset') || tl.includes('portfolio') || tl.includes('director') || tl.includes('vice president') || tl.includes('vp') || tl.includes('managing director')) role_type = 'asset_manager'
     return {
       name: normStr(c.name) || '', title: normStr(c.title) || '',
       company: normStr(c.organization?.name) || entity, role_type,
-      email: normStr(c.email) || '', phone: c.phone_numbers?.[0] || '',
-      linkedin: c.linkedin_url || '',
+      email: normStr(c.email) || '', phone: normStr(c.phone_numbers?.[0]) || '',
+      linkedin: normStr(c.linkedin_url) || '',
     }
-  })
+  }).filter(c => c.name)
 
-  // Extract named contacts from web snippets (both company-level LinkedIn + property-level search)
-  const allSnippets = [painSnippets, ...[...linkedinResults, ...propertyPmResults].filter(r => r.content?.length > 40).slice(0, 8).map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 350)}`)].join('\n\n---\n\n')
-  const webExtracted = allSnippets.length > 50
-    ? await haikusExtract<{ contacts: StepContact[] }>(
-        `Extract named individuals who work for "${entity}" as property managers, regional managers, or asset managers. Return ONLY valid JSON:
+  // ── Extract named contacts from all web snippets ─────────────────────────────
+  const webSnippetSources = [
+    ...liPropertyResults, ...liRegionalResults, ...liOwnerResults,
+    ...websiteTeamResults, ...propertyPmResults,
+  ]
+  const webSnippets = [
+    painSnippets,
+    ...webSnippetSources.filter(r => r.content?.length > 40).slice(0, 10)
+      .map((r, i) => `[${i + 1}] SOURCE: ${r.source || r.url}\nTITLE: ${r.title}\nURL: ${r.url}\n${r.content.slice(0, 400)}`),
+  ].join('\n\n---\n\n')
+
+  const webExtracted = webSnippets.length > 80
+    ? await haikusExtract<{ contacts: Array<StepContact & { linkedin_url?: string }> }>(
+        `You are a real estate contact intelligence extractor. Extract EVERY named individual from these search results who works for "${entity}" OR at the property "${name}".
+
+Return ONLY valid JSON:
 {"contacts":[{"name":"","title":"","company":"","role_type":"property_manager","email":"","phone":"","linkedin":""}]}
-role_type: "property_manager"=on-site, "regional_manager"=multi-property, "asset_manager"=financial, "corporate"=C-suite
-Only include people with actual names. Empty array if none found.`,
-        allSnippets, 500, client)
+
+EXTRACTION RULES:
+- role_type options: "property_manager" (on-site community/leasing manager), "regional_manager" (multi-property regional/area/district director), "asset_manager" (investment/portfolio/VP level), "corporate" (C-suite, president, CEO)
+- email: extract any email address found in the snippet — even partial like "jsmith@..."
+- phone: extract any phone number (format as-is from source)
+- linkedin: extract full LinkedIn URL if present (linkedin.com/in/...)
+- Only real human names (First Last format) — no company names, no titles as names
+- Include people found on LinkedIn search results even if snippet is brief — URL alone proves they exist
+- If LinkedIn URL contains a name slug (e.g. /in/sarah-johnson-pm), extract inferred name "Sarah Johnson" if not already named
+- Empty array if ZERO named contacts found`,
+        webSnippets, 800, client)
     : null
 
-  const webContacts: StepContact[] = (webExtracted?.contacts ?? []).filter(c => normStr(c.name) !== null)
+  const webContacts: StepContact[] = ((webExtracted?.contacts ?? []) as StepContact[])
+    .filter(c => normStr(c.name) !== null && c.name.includes(' '))
 
-  // Merge & deduplicate
-  const allContacts = [...webContacts, ...apolloTyped].filter((c, idx, arr) =>
-    c.name && arr.findIndex(x => x.name === c.name) === idx
+  // ── Await email format, then construct missing emails ────────────────────────
+  const emailFormat = await emailFormatP
+
+  // ── ProxyCurl: validate the best Apollo contact with LinkedIn URL (1 call max) ─
+  const topWithLinkedin = apolloTyped.find(c => c.linkedin) || webContacts.find(c => c.linkedin)
+  let proxyProfile: ProxycurlProfile | null = null
+  if (topWithLinkedin?.linkedin) proxyProfile = await proxycurlProfile(topWithLinkedin.linkedin)
+
+  // ── Merge & deduplicate (Apollo first — most likely to have emails/phones) ───
+  const allContacts: StepContact[] = [...apolloTyped, ...webContacts].filter((c, idx, arr) =>
+    c.name && arr.findIndex(x => x.name.toLowerCase() === c.name.toLowerCase()) === idx
   )
 
-  // Update with ProxyCurl verified data
+  // ── Patch ProxyCurl verified data onto matching contact ──────────────────────
   if (proxyProfile && topWithLinkedin) {
     const currentExp = (proxyProfile.experiences ?? []).find(e => !e.ends_at)
-    const idx = allContacts.findIndex(c => c.name === topWithLinkedin.name)
+    const idx = allContacts.findIndex(c => c.name.toLowerCase() === topWithLinkedin.name.toLowerCase())
     if (idx >= 0) {
-      if (proxyProfile.email || proxyProfile.personal_email) allContacts[idx].email = proxyProfile.email || proxyProfile.personal_email || allContacts[idx].email
+      if (proxyProfile.email || proxyProfile.personal_email)
+        allContacts[idx].email = proxyProfile.email || proxyProfile.personal_email || allContacts[idx].email
       if (currentExp?.title) allContacts[idx].title = currentExp.title
     }
+  }
+
+  // ── Construct best-guess email for contacts still missing one ────────────────
+  if (domainForEmail) {
+    allContacts.forEach(c => {
+      if (!c.email && c.name && c.name.includes(' ')) {
+        const parts = c.name.trim().split(/\s+/)
+        const first = parts[0], last = parts[parts.length - 1]
+        c.email = constructEmail(first, last, domainForEmail, emailFormat)
+      }
+    })
   }
 
   return {
@@ -898,7 +1004,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Step 6: People ────────────────────────────────────────────────────────
-    const s6 = await runStep6(property_name, city, state, mgmt, owner, s1.email_domain, s3.raw_excerpts, anthropic)
+    const s6 = await runStep6(property_name, city, state, mgmt, owner, s1.email_domain, bootstrapWebsite, s3.raw_excerpts, anthropic)
 
     // ── Step 7: Sonnet synthesis ───────────────────────────────────────────────
     const siloSummary = `STEP 1 — IDENTITY (verified):
@@ -950,6 +1056,9 @@ CONTRACT WINDOW ESTIMATION (critical for sales):
 - If acquisition_year is recent (last 2 years), note "New ownership — capex window open" in capex_signal
 
 CONTACT PRIORITY: Property Manager > Regional Manager > Asset Manager > CEO
+- Copy all three levels (property_manager, regional_manager, asset_manager) from Step 6 exactly — do not discard any level
+- If a contact has a constructed email (looks like firstname.lastname@domain), include it — it's a best-guess but label it as such only if evidence is absent
+- Include phone and LinkedIn from Step 6 verbatim — never blank these if Step 6 found them
 
 key_finding: "[WHO] at [company] controls this. [WHY NOW: specific pain signal / contract expiry window / acquisition / aging tech — be specific with dates and provider names]"
 pitch_strategy.primary_hook: one sentence using THIS property's pain signal AND the contract window if known
