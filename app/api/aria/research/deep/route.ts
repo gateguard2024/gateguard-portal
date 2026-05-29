@@ -843,8 +843,8 @@ CRITICAL COPY RULES:
 
 CONTRACT WINDOW ESTIMATION (critical for sales):
 - If year_built is known and bulk deal is detected but no expiry found:
-  - fiber deals: expiry_estimate = "~${year_built + 8}–${year_built + 10} (estimated)"
-  - cable deals: expiry_estimate = "~${year_built + 5}–${year_built + 7} (estimated)"
+  - fiber deals: expiry_estimate = "~[year_built + 8]–[year_built + 10] (estimated)"
+  - cable deals: expiry_estimate = "~[year_built + 5]–[year_built + 7] (estimated)"
 - If acquisition_year is recent (last 2 years), note "New ownership — capex window open" in capex_signal
 
 CONTACT PRIORITY: Property Manager > Regional Manager > Asset Manager > CEO
