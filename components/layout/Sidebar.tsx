@@ -456,6 +456,54 @@ export function Sidebar() {
         </div>
       )}
 
+      {/* ── Admin quick-links (corporate only) ───────────────────────────── */}
+      {!collapsed && showAdmin && (
+        <div className="mx-3 mt-2 shrink-0">
+          <p className="text-[8px] font-bold uppercase tracking-[0.18em] text-white/30 px-1 mb-1">Access Control</p>
+          <div className="flex gap-1">
+            <Link
+              href="/admin/settings/features"
+              className={cn(
+                "flex-1 flex flex-col items-center gap-0.5 py-2 rounded-lg transition-colors text-center",
+                pathname.startsWith("/admin/settings/features")
+                  ? "bg-brand-400/20 text-brand-400"
+                  : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
+              )}
+              title="Feature Settings — Global tier defaults"
+            >
+              <Settings size={13} />
+              <span className="text-[8px] font-semibold leading-tight">Features</span>
+            </Link>
+            <Link
+              href="/admin/dealers"
+              className={cn(
+                "flex-1 flex flex-col items-center gap-0.5 py-2 rounded-lg transition-colors text-center",
+                pathname.startsWith("/admin/dealers")
+                  ? "bg-brand-400/20 text-brand-400"
+                  : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
+              )}
+              title="Dealers — Per-org feature overrides"
+            >
+              <Users size={13} />
+              <span className="text-[8px] font-semibold leading-tight">Dealers</span>
+            </Link>
+            <Link
+              href="/admin/users"
+              className={cn(
+                "flex-1 flex flex-col items-center gap-0.5 py-2 rounded-lg transition-colors text-center",
+                pathname.startsWith("/admin/users")
+                  ? "bg-brand-400/20 text-brand-400"
+                  : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
+              )}
+              title="Platform Users — Per-user feature access"
+            >
+              <UserCheck size={13} />
+              <span className="text-[8px] font-semibold leading-tight">Users</span>
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* ── AI ARMY ───────────────────────────────────────────────────────── */}
       {!collapsed && (
         <div className="mx-3 mt-2 shrink-0">
@@ -515,54 +563,6 @@ export function Sidebar() {
               })}
             </div>
           )}
-        </div>
-      )}
-
-      {/* ── Admin quick-links (corporate only) ───────────────────────────── */}
-      {!collapsed && showAdmin && (
-        <div className="mx-3 mt-2 shrink-0">
-          <p className="text-[8px] font-bold uppercase tracking-[0.18em] text-white/30 px-1 mb-1">Access Control</p>
-          <div className="flex gap-1">
-            <Link
-              href="/admin/settings/features"
-              className={cn(
-                "flex-1 flex flex-col items-center gap-0.5 py-2 rounded-lg transition-colors text-center",
-                pathname.startsWith("/admin/settings/features")
-                  ? "bg-brand-400/20 text-brand-400"
-                  : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
-              )}
-              title="Feature Settings — Global tier defaults"
-            >
-              <Settings size={13} />
-              <span className="text-[8px] font-semibold leading-tight">Features</span>
-            </Link>
-            <Link
-              href="/admin/dealers"
-              className={cn(
-                "flex-1 flex flex-col items-center gap-0.5 py-2 rounded-lg transition-colors text-center",
-                pathname.startsWith("/admin/dealers")
-                  ? "bg-brand-400/20 text-brand-400"
-                  : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
-              )}
-              title="Dealers — Per-org feature overrides"
-            >
-              <Users size={13} />
-              <span className="text-[8px] font-semibold leading-tight">Dealers</span>
-            </Link>
-            <Link
-              href="/admin/users"
-              className={cn(
-                "flex-1 flex flex-col items-center gap-0.5 py-2 rounded-lg transition-colors text-center",
-                pathname.startsWith("/admin/users")
-                  ? "bg-brand-400/20 text-brand-400"
-                  : "text-[hsl(var(--sidebar-text))] hover:text-white hover:bg-white/5"
-              )}
-              title="Platform Users — Per-user feature access"
-            >
-              <UserCheck size={13} />
-              <span className="text-[8px] font-semibold leading-tight">Users</span>
-            </Link>
-          </div>
         </div>
       )}
 

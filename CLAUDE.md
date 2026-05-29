@@ -487,8 +487,37 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 - ✅ S3 Reddit pain signals — switched from Tavily to Serper for Reddit (Serper indexes Reddit better)
 - ✅ Phone extraction — explicit format examples added to S1 Haiku prompt
 
+### Completed — May 29, 2026 (session 8) — ARIA v7.1: Video/ROE + Learning Loop
+- ✅ ARIA engine v7.0 — full rewrite: 4-phase sequential architecture (`specific_property | city_prospect | criteria_prospect | contract_prospect`), listing sites first (Phase 1A), Phase 1B returns candidate grid for prospecting queries, Phase 2 enrichment, Phase 3 intelligence, Phase 4 Sonnet synthesis
+- ✅ `app/aria/page.tsx` — candidate grid UI: `Candidate` interface, `ViewMode` type, `CandidateGrid` component (2-col desktop/1-col mobile, score circle, ISP badge, pain brief, "Research This Property →" button), `searchCandidate()` callback, updated `PHASES` labels
+- ✅ ARIA engine v7.1 — Phase 2 expanded with 2 additional parallel searches:
+  - Video provider search (Serper news): DirecTV, Comcast, Spectrum, Dish + live DB video provider names
+  - ROE/bulk agreement search (Serper): "right of entry", "ROE agreement", "bulk agreement", expiry/renew/term signals
+  - `KNOWN_VIDEO_PROVIDERS` set (16 cable/satellite/IPTV providers)
+  - `fetchMduProviders()` — fetches live `mdu_providers` DB, splits video vs ISP, injects names into search queries
+  - `allDbProviderNames` injected into Haiku extraction prompt as reference list
+  - `Phase2Result` extended: `roe_detected`, `roe_providers`, `roe_expiry_year`
+  - Haiku token budget raised to 1400; source tags `[bulk]`, `[video]`, `[roe]`, `[owner]` in snippets
+  - Profile `contract_window` now prefers `roe_expiry_year` when present
+- ✅ ARIA Learning Loop — every re-search on a known property enriches rather than replaces:
+  - `lookupExistingProperty()` — DB lookback at start of specific_property flow, runs parallel to Phase 1A
+  - Phase 1/2 pre-seeded from existing `aria_properties` record (DB fills gaps, fresh AI wins on conflicts)
+  - User-verified DB fields always win over new AI results (`isp_providers_user_verified`, `roe_expiry_user_verified`, etc.)
+  - `runPhase2` accepts `dbProviders` param — live MDU provider names from DB injected into searches
+  - Phase 2 result merged with DB seed after completion (union arrays, prefer user-verified)
+- ✅ Smart merge upsert (`app/api/aria/properties/route.ts` POST):
+  - `mergeVal()`, `mergeArr()`, `mergeBulkAgreements()` helpers — never overwrite non-null with null
+  - Fetches existing record first; arrays are unioned (never shrunk); bulk agreements merged by provider+service_type key
+  - User-verified contact flags (`dm_name_user_verified` etc.) protect corrected contacts from AI overwrites
+  - ROE fields added to upsert: `roe_detected`, `roe_providers`, `roe_expiry_year`
+- ✅ Extended PATCH (`app/api/aria/properties/[id]/route.ts`):
+  - Reps can now correct: `isp_providers`, `video_providers`, `roe_expiry_year`, `roe_providers`, `bulk_agreements`, `dm_name/email/phone/title`, `units`, `year_built`, `management_company`, `owner_entity`
+  - Each correction sets corresponding `*_user_verified = true` flag — protected from future AI overwrites
+- ✅ Migration 100 (`supabase/migrations/100_aria_roe_learning_loop.sql`) — `aria_properties`: `roe_detected`, `roe_providers`, `roe_expiry_year` + `*_user_verified` boolean flags for ISP, video, ROE, DM contact fields; 2 new indexes
+
 ### Pending — Migrations to Run
-- All migrations 093–098 are now deployed on beta + prod ✅
+- Migrations 093–098 deployed on beta + prod ✅
+- **Migration 100** (`100_aria_roe_learning_loop.sql`) — run on beta + prod: ROE fields + user-verified flags
 
 ### Pending — CPQ Phase 2
 - Add `unit_cost` column to `quote_line_items` (migration 092) — enables real margin vs. estimated
