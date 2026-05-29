@@ -69,12 +69,18 @@ async function rawGeocode(address: string) {
 
 async function rawFCC(lat: number, lng: number) {
   try {
+    // FCC Broadband Map API now requires POST with JSON body (GET returns 405)
     const res = await fetch(
-      `https://broadbandmap.fcc.gov/api/public/map/listAvailability?latitude=${lat.toFixed(6)}&longitude=${lng.toFixed(6)}&unit=location`,
-      { headers: { 'User-Agent': 'GateGuard-ARIA-Test/1.0' }, signal: AbortSignal.timeout(8000) }
+      'https://broadbandmap.fcc.gov/api/public/map/listAvailability',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'User-Agent': 'GateGuard-ARIA-Test/1.0' },
+        body: JSON.stringify({ latitude: parseFloat(lat.toFixed(6)), longitude: parseFloat(lng.toFixed(6)), unit: 'location', limit_to_isp: 'N' }),
+        signal: AbortSignal.timeout(8000),
+      }
     )
     const data = await res.json()
-    const providers = data?.results ?? data?.availability ?? []
+    const providers = data?.results ?? data?.availability ?? data?.data ?? []
     return {
       ok: res.ok, status: res.status,
       provider_count: providers.length,
@@ -84,29 +90,32 @@ async function rawFCC(lat: number, lng: number) {
   } catch (e: any) { return { error: e.message } }
 }
 
-async function rawApollo(company: string, titles: string[], location?: string) {
-  if (!process.env.APOLLO_API_KEY) return { error: 'APOLLO_API_KEY not set', people: [] }
+// Apollo People Enrichment — new endpoint /api/v1/people/match (name + domain)
+// Old /mixed_people/search endpoint is deprecated and returns 403
+async function rawApollo(name: string, domain: string) {
+  if (!process.env.APOLLO_API_KEY) return { error: 'APOLLO_API_KEY not set', person: null }
   try {
-    const res = await fetch('https://api.apollo.io/api/v1/mixed_people/search', {
+    const res = await fetch('https://api.apollo.io/api/v1/people/match', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Api-Key': process.env.APOLLO_API_KEY },
-      body: JSON.stringify({ q_organization_name: company, person_titles: titles, person_locations: location ? [location] : [], per_page: 8 }),
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.APOLLO_API_KEY}` },
+      body: JSON.stringify({ name, domain, reveal_personal_emails: true }),
       signal: AbortSignal.timeout(10000),
     })
     const data = await res.json()
+    const p = data?.person
     return {
       ok: res.ok, status: res.status,
-      people_count: data?.people?.length ?? 0,
-      people: (data?.people ?? []).map((p: any) => ({
+      found: !!p,
+      person: p ? {
         name: p.name, title: p.title,
         company: p.organization?.name,
-        email: p.email || '(not returned — Apollo free tier)',
+        email: p.email || null,
         phone: p.phone_numbers?.[0] || null,
         linkedin: p.linkedin_url,
-      })),
-      pagination: data?.pagination,
+      } : null,
+      raw_keys: data ? Object.keys(data) : [],
     }
-  } catch (e: any) { return { error: e.message, people: [] } }
+  } catch (e: any) { return { error: e.message, person: null } }
 }
 
 // ─── Route ────────────────────────────────────────────────────────────────────
@@ -210,23 +219,26 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── STEP 6: Contacts — what does Apollo actually return for Greystar/Northland? ──
+  // ── STEP 6: Contacts — LinkedIn finds names, Apollo enriches them ──────────────
   if (run('s6')) {
     report.steps_run.push('s6')
-    const [apolloGreystar, apolloNorthland, linkedinPM, linkedinRegional] = await Promise.all([
-      rawApollo('Greystar', ['Community Manager', 'Property Manager', 'Regional Manager', 'Regional Director'], 'Charleston, SC'),
-      rawApollo('Northland Investment Corporation', ['Asset Manager', 'Portfolio Manager', 'VP', 'President'], 'Charleston, SC'),
+    const [linkedinPM, linkedinRegional] = await Promise.all([
       rawSerper(`"Wharf 7" Charleston "community manager" OR "property manager" site:linkedin.com`, 5),
       rawSerper(`"Greystar" "Charleston" "regional manager" OR "regional director" site:linkedin.com`, 5),
     ])
+    // Enrich the two most likely contacts by name + domain (new /people/match endpoint)
+    const [apolloKathlina, apolloKristen] = await Promise.all([
+      rawApollo('Kathlina Sampson', 'greystar.com'),
+      rawApollo('Kristen Gomez', 'greystar.com'),
+    ])
     report.s6 = {
-      description: 'People: what contacts does Apollo + LinkedIn actually return?',
-      question: 'Do we get names + emails + phones from Apollo? Does LinkedIn indexing help?',
-      apollo_greystar: { company: 'Greystar', location: 'Charleston SC', ...apolloGreystar },
-      apollo_northland: { company: 'Northland Investment Corporation', ...apolloNorthland },
+      description: 'People: LinkedIn finds names, Apollo /people/match enriches with email+phone',
+      question: 'Does /people/match return emails? Are phone numbers present?',
+      apollo_kathlina_sampson: { name: 'Kathlina Sampson', domain: 'greystar.com', ...apolloKathlina },
+      apollo_kristen_gomez: { name: 'Kristen Gomez', domain: 'greystar.com', ...apolloKristen },
       linkedin_pm: { query: 'Wharf 7 Charleston community manager linkedin', ...linkedinPM },
       linkedin_regional: { query: 'Greystar Charleston regional manager linkedin', ...linkedinRegional },
-      key_check: 'Does Apollo return emails? Does Apollo require paid tier? Are phone numbers present?',
+      key_check: 'Does /people/match return email + phone for confirmed names? Compare with old /mixed_people/search (was 403).',
     }
   }
 
@@ -236,7 +248,7 @@ export async function POST(req: NextRequest) {
       tavily: !!process.env.TAVILY_API_KEY,
       serper: !!process.env.SERPER_API_KEY,
       apollo: !!process.env.APOLLO_API_KEY,
-      proxycurl: !!process.env.PROXYCURL_API_KEY,
+      ninjapear: !!process.env.NINJAPEAR_API_KEY,
       anthropic: !!process.env.ANTHROPIC_API_KEY,
     },
     instructions: 'Review each step\'s key_check field. The gap between what the raw API returns and what ARIA displays is exactly what needs fixing in the engine prompts.',

@@ -32,7 +32,7 @@ export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
 // Version: Year.MonthRevision — increment revision on each engine change this month
-const ARIA_ENGINE_VERSION = 'v6.56'
+const ARIA_ENGINE_VERSION = 'v6.59'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -200,45 +200,66 @@ async function searchEdgar(propertyName: string, managementCompany: string): Pro
   return results
 }
 
-// ─── Apollo ───────────────────────────────────────────────────────────────────
+// ─── Apollo People Enrichment ─────────────────────────────────────────────────
+// Endpoint: POST /api/v1/people/match (current — old /mixed_people/search was deprecated)
+// Auth: Bearer token
+// Use: enrich a SPECIFIC person by name + domain → returns email + phone
+// Called AFTER LinkedIn searches confirm names (better precision than bulk search)
 
 interface ApolloEnrichment { name?: string; title?: string; email?: string; phone_numbers?: string[]; linkedin_url?: string; organization?: { name?: string } }
 
-async function apolloSearchContacts(company: string, titles: string[], location?: string): Promise<ApolloEnrichment[]> {
-  if (!process.env.APOLLO_API_KEY) return []
-  const key = process.env.APOLLO_API_KEY
-  // Apollo changed auth in 2024: try Bearer first, fall back to X-Api-Key
-  const tryApollo = async (authHeader: Record<string, string>) => {
-    try {
-      const res = await fetch('https://api.apollo.io/api/v1/mixed_people/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeader },
-        body: JSON.stringify({ q_organization_name: company, person_titles: titles, person_locations: location ? [location] : [], per_page: 8 }),
-        signal: AbortSignal.timeout(8000),
-      })
-      if (res.status === 403 || res.status === 401) return null
-      if (!res.ok) return []
-      const data = await res.json()
-      return (data?.people ?? []).slice(0, 8) as ApolloEnrichment[]
-    } catch { return null }
-  }
-  // Try Bearer token (new format)
-  const bearerResult = await tryApollo({ 'Authorization': `Bearer ${key}` })
-  if (bearerResult !== null) return bearerResult
-  // Fall back to X-Api-Key (old format)
-  const legacyResult = await tryApollo({ 'X-Api-Key': key })
-  return legacyResult ?? []
+async function apolloEnrichPerson(name: string, domain: string): Promise<ApolloEnrichment | null> {
+  if (!process.env.APOLLO_API_KEY) return null
+  try {
+    const res = await fetch('https://api.apollo.io/api/v1/people/match', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.APOLLO_API_KEY}` },
+      body: JSON.stringify({ name, domain, reveal_personal_emails: true }),
+      signal: AbortSignal.timeout(4000),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    const p = data?.person
+    if (!p) return null
+    return { name: p.name, title: p.title, email: p.email, phone_numbers: p.phone_numbers, linkedin_url: p.linkedin_url, organization: p.organization }
+  } catch { return null }
 }
 
-// ─── ProxyCurl (1 call max) ───────────────────────────────────────────────────
+// ─── NinjaPear Employee API (formerly ProxyCurl) — 1 call max ────────────────
+// Rebranded: Nubela → NinjaPear. New API — no LinkedIn URL input (no scraping).
+// Input: name + employer_website OR employer_website + role.
+// Response: work_experience[].end_date null = currently employed.
 
-interface ProxycurlProfile { full_name?: string; occupation?: string; experiences?: Array<{ company?: string; title?: string; ends_at?: any }>; email?: string; personal_email?: string }
+interface NinjaPearProfile {
+  full_name?: string
+  first_name?: string
+  last_name?: string
+  work_experience?: Array<{ role?: string; company_name?: string; company_website?: string; start_date?: string; end_date?: string | null }>
+}
 
-async function proxycurlProfile(linkedinUrl: string): Promise<ProxycurlProfile | null> {
-  if (!process.env.PROXYCURL_API_KEY) return null
+// Validate a specific person is still at a company (name + employer_website)
+async function ninjapearValidatePerson(firstName: string, lastName: string, employerWebsite: string): Promise<NinjaPearProfile | null> {
+  if (!process.env.NINJAPEAR_API_KEY) return null
   try {
-    const params = new URLSearchParams({ url: linkedinUrl, use_cache: 'if-recent', fallback_to_cache: 'on-error', skills: 'exclude', inferred_salary: 'exclude' })
-    const res = await fetch(`https://nubela.co/proxycurl/api/v2/linkedin?${params}`, { headers: { Authorization: `Bearer ${process.env.PROXYCURL_API_KEY}` }, signal: AbortSignal.timeout(4000) })
+    const params = new URLSearchParams({ first_name: firstName, last_name: lastName, employer_website: employerWebsite })
+    const res = await fetch(`https://nubela.co/api/v1/employee/profile?${params}`, {
+      headers: { Authorization: `Bearer ${process.env.NINJAPEAR_API_KEY}` },
+      signal: AbortSignal.timeout(4000),
+    })
+    if (!res.ok) return null
+    return await res.json()
+  } catch { return null }
+}
+
+// Find who currently holds a specific role at a company (employer_website + role)
+async function ninjapearFindByRole(employerWebsite: string, role: string): Promise<NinjaPearProfile | null> {
+  if (!process.env.NINJAPEAR_API_KEY) return null
+  try {
+    const params = new URLSearchParams({ employer_website: employerWebsite, role })
+    const res = await fetch(`https://nubela.co/api/v1/employee/profile?${params}`, {
+      headers: { Authorization: `Bearer ${process.env.NINJAPEAR_API_KEY}` },
+      signal: AbortSignal.timeout(4000),
+    })
     if (!res.ok) return null
     return await res.json()
   } catch { return null }
@@ -639,7 +660,7 @@ Empty arrays for anything not found — never fabricate brand names.`,
 //   3. Official website team/staff page scrape
 //   4. Property-level PM contact (Google: property name + "community manager")
 //   5. Email format construction (Hunter/RocketReach pattern → build from name + domain)
-//   6. ProxyCurl validation on top Apollo contact (1 call max)
+//   6. NinjaPear validation on top Apollo contact — name+employer lookup (1 call max)
 
 function constructEmail(firstName: string, lastName: string, domain: string, format: string): string {
   if (!firstName || !lastName || !domain) return ''
@@ -682,8 +703,8 @@ async function runStep6(
     websiteTeamResults,
     // 1e. Property-level PM — Google indexed contact pages, Apartments.com staff bio
     propertyPmResults,
-    // 1f. Apollo B2B contacts — best source for direct emails
-    apolloContacts,
+    // 1f. placeholder — Apollo enrichment runs AFTER LinkedIn names are known
+    Promise.resolve([] as TavilyResult[]),
   ] = await Promise.all([
     serperSearch(
       `"${name}" "${geo}" "community manager" OR "property manager" OR "leasing manager" site:linkedin.com`,
@@ -710,12 +731,8 @@ async function runStep6(
       `"${name}" ${geo} "community manager" OR "property manager" OR "leasing manager" name phone email contact`,
       3, 'people'
     ),
-    apolloSearchContacts(entity, [
-      'Property Manager', 'Community Manager', 'Leasing Manager',
-      'Regional Property Manager', 'Regional Manager', 'Regional Director', 'Area Manager', 'District Manager',
-      'Asset Manager', 'Portfolio Manager', 'Vice President', 'Director of Operations',
-      'Chief Executive Officer', 'CEO', 'President', 'Managing Director',
-    ], geo),
+    // Apollo enrichment fires AFTER — placeholder keeps array shape consistent
+    Promise.resolve([] as TavilyResult[]),
   ])
 
   // ── Email format detection (parallel — doesn't block contact discovery) ─────
@@ -742,19 +759,8 @@ Return empty string if format cannot be determined with confidence.`,
   })()
 
   // ── Apollo contacts → typed StepContacts ────────────────────────────────────
-  const apolloTyped: StepContact[] = apolloContacts.slice(0, 8).map(c => {
-    const tl = (c.title ?? '').toLowerCase()
-    let role_type = 'corporate'
-    if (tl.includes('property manager') || tl.includes('community manager') || tl.includes('leasing')) role_type = 'property_manager'
-    else if (tl.includes('regional') || tl.includes('area manager') || tl.includes('district manager')) role_type = 'regional_manager'
-    else if (tl.includes('asset') || tl.includes('portfolio') || tl.includes('director') || tl.includes('vice president') || tl.includes('vp') || tl.includes('managing director')) role_type = 'asset_manager'
-    return {
-      name: normStr(c.name) || '', title: normStr(c.title) || '',
-      company: normStr(c.organization?.name) || entity, role_type,
-      email: normStr(c.email) || '', phone: normStr(c.phone_numbers?.[0]) || '',
-      linkedin: normStr(c.linkedin_url) || '',
-    }
-  }).filter(c => c.name)
+  // Apollo enrichment runs AFTER LinkedIn — apolloContacts placeholder is empty, enrichment fires below
+  const apolloTyped: StepContact[] = []
 
   // ── Extract named contacts from all web snippets ─────────────────────────────
   const webSnippetSources = [
@@ -789,27 +795,48 @@ EXTRACTION RULES:
   const webContacts: StepContact[] = ((webExtracted?.contacts ?? []) as StepContact[])
     .filter(c => normStr(c.name) !== null && c.name.includes(' '))
 
-  // ── Await email format, then construct missing emails ────────────────────────
-  const emailFormat = await emailFormatP
+  // ── Apollo + NinjaPear + email format — all parallel, 4s caps, non-blocking ───
+  // Apollo: enrich top 1 contact only (name + domain → email + phone)
+  // NinjaPear: validate top contact still employed
+  // All three fire simultaneously — no sequential wait
+  const topContact = webContacts[0]
+  const topContactParts = topContact?.name?.trim().split(/\s+/) ?? []
 
-  // ── ProxyCurl: validate the best Apollo contact with LinkedIn URL (1 call max) ─
-  const topWithLinkedin = apolloTyped.find(c => c.linkedin) || webContacts.find(c => c.linkedin)
-  let proxyProfile: ProxycurlProfile | null = null
-  if (topWithLinkedin?.linkedin) proxyProfile = await proxycurlProfile(topWithLinkedin.linkedin)
+  const [emailFormat, apolloTopResult, ninjaProfile] = await Promise.all([
+    emailFormatP,
+    // Apollo: 1 call max, 4s timeout — top PM contact
+    (topContact?.name && domainForEmail)
+      ? apolloEnrichPerson(topContact.name, domainForEmail)
+      : Promise.resolve(null),
+    // NinjaPear: 1 call max, 4s timeout — same top contact
+    (topContact?.name && topContact.name.includes(' ') && emailDomain)
+      ? ninjapearValidatePerson(topContactParts[0], topContactParts[topContactParts.length - 1], emailDomain)
+      : Promise.resolve(null),
+  ])
 
-  // ── Merge & deduplicate (Apollo first — most likely to have emails/phones) ───
+  // ── Merge & deduplicate ───────────────────────────────────────────────────────
   const allContacts: StepContact[] = [...apolloTyped, ...webContacts].filter((c, idx, arr) =>
     c.name && arr.findIndex(x => x.name.toLowerCase() === c.name.toLowerCase()) === idx
   )
 
-  // ── Patch ProxyCurl verified data onto matching contact ──────────────────────
-  if (proxyProfile && topWithLinkedin) {
-    const currentExp = (proxyProfile.experiences ?? []).find(e => !e.ends_at)
-    const idx = allContacts.findIndex(c => c.name.toLowerCase() === topWithLinkedin.name.toLowerCase())
+  // ── Patch Apollo email + phone onto top contact ───────────────────────────────
+  if (apolloTopResult && topContact) {
+    const idx = allContacts.findIndex(c => c.name.toLowerCase() === topContact.name.toLowerCase())
     if (idx >= 0) {
-      if (proxyProfile.email || proxyProfile.personal_email)
-        allContacts[idx].email = proxyProfile.email || proxyProfile.personal_email || allContacts[idx].email
-      if (currentExp?.title) allContacts[idx].title = currentExp.title
+      if (apolloTopResult.email) allContacts[idx].email = apolloTopResult.email
+      if (apolloTopResult.phone_numbers?.[0]) allContacts[idx].phone = apolloTopResult.phone_numbers[0]
+      if (apolloTopResult.title) allContacts[idx].title = apolloTopResult.title
+      if (apolloTopResult.linkedin_url) allContacts[idx].linkedin = apolloTopResult.linkedin_url
+    }
+  }
+
+  // ── Patch NinjaPear current-role verification ─────────────────────────────────
+  if (ninjaProfile && topContact) {
+    const currentExp = (ninjaProfile.work_experience ?? []).find(e => e.end_date === null)
+    const idx = allContacts.findIndex(c => c.name.toLowerCase() === topContact.name.toLowerCase())
+    if (idx >= 0) {
+      if (currentExp?.role) allContacts[idx].title = currentExp.role
+      if (currentExp) allContacts[idx].verified = true
     }
   }
 
@@ -1289,7 +1316,7 @@ freshness_score (1-5): 5=contract expiry this year or confirmed pain <3mo; 4=pai
         edgar: edgarHit, fcc: s4.fcc_providers.length > 0,
         resident_reviews: s3.raw_excerpts.length > 0,
         apollo: s6.all_contacts.length > 0,
-        proxycurl_verified: false,
+        ninjapear_verified: false,
         portfolio_isp_match: portfolioIspBlock.length > 0,
         old_name_detected: !!old_name,
         isp_confirmed: s4.provider_confirmed,

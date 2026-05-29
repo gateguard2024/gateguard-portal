@@ -174,8 +174,8 @@
 
 **ARIA deep engine (session 6 upgrade):**
 - Model: `claude-sonnet-4-6`
-- APIs (graceful fallback if keys absent): Apollo (`APOLLO_API_KEY`), Prospeo (`PROSPEO_API_KEY`), Proxycurl (`PROXYCURL_API_KEY`), PDL (`PDL_API_KEY`)
-- Executive Truth Loop: Apollo wide net → ProxyCurl live LinkedIn validation → compare `ends_at: null` (current) vs expired
+- APIs (graceful fallback if keys absent): Apollo (`APOLLO_API_KEY`), Prospeo (`PROSPEO_API_KEY`), NinjaPear (`NINJAPEAR_API_KEY`, formerly ProxyCurl), PDL (`PDL_API_KEY`)
+- Executive Truth Loop: Apollo wide net → NinjaPear Employee API validation (name + employer_website lookup, no LinkedIn scraping) → `work_experience[].end_date === null` = currently employed
 - New searches: temporal resident reviews (date-filtered, site-targeted), vendor footprint (uses live `mdu_providers` names from DB)
 - Post-synthesis: non-blocking upsert to `aria_properties` + auto-catalog new tech providers into `aria_tech_providers`
 - Prior contract findings from `aria_contract_findings` injected at start of synthesis
@@ -466,7 +466,7 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 - ✅ Migration 098 (`supabase/migrations/098_aria_intelligence_db.sql`) — `aria_properties` persistent intelligence table (never deleted, upserted on every search); `aria_tech_providers` auto-growing vendor catalog (50+ seeded); `increment_*` RPCs for atomic counters; GRANT blocks; deployed beta + prod
 - ✅ `app/api/aria/properties/route.ts` — GET (paginated, filterable by stage/urgency/sara/expiry/search) + POST (batch upsert from deep route, extracts `contract_expiry_year`, auto-catalogs tech providers)
 - ✅ `app/api/aria/properties/[id]/route.ts` — GET single + PATCH sales cycle fields only
-- ✅ `app/api/aria/research/deep/route.ts` — post-synthesis non-blocking upsert to `aria_properties`; Executive Truth Loop (Apollo → ProxyCurl validation); temporal resident review searches; vendor footprint using live DB provider names; Haiku sentiment pre-pass; accepts `{ query }` not `{ property_name }`
+- ✅ `app/api/aria/research/deep/route.ts` — post-synthesis non-blocking upsert to `aria_properties`; Executive Truth Loop (Apollo → NinjaPear Employee API validation); temporal resident review searches; vendor footprint using live DB provider names; Haiku sentiment pre-pass; accepts `{ query }` not `{ property_name }`
 - ✅ `app/api/crm/activities/[id]/route.ts` — PATCH (edit subject/body/type/due_at/outcome/duration_mins/completed) + DELETE; inline edit UI on opportunity detail with complete/edit/delete icon buttons
 - ✅ GCal push fix (`app/api/calendar/google/sync/route.ts`) — todos scoped to current user, per-item error capture + diagnostics, WO end time = start + 1hr (was zero-duration, rejected by Google)
 
@@ -497,7 +497,7 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 - `TAVILY_API_KEY` — ARIA Base + Deep Intel web search
 - `APOLLO_API_KEY` — ARIA Deep: contact enrichment at management company
 - `PROSPEO_API_KEY` — ARIA Deep: LinkedIn email format finder
-- `PROXYCURL_API_KEY` — ARIA Deep: LinkedIn profile scraper
+- `NINJAPEAR_API_KEY` — ARIA Deep: Employee API (formerly ProxyCurl/Nubela → NinjaPear). Person validation via name + employer_website. Sign up at nubela.co
 - `PDL_API_KEY` — ARIA Deep: behavioral/psychographic enrichment
 
 ### Feature backlog
