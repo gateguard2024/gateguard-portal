@@ -32,7 +32,7 @@ export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
 // Version: Year.MonthRevision — increment revision on each engine change this month
-const ARIA_ENGINE_VERSION = 'v6.59'
+const ARIA_ENGINE_VERSION = 'v6.60'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -380,9 +380,11 @@ async function runStep1(name: string, hintCity: string, hintState: string, hintM
   const geo = [hintCity, hintState].filter(Boolean).join(', ')
 
   const [listingResults, unitResults, websiteResults, contactResults] = await Promise.all([
-    // Listing sites — advanced depth + raw content for unit tables
-    tavilySearch(`"${name}" ${geo} apartments site:apartments.com OR site:rentcafe.com OR site:zillow.com OR site:apartmentlist.com OR site:forrent.com`, 3, 'identity', 'advanced', true),
-    // Broad search — no site restriction — finds official site + press releases
+    // Listing sites — advanced depth, NO raw_content — apartments.com/Zillow are JS-rendered,
+    // raw_content returns HTML noise (<script> tags) not structured data. Tavily's own
+    // snippet extraction (raw_content:false) reliably pulls "312 units", "Year Built: 2017"
+    tavilySearch(`"${name}" ${geo} apartments site:apartments.com OR site:rentcafe.com OR site:zillow.com OR site:apartmentlist.com OR site:forrent.com`, 3, 'identity', 'advanced', false),
+    // Press releases / official site — raw_content:true is fine here (plain HTML, not JS-rendered)
     tavilySearch(`"${name}" ${geo} apartments "unit" OR "units" OR "homes" "year built" OR "built" floor plans occupancy`, 3, 'identity', 'advanced', true),
     // Official website + owner/mgmt press releases — no site restriction
     hintWebsite
@@ -412,7 +414,7 @@ RULES:
 - isp_hints: any internet provider named as included amenity or "internet included"
 - null for unknown numbers, empty string for unknown text`
 
-  const extracted = await haikusExtract<Omit<StepIdentity, 'coords'>>(prompt, snippets, 500, client)
+  const extracted = await haikusExtract<Omit<StepIdentity, 'coords'>>(prompt, snippets, 1000, client)
   if (!extracted) return blank
 
   const addrForGeo = normStr(extracted.address) || name
@@ -652,6 +654,59 @@ Empty arrays for anything not found — never fabricate brand names.`,
   return extracted || blank
 }
 
+// ─── Management company domain lookup ────────────────────────────────────────
+// Apollo needs the company's email domain to enrich a person — NOT the property website.
+// Amanda Ferris works at Greystar → greystar.com, not wharfseven.com.
+// This lookup covers the top ~30 US multifamily management companies.
+
+const MGMT_DOMAIN_MAP: Record<string, string> = {
+  'greystar':        'greystar.com',
+  'lincoln property': 'lincolnapts.com',
+  'cushman':         'cushwake.com',
+  'equity residential': 'equityapartments.com',
+  'camden property': 'camdenliving.com',
+  'camden':          'camdenliving.com',
+  'aimco':           'aimco.com',
+  'udr':             'udr.com',
+  'essex property':  'essexapartmenthomes.com',
+  'avalonbay':       'avalonbay.com',
+  'avalon':          'avalonbay.com',
+  'irvine company':  'irvinecompany.com',
+  'bozzuto':         'bozzuto.com',
+  'morgan properties': 'morganproperties.com',
+  'kettler':         'kettler.net',
+  'post apartments': 'postproperties.com',
+  'alliance residential': 'allresco.com',
+  'bell partners':   'bellpartnersinc.com',
+  'cortland':        'cortland.com',
+  'nrp group':       'nrpgroup.com',
+  'northland':       'northlandco.com',
+  'related companies': 'related.com',
+  'bridge property': 'bridgepm.com',
+  'fairfield residential': 'fairfieldresidential.com',
+  'weidner':         'weidner.com',
+  'peak living':     'peakliving.com',
+  'simpson housing': 'simpsonhousing.com',
+  'harbor group':    'harborgroupintl.com',
+  'monarch investment': 'monarchinvestment.com',
+  'cardinal group':  'cardinalgroup.com',
+  'village green':   'villagegreen.com',
+  'apartment income reit': 'aimco.com',
+  'maa':             'maac.com',
+  'mid-america':     'maac.com',
+  'nhe':             'nhe.com',
+  'southwood':       'southwoodpm.com',
+}
+
+function deriveMgmtDomain(entityName: string): string {
+  if (!entityName) return ''
+  const lower = entityName.toLowerCase()
+  for (const [key, domain] of Object.entries(MGMT_DOMAIN_MAP)) {
+    if (lower.includes(key)) return domain
+  }
+  return ''
+}
+
 // ─── STEP 6: People — Full contact chain (PM / Regional / Asset) ─────────────
 // Excellence standard: name + title + email + phone + LinkedIn for each level.
 // Sources (in priority order):
@@ -802,11 +857,21 @@ EXTRACTION RULES:
   const topContact = webContacts[0]
   const topContactParts = topContact?.name?.trim().split(/\s+/) ?? []
 
+  // CRITICAL: Apollo needs the contact's EMPLOYER domain, not the property website.
+  // Amanda Ferris works at Greystar → apollo needs "greystar.com", not "wharfseven.com"
+  // Priority: (1) known lookup from contact's company name, (2) known lookup from mgmt/owner,
+  //           (3) property email domain as fallback
+  const contactCompany = topContact?.company || ''
+  const apolloDomain = deriveMgmtDomain(contactCompany)
+    || deriveMgmtDomain(mgmt)
+    || deriveMgmtDomain(owner)
+    || domainForEmail
+
   const [emailFormat, apolloTopResult, ninjaProfile] = await Promise.all([
     emailFormatP,
-    // Apollo: 1 call max, 4s timeout — top PM contact
-    (topContact?.name && domainForEmail)
-      ? apolloEnrichPerson(topContact.name, domainForEmail)
+    // Apollo: 1 call max, 4s timeout — top PM contact with correct employer domain
+    (topContact?.name && apolloDomain)
+      ? apolloEnrichPerson(topContact.name, apolloDomain)
       : Promise.resolve(null),
     // NinjaPear: 1 call max, 4s timeout — same top contact
     (topContact?.name && topContact.name.includes(' ') && emailDomain)
@@ -841,15 +906,21 @@ EXTRACTION RULES:
   }
 
   // ── Construct best-guess email for contacts still missing one ────────────────
-  if (domainForEmail) {
-    allContacts.forEach(c => {
-      if (!c.email && c.name && c.name.includes(' ')) {
+  // Use each contact's own company domain (if known) — Greystar staff → greystar.com,
+  // Northland staff → northlandco.com, unknown → fall back to property domain
+  allContacts.forEach(c => {
+    if (!c.email && c.name && c.name.includes(' ')) {
+      const contactDomain = deriveMgmtDomain(c.company || '')
+        || deriveMgmtDomain(mgmt)
+        || deriveMgmtDomain(owner)
+        || domainForEmail
+      if (contactDomain) {
         const parts = c.name.trim().split(/\s+/)
         const first = parts[0], last = parts[parts.length - 1]
-        c.email = constructEmail(first, last, domainForEmail, emailFormat)
+        c.email = constructEmail(first, last, contactDomain, emailFormat)
       }
-    })
-  }
+    }
+  })
 
   return {
     property_manager: allContacts.find(c => c.role_type === 'property_manager') || null,
@@ -1000,6 +1071,33 @@ export async function POST(req: NextRequest) {
     if (s0.confirmed_year_built && !s1.year_built) s1.year_built  = s0.confirmed_year_built
     if (s0.confirmed_phone    && !s1.phone)       s1.phone       = s0.confirmed_phone
     if (s0.confirmed_website  && !s1.website)     s1.website     = s0.confirmed_website
+
+    // ── Reconciliation pass: units + year_built ───────────────────────────────
+    // If BOTH Step 0 and Step 1 missed these fields, fire one targeted Tavily search
+    // targeting press releases and news articles — plain text, always contains unit counts.
+    // This is cheap: 1 Tavily call + 1 tiny Haiku call (80 tokens), only runs when needed.
+    if (!s1.units || !s1.year_built) {
+      try {
+        const recoResults = await tavilySearch(
+          `"${property_name}" "${city || state}" "apartment homes" OR "residential units" OR "units" "year built" OR "built" OR "completed" OR "opened" OR "delivered"`,
+          4, 'reconcile', 'advanced', false
+        )
+        const recoSnippets = recoResults
+          .filter(r => r.content?.length > 40)
+          .map((r, i) => `[${i}] ${r.title}: ${r.content.slice(0, 600)}`).join('\n\n')
+        if (recoSnippets.length > 80) {
+          const reco = await haikusExtract<{ units: number | null; year_built: number | null }>(
+            `Find ONLY: (1) total number of apartment units/homes, (2) year property was built/completed.
+Return ONLY valid JSON: {"units":null,"year_built":null}
+Scan for any pattern: "312 units", "312 homes", "312-unit", "Total Units: 312", "N studio to", built/completed/opened/delivered YYYY
+Return null if genuinely not found. Do NOT guess.`,
+            recoSnippets, 80, anthropic
+          )
+          if (!s1.units && reco?.units) s1.units = reco.units
+          if (!s1.year_built && reco?.year_built) s1.year_built = reco.year_built
+        }
+      } catch { /* non-blocking — best effort */ }
+    }
 
     // ── DB lookups + Step 2 in parallel ──────────────────────────────────────
     let portfolioIspBlock = ''
