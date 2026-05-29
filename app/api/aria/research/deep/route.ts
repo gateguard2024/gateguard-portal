@@ -363,7 +363,7 @@ interface StepPropTech {
   package_solutions: string[]
   tech_generation: string
 }
-interface StepContact { name: string; title: string; company: string; role_type: string; email: string; phone: string; linkedin: string }
+interface StepContact { name: string; title: string; company: string; role_type: string; email: string; phone: string; linkedin: string; verified?: boolean }
 interface StepPeople {
   property_manager: StepContact | null; regional_manager: StepContact | null
   asset_manager: StepContact | null; all_contacts: StepContact[]; email_format: string
