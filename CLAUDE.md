@@ -1,6 +1,6 @@
 # GateGuard Portal — Claude Context (Active Reference)
 
-> Last trimmed: May 27, 2026 (session 6). Full sprint history, /tech docs, SARA Plus intel → CLAUDE.archive.md
+> Last trimmed: May 29, 2026 (session 7). Full sprint history, /tech docs, SARA Plus intel → CLAUDE.archive.md
 
 ---
 
@@ -159,6 +159,7 @@
 | `app/api/aria/usage/route.ts` | GET: my/org/hierarchy search counts |
 | `app/api/aria/properties/route.ts` | GET (paginated + filterable intel DB) + POST (batch upsert from deep route) |
 | `app/api/aria/properties/[id]/route.ts` | GET single + PATCH sales cycle fields (stage, notes, rep, contact date) |
+| `app/api/aria/test/route.ts` | Diagnostic: raw API calls per step, no Haiku processing — use to audit ground truth before engine changes |
 | `supabase/migrations/094_aria_ownership.sql` | `show_leads.assigned_to_user_id`, `assigned_to_name`, `temp_hold_expires_at` |
 | `supabase/migrations/098_aria_intelligence_db.sql` | `aria_properties` (persistent, never deleted) + `aria_tech_providers` (auto-growing catalog) + RPCs |
 
@@ -172,14 +173,19 @@
 - Mobile: `mobileTab` state (`'list' | 'property' | 'dm' | 'scout'`), bottom nav 4 tabs fixed at 56px
 - `require()` needed for `LayoutList, ArrowLeft`
 
-**ARIA deep engine (session 6 upgrade):**
+**ARIA deep engine (session 7 — v6.59):**
+- Current version: `v6.59`
 - Model: `claude-sonnet-4-6`
 - APIs (graceful fallback if keys absent): Apollo (`APOLLO_API_KEY`), Prospeo (`PROSPEO_API_KEY`), NinjaPear (`NINJAPEAR_API_KEY`, formerly ProxyCurl), PDL (`PDL_API_KEY`)
-- Executive Truth Loop: Apollo wide net → NinjaPear Employee API validation (name + employer_website lookup, no LinkedIn scraping) → `work_experience[].end_date === null` = currently employed
-- New searches: temporal resident reviews (date-filtered, site-targeted), vendor footprint (uses live `mdu_providers` names from DB)
+- Apollo endpoint: `POST /api/v1/people/match` (name + domain → email + phone). Old `/mixed_people/search` is deprecated (was returning 403). Auth: `Bearer` token.
+- Executive Truth Loop: LinkedIn searches find names → Apollo `/people/match` enriches top contact → NinjaPear Employee API validates still employed → all three run in one `Promise.all` (no sequential wait)
+- FCC Broadband Map: now `POST /api/public/map/listAvailability` with JSON body (was GET → 405)
+- NinjaPear Employee API: `GET /api/v1/employee/profile?first_name=X&last_name=Y&employer_website=Z` — no LinkedIn scraping; `work_experience[].end_date === null` = currently employed
+- Timeout caps: Tavily 6s, Serper 5s, Apollo 4s, NinjaPear 4s — prevents 504
+- Steps 3+4+5+6 run concurrently; within Step 6: emailFormat + Apollo + NinjaPear all parallel
+- New searches: temporal resident reviews (date-filtered, site-targeted), vendor footprint (uses live `mdu_providers` names from DB), Reddit via Serper (not Tavily) for pain signals
 - Post-synthesis: non-blocking upsert to `aria_properties` + auto-catalog new tech providers into `aria_tech_providers`
-- Prior contract findings from `aria_contract_findings` injected at start of synthesis
-- Route accepts `{ query }` (not `{ property_name }`) — page always sends raw query string
+- Diagnostic test route: `POST /api/aria/test` — raw API calls with no Haiku, returns ground truth per step
 
 **ARIA Intelligence Database (migration 098):**
 - `aria_properties`: one row per property (upserted by every ARIA search, NEVER deleted by app). Fields: full property intel, proptech stack (gate/access/intercom/camera arrays), DM chain, behavioral_profile, pitch_strategy, `contract_expiry_year` (auto-extracted from bulk_agreements + contract_window), `sales_stage`, `sales_notes`, `assigned_rep`, `times_researched` counter
@@ -470,6 +476,17 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 - ✅ `app/api/crm/activities/[id]/route.ts` — PATCH (edit subject/body/type/due_at/outcome/duration_mins/completed) + DELETE; inline edit UI on opportunity detail with complete/edit/delete icon buttons
 - ✅ GCal push fix (`app/api/calendar/google/sync/route.ts`) — todos scoped to current user, per-item error capture + diagnostics, WO end time = start + 1hr (was zero-duration, rejected by Google)
 
+### Completed — May 29, 2026 (session 7) — ARIA Engine Data Quality + API Updates
+- ✅ ARIA diagnostic test route (`app/api/aria/test/route.ts`) — raw API endpoint for ground-truth auditing; no Haiku processing; returns exact API responses per step
+- ✅ FCC API fix — switched from GET (405) to POST with JSON body in both engine and test route
+- ✅ Apollo API fix — switched from deprecated `/mixed_people/search` (403) to `/api/v1/people/match` (name + domain enrichment); Bearer auth
+- ✅ NinjaPear migration — replaced ProxyCurl (`PROXYCURL_API_KEY`) with NinjaPear Employee API (`NINJAPEAR_API_KEY`); new endpoint `nubela.co/api/v1/employee/profile`; no LinkedIn scraping
+- ✅ 504 timeout fix (v6.59) — Apollo + NinjaPear + emailFormat now run in one `Promise.all` (was sequential, added ~12s)
+- ✅ S0 bootstrap fix — quoted property name in search query to prevent Serper drift
+- ✅ S1 unit extraction — added "N studio to" pattern to catch Northland-style press release phrasing
+- ✅ S3 Reddit pain signals — switched from Tavily to Serper for Reddit (Serper indexes Reddit better)
+- ✅ Phone extraction — explicit format examples added to S1 Haiku prompt
+
 ### Pending — Migrations to Run
 - All migrations 093–098 are now deployed on beta + prod ✅
 
@@ -486,6 +503,7 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 
 ### High priority next
 - Task #50 — Client portal at portal.gateguard.co/[site-slug] (property manager dashboard)
+- Task #86 — Internal API Subscriptions page at `/admin/api-sources` (see ARIA_DATA_SOURCES.md on Desktop)
 - Task #132 — Site Service Analytics tab on /sites/[id]
 - Task #163 — NEXUS action tools — write/update To-Dos + WOs via chat
 - Task #117 — Portal Help Center
@@ -497,8 +515,9 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 - `TAVILY_API_KEY` — ARIA Base + Deep Intel web search
 - `APOLLO_API_KEY` — ARIA Deep: contact enrichment at management company
 - `PROSPEO_API_KEY` — ARIA Deep: LinkedIn email format finder
-- `NINJAPEAR_API_KEY` — ARIA Deep: Employee API (formerly ProxyCurl/Nubela → NinjaPear). Person validation via name + employer_website. Sign up at nubela.co
+- `NINJAPEAR_API_KEY` — ARIA Deep: Employee API (formerly ProxyCurl/Nubela → NinjaPear). Person validation via name + employer_website. $50/2500 credits at nubela.co. Env var was previously PROXYCURL_API_KEY — rename in Vercel.
 - `PDL_API_KEY` — ARIA Deep: behavioral/psychographic enrichment
+- `SERPER_API_KEY` — ARIA Deep + web search: Google Search API via serper.dev
 
 ### Feature backlog
 - Photo evidence on work orders
