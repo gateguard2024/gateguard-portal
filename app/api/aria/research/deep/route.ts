@@ -24,7 +24,7 @@ const supabaseDeep = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export const maxDuration = 60
+export const maxDuration = 120
 export const dynamic = 'force-dynamic'
 
 const ARIA_ENGINE_VERSION = 'v7.2'
@@ -1089,66 +1089,86 @@ const deepIntelTool: Anthropic.Tool = {
       },
       freshness_score: { type: 'number' },
       buying_trends: { type: 'string' },
-      outreach_plan: {
-        type: 'object',
-        description: '6-month structured outreach campaign calendar for SCOUT',
-        properties: {
-          month_1: {
-            type: 'object',
-            properties: {
-              theme: { type: 'string' },
-              actions: { type: 'array', items: { type: 'string' } },
-              goal: { type: 'string' },
-            },
-          },
-          month_2: {
-            type: 'object',
-            properties: {
-              theme: { type: 'string' },
-              actions: { type: 'array', items: { type: 'string' } },
-              goal: { type: 'string' },
-            },
-          },
-          month_3: {
-            type: 'object',
-            properties: {
-              theme: { type: 'string' },
-              actions: { type: 'array', items: { type: 'string' } },
-              goal: { type: 'string' },
-            },
-          },
-          month_4: {
-            type: 'object',
-            properties: {
-              theme: { type: 'string' },
-              actions: { type: 'array', items: { type: 'string' } },
-              goal: { type: 'string' },
-            },
-          },
-          month_5: {
-            type: 'object',
-            properties: {
-              theme: { type: 'string' },
-              actions: { type: 'array', items: { type: 'string' } },
-              goal: { type: 'string' },
-            },
-          },
-          month_6: {
-            type: 'object',
-            properties: {
-              theme: { type: 'string' },
-              actions: { type: 'array', items: { type: 'string' } },
-              goal: { type: 'string' },
-            },
-          },
-          total_touches: { type: 'number' },
-          primary_channel: { type: 'string' },
-          key_milestone: { type: 'string' },
-          expected_close_quarter: { type: 'string' },
-        },
-      },
     },
   },
+}
+
+// ─── Parallel Haiku: 6-month outreach campaign generator ─────────────────────
+// Runs alongside the Sonnet synthesis call — Haiku is ~5x faster so it finishes
+// first and the result is ready when Promise.all([sonnet, outreachPlan]) resolves.
+
+interface OutreachMonth {
+  theme: string
+  actions: string[]
+  goal: string
+}
+
+interface OutreachPlan {
+  month_1: OutreachMonth; month_2: OutreachMonth; month_3: OutreachMonth
+  month_4: OutreachMonth; month_5: OutreachMonth; month_6: OutreachMonth
+  total_touches: number
+  primary_channel: string
+  key_milestone: string
+  expected_close_quarter: string
+}
+
+async function generateOutreachPlan(
+  propertyName: string,
+  city: string,
+  units: number | null,
+  ispProviders: string[],
+  roeExpiry: number | null,
+  bulkDetected: boolean,
+  painSignals: PainSignal[],
+  behavioralProfile: Record<string, string> | null,
+  pitchStrategy: Record<string, unknown> | null,
+  acquisitionYear: string,
+  client: Anthropic
+): Promise<OutreachPlan | null> {
+  const topPain = painSignals.slice(0, 3).map(s => `"${s.quote}" (${s.type})`).join('; ')
+  const isp = ispProviders[0] || 'unknown ISP'
+  const contractCtx = roeExpiry
+    ? `ROE/bulk agreement expires ${roeExpiry}`
+    : bulkDetected ? 'Bulk agreement detected — expiry unknown'
+    : 'No bulk agreement detected — displacement opportunity'
+  const behCtx = behavioralProfile
+    ? `Decision style: ${behavioralProfile.decision_style || 'unknown'}. Channel pref: ${behavioralProfile.communication_pref || 'email'}. Risk: ${behavioralProfile.risk_tolerance || 'medium'}.`
+    : 'No behavioral data.'
+  const pitchHook = (pitchStrategy as any)?.primary_hook || ''
+
+  const prompt = `Build a 6-month sales outreach campaign for a GateGuard rep targeting this property.
+
+PROPERTY: ${propertyName}, ${city}${units ? ` (${units} units)` : ''}
+CONTRACT: ${contractCtx}
+CURRENT ISP: ${isp}
+PAIN SIGNALS: ${topPain || 'None found'}
+BEHAVIORAL PROFILE: ${behCtx}
+PITCH HOOK: ${pitchHook}
+${acquisitionYear ? `NEW OWNERSHIP: Acquired ${acquisitionYear} — capex window likely open` : ''}
+
+Return ONLY valid JSON — no text outside the JSON block:
+{
+  "month_1": {"theme": "First Touch — Awareness", "actions": ["Send intro email referencing [specific pain or ROE insight]", "Connect on LinkedIn with personalized note", "Research gate/access system details for site"], "goal": "Get on their radar with a relevant, specific opener"},
+  "month_2": {"theme": "Education — Value Proof", "actions": [], "goal": ""},
+  "month_3": {"theme": "Validation — Demo Request", "actions": [], "goal": ""},
+  "month_4": {"theme": "Proposal Prep — Site Walk", "actions": [], "goal": ""},
+  "month_5": {"theme": "Proposal Delivery", "actions": [], "goal": ""},
+  "month_6": {"theme": "Close / Urgency", "actions": [], "goal": ""},
+  "total_touches": 18,
+  "primary_channel": "email",
+  "key_milestone": "ROE expires [year] — proposal must land 90 days prior",
+  "expected_close_quarter": "Q3 2026"
+}
+
+RULES:
+- Each month: theme (short title), actions (3-4 specific tasks using THIS property's data), goal (1-sentence outcome)
+- Actions must reference real details: the ISP name, the pain signal quotes, the contract window
+- primary_channel: "email"/"phone"/"linkedin" based on behavioral profile
+- key_milestone: most important event in window (ROE expiry, new ownership capex cycle, or biggest pain signal)
+- expected_close_quarter: based on contract window + typical 6-month sales cycle
+- total_touches: total action count across all 6 months`
+
+  return await haikusExtract<OutreachPlan>(prompt, '', 1200, client)
 }
 
 // ─── Route handler ────────────────────────────────────────────────────────────
@@ -1271,12 +1291,17 @@ ${JSON.stringify({ owner_entity: finalOwner, owner_type: p2.owner_type, acquisit
 PHASE 3 — INTELLIGENCE:
 ${JSON.stringify({ pain_signals: p3.pain_signals.slice(0, 12), proptech: p3.proptech, contact_count: p3.contacts.length, email_format: p3.email_format }, null, 2)}`
 
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 3500,
-      tools: [deepIntelTool],
-      tool_choice: { type: 'tool', name: 'aria_deep_intel_result' },
-      system: `You assemble step-verified data into a final property intelligence report. Phases 1-3 are ground truth — copy directly. Use synthesis only to fill gaps and write the sales brief.
+    // ── PHASE 4: Sonnet synthesis + Haiku outreach plan — run in PARALLEL ───────
+    // Haiku is ~5x faster than Sonnet; both kick off at the same time so the
+    // outreach plan is ready by the time Sonnet finishes. This prevents the
+    // outreach plan from adding any latency to the critical path.
+    const [message, outreachPlanResult] = await Promise.all([
+      anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2800,
+        tools: [deepIntelTool],
+        tool_choice: { type: 'tool', name: 'aria_deep_intel_result' },
+        system: `You assemble step-verified data into a final property intelligence report. Phases 1-3 are ground truth — copy directly. Use synthesis only to fill gaps and write the sales brief.
 
 CRITICAL RULES:
 1. property_details.units: copy from Phase 1
@@ -1308,28 +1333,30 @@ key_finding: "[WHO] at [company] controls this. [WHY NOW: specific pain/contract
 pitch_strategy.primary_hook: 1 sentence using THIS property's pain + contract/ROE window
 behavioral_profile: decision_style, communication_pref, risk_tolerance, budget_orientation
 freshness_score (1-10): 10=ROE expiry known + recent acquisition; 8=contract expiry/bulk detected; 6=pain signals; 4=basic intel; 2=inference only
-buying_trends: 1-sentence sales trend insight for this property type
-
-OUTREACH PLAN — 6-MONTH CAMPAIGN CALENDAR:
-Build a month-by-month outreach strategy for SCOUT based on everything we know:
-- Month 1 theme: Awareness / First Touch (email + LinkedIn, lead with specific pain or ROE insight)
-- Month 2 theme: Education (value proof — case study at similar property or ROE savings angle)
-- Month 3 theme: Validation / Demo Request (propose site walk or virtual demo)
-- Month 4 theme: Proposal Prep (gather gate count, access points, scope assessment)
-- Month 5 theme: Proposal Delivery + ROI presentation
-- Month 6 theme: Close / Negotiation (urgency: contract window, upcoming renewal, or capex cycle)
-For each month: theme (short title), actions (3-5 specific tasks), goal (1-sentence outcome)
-Use THIS property's context — reference the actual ISP/ROE situation, the DM's behavioral profile, and the pain signals.
-primary_channel: "email" / "phone" / "linkedin" based on behavioral_profile.communication_pref
-key_milestone: the single most important event in the 6-month window (e.g. "ROE expires Q3 2027 — proposal must land by Q1 2027")
-expected_close_quarter: e.g. "Q3 2026" based on contract window + sales cycle length
-total_touches: count of all actions across 6 months`,
-      messages: [{ role: 'user', content: `Property: ${property_name}\nLocation: ${city}, ${state}\n\n${synthesisData}` }],
-    })
+buying_trends: 1-sentence sales trend insight for this property type`,
+        messages: [{ role: 'user', content: `Property: ${property_name}\nLocation: ${city}, ${state}\n\n${synthesisData}` }],
+      }),
+      // Haiku generates the 6-month outreach plan in parallel — adds zero latency
+      generateOutreachPlan(
+        property_name, city,
+        p1.confirmed_units,
+        p2.isp_providers,
+        p2.roe_expiry_year,
+        p2.bulk_detected,
+        p3.pain_signals,
+        null, // behavioral_profile not yet available (Sonnet hasn't finished)
+        null, // pitch_strategy not yet available
+        p2.acquisition_year,
+        anthropic
+      ),
+    ])
 
     const toolBlock = message.content.find(b => b.type === 'tool_use') as Anthropic.ToolUseBlock | undefined
     if (!toolBlock) throw new Error('No synthesis result from Claude')
     const rawData = toolBlock.input as Record<string, any>
+
+    // outreachPlanResult is ready — Haiku finished while Sonnet was synthesising
+    const outreachPlan = outreachPlanResult ?? null
 
     // ── Build final payload ───────────────────────────────────────────────────
     const cleanIspProviders = normStrArr(p2.isp_providers.length ? p2.isp_providers : (rawData.isp_providers ?? []))
@@ -1412,7 +1439,7 @@ total_touches: count of all actions across 6 months`,
         ...(p2.roe_expiry_year ? [`ROE expires ${p2.roe_expiry_year} — contract window opens soon`] : []),
         ...(p2.acquisition_year && parseInt(p2.acquisition_year) >= new Date().getFullYear() - 1 ? ['Recent acquisition — capex window open'] : []),
       ],
-      outreach_plan: rawData.outreach_plan ?? null,
+      outreach_plan: outreachPlan,
       outreach_sequence: ['email_1', 'call_1', 'linkedin_touch', 'email_2', 'call_2', 'email_3'],
     }
 
