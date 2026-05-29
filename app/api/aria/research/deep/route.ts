@@ -237,22 +237,32 @@ async function runStep1(name: string, hintCity: string, hintState: string, hintM
   }
   const geo = [hintCity, hintState].filter(Boolean).join(', ')
 
-  const [listingResults, unitResults] = await Promise.all([
-    tavilySearch(`"${name}" ${geo} apartments site:apartments.com OR site:rentcafe.com OR site:zillow.com`, 3, 'identity', 'basic', true),
-    tavilySearch(`"${name}" ${geo} "units" OR "homes" "year built" OR "built in" apartments management`, 3, 'identity'),
+  const [listingResults, unitResults, contactResults] = await Promise.all([
+    tavilySearch(`"${name}" ${geo} apartments site:apartments.com OR site:rentcafe.com OR site:zillow.com OR site:apartmentlist.com`, 3, 'identity', 'advanced', true),
+    tavilySearch(`"${name}" ${geo} "apartment homes" OR "units" "year built" OR "built in" OR "constructed" floor plans occupancy`, 3, 'identity', 'basic', true),
+    tavilySearch(`"${name}" ${geo} leasing office phone contact website management`, 2, 'identity'),
   ])
-  const allResults = [...listingResults, ...unitResults]
-  const usable = allResults.filter(r => (r.raw_content || r.content)?.length > 40).slice(0, 8)
+  const allResults = [...listingResults, ...unitResults, ...contactResults]
+  const usable = allResults.filter(r => (r.raw_content || r.content)?.length > 40).slice(0, 10)
   if (usable.length === 0) return blank
 
   const snippets = usable.map((r, i) => {
-    const text = r.raw_content ? r.raw_content.slice(0, 1000) : r.content.slice(0, 400)
+    const text = r.raw_content ? r.raw_content.slice(0, 2000) : r.content.slice(0, 500)
     return `[${i + 1}] ${r.title}\nURL: ${r.url}\n${text}`
   }).join('\n\n---\n\n')
 
   const prompt = `Extract property facts. Return ONLY valid JSON:
 {"name":"","address":"","city":"","state":"","units":null,"year_built":null,"property_class":null,"property_type":"multifamily","website":"","phone":"","email":"","email_domain":"","management_company":"","isp_hints":[]}
-RULES: units=integer (look for "X units","X homes","X apartment homes"); year_built=4-digit integer; property_class="A","B", or "C" only; website=official URL; phone=leasing office number; email_domain=domain from email/website; management_company=ONLY if explicitly named; isp_hints=any internet provider named as included amenity; null for unknown numbers, empty string for unknown text`
+RULES:
+- units: integer ONLY — scan deeply for patterns like "312 apartment homes", "312 units", "312 homes", "Total Units: 312", "312-unit" — do NOT return null if ANY number of units appears ANYWHERE in the text
+- year_built: 4-digit integer — look for "built in YYYY", "Year Built: YYYY", "constructed YYYY", "opened YYYY"
+- property_class: "A","B", or "C" only — look for "Class A", "Class B", luxury/premium=A, standard=B, affordable=C
+- website: official property URL (not apartments.com)
+- phone: leasing office phone number
+- email_domain: extract domain from any email or official website found
+- management_company: ONLY if explicitly named as manager/operator — NOT the property name itself
+- isp_hints: any internet provider named as included amenity or "internet included"
+- null for unknown numbers, empty string for unknown text`
 
   const extracted = await haikusExtract<Omit<StepIdentity, 'coords'>>(prompt, snippets, 500, client)
   if (!extracted) return blank
@@ -337,6 +347,16 @@ Include up to 12 signals. Prefer last 6-12 months. ONLY negative signals.`,
   return { ...(extracted || blank), raw_excerpts: allResults }
 }
 
+// ─── Known MDU-only ISPs (detecting any of these = auto-flag bulk_detected) ───
+// These providers exclusively serve bulk/exclusive MDU deals — no retail residential
+
+const KNOWN_MDU_BULK_ISPS = new Set([
+  'gigstreem', 'hotwire', 'pavlov media', 'mdu communications', 'wired broadband',
+  'all west', 'bel-fuse', 'broadstripe', 'sonic mdu', 'xenon networks',
+  'apogee', 'limecom', 'gig-e', 'pocketinet', 'skybridge',
+  'bulk solutions', 'enterprise network services', 'smartabase',
+])
+
 // ─── STEP 4: Connectivity ─────────────────────────────────────────────────────
 
 async function runStep4(
@@ -353,13 +373,18 @@ async function runStep4(
 
   const fccProviders = coords ? await fccBroadbandLookup(coords.lat, coords.lng) : []
 
-  const [bulkResults, ispResults, edgarResults] = await Promise.all([
+  // Auto-detect known MDU-only ISPs from FCC results → auto-flag bulk even before web search
+  const fccLower = fccProviders.map(p => p.toLowerCase())
+  const knownMduInFcc = fccLower.some(p => [...KNOWN_MDU_BULK_ISPS].some(mdu => p.includes(mdu)))
+
+  const [bulkResults, ispResults, videoResults, edgarResults] = await Promise.all([
     tavilySearch(`${nameQ} ${geo} "internet included" OR "bulk internet" OR "wifi included" OR "technology fee" OR "mandatory wifi" site:apartments.com OR site:rentcafe.com`, 3, 'isp', 'advanced'),
     tavilySearch(`${nameQ} ${geo} ${fccProviders.slice(0, 3).join(' OR ') || 'Comcast OR Spectrum OR "AT&T" OR Gigstreem OR Hotwire'} internet agreement OR provider`, 4, 'isp'),
+    tavilySearch(`${nameQ} ${geo} cable TV OR DirecTV OR "DIRECTV" OR "Dish Network" OR Xfinity OR "Spectrum TV" OR "AT&T TV" OR "Sling" television video`, 3, 'video'),
     searchEdgar(name, entity).then(r => r.map(e => ({ ...e, source: 'EDGAR' } as TavilyResult))),
   ])
 
-  const allResults = [...bulkResults, ...ispResults, ...edgarResults]
+  const allResults = [...bulkResults, ...ispResults, ...videoResults, ...edgarResults]
   const usable = allResults.filter(r => r.content?.length > 40).slice(0, 12)
 
   const portfolioCtx  = portfolioIspBlock  ? `\n\nPORTFOLIO ISP DB (high confidence):\n${portfolioIspBlock}` : ''
@@ -369,15 +394,32 @@ async function runStep4(
 
   const snippets = usable.map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 400)}`).join('\n\n---\n\n')
   const extracted = usable.length > 0 ? await haikusExtract<StepConnectivity>(
-    `Extract internet/video connectivity data. Return ONLY valid JSON:
+    `Extract internet AND video connectivity data. Return ONLY valid JSON:
 {"isp_providers":[],"video_providers":[],"bulk_agreements":[],"mandatory_tech_fee":false,"fcc_providers":[],"bulk_detected":false,"provider_confirmed":false}
 bulk_agreements: [{"provider":"","service_type":"internet","agreement_type":"bulk","confidence":"high","evidence":"","expiry_estimate":""}]
-RULES: isp_providers = ONLY actual ISPs (never management company names); bulk_detected=true if internet included in rent or bulk/exclusive deal found; provider_confirmed=true if provider name is explicitly stated${portfolioCtx}${fccCtx}${cacheCtx}${findingsCtx}`,
-    snippets, 500, client
+RULES:
+- isp_providers = ONLY actual ISPs (never management company names)
+- video_providers = cable/satellite/IPTV providers (DirecTV, Dish, Xfinity, Spectrum TV, DIRECTV STREAM, etc.)
+- bulk_detected=true if internet included in rent OR bulk/exclusive deal found OR technology fee mentioned
+- provider_confirmed=true if provider name is explicitly stated
+- Add video bulk_agreements too if cable/satellite is included in rent${portfolioCtx}${fccCtx}${cacheCtx}${findingsCtx}`,
+    snippets, 600, client
   ) : null
 
   const result = extracted || blank
   result.fcc_providers = fccProviders
+  // Auto-flag bulk if any known MDU-only ISP detected in FCC results
+  if (knownMduInFcc) result.bulk_detected = true
+  // Promote known MDU ISPs to front of isp_providers list
+  if (knownMduInFcc) {
+    const knownFccProviders = fccProviders.filter(p => [...KNOWN_MDU_BULK_ISPS].some(mdu => p.toLowerCase().includes(mdu)))
+    for (const kp of knownFccProviders.reverse()) {
+      if (!result.isp_providers.includes(kp)) result.isp_providers.unshift(kp)
+      if (result.bulk_agreements.length === 0) {
+        result.bulk_agreements.push({ provider: kp, service_type: 'internet', agreement_type: 'bulk', confidence: 'high', evidence: `FCC map shows ${kp} — MDU-only ISP, exclusive bulk model` })
+      }
+    }
+  }
   return result
 }
 
@@ -421,13 +463,14 @@ async function runStep5(
   const entity = mgmt || owner
   const hasGatePain = painSignals.some(s => s.type === 'gate')
 
-  const [gateResults, accessResults, entityResults] = await Promise.all([
+  const [gateResults, accessResults, addressResults, entityResults] = await Promise.all([
     tavilySearch(`"${name}" ${location} ${hasGatePain ? '"gate" "broken" OR "replaced" OR "installed"' : ''} DoorKing OR LiftMaster OR Viking OR Linear OR FAAC OR ButterflyMX OR Aiphone gate intercom access`, 4, 'proptech'),
     tavilySearch(`"${name}" ${location} Brivo OR Openpath OR HID OR SALTO OR Verkada OR Avigilon OR SmartRent OR GateWise OR Latch cameras security`, 4, 'proptech'),
-    entity ? tavilySearch(`"${entity}" ButterflyMX OR DoorKing OR SmartRent OR Brivo OR LiftMaster portfolio standard`, 3, 'proptech') : Promise.resolve([] as TavilyResult[]),
+    tavilySearch(`"${name}" ${location} "new" OR "installed" OR "upgraded" OR "replaced" gate OR intercom OR camera OR "access control" OR "smart lock" OR "package locker" 2022 OR 2023 OR 2024 OR 2025`, 3, 'proptech'),
+    entity ? tavilySearch(`"${entity}" ButterflyMX OR DoorKing OR SmartRent OR Brivo OR LiftMaster OR Verkada portfolio standard`, 3, 'proptech') : Promise.resolve([] as TavilyResult[]),
   ])
 
-  const usable = [...gateResults, ...accessResults, ...entityResults].filter(r => r.content?.length > 40).slice(0, 10)
+  const usable = [...gateResults, ...accessResults, ...addressResults, ...entityResults].filter(r => r.content?.length > 40).slice(0, 12)
   if (usable.length === 0) return blank
 
   const snippets = usable.map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 350)}`).join('\n\n---\n\n')
@@ -455,8 +498,9 @@ async function runStep6(
   const painSnippets = painRawExcerpts.filter(r => r.content?.length > 40).slice(0, 6)
     .map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 300)}`).join('\n\n---\n\n')
 
-  const [linkedinResults, apolloContacts] = await Promise.all([
+  const [linkedinResults, propertyPmResults, apolloContacts] = await Promise.all([
     tavilySearch(`"${entity}" ${geo} "property manager" OR "community manager" OR "regional manager" site:linkedin.com`, 4, 'people'),
+    tavilySearch(`"${name}" ${geo} "property manager" OR "community manager" OR "leasing manager" contact phone email name`, 3, 'people'),
     apolloSearchContacts(entity, [
       'Property Manager', 'Community Manager', 'Leasing Manager',
       'Regional Property Manager', 'Regional Manager', 'Area Manager',
@@ -499,8 +543,8 @@ Examples: "firstname.lastname@domain.com", "flastname@domain.com", "firstname@do
     }
   })
 
-  // Extract named contacts from web snippets
-  const allSnippets = [painSnippets, ...linkedinResults.filter(r => r.content?.length > 40).slice(0, 6).map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 350)}`)].join('\n\n---\n\n')
+  // Extract named contacts from web snippets (both company-level LinkedIn + property-level search)
+  const allSnippets = [painSnippets, ...[...linkedinResults, ...propertyPmResults].filter(r => r.content?.length > 40).slice(0, 8).map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 350)}`)].join('\n\n---\n\n')
   const webExtracted = allSnippets.length > 50
     ? await haikusExtract<{ contacts: StepContact[] }>(
         `Extract named individuals who work for "${entity}" as property managers, regional managers, or asset managers. Return ONLY valid JSON:
@@ -753,18 +797,30 @@ CRITICAL COPY RULES:
 1. property_details.units: copy from STEP 1 — do not modify
 2. property_details.management_company: copy from STEP 1 mgmt — NEVER overwrite with a person's name
 3. isp_providers: copy from STEP 4 — FCC/web verified ISPs only
-4. bulk_agreements: copy from STEP 4 — already structured
-5. proptech fields: copy from STEP 5
-6. extracted_contacts: use STEP 6 — property_manager first, then regional, then asset manager
-7. pain_signals: use STEP 3 signals — up to 12, last 6-12 months
-8. ownership: copy from STEP 2
-9. If management_company blank but owner is a RE firm → set management_company = owner_entity
+4. video_providers: copy from STEP 4 — cable/satellite/IPTV providers
+5. bulk_agreements: copy from STEP 4 — already structured; if no expiry_estimate yet, ESTIMATE it:
+   - MDU fiber deals (GIGstreem, Hotwire, Pavlov) typically 7-10 year terms. Year built + 7-10 = first expiry window
+   - Cable bulk deals (Comcast, Spectrum) typically 5-7 year terms
+   - If bulk deal present but no expiry: set expiry_estimate = "Est. [year_built + 7]–[year_built + 10]"
+6. proptech fields: copy from STEP 5
+7. extracted_contacts: use STEP 6 — property_manager first, then regional, then asset manager
+8. pain_signals: use STEP 3 signals — up to 12, last 6-12 months
+9. ownership: copy from STEP 2
+10. If management_company blank but owner is a RE firm → set management_company = owner_entity
+11. proptech.replacement_window: estimate based on tech_generation + year_built (legacy pre-2015 = "Immediate", 2015-2019 = "1-3 years", 2020+ modern = "3-5 years")
+
+CONTRACT WINDOW ESTIMATION (critical for sales):
+- If year_built is known and bulk deal is detected but no expiry found:
+  - fiber deals: expiry_estimate = "~${year_built + 8}–${year_built + 10} (estimated)"
+  - cable deals: expiry_estimate = "~${year_built + 5}–${year_built + 7} (estimated)"
+- If acquisition_year is recent (last 2 years), note "New ownership — capex window open" in capex_signal
 
 CONTACT PRIORITY: Property Manager > Regional Manager > Asset Manager > CEO
 
-key_finding: "[WHO] at [company] controls this. [WHY NOW: pain signal / contract expiry / acquisition / aging tech]"
-pitch_strategy.primary_hook: one sentence using THIS property's specific pain signal
-freshness_score (1-5): 5=contract expiry this year; 4=pain complaints <6mo; 3=listing confirmed; 2=older data; 1=inference`,
+key_finding: "[WHO] at [company] controls this. [WHY NOW: specific pain signal / contract expiry window / acquisition / aging tech — be specific with dates and provider names]"
+pitch_strategy.primary_hook: one sentence using THIS property's pain signal AND the contract window if known
+pitch_strategy.social_proof: suggest a specific GateGuard case study angle relevant to this property type
+freshness_score (1-5): 5=contract expiry this year or confirmed pain <3mo; 4=pain complaints <6mo; 3=listing confirmed; 2=older data; 1=inference only`,
       messages: [{ role: 'user', content: `Property: ${property_name}\nAddress: ${address || 'unknown'}\nLocation: ${location}\n\n${siloSummary}` }],
     })
 
@@ -834,8 +890,8 @@ freshness_score (1-5): 5=contract expiry this year; 4=pain complaints <6mo; 3=li
         },
       },
       decision_maker: {
-        name:             normStr(bestContact?.name || fallback.name) ?? mgmt ?? property_name,
-        title:            normStr(bestContact?.title || fallback.title) ?? 'Executive',
+        name:             normStr(bestContact?.name || fallback.name) ?? null,
+        title:            normStr(bestContact?.title || fallback.title) ?? null,
         company:          normStr(bestContact?.company || fallback.company) ?? mgmt ?? '',
         email:            normStr(bestContact?.email || fallback.email) ?? '',
         phone:            normStr(bestContact?.phone) ?? '',
@@ -860,7 +916,7 @@ freshness_score (1-5): 5=contract expiry this year; 4=pain complaints <6mo; 3=li
       profile: {
         buy_score:           rawData.freshness_score ? Math.round(rawData.freshness_score * 1.5 + 2) : 5,
         urgency:             s3.gate_issue_count > 2 || s4.bulk_detected ? 'high' : 'medium',
-        primary_concern:     normStr(rawData.key_finding?.slice(0, 80)) ?? 'No critical vulnerabilities detected',
+        primary_concern:     normStr(rawData.key_finding?.slice(0, 300)) ?? 'No critical vulnerabilities detected',
         current_vendor:      normStr((cleanBulkAgreements[0] as any)?.provider ?? cleanIspProviders[0]),
         contract_window:     normStr((cleanBulkAgreements[0] as any)?.expiry_estimate),
         communication_style: normStr(rawData.behavioral_profile?.communication_pref) ?? 'Email',
