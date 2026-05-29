@@ -72,6 +72,33 @@ async function tavilySearch(query: string, maxResults = 4, source = 'web', depth
   } catch { return [] }
 }
 
+// ─── Serper (Google Search API) ──────────────────────────────────────────────
+// Used where Google's index beats Tavily: LinkedIn, press releases, social pages
+
+async function serperSearch(query: string, maxResults = 5, source = 'serper', type: 'search' | 'news' = 'search'): Promise<TavilyResult[]> {
+  if (!process.env.SERPER_API_KEY) return []
+  try {
+    const endpoint = type === 'news' ? 'https://google.serper.dev/news' : 'https://google.serper.dev/search'
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-KEY': process.env.SERPER_API_KEY },
+      body: JSON.stringify({ q: query, num: maxResults, gl: 'us', hl: 'en' }),
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return []
+    const data = await res.json()
+    // Normalize Serper results to TavilyResult shape
+    const items = type === 'news' ? (data.news ?? []) : (data.organic ?? [])
+    return items.slice(0, maxResults).map((r: any) => ({
+      title:   r.title ?? '',
+      url:     r.link ?? '',
+      content: [r.snippet, r.date].filter(Boolean).join(' — '),
+      score:   0.8,
+      source,
+    }))
+  } catch { return [] }
+}
+
 // ─── Haiku JSON extraction helper ─────────────────────────────────────────────
 
 async function haikusExtract<T>(prompt: string, snippets: string, maxTokens: number, client: Anthropic): Promise<T | null> {
@@ -377,14 +404,16 @@ async function runStep4(
   const fccLower = fccProviders.map(p => p.toLowerCase())
   const knownMduInFcc = fccLower.some(p => [...KNOWN_MDU_BULK_ISPS].some(mdu => p.includes(mdu)))
 
-  const [bulkResults, ispResults, videoResults, edgarResults] = await Promise.all([
+  const [bulkResults, ispResults, videoResults, pressReleaseResults, edgarResults] = await Promise.all([
     tavilySearch(`${nameQ} ${geo} "internet included" OR "bulk internet" OR "wifi included" OR "technology fee" OR "mandatory wifi" site:apartments.com OR site:rentcafe.com`, 3, 'isp', 'advanced'),
     tavilySearch(`${nameQ} ${geo} ${fccProviders.slice(0, 3).join(' OR ') || 'Comcast OR Spectrum OR "AT&T" OR Gigstreem OR Hotwire'} internet agreement OR provider`, 4, 'isp'),
     tavilySearch(`${nameQ} ${geo} cable TV OR DirecTV OR "DIRECTV" OR "Dish Network" OR Xfinity OR "Spectrum TV" OR "AT&T TV" OR "Sling" television video`, 3, 'video'),
+    // Serper → Google indexes PRNewswire/BusinessWire MDU deal announcements better than Tavily
+    entity ? serperSearch(`"${entity}" "bulk internet" OR "MDU" OR "fiber" OR "internet included" OR "broadband" apartment deal announcement`, 5, 'serper-press', 'news') : Promise.resolve([] as TavilyResult[]),
     searchEdgar(name, entity).then(r => r.map(e => ({ ...e, source: 'EDGAR' } as TavilyResult))),
   ])
 
-  const allResults = [...bulkResults, ...ispResults, ...videoResults, ...edgarResults]
+  const allResults = [...bulkResults, ...ispResults, ...videoResults, ...pressReleaseResults, ...edgarResults]
   const usable = allResults.filter(r => r.content?.length > 40).slice(0, 12)
 
   const portfolioCtx  = portfolioIspBlock  ? `\n\nPORTFOLIO ISP DB (high confidence):\n${portfolioIspBlock}` : ''
@@ -463,14 +492,16 @@ async function runStep5(
   const entity = mgmt || owner
   const hasGatePain = painSignals.some(s => s.type === 'gate')
 
-  const [gateResults, accessResults, addressResults, entityResults] = await Promise.all([
+  const [gateResults, accessResults, addressResults, entityResults, socialResults] = await Promise.all([
     tavilySearch(`"${name}" ${location} ${hasGatePain ? '"gate" "broken" OR "replaced" OR "installed"' : ''} DoorKing OR LiftMaster OR Viking OR Linear OR FAAC OR ButterflyMX OR Aiphone gate intercom access`, 4, 'proptech'),
     tavilySearch(`"${name}" ${location} Brivo OR Openpath OR HID OR SALTO OR Verkada OR Avigilon OR SmartRent OR GateWise OR Latch cameras security`, 4, 'proptech'),
     tavilySearch(`"${name}" ${location} "new" OR "installed" OR "upgraded" OR "replaced" gate OR intercom OR camera OR "access control" OR "smart lock" OR "package locker" 2022 OR 2023 OR 2024 OR 2025`, 3, 'proptech'),
     entity ? tavilySearch(`"${entity}" ButterflyMX OR DoorKing OR SmartRent OR Brivo OR LiftMaster OR Verkada portfolio standard`, 3, 'proptech') : Promise.resolve([] as TavilyResult[]),
+    // Serper → Google indexes public Facebook/social pages announcing new tech installs
+    serperSearch(`"${name}" ${location} "new gate" OR "new intercom" OR "ButterflyMX" OR "new cameras" OR "upgraded" OR "smart access" site:facebook.com OR site:instagram.com OR site:nextdoor.com`, 4, 'serper-social'),
   ])
 
-  const usable = [...gateResults, ...accessResults, ...addressResults, ...entityResults].filter(r => r.content?.length > 40).slice(0, 12)
+  const usable = [...gateResults, ...accessResults, ...addressResults, ...entityResults, ...socialResults].filter(r => r.content?.length > 40).slice(0, 14)
   if (usable.length === 0) return blank
 
   const snippets = usable.map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 350)}`).join('\n\n---\n\n')
@@ -499,7 +530,8 @@ async function runStep6(
     .map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 300)}`).join('\n\n---\n\n')
 
   const [linkedinResults, propertyPmResults, apolloContacts] = await Promise.all([
-    tavilySearch(`"${entity}" ${geo} "property manager" OR "community manager" OR "regional manager" site:linkedin.com`, 4, 'people'),
+    // Serper → Google has LinkedIn indexed far more thoroughly than Tavily's crawler
+    serperSearch(`"${entity}" "property manager" OR "community manager" OR "regional manager" OR "asset manager" site:linkedin.com ${geo}`, 6, 'serper-linkedin'),
     tavilySearch(`"${name}" ${geo} "property manager" OR "community manager" OR "leasing manager" contact phone email name`, 3, 'people'),
     apolloSearchContacts(entity, [
       'Property Manager', 'Community Manager', 'Leasing Manager',
@@ -996,6 +1028,7 @@ freshness_score (1-5): 5=contract expiry this year or confirmed pain <3mo; 4=pai
         portfolio_isp_match: portfolioIspBlock.length > 0,
         old_name_detected: !!old_name,
         isp_confirmed: s4.provider_confirmed,
+        serper_active: !!process.env.SERPER_API_KEY,
       },
       fccVerified: s4.fcc_providers.length > 0,
       webIntelligence: true,
