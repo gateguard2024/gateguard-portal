@@ -109,6 +109,14 @@ interface ScoutBrief {
   key_data_points: string[];
 }
 
+interface ScoutQueue {
+  property: { name: string; address: string; city: string; state: string; units: number; class: string; management_company: string; owner_entity: string; old_name: string | null };
+  pain_angles: Array<{ type: string; quote: string; severity: string }>;
+  connectivity: { isp_providers: string[]; bulk_detected: boolean; provider_confirmed: boolean; bulk_agreements: BulkAgreement[] };
+  proptech: { gate_operators: string[]; access_control: string[]; tech_generation: string };
+  contact_chain: DecisionMakerChainItem[];
+}
+
 interface DecisionMakerChainItem {
   name: string;
   title: string;
@@ -140,6 +148,11 @@ interface Prospect {
   pain_signals: PainSignal[];
   profile: Profile;
   scout_brief: ScoutBrief;
+  scout_queue?: ScoutQueue;
+  behavioral_profile?: Record<string, string>;
+  pitch_strategy?: { primary_hook?: string; secondary_hooks?: string[]; avoid?: string[] };
+  freshness_score?: number;
+  buying_trends?: string;
 }
 
 interface ResearchResult {
@@ -219,7 +232,7 @@ const URGENCY_PILL: Record<string, string> = {
   low:      "bg-slate-100 text-slate-700",
 };
 
-type DetailTab = 'property' | 'dm' | 'intel' | 'scout';
+type DetailTab = 'property' | 'proptech' | 'dm' | 'intel' | 'scout';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -279,7 +292,7 @@ export default function ARIAPage() {
   const [error, setError]                   = useState<string | null>(null);
   const [selectedProspect, setSelectedProspect] = useState(0);
   const [activeTab, setActiveTab]           = useState<DetailTab>('property');
-  const [mobileTab, setMobileTab]           = useState<'list' | 'property' | 'dm' | 'scout'>('list');
+  const [mobileTab, setMobileTab]           = useState<'list' | 'property' | 'proptech' | 'dm' | 'scout'>('list');
   const [copied, setCopied]                 = useState(false);
   const [savedSearchId, setSavedSearchId]   = useState<string | null>(null);
   const [savedSearches, setSavedSearches]   = useState<SavedSearch[]>([]);
@@ -683,10 +696,11 @@ export default function ARIAPage() {
         <div className="px-6 pb-0">
           <div className="flex gap-2 mb-[-1px]">
             {([
-              { key: 'property', label: 'Property Telemetry' },
+              { key: 'property', label: 'Property' },
+              { key: 'proptech', label: 'PropTech', badge: [p.property?.proptech?.gate_operators, p.property?.proptech?.access_control, p.property?.proptech?.cameras, p.property?.proptech?.intercoms].filter(a => a?.length).length || null },
               { key: 'dm',       label: 'Decision Matrix' },
               { key: 'intel',    label: 'AI Intel', badge: p.pain_signals?.length > 0 ? p.pain_signals.length : null },
-              { key: 'scout',    label: 'SCOUT Handoff', greenBadge: true },
+              { key: 'scout',    label: 'SCOUT', greenBadge: true },
             ] as { key: DetailTab; label: string; badge?: number | null; greenBadge?: boolean }[]).map(tab => {
               const isActive = activeTab === tab.key;
               return (
@@ -721,20 +735,6 @@ export default function ARIAPage() {
 
   // ── Property tab ──────────────────────────────────────────────────────────
   function PropertyTab({ p }: { p: Prospect }) {
-    const pt = p.property?.proptech ?? {};
-    const hasStack = [pt.gate_operators, pt.access_control, pt.intercoms, pt.cameras,
-      pt.smart_locks, pt.resident_apps, pt.package_solutions].some(a => a?.length);
-
-    const categories = [
-      { label: 'Gates',          emoji: '🚧', key: 'gate_operators' as keyof PropTech,    chipClass: 'bg-orange-50/80 text-orange-700 border-orange-200/60' },
-      { label: 'Access Control', emoji: '🔑', key: 'access_control' as keyof PropTech,    chipClass: 'bg-blue-50/80 text-blue-700 border-blue-200/60' },
-      { label: 'Intercoms',      emoji: '📟', key: 'intercoms' as keyof PropTech,         chipClass: 'bg-violet-50/80 text-violet-700 border-violet-200/60' },
-      { label: 'Cameras',        emoji: '📷', key: 'cameras' as keyof PropTech,           chipClass: 'bg-slate-50/80 text-slate-700 border-slate-200/60' },
-      { label: 'Smart Locks',    emoji: '🔒', key: 'smart_locks' as keyof PropTech,       chipClass: 'bg-emerald-50/80 text-emerald-700 border-emerald-200/60' },
-      { label: 'Resident App',   emoji: '📱', key: 'resident_apps' as keyof PropTech,     chipClass: 'bg-indigo-50/80 text-indigo-700 border-indigo-200/60' },
-      { label: 'Packages',       emoji: '📦', key: 'package_solutions' as keyof PropTech, chipClass: 'bg-amber-50/80 text-amber-700 border-amber-200/60' },
-    ];
-
     return (
       <div className="grid grid-cols-2 gap-5 max-w-5xl animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
@@ -855,64 +855,38 @@ export default function ARIAPage() {
           </div>
         </div>
 
-        {(hasStack || pt.tech_generation || pt.sara_signals) && (
-          <div className="col-span-2 bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B7EFF]">PropTech Stack Architecture</p>
-              <div className="flex-1" />
-              {pt.sara_signals
-                ? <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-600 border border-purple-100 shadow-sm">🎯 SARA Opportunity</span>
-                : pt.tech_generation
-                  ? <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-md capitalize shadow-sm border",
-                      pt.tech_generation === 'legacy' ? 'bg-rose-50 text-rose-600 border-rose-100' :
-                      pt.tech_generation === 'modern' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                                                        'bg-amber-50 text-amber-600 border-amber-100'
-                    )}>{pt.tech_generation} Generation</span>
-                  : null}
-            </div>
-            <div className="flex flex-wrap gap-x-8 gap-y-4">
-              {categories.map(cat => {
-                const items = pt[cat.key] as string[] | undefined;
-                if (!items?.length) return null;
-                return (
-                  <div key={cat.key}>
-                    <p className="text-[10px] font-mono text-slate-400 mb-2">{cat.emoji} {cat.label}</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(items || []).map((item: string) => (
-                        <span key={item} className={cn("text-[10px] px-2 py-1 rounded-md font-bold border shadow-sm", cat.chipClass)}>{item}</span>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            {pt.replacement_window && (
-              <div className="mt-5 rounded-xl px-4 py-3 bg-amber-50/50 border border-amber-200/60 flex items-start gap-2">
-                <Clock size={14} className="text-amber-500 mt-0.5" />
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700/80 mb-0.5">Est. Replacement Window</p>
-                  <p className="text-xs font-medium text-amber-900">{pt.replacement_window}</p>
-                </div>
-              </div>
-            )}
-            {pt.displacement_targets?.length ? (
-              <div className="mt-3 rounded-xl px-4 py-3 border border-rose-200/60 bg-rose-50/30">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-rose-600 mb-2 flex items-center gap-1.5"><Target size={12}/> GateGuard Targets</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {(pt.displacement_targets || []).map((t: string) => (
-                    <span key={t} className="text-[10px] px-2 py-1 rounded-md font-bold bg-white text-rose-600 border border-rose-100 shadow-sm">{t}</span>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        )}
+        <div className="col-span-2 flex items-center gap-2 p-3 rounded-xl border border-[#6B7EFF]/20 bg-[#6B7EFF]/5 cursor-pointer hover:bg-[#6B7EFF]/10 transition-colors"
+          onClick={() => setActiveTab('proptech')}>
+          <Package size={14} className="text-[#6B7EFF]" />
+          <span className="text-xs font-bold text-[#6B7EFF]">View PropTech Architecture →</span>
+          {p.property?.proptech?.sara_signals && (
+            <span className="ml-auto text-[9px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-600 border border-purple-100">🎯 SARA Opportunity</span>
+          )}
+        </div>
       </div>
     );
   }
 
   // ── DM tab ────────────────────────────────────────────────────────────────
   function DMTab({ p }: { p: Prospect }) {
+    const [crmImporting, setCrmImporting] = useState(false);
+    const [crmImported, setCrmImported] = useState(false);
+
+    async function importToCRM() {
+      if (!savedSearchId || crmImporting) return;
+      setCrmImporting(true);
+      try {
+        const r = await fetch(`/api/aria/searches/${savedSearchId}/import`, { method: 'POST' });
+        const d = await r.json();
+        if (!d.error) {
+          setCrmImported(true);
+          setImportResult(prev => ({ ...prev, [savedSearchId]: { created: d.created, skipped: d.skipped } }));
+        }
+      } catch { /* fail silently */ } finally {
+        setCrmImporting(false);
+      }
+    }
+
     const roleMeta: Record<string, { label: string; bg: string; text: string; border: string }> = {
       owner:            { label: 'Owner / PE',     bg: 'bg-purple-50/80', text: 'text-purple-700', border: 'border-purple-200/60' },
       asset_manager:    { label: 'Asset Manager',  bg: 'bg-[#6B7EFF]/5', text: 'text-[#6B7EFF]', border: 'border-[#6B7EFF]/20' },
@@ -921,10 +895,76 @@ export default function ARIAPage() {
       unknown:          { label: 'Contact',        bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200/60' },
     };
 
+    // Separate chain into property-level (pm, regional) vs ownership-level (owner, asset)
+    const chain = p.decision_maker_chain ?? [];
+    const propertyLevelRoles = ['property_manager', 'regional_manager', 'unknown'];
+    const ownershipLevelRoles = ['owner', 'asset_manager'];
+    const propertyContacts = chain.filter(c => propertyLevelRoles.includes(c.role_type));
+    const ownershipContacts = chain.filter(c => ownershipLevelRoles.includes(c.role_type));
+
+    const ContactCard = ({ dm, idx }: { dm: DecisionMakerChainItem; idx: number }) => {
+      const meta = roleMeta[dm.role_type] ?? roleMeta.unknown;
+      return (
+        <div className={cn("rounded-xl border p-4 bg-white shadow-sm transition-all hover:shadow-md", meta.border)}>
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[10px] shrink-0 shadow-sm"
+              style={{ background: dm.role_type === 'owner' ? 'linear-gradient(135deg, #7C3AED, #5B21B6)' : dm.role_type === 'asset_manager' ? 'linear-gradient(135deg, #6B7EFF, #3B4FCC)' : 'linear-gradient(135deg, #10B981, #059669)' }}>
+              {getInitials(dm.name)}
+            </div>
+            <div className="flex-1 min-w-0 pt-0.5">
+              <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                <p className="text-sm font-bold text-slate-900 truncate">{dm.name || 'Unknown'}</p>
+                <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-md border shadow-sm", meta.bg, meta.text, meta.border)}>{meta.label}</span>
+              </div>
+              <p className="text-xs font-medium text-slate-500 truncate">{dm.title}</p>
+              <p className="text-[10px] text-slate-400 truncate mt-0.5">{dm.company}</p>
+            </div>
+          </div>
+          {(dm.top_email_format || dm.email) && (
+            <div className="mt-3 pt-3 border-t border-slate-100">
+              <p className="font-mono text-[10px] text-slate-600 bg-slate-50 px-2 py-1 rounded w-fit border border-slate-100">{dm.top_email_format || dm.email}</p>
+            </div>
+          )}
+          {dm.dm_hooks && dm.dm_hooks.length > 0 && dm.dm_hooks[0] !== 'no recent social activity found' && (
+            <div className="mt-3 space-y-1.5 bg-slate-50/50 p-3 rounded-lg border border-slate-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">AI Hooks</p>
+              {(dm.dm_hooks || []).slice(0, 2).map((hook, hi) => (
+                <p key={hi} className="text-[10px] text-slate-600 leading-relaxed font-medium">
+                  <span className={cn("font-bold mr-1.5", meta.text)}>↳</span>{hook}
+                </p>
+              ))}
+            </div>
+          )}
+          {dm.linkedin_slug && (
+            <a href={`https://linkedin.com/in/${dm.linkedin_slug}`} target="_blank" rel="noopener noreferrer"
+              className={cn("mt-3 flex items-center gap-1.5 text-[10px] font-bold w-fit px-2 py-1 rounded-md transition-colors", meta.bg, meta.text)}>
+              <ExternalLink size={10} /> LinkedIn Profile
+            </a>
+          )}
+        </div>
+      );
+    };
+
     return (
       <div className="space-y-5 max-w-4xl animate-in fade-in slide-in-from-bottom-2 duration-500">
+
+        {/* Primary contact card + CRM import */}
         <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Primary Contact</p>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Primary Contact</p>
+            {savedSearchId && !crmImported && !importResult[savedSearchId] && (
+              <button onClick={importToCRM} disabled={crmImporting}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg text-white font-bold disabled:opacity-60 shadow-sm transition-all hover:opacity-90"
+                style={{ background: '#6B7EFF' }}>
+                {crmImporting ? <Loader2 size={11} className="animate-spin" /> : <><Download size={11} /> Import to CRM</>}
+              </button>
+            )}
+            {(crmImported || importResult[savedSearchId ?? '']?.created >= 0) && (
+              <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100">
+                <CheckCircle2 size={12} /> Added to CRM
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-4 mb-5">
             <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg shrink-0 shadow-sm"
               style={{ background: "linear-gradient(135deg, #6B7EFF 0%, #3B4FCC 100%)" }}>
@@ -962,56 +1002,285 @@ export default function ARIAPage() {
           </div>
         </div>
 
-        {p.decision_maker_chain && p.decision_maker_chain.length > 0 && (
+        {/* Property-Level Contacts */}
+        {propertyContacts.length > 0 && (
+          <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-2 h-2 rounded-full bg-emerald-400" />
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Property Level</p>
+              <span className="text-[9px] font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md ml-auto">{propertyContacts.length} contacts</span>
+            </div>
+            <p className="text-[10px] text-slate-400 mb-3 font-medium">On-site management: property managers, regional VPs — your primary outreach targets</p>
+            <div className="space-y-3">
+              {propertyContacts.map((dm, idx) => <ContactCard key={idx} dm={dm} idx={idx} />)}
+            </div>
+          </div>
+        )}
+
+        {/* Ownership-Level Contacts */}
+        {ownershipContacts.length > 0 && (
+          <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-2 h-2 rounded-full bg-purple-400" />
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Ownership Level</p>
+              <span className="text-[9px] font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md ml-auto">{ownershipContacts.length} contacts</span>
+            </div>
+            <p className="text-[10px] text-slate-400 mb-3 font-medium">
+              {p.ownership?.owner_entity && <span className="font-bold text-slate-600">{p.ownership.owner_entity}</span>}
+              {p.ownership?.portfolio_size && <span> · {p.ownership.portfolio_size} portfolio</span>}
+              {' '}— asset managers, PE principals, key budget decision makers
+            </p>
+            <div className="space-y-3">
+              {ownershipContacts.map((dm, idx) => <ContactCard key={idx} dm={dm} idx={idx} />)}
+            </div>
+          </div>
+        )}
+
+        {/* Fallback: show all if not separated */}
+        {propertyContacts.length === 0 && ownershipContacts.length === 0 && chain.length > 0 && (
           <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
             <div className="flex items-center gap-2 mb-4">
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Corporate Hierarchy</p>
-              <span className="ml-auto text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">{p.decision_maker_chain.length} Nodes</span>
+              <span className="ml-auto text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">{chain.length} Nodes</span>
             </div>
             <div className="space-y-3">
-              {(p.decision_maker_chain || []).map((dm, idx) => {
-                const meta = roleMeta[dm.role_type] ?? roleMeta.unknown;
-                return (
-                  <div key={idx} className={cn("rounded-xl border p-4 bg-white shadow-sm transition-all hover:shadow-md", meta.border)}>
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[10px] shrink-0 shadow-sm"
-                        style={{ background: dm.role_type === 'owner' ? 'linear-gradient(135deg, #7C3AED, #5B21B6)' : dm.role_type === 'asset_manager' ? 'linear-gradient(135deg, #6B7EFF, #3B4FCC)' : 'linear-gradient(135deg, #10B981, #059669)' }}>
-                        {getInitials(dm.name)}
-                      </div>
-                      <div className="flex-1 min-w-0 pt-0.5">
-                        <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                          <p className="text-sm font-bold text-slate-900 truncate">{dm.name || 'Unknown'}</p>
-                          <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-md border shadow-sm", meta.bg, meta.text, meta.border)}>{meta.label}</span>
-                        </div>
-                        <p className="text-xs font-medium text-slate-500 truncate">{dm.title}</p>
-                        <p className="text-[10px] text-slate-400 truncate mt-0.5">{dm.company}</p>
-                      </div>
-                    </div>
-                    {(dm.top_email_format || dm.email) && (
-                      <div className="mt-3 pt-3 border-t border-slate-100">
-                        <p className="font-mono text-[10px] text-slate-600 bg-slate-50 px-2 py-1 rounded w-fit border border-slate-100">{dm.top_email_format || dm.email}</p>
-                      </div>
-                    )}
-                    {dm.dm_hooks && dm.dm_hooks.length > 0 && dm.dm_hooks[0] !== 'no recent social activity found' && (
-                      <div className="mt-3 space-y-1.5 bg-slate-50/50 p-3 rounded-lg border border-slate-100">
-                        <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">AI Hooks</p>
-                        {(dm.dm_hooks || []).slice(0, 2).map((hook, hi) => (
-                          <p key={hi} className="text-[10px] text-slate-600 leading-relaxed font-medium">
-                            <span className={cn("font-bold mr-1.5", meta.text)}>↳</span>{hook}
-                          </p>
-                        ))}
-                      </div>
-                    )}
-                    {dm.linkedin_slug && (
-                      <a href={`https://linkedin.com/in/${dm.linkedin_slug}`} target="_blank" rel="noopener noreferrer"
-                        className={cn("mt-3 flex items-center gap-1.5 text-[10px] font-bold w-fit px-2 py-1 rounded-md transition-colors", meta.bg, meta.text)}>
-                        <ExternalLink size={10} /> LinkedIn Profile
-                      </a>
-                    )}
-                  </div>
-                );
-              })}
+              {chain.map((dm, idx) => <ContactCard key={idx} dm={dm} idx={idx} />)}
             </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── PropTech Architecture tab ─────────────────────────────────────────────
+  function PropTechTab({ p }: { p: Prospect }) {
+    const pt = p.property?.proptech ?? {};
+    const agreements = p.property?.bulk_agreements ?? [];
+    const videoAgreements = agreements.filter((a: BulkAgreement) => a.service_type === 'video' || a.service_type === 'bundled');
+    const internetAgreements = agreements.filter((a: BulkAgreement) => a.service_type === 'internet' || a.service_type === 'bundled');
+
+    const AgreementCard = ({ a }: { a: BulkAgreement }) => (
+      <div className={cn("rounded-xl border p-4 shadow-sm",
+        a.agreement_type === 'exclusive' ? 'bg-amber-50/30 border-amber-200/60' :
+        a.agreement_type === 'bulk' ? 'bg-emerald-50/30 border-emerald-200/60' : 'bg-slate-50 border-slate-200/60'
+      )}>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-bold text-slate-900">{a.provider}</span>
+          <div className="flex items-center gap-2">
+            <span className={cn("text-[9px] font-bold uppercase px-2 py-0.5 rounded-md",
+              a.confidence === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
+              a.confidence === 'high' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-600'
+            )}>{a.confidence}</span>
+            <span className={cn("text-[9px] font-bold uppercase px-2 py-0.5 rounded-md",
+              a.agreement_type === 'exclusive' ? 'bg-amber-100 text-amber-700' :
+              a.agreement_type === 'bulk' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+            )}>{a.agreement_type}</span>
+          </div>
+        </div>
+        {a.expiry_estimate && a.expiry_estimate !== 'unknown' && (
+          <div className="flex items-center gap-1.5 mt-1">
+            <Clock size={12} className="text-amber-500" />
+            <span className="text-xs font-bold text-amber-700">Est. expiry: {a.expiry_estimate}</span>
+          </div>
+        )}
+        {a.source_snippet && (
+          <p className="text-[10px] text-slate-500 mt-2 leading-relaxed italic border-t border-slate-100 pt-2">&ldquo;{a.source_snippet.slice(0, 120)}...&rdquo;</p>
+        )}
+      </div>
+    );
+
+    const TechCategory = ({ label, emoji, items, chipClass }: { label: string; emoji: string; items?: string[]; chipClass: string }) => {
+      if (!items?.length) return null;
+      return (
+        <div className="space-y-2">
+          <p className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">{emoji} {label}</p>
+          <div className="flex flex-wrap gap-2">
+            {items.map(item => (
+              <span key={item} className={cn("text-[11px] px-3 py-1.5 rounded-lg font-bold border shadow-sm", chipClass)}>{item}</span>
+            ))}
+          </div>
+        </div>
+      );
+    };
+
+    const hasVideoAgreements = videoAgreements.length > 0;
+    const hasInternetAgreements = internetAgreements.length > 0;
+    const hasTechStack = [pt.gate_operators, pt.access_control, pt.intercoms, pt.cameras, pt.smart_locks, pt.resident_apps, pt.package_solutions].some(a => a?.length);
+    const hasDisplacementTargets = (pt.displacement_targets?.length ?? 0) > 0;
+    const noData = !hasVideoAgreements && !hasInternetAgreements && !hasTechStack;
+
+    if (noData) return (
+      <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
+        <Package size={32} className="opacity-20" />
+        <p className="text-sm font-medium">No PropTech data found for this property</p>
+        <p className="text-xs text-slate-400">Run a deeper search or check Intel tab for signals</p>
+      </div>
+    );
+
+    return (
+      <div className="space-y-6 max-w-5xl animate-in fade-in slide-in-from-bottom-2 duration-500">
+
+        {/* Video Agreements */}
+        {(hasVideoAgreements || p.property?.video_providers?.length) && (
+          <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <Globe size={15} className="text-violet-500" />
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-700">Video Agreements</p>
+              {hasVideoAgreements && <span className="ml-auto text-[10px] font-mono bg-violet-50 text-violet-600 border border-violet-100 px-2 py-0.5 rounded-md">{videoAgreements.length} detected</span>}
+            </div>
+            {hasVideoAgreements ? (
+              <div className="space-y-3">
+                {videoAgreements.map((a, i) => <AgreementCard key={i} a={a} />)}
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {(p.property?.video_providers || []).map(v => (
+                  <span key={v} className="text-[11px] px-3 py-1.5 rounded-lg font-bold border bg-violet-50/80 text-violet-700 border-violet-200/60 shadow-sm">{v}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Internet Agreements */}
+        {(hasInternetAgreements || p.property?.isp_providers?.length) && (
+          <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <Wifi size={15} className="text-emerald-500" />
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-700">Internet Agreements</p>
+              <div className="flex items-center gap-2 ml-auto">
+                {p.property?._fcc_verified
+                  ? <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-100 text-emerald-600">FCC Verified</span>
+                  : <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-amber-50 border border-amber-100 text-amber-600">AI Estimated</span>}
+                {hasInternetAgreements && <span className="text-[10px] font-mono bg-emerald-50 text-emerald-600 border border-emerald-100 px-2 py-0.5 rounded-md">{internetAgreements.length} detected</span>}
+              </div>
+            </div>
+            {hasInternetAgreements ? (
+              <div className="space-y-3">
+                {internetAgreements.map((a, i) => <AgreementCard key={i} a={a} />)}
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {(p.property?.isp_providers || []).map(v => (
+                  <span key={v} className={cn("text-[11px] px-3 py-1.5 rounded-lg font-bold border shadow-sm",
+                    p.property?._fcc_verified ? "bg-emerald-50/80 text-emerald-700 border-emerald-200/60" : "bg-blue-50/80 text-blue-700 border-blue-200/60"
+                  )}>{v}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Gates & Access Control */}
+        {(pt.gate_operators?.length || pt.access_control?.length || pt.intercoms?.length) && (
+          <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <Shield size={15} className="text-orange-500" />
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-700">Gates &amp; Access Control</p>
+              {pt.tech_generation && (
+                <span className={cn("ml-auto text-[9px] font-bold px-2 py-0.5 rounded-md capitalize",
+                  pt.tech_generation === 'legacy' ? 'bg-rose-50 text-rose-600 border border-rose-100' :
+                  pt.tech_generation === 'modern' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                                                    'bg-amber-50 text-amber-600 border border-amber-100'
+                )}>{pt.tech_generation} Generation</span>
+              )}
+            </div>
+            <div className="space-y-4">
+              <TechCategory label="Gate Operators" emoji="🚧" items={pt.gate_operators} chipClass="bg-orange-50/80 text-orange-700 border-orange-200/60" />
+              <TechCategory label="Access Control" emoji="🔑" items={pt.access_control} chipClass="bg-blue-50/80 text-blue-700 border-blue-200/60" />
+              <TechCategory label="Intercoms" emoji="📟" items={pt.intercoms} chipClass="bg-violet-50/80 text-violet-700 border-violet-200/60" />
+            </div>
+            {pt.replacement_window && (
+              <div className="mt-4 rounded-xl px-4 py-3 bg-amber-50/50 border border-amber-200/60 flex items-start gap-2">
+                <Clock size={13} className="text-amber-500 mt-0.5" />
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-amber-700/80 mb-0.5">Estimated Replacement Window</p>
+                  <p className="text-xs font-medium text-amber-900">{pt.replacement_window}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Cameras & Security */}
+        {pt.cameras?.length && (
+          <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <Radio size={15} className="text-slate-500" />
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-700">Cameras &amp; Security</p>
+            </div>
+            <TechCategory label="Camera Systems" emoji="📷" items={pt.cameras} chipClass="bg-slate-50/80 text-slate-700 border-slate-200/60" />
+          </div>
+        )}
+
+        {/* SmartRent & other tech */}
+        {(pt.smart_locks?.length || pt.resident_apps?.length || pt.package_solutions?.length) && (
+          <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <Package size={15} className="text-indigo-500" />
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-700">SmartRent &amp; Other Tech</p>
+              {(pt.resident_apps?.some((a: string) => a.toLowerCase().includes('smartrent')) || pt.smart_locks?.some((a: string) => a.toLowerCase().includes('smartrent'))) && (
+                <span className="ml-auto text-[9px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 border border-indigo-100">SmartRent Detected</span>
+              )}
+            </div>
+            <div className="space-y-4">
+              <TechCategory label="Smart Locks" emoji="🔒" items={pt.smart_locks} chipClass="bg-emerald-50/80 text-emerald-700 border-emerald-200/60" />
+              <TechCategory label="Resident App" emoji="📱" items={pt.resident_apps} chipClass="bg-indigo-50/80 text-indigo-700 border-indigo-200/60" />
+              <TechCategory label="Package Solutions" emoji="📦" items={pt.package_solutions} chipClass="bg-amber-50/80 text-amber-700 border-amber-200/60" />
+            </div>
+          </div>
+        )}
+
+        {/* AI Recommendations */}
+        {(hasDisplacementTargets || p.pitch_strategy || pt.sara_signals) && (
+          <div className="bg-white rounded-2xl border border-[#6B7EFF]/20 p-5 shadow-sm relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-[#6B7EFF] to-[#A78BFA]" />
+            <div className="flex items-center gap-2 mb-4">
+              <Zap size={15} className="text-[#6B7EFF]" />
+              <p className="text-xs font-bold uppercase tracking-widest text-[#6B7EFF]">AI Recommendations</p>
+              {pt.sara_signals && <span className="ml-auto text-[9px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-600 border border-purple-100">🎯 SARA Opportunity</span>}
+            </div>
+
+            {hasDisplacementTargets && (
+              <div className="mb-4">
+                <p className="text-[10px] font-bold text-slate-500 mb-2 flex items-center gap-1.5"><Target size={11} className="text-rose-500" /> GateGuard Displacement Targets</p>
+                <div className="flex flex-wrap gap-2">
+                  {(pt.displacement_targets || []).map((t: string) => (
+                    <span key={t} className="text-[11px] px-3 py-1.5 rounded-lg font-bold bg-white text-rose-600 border border-rose-200 shadow-sm">{t}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {p.pitch_strategy?.primary_hook && (
+              <div className="rounded-xl bg-amber-50/50 border border-amber-200/60 px-4 py-3 mb-3">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-amber-700/80 mb-1.5">Recommended Opening Hook</p>
+                <p className="text-sm text-amber-900 leading-relaxed font-medium italic">&ldquo;{p.pitch_strategy.primary_hook}&rdquo;</p>
+              </div>
+            )}
+
+            {p.pitch_strategy?.secondary_hooks && p.pitch_strategy.secondary_hooks.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Secondary Angles</p>
+                {p.pitch_strategy.secondary_hooks.slice(0, 3).map((hook, i) => (
+                  <div key={i} className="flex items-start gap-2.5 text-xs text-slate-600">
+                    <span className="font-mono font-bold text-[#6B7EFF] mt-0.5 shrink-0">[{i+2}]</span>
+                    <span className="font-medium leading-relaxed">{hook}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {p.pitch_strategy?.avoid && p.pitch_strategy.avoid.length > 0 && (
+              <div className="mt-4 pt-3 border-t border-slate-100">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-rose-500 mb-2">Avoid Mentioning</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {p.pitch_strategy.avoid.map((a, i) => (
+                    <span key={i} className="text-[10px] px-2 py-0.5 rounded-md bg-rose-50 text-rose-600 border border-rose-100 font-medium">{a}</span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1020,22 +1289,37 @@ export default function ARIAPage() {
 
   // ── Intel tab ─────────────────────────────────────────────────────────────
   function IntelTab({ p }: { p: Prospect }) {
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - 12);
+    const filteredSignals = (p.pain_signals || []).filter(sig => {
+      if (!sig.date || sig.date === 'unknown') return true;
+      const d = new Date(sig.date);
+      return isNaN(d.getTime()) || d >= cutoff;
+    }).slice(0, 12);
+    const totalSignals = p.pain_signals?.length ?? 0;
+    const hiddenCount = totalSignals - filteredSignals.length;
+
     return (
       <div className="space-y-6 max-w-4xl animate-in fade-in slide-in-from-bottom-2 duration-500">
-        
+
         {/* AI Synthesis Block */}
         <div className="ai-border-glow active bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
           <div className="flex items-center gap-2 mb-5">
             <Cpu size={16} className="text-[#A78BFA]" />
             <h3 className="text-xs font-bold uppercase tracking-widest text-[#A78BFA]">ARIA Synthesis</h3>
+            {p.freshness_score != null && (
+              <span className="ml-auto text-[10px] font-mono bg-[#6B7EFF]/10 text-[#6B7EFF] border border-[#6B7EFF]/20 px-2 py-0.5 rounded-md">
+                Freshness {p.freshness_score}/10
+              </span>
+            )}
           </div>
-          
+
           <div className="grid grid-cols-2 gap-x-8 gap-y-6">
             <div className="space-y-1.5">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Target size={12}/> Primary Vulnerability</p>
               <p className="text-sm text-slate-800 leading-relaxed font-medium">{p.profile?.primary_concern || 'None detected'}</p>
             </div>
-            
+
             <div className="space-y-1.5">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Clock size={12}/> Contract Window</p>
               <p className={`text-sm leading-relaxed font-medium ${p.profile?.contract_window ? 'text-slate-800' : 'text-slate-300'}`}>
@@ -1054,44 +1338,60 @@ export default function ARIAPage() {
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Users size={12}/> Comm Style</p>
               <p className="text-sm text-slate-800 leading-relaxed font-medium capitalize">{p.profile?.communication_style?.replace(/-/g, " ") || 'Email'}</p>
             </div>
+
+            {p.buying_trends && (
+              <div className="col-span-2 space-y-1.5 pt-2 border-t border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><TrendingUp size={12}/> Buying Trends</p>
+                <p className="text-sm text-slate-700 leading-relaxed font-medium">{p.buying_trends}</p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Intent Signals / Anomalies */}
+        {/* Intent Signals / Anomalies — last 12 months, max 12 */}
         <div>
           <div className="flex items-center justify-between mb-4 px-1">
             <div className="flex items-center gap-2">
               <Radio size={16} className="text-rose-500" />
-              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-700">Intent Signals Detected</h3>
+              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-700">Intent Signals</h3>
+              <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">Last 12 months</span>
             </div>
-            <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-1 rounded-md">{p.pain_signals?.length || 0} Anomalies</span>
+            <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-1 rounded-md">
+              {filteredSignals.length} anomalies{hiddenCount > 0 ? ` (${hiddenCount} older hidden)` : ''}
+            </span>
           </div>
 
-          <div className="space-y-3">
-            {(p.pain_signals || []).map((sig, i) => {
-              const Icon = SIGNAL_ICONS[sig.signal_type] || AlertCircle;
-              const sev = SIGNAL_SEVERITY[sig.severity] ?? SIGNAL_SEVERITY.low;
-              return (
-                <div key={i} className={cn("rounded-xl border bg-white shadow-sm p-4 relative overflow-hidden group", sev.border)}>
-                  <div className={cn("absolute left-0 top-0 bottom-0 w-1 opacity-50", sev.bg.replace('bg-', 'bg-gradient-to-b from-white to-'))} />
-                  
-                  <div className="flex items-start gap-4">
-                    <div className={cn("p-2 rounded-lg bg-slate-50 border", sev.text, sev.border.replace('border-', 'border-').replace('200', '100'))}>
-                       <Icon size={16} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <span className={cn("text-[10px] font-bold uppercase tracking-wider", sev.text)}>{displaySource(sig.source)}</span>
-                        <span className="text-[10px] font-mono text-slate-400">• {sig.date}</span>
-                        <span className={cn("ml-auto text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm border", sev.badge, sev.border.replace('200','100'))}>{sig.severity} Alert</span>
+          {filteredSignals.length === 0 ? (
+            <div className="text-center py-10 text-slate-400">
+              <Radio size={24} className="mx-auto mb-3 opacity-20" />
+              <p className="text-sm font-medium">No recent signals detected in the last 12 months</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredSignals.map((sig, i) => {
+                const Icon = SIGNAL_ICONS[sig.signal_type] || AlertCircle;
+                const sev = SIGNAL_SEVERITY[sig.severity] ?? SIGNAL_SEVERITY.low;
+                return (
+                  <div key={i} className={cn("rounded-xl border bg-white shadow-sm p-4 relative overflow-hidden group", sev.border)}>
+                    <div className={cn("absolute left-0 top-0 bottom-0 w-1", sev.bg)} />
+                    <div className="flex items-start gap-4">
+                      <div className={cn("p-2 rounded-lg bg-slate-50 border", sev.text, sev.border.replace('200', '100'))}>
+                         <Icon size={16} />
                       </div>
-                      <p className="text-sm text-slate-700 leading-relaxed font-medium">&ldquo;{sig.quote}&rdquo;</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <span className={cn("text-[10px] font-bold uppercase tracking-wider", sev.text)}>{displaySource(sig.source)}</span>
+                          <span className="text-[10px] font-mono text-slate-400">• {sig.date}</span>
+                          <span className={cn("ml-auto text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm border", sev.badge, sev.border.replace('200','100'))}>{sig.severity} Alert</span>
+                        </div>
+                        <p className="text-sm text-slate-700 leading-relaxed font-medium">&ldquo;{sig.quote}&rdquo;</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1099,103 +1399,198 @@ export default function ARIAPage() {
 
   // ── SCOUT tab ─────────────────────────────────────────────────────────────
   function ScoutTab({ p }: { p: Prospect }) {
-    if (!p.scout_brief) return (
+    const sq = p.scout_queue;
+    const sb = p.scout_brief;
+
+    if (!sq && !sb) return (
       <div className="flex flex-col items-center justify-center py-16 text-slate-300 gap-3">
         <Send size={32} className="opacity-20" />
-        <p className="text-sm font-medium">No SCOUT brief available for this target</p>
+        <p className="text-sm font-medium">No SCOUT context available for this target</p>
       </div>
     );
 
+    const copyPayload = () => {
+      const payload = sq
+        ? JSON.stringify(sq, null, 2)
+        : `SCOUT Brief\n\nContact: ${sb?.primary_contact}\nAngle: ${sb?.outreach_angle?.replace(/_/g, ' ')}\nUrgency: ${sb?.contract_window_urgency}\n\n${(sb?.key_data_points || []).map((pt, i) => `[${i+1}] ${pt}`).join('\n')}`;
+      navigator.clipboard.writeText(payload);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    };
+
     return (
-      <div className="space-y-6 max-w-4xl animate-in fade-in slide-in-from-bottom-2 duration-500">
+      <div className="space-y-5 max-w-4xl animate-in fade-in slide-in-from-bottom-2 duration-500">
+
+        {/* Header bar */}
         <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
-          
-          {/* Header */}
           <div className="bg-slate-50/50 border-b border-slate-100 px-6 py-4 flex items-center justify-between">
-             <div className="flex items-center gap-2">
-               <Zap size={16} className="text-emerald-500" />
-               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-700">Scout Handoff Payload</h3>
-             </div>
-             <span className="text-[10px] font-mono text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100 shadow-sm">Status: Ready</span>
+            <div className="flex items-center gap-2">
+              <Zap size={16} className="text-emerald-500" />
+              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-700">SCOUT Context Queue</h3>
+            </div>
+            <span className="text-[10px] font-mono text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100">Status: Ready</span>
           </div>
 
-          <div className="p-6">
-            {/* Meta Tags */}
-            <div className="flex items-center gap-3 flex-wrap mb-6 pb-6 border-b border-slate-100">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#6B7EFF]/10 border border-[#6B7EFF]/20 shadow-sm">
-                <Target size={12} className="text-[#6B7EFF]" />
-                <span className="text-[11px] font-bold text-[#6B7EFF] tracking-wide">
-                  {(p.scout_brief?.outreach_angle || 'General').replace(/_/g, ' ').toUpperCase()}
-                </span>
-              </div>
-              <span className={cn("text-[11px] font-bold px-3 py-1.5 rounded-lg uppercase tracking-wide shadow-sm border",
-                URGENCY_PILL[p.scout_brief?.contract_window_urgency] || "bg-slate-100 text-slate-600 border-slate-200")}>
-                {p.scout_brief?.contract_window_urgency || 'medium'} URGENCY
+          <div className="px-6 py-4 flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#6B7EFF]/10 border border-[#6B7EFF]/20">
+              <Target size={12} className="text-[#6B7EFF]" />
+              <span className="text-[11px] font-bold text-[#6B7EFF] tracking-wide">
+                {(sb?.outreach_angle || 'General').replace(/_/g, ' ').toUpperCase()}
               </span>
-              <div className="ml-auto flex items-center gap-2 text-[11px] font-mono text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
-                <User size={12} /> Target: <span className="text-slate-800 font-bold">{p.scout_brief?.primary_contact || 'Unknown'}</span>
-              </div>
             </div>
-
-            {/* Key Intel Terminal Block */}
-            <div className="bg-slate-50/80 rounded-xl p-6 border border-slate-200/60 shadow-inner relative overflow-hidden">
-              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#6B7EFF] to-[#A78BFA] opacity-80" />
-              <p className="text-[10px] font-bold text-slate-500 mb-4 uppercase tracking-widest flex items-center gap-2">
-                <Cpu size={12} className="text-[#6B7EFF]"/> Injecting variables...
-              </p>
-              <div className="space-y-4">
-                {(p.scout_brief?.key_data_points || []).map((point, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <span className="text-[11px] font-mono font-bold text-[#6B7EFF] mt-0.5">[{i + 1}]</span>
-                    <p className="text-[13px] font-medium text-slate-700 leading-relaxed">{point}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="mt-6 flex items-center gap-3">
-              <button
-                onClick={() => {
-                  const text = `SCOUT Brief\n\nPrimary Contact: ${p.scout_brief?.primary_contact || 'Unknown'}\nAngle: ${(p.scout_brief?.outreach_angle || '').replace(/_/g, ' ')}\nContract Window: ${p.scout_brief?.contract_window_urgency || 'Unknown'}\n\nKey Intel:\n${(p.scout_brief?.key_data_points || []).map((pt, i) => `${i+1}. ${pt}`).join('\n')}`;
-                  navigator.clipboard.writeText(text);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2000);
-                }}
-                className="flex items-center gap-2 text-xs px-4 py-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors font-bold shadow-sm"
-              >
-                <Copy size={14} /> {copied ? "Copied!" : "Copy Payload"}
+            <span className={cn("text-[11px] font-bold px-3 py-1.5 rounded-lg uppercase tracking-wide border",
+              URGENCY_PILL[sb?.contract_window_urgency ?? ''] || "bg-slate-100 text-slate-600 border-slate-200")}>
+              {sb?.contract_window_urgency || 'medium'} urgency
+            </span>
+            <div className="ml-auto flex items-center gap-2">
+              <button onClick={copyPayload}
+                className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold shadow-sm transition-colors">
+                <Copy size={12} /> {copied ? "Copied!" : "Copy JSON"}
               </button>
-              
-              <div className="flex-1" />
+            </div>
+          </div>
+        </div>
 
-              {savedSearchId && !importResult[savedSearchId] && (
-                <button
-                  onClick={() => importSearch(savedSearchId)}
-                  disabled={importing === savedSearchId}
-                  className="flex items-center gap-2 text-xs px-5 py-2.5 rounded-lg text-white font-bold transition-all hover:opacity-90 disabled:opacity-60 shadow-sm"
-                  style={{ background: "#6B7EFF" }}
-                >
-                  {importing === savedSearchId ? <Loader2 size={14} className="animate-spin" /> : <><Download size={14} /> Import to Queue</>}
-                </button>
-              )}
-              {savedSearchId && (importResult[savedSearchId]?.created ?? 0) >= 0 && !scoutResult[savedSearchId] && (
-                <button
-                  onClick={() => launchScout(savedSearchId)}
-                  disabled={scoutLoading === savedSearchId}
-                  className="ai-border-glow active flex items-center gap-2 text-xs px-6 py-2.5 rounded-lg text-white font-bold transition-all hover:scale-105 disabled:opacity-60 disabled:hover:scale-100 shadow-[0_4px_14px_0_rgba(16,185,129,0.39)]"
-                  style={{ background: "linear-gradient(to right, #10B981, #059669)" }}
-                >
-                  {scoutLoading === savedSearchId ? <Loader2 size={14} className="animate-spin" /> : <><Zap size={14} /> INITIALIZE SCOUT</>}
-                </button>
-              )}
-              {savedSearchId && scoutResult[savedSearchId] && (
-                <div className="flex items-center gap-2 text-xs font-bold text-emerald-600 bg-emerald-50 px-4 py-2.5 rounded-lg border border-emerald-100 shadow-sm">
-                  <CheckCircle2 size={14} /> Sequence Deployed ({scoutResult[savedSearchId].sent} sent)
+        {/* Property context block */}
+        {sq?.property && (
+          <div className="bg-white rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
+              <span className="font-mono text-[#6B7EFF]">[PROPERTY]</span> Identity Context
+            </p>
+            <div className="grid grid-cols-3 gap-4 text-xs">
+              {[
+                { label: 'Name', val: sq.property.name },
+                { label: 'Units', val: sq.property.units },
+                { label: 'Class', val: sq.property.class },
+                { label: 'Management', val: sq.property.management_company },
+                { label: 'Owner', val: sq.property.owner_entity },
+                { label: 'Formerly', val: sq.property.old_name },
+              ].filter(r => r.val).map(({ label, val }) => (
+                <div key={label}>
+                  <p className="text-slate-400 text-[9px] uppercase font-bold">{label}</p>
+                  <p className="font-bold text-slate-800 mt-0.5 truncate">{String(val)}</p>
                 </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Connectivity context */}
+        {sq?.connectivity && (sq.connectivity.isp_providers?.length || sq.connectivity.bulk_detected) && (
+          <div className="bg-white rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
+              <span className="font-mono text-emerald-600">[CONNECTIVITY]</span> Internet Signal
+            </p>
+            <div className="flex items-center gap-3 flex-wrap">
+              {sq.connectivity.isp_providers.map(isp => (
+                <span key={isp} className="text-[11px] px-3 py-1.5 rounded-lg font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">{isp}</span>
+              ))}
+              {sq.connectivity.bulk_detected && (
+                <span className="text-[11px] px-3 py-1.5 rounded-lg font-bold bg-amber-50 text-amber-700 border border-amber-200/60">Bulk Agreement Detected</span>
+              )}
+              {sq.connectivity.provider_confirmed && (
+                <span className="text-[11px] px-3 py-1.5 rounded-lg font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">Provider Confirmed</span>
               )}
             </div>
           </div>
+        )}
+
+        {/* Pain angles */}
+        {sq?.pain_angles && sq.pain_angles.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
+              <span className="font-mono text-rose-500">[PAIN_ANGLES]</span> Top Vulnerability Signals
+            </p>
+            <div className="bg-slate-900 rounded-xl p-4 font-mono text-[11px] leading-relaxed overflow-x-auto">
+              {sq.pain_angles.slice(0, 6).map((sig, i) => (
+                <div key={i} className="flex items-start gap-3 mb-2 last:mb-0">
+                  <span className="text-[#6B7EFF] shrink-0">[{i+1}]</span>
+                  <span className={sig.severity === 'high' ? 'text-rose-300' : sig.severity === 'medium' ? 'text-amber-300' : 'text-slate-400'}>
+                    <span className="text-slate-500">{sig.type}:</span> {sig.quote.slice(0, 100)}{sig.quote.length > 100 ? '...' : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* PropTech context */}
+        {sq?.proptech && (sq.proptech.gate_operators?.length || sq.proptech.access_control?.length) && (
+          <div className="bg-white rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
+              <span className="font-mono text-orange-500">[PROPTECH]</span> Gate &amp; Access Stack
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {[...(sq.proptech.gate_operators || []), ...(sq.proptech.access_control || [])].map(t => (
+                <span key={t} className="text-[11px] px-3 py-1.5 rounded-lg font-bold bg-orange-50 text-orange-700 border border-orange-200/60">{t}</span>
+              ))}
+              {sq.proptech.tech_generation && (
+                <span className="text-[11px] px-3 py-1.5 rounded-lg font-bold bg-slate-100 text-slate-600 border border-slate-200 capitalize">{sq.proptech.tech_generation} gen</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Contact chain */}
+        {sq?.contact_chain && sq.contact_chain.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
+              <span className="font-mono text-violet-500">[CONTACTS]</span> Outreach Chain ({sq.contact_chain.length} nodes)
+            </p>
+            <div className="space-y-2">
+              {sq.contact_chain.slice(0, 4).map((c, i) => (
+                <div key={i} className="flex items-center gap-3 text-xs bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
+                  <span className="font-mono text-[#6B7EFF] text-[10px]">[{i+1}]</span>
+                  <span className="font-bold text-slate-900">{c.name || '—'}</span>
+                  <span className="text-slate-500 capitalize">{(c.role_type || 'unknown').replace('_', ' ')}</span>
+                  {(c.top_email_format || c.email) && (
+                    <span className="ml-auto font-mono text-slate-500 text-[10px]">{c.top_email_format || c.email}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Key data points fallback from scout_brief */}
+        {!sq && sb?.key_data_points && sb.key_data_points.length > 0 && (
+          <div className="bg-slate-50/80 rounded-xl p-6 border border-slate-200/60 shadow-inner relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#6B7EFF] to-[#A78BFA]" />
+            <p className="text-[10px] font-bold text-slate-500 mb-4 uppercase tracking-widest flex items-center gap-2">
+              <Cpu size={12} className="text-[#6B7EFF]"/> Key Intel
+            </p>
+            <div className="space-y-4">
+              {sb.key_data_points.map((point, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <span className="text-[11px] font-mono font-bold text-[#6B7EFF] mt-0.5">[{i + 1}]</span>
+                  <p className="text-[13px] font-medium text-slate-700 leading-relaxed">{point}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex items-center gap-3 pt-1">
+          {savedSearchId && !importResult[savedSearchId] && (
+            <button onClick={() => importSearch(savedSearchId)} disabled={importing === savedSearchId}
+              className="flex items-center gap-2 text-xs px-5 py-2.5 rounded-lg text-white font-bold transition-all hover:opacity-90 disabled:opacity-60 shadow-sm"
+              style={{ background: "#6B7EFF" }}>
+              {importing === savedSearchId ? <Loader2 size={14} className="animate-spin" /> : <><Download size={14} /> Import to Queue</>}
+            </button>
+          )}
+          {savedSearchId && (importResult[savedSearchId]?.created ?? 0) >= 0 && !scoutResult[savedSearchId] && (
+            <button onClick={() => launchScout(savedSearchId)} disabled={scoutLoading === savedSearchId}
+              className="ai-border-glow active flex items-center gap-2 text-xs px-6 py-2.5 rounded-lg text-white font-bold transition-all hover:scale-105 disabled:opacity-60 shadow-[0_4px_14px_0_rgba(16,185,129,0.39)]"
+              style={{ background: "linear-gradient(to right, #10B981, #059669)" }}>
+              {scoutLoading === savedSearchId ? <Loader2 size={14} className="animate-spin" /> : <><Zap size={14} /> INITIALIZE SCOUT</>}
+            </button>
+          )}
+          {savedSearchId && scoutResult[savedSearchId] && (
+            <div className="flex items-center gap-2 text-xs font-bold text-emerald-600 bg-emerald-50 px-4 py-2.5 rounded-lg border border-emerald-100">
+              <CheckCircle2 size={14} /> Sequence Deployed ({scoutResult[savedSearchId].sent} sent)
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1468,7 +1863,7 @@ export default function ARIAPage() {
               onClick={runARIA}
               disabled={isRunning || !query.trim()}
               className="w-full py-2.5 rounded-xl text-white text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-sm hover:opacity-90"
-              style={{ background: isRunning ? "#94a3b8" : "linear-gradient(135deg, #6B7EFF 0%, #4F46E5 100%)" }}
+              style={{ background: isRunning ? "#94a3b8" : "linear-gradient(135deg, #0d2150 0%, #1a3a7c 45%, #6B7EFF 100%)" }}
             >
               {isRunning ? <><Loader2 size={12} className="animate-spin" /> Synchronizing...</> : <><Zap size={12} /> Launch ARIA</>}
             </button>
@@ -1540,26 +1935,40 @@ export default function ARIAPage() {
               <DetailHeader p={prospect} />
               <div className="flex-1 overflow-y-auto p-6 lg:p-8">
                 {activeTab === 'property' && <PropertyTab p={prospect} />}
+                {activeTab === 'proptech' && <PropTechTab p={prospect} />}
                 {activeTab === 'dm'       && <DMTab p={prospect} />}
                 {activeTab === 'intel'    && <IntelTab p={prospect} />}
                 {activeTab === 'scout'    && <ScoutTab p={prospect} />}
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full gap-5 text-slate-400">
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-lg relative"
-                style={{ background: "linear-gradient(135deg, #6B7EFF 0%, #3B4FCC 100%)" }}>
-                AR
-                <div className="absolute inset-0 rounded-2xl border border-white/20" />
+            <div className="flex flex-col items-center justify-center h-full relative overflow-hidden"
+              style={{ background: 'radial-gradient(ellipse at 50% 70%, #0d2150 0%, #060e28 38%, #020810 68%, #000306 100%)' }}>
+              {/* Pulsing rings */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none" aria-hidden="true">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="absolute rounded-full border border-[#6B7EFF]/10"
+                    style={{ width: `${i * 160}px`, height: `${i * 160}px`, animation: `aria-pulse ${2 + i * 0.6}s ease-in-out infinite`, animationDelay: `${i * 0.35}s` }} />
+                ))}
               </div>
-              <div className="text-center">
-                <p className="text-base font-bold text-slate-800">ARIA Intelligence Engine</p>
-                <p className="text-sm font-medium text-slate-500 mt-1">Awaiting operational parameters.</p>
-              </div>
-              <div className="flex items-center justify-center gap-6 mt-6 pt-6 border-t border-slate-200/60 text-[11px] font-bold text-slate-400">
-                <span className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-[#6B7EFF]" /> FCC Broadband Data</span>
-                <span className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-[#6B7EFF]" /> SEC EDGAR Filings</span>
-                <span className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-[#6B7EFF]" /> 28 OSINT Sources</span>
+              <div className="relative z-10 flex flex-col items-center gap-6 px-8">
+                {/* ARIA logo */}
+                <div className="w-20 h-20 rounded-3xl flex items-center justify-center font-bold text-2xl relative overflow-hidden"
+                  style={{ background: 'linear-gradient(135deg, #0d2150 0%, #1e3a7c 50%, #6B7EFF 100%)', boxShadow: '0 0 40px rgba(107,126,255,0.3), 0 20px 40px rgba(0,0,0,0.5)' }}>
+                  <span className="text-white tracking-tight select-none" style={{ textShadow: '0 0 20px rgba(107,126,255,0.9)' }}>AR</span>
+                  <div className="absolute bottom-0 left-0 right-0 h-1/2" style={{ background: 'linear-gradient(to top, rgba(107,126,255,0.2), transparent)' }} />
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-bold text-white tracking-tight">ARIA Intelligence Engine</p>
+                  <p className="text-sm font-medium text-slate-400 mt-1.5 max-w-xs leading-relaxed">
+                    Search any property, management company, or market — ARIA will profile it.
+                  </p>
+                </div>
+                <div className="flex items-center gap-6 mt-2 pt-5 border-t border-white/10 text-[11px] font-bold text-slate-500">
+                  <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> FCC Broadband</span>
+                  <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#6B7EFF]" /> SEC EDGAR</span>
+                  <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-purple-400" /> 14 Sources</span>
+                </div>
               </div>
             </div>
           )}
@@ -1583,7 +1992,7 @@ export default function ARIAPage() {
             </div>
             <button onClick={runARIA} disabled={isRunning || !query.trim()}
               className="px-4 py-2.5 rounded-xl text-white text-xs font-bold flex items-center gap-1 disabled:opacity-50 shadow-sm"
-              style={{ background: isRunning ? "#94a3b8" : "linear-gradient(135deg, #6B7EFF 0%, #4F46E5 100%)" }}>
+              style={{ background: isRunning ? "#94a3b8" : "linear-gradient(135deg, #0d2150 0%, #1a3a7c 45%, #6B7EFF 100%)" }}>
               {isRunning ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
             </button>
           </div>
@@ -1649,16 +2058,17 @@ export default function ARIAPage() {
                 <p className="text-xs font-medium text-slate-500 mt-0.5">{prospect.property?.address}</p>
               </div>
               <div className="bg-white border-b border-slate-200/60 flex overflow-x-auto no-scrollbar">
-                {(['property', 'dm', 'intel', 'scout'] as DetailTab[]).map(tab => (
+                {(['property', 'proptech', 'dm', 'intel', 'scout'] as DetailTab[]).map(tab => (
                   <button key={tab} onClick={() => setActiveTab(tab)}
                     className={cn("whitespace-nowrap px-5 py-3 text-xs font-bold capitalize border-b-2 transition-colors",
                       activeTab === tab ? "border-[#6B7EFF] text-[#6B7EFF]" : "border-transparent text-slate-400")}>
-                    {tab === 'dm' ? 'Decision Maker' : tab}
+                    {tab === 'dm' ? 'DM' : tab === 'proptech' ? 'PropTech' : tab}
                   </button>
                 ))}
               </div>
               <div className="p-4">
                 {activeTab === 'property' && <PropertyTab p={prospect} />}
+                {activeTab === 'proptech' && <PropTechTab p={prospect} />}
                 {activeTab === 'dm'       && <DMTab p={prospect} />}
                 {activeTab === 'intel'    && <IntelTab p={prospect} />}
                 {activeTab === 'scout'    && <ScoutTab p={prospect} />}
@@ -1700,6 +2110,10 @@ export default function ARIAPage() {
         @keyframes aria-fill {
           from { width: 0%; }
           to   { width: 100%; }
+        }
+        @keyframes aria-pulse {
+          0%, 100% { transform: scale(1); opacity: 0.6; }
+          50%       { transform: scale(1.08); opacity: 1; }
         }
         @keyframes aria-shimmer {
           0%   { background-position: 200% center; }

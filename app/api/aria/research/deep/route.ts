@@ -1,9 +1,19 @@
 /**
  * POST /api/aria/research/deep
  *
- * ARIA Deep Intel — 4-silo parallel intelligence pipeline.
- * Architecture: Phase 0 (classify) → Phase 1 (property facts) → Phase 2 (silos B/C/D in parallel)
- *             → Phase 3 (gap fill) → Phase 4 (Apollo/ProxyCurl) → Phase 5 (Sonnet synthesis)
+ * ARIA Sales Intelligence Engine v2 — Sales Rep Workflow Architecture
+ * 7 sequential steps modeled on how a great sales rep researches a property.
+ *
+ * Step 1: Identity   — unit count, address, mgmt company, geocode (~4s, 2 searches)
+ * Step 2: Ownership  — owner entity, acquisition, old name detection (~4s, 2 searches)
+ * Step 3: Pain       — reviews, Reddit, social (current + old name) (~5s, 4 searches)
+ * Step 4: ISP        — FCC API + DB portfolio + targeted ISP searches (~4s, 2 searches)
+ * Step 4B: ISP Conf  — if bulk detected but provider unknown (~3s, 2 searches, conditional)
+ * Step 5: PropTech   — gate/access/camera brands (~4s, 3 searches)
+ * Step 6: People     — PM, regional, asset manager, Apollo (~6s, 2 searches + Apollo)
+ * Step 7: Synthesis  — Sonnet assembles into structured output (~8s)
+ *
+ * Total: ~38-48s | ~14 Tavily calls | ~$0.48/search
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -22,489 +32,47 @@ export const dynamic = 'force-dynamic'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
-// ─── Tavily helper ────────────────────────────────────────────────────────
+// ─── Normalization helpers ────────────────────────────────────────────────────
+
+const SENTINEL_STRINGS = new Set(['null','undefined','unknown','n/a','na','none','not found','not available','','—','–','-','0','tbd','?'])
+
+function normStr(val: unknown): string | null {
+  if (val === null || val === undefined) return null
+  const s = String(val).trim()
+  if (/^<[^>]{0,30}>$/.test(s)) return null
+  return SENTINEL_STRINGS.has(s.toLowerCase()) ? null : s
+}
+function normInt(val: unknown): number | null {
+  if (val === null || val === undefined) return null
+  if (typeof val === 'number') return val > 0 ? val : null
+  const n = parseInt(String(val).replace(/[^0-9]/g, ''), 10)
+  return isNaN(n) || n <= 0 ? null : n
+}
+function normStrArr(arr: unknown): string[] {
+  if (!Array.isArray(arr)) return []
+  return arr.map(v => normStr(v)).filter((v): v is string => v !== null)
+}
+
+// ─── Tavily ───────────────────────────────────────────────────────────────────
 
 interface TavilyResult { title: string; url: string; content: string; raw_content?: string; score: number; source?: string }
-interface TavilyResponse { results: TavilyResult[]; answer?: string }
 
-async function tavilySearch(query: string, maxResults = 5, source = 'web', search_time?: 'day' | 'week' | 'month' | 'year', depth: 'basic' | 'advanced' = 'basic', rawContent = false): Promise<TavilyResult[]> {
+async function tavilySearch(query: string, maxResults = 4, source = 'web', depth: 'basic' | 'advanced' = 'basic', rawContent = false): Promise<TavilyResult[]> {
   if (!process.env.TAVILY_API_KEY) return []
   try {
-    const body: Record<string, unknown> = {
-      // rawContent=true gets full page text — required for JS-rendered listing pages
-      // where unit count / amenities are in a data table below the 400-char snippet threshold
-      query, search_depth: depth, max_results: maxResults, include_answer: false, include_raw_content: rawContent, include_images: false,
-    }
-    if (search_time) body.search_time = search_time
     const res = await fetch('https://api.tavily.com/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.TAVILY_API_KEY}` },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(12000),
-    })
-    if (!res.ok) return []
-    const data: TavilyResponse = await res.json()
-    return (data.results ?? []).map(r => ({ ...r, source }))
-  } catch { return [] }
-}
-
-// ─── SEC EDGAR full-text search ───────────────────────────────────────────
-
-interface EdgarResult { title: string; url: string; content: string; score: number; source: string }
-
-async function searchEdgar(propertyName: string, managementCompany: string): Promise<EdgarResult[]> {
-  const results: EdgarResult[] = []
-  const queries = [
-    `"${propertyName}" "bulk internet" OR "MDU agreement" OR "exclusive internet" OR "bulk broadband"`,
-    managementCompany ? `"${managementCompany}" "MDU" "internet" "exclusive" OR "bulk agreement" OR "preferred provider"` : null,
-  ].filter(Boolean) as string[]
-
-  for (const q of queries) {
-    try {
-      const url = `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(q)}&forms=10-K%2C10-Q%2C8-K&dateRange=custom&startdt=2018-01-01`
-      const res = await fetch(url, { headers: { 'User-Agent': 'GateGuard-ARIA/1.0' }, signal: AbortSignal.timeout(8000) })
-      if (!res.ok) continue
-      const data = await res.json()
-      const hits: any[] = data?.hits?.hits ?? []
-      for (const hit of hits.slice(0, 4)) {
-        const highlights: string[] = hit.highlight?.file_contents ?? []
-        if (highlights.length === 0) continue
-        const entity   = hit._source?.entity_name ?? 'Unknown entity'
-        const form     = hit._source?.form_type   ?? 'SEC filing'
-        const fileDate = hit._source?.file_date   ?? ''
-        const accNum   = hit._source?.accession_no ?? ''
-        const edgarUrl = accNum ? `https://www.sec.gov/Archives/edgar/data/${hit._source?.entity_id}/${accNum.replace(/-/g, '')}/` : `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(q)}&forms=10-K%2C10-Q`
-        results.push({
-          title: `${entity} — ${form} (${fileDate})`,
-          url: edgarUrl,
-          content: highlights.slice(0, 2).map((h: string) => h.replace(/<\/?em>/g, '**')).join(' ... '),
-          score: 0.75, source: 'EDGAR',
-        })
-      }
-    } catch { }
-  }
-  return results
-}
-
-// ─── State PUC search via Tavily ──────────────────────────────────────────
-
-async function searchPUC(propertyName: string, address: string, state: string): Promise<TavilyResult[]> {
-  if (!process.env.TAVILY_API_KEY || !state) return []
-  const pucDomains: Record<string, string> = { FL: 'floridapsc.com', TX: 'puc.texas.gov', GA: 'psc.state.ga.us', NC: 'ncuc.net', TN: 'tn.gov/puc', CA: 'cpuc.ca.gov', NY: 'dps.ny.gov', VA: 'scc.virginia.gov', AZ: 'azcc.gov', CO: 'puc.colorado.gov' }
-  const stateAbbr = state.trim().toUpperCase().slice(0, 2)
-  const pucDomain = pucDomains[stateAbbr]
-
-  const queries = [
-    `${address || propertyName} ${state} ISP internet "right of way" OR "conduit" OR "MDU" fiber telecom permit site:${pucDomain || 'gov'}`,
-    `"${address || propertyName}" ${state} public utility commission internet provider filing`,
-  ]
-  const pucResults = await Promise.all(queries.slice(0, pucDomain ? 1 : 1).map(q => tavilySearch(q, 3, 'PUC')))
-  return pucResults.flat()
-}
-
-// ─── City permit search via Tavily + Socrata ──────────────────────────────
-
-async function searchCityPermits(address: string, city: string, state: string): Promise<TavilyResult[]> {
-  if (!process.env.TAVILY_API_KEY || !city) return []
-  const cityLower = city.toLowerCase()
-  const openDataCities: Record<string, string> = { atlanta: 'data.atlantaga.gov', nashville: 'data.nashville.gov', dallas: 'dallasopendata.com', austin: 'data.austintexas.gov', charlotte: 'data.charlottenc.gov', phoenix: 'data.phoenix.gov', denver: 'denvergov.org/opendata', raleigh: 'data-ral.opendata.arcgis.com', miami: 'gis.miamifl.gov', tampa: 'data.tampagov.net' }
-  const matchedCity = Object.keys(openDataCities).find(c => cityLower.includes(c))
-  const portalDomain = matchedCity ? openDataCities[matchedCity] : null
-
-  const queries = [
-    portalDomain ? `${address} telecommunications OR fiber OR conduit permit site:${portalDomain}` : `${address} ${city} ${state} ISP fiber conduit permit "telecommunications" filetype:html`,
-    `"${address}" OR "${city} ${state}" ISP internet fiber permit "Comcast" OR "Spectrum" OR "AT&T" OR "telecom" construction permit`,
-  ]
-  const permitResults = await Promise.all(queries.map(q => tavilySearch(q, 3, 'CityPermit')))
-  return permitResults.flat()
-}
-
-// ─── ISP MDU press release search ─────────────────────────────────────────
-
-async function searchISPPressReleases(propertyName: string, managementCompany: string, location: string): Promise<TavilyResult[]> {
-  if (!process.env.TAVILY_API_KEY) return []
-  const queries = [
-    `"${propertyName}" OR "${managementCompany}" "Comcast Communities" OR "Xfinity Communities" OR "Spectrum Communities" OR "AT&T Smart Communities" OR "Lumen MDU" OR "Frontier MDU" internet deal announcement`,
-    `"${propertyName}" OR "${managementCompany}" ${location} internet provider "partnership" OR "agreement" OR "deal" OR "service agreement" multifamily apartment`,
-    managementCompany ? `"${managementCompany}" internet OR broadband "portfolio" OR "exclusive" OR "bulk" agreement announcement` : `"${propertyName}" ${location} internet bulk "agreement" OR "partnership" announcement`,
-  ]
-  const pressResults = await Promise.all(queries.map(q => tavilySearch(q, 3, 'ISP-Press')))
-  return pressResults.flat()
-}
-
-// ─── Apollo.io — company + person enrichment ──────────────────────────────
-
-interface ApolloEnrichment { name?: string; title?: string; email?: string; phone_numbers?: string[]; linkedin_url?: string; organization?: { name?: string; website_url?: string } }
-
-async function apolloSearchContacts(company: string, titles: string[], location?: string): Promise<ApolloEnrichment[]> {
-  if (!process.env.APOLLO_API_KEY) return []
-  try {
-    const res = await fetch('https://api.apollo.io/api/v1/mixed_people/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Api-Key': process.env.APOLLO_API_KEY },
-      body: JSON.stringify({ q_organization_name: company, person_titles: titles, person_locations: location ? [location] : [], per_page: 5 }),
+      body: JSON.stringify({ query, search_depth: depth, max_results: maxResults, include_answer: false, include_raw_content: rawContent, include_images: false }),
       signal: AbortSignal.timeout(10000),
     })
     if (!res.ok) return []
     const data = await res.json()
-    return (data?.people ?? []).slice(0, 5)
+    return (data.results ?? []).map((r: TavilyResult) => ({ ...r, source }))
   } catch { return [] }
 }
 
-// ─── Proxycurl — LinkedIn profile scraper ─────────────────────────────────
-
-interface ProxycurlProfile { full_name?: string; headline?: string; occupation?: string; experiences?: Array<{ company?: string; title?: string; starts_at?: { year?: number } | null; ends_at?: { year?: number } | null }>; email?: string; personal_email?: string }
-
-async function proxycurlProfile(linkedinUrl: string): Promise<ProxycurlProfile | null> {
-  if (!process.env.PROXYCURL_API_KEY) return null
-  try {
-    const params = new URLSearchParams({ url: linkedinUrl, use_cache: 'if-recent', fallback_to_cache: 'on-error', skills: 'exclude', inferred_salary: 'exclude' })
-    const res = await fetch(`https://nubela.co/proxycurl/api/v2/linkedin?${params}`, { headers: { Authorization: `Bearer ${process.env.PROXYCURL_API_KEY}` }, signal: AbortSignal.timeout(10000) })
-    if (!res.ok) return null
-    return await res.json()
-  } catch { return null }
-}
-
-// ─── People Data Labs — behavioral / psychographic enrichment ─────────────
-
-interface PDLPerson { full_name?: string; job_title?: string; job_company_name?: string; skills?: string[]; linkedin_url?: string }
-
-async function pdlEnrichPerson(name: string, company: string, email?: string): Promise<PDLPerson | null> {
-  if (!process.env.PDL_API_KEY) return null
-  try {
-    const params = new URLSearchParams({ name, company, pretty: 'false', titlecase: 'false' })
-    if (email) params.set('email', email)
-    const res = await fetch(`https://api.peopledatalabs.com/v5/person/enrich?${params}`, { headers: { 'X-Api-Key': process.env.PDL_API_KEY }, signal: AbortSignal.timeout(8000) })
-    if (!res.ok) return null
-    const data = await res.json()
-    return data?.data ?? null
-  } catch { return null }
-}
-
-// ─── Query type classification ────────────────────────────────────────────
-
-type QueryType = 'named_property' | 'prospecting_query'
-
-interface QueryClassification {
-  type: QueryType
-  extracted_city: string
-  extracted_state: string
-  criteria_summary: string
-}
-
-async function classifyQuery(rawQuery: string, client: Anthropic): Promise<QueryClassification> {
-  const fallback: QueryClassification = { type: 'named_property', extracted_city: '', extracted_state: '', criteria_summary: '' }
-  const prospectingPatterns = /\b(find|looking for|any|HOA|apartment.*(with|near|in)|criteria|more than|over|units|contract expir|bulk internet|gated)\b/i
-  if (!prospectingPatterns.test(rawQuery)) return fallback
-  if (rawQuery.trim().split(/\s+/).length <= 4 && !/\b(HOA|find|looking|criteria)\b/i.test(rawQuery)) return fallback
-
-  try {
-    const msg = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 200,
-      messages: [{
-        role: 'user',
-        content: `Classify this ARIA search query. Is it: (A) the name of a specific apartment property (e.g. "AMLI Marina Del Rey", "Northland Wharf 7"), or (B) a criteria-based prospecting query looking for properties matching certain attributes (e.g. "HOA in Atlanta with 500+ units and bulk internet")?
-
-Query: "${rawQuery}"
-
-Return ONLY valid JSON:
-{"type":"named_property"|"prospecting_query","extracted_city":"city or empty","extracted_state":"2-letter state or empty","criteria_summary":"brief summary of criteria, or empty if named_property"}`
-      }]
-    })
-    const text = msg.content[0]?.type === 'text' ? msg.content[0].text : '{}'
-    const match = text.match(/\{[\s\S]+\}/)
-    if (match) {
-      return JSON.parse(match[0]) as QueryClassification
-    }
-  } catch { /* fallback */ }
-  return fallback
-}
-
-// ─── Prospecting: find specific candidate properties ──────────────────────
-
-async function findCandidateProperties(rawQuery: string, city: string, state: string, criteria: string): Promise<TavilyResult[]> {
-  if (!process.env.TAVILY_API_KEY) return []
-  const geo = [city, state].filter(Boolean).join(', ') || 'Atlanta, GA'
-  const queries = [
-    `${geo} apartment community gated 500 units "bulk internet" OR "internet included" OR "managed wifi" site:apartments.com OR site:rentcafe.com`,
-    `${geo} luxury gated apartment complex 500 units bulk internet OR "internet included" property management`,
-    `${geo} HOA condominium complex 500+ units gated internet included gate access control`,
-    `${geo} "best apartments" OR "luxury community" 500 units gated internet amenities 2024 OR 2025`,
-    `${geo} apartment communities list 500+ units gated access control OR gate operator amenities`,
-  ]
-  const results = await Promise.all(queries.map(q => tavilySearch(q, 5, 'prospect-discovery')))
-  return results.flat()
-}
-
-// ─── Extract candidate property names from prospecting results ─────────────
-
-async function extractCandidateNames(results: TavilyResult[], rawQuery: string, city: string, client: Anthropic): Promise<string[]> {
-  const usable = results.filter(r => r.content?.length > 40).slice(0, 16)
-  if (usable.length === 0) return []
-  const snippets = usable.map((r, i) => `[${i + 1}] ${r.title}\nURL: ${r.url}\n${r.content.slice(0, 300)}`).join('\n\n---\n\n')
-
-  try {
-    const msg = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 400,
-      messages: [{
-        role: 'user',
-        content: `The user is looking for: "${rawQuery}"
-
-From these search results, extract the names of SPECIFIC apartment communities or HOA complexes in ${city || 'the target city'} that appear to match the criteria. Focus on properties that seem large (400+ units), gated or have access control, and may have bulk internet.
-
-Search results:
-${snippets}
-
-Return ONLY valid JSON — a list of up to 3 specific property names:
-{"candidates": ["Property Name 1", "Property Name 2", "Property Name 3"]}`
-      }]
-    })
-    const text = msg.content[0]?.type === 'text' ? msg.content[0].text : '{}'
-    const match = text.match(/\{[\s\S]+\}/)
-    if (match) {
-      const parsed = JSON.parse(match[0]) as { candidates: string[] }
-      return (parsed.candidates ?? []).filter((n: string) => n && n.length > 2).slice(0, 3)
-    }
-  } catch { /* return empty */ }
-  return []
-}
-
-// ─── Executive Truth Loop: ProxyCurl DM validation ───────────────────────
-
-interface ValidatedDM { name: string; currentTitle: string; company: string; email?: string; linkedinUrl?: string; confidence: 'proxycurl-verified' | 'apollo-only'; isActiveCEO: boolean; isFormerOrAdvisory: boolean }
-
-async function proxycurlValidateDMs(apolloContacts: ApolloEnrichment[]): Promise<ValidatedDM[]> {
-  const validated: ValidatedDM[] = []
-  const withLinkedIn = apolloContacts.filter(c => c.linkedin_url).slice(0, 3)
-  const withoutLinkedIn = apolloContacts.filter(c => !c.linkedin_url)
-  let profiles: Array<ProxycurlProfile | null> = []
-
-  if (process.env.PROXYCURL_API_KEY && withLinkedIn.length > 0) {
-    const settled = await Promise.allSettled(withLinkedIn.map(c => proxycurlProfile(c.linkedin_url!)))
-    profiles = settled.map(r => (r.status === 'fulfilled' ? r.value : null))
-  }
-
-  for (let i = 0; i < withLinkedIn.length; i++) {
-    const c = withLinkedIn[i]; const p = profiles[i]
-    if (p) {
-      const currentExp = (p.experiences ?? []).find(e => e.ends_at === null || e.ends_at === undefined)
-      const currentTitle = currentExp?.title ?? p.occupation ?? c.title ?? ''
-      const currentCompany = currentExp?.company ?? c.organization?.name ?? ''
-      const titleLower = currentTitle.toLowerCase()
-      const isActiveCEO = (titleLower.includes('chief executive') || titleLower.includes('ceo')) && !currentExp?.ends_at
-      const isFormerOrAdvisory = titleLower.includes('founder') || titleLower.includes('chairman') || titleLower.includes('advisor') || !!(p.experiences ?? []).find(e => e.ends_at !== null && e.ends_at !== undefined && (e.title ?? '').toLowerCase().includes('ceo'))
-      validated.push({ name: p.full_name ?? c.name ?? 'Unknown', currentTitle, company: currentCompany, email: p.email ?? p.personal_email ?? c.email, linkedinUrl: c.linkedin_url, confidence: 'proxycurl-verified', isActiveCEO, isFormerOrAdvisory })
-    } else {
-      const titleLower = (c.title ?? '').toLowerCase()
-      validated.push({ name: c.name ?? 'Unknown', currentTitle: c.title ?? '', company: c.organization?.name ?? '', email: c.email, linkedinUrl: c.linkedin_url, confidence: 'apollo-only', isActiveCEO: titleLower.includes('ceo') || titleLower.includes('chief executive'), isFormerOrAdvisory: titleLower.includes('founder') || titleLower.includes('chairman') })
-    }
-  }
-
-  for (const c of withoutLinkedIn) {
-    const titleLower = (c.title ?? '').toLowerCase()
-    validated.push({ name: c.name ?? 'Unknown', currentTitle: c.title ?? '', company: c.organization?.name ?? '', email: c.email, confidence: 'apollo-only', isActiveCEO: titleLower.includes('ceo') || titleLower.includes('chief executive'), isFormerOrAdvisory: titleLower.includes('founder') || titleLower.includes('chairman') })
-  }
-  return validated
-}
-
-// ─── Review sentiment pre-pass (Haiku) ───────────────────────────────────
-
-async function extractReviewSentiment(reviewResults: TavilyResult[], anthropicClient: Anthropic): Promise<string> {
-  const usable = reviewResults.filter(r => r.content && r.content.length > 60).slice(0, 8)
-  if (usable.length === 0) return ''
-  const snippets = usable.map((r, i) => `[Review ${i + 1}] ${r.title}\n${r.content.slice(0, 320)}`).join('\n\n')
-
-  try {
-    const msg = await anthropicClient.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 450,
-      messages: [{ role: 'user', content: `Analyze these resident reviews and extract ONLY concrete factual signals: 1. Current internet provider 2. Any provider SWITCH mentioned 3. Gate/intercom problems 4. Connectivity sentiment\nReviews:\n${snippets}` }],
-    })
-    const text = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
-    return text ? `\n\nRESIDENT REVIEW SIGNALS:\n${text}\n` : ''
-  } catch { return '' }
-}
-
-// ─── Deep intel synthesis tool ────────────────────────────────────────────
-
-const deepIntelTool: Anthropic.Tool = {
-  name: 'aria_deep_intel_result',
-  description: 'Return the structured deep connectivity, proptech, and ownership intelligence for this property.',
-  input_schema: {
-    type: 'object' as const,
-    required: ['property_details', 'isp_providers', 'video_providers', 'bulk_agreements', 'extracted_contacts', 'key_finding', 'confidence', 'proptech', 'pain_signals'],
-    properties: {
-      property_details: {
-        type: 'object',
-        description: 'Fundamental physical and demographic stats of the property',
-        properties: {
-          units: { type: 'number' },
-          year_built: { type: 'number' },
-          management_company: { type: 'string' },
-          property_type: { type: 'string' },
-          class: { type: 'string', description: 'Asset class, e.g. A, B, C' },
-          occupancy: { type: 'string' }
-        }
-      },
-      isp_providers: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'Strictly internet service providers (e.g. Gigstreem, Comcast, AT&T). DO NOT include management companies here.'
-      },
-      video_providers: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'Strictly video/TV providers (e.g. DirecTV, Spectrum).'
-      },
-      bulk_agreements: {
-        type: 'array',
-        items: {
-          type: 'object',
-          required: ['provider', 'service_type', 'agreement_type', 'expiry_estimate', 'confidence', 'evidence', 'evidence_source'],
-          properties: {
-            provider:        { type: 'string' },
-            service_type:    { type: 'string', enum: ['internet', 'video', 'bundled'] },
-            agreement_type:  { type: 'string', enum: ['exclusive', 'bulk', 'preferred', 'unknown'] },
-            expiry_estimate: { type: 'string' },
-            confidence:      { type: 'string', enum: ['high', 'medium', 'low'] },
-            evidence:        { type: 'string' },
-            evidence_source: { type: 'string' },
-          },
-        },
-      },
-      extracted_contacts: {
-        type: 'array',
-        description: 'Decision makers (Asset Managers, Regional VPs, Property Managers) found in the text or Truth Loop.',
-        items: {
-          type: 'object',
-          properties: { name: { type: 'string' }, title: { type: 'string' }, company: { type: 'string' }, email: { type: 'string' }, linkedin_slug: { type: 'string' } }
-        }
-      },
-      key_finding: { type: 'string' },
-      confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
-      units: { type: 'number', description: 'Total number of apartment units/homes.' },
-      year_built: { type: 'number', description: 'Year the property was built or major renovation year.' },
-      property_class: { type: 'string', enum: ['A', 'B', 'C'], description: 'Property class: A=luxury/Class A, B=mid-range, C=workforce/older.' },
-      property_type: { type: 'string', description: 'e.g. multifamily, senior-living, student, mixed-use, garden-style, mid-rise, high-rise, townhome' },
-      atlas_opportunity: { type: 'boolean' },
-      edgar_signal: { type: 'boolean' },
-      permit_signal: { type: 'boolean' },
-      ownership: {
-        type: 'object',
-        properties: {
-          owner_entity:     { type: 'string' },
-          owner_type:       { type: 'string' },
-          portfolio_size:   { type: 'string' },
-          acquisition_year: { type: 'string' },
-          capex_signal:     { type: 'string' },
-          sec_filing_ref:   { type: 'string' },
-        },
-      },
-      proptech: {
-        type: 'object',
-        properties: {
-          gate_operators:      { type: 'array', items: { type: 'string' } },
-          access_control:      { type: 'array', items: { type: 'string' } },
-          intercoms:           { type: 'array', items: { type: 'string' } },
-          cameras:             { type: 'array', items: { type: 'string' } },
-          smart_locks:         { type: 'array', items: { type: 'string' } },
-          resident_apps:       { type: 'array', items: { type: 'string' } },
-          package_solutions:   { type: 'array', items: { type: 'string' } },
-          tech_generation:     { type: 'string', enum: ['legacy','modern','hybrid'] },
-          sara_signals:        { type: 'boolean' },
-          replacement_window:  { type: 'string' },
-          displacement_targets:{ type: 'array', items: { type: 'string' } },
-        },
-      },
-      pain_signals: {
-        type: 'array',
-        description: 'Specific tenant complaints extracted from the review sentiment block.',
-        items: {
-          type: 'object',
-          properties: {
-            source: { type: 'string' },
-            date: { type: 'string' },
-            signal_type: { type: 'string', enum: ['gate_access', 'internet', 'package_theft', 'intercom', 'general'] },
-            quote: { type: 'string' },
-            severity: { type: 'string', enum: ['high', 'medium', 'low'] }
-          }
-        }
-      },
-      behavioral_profile: {
-        type: 'object',
-        properties: { personality_type: { type: 'string' }, decision_style: { type: 'string' }, risk_tolerance: { type: 'string' }, communication_pref: { type: 'string' } },
-      },
-      pitch_strategy: {
-        type: 'object',
-        properties: { primary_hook: { type: 'string' }, avoid_topics: { type: 'array', items: { type: 'string' } }, best_time_to_call: { type: 'string' }, social_proof: { type: 'string' } },
-      },
-      freshness_score: { type: 'number' },
-      buying_trends: { type: 'string' },
-    },
-  },
-}
-
-// ─── Silo data interfaces ─────────────────────────────────────────────────
-
-interface SiloAData {
-  corrected_name: string
-  address: string
-  city: string
-  state: string
-  units: number | null
-  year_built: number | null
-  property_class: string | null
-  property_type: string
-  occupancy: string
-  management_company: string
-  owner_entity: string
-  acquisition_year: string
-  portfolio_size: string
-  isp_hints: string[]
-  missing_fields: string[]
-}
-
-interface SiloBData {
-  gate_operators: string[]
-  access_control: string[]
-  intercoms: string[]
-  cameras: string[]
-  smart_locks: string[]
-  resident_apps: string[]
-  managed_network_provider: string
-  tech_generation: string
-  missing_fields: string[]
-}
-
-interface SiloCData {
-  isp_providers: string[]
-  video_providers: string[]
-  bulk_agreements: Array<{ provider: string; service_type: string; agreement_type: string; confidence: string; evidence: string }>
-  mandatory_tech_fee: boolean
-  missing_fields: string[]
-}
-
-interface SiloDContact {
-  name: string
-  title: string
-  company: string
-  role_type: string
-  email: string
-  phone: string
-  linkedin: string
-}
-
-interface SiloDData {
-  property_manager: SiloDContact
-  regional_manager: SiloDContact
-  asset_manager: SiloDContact
-  all_contacts: Array<SiloDContact>
-  missing_fields: string[]
-}
-
-// ─── Haiku JSON extraction helper ─────────────────────────────────────────
+// ─── Haiku JSON extraction helper ─────────────────────────────────────────────
 
 async function haikusExtract<T>(prompt: string, snippets: string, maxTokens: number, client: Anthropic): Promise<T | null> {
   try {
@@ -516,744 +84,798 @@ async function haikusExtract<T>(prompt: string, snippets: string, maxTokens: num
     const text = msg.content[0]?.type === 'text' ? msg.content[0].text : '{}'
     const match = text.match(/\{[\s\S]+\}/)
     if (match) return JSON.parse(match[0]) as T
-  } catch { /* fall through */ }
+  } catch { }
   return null
 }
 
-// ─── SILO A: Property Facts ───────────────────────────────────────────────
+// ─── Nominatim geocoding (free) ───────────────────────────────────────────────
 
-async function runSiloA(
-  name: string,
-  locationAnchor: string,
-  address: string,
-  city: string,
-  state: string,
-  rawMgmt: string,
-  client: Anthropic
-): Promise<{ data: SiloAData; results: TavilyResult[] }> {
-  const blank: SiloAData = {
-    corrected_name: name, address, city, state,
-    units: null, year_built: null, property_class: null,
-    property_type: 'multifamily', occupancy: '', management_company: rawMgmt,
-    owner_entity: '', acquisition_year: '', portfolio_size: '', isp_hints: [],
-    missing_fields: ['units', 'year_built'],
+async function geocodeAddress(address: string, city: string, state: string): Promise<{ lat: number; lng: number } | null> {
+  const query = [address, city, state].filter(Boolean).join(', ')
+  if (!query) return null
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
+      { headers: { 'User-Agent': 'GateGuard-ARIA/2.0 (rfeldman@gateguard.co)' }, signal: AbortSignal.timeout(5000) }
+    )
+    if (!res.ok) return null
+    const data = await res.json()
+    if (!data?.[0]) return null
+    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) }
+  } catch { return null }
+}
+
+// ─── FCC Broadband Map API (free) ─────────────────────────────────────────────
+
+async function fccBroadbandLookup(lat: number, lng: number): Promise<string[]> {
+  try {
+    const res = await fetch(
+      `https://broadbandmap.fcc.gov/api/public/map/listAvailability?latitude=${lat.toFixed(6)}&longitude=${lng.toFixed(6)}&unit=location`,
+      { headers: { 'User-Agent': 'GateGuard-ARIA/2.0' }, signal: AbortSignal.timeout(6000) }
+    )
+    if (!res.ok) return []
+    const data = await res.json()
+    const providers: Array<{ brand_name: string; technology: string }> = data?.results ?? data?.availability ?? []
+    return [...new Set(
+      providers
+        .filter(p => p.technology && !['60', '70', '300', '400'].includes(String(p.technology)))
+        .map(p => p.brand_name)
+        .filter(Boolean)
+    )]
+  } catch { return [] }
+}
+
+// ─── EDGAR ────────────────────────────────────────────────────────────────────
+
+interface EdgarResult { title: string; url: string; content: string; score: number; source: string }
+
+async function searchEdgar(propertyName: string, managementCompany: string): Promise<EdgarResult[]> {
+  const queries = [
+    `"${propertyName}" "bulk internet" OR "MDU agreement" OR "exclusive internet" OR "bulk broadband"`,
+    managementCompany ? `"${managementCompany}" MDU internet "exclusive" OR "bulk agreement"` : null,
+  ].filter(Boolean) as string[]
+  const results: EdgarResult[] = []
+  for (const q of queries) {
+    try {
+      const url = `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(q)}&forms=10-K%2C10-Q%2C8-K&dateRange=custom&startdt=2019-01-01`
+      const res = await fetch(url, { headers: { 'User-Agent': 'GateGuard-ARIA/2.0' }, signal: AbortSignal.timeout(8000) })
+      if (!res.ok) continue
+      const data = await res.json()
+      for (const hit of (data?.hits?.hits ?? []).slice(0, 3)) {
+        const highlights: string[] = hit.highlight?.file_contents ?? []
+        if (!highlights.length) continue
+        results.push({
+          title: `${hit._source?.entity_name ?? 'Unknown'} — ${hit._source?.form_type ?? 'SEC'} (${hit._source?.file_date ?? ''})`,
+          url: `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(q)}&forms=10-K`,
+          content: highlights.slice(0, 2).map((h: string) => h.replace(/<\/?em>/g, '**')).join(' ... '),
+          score: 0.75, source: 'EDGAR',
+        })
+      }
+    } catch { }
   }
+  return results
+}
 
-  const searches = await Promise.all([
-    // rawContent:true gets full page text — listing sites bury unit count in data tables below the fold
-    tavilySearch(`"${name}" ${locationAnchor} site:apartments.com OR site:zillow.com OR site:rentcafe.com OR site:rent.com`, 2, 'silo-a', undefined, 'advanced', true),
-    tavilySearch(`"${name}" ${locationAnchor} "units" "year built" OR "built in" apartments management company`, 3, 'silo-a', undefined, 'basic', true),
-    tavilySearch(`"${address}" OR "${name}" ${city} ${state} "property tax" OR "county assessor" OR "tax record" units apartments`, 4, 'silo-a'),
-    tavilySearch(`"${name}" ${locationAnchor} acquired purchased ownership "private equity" OR "REIT" OR "portfolio" units`, 4, 'silo-a'),
-    tavilySearch(`"${name}" ${locationAnchor} apartment floor plans amenities occupancy`, 4, 'silo-a'),
-    tavilySearch(`"${name}" ${locationAnchor} site:apartmentlist.com OR site:forrent.com`, 2, 'silo-a', undefined, 'advanced', true),
-    searchEdgar(name, rawMgmt).then(r => r.map(e => ({ ...e, source: 'EDGAR' } as TavilyResult))),
+// ─── Apollo ───────────────────────────────────────────────────────────────────
+
+interface ApolloEnrichment { name?: string; title?: string; email?: string; phone_numbers?: string[]; linkedin_url?: string; organization?: { name?: string } }
+
+async function apolloSearchContacts(company: string, titles: string[], location?: string): Promise<ApolloEnrichment[]> {
+  if (!process.env.APOLLO_API_KEY) return []
+  try {
+    const res = await fetch('https://api.apollo.io/api/v1/mixed_people/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Api-Key': process.env.APOLLO_API_KEY },
+      body: JSON.stringify({ q_organization_name: company, person_titles: titles, person_locations: location ? [location] : [], per_page: 6 }),
+      signal: AbortSignal.timeout(10000),
+    })
+    if (!res.ok) return []
+    const data = await res.json()
+    return (data?.people ?? []).slice(0, 6)
+  } catch { return [] }
+}
+
+// ─── ProxyCurl (1 call max) ───────────────────────────────────────────────────
+
+interface ProxycurlProfile { full_name?: string; occupation?: string; experiences?: Array<{ company?: string; title?: string; ends_at?: any }>; email?: string; personal_email?: string }
+
+async function proxycurlProfile(linkedinUrl: string): Promise<ProxycurlProfile | null> {
+  if (!process.env.PROXYCURL_API_KEY) return null
+  try {
+    const params = new URLSearchParams({ url: linkedinUrl, use_cache: 'if-recent', fallback_to_cache: 'on-error', skills: 'exclude', inferred_salary: 'exclude' })
+    const res = await fetch(`https://nubela.co/proxycurl/api/v2/linkedin?${params}`, { headers: { Authorization: `Bearer ${process.env.PROXYCURL_API_KEY}` }, signal: AbortSignal.timeout(10000) })
+    if (!res.ok) return null
+    return await res.json()
+  } catch { return null }
+}
+
+// ─── Step interfaces ──────────────────────────────────────────────────────────
+
+interface StepIdentity {
+  name: string; address: string; city: string; state: string
+  units: number | null; year_built: number | null
+  property_class: string | null; property_type: string
+  website: string; phone: string; email: string; email_domain: string
+  management_company: string; isp_hints: string[]
+  coords: { lat: number; lng: number } | null
+}
+interface StepOwnership {
+  owner_entity: string; owner_type: string
+  acquisition_year: string; sale_price: string
+  portfolio_size: string; old_name: string
+}
+interface PainSignal {
+  type: 'gate' | 'internet' | 'camera' | 'crime' | 'management' | 'smart_lock' | 'general'
+  quote: string; source: string; date: string; severity: 'high' | 'medium' | 'low'
+}
+interface StepPainSignals { signals: PainSignal[]; gate_issue_count: number; internet_issue_count: number; raw_excerpts: TavilyResult[] }
+interface StepConnectivity {
+  isp_providers: string[]; video_providers: string[]
+  bulk_agreements: Array<{ provider: string; service_type: string; agreement_type: string; confidence: string; evidence: string; expiry_estimate?: string }>
+  mandatory_tech_fee: boolean; fcc_providers: string[]
+  bulk_detected: boolean; provider_confirmed: boolean
+}
+interface StepPropTech {
+  gate_operators: string[]; access_control: string[]
+  intercoms: string[]; cameras: string[]
+  smart_locks: string[]; resident_apps: string[]
+  tech_generation: string
+}
+interface StepContact { name: string; title: string; company: string; role_type: string; email: string; phone: string; linkedin: string }
+interface StepPeople {
+  property_manager: StepContact | null; regional_manager: StepContact | null
+  asset_manager: StepContact | null; all_contacts: StepContact[]; email_format: string
+}
+
+// ─── STEP 1: Identity ─────────────────────────────────────────────────────────
+
+async function runStep1(name: string, hintCity: string, hintState: string, hintMgmt: string, client: Anthropic): Promise<StepIdentity> {
+  const blank: StepIdentity = {
+    name, address: '', city: hintCity, state: hintState, units: null, year_built: null,
+    property_class: null, property_type: 'multifamily', website: '', phone: '', email: '',
+    email_domain: '', management_company: hintMgmt, isp_hints: [], coords: null,
+  }
+  const geo = [hintCity, hintState].filter(Boolean).join(', ')
+
+  const [listingResults, unitResults] = await Promise.all([
+    tavilySearch(`"${name}" ${geo} apartments site:apartments.com OR site:rentcafe.com OR site:zillow.com`, 3, 'identity', 'basic', true),
+    tavilySearch(`"${name}" ${geo} "units" OR "homes" "year built" OR "built in" apartments management`, 3, 'identity'),
   ])
-  const allResults = searches.flat()
-  const usable = allResults.filter(r => (r.raw_content || r.content)?.length > 40).slice(0, 16)
-  if (usable.length === 0) return { data: blank, results: allResults }
+  const allResults = [...listingResults, ...unitResults]
+  const usable = allResults.filter(r => (r.raw_content || r.content)?.length > 40).slice(0, 8)
+  if (usable.length === 0) return blank
 
-  // Use raw_content when available (full page text from listing sites); cap at 1200 chars to control tokens
   const snippets = usable.map((r, i) => {
-    const text = r.raw_content ? r.raw_content.slice(0, 1200) : r.content.slice(0, 400)
-    return `[${i + 1}] ${r.title}\n${text}`
+    const text = r.raw_content ? r.raw_content.slice(0, 1000) : r.content.slice(0, 400)
+    return `[${i + 1}] ${r.title}\nURL: ${r.url}\n${text}`
   }).join('\n\n---\n\n')
-  const prompt = `Extract physical property facts. Return ONLY valid JSON:
-{"corrected_name":"","address":"","city":"","state":"","units":null,"year_built":null,"property_class":null,"property_type":"","occupancy":"","management_company":"","owner_entity":"","acquisition_year":"","portfolio_size":"","isp_hints":[],"missing_fields":[]}
-RULES: units=any "X units"/"X homes" number; use null for unknown numbers; empty string for unknown text; if management_company empty but owner is a RE firm, set management_company=owner_entity; missing_fields lists what you couldn't find`
 
-  const extracted = await haikusExtract<SiloAData>(prompt, snippets, 600, client)
-  if (!extracted) return { data: blank, results: allResults }
-  if (!extracted.corrected_name || extracted.corrected_name.length < 2) extracted.corrected_name = name
-  return { data: extracted, results: allResults }
+  const prompt = `Extract property facts. Return ONLY valid JSON:
+{"name":"","address":"","city":"","state":"","units":null,"year_built":null,"property_class":null,"property_type":"multifamily","website":"","phone":"","email":"","email_domain":"","management_company":"","isp_hints":[]}
+RULES: units=integer (look for "X units","X homes","X apartment homes"); year_built=4-digit integer; property_class="A","B", or "C" only; website=official URL; phone=leasing office number; email_domain=domain from email/website; management_company=ONLY if explicitly named; isp_hints=any internet provider named as included amenity; null for unknown numbers, empty string for unknown text`
+
+  const extracted = await haikusExtract<Omit<StepIdentity, 'coords'>>(prompt, snippets, 500, client)
+  if (!extracted) return blank
+
+  const addrForGeo = normStr(extracted.address) || name
+  const coords = await geocodeAddress(addrForGeo, normStr(extracted.city) || hintCity, normStr(extracted.state) || hintState)
+
+  return {
+    name:               normStr(extracted.name) || name,
+    address:            normStr(extracted.address) || '',
+    city:               normStr(extracted.city) || hintCity,
+    state:              normStr(extracted.state) || hintState,
+    units:              normInt(extracted.units),
+    year_built:         normInt(extracted.year_built),
+    property_class:     normStr(extracted.property_class),
+    property_type:      normStr(extracted.property_type) || 'multifamily',
+    website:            normStr(extracted.website) || '',
+    phone:              normStr(extracted.phone) || '',
+    email:              normStr(extracted.email) || '',
+    email_domain:       normStr(extracted.email_domain) || '',
+    management_company: normStr(extracted.management_company) || hintMgmt,
+    isp_hints:          normStrArr(extracted.isp_hints),
+    coords,
+  }
 }
 
-// ─── SILO B: PropTech Stack ───────────────────────────────────────────────
+// ─── STEP 2: Ownership ────────────────────────────────────────────────────────
 
-async function runSiloB(
-  name: string,
-  location: string,
-  mgmt: string,
-  owner: string,
-  client: Anthropic
-): Promise<{ data: SiloBData; results: TavilyResult[] }> {
-  const blank: SiloBData = {
-    gate_operators: [], access_control: [], intercoms: [], cameras: [],
-    smart_locks: [], resident_apps: [], managed_network_provider: '',
-    tech_generation: 'legacy', missing_fields: ['gate_operators', 'access_control', 'intercoms', 'cameras'],
-  }
-  const entity = mgmt || owner
-
-  const searches = await Promise.all([
-    tavilySearch(`"${name}" ${location} ButterflyMX OR DoorKing OR LiftMaster OR Viking OR Linear OR PDK OR Doorbird gate intercom access`, 5, 'silo-b'),
-    tavilySearch(`"${name}" ${location} Brivo OR Openpath OR HID OR SALTO OR Allegion "access control" OR "key fob"`, 5, 'silo-b'),
-    tavilySearch(`"${name}" ${location} Verkada OR Avigilon OR "Eagle Eye" OR Hanwha cameras security`, 4, 'silo-b'),
-    tavilySearch(`"${name}" ${location} SmartRent OR GateWise OR Latch OR August OR Yale OR Honeywell "smart home" OR "smart lock"`, 4, 'silo-b'),
-    entity ? tavilySearch(`"${entity}" ButterflyMX OR DoorKing OR SmartRent OR Brivo OR LiftMaster portfolio standard MDU multifamily`, 4, 'silo-b') : Promise.resolve([] as TavilyResult[]),
-    tavilySearch(`"${name}" ${location} "managed wifi" OR Plume OR Boingo OR "Single Digits" OR "Pavlov" leasing office`, 4, 'silo-b'),
-  ])
-  const allResults = searches.flat()
-  const usable = allResults.filter(r => r.content?.length > 40).slice(0, 14)
-  if (usable.length === 0) return { data: blank, results: allResults }
-
-  const snippets = usable.map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 350)}`).join('\n\n---\n\n')
-  const prompt = `Extract technology brands found for this property. Return ONLY valid JSON:
-{"gate_operators":[],"access_control":[],"intercoms":[],"cameras":[],"smart_locks":[],"resident_apps":[],"managed_network_provider":"","tech_generation":"legacy","missing_fields":[]}
-Known brands: gates=DoorKing/LiftMaster/Viking/Linear/PDK; access=Brivo/HID/SALTO/Openpath; intercoms=ButterflyMX/Aiphone/Viking/2N; cameras=Verkada/Avigilon/EagleEye/Hanwha; locks=SmartRent/GateWise/Latch/August/Yale
-Empty arrays if not found. missing_fields=categories with no data.`
-
-  const extracted = await haikusExtract<SiloBData>(prompt, snippets, 400, client)
-  if (!extracted) return { data: blank, results: allResults }
-  return { data: extracted, results: allResults }
-}
-
-// ─── SILO C: Connectivity / ISP ───────────────────────────────────────────
-
-async function runSiloC(
-  name: string,
-  location: string,
-  mgmt: string,
-  owner: string,
-  portfolioIspBlock: string,
-  client: Anthropic
-): Promise<{ data: SiloCData; results: TavilyResult[] }> {
-  const blank: SiloCData = {
-    isp_providers: [], video_providers: [], bulk_agreements: [],
-    mandatory_tech_fee: false, missing_fields: ['isp_providers'],
-  }
-  const entity = mgmt || owner
-
-  const [pucCity, pucState] = location.split(',').map(s => s.trim())
-  const searches = await Promise.all([
-    tavilySearch(`"${name}" ${location} site:apartments.com "internet included" OR "bulk internet" OR "wifi included" OR "technology fee"`, 5, 'silo-c', undefined, 'advanced'),
-    tavilySearch(`"${name}" ${location} Gigstreem OR SpectrumU OR Hotwire OR Pavlov OR "Managed WiFi" internet`, 5, 'silo-c'),
-    tavilySearch(`"${name}" OR "${entity}" site:gigstreem.com OR site:spectrumu.com OR site:hotwire.net OR site:pavlovmedia.com`, 4, 'silo-c', undefined, 'advanced'),
-    tavilySearch(`"${name}" ${location} internet wifi "mandatory fee" OR "technology fee" OR "no choice" OR "forced" resident`, 4, 'silo-c', 'year', 'advanced'),
-    tavilySearch(`"${name}" ${location} Comcast OR "AT&T" OR Cox OR Spectrum OR Frontier internet broadband`, 5, 'silo-c'),
-    entity ? tavilySearch(`"${entity}" internet OR broadband MDU "bulk" OR "exclusive" OR "agreement" multifamily`, 4, 'silo-c') : Promise.resolve([] as TavilyResult[]),
-    Promise.all([
-      searchPUC(name, pucCity || '', pucState || ''),
-      searchCityPermits(pucCity || '', pucCity || '', pucState || ''),
-    ]).then(r => r.flat()),
-    searchISPPressReleases(name, entity, location),
-  ])
-  const allResults = searches.flat()
-  const usable = allResults.filter(r => r.content?.length > 40).slice(0, 16)
-  if (usable.length === 0) return { data: blank, results: allResults }
-
-  const snippets = usable.map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 400)}`).join('\n\n---\n\n')
-  const portfolioContext = portfolioIspBlock ? `\n\nPORTFOLIO ISP INTELLIGENCE (inject into bulk_agreements with confidence=high):\n${portfolioIspBlock}` : ''
-  const prompt = `Extract internet/video connectivity data. Return ONLY valid JSON:
-{"isp_providers":[],"video_providers":[],"bulk_agreements":[{"provider":"","service_type":"internet","agreement_type":"bulk","confidence":"medium","evidence":""}],"mandatory_tech_fee":false,"missing_fields":[]}
-CRITICAL: isp_providers = ONLY actual ISPs (Gigstreem/Comcast/AT&T/etc), NEVER management company names.
-If PORTFOLIO ISP INTELLIGENCE block says [company]->[ISP], include it in bulk_agreements with confidence=high.
-mandatory_tech_fee=true if any source mentions mandatory monthly wifi/internet/technology fee.${portfolioContext}`
-
-  const extracted = await haikusExtract<SiloCData>(prompt, snippets, 500, client)
-  if (!extracted) return { data: blank, results: allResults }
-  return { data: extracted, results: allResults }
-}
-
-// ─── SILO D: People / Contacts ────────────────────────────────────────────
-
-async function runSiloD(
-  name: string,
-  address: string,
-  city: string,
-  state: string,
-  mgmt: string,
-  owner: string,
-  client: Anthropic
-): Promise<{ data: SiloDData; results: TavilyResult[] }> {
-  const emptyContact: SiloDContact = { name: '', title: '', company: '', role_type: '', email: '', phone: '', linkedin: '' }
-  const blank: SiloDData = {
-    property_manager: { ...emptyContact }, regional_manager: { ...emptyContact },
-    asset_manager: { ...emptyContact }, all_contacts: [],
-    missing_fields: ['property_manager', 'regional_manager'],
-  }
-  const entity = mgmt || owner
-  const entitySlug = entity.toLowerCase().replace(/\s+(investment|corporation|partners|residential|capital|properties|group|llc|inc|reit)\s*/gi, '').replace(/\s+/g, '')
+async function runStep2(name: string, address: string, city: string, state: string, client: Anthropic): Promise<StepOwnership> {
+  const blank: StepOwnership = { owner_entity: '', owner_type: '', acquisition_year: '', sale_price: '', portfolio_size: '', old_name: '' }
   const geo = [city, state].filter(Boolean).join(', ')
 
-  const searches = await Promise.all([
-    // Property-level
-    tavilySearch(`"${name}" ${geo} "community manager" OR "property manager" OR "leasing manager" contact email phone`, 5, 'silo-d'),
-    tavilySearch(`"${address}" ${city} "property manager" OR "community manager" OR "leasing office" contact`, 4, 'silo-d'),
-    tavilySearch(`"${name}" ${city} apartments leasing office hours phone contact`, 4, 'silo-d'),
-    // Regional-level
-    entity ? tavilySearch(`"${entity}" ${city} ${state} "regional manager" OR "regional property manager" OR "area manager"`, 5, 'silo-d') : Promise.resolve([] as TavilyResult[]),
-    entity ? tavilySearch(`"${entity}" ${city} "community manager" OR "leasing manager" site:linkedin.com`, 4, 'silo-d') : Promise.resolve([] as TavilyResult[]),
-    entity ? tavilySearch(`"${entity}" ${state} "regional" OR "area" property manager email contact`, 4, 'silo-d') : Promise.resolve([] as TavilyResult[]),
-    // Corporate/Asset
-    entity ? tavilySearch(`site:theorg.com "${entity}"`, 4, 'silo-d') : Promise.resolve([] as TavilyResult[]),
-    entity ? tavilySearch(`"${entity}" "asset manager" OR "portfolio manager" OR "director" ${state} apartment email`, 4, 'silo-d') : Promise.resolve([] as TavilyResult[]),
-    entity ? tavilySearch(`"${entity}" "regional property manager" OR "community manager" site:rocketreach.co OR site:zoominfo.com`, 4, 'silo-d') : Promise.resolve([] as TavilyResult[]),
-    entity && entitySlug ? tavilySearch(`"${entity}" "meet the team" OR "our team" OR "leadership" site:${entitySlug}.com`, 4, 'silo-d') : Promise.resolve([] as TavilyResult[]),
+  const [ownerResults, oldNameResults, edgarResults] = await Promise.all([
+    tavilySearch(`"${address || name}" ${geo} sold acquired purchased ownership "private equity" OR "REIT" OR "investment" apartment`, 4, 'ownership'),
+    tavilySearch(`"${name}" ${geo} "formerly known as" OR "previously" OR "renamed" OR "rebranded" apartment`, 3, 'ownership'),
+    searchEdgar(name, '').then(r => r.map(e => ({ ...e, source: 'EDGAR' } as TavilyResult))),
   ])
-  const allResults = searches.flat()
-  const usable = allResults.filter(r => r.content?.length > 40).slice(0, 18)
-  if (usable.length === 0) return { data: blank, results: allResults }
+
+  const allResults = [...ownerResults, ...oldNameResults, ...edgarResults]
+  const usable = allResults.filter(r => r.content?.length > 40).slice(0, 10)
+  if (usable.length === 0) return blank
 
   const snippets = usable.map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 400)}`).join('\n\n---\n\n')
-  const prompt = `Extract ALL named individuals who work for or manage this property/company. Return ONLY valid JSON:
-{"property_manager":{"name":"","title":"","company":"","role_type":"property_manager","email":"","phone":"","linkedin":""},"regional_manager":{"name":"","title":"","company":"","role_type":"regional_manager","email":"","phone":"","linkedin":""},"asset_manager":{"name":"","title":"","company":"","role_type":"asset_manager","email":"","phone":"","linkedin":""},"all_contacts":[{"name":"","title":"","company":"","role_type":"property_manager","email":"","phone":"","linkedin":""}],"missing_fields":[]}
-role_type: property_manager=on-site; regional_manager=multi-property; asset_manager=financial oversight; corporate=C-suite
-Prefer regional and property-level contacts over corporate executives.`
-
-  const extracted = await haikusExtract<SiloDData>(prompt, snippets, 600, client)
-  if (!extracted) return { data: blank, results: allResults }
-  return { data: extracted, results: allResults }
+  const extracted = await haikusExtract<StepOwnership>(
+    `Extract ownership and prior name data. Return ONLY valid JSON:
+{"owner_entity":"","owner_type":"","acquisition_year":"","sale_price":"","portfolio_size":"","old_name":""}
+owner_type: "private_equity","reit","family_office","institutional","local", or ""
+old_name: PREVIOUS property name if the property was renamed (look for "formerly","previously known as","rebranded from")
+Empty string for anything not found.`,
+    snippets, 400, client
+  )
+  return extracted || blank
 }
 
-// ─── Phase 3: Gap Fill ────────────────────────────────────────────────────
+// ─── STEP 3: Pain Signals ─────────────────────────────────────────────────────
 
-async function runGapFill(
-  name: string,
-  location: string,
-  mgmt: string,
-  owner: string,
-  city: string,
-  siloA: SiloAData,
-  siloC: SiloCData,
-  siloD: SiloDData,
+async function runStep3(name: string, oldName: string, city: string, state: string, client: Anthropic): Promise<StepPainSignals> {
+  const blank: StepPainSignals = { signals: [], gate_issue_count: 0, internet_issue_count: 0, raw_excerpts: [] }
+  const geo = [city, state].filter(Boolean).join(', ')
+  const nameQ = [name, oldName].filter(Boolean).map(n => `"${n}"`).join(' OR ')
+
+  const [reviewResults, redditResults, internetResults, gateResults] = await Promise.all([
+    tavilySearch(`${nameQ} ${geo} reviews internet wifi gate access problems site:apartmentratings.com OR site:apartments.com OR site:yelp.com`, 4, 'pain', 'advanced'),
+    tavilySearch(`${nameQ} ${geo} internet OR wifi OR gate OR "access control" complaints site:reddit.com`, 3, 'pain'),
+    tavilySearch(`${nameQ} ${geo} "no choice" OR "forced" OR "mandatory" OR "only option" internet wifi provider`, 3, 'pain', 'advanced'),
+    tavilySearch(`${nameQ} ${geo} "gate broken" OR "gate down" OR "gate not working" OR "can't get in"`, 3, 'pain'),
+  ])
+
+  const allResults = [...reviewResults, ...redditResults, ...internetResults, ...gateResults]
+  const usable = allResults.filter(r => r.content?.length > 60).slice(0, 14)
+  if (usable.length === 0) return { ...blank, raw_excerpts: allResults }
+
+  const snippets = usable.map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 400)}`).join('\n\n---\n\n')
+  const extracted = await haikusExtract<Omit<StepPainSignals, 'raw_excerpts'>>(
+    `Extract resident pain signals from reviews. Focus on: gate issues, internet/wifi problems, camera/security, management, crime, smart locks. Return ONLY valid JSON:
+{"signals":[{"type":"gate","quote":"","source":"","date":"","severity":"high"}],"gate_issue_count":0,"internet_issue_count":0}
+type options: "gate","internet","camera","crime","management","smart_lock","general"
+quote: verbatim (max 120 chars). severity: high=safety/major failure, medium=recurring, low=minor.
+Include up to 12 signals. Prefer last 6-12 months. ONLY negative signals.`,
+    snippets, 800, client
+  )
+  return { ...(extracted || blank), raw_excerpts: allResults }
+}
+
+// ─── STEP 4: Connectivity ─────────────────────────────────────────────────────
+
+async function runStep4(
+  name: string, oldName: string, city: string, state: string,
+  mgmt: string, owner: string,
+  coords: { lat: number; lng: number } | null,
+  portfolioIspBlock: string, cachedDetections: string, priorFindings: string,
   client: Anthropic
-): Promise<{ updatedA: SiloAData; updatedC: SiloCData; updatedD: SiloDData }> {
-  const gapFills: Array<Promise<void>> = []
+): Promise<StepConnectivity> {
+  const blank: StepConnectivity = { isp_providers: [], video_providers: [], bulk_agreements: [], mandatory_tech_fee: false, fcc_providers: [], bulk_detected: false, provider_confirmed: false }
+  const geo = [city, state].filter(Boolean).join(', ')
   const entity = mgmt || owner
+  const nameQ = [name, oldName].filter(Boolean).map(n => `"${n}"`).join(' OR ')
 
-  if (siloA.units === null) {
-    gapFills.push((async () => {
-      const results = await tavilySearch(`"${name}" ${location} "apartment homes" OR "apartment units" total`, 3, 'gap-fill', undefined, 'advanced', true)
-      const usable = results.filter(r => (r.raw_content || r.content)?.length > 40).slice(0, 4)
-      if (usable.length === 0) return
-      const snippets = usable.map((r, i) => {
-        const text = r.raw_content ? r.raw_content.slice(0, 1000) : r.content.slice(0, 400)
-        return `[${i + 1}] ${r.title}\n${text}`
-      }).join('\n\n---\n\n')
-      const prompt = `Extract ONLY the total unit count for this apartment property. Look for patterns like "287 apartment homes", "400 units", "287 homes". Return ONLY valid JSON: {"units": null_or_integer}`
-      const result = await haikusExtract<{ units: number | null }>(prompt, snippets, 100, client)
-      if (result?.units) siloA.units = result.units
-    })())
-  }
+  const fccProviders = coords ? await fccBroadbandLookup(coords.lat, coords.lng) : []
 
-  if (siloC.isp_providers.length === 0) {
-    gapFills.push((async () => {
-      const results = await tavilySearch(`"${name}" ${location} internet reviews provider 2024 2025 resident`, 4, 'gap-fill', undefined, 'advanced')
-      const usable = results.filter(r => r.content?.length > 40).slice(0, 6)
-      if (usable.length === 0) return
-      const snippets = usable.map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 300)}`).join('\n\n---\n\n')
-      const prompt = `Extract ONLY ISP/internet provider names from these reviews. Return ONLY valid JSON: {"isp_providers": ["Provider1", "Provider2"]}`
-      const result = await haikusExtract<{ isp_providers: string[] }>(prompt, snippets, 150, client)
-      if (result?.isp_providers?.length) siloC.isp_providers = result.isp_providers
-    })())
-  }
+  const [bulkResults, ispResults, edgarResults] = await Promise.all([
+    tavilySearch(`${nameQ} ${geo} "internet included" OR "bulk internet" OR "wifi included" OR "technology fee" OR "mandatory wifi" site:apartments.com OR site:rentcafe.com`, 3, 'isp', 'advanced'),
+    tavilySearch(`${nameQ} ${geo} ${fccProviders.slice(0, 3).join(' OR ') || 'Comcast OR Spectrum OR "AT&T" OR Gigstreem OR Hotwire'} internet agreement OR provider`, 4, 'isp'),
+    searchEdgar(name, entity).then(r => r.map(e => ({ ...e, source: 'EDGAR' } as TavilyResult))),
+  ])
 
-  if (!siloD.property_manager?.name && city) {
-    gapFills.push((async () => {
-      const results = await tavilySearch(`"${name}" ${location} "on-site" manager contact info leasing`, 4, 'gap-fill')
-      const usable = results.filter(r => r.content?.length > 40).slice(0, 6)
-      if (usable.length === 0) return
-      const snippets = usable.map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 300)}`).join('\n\n---\n\n')
-      const prompt = `Extract the on-site property or community manager's name and contact for this apartment. Return ONLY valid JSON: {"name":"","title":"","email":"","phone":""}`
-      const result = await haikusExtract<{ name: string; title: string; email: string; phone: string }>(prompt, snippets, 150, client)
-      if (result?.name) {
-        siloD.property_manager = { name: result.name, title: result.title || 'Community Manager', company: mgmt || owner, role_type: 'property_manager', email: result.email || '', phone: result.phone || '', linkedin: '' }
-        if (!siloD.all_contacts.find(c => c.name === result.name)) {
-          siloD.all_contacts.push(siloD.property_manager)
-        }
-      }
-    })())
-  }
+  const allResults = [...bulkResults, ...ispResults, ...edgarResults]
+  const usable = allResults.filter(r => r.content?.length > 40).slice(0, 12)
 
-  if (!siloD.regional_manager?.name && entity) {
-    gapFills.push((async () => {
-      const results = await tavilySearch(`"${entity}" ${city} property management staff regional`, 4, 'gap-fill')
-      const usable = results.filter(r => r.content?.length > 40).slice(0, 6)
-      if (usable.length === 0) return
-      const snippets = usable.map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 300)}`).join('\n\n---\n\n')
-      const prompt = `Extract the regional property manager or area manager name and contact for this management company. Return ONLY valid JSON: {"name":"","title":"","email":""}`
-      const result = await haikusExtract<{ name: string; title: string; email: string }>(prompt, snippets, 150, client)
-      if (result?.name) {
-        siloD.regional_manager = { name: result.name, title: result.title || 'Regional Manager', company: entity, role_type: 'regional_manager', email: result.email || '', phone: '', linkedin: '' }
-        if (!siloD.all_contacts.find(c => c.name === result.name)) {
-          siloD.all_contacts.push(siloD.regional_manager)
-        }
-      }
-    })())
-  }
+  const portfolioCtx  = portfolioIspBlock  ? `\n\nPORTFOLIO ISP DB (high confidence):\n${portfolioIspBlock}` : ''
+  const cacheCtx      = cachedDetections   ? `\n\nCACHED DETECTIONS:\n${cachedDetections}` : ''
+  const findingsCtx   = priorFindings      ? `\n\nPRIOR FINDINGS:\n${priorFindings}` : ''
+  const fccCtx        = fccProviders.length > 0 ? `\n\nFCC BROADBAND MAP (confirmed at address):\n${fccProviders.map(p => `• ${p}`).join('\n')}` : ''
 
-  await Promise.all(gapFills)
-  return { updatedA: siloA, updatedC: siloC, updatedD: siloD }
+  const snippets = usable.map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 400)}`).join('\n\n---\n\n')
+  const extracted = usable.length > 0 ? await haikusExtract<StepConnectivity>(
+    `Extract internet/video connectivity data. Return ONLY valid JSON:
+{"isp_providers":[],"video_providers":[],"bulk_agreements":[],"mandatory_tech_fee":false,"fcc_providers":[],"bulk_detected":false,"provider_confirmed":false}
+bulk_agreements: [{"provider":"","service_type":"internet","agreement_type":"bulk","confidence":"high","evidence":"","expiry_estimate":""}]
+RULES: isp_providers = ONLY actual ISPs (never management company names); bulk_detected=true if internet included in rent or bulk/exclusive deal found; provider_confirmed=true if provider name is explicitly stated${portfolioCtx}${fccCtx}${cacheCtx}${findingsCtx}`,
+    snippets, 500, client
+  ) : null
+
+  const result = extracted || blank
+  result.fcc_providers = fccProviders
+  return result
 }
 
-// ─── Route handler ────────────────────────────────────────────────────────
+// ─── STEP 4B: ISP Confirmation (conditional) ──────────────────────────────────
+
+async function runStep4b(
+  name: string, mgmt: string, owner: string,
+  fccProviders: string[], client: Anthropic
+): Promise<{ confirmed_provider: string | null; evidence: string }> {
+  const entity = mgmt || owner
+  if (!entity) return { confirmed_provider: null, evidence: '' }
+
+  const ispStr = fccProviders.length > 0 ? fccProviders.slice(0, 3).join(' OR ') : 'Spectrum OR Comcast OR "AT&T" OR Hotwire OR Gigstreem'
+
+  const [portfolioResults, testimonialResults] = await Promise.all([
+    tavilySearch(`"${entity}" ${ispStr} "internet included" OR "bulk" OR "community solutions" OR MDU multifamily`, 3, 'isp-confirm'),
+    tavilySearch(`"${entity}" ${ispStr} testimonial OR "case study" OR partner agreement multifamily broadband`, 3, 'isp-confirm'),
+  ])
+
+  const usable = [...portfolioResults, ...testimonialResults].filter(r => r.content?.length > 40).slice(0, 8)
+  if (usable.length === 0) return { confirmed_provider: null, evidence: '' }
+
+  const snippets = usable.map((r, i) => `[${i + 1}] ${r.title}\nURL: ${r.url}\n${r.content.slice(0, 400)}`).join('\n\n---\n\n')
+  const extracted = await haikusExtract<{ confirmed_provider: string | null; evidence: string }>(
+    `"${entity}" has a bulk internet deal — find the confirmed ISP. Return ONLY valid JSON:
+{"confirmed_provider":null,"evidence":""}
+confirmed_provider: exact ISP name (e.g. "Spectrum","Comcast","AT&T Fiber","Gigstreem") or null
+evidence: the key phrase that confirms it (e.g. "Spectrum Community Solutions testimonial featuring ${entity}")`,
+    snippets, 200, client
+  )
+  return extracted || { confirmed_provider: null, evidence: '' }
+}
+
+// ─── STEP 5: PropTech ─────────────────────────────────────────────────────────
+
+async function runStep5(
+  name: string, location: string, mgmt: string, owner: string,
+  painSignals: PainSignal[], client: Anthropic
+): Promise<StepPropTech> {
+  const blank: StepPropTech = { gate_operators: [], access_control: [], intercoms: [], cameras: [], smart_locks: [], resident_apps: [], tech_generation: 'legacy' }
+  const entity = mgmt || owner
+  const hasGatePain = painSignals.some(s => s.type === 'gate')
+
+  const [gateResults, accessResults, entityResults] = await Promise.all([
+    tavilySearch(`"${name}" ${location} ${hasGatePain ? '"gate" "broken" OR "replaced" OR "installed"' : ''} DoorKing OR LiftMaster OR Viking OR Linear OR FAAC OR ButterflyMX OR Aiphone gate intercom access`, 4, 'proptech'),
+    tavilySearch(`"${name}" ${location} Brivo OR Openpath OR HID OR SALTO OR Verkada OR Avigilon OR SmartRent OR GateWise OR Latch cameras security`, 4, 'proptech'),
+    entity ? tavilySearch(`"${entity}" ButterflyMX OR DoorKing OR SmartRent OR Brivo OR LiftMaster portfolio standard`, 3, 'proptech') : Promise.resolve([] as TavilyResult[]),
+  ])
+
+  const usable = [...gateResults, ...accessResults, ...entityResults].filter(r => r.content?.length > 40).slice(0, 10)
+  if (usable.length === 0) return blank
+
+  const snippets = usable.map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 350)}`).join('\n\n---\n\n')
+  const extracted = await haikusExtract<StepPropTech>(
+    `Extract technology brands found. Return ONLY valid JSON:
+{"gate_operators":[],"access_control":[],"intercoms":[],"cameras":[],"smart_locks":[],"resident_apps":[],"tech_generation":"legacy"}
+Known brands — gates: DoorKing/LiftMaster/Viking/Linear/FAAC/PDK; access: Brivo/HID/SALTO/Openpath; intercoms: ButterflyMX/Aiphone/Viking/2N; cameras: Verkada/Avigilon/EagleEye/Hanwha; locks: SmartRent/GateWise/Latch/August/Yale
+tech_generation: "legacy"=pre-2018, "modern"=2018+ cloud, "hybrid"=mix. Empty arrays if not found.`,
+    snippets, 400, client
+  )
+  return extracted || blank
+}
+
+// ─── STEP 6: People ───────────────────────────────────────────────────────────
+
+async function runStep6(
+  name: string, city: string, state: string, mgmt: string, owner: string,
+  emailDomain: string, painRawExcerpts: TavilyResult[], client: Anthropic
+): Promise<StepPeople> {
+  const blank: StepPeople = { property_manager: null, regional_manager: null, asset_manager: null, all_contacts: [], email_format: '' }
+  const entity = mgmt || owner
+  if (!entity) return blank
+  const geo = [city, state].filter(Boolean).join(', ')
+
+  const painSnippets = painRawExcerpts.filter(r => r.content?.length > 40).slice(0, 6)
+    .map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 300)}`).join('\n\n---\n\n')
+
+  const [linkedinResults, apolloContacts] = await Promise.all([
+    tavilySearch(`"${entity}" ${geo} "property manager" OR "community manager" OR "regional manager" site:linkedin.com`, 4, 'people'),
+    apolloSearchContacts(entity, [
+      'Property Manager', 'Community Manager', 'Leasing Manager',
+      'Regional Property Manager', 'Regional Manager', 'Area Manager',
+      'Asset Manager', 'Portfolio Manager', 'Vice President', 'Director',
+      'Chief Executive Officer', 'CEO', 'President',
+    ], geo),
+  ])
+
+  // ProxyCurl: validate top Apollo contact only (1 call max)
+  const topWithLinkedin = apolloContacts.find(c => c.linkedin_url)
+  let proxyProfile: ProxycurlProfile | null = null
+  if (topWithLinkedin?.linkedin_url) proxyProfile = await proxycurlProfile(topWithLinkedin.linkedin_url)
+
+  // Email format lookup
+  let emailFormat = ''
+  if (emailDomain) {
+    const efResults = await tavilySearch(`"${emailDomain}" email format "firstname.lastname" OR "first.last" OR "flastname" site:rocketreach.co OR site:hunter.io`, 2, 'people')
+    const efSnippets = efResults.filter(r => r.content?.length > 30).slice(0, 3).map(r => r.content.slice(0, 200)).join('\n')
+    if (efSnippets) {
+      const efResult = await haikusExtract<{ format: string }>(
+        `Find the email format for domain "${emailDomain}". Return ONLY valid JSON: {"format":""}
+Examples: "firstname.lastname@domain.com", "flastname@domain.com", "firstname@domain.com"`,
+        efSnippets, 100, client)
+      emailFormat = normStr(efResult?.format) || ''
+    }
+  }
+
+  // Apollo contacts → typed
+  const apolloTyped: StepContact[] = apolloContacts.slice(0, 6).map(c => {
+    const tl = (c.title ?? '').toLowerCase()
+    let role_type = 'corporate'
+    if (tl.includes('property manager') || tl.includes('community manager') || tl.includes('leasing')) role_type = 'property_manager'
+    else if (tl.includes('regional') || tl.includes('area manager')) role_type = 'regional_manager'
+    else if (tl.includes('asset') || tl.includes('portfolio') || tl.includes('director') || tl.includes('vice president') || tl.includes('vp')) role_type = 'asset_manager'
+    return {
+      name: normStr(c.name) || '', title: normStr(c.title) || '',
+      company: normStr(c.organization?.name) || entity, role_type,
+      email: normStr(c.email) || '', phone: c.phone_numbers?.[0] || '',
+      linkedin: c.linkedin_url || '',
+    }
+  })
+
+  // Extract named contacts from web snippets
+  const allSnippets = [painSnippets, ...linkedinResults.filter(r => r.content?.length > 40).slice(0, 6).map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 350)}`)].join('\n\n---\n\n')
+  const webExtracted = allSnippets.length > 50
+    ? await haikusExtract<{ contacts: StepContact[] }>(
+        `Extract named individuals who work for "${entity}" as property managers, regional managers, or asset managers. Return ONLY valid JSON:
+{"contacts":[{"name":"","title":"","company":"","role_type":"property_manager","email":"","phone":"","linkedin":""}]}
+role_type: "property_manager"=on-site, "regional_manager"=multi-property, "asset_manager"=financial, "corporate"=C-suite
+Only include people with actual names. Empty array if none found.`,
+        allSnippets, 500, client)
+    : null
+
+  const webContacts: StepContact[] = (webExtracted?.contacts ?? []).filter(c => normStr(c.name) !== null)
+
+  // Merge & deduplicate
+  const allContacts = [...webContacts, ...apolloTyped].filter((c, idx, arr) =>
+    c.name && arr.findIndex(x => x.name === c.name) === idx
+  )
+
+  // Update with ProxyCurl verified data
+  if (proxyProfile && topWithLinkedin) {
+    const currentExp = (proxyProfile.experiences ?? []).find(e => !e.ends_at)
+    const idx = allContacts.findIndex(c => c.name === topWithLinkedin.name)
+    if (idx >= 0) {
+      if (proxyProfile.email || proxyProfile.personal_email) allContacts[idx].email = proxyProfile.email || proxyProfile.personal_email || allContacts[idx].email
+      if (currentExp?.title) allContacts[idx].title = currentExp.title
+    }
+  }
+
+  return {
+    property_manager: allContacts.find(c => c.role_type === 'property_manager') || null,
+    regional_manager: allContacts.find(c => c.role_type === 'regional_manager') || null,
+    asset_manager:    allContacts.find(c => c.role_type === 'asset_manager') || allContacts.find(c => c.role_type === 'corporate') || null,
+    all_contacts: allContacts,
+    email_format: emailFormat,
+  }
+}
+
+// ─── Synthesis tool schema ────────────────────────────────────────────────────
+
+const deepIntelTool: Anthropic.Tool = {
+  name: 'aria_deep_intel_result',
+  description: 'Return the structured deep connectivity, proptech, and ownership intelligence for this property.',
+  input_schema: {
+    type: 'object' as const,
+    required: ['property_details', 'isp_providers', 'video_providers', 'bulk_agreements', 'extracted_contacts', 'key_finding', 'confidence', 'proptech', 'pain_signals'],
+    properties: {
+      property_details: {
+        type: 'object',
+        properties: {
+          units: { type: 'number' }, year_built: { type: 'number' },
+          management_company: { type: 'string' }, property_type: { type: 'string' },
+          class: { type: 'string' }, occupancy: { type: 'string' },
+        },
+      },
+      isp_providers:  { type: 'array', items: { type: 'string' } },
+      video_providers: { type: 'array', items: { type: 'string' } },
+      bulk_agreements: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['provider', 'service_type', 'agreement_type', 'expiry_estimate', 'confidence', 'evidence', 'evidence_source'],
+          properties: {
+            provider: { type: 'string' }, service_type: { type: 'string', enum: ['internet', 'video', 'bundled'] },
+            agreement_type: { type: 'string', enum: ['exclusive', 'bulk', 'preferred', 'unknown'] },
+            expiry_estimate: { type: 'string' }, confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+            evidence: { type: 'string' }, evidence_source: { type: 'string' },
+          },
+        },
+      },
+      extracted_contacts: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: { name: { type: 'string' }, title: { type: 'string' }, company: { type: 'string' }, email: { type: 'string' }, linkedin_slug: { type: 'string' } },
+        },
+      },
+      key_finding:    { type: 'string' },
+      confidence:     { type: 'string', enum: ['high', 'medium', 'low'] },
+      units:          { type: 'number' }, year_built: { type: 'number' },
+      property_class: { type: 'string', enum: ['A', 'B', 'C'] },
+      property_type:  { type: 'string' },
+      atlas_opportunity: { type: 'boolean' }, edgar_signal: { type: 'boolean' }, permit_signal: { type: 'boolean' },
+      ownership: {
+        type: 'object',
+        properties: {
+          owner_entity: { type: 'string' }, owner_type: { type: 'string' },
+          portfolio_size: { type: 'string' }, acquisition_year: { type: 'string' },
+          capex_signal: { type: 'string' }, sec_filing_ref: { type: 'string' },
+        },
+      },
+      proptech: {
+        type: 'object',
+        properties: {
+          gate_operators:       { type: 'array', items: { type: 'string' } },
+          access_control:       { type: 'array', items: { type: 'string' } },
+          intercoms:            { type: 'array', items: { type: 'string' } },
+          cameras:              { type: 'array', items: { type: 'string' } },
+          smart_locks:          { type: 'array', items: { type: 'string' } },
+          resident_apps:        { type: 'array', items: { type: 'string' } },
+          package_solutions:    { type: 'array', items: { type: 'string' } },
+          tech_generation:      { type: 'string', enum: ['legacy', 'modern', 'hybrid'] },
+          sara_signals:         { type: 'boolean' },
+          replacement_window:   { type: 'string' },
+          displacement_targets: { type: 'array', items: { type: 'string' } },
+        },
+      },
+      pain_signals: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            source: { type: 'string' }, date: { type: 'string' },
+            signal_type: { type: 'string', enum: ['gate_access', 'internet', 'package_theft', 'intercom', 'general'] },
+            quote: { type: 'string' }, severity: { type: 'string', enum: ['high', 'medium', 'low'] },
+          },
+        },
+      },
+      behavioral_profile: {
+        type: 'object',
+        properties: { personality_type: { type: 'string' }, decision_style: { type: 'string' }, risk_tolerance: { type: 'string' }, communication_pref: { type: 'string' } },
+      },
+      pitch_strategy: {
+        type: 'object',
+        properties: { primary_hook: { type: 'string' }, avoid_topics: { type: 'array', items: { type: 'string' } }, best_time_to_call: { type: 'string' }, social_proof: { type: 'string' } },
+      },
+      freshness_score: { type: 'number' },
+      buying_trends:   { type: 'string' },
+    },
+  },
+}
+
+// ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
     const { userId } = await auth()
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    if (!process.env.TAVILY_API_KEY) {
-      return NextResponse.json({ error: 'TAVILY_API_KEY not configured' }, { status: 503 })
-    }
+    if (!process.env.TAVILY_API_KEY) return NextResponse.json({ error: 'TAVILY_API_KEY not configured' }, { status: 503 })
 
     const raw = await req.json()
-    let rawQuery: string = raw.property_name || raw.query || ''
+    const rawQuery: string = raw.property_name || raw.query || ''
     if (!rawQuery) return NextResponse.json({ error: 'property_name or query required' }, { status: 400 })
 
-    // ── Phase 0: Query classification ─────────────────────────────────────────
-    let prospectDiscoveryNote: string | undefined
-    const queryClass = await classifyQuery(rawQuery, anthropic)
-    if (queryClass.type === 'prospecting_query') {
-      const candidateResults = await findCandidateProperties(
-        rawQuery, queryClass.extracted_city, queryClass.extracted_state, queryClass.criteria_summary,
-      )
-      const candidateNames = await extractCandidateNames(
-        candidateResults, rawQuery, queryClass.extracted_city, anthropic,
-      )
-      if (candidateNames.length > 0) {
-        prospectDiscoveryNote = `Prospecting query detected. Found candidate: "${candidateNames[0]}" (from criteria: ${queryClass.criteria_summary})`
-        rawQuery = candidateNames[0]
-      } else {
-        prospectDiscoveryNote = `Prospecting query — no specific candidates found in ${queryClass.extracted_city || 'target city'}. Searching broadly.`
-      }
-    }
-
-    // ── Hint params from request ───────────────────────────────────────────────
-    const hintCity  = (raw.city as string)  || queryClass.extracted_city  || ''
-    const hintState = (raw.state as string) || queryClass.extracted_state || ''
+    const hintCity  = (raw.city  as string) || ''
+    const hintState = (raw.state as string) || ''
     const hintMgmt  = (raw.management_company as string) || ''
-    const locationAnchor = [hintCity, hintState].filter(Boolean).join(' ')
 
-    // ── DB lookups (parallel with Phase 1) ───────────────────────────────────
-    let mduProviderSlugsDeep: Array<any> = []
-    let mduAllProviderNames: string[] = []
-    let cachedDetectionsBlockDeep = ''
-    let priorFindingsBlock = ''
+    // ── Step 1: Identity ──────────────────────────────────────────────────────
+    const s1 = await runStep1(rawQuery, hintCity, hintState, hintMgmt, anthropic)
+    const property_name = s1.name || rawQuery
+    const address       = (raw.address as string) || s1.address || ''
+    const city          = hintCity  || s1.city  || ''
+    const state         = hintState || s1.state || ''
+    const mgmt          = s1.management_company || ''
+    const location      = [city, state].filter(Boolean).join(', ') || address || ''
+
+    // ── DB lookups + Step 2 in parallel ──────────────────────────────────────
     let portfolioIspBlock = ''
+    let cachedDetectionsBlock = ''
+    let priorFindingsBlock = ''
 
-    const [siloAResult] = await Promise.all([
-      runSiloA(rawQuery, locationAnchor, raw.address || '', hintCity, hintState, hintMgmt, anthropic),
+    const [s2] = await Promise.all([
+      runStep2(property_name, address, city, state, anthropic),
       Promise.allSettled([
         (async () => {
+          if (!mgmt) return
           try {
-            const { data: providers } = await supabaseDeep.from('mdu_providers').select('name, slug, property_page_pattern, operator_page_pattern, notes').eq('active', true)
-            if (providers) {
-              mduProviderSlugsDeep = providers.filter(p => p.property_page_pattern || p.operator_page_pattern)
-              mduAllProviderNames = providers.map(p => p.name)
+            const { data } = await supabaseDeep.from('mgmt_isp_portfolio')
+              .select('management_company_display, isp_name, agreement_type, coverage_states, coverage_notes, confidence')
+              .ilike('management_company', `%${mgmt.split(' ')[0]}%`).eq('active', true)
+            if (data?.length) {
+              const rel = state ? data.filter((r: any) => !r.coverage_states?.length || r.coverage_states.includes(state.toUpperCase())) : data
+              if (rel.length) portfolioIspBlock = rel.map((r: any) => `• ${r.management_company_display} → ${r.isp_name} (${r.agreement_type}) [${r.confidence}]\n  ${r.coverage_notes ?? ''}`).join('\n')
             }
           } catch {}
         })(),
         (async () => {
           try {
-            const { data: detections } = await supabaseDeep.from('mdu_provider_detections').select('confidence, source_type, source_snippet, contract_end_year, verified_by, mdu_providers ( name, provider_type )').ilike('property_name', `%${rawQuery}%`).in('confidence', ['confirmed', 'high', 'medium']).limit(10)
-            if (detections && detections.length > 0) {
-              const lines = detections.map((d: any) => `• ${d.mdu_providers?.name ?? 'Unknown'}: ${d.confidence} [${d.source_type}]`)
-              cachedDetectionsBlockDeep = `\n\nGATEGUARD CACHED PROVIDER DETECTIONS:\n${lines.join('\n')}\n`
-            }
+            const { data } = await supabaseDeep.from('mdu_provider_detections')
+              .select('confidence, source_type, mdu_providers ( name )')
+              .ilike('property_name', `%${property_name}%`).in('confidence', ['confirmed', 'high', 'medium']).limit(8)
+            if (data?.length) cachedDetectionsBlock = data.map((d: any) => `• ${d.mdu_providers?.name}: ${d.confidence} [${d.source_type}]`).join('\n')
           } catch {}
         })(),
         (async () => {
           try {
-            const { data: findings } = await supabaseDeep.from('aria_contract_findings').select('provider_name, agreement_type, service_type, expiry_year, expiry_date, confidence, source_type, source_snippet').or(`property_name.ilike.%${rawQuery}%`).in('confidence', ['confirmed', 'high', 'medium-high']).order('created_at', { ascending: false }).limit(10)
-            if (findings && findings.length > 0) {
-              const lines = findings.map((f: any) => `• ${f.provider_name} — ${f.agreement_type} ${f.service_type} [${f.confidence}]`)
-              priorFindingsBlock = `\n\nGATEGUARD PRIOR CONTRACT FINDINGS:\n${lines.join('\n')}\n`
-            }
-          } catch {}
-        })(),
-        (async () => {
-          try {
-            const queryLower = rawQuery.toLowerCase()
-            const knownMgmt = ['cortland','greystar','maa','nexpoint','camden','aimco','udr','invitation homes','equity residential','progress residential','starwood','landmark']
-            const hintMatch = knownMgmt.find(m => queryLower.includes(m))
-            if (hintMatch) {
-              const { data: portfolioRows } = await supabaseDeep.from('mgmt_isp_portfolio').select('management_company_display, isp_name, agreement_type, coverage_states, coverage_notes, confidence').ilike('management_company', `%${hintMatch}%`).eq('active', true)
-              if (portfolioRows && portfolioRows.length > 0) {
-                const lines = portfolioRows.map((r: any) => `• ${r.management_company_display} → ${r.isp_name} (${r.agreement_type}) [${r.confidence}]\n  Coverage: ${(r.coverage_states ?? []).join(', ') || 'nationwide'}\n  ${r.coverage_notes ?? ''}`)
-                portfolioIspBlock = `\n\nGATEGUARD PORTFOLIO ISP INTELLIGENCE:\n${lines.join('\n')}\n`
-              }
-            }
+            const { data } = await supabaseDeep.from('aria_contract_findings')
+              .select('provider_name, agreement_type, service_type, confidence')
+              .or(`property_name.ilike.%${property_name}%`).in('confidence', ['confirmed', 'high', 'medium-high'])
+              .order('created_at', { ascending: false }).limit(6)
+            if (data?.length) priorFindingsBlock = data.map((f: any) => `• ${f.provider_name} — ${f.agreement_type} ${f.service_type} [${f.confidence}]`).join('\n')
           } catch {}
         })(),
       ]),
     ])
 
-    // ── Resolve confirmed property identity from Silo A ───────────────────────
-    const siloAData = siloAResult.data
-    const property_name = siloAData.corrected_name || rawQuery
-    const address       = (raw.address as string) || siloAData.address || ''
-    const city          = hintCity  || siloAData.city  || ''
-    const state         = hintState || siloAData.state || ''
-    const mgmt          = hintMgmt  || siloAData.management_company || ''
-    const owner         = siloAData.owner_entity || ''
-    const location      = [city, state].filter(Boolean).join(', ') || address || ''
+    const owner    = normStr(s2.owner_entity) || ''
+    const old_name = normStr(s2.old_name) || ''
 
-    // ── Portfolio ISP lookup now that we have the real mgmt name ──────────────
-    if (mgmt && !portfolioIspBlock) {
-      try {
-        const mgmtLower = mgmt.toLowerCase()
-        const { data: portfolioRows } = await supabaseDeep
-          .from('mgmt_isp_portfolio')
-          .select('management_company_display, isp_name, agreement_type, coverage_states, coverage_notes, confidence')
-          .ilike('management_company', `%${mgmtLower.split(' ')[0]}%`)
-          .eq('active', true)
-        if (portfolioRows && portfolioRows.length > 0) {
-          const relevant = state
-            ? portfolioRows.filter((r: any) => !r.coverage_states?.length || r.coverage_states.includes(state.toUpperCase()))
-            : portfolioRows
-          if (relevant.length > 0) {
-            const lines = relevant.map((r: any) => `• ${r.management_company_display} → ${r.isp_name} (${r.agreement_type}) [${r.confidence}]\n  ${r.coverage_notes ?? ''}`)
-            portfolioIspBlock = `\n\nGATEGUARD PORTFOLIO ISP INTELLIGENCE (${mgmt}):\n${lines.join('\n')}\nIMPORTANT: This is GateGuard confirmed field intelligence about this management company's standard ISP deal. Use it to populate isp_providers and bulk_agreements with high confidence when property evidence is sparse.\n`
-          }
-        }
-      } catch {}
-    }
-
-    // Re-fetch detections for corrected name if changed
-    if (property_name !== rawQuery && !cachedDetectionsBlockDeep) {
-      try {
-        const { data: detections } = await supabaseDeep.from('mdu_provider_detections').select('confidence, source_type, source_snippet, contract_end_year, verified_by, mdu_providers ( name, provider_type )').ilike('property_name', `%${property_name}%`).in('confidence', ['confirmed', 'high', 'medium']).limit(10)
-        if (detections && detections.length > 0) {
-          const lines = detections.map((d: any) => `• ${d.mdu_providers?.name ?? 'Unknown'}: ${d.confidence} [${d.source_type}]`)
-          cachedDetectionsBlockDeep = `\n\nGATEGUARD CACHED PROVIDER DETECTIONS:\n${lines.join('\n')}\n`
-        }
-      } catch {}
-    }
-
-    // ── Phase 2: Silos B, C, D in parallel ───────────────────────────────────
-    const [siloBResult, siloCResult, siloDResult] = await Promise.all([
-      runSiloB(property_name, location, mgmt, owner, anthropic),
-      runSiloC(property_name, location, mgmt, owner, portfolioIspBlock, anthropic),
-      runSiloD(property_name, address, city, state, mgmt, owner, anthropic),
+    // ── Steps 3, 4, 5 in parallel ─────────────────────────────────────────────
+    const [s3, s4, s5] = await Promise.all([
+      runStep3(property_name, old_name, city, state, anthropic),
+      runStep4(property_name, old_name, city, state, mgmt, owner, s1.coords, portfolioIspBlock, cachedDetectionsBlock, priorFindingsBlock, anthropic),
+      runStep5(property_name, location, mgmt, owner, [], anthropic),
     ])
 
-    // ── Phase 3: Gap Fill ─────────────────────────────────────────────────────
-    const { updatedA, updatedC, updatedD } = await runGapFill(
-      property_name, location, mgmt, owner, city,
-      siloAData, siloCResult.data, siloDResult.data,
-      anthropic,
-    )
-
-    // ── Phase 4: Apollo + ProxyCurl ───────────────────────────────────────────
-    const apolloEntity = mgmt || owner
-    const apolloContacts = apolloEntity
-      ? await apolloSearchContacts(apolloEntity, ['Chief Executive Officer', 'CEO', 'President', 'Vice President', 'Asset Manager', 'Regional Manager', 'Regional Property Manager', 'Director', 'Portfolio Manager', 'Property Manager', 'Community Manager'], location)
-      : []
-    const validatedDMs = await proxycurlValidateDMs(apolloContacts)
-    const primaryDM = validatedDMs.find(d => d.isActiveCEO && d.confidence === 'proxycurl-verified') ?? validatedDMs.find(d => d.isActiveCEO) ?? validatedDMs.find(d => !d.isFormerOrAdvisory) ?? null
-    const pdlDMProfile = primaryDM ? await pdlEnrichPerson(primaryDM.name, primaryDM.company, primaryDM.email) : null
-
-    let apolloBlock = ''
-    if (validatedDMs.length > 0) {
-      const activeLines = validatedDMs.filter(d => !d.isFormerOrAdvisory).map(d => `• ${d.name} — ${d.currentTitle} at ${d.company}`)
-      if (activeLines.length > 0) apolloBlock = `\n\nEXECUTIVE TRUTH LOOP RESULTS:\nACTIVE DECISION MAKERS:\n${activeLines.join('\n')}\n`
+    // ── Step 4B: ISP Confirmation (only if bulk detected + provider unknown) ──
+    if (s4.bulk_detected && !s4.provider_confirmed && (mgmt || owner)) {
+      const conf = await runStep4b(property_name, mgmt, owner, s4.fcc_providers, anthropic)
+      if (conf.confirmed_provider) {
+        if (!s4.isp_providers.includes(conf.confirmed_provider)) s4.isp_providers.unshift(conf.confirmed_provider)
+        s4.provider_confirmed = true
+        if (s4.bulk_agreements.length === 0) {
+          s4.bulk_agreements.push({ provider: conf.confirmed_provider, service_type: 'internet', agreement_type: 'bulk', confidence: 'high', evidence: conf.evidence })
+        } else if (!s4.bulk_agreements[0].provider) {
+          s4.bulk_agreements[0].provider = conf.confirmed_provider
+        }
+      }
     }
 
-    // ── Provider slug searches (legacy: ISP domain-specific) ─────────────────
-    const providerSlugResults: TavilyResult[] = await (async () => {
-      if (!process.env.TAVILY_API_KEY || mduProviderSlugsDeep.length === 0) return []
-      const slugSearches = mduProviderSlugsDeep.slice(0, 8).map((p: any) => {
-        const domain = ((p.property_page_pattern || p.operator_page_pattern || '') as string).replace(/\{.*?\}/g, '').replace(/\/$/, '')
-        const domainOnly = domain.replace(/^https?:\/\//, '').split('/')[0]
-        if (!domainOnly) return Promise.resolve([] as TavilyResult[])
-        return tavilySearch(`"${property_name}" site:${domainOnly}`, 2, 'provider-slug')
-      })
-      const results = await Promise.allSettled(slugSearches)
-      return results.filter((r): r is PromiseFulfilledResult<TavilyResult[]> => r.status === 'fulfilled').flatMap(r => r.value)
-    })()
+    // ── Step 6: People ────────────────────────────────────────────────────────
+    const s6 = await runStep6(property_name, city, state, mgmt, owner, s1.email_domain, s3.raw_excerpts, anthropic)
 
-    // ── Resident reviews for pain signals ─────────────────────────────────────
-    const reviewResults = await (async (): Promise<TavilyResult[]> => {
-      if (!process.env.TAVILY_API_KEY) return []
-      const queries: Array<[string, 'year' | undefined, 'basic' | 'advanced']> = [
-        [`"${property_name}" ${location} internet OR wifi OR "internet provider" OR gate OR "access control" site:apartmentratings.com`, 'year', 'advanced'],
-        [`"${property_name}" ${location} site:yelp.com reviews internet wifi provider fee`, undefined, 'advanced'],
-        [`"${property_name}" ${location} internet provider wifi "no choice" OR "forced" OR "mandatory" OR "included in rent"`, 'year', 'advanced'],
-        [`"${property_name}" ${location} "technology fee" OR "wifi fee" OR "internet fee" OR "Gigstreem" OR "managed wifi" site:apartments.com OR site:apartmentlist.com`, undefined, 'advanced'],
-      ]
-      const results = await Promise.all(queries.map(([q, t, d]) => tavilySearch(q, 5, 'resident-review', t, d)))
-      return results.flat()
-    })()
+    // ── Step 7: Sonnet synthesis ───────────────────────────────────────────────
+    const siloSummary = `STEP 1 — IDENTITY (verified):
+${JSON.stringify({ name: property_name, address, city, state, units: s1.units, year_built: s1.year_built, property_class: s1.property_class, website: s1.website, phone: s1.phone, management_company: mgmt }, null, 2)}
 
-    const reviewSentimentBlock = await extractReviewSentiment(reviewResults, anthropic)
+STEP 2 — OWNERSHIP (verified):
+${JSON.stringify({ owner_entity: owner, owner_type: s2.owner_type, acquisition_year: s2.acquisition_year, portfolio_size: s2.portfolio_size, old_name, sale_price: s2.sale_price }, null, 2)}
 
-    // ── Collect all raw results for sources + excerpt block ───────────────────
-    const allRawResults = [
-      ...siloAResult.results, ...siloBResult.results, ...siloCResult.results, ...siloDResult.results,
-      ...providerSlugResults, ...reviewResults,
-    ]
+STEP 3 — PAIN SIGNALS (resident reviews/Reddit/social — last 12 months):
+${JSON.stringify({ gate_issue_count: s3.gate_issue_count, internet_issue_count: s3.internet_issue_count, signals: s3.signals.slice(0, 12) }, null, 2)}
 
-    const seenUrls = new Set<string>()
-    const deepBoostSources: Record<string, number> = {
-      'provider-slug': 0.40, 'EDGAR': 0.30, 'PUC': 0.30, 'CityPermit': 0.30,
-      'ISP-Press': 0.25, 'resident-review': 0.20, 'silo-c': 0.15, 'silo-d': 0.15,
-    }
-    const uniqueResults = allRawResults
-      .filter(r => { if (seenUrls.has(r.url)) return false; seenUrls.add(r.url); return r.score > 0.25 })
-      .sort((a, b) => (b.score + (deepBoostSources[b.source ?? ''] ?? 0)) - (a.score + (deepBoostSources[a.source ?? ''] ?? 0)))
-      .slice(0, 22)
+STEP 4 — CONNECTIVITY (FCC + web verified):
+${JSON.stringify({ fcc_providers: s4.fcc_providers, isp_providers: s4.isp_providers, video_providers: s4.video_providers, bulk_agreements: s4.bulk_agreements, mandatory_tech_fee: s4.mandatory_tech_fee, bulk_detected: s4.bulk_detected, provider_confirmed: s4.provider_confirmed }, null, 2)}
+${portfolioIspBlock ? `\nPORTFOLIO ISP DB:\n${portfolioIspBlock}` : ''}${cachedDetectionsBlock ? `\nCACHED DETECTIONS:\n${cachedDetectionsBlock}` : ''}${priorFindingsBlock ? `\nPRIOR FINDINGS:\n${priorFindingsBlock}` : ''}
 
-    if (uniqueResults.length === 0) {
-      return NextResponse.json({ error: 'No data found.' }, { status: 404 })
-    }
+STEP 5 — PROPTECH STACK (verified):
+${JSON.stringify(s5, null, 2)}
 
-    const excerptBlock = uniqueResults.map((r, i) => `[Source ${i + 1}] [${r.source?.toUpperCase()}] ${r.title}\nURL: ${r.url}\n${r.content.slice(0, 500)}`).join('\n\n---\n\n')
-
-    const edgarResults = allRawResults.filter(r => r.source === 'EDGAR')
-    const pucResults   = allRawResults.filter(r => r.source === 'PUC')
-    const permitResults = allRawResults.filter(r => r.source === 'CityPermit')
-    const ispPressResults = allRawResults.filter(r => r.source === 'ISP-Press')
-    const vendorFootprintResults = providerSlugResults
-
-    // ── Phase 5: Sonnet synthesis with structured silo inputs ─────────────────
-    const sourcesSummary = [
-      edgarResults.length > 0    ? `[EDGAR: ${edgarResults.length} SEC filing(s)]` : null,
-      pucResults.length > 0      ? `[PUC: ${pucResults.length} utility filing(s)]` : null,
-      permitResults.length > 0   ? `[CityPermit: ${permitResults.length} permit(s)]` : null,
-      ispPressResults.length > 0 ? `[ISP-Press: ${ispPressResults.length} press result(s)]` : null,
-      vendorFootprintResults.length > 0 ? `[VENDOR-FOOTPRINT: ${vendorFootprintResults.length} vendor listing(s)]` : null,
-      reviewResults.length > 0   ? `[RESIDENT-REVIEWS: ${reviewResults.length} review(s)]` : null,
-      apolloContacts.length > 0  ? `[APOLLO: ${apolloContacts.length} contact(s)]` : null,
-      validatedDMs.length > 0    ? `[PROXYCURL-VERIFIED: ${validatedDMs.length} DM(s) validated]` : null,
-    ].filter(Boolean).join(' | ')
+STEP 6 — PEOPLE CHAIN (verified):
+${JSON.stringify({ property_manager: s6.property_manager, regional_manager: s6.regional_manager, asset_manager: s6.asset_manager, contact_count: s6.all_contacts.length, email_format: s6.email_format }, null, 2)}`
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 4000,
+      max_tokens: 3500,
       tools: [deepIntelTool],
       tool_choice: { type: 'tool', name: 'aria_deep_intel_result' },
-      system: `You are assembling structured silo outputs into a final property intelligence report. Silo extractions are ground truth — do not contradict them. Use web excerpts only to fill remaining gaps not covered by silos.
+      system: `You are assembling step-verified data into a final property intelligence report. Steps 1-6 are ground truth — copy them directly. Use synthesis only to fill gaps and write the sales brief.
 
-CRITICAL — always populate these fields when any evidence exists:
-• property_details.units: from SILO A — it is already verified. Copy it directly.
-• property_details.year_built: from SILO A — copy directly.
-• property_details.class: from SILO A property_class.
-• property_details.management_company: from SILO A — use owner_entity fallback if management_company is empty.
-• isp_providers: from SILO C isp_providers — these are verified ISPs only.
-• bulk_agreements: from SILO C bulk_agreements — already structured.
-• proptech fields: from SILO B — already categorized by type.
-• extracted_contacts: from SILO D all_contacts — these are real people found in searches.
-• pain_signals: from resident reviews and SILO C mandatory_tech_fee signals.
+CRITICAL COPY RULES:
+1. property_details.units: copy from STEP 1 — do not modify
+2. property_details.management_company: copy from STEP 1 mgmt — NEVER overwrite with a person's name
+3. isp_providers: copy from STEP 4 — FCC/web verified ISPs only
+4. bulk_agreements: copy from STEP 4 — already structured
+5. proptech fields: copy from STEP 5
+6. extracted_contacts: use STEP 6 — property_manager first, then regional, then asset manager
+7. pain_signals: use STEP 3 signals — up to 12, last 6-12 months
+8. ownership: copy from STEP 2
+9. If management_company blank but owner is a RE firm → set management_company = owner_entity
 
-CRITICAL ENTITY RESOLUTION RULES:
-1. NEVER confuse a Management Company or Owner with an Internet Service Provider.
-2. isp_providers must contain ONLY actual ISPs. Management company names never belong here.
-3. SELF-MANAGED FIRMS: If management_company is blank but owner is a known RE firm, set management_company = owner_entity.
-4. DirecTV, DISH, Spectrum video → record as video_provider AND bulk_agreement with service_type "video".
-5. If gated community with no brand, put "Unknown (gated)" in proptech.access_control.
+CONTACT PRIORITY: Property Manager > Regional Manager > Asset Manager > CEO
 
-CONTACT PRIORITY: Property-level (community manager, leasing manager) and Regional-level contacts are MORE valuable than corporate CEO. Always surface property_manager and regional_manager from SILO D first.
-
-key_finding: "[WHO to call] at [company] controls capex. [WHY NOW: deal expiry, acquisition, aging tech, SEC signal]."
-BEHAVIORAL PROFILE: analytical (PE/REIT, CFOs), driver (Regional VPs), expressive (Marketing PMs), amiable (Community managers)
-PITCH STRATEGY: primary_hook = single opening sentence referencing THIS property's specific pain.
-FRESHNESS SCORE (1–5): 5=SEC 8-K in 90d or contract expiry this year; 4=resident complaints 6mo or ISP press 1yr; 3=listing confirmed or EDGAR 10-K 2yr; 2=older web data; 1=all inference
-edgar_signal: true if ANY EDGAR source was useful. permit_signal: true if ANY city permit/PUC confirms ISP infrastructure.`,
-      messages: [{
-        role: 'user',
-        content: `Property: ${property_name}
-Address: ${address || updatedA.address || 'unknown'}
-Location: ${location}
-Sources retrieved: ${sourcesSummary || 'web only'}
-
-SILO A — PROPERTY FACTS (Haiku verified):
-${JSON.stringify(updatedA, null, 2)}
-
-SILO B — PROPTECH STACK (Haiku verified):
-${JSON.stringify(siloBResult.data, null, 2)}
-
-SILO C — CONNECTIVITY (Haiku verified):
-${JSON.stringify(updatedC, null, 2)}
-
-SILO D — CONTACTS (Haiku verified):
-${JSON.stringify(updatedD, null, 2)}
-
-APOLLO/PROXYCURL VERIFIED CONTACTS:
-${apolloBlock || '(none)'}
-
-PORTFOLIO ISP INTELLIGENCE:
-${portfolioIspBlock || '(none)'}
-
-PRIOR CONTRACT FINDINGS:
-${priorFindingsBlock || '(none)'}
-
-CACHED PROVIDER DETECTIONS:
-${cachedDetectionsBlockDeep || '(none)'}
-${reviewSentimentBlock}
-RAW WEB EXCERPTS (for context / gap-filling only — silos above take precedence):
-${excerptBlock}`,
-      }],
+key_finding: "[WHO] at [company] controls this. [WHY NOW: pain signal / contract expiry / acquisition / aging tech]"
+pitch_strategy.primary_hook: one sentence using THIS property's specific pain signal
+freshness_score (1-5): 5=contract expiry this year; 4=pain complaints <6mo; 3=listing confirmed; 2=older data; 1=inference`,
+      messages: [{ role: 'user', content: `Property: ${property_name}\nAddress: ${address || 'unknown'}\nLocation: ${location}\n\n${siloSummary}` }],
     })
 
     const toolBlock = message.content.find(b => b.type === 'tool_use') as Anthropic.ToolUseBlock | undefined
     if (!toolBlock) throw new Error('No synthesis result from Claude')
-
-    // ── Source metadata for response ──────────────────────────────────────────
-    const sources = uniqueResults.slice(0, 8).map(r => ({
-      title: r.title,
-      url: r.url,
-      excerpt: r.content.slice(0, 200),
-      score: r.score,
-      type: r.source ?? 'web',
-    }))
-
-    const intelligenceSources = {
-      edgar:              edgarResults.length > 0,
-      puc:                pucResults.length > 0,
-      permits:            permitResults.length > 0,
-      isp_press:          ispPressResults.length > 0,
-      listing_sites:      allRawResults.filter(r => r.source === 'silo-a').some(r => r.score > 0.4),
-      vendor_footprint:   vendorFootprintResults.length > 0,
-      resident_reviews:   reviewResults.length > 0,
-      apollo:             apolloContacts.length > 0,
-      proxycurl_verified: validatedDMs.some(d => d.confidence === 'proxycurl-verified'),
-      pdl:                pdlDMProfile !== null,
-      dm_verified_count:  validatedDMs.filter(d => !d.isFormerOrAdvisory).length,
-      portfolio_isp_match: portfolioIspBlock.length > 0,
-    }
-
-    // ── Data normalization helpers ────────────────────────────────────────────
-    // Haiku/Sonnet sometimes return the STRING "null", "Unknown", "N/A", "none", "0"
-    // instead of JSON null. These helpers coerce them to clean null/undefined.
-    const SENTINEL_STRINGS = new Set(['null','undefined','unknown','n/a','na','none','not found','not available','','—','–','-','0','tbd','?'])
-    function normStr(val: unknown): string | null {
-      if (val === null || val === undefined) return null
-      const s = String(val).trim()
-      // Catch <UNKNOWN>, <N/A>, <TBD> etc. — LLMs wrap placeholders in angle brackets
-      if (/^<[^>]{0,30}>$/.test(s)) return null
-      return SENTINEL_STRINGS.has(s.toLowerCase()) ? null : s
-    }
-    function normInt(val: unknown): number | null {
-      if (val === null || val === undefined) return null
-      if (typeof val === 'number') return val > 0 ? val : null
-      // Strip non-numeric chars (handles "287 units", "~300", "287+")
-      const n = parseInt(String(val).replace(/[^0-9]/g, ''), 10)
-      return isNaN(n) || n <= 0 ? null : n
-    }
-    function normStrArr(arr: unknown): string[] {
-      if (!Array.isArray(arr)) return []
-      return arr
-        .map(v => normStr(v))
-        .filter((v): v is string => v !== null)
-    }
-
-    // ── Sanitization layer ────────────────────────────────────────────────────
     const rawData = toolBlock.input as Record<string, any>
 
-    // Build DM chain: prefer silo D contacts over Apollo-only
-    const siloDContacts = updatedD.all_contacts.filter(c => c.name)
-    const apolloDMs = validatedDMs.map(dm => ({
-      name: dm.name, title: dm.currentTitle, company: dm.company,
-      role_type: dm.isActiveCEO ? 'owner' : 'asset_manager',
-      email: dm.email || '', top_email_format: '',
-      linkedin_slug: dm.linkedinUrl?.split('/in/')?.[1] || '',
+    // ── Build final payload ───────────────────────────────────────────────────
+    const cleanIspProviders   = normStrArr(s4.isp_providers.length ? s4.isp_providers : (rawData.isp_providers ?? []))
+    const cleanVideoProviders = normStrArr(s4.video_providers.length ? s4.video_providers : (rawData.video_providers ?? []))
+    const cleanBulkAgreements = s4.bulk_agreements.length ? s4.bulk_agreements : (rawData.bulk_agreements ?? [])
+
+    const mergedDMChain = s6.all_contacts.filter(c => c.name).map(c => ({
+      name: c.name, title: c.title, company: c.company || mgmt || owner,
+      role_type: c.role_type, email: c.email, top_email_format: s6.email_format,
+      linkedin_slug: c.linkedin?.split('/in/')?.[1] || '',
     }))
 
-    // Merge: silo D contacts first, then Apollo contacts not already named
-    const mergedDMChain = [...siloDContacts.map(c => ({
-      name: c.name, title: c.title, company: c.company || mgmt || owner,
-      role_type: c.role_type || 'unknown',
-      email: c.email || '', top_email_format: '',
-      linkedin_slug: c.linkedin || '',
-    })), ...apolloDMs.filter(ad => !siloDContacts.find(sc => sc.name === ad.name))]
+    const bestContact = s6.property_manager || s6.regional_manager || s6.asset_manager || s6.all_contacts[0]
+    const fallback    = (rawData.extracted_contacts || [])[0] || {}
 
-    // Primary DM: prefer regional or property manager over CEO
-    const regionalContact = updatedD.regional_manager?.name ? updatedD.regional_manager : null
-    const propertyContact = updatedD.property_manager?.name ? updatedD.property_manager : null
-    const bestSiloContact = regionalContact || propertyContact || siloDContacts[0]
-    const bestApolloContact = validatedDMs.find(d => !d.isFormerOrAdvisory) ?? null
-    const webContact = rawData.extracted_contacts?.[0] || {}
-
-    const primaryContactName = bestSiloContact?.name || bestApolloContact?.name || webContact.name || mgmt || property_name
-    const primaryContactTitle = bestSiloContact?.title || bestApolloContact?.currentTitle || webContact.title || 'Executive'
-    const primaryContactCompany = bestSiloContact?.company || bestApolloContact?.company || webContact.company || mgmt
-    const primaryContactEmail = bestSiloContact?.email || bestApolloContact?.email || webContact.email || ''
-    const primaryContactLinkedin = bestSiloContact?.linkedin || bestApolloContact?.linkedinUrl?.split('/in/')?.[1] || webContact.linkedin_slug || ''
-
-    // Clean silo outputs before using them (remove sentinel strings from arrays)
-    const cleanIspProviders = normStrArr(rawData.isp_providers?.length ? rawData.isp_providers : updatedC.isp_providers)
-    const cleanVideoProviders = normStrArr(rawData.video_providers?.length ? rawData.video_providers : updatedC.video_providers)
-    const cleanBulkAgreements = (rawData.bulk_agreements?.length ? rawData.bulk_agreements : updatedC.bulk_agreements) ?? []
+    const scoutQueue = {
+      property:      { name: property_name, address, city, state, units: s1.units, class: s1.property_class, management_company: mgmt, owner_entity: owner, old_name },
+      pain_angles:   s3.signals.slice(0, 8).map(s => ({ type: s.type, quote: s.quote, severity: s.severity })),
+      connectivity:  { isp_providers: cleanIspProviders, bulk_detected: s4.bulk_detected, provider_confirmed: s4.provider_confirmed, bulk_agreements: cleanBulkAgreements },
+      proptech:      { gate_operators: s5.gate_operators, access_control: s5.access_control, tech_generation: s5.tech_generation },
+      contact_chain: mergedDMChain.slice(0, 5),
+      email_format:  s6.email_format,
+      objection_flags: [
+        ...(s4.bulk_detected && s4.provider_confirmed ? [`Existing bulk deal with ${cleanIspProviders[0]} — needs contract expiry`] : []),
+        ...(s2.acquisition_year && parseInt(s2.acquisition_year) >= new Date().getFullYear() - 1 ? ['Recent acquisition — capex window open'] : []),
+        ...(s3.gate_issue_count > 2 ? [`${s3.gate_issue_count} gate complaints — displacement signal`] : []),
+      ],
+      outreach_sequence: ['email_1', 'call_1', 'linkedin_touch', 'email_2'],
+    }
 
     const prospectPayload = {
       property: {
         name: property_name,
-        address: normStr(address || updatedA.address || location) || property_name,
-        // normInt handles string "287", "~300", "null", 0 → clean integer or null
-        units:      normInt(rawData.property_details?.units ?? rawData.units ?? updatedA.units),
-        property_type: normStr(rawData.property_details?.property_type ?? rawData.property_type ?? updatedA.property_type) ?? 'multifamily',
-        class:      normStr(rawData.property_details?.class ?? rawData.property_class ?? updatedA.property_class),
-        year_built: normInt(rawData.property_details?.year_built ?? rawData.year_built ?? updatedA.year_built),
-        occupancy:  normStr(rawData.property_details?.occupancy ?? updatedA.occupancy),
-        management_company: (() => {
-          // Priority: hint param → Silo A verified extraction → Sonnet synthesis (last, can confuse person names with company names)
-          const rawMgmt = normStr(mgmt ?? updatedA.management_company ?? rawData.property_details?.management_company)
-          const resolvedOwner = normStr(owner ?? rawData.ownership?.owner_entity)
-          // Self-managed fallback: if mgmt unknown but owner is a real RE firm, use owner
-          return rawMgmt || resolvedOwner || null
-        })(),
-        owner_entity: normStr(rawData.ownership?.owner_entity ?? owner),
-        isp_providers:   cleanIspProviders,
-        video_providers: cleanVideoProviders,
-        bulk_agreements: cleanBulkAgreements,
-        _fcc_verified: edgarResults.length > 0 || permitResults.length > 0,
+        address: normStr(address || s1.address || location) || property_name,
+        units:              normInt(s1.units ?? rawData.property_details?.units ?? rawData.units),
+        property_type:      normStr(s1.property_type ?? rawData.property_details?.property_type) ?? 'multifamily',
+        class:              normStr(s1.property_class ?? rawData.property_details?.class ?? rawData.property_class),
+        year_built:         normInt(s1.year_built ?? rawData.property_details?.year_built ?? rawData.year_built),
+        occupancy:          normStr(rawData.property_details?.occupancy),
+        management_company: normStr(mgmt ?? rawData.property_details?.management_company) || normStr(owner ?? rawData.ownership?.owner_entity) || null,
+        owner_entity:       normStr(owner || rawData.ownership?.owner_entity),
+        old_name:           normStr(old_name),
+        phone:              normStr(s1.phone),
+        website:            normStr(s1.website),
+        isp_providers:      cleanIspProviders,
+        video_providers:    cleanVideoProviders,
+        bulk_agreements:    cleanBulkAgreements,
+        _fcc_verified:      s4.fcc_providers.length > 0,
         proptech: {
-          gate_operators:   normStrArr(rawData.proptech?.gate_operators?.length ? rawData.proptech.gate_operators : siloBResult.data.gate_operators),
-          access_control:   normStrArr(rawData.proptech?.access_control?.length ? rawData.proptech.access_control : siloBResult.data.access_control),
-          intercoms:        normStrArr(rawData.proptech?.intercoms?.length ? rawData.proptech.intercoms : siloBResult.data.intercoms),
-          cameras:          normStrArr(rawData.proptech?.cameras?.length ? rawData.proptech.cameras : siloBResult.data.cameras),
-          smart_locks:      normStrArr(rawData.proptech?.smart_locks?.length ? rawData.proptech.smart_locks : siloBResult.data.smart_locks),
-          resident_apps:    normStrArr(rawData.proptech?.resident_apps?.length ? rawData.proptech.resident_apps : siloBResult.data.resident_apps),
-          package_solutions:normStrArr(rawData.proptech?.package_solutions),
-          tech_generation:  normStr(rawData.proptech?.tech_generation ?? siloBResult.data.tech_generation) ?? 'legacy',
-          sara_signals:     rawData.proptech?.sara_signals ?? false,
-          replacement_window: normStr(rawData.proptech?.replacement_window),
+          gate_operators:       normStrArr(s5.gate_operators.length ? s5.gate_operators : rawData.proptech?.gate_operators),
+          access_control:       normStrArr(s5.access_control.length ? s5.access_control : rawData.proptech?.access_control),
+          intercoms:            normStrArr(s5.intercoms.length ? s5.intercoms : rawData.proptech?.intercoms),
+          cameras:              normStrArr(s5.cameras.length ? s5.cameras : rawData.proptech?.cameras),
+          smart_locks:          normStrArr(s5.smart_locks.length ? s5.smart_locks : rawData.proptech?.smart_locks),
+          resident_apps:        normStrArr(s5.resident_apps.length ? s5.resident_apps : rawData.proptech?.resident_apps),
+          package_solutions:    normStrArr(rawData.proptech?.package_solutions),
+          tech_generation:      normStr(s5.tech_generation ?? rawData.proptech?.tech_generation) ?? 'legacy',
+          sara_signals:         rawData.proptech?.sara_signals ?? false,
+          replacement_window:   normStr(rawData.proptech?.replacement_window),
           displacement_targets: normStrArr(rawData.proptech?.displacement_targets),
-        }
+        },
       },
       decision_maker: {
-        name:         normStr(primaryContactName) ?? mgmt ?? property_name,
-        title:        normStr(primaryContactTitle) ?? 'Executive',
-        company:      normStr(primaryContactCompany) ?? mgmt ?? '',
-        email:        normStr(primaryContactEmail) ?? '',
-        phone:        '',
-        tenure_years: 0,
-        top_email_format: '',
-        linkedin_slug: normStr(primaryContactLinkedin) ?? '',
+        name:             normStr(bestContact?.name || fallback.name) ?? mgmt ?? property_name,
+        title:            normStr(bestContact?.title || fallback.title) ?? 'Executive',
+        company:          normStr(bestContact?.company || fallback.company) ?? mgmt ?? '',
+        email:            normStr(bestContact?.email || fallback.email) ?? '',
+        phone:            normStr(bestContact?.phone) ?? '',
+        tenure_years:     0,
+        top_email_format: s6.email_format || '',
+        linkedin_slug:    normStr(bestContact?.linkedin?.split('/in/')?.[1] || fallback.linkedin_slug) ?? '',
       },
-      decision_maker_chain: mergedDMChain.length > 0
-        ? mergedDMChain.filter(dm => normStr(dm.name) !== null)
-        : (rawData.extracted_contacts || [])
-            .filter((wc: any) => normStr(wc.name) !== null)
-            .map((wc: any) => ({
-              name: normStr(wc.name) ?? '', title: normStr(wc.title) ?? '', company: normStr(wc.company) ?? '',
-              role_type: 'unknown', email: normStr(wc.email) ?? '', top_email_format: '',
-              linkedin_slug: normStr(wc.linkedin_slug) ?? '',
-            })),
-      ownership: rawData.ownership ? {
-        owner_entity:     normStr(rawData.ownership.owner_entity),
-        owner_type:       normStr(rawData.ownership.owner_type),
-        portfolio_size:   normStr(rawData.ownership.portfolio_size),
-        acquisition_year: normStr(rawData.ownership.acquisition_year),
-        capex_signal:     normStr(rawData.ownership.capex_signal),
-      } : null,
-      pain_signals: rawData.pain_signals ?? [],
+      decision_maker_chain: mergedDMChain.length > 0 ? mergedDMChain
+        : (rawData.extracted_contacts || []).filter((c: any) => normStr(c.name)).map((c: any) => ({
+            name: normStr(c.name) ?? '', title: normStr(c.title) ?? '', company: normStr(c.company) ?? '',
+            role_type: 'unknown', email: normStr(c.email) ?? '', top_email_format: '', linkedin_slug: normStr(c.linkedin_slug) ?? '',
+          })),
+      ownership: {
+        owner_entity:     normStr(owner || rawData.ownership?.owner_entity),
+        owner_type:       normStr(s2.owner_type || rawData.ownership?.owner_type),
+        portfolio_size:   normStr(s2.portfolio_size || rawData.ownership?.portfolio_size),
+        acquisition_year: normStr(s2.acquisition_year || rawData.ownership?.acquisition_year),
+        sale_price:       normStr(s2.sale_price),
+        capex_signal:     normStr(rawData.ownership?.capex_signal),
+      },
+      pain_signals:      s3.signals.length > 0 ? s3.signals : (rawData.pain_signals ?? []),
       profile: {
-        buy_score: rawData.freshness_score ? Math.round(rawData.freshness_score * 1.5 + 2) : 5,
-        urgency: cleanBulkAgreements.length > 0 || (rawData.pain_signals ?? []).length > 0 ? 'high' : 'medium',
-        primary_concern: normStr(rawData.key_finding?.slice(0, 80)) ?? 'No critical vulnerabilities detected',
-        // current_vendor: prefer named ISP from agreements or providers, never "Unknown"
-        current_vendor: normStr((cleanBulkAgreements[0] as any)?.provider ?? cleanIspProviders[0]),
-        contract_window: normStr((cleanBulkAgreements[0] as any)?.expiry_estimate),
+        buy_score:           rawData.freshness_score ? Math.round(rawData.freshness_score * 1.5 + 2) : 5,
+        urgency:             s3.gate_issue_count > 2 || s4.bulk_detected ? 'high' : 'medium',
+        primary_concern:     normStr(rawData.key_finding?.slice(0, 80)) ?? 'No critical vulnerabilities detected',
+        current_vendor:      normStr((cleanBulkAgreements[0] as any)?.provider ?? cleanIspProviders[0]),
+        contract_window:     normStr((cleanBulkAgreements[0] as any)?.expiry_estimate),
         communication_style: normStr(rawData.behavioral_profile?.communication_pref) ?? 'Email',
       },
+      behavioral_profile: rawData.behavioral_profile ?? null,
+      pitch_strategy:     rawData.pitch_strategy ?? null,
+      freshness_score:    rawData.freshness_score ?? 3,
+      buying_trends:      normStr(rawData.buying_trends),
       scout_brief: {
-        primary_contact: normStr(primaryContactName) ?? mgmt ?? property_name,
-        outreach_angle: rawData.atlas_opportunity ? 'contract_window' : 'tech_displacement',
-        contract_window_urgency: 'medium',
-        key_data_points: rawData.key_finding ? [rawData.key_finding] : [],
+        primary_contact:         normStr(bestContact?.name) ?? mgmt ?? property_name,
+        outreach_angle:          s4.bulk_detected ? 'contract_window' : 'tech_displacement',
+        contract_window_urgency: s4.bulk_detected ? 'high' : 'medium',
+        key_data_points:         rawData.key_finding ? [rawData.key_finding] : [],
       },
+      scout_queue: scoutQueue,
     }
 
     // ── Save to aria_searches ─────────────────────────────────────────────────
@@ -1261,78 +883,66 @@ ${excerptBlock}`,
     try {
       const portalUser = await getCurrentUser()
       const originalQuery = raw.property_name || raw.query || rawQuery
-      const { data: searchRow } = await supabaseDeep
-        .from('aria_searches')
-        .insert({
-          query: originalQuery,
-          query_interpretation: prospectDiscoveryNote ?? (property_name !== originalQuery ? `Searched as: ${property_name}` : 'ARIA Deep Intel'),
-          results: { mode: 'deep', prospects: [prospectPayload], fccVerified: edgarResults.length > 0 || permitResults.length > 0, webIntelligence: true },
-          search_type: 'deep',
-          user_id: userId,
-          user_name: portalUser.name,
-          user_email: portalUser.email,
-          org_id: portalUser.org_id ?? null,
-          expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        })
-        .select('id')
-        .single()
+      const { data: searchRow } = await supabaseDeep.from('aria_searches').insert({
+        query: originalQuery,
+        query_interpretation: old_name ? `"${property_name}" (formerly "${old_name}")` : `ARIA v2 — ${property_name}`,
+        results: { mode: 'deep', prospects: [prospectPayload], fccVerified: s4.fcc_providers.length > 0, webIntelligence: true },
+        search_type: 'deep', user_id: userId,
+        user_name: portalUser.name, user_email: portalUser.email,
+        org_id: portalUser.org_id ?? null,
+        expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      }).select('id').single()
       if (searchRow?.id) savedSearchId = searchRow.id
-    } catch { /* best-effort */ }
+    } catch { }
 
-    // ── Persist mdu_provider_detections (non-blocking) ────────────────────────
-    const bulkAgreementsForDetection: any[] = rawData.bulk_agreements ?? []
-    if (bulkAgreementsForDetection.length > 0) {
-      void (async () => {
-        try {
-          const { data: allProviders } = await supabaseDeep.from('mdu_providers').select('id, name').eq('active', true)
-          if (!allProviders) return
-          const rows = bulkAgreementsForDetection
-            .filter((a: any) => ['high', 'confirmed', 'medium'].includes(a.confidence ?? ''))
-            .map((a: any) => {
-              const provName = (a.provider ?? '').toLowerCase()
-              const matched = (allProviders as any[]).find(p => p.name.toLowerCase().includes(provName) || provName.includes(p.name.toLowerCase()))
-              if (!matched) return null
-              const yearMatch = (a.expiry_estimate ?? '').match(/20\d{2}/)
-              return {
-                provider_id: matched.id,
-                property_name: property_name || null,
-                property_address: address || null,
-                confidence: a.confidence === 'confirmed' ? 'confirmed' : (a.confidence === 'high' ? 'high' : 'medium'),
-                source_type: a.evidence_source ?? 'aria',
-                source_snippet: a.evidence ? (a.evidence as string).slice(0, 250) : null,
-                contract_end_year: yearMatch ? parseInt(yearMatch[0], 10) : null,
-                verified_by: 'aria',
-              }
-            })
-            .filter(Boolean)
-          if (rows.length > 0) {
-            await supabaseDeep.from('mdu_provider_detections').upsert(rows, { onConflict: 'provider_id,property_name', ignoreDuplicates: false })
-          }
-        } catch { /* non-blocking */ }
-      })()
-    }
+    // ── Persist detections (non-blocking) ─────────────────────────────────────
+    void (async () => {
+      try {
+        const { data: allProviders } = await supabaseDeep.from('mdu_providers').select('id, name').eq('active', true)
+        if (!allProviders) return
+        const rows = cleanBulkAgreements
+          .filter((a: any) => ['high', 'confirmed', 'medium'].includes(a.confidence ?? ''))
+          .map((a: any) => {
+            const provName = (a.provider ?? '').toLowerCase()
+            const matched = (allProviders as any[]).find(p => p.name.toLowerCase().includes(provName) || provName.includes(p.name.toLowerCase()))
+            if (!matched) return null
+            const yearMatch = (a.expiry_estimate ?? '').match(/20\d{2}/)
+            return { provider_id: matched.id, property_name: property_name || null, property_address: address || null, confidence: a.confidence === 'high' ? 'high' : 'medium', source_type: 'aria', source_snippet: (a.evidence as string)?.slice(0, 250) ?? null, contract_end_year: yearMatch ? parseInt(yearMatch[0], 10) : null, verified_by: 'aria' }
+          }).filter(Boolean)
+        if (rows.length > 0) await supabaseDeep.from('mdu_provider_detections').upsert(rows, { onConflict: 'provider_id,property_name', ignoreDuplicates: false })
+      } catch { }
+    })()
 
     // ── Persist to Intel DB (non-blocking) ────────────────────────────────────
     void (async () => {
       try {
         await fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/api/aria/properties`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ prospects: [prospectPayload] }),
         })
-      } catch { /* non-blocking */ }
+      } catch { }
     })()
 
+    const edgarHit = s4.fcc_providers.length === 0
     return NextResponse.json({
       mode: 'deep',
-      query_interpretation: prospectDiscoveryNote ?? 'ARIA Deep OSINT Aggregation',
+      query_interpretation: old_name ? `"${property_name}" (formerly "${old_name}")` : `ARIA v2 Intel — ${property_name}`,
       prospects: [prospectPayload],
       savedSearchId,
-      sources,
-      intelligence_sources: intelligenceSources,
-      fccVerified: edgarResults.length > 0 || permitResults.length > 0,
+      sources: s3.raw_excerpts.filter(r => r.url && r.score > 0.3).slice(0, 8).map(r => ({
+        title: r.title, url: r.url, excerpt: r.content.slice(0, 200), score: r.score, type: r.source ?? 'web',
+      })),
+      intelligence_sources: {
+        edgar: edgarHit, fcc: s4.fcc_providers.length > 0,
+        resident_reviews: s3.raw_excerpts.length > 0,
+        apollo: s6.all_contacts.length > 0,
+        proxycurl_verified: false,
+        portfolio_isp_match: portfolioIspBlock.length > 0,
+        old_name_detected: !!old_name,
+        isp_confirmed: s4.provider_confirmed,
+      },
+      fccVerified: s4.fcc_providers.length > 0,
       webIntelligence: true,
-      ...(prospectDiscoveryNote ? { prospect_discovery_note: prospectDiscoveryNote } : {}),
     })
 
   } catch (err: any) {
