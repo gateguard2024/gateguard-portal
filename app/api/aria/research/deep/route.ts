@@ -295,7 +295,7 @@ RULES:
 - confirmed_name: exact property/community name found in results (not the query, the real name)
 - confirmed_address: full street address (number + street + city + state + zip) if found
 - confirmed_city + confirmed_state: REQUIRED — extract from address or any location mention — NEVER guess
-- confirmed_units: scan DEEPLY for patterns — "312 apartment homes", "312-unit", "312 units", "312 homes", "Total Units: 312" — integer ONLY — do NOT leave null if ANY unit count appears ANYWHERE
+- confirmed_units: scan DEEPLY for patterns — "312 apartment homes", "312-unit", "312 units", "312 homes", "Total Units: 312", "312 studio", "312 one-bedroom", "312 studio to" — integer ONLY — do NOT leave null if ANY unit count appears ANYWHERE
 - confirmed_year_built: 4-digit year from "built in YYYY", "Year Built: YYYY", "constructed YYYY", "opened YYYY", "completed YYYY", "delivered YYYY"
 - confirmed_management: the company that MANAGES DAY-TO-DAY operations (leasing, maintenance) — look for "managed by", "property management", "operated by" — NOT the developer or owner/investment firm
 - confirmed_owner: the INVESTOR, DEVELOPER, or OWNER entity that built or bought the property — look for "developed by", "owned by", "acquired by", "partnership", REIT names, private equity firm names, LLC names. IMPORTANT: If the developer name is in the property name (e.g. "Northland Wharf 7" → Northland is the developer/owner) set confirmed_owner = that company
