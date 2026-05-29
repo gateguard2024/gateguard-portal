@@ -32,7 +32,7 @@ export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
 // Version: Year.MonthRevision — increment revision on each engine change this month
-const ARIA_ENGINE_VERSION = 'v6.54'
+const ARIA_ENGINE_VERSION = 'v6.55'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -246,14 +246,22 @@ async function runStep0(query: string, client: Anthropic): Promise<StepBootstrap
     confirmed_owner: null, confirmed_website: null, confirmed_phone: null, is_specific_property: false,
   }
 
-  // Broad Serper — no site: restrictions — finds official website + owner press releases
-  const results = await serperSearch(
-    `${query} apartments units address "year built" ownership management contact phone`,
-    8, 'bootstrap'
-  )
-  if (results.length === 0) return blank
+  // Two parallel Serper searches: (1) broad web, (2) news/press releases
+  // Press releases are the most reliable source for units + year built + owner entity
+  const [results, newsResults] = await Promise.all([
+    serperSearch(
+      `${query} apartments units address "year built" ownership management contact phone`,
+      7, 'bootstrap'
+    ),
+    serperSearch(
+      `"${query}" apartments "units" completed OR opened OR acquired OR developed OR "apartment homes"`,
+      4, 'bootstrap-news', 'news'
+    ),
+  ])
+  const allResults = [...results, ...newsResults]
+  if (allResults.length === 0) return blank
 
-  const snippets = results.map((r, i) => `[${i + 1}] ${r.title}\nURL: ${r.url}\n${r.content}`).join('\n\n---\n\n')
+  const snippets = allResults.map((r, i) => `[${i + 1}] ${r.title}\nURL: ${r.url}\n${r.content}`).join('\n\n---\n\n')
 
   const extracted = await haikusExtract<StepBootstrap>(
     `Extract property facts. Return ONLY valid JSON:
@@ -262,15 +270,15 @@ RULES:
 - confirmed_name: exact property/community name found in results (not the query, the real name)
 - confirmed_address: full street address (number + street + city + state + zip) if found
 - confirmed_city + confirmed_state: REQUIRED — extract from address or any location mention — NEVER guess
-- confirmed_units: scan for "N units", "N-unit community", "N apartment homes", "N homes" — integer only
-- confirmed_year_built: 4-digit year from "built in YYYY", "Year Built: YYYY", "constructed in YYYY", "opened YYYY"
-- confirmed_management: management/operating company name — NOT the owner/investment firm
-- confirmed_owner: investment/ownership entity (REIT, private equity firm, LLC owner)
-- confirmed_website: official property or management company website
-- confirmed_phone: leasing office or main contact phone
+- confirmed_units: scan DEEPLY for patterns — "312 apartment homes", "312-unit", "312 units", "312 homes", "Total Units: 312" — integer ONLY — do NOT leave null if ANY unit count appears ANYWHERE
+- confirmed_year_built: 4-digit year from "built in YYYY", "Year Built: YYYY", "constructed YYYY", "opened YYYY", "completed YYYY", "delivered YYYY"
+- confirmed_management: the company that MANAGES DAY-TO-DAY operations (leasing, maintenance) — look for "managed by", "property management", "operated by" — NOT the developer or owner/investment firm
+- confirmed_owner: the INVESTOR, DEVELOPER, or OWNER entity that built or bought the property — look for "developed by", "owned by", "acquired by", "partnership", REIT names, private equity firm names, LLC names. IMPORTANT: If the developer name is in the property name (e.g. "Northland Wharf 7" → Northland is the developer/owner) set confirmed_owner = that company
+- confirmed_website: official property website URL (not apartments.com/zillow/yelp)
+- confirmed_phone: leasing office or main contact phone number — extract from contact info, Google Business listing snippet, or "call us at" mentions
 - is_specific_property: true if results clearly identify ONE specific named property
-- null for ANYTHING not found — never guess or infer city/state`,
-    snippets, 700, client
+- null for ANYTHING genuinely not found — never guess city/state`,
+    snippets, 800, client
   )
 
   return extracted || blank
@@ -992,17 +1000,36 @@ export async function POST(req: NextRequest) {
       runStep6(property_name, city, state, mgmt, owner, s1.email_domain, bootstrapWebsite, [], anthropic),
     ])
 
-    // ── Step 4B: ISP Confirmation (only if bulk detected + provider unknown) ──
-    if (s4.bulk_detected && !s4.provider_confirmed && (mgmt || owner)) {
+    // ── Step 4B: ISP Confirmation ─────────────────────────────────────────────
+    // Fires when: (a) FCC/web detected bulk deal without named provider, OR
+    //             (b) ≥2 internet pain signals + "no choice"/"locked in"/"included" language
+    //             → resident complaints are a reliable proxy for MDU bulk internet
+    const painBulkSignals = s3.signals.filter(s => s.type === 'internet')
+    const painIndicatesBulk = painBulkSignals.length >= 2 ||
+      painBulkSignals.some(s => {
+        const q = s.quote.toLowerCase()
+        return q.includes('no choice') || q.includes('locked') || q.includes('only option') ||
+               q.includes('included') || q.includes('no other') || q.includes('monopoly') ||
+               q.includes('forced') || q.includes('one provider') || q.includes('not worth')
+      })
+
+    if ((s4.bulk_detected || painIndicatesBulk) && !s4.provider_confirmed && (mgmt || owner)) {
+      // If pain signals triggered this (not FCC), mark as bulk_detected
+      if (painIndicatesBulk && !s4.bulk_detected) {
+        s4.bulk_detected = true
+      }
       const conf = await runStep4b(property_name, mgmt, owner, s4.fcc_providers, anthropic)
       if (conf.confirmed_provider) {
         if (!s4.isp_providers.includes(conf.confirmed_provider)) s4.isp_providers.unshift(conf.confirmed_provider)
         s4.provider_confirmed = true
         if (s4.bulk_agreements.length === 0) {
-          s4.bulk_agreements.push({ provider: conf.confirmed_provider, service_type: 'internet', agreement_type: 'bulk', confidence: 'high', evidence: conf.evidence })
+          s4.bulk_agreements.push({ provider: conf.confirmed_provider, service_type: 'internet', agreement_type: 'bulk', confidence: painIndicatesBulk ? 'medium' : 'high', evidence: conf.evidence || 'Inferred from resident pain signals: no choice of provider' })
         } else if (!s4.bulk_agreements[0].provider) {
           s4.bulk_agreements[0].provider = conf.confirmed_provider
         }
+      } else if (painIndicatesBulk && s4.bulk_agreements.length === 0) {
+        // Even if we can't name the provider, record the bulk signal from resident complaints
+        s4.bulk_agreements.push({ provider: 'Unknown MDU ISP', service_type: 'internet', agreement_type: 'bulk', confidence: 'medium', evidence: `Resident complaints: "${painBulkSignals[0]?.quote?.slice(0, 100)}"` })
       }
     }
 
