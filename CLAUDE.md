@@ -173,8 +173,8 @@
 - Mobile: `mobileTab` state (`'list' | 'property' | 'dm' | 'scout'`), bottom nav 4 tabs fixed at 56px
 - `require()` needed for `LayoutList, ArrowLeft`
 
-**ARIA deep engine (session 7 — v6.59):**
-- Current version: `v6.59`
+**ARIA deep engine (session 9 — v7.2):**
+- Current version: `v7.2`
 - Model: `claude-sonnet-4-6`
 - APIs (graceful fallback if keys absent): Apollo (`APOLLO_API_KEY`), Prospeo (`PROSPEO_API_KEY`), NinjaPear (`NINJAPEAR_API_KEY`, formerly ProxyCurl), PDL (`PDL_API_KEY`)
 - Apollo endpoint: `POST /api/v1/people/match` (name + domain → email + phone). Old `/mixed_people/search` is deprecated (was returning 403). Auth: `Bearer` token.
@@ -515,9 +515,14 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
   - Each correction sets corresponding `*_user_verified = true` flag — protected from future AI overwrites
 - ✅ Migration 100 (`supabase/migrations/100_aria_roe_learning_loop.sql`) — `aria_properties`: `roe_detected`, `roe_providers`, `roe_expiry_year` + `*_user_verified` boolean flags for ISP, video, ROE, DM contact fields; 2 new indexes
 
+### Completed — May 29, 2026 (session 9) — ARIA v7.2: dbPhase2Seed Fix + SCOUT 6-Month Campaign
+- ✅ ARIA engine v7.2 (`app/api/aria/research/deep/route.ts`):
+  - **dbPhase2Seed fix** — now seeds ALL existing ISP/video/ROE data from DB on every re-search (was only seeding user-verified fields — root cause of GIGstreem disappearing on re-run). Arrays are always unioned; `roe_expiry_year` scalar still protected if `roe_expiry_user_verified = true`
+  - **6-month outreach_plan** added to Sonnet tool schema — Sonnet builds a month-by-month campaign calendar using this property's actual pain signals, ROE/contract window, behavioral profile, and DM data. Fields: `month_1..month_6` (theme + actions[] + goal), `total_touches`, `primary_channel`, `key_milestone`, `expected_close_quarter`
+  - **Expanded scoutQueue** — SCOUT now receives full campaign brief: `market_context` (tech_generation, replacement_window, acquisition_year, buying_trends), `connectivity` extended (video_providers, roe_detected, roe_expiry_year, contract_urgency, contract_window), `proptech` extended (intercoms, cameras, smart_locks, displacement_targets, sara_signals), `behavioral_profile`, `pitch_strategy`, `key_finding`, full `objection_flags` (ROE + acquisition), `outreach_plan`, extended `outreach_sequence` (6 touches)
+
 ### Pending — Migrations to Run
-- Migrations 093–098 deployed on beta + prod ✅
-- **Migration 100** (`100_aria_roe_learning_loop.sql`) — run on beta + prod: ROE fields + user-verified flags
+- Migrations 093–100 deployed on beta + prod ✅
 
 ### Pending — CPQ Phase 2
 - Add `unit_cost` column to `quote_line_items` (migration 092) — enables real margin vs. estimated
