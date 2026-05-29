@@ -74,6 +74,8 @@ interface Property {
   proptech?: PropTech;
   _fcc_verified?: boolean;
   _fcc_providers?: string[];
+  lat?: number | null;
+  lng?: number | null;
 }
 
 interface DecisionMaker {
@@ -727,9 +729,7 @@ export default function ARIAPage() {
                 <span className="text-[10px] font-bold uppercase tracking-widest text-[#6B7EFF]">Target Acquired</span>
               </div>
               <h2 className="text-xl font-bold text-slate-900 tracking-tight">{p.property?.name}</h2>
-              <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5 font-medium">
-                <MapPin size={12} /> {p.property?.address}
-              </p>
+              <p className="text-xs text-slate-400 mt-0.5 font-medium">{p.property?.address?.split(',').slice(-2).join(',').trim()}</p>
             </div>
             
             <div className="flex flex-col items-end">
@@ -916,6 +916,41 @@ export default function ARIAPage() {
             <span className="ml-auto text-[9px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-600 border border-purple-100">🎯 SARA Opportunity</span>
           )}
         </div>
+
+        {/* ── Location + Street View ─────────────────────────────────────────── */}
+        {p.property?.address && (
+          <div className="col-span-2 bg-white/80 rounded-2xl border border-slate-200/60 overflow-hidden shadow-sm">
+            <div className="px-5 pt-4 pb-3 flex items-center justify-between border-b border-slate-100">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Location</p>
+                <p className="text-sm font-bold text-slate-800 mt-0.5 flex items-center gap-1.5">
+                  <MapPin size={12} className="text-[#6B7EFF] shrink-0" />
+                  {p.property.address}
+                </p>
+              </div>
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.property.address)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] font-bold text-[#6B7EFF] hover:underline flex items-center gap-1 shrink-0"
+              >
+                Open in Maps ↗
+              </a>
+            </div>
+            {/* Google Maps embed — supports click-to-street-view */}
+            <div className="w-full h-64 relative">
+              <iframe
+                title="Property Location"
+                width="100%"
+                height="100%"
+                style={{ border: 0, display: 'block' }}
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                src={`https://maps.google.com/maps?q=${encodeURIComponent(p.property.address)}&output=embed&z=17`}
+              />
+            </div>
+          </div>
+        )}
       </div>
     );
   }

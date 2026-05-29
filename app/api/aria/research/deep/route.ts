@@ -401,6 +401,12 @@ interface Phase1Result {
   confirmed_website: string | null
   confirmed_phone: string | null
   is_specific_property: boolean
+  // Amenity-sourced fields — directly from listing page full content
+  listing_url: string | null
+  listing_isp: string | null           // e.g. "GIGstreem" — from amenities section
+  listing_cable: string | null         // e.g. "DirecTV" — from amenities section
+  listing_proptech: string[]           // e.g. ["ButterflyMX","Brivo"] — from amenities
+  listing_bulk_detected: boolean       // "internet included" or "tech fee" on listing
 }
 
 async function runPhase1A(query: string, client: Anthropic): Promise<Phase1Result> {
@@ -410,50 +416,83 @@ async function runPhase1A(query: string, client: Anthropic): Promise<Phase1Resul
     confirmed_management: null, confirmed_owner: null,
     confirmed_website: null, confirmed_phone: null,
     is_specific_property: false,
+    listing_url: null, listing_isp: null, listing_cable: null,
+    listing_proptech: [], listing_bulk_detected: false,
   }
 
-  const [listingResults, pressResults] = await Promise.all([
+  // Three parallel searches:
+  // 1. Listing sites — snippet only (fast identity confirmation)
+  // 2. Press/news — unit count, year built
+  // 3. Amenities deep-read — raw full-page content to catch ISP/cable/gate in amenities section
+  const [listingResults, pressResults, amenityResults] = await Promise.all([
     tavilySearch(
       `"${query}" apartments site:apartments.com OR site:rentcafe.com OR site:zillow.com OR site:apartmentlist.com`,
-      5, 'listing', 'advanced', false
+      4, 'listing', 'advanced', false
     ),
     serperSearch(
       `"${query}" apartments "apartment homes" OR units completed OR opened OR built`,
       5, 'press', 'news'
     ),
+    // Raw content fetch — amenities sections explicitly list ISP/cable/gate providers
+    tavilySearch(
+      `"${query}" apartments amenities internet cable intercom gate access`,
+      2, 'amenities', 'advanced', true  // rawContent = TRUE — reads the full page
+    ),
   ])
 
   const allResults = [...listingResults, ...pressResults]
-  if (allResults.length === 0) return blank
+  if (allResults.length === 0 && amenityResults.length === 0) return blank
 
+  // Standard identity snippets (400 chars)
   const snippets = allResults
     .filter(r => (r.content || '').length > 30)
     .slice(0, 10)
     .map((r, i) => `[${i + 1}] ${r.title}\nURL: ${r.url}\n${r.content}`)
     .join('\n\n---\n\n')
 
-  if (!snippets) return blank
+  // Amenity raw content — first 4000 chars of each page (amenities usually near top)
+  const amenitySnippets = amenityResults
+    .filter(r => r.raw_content && r.raw_content.length > 100)
+    .slice(0, 2)
+    .map((r, i) => `[A${i + 1}] URL: ${r.url}\n${(r.raw_content ?? r.content).slice(0, 4000)}`)
+    .join('\n\n---\n\n')
+
+  const combinedSnippets = [snippets, amenitySnippets].filter(Boolean).join('\n\n===AMENITY PAGES===\n\n')
+  if (!combinedSnippets) return blank
 
   const extracted = await haikusExtract<Phase1Result>(
-    `Extract verified property facts. Return ONLY valid JSON:
-{"confirmed_name":null,"confirmed_address":null,"confirmed_city":null,"confirmed_state":null,"confirmed_units":null,"confirmed_year_built":null,"confirmed_management":null,"confirmed_owner":null,"confirmed_website":null,"confirmed_phone":null,"is_specific_property":false}
+    `Extract verified property facts AND amenity/technology data. Return ONLY valid JSON:
+{"confirmed_name":null,"confirmed_address":null,"confirmed_city":null,"confirmed_state":null,"confirmed_units":null,"confirmed_year_built":null,"confirmed_management":null,"confirmed_owner":null,"confirmed_website":null,"confirmed_phone":null,"is_specific_property":false,"listing_url":null,"listing_isp":null,"listing_cable":null,"listing_proptech":[],"listing_bulk_detected":false}
 
-RULES:
+IDENTITY RULES:
 - confirmed_name: exact community name found in results (not the query — the real name)
 - confirmed_address: full street address if found
-- confirmed_city + confirmed_state: REQUIRED if any geo context exists — extract from address or location mention
-- confirmed_units: scan DEEPLY — patterns include "312 units", "312 apartment homes", "312-unit", "Total Units: 312", "312 studio", "N studio to"
-- confirmed_year_built: 4-digit year from "built in YYYY", "Year Built: YYYY", "constructed YYYY", "opened YYYY", "completed YYYY", "delivered YYYY"
-- confirmed_management: company that manages day-to-day operations
-- confirmed_owner: investor/developer/owner entity. If developer's name appears IN the property name (e.g. "Northland Wharf 7" → Northland), set this field
-- confirmed_website: official property URL (not apartments.com/zillow)
-- confirmed_phone: leasing office phone number — examples "(404) 555-1234", "+1 833-571-2103"
+- confirmed_city + confirmed_state: REQUIRED if any geo context exists
+- confirmed_units: patterns: "312 units", "312-unit", "Total Units: 312", "N studio to"
+- confirmed_year_built: from "built YYYY", "Year Built: YYYY", "opened YYYY", "completed YYYY"
+- confirmed_management: company managing day-to-day operations
+- confirmed_owner: investor/developer/owner entity
+- confirmed_website: official property URL (NOT apartments.com/zillow)
+- confirmed_phone: leasing office phone number
 - is_specific_property: true if results clearly identify ONE specific named property
-- null if not found — never guess`,
-    snippets, 1000, client
+
+AMENITY/TECHNOLOGY RULES (look especially in ===AMENITY PAGES===):
+- listing_url: apartments.com OR rentcafe.com URL for this property if found
+- listing_isp: ISP/internet provider named in amenities — e.g. "GIGstreem", "Hotwire", "Comcast", "AT&T Fiber". Look for: "High-speed internet", "Fiber internet", "Gigabit internet", "Internet included", provider name in amenities list
+- listing_cable: cable/satellite/TV provider — e.g. "DirecTV", "Dish", "Spectrum TV", "Xfinity". Look in amenities for "cable", "satellite TV", "DIRECTV"
+- listing_proptech: array of ALL named proptech brands — gate systems (DoorKing, LiftMaster, Viking, FAAC), intercoms (ButterflyMX, Aiphone, Viking, 2N), access (Brivo, HID, Openpath, Kisi), cameras (Verkada, Avigilon), smart locks (SmartRent, Latch), any brand name in amenities section
+- listing_bulk_detected: true if amenities say "internet included", "fiber included", "tech fee", "technology fee", "cable included", OR any ISP/cable provider explicitly listed as an amenity
+- null/[] if not found — never guess`,
+    combinedSnippets, 1400, client
   )
 
-  return extracted || blank
+  if (!extracted) return blank
+  return {
+    ...blank,
+    ...extracted,
+    listing_proptech: normStrArr(extracted.listing_proptech),
+    listing_bulk_detected: extracted.listing_bulk_detected ?? false,
+  }
 }
 
 // ─── PHASE 1B: Prospecting Candidate List ────────────────────────────────────
@@ -820,7 +859,8 @@ async function runPhase3(
   confirmedMgmt: string,
   confirmedOwner: string,
   confirmedWebsite: string,
-  client: Anthropic
+  client: Anthropic,
+  listingProptech: string[] = []
 ): Promise<Phase3Result> {
   const blank: Phase3Result = {
     pain_signals: [],
@@ -839,51 +879,84 @@ async function runPhase3(
     : ''
   const domainForEmail = mgmtDomain || websiteDomain
 
-  // 5 parallel searches
-  const [painResults, proptechResults, contactResults] = await Promise.all([
+  // 5 parallel searches — including social/reviews + raw-content proptech
+  const [painResults, proptechResults, contactResults, socialResults, websiteResults] = await Promise.all([
+    // Pain signals: Google reviews + resident complaints
     serperSearch(`"${confirmedName}" "${geo}" reviews complaints internet gate crime`, 5, 'pain'),
-    tavilySearch(`"${confirmedName}" "${geo}" ButterflyMX OR DoorKing OR Brivo OR Openpath OR Verkada OR Avigilon OR SmartRent OR Latch OR LiftMaster OR HID OR SALTO`, 5, 'proptech', 'advanced', false),
+    // PropTech: raw content fetch — amenities pages explicitly name gate/intercom/camera brands
+    tavilySearch(
+      `"${confirmedName}" "${geo}" ButterflyMX OR DoorKing OR Brivo OR Openpath OR Verkada OR Avigilon OR SmartRent OR Latch OR LiftMaster OR HID OR SALTO OR Viking OR Linear OR PDK`,
+      3, 'proptech', 'advanced', true  // rawContent = TRUE — reads full technology pages
+    ),
+    // Contacts: LinkedIn
     entity
       ? serperSearch(`"${entity}" "${geo}" "community manager" OR "regional manager" site:linkedin.com`, 5, 'contacts')
       : Promise.resolve([] as TavilyResult[]),
+    // Social signals: Reddit + Google reviews + Facebook property page
+    serperSearch(
+      `"${confirmedName}" "${geo}" (site:reddit.com OR "Google Reviews" OR site:facebook.com OR site:yelp.com) internet OR gate OR management OR crime 2024 OR 2025`,
+      6, 'social'
+    ),
+    // Property website raw content — owner/property site often lists all tech partners + amenities
+    confirmedWebsite
+      ? tavilySearch(confirmedWebsite, 1, 'website', 'advanced', true)
+      : Promise.resolve([] as TavilyResult[]),
   ])
 
-  const allResults = [...painResults, ...proptechResults, ...contactResults]
+  const allResults = [...painResults, ...proptechResults, ...contactResults, ...socialResults, ...websiteResults]
 
-  // Pain signal extraction
-  const painSnippets = painResults.filter(r => (r.content || '').length > 40).slice(0, 8)
-    .map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 400)}`).join('\n\n---\n\n')
+  // Pain signal extraction — includes social posts (Reddit, Google reviews, Facebook)
+  const painAllSources = [...painResults, ...socialResults]
+  const painSnippets = painAllSources.filter(r => (r.content || '').length > 40).slice(0, 12)
+    .map((r, i) => `[${i + 1}][${r.source ?? 'review'}] ${r.title}\n${r.content.slice(0, 500)}`)
+    .join('\n\n---\n\n')
 
   const painExtracted = painSnippets.length > 80
     ? await haikusExtract<{ signals: PainSignal[] }>(
-        `Extract resident pain signals. Return ONLY valid JSON:
+        `Extract resident pain signals from reviews, Reddit, Google Maps, Facebook posts. Return ONLY valid JSON:
 {"signals":[{"type":"gate","quote":"","source":"","date":"","severity":"high"}]}
 type: "gate","internet","camera","crime","management","smart_lock","general"
-quote: verbatim (max 150 chars)
-severity: high=safety/major failure, medium=recurring, low=minor
-Up to 12 signals. Prefer last 12 months.`,
-        painSnippets, 700, client)
+quote: verbatim resident or user quote (max 150 chars) — prioritize direct quotes from real tenants
+source: "Google Reviews","Reddit","Facebook","Yelp","ApartmentRatings", etc.
+date: any date signal found ("2024","Jan 2025","3 months ago" → approximate year)
+severity: high=safety/major failure/no working gate/internet outage, medium=recurring issue, low=minor
+Up to 15 signals. Prefer last 18 months. Include internet/gate specific quotes.`,
+        painSnippets, 900, client)
     : null
 
-  // PropTech extraction
-  const proptechSnippets = proptechResults.filter(r => (r.content || '').length > 40).slice(0, 10)
-    .map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 350)}`).join('\n\n---\n\n')
+  // PropTech extraction — uses raw content so full page text is available
+  // Also pre-seed from Phase 1A listing page findings
+  const listingProptechCtx = listingProptech.length > 0
+    ? `\n\nALREADY CONFIRMED FROM LISTING PAGE (treat as verified): ${listingProptech.join(', ')}`
+    : ''
+
+  // Build proptech snippets: use raw_content if available, else content
+  const websiteRaw = websiteResults.filter(r => r.raw_content && r.raw_content.length > 100)
+    .map((r, i) => `[W${i + 1}] ${r.url}\n${r.raw_content!.slice(0, 3000)}`).join('\n\n---\n\n')
+  const proptechRaw = proptechResults.filter(r => (r.raw_content || r.content || '').length > 40)
+    .slice(0, 3)
+    .map((r, i) => {
+      const body = r.raw_content ? r.raw_content.slice(0, 2500) : r.content.slice(0, 500)
+      return `[P${i + 1}] ${r.title}\n${body}`
+    }).join('\n\n---\n\n')
+
+  const proptechSnippets = [proptechRaw, websiteRaw].filter(Boolean).join('\n\n===WEBSITE===\n\n')
 
   const proptechExtracted = proptechSnippets.length > 80
     ? await haikusExtract<Phase3Result['proptech']>(
-        `Extract property technology brands. Return ONLY valid JSON:
+        `Extract ALL property technology brands mentioned. Return ONLY valid JSON:
 {"gate_operators":[],"access_control":[],"intercoms":[],"cameras":[],"smart_locks":[],"resident_apps":[],"package_solutions":[],"tech_generation":"legacy"}
 Known brands:
-- gates: DoorKing/LiftMaster/Viking/Linear/FAAC/PDK
-- access: Brivo/HID/SALTO/Openpath/PDK/Kisi
-- intercoms: ButterflyMX/Aiphone/Viking/2N/Doorbird/Verkada
-- cameras: Verkada/Avigilon/EagleEye/Hanwha/Axis/Hikvision
-- smart_locks: SmartRent/GateWise/Latch/August/Yale/Schlage
-- resident_apps: SmartRent/Entrata/RealPage/Yardi/AppFolio
-- package_solutions: "Parcel Pending"/"Amazon Hub"/"Package Concierge"/"Luxer One"
-tech_generation: "legacy"=pre-2018, "modern"=2018+, "hybrid"=mix
-Empty arrays for nothing found.`,
-        proptechSnippets, 500, client)
+- gate_operators: DoorKing/LiftMaster/Viking/Linear/FAAC/PDK/Elite Gates/LIFTMASTER
+- access_control: Brivo/HID/SALTO/Openpath/PDK/Kisi/Allegion/Schlage/Nexkey
+- intercoms: ButterflyMX/Aiphone/Viking/2N/Doorbird/Verkada Door/Doorbell Camera/CallBox
+- cameras: Verkada/Avigilon/EagleEye/Hanwha/Axis/Hikvision/Dahua/Bosch
+- smart_locks: SmartRent/GateWise/Latch/August/Yale/Schlage/Kwikset/igloohome
+- resident_apps: SmartRent/Entrata/RealPage/Yardi/AppFolio/Rent Manager/BuildingLink
+- package_solutions: "Parcel Pending"/"Amazon Hub"/"Package Concierge"/"Luxer One"/"Fetch"
+tech_generation: "legacy"=pre-2018 brands dominant, "modern"=2018+ brands, "hybrid"=mix
+IMPORTANT: scan full page text — proptech brands often appear in: "Community Features", "Building Features", "Amenities", "Technology", "Access" sections${listingProptechCtx}`,
+        proptechSnippets, 800, client)
     : null
 
   // Contact extraction
@@ -982,9 +1055,33 @@ Examples: "firstname.lastname@domain.com", "flastname@domain.com", "firstname@do
     }
   })
 
+  // Merge listing-verified proptech into extracted proptech
+  // listingProptech is already confirmed from amenity page — never discard it
+  const finalProptech: Phase3Result['proptech'] = {
+    ...(proptechExtracted ?? blank.proptech),
+  }
+  if (listingProptech.length > 0 && proptechExtracted) {
+    // Distribute listing proptech brands into the right category arrays
+    for (const brand of listingProptech) {
+      const b = brand.toLowerCase()
+      if (['butterflyMX','aiphone','2n','doorbird','callbox'].some(i => b.includes(i.toLowerCase()))) {
+        if (!finalProptech.intercoms.some(x => x.toLowerCase() === b)) finalProptech.intercoms.push(brand)
+      } else if (['brivo','hid','openpath','kisi','salto','pdk','allegion'].some(i => b.includes(i.toLowerCase()))) {
+        if (!finalProptech.access_control.some(x => x.toLowerCase() === b)) finalProptech.access_control.push(brand)
+      } else if (['liftmaster','doorking','viking','linear','faac','elite'].some(i => b.includes(i.toLowerCase()))) {
+        if (!finalProptech.gate_operators.some(x => x.toLowerCase() === b)) finalProptech.gate_operators.push(brand)
+      } else if (['verkada','avigilon','eagle','hanwha','axis','hikvision','dahua'].some(i => b.includes(i.toLowerCase()))) {
+        if (!finalProptech.cameras.some(x => x.toLowerCase() === b)) finalProptech.cameras.push(brand)
+      } else if (['smartrent','latch','august','yale','schlage','kwikset','gatewise'].some(i => b.includes(i.toLowerCase()))) {
+        if (!finalProptech.smart_locks.some(x => x.toLowerCase() === b)) finalProptech.smart_locks.push(brand)
+      }
+      // If brand doesn't fit known categories, still log it (Sonnet will categorize it)
+    }
+  }
+
   return {
     pain_signals: painExtracted?.signals ?? [],
-    proptech: proptechExtracted ?? blank.proptech,
+    proptech: finalProptech,
     contacts: allContacts,
     email_format: emailFormat,
     raw_excerpts: allResults,
@@ -1213,21 +1310,40 @@ export async function POST(req: NextRequest) {
     const owner = p1.confirmed_owner || existingRecord?.owner_entity || ''
     const website = p1.confirmed_website || ''
 
-    // Pre-seed Phase 2 from DB — ALL existing data seeded; user-verified fields
-    // protect scalar overrides (roe_expiry_year); arrays are always unioned (never shrunk)
-    const dbPhase2Seed = existingRecord ? {
-      isp_providers:    existingRecord.isp_providers ?? [],         // always seed — unioned with AI
-      video_providers:  existingRecord.video_providers ?? [],       // always seed — unioned with AI
-      roe_expiry_year:  existingRecord.roe_expiry_user_verified     // scalar: protect if user-verified, else AI can update
-        ? (existingRecord.roe_expiry_year ?? null)
-        : null,
-      roe_providers:    existingRecord.roe_providers ?? [],         // always seed — unioned with AI
-      roe_detected:     existingRecord.roe_detected ?? false,
-      bulk_agreements:  existingRecord.bulk_agreements ?? [],       // always seed — merged with AI
-    } : null
+    // Log Phase 1A amenity findings — these are gold (listing page verified)
+    if (p1.listing_isp) console.log(`[aria] Phase1A amenity ISP: ${p1.listing_isp}`)
+    if (p1.listing_cable) console.log(`[aria] Phase1A amenity cable: ${p1.listing_cable}`)
+    if (p1.listing_proptech.length) console.log(`[aria] Phase1A amenity proptech: ${p1.listing_proptech.join(', ')}`)
+
+    // Pre-seed Phase 2: DB data + Phase 1A listing-verified amenity data
+    // Priority: user-verified DB > listing-page verified > AI search results
+    const listingVerifiedIsps = p1.listing_isp ? [p1.listing_isp] : []
+    const listingVerifiedVideos = p1.listing_cable ? [p1.listing_cable] : []
+
+    const dbPhase2Seed = {
+      isp_providers:    [...new Set([...(existingRecord?.isp_providers ?? []), ...listingVerifiedIsps])],
+      video_providers:  [...new Set([...(existingRecord?.video_providers ?? []), ...listingVerifiedVideos])],
+      roe_expiry_year:  existingRecord?.roe_expiry_user_verified
+        ? (existingRecord.roe_expiry_year ?? null) : null,
+      roe_providers:    existingRecord?.roe_providers ?? [],
+      roe_detected:     (existingRecord?.roe_detected ?? false) || p1.listing_bulk_detected,
+      bulk_agreements:  existingRecord?.bulk_agreements ?? [],
+      // Listing-page bulk detection: if ISP/cable listed as amenity, create a seed agreement
+      listing_bulk_detected: p1.listing_bulk_detected,
+    }
+
+    // If listing page confirmed bulk, create a seed agreement entry
+    if (p1.listing_bulk_detected && p1.listing_isp && dbPhase2Seed.bulk_agreements.length === 0) {
+      dbPhase2Seed.bulk_agreements = [{
+        provider: p1.listing_isp,
+        service_type: 'internet',
+        agreement_type: 'bulk',
+        confidence: 'high',
+        evidence: `Listed as amenity on property listing page (${p1.listing_url || 'listing site'})`,
+      }]
+    }
 
     if (existingRecord?.times_researched) {
-      // Log the re-research count — useful for debugging and analytics
       console.log(`[aria] Re-searching known property: ${property_name} (researched ${existingRecord.times_researched}x)`)
     }
 
@@ -1244,25 +1360,25 @@ export async function POST(req: NextRequest) {
       fetchMduProviders().then(dbProviders =>
         runPhase2(property_name, address, city, state, mgmt, coords, anthropic, dbProviders)
       ),
-      runPhase3(property_name, city, state, mgmt, owner, website, anthropic),
+      // Pass Phase 1A listing data into Phase 3 so proptech pre-seeded from amenities
+      runPhase3(property_name, city, state, mgmt, owner, website, anthropic, p1.listing_proptech),
     ])
 
-    // Merge Phase 2 with DB seed — user-verified fields from DB always win over AI results
+    // Merge Phase 2 with DB+listing seed — user-verified DB > listing-verified > AI
     const p2: typeof p2Raw = {
       ...p2Raw,
-      // For user-verified DB fields, union them in; AI result fills any gaps
       isp_providers: [
-        ...new Set([...(dbPhase2Seed?.isp_providers ?? []), ...p2Raw.isp_providers])
+        ...new Set([...(dbPhase2Seed.isp_providers), ...p2Raw.isp_providers])
       ],
       video_providers: [
-        ...new Set([...(dbPhase2Seed?.video_providers ?? []), ...p2Raw.video_providers])
+        ...new Set([...(dbPhase2Seed.video_providers), ...p2Raw.video_providers])
       ],
-      roe_expiry_year: dbPhase2Seed?.roe_expiry_year ?? p2Raw.roe_expiry_year,
+      roe_expiry_year: dbPhase2Seed.roe_expiry_year ?? p2Raw.roe_expiry_year,
       roe_providers: [
-        ...new Set([...(dbPhase2Seed?.roe_providers ?? []), ...p2Raw.roe_providers])
+        ...new Set([...(dbPhase2Seed.roe_providers), ...p2Raw.roe_providers])
       ],
-      roe_detected: p2Raw.roe_detected || dbPhase2Seed?.roe_detected || false,
-      // Merge bulk agreements: DB agreements merged with new findings
+      roe_detected: p2Raw.roe_detected || dbPhase2Seed.roe_detected || false,
+      // Merge bulk agreements: DB+listing agreements merged with new findings
       bulk_agreements: (() => {
         const dbAgreements = dbPhase2Seed?.bulk_agreements ?? []
         const newAgreements = p2Raw.bulk_agreements
@@ -1463,6 +1579,8 @@ buying_trends: 1-sentence sales trend insight for this property type`,
         roe_detected: p2.roe_detected,
         roe_providers: p2.roe_providers,
         roe_expiry_year: p2.roe_expiry_year,
+        lat: coords?.lat ?? null,
+        lng: coords?.lng ?? null,
         _fcc_verified: p2.fcc_providers.length > 0,
         _fcc_providers: p2.fcc_providers,
         proptech: {
