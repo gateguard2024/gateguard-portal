@@ -27,7 +27,7 @@ const supabaseDeep = createClient(
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
-const ARIA_ENGINE_VERSION = 'v7.1'
+const ARIA_ENGINE_VERSION = 'v7.2'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -293,18 +293,45 @@ interface AriaDbRecord {
 
 async function lookupExistingProperty(query: string, cityHint: string | null): Promise<AriaDbRecord | null> {
   try {
-    // Normalize query: strip city/state suffixes for the property name match
-    const namePart = query.replace(/,?\s+(atlanta|austin|dallas|houston|chicago|phoenix|denver|nashville|miami|charlotte|raleigh|seattle|boston|NYC|new york|los angeles|san francisco|[A-Z]{2})$/i, '').trim()
-    let q = supabaseDeep
-      .from('aria_properties')
-      .select('id,property_name,address,units,year_built,management_company,owner_entity,isp_providers,video_providers,bulk_agreements,roe_detected,roe_providers,roe_expiry_year,isp_providers_user_verified,video_providers_user_verified,roe_expiry_user_verified,dm_name,dm_email,dm_phone,dm_title,dm_linkedin_slug,dm_chain,dm_name_user_verified,dm_email_user_verified,dm_phone_user_verified,times_researched')
-      .ilike('property_name', `%${namePart}%`)
-    if (cityHint) {
-      // Try to narrow by city in address field
-      q = q.ilike('address', `%${cityHint}%`)
+    // Build multiple search patterns to handle "northland warf 7" → DB "Wharf 7"
+    // The AI-confirmed name (stored in DB) may differ from the search query
+    const COMMON_MGMT_WORDS = new Set(['investment','corporation','corp','inc','llc','management','property','properties','residential','realty','greystar','northland','cortland','lincoln','bozzuto','camden'])
+    const words = query.trim().split(/\s+/)
+
+    // Pattern 1: last 2 words — often the actual property name ("warf 7", "wharf 7")
+    const lastTwo = words.slice(-2).join(' ')
+    // Pattern 2: skip first word if it looks like a mgmt company keyword
+    const skipFirst = COMMON_MGMT_WORDS.has(words[0]?.toLowerCase()) ? words.slice(1).join(' ') : query
+    // Pattern 3: full query stripped of state/city suffixes
+    const fullNorm = query.replace(/,?\s+(atlanta|austin|dallas|houston|chicago|phoenix|denver|nashville|miami|charlotte|raleigh|seattle|boston|NYC|new york|los angeles|san francisco|[A-Z]{2})$/i, '').trim()
+
+    const patterns = [...new Set([lastTwo, skipFirst, fullNorm].filter(p => p.length >= 3))]
+
+    const cols = 'id,property_name,address,units,year_built,management_company,owner_entity,isp_providers,video_providers,bulk_agreements,roe_detected,roe_providers,roe_expiry_year,isp_providers_user_verified,video_providers_user_verified,roe_expiry_user_verified,dm_name,dm_email,dm_phone,dm_title,dm_linkedin_slug,dm_chain,dm_name_user_verified,dm_email_user_verified,dm_phone_user_verified,times_researched'
+
+    for (const pattern of patterns) {
+      let q = supabaseDeep
+        .from('aria_properties')
+        .select(cols)
+        .ilike('property_name', `%${pattern}%`)
+      if (cityHint) q = q.ilike('address', `%${cityHint}%`)
+      const { data } = await q.limit(1).maybeSingle()
+      if (data) return data as AriaDbRecord
     }
-    const { data } = await q.limit(1).maybeSingle()
-    return (data as AriaDbRecord | null)
+
+    // Fallback: city-only search if city hint provided
+    if (cityHint && words.length >= 2) {
+      const { data } = await supabaseDeep
+        .from('aria_properties')
+        .select(cols)
+        .ilike('address', `%${cityHint}%`)
+        .ilike('property_name', `%${words[words.length - 1]}%`)
+        .limit(1)
+        .maybeSingle()
+      if (data) return data as AriaDbRecord
+    }
+
+    return null
   } catch { return null }
 }
 
@@ -617,14 +644,28 @@ async function runPhase2(
   // Build all DB provider names for Haiku context
   const allDbProviderNames = dbProviders.map(p => p.name).join(', ')
 
-  const propTarget = confirmedMgmt ? `"${confirmedMgmt}"` : `"${confirmedName}"`
+  // Extract brand-name keyword from full management company name
+  // "Northland Investment Corporation" → "Northland"
+  // Using the full quoted name in Tavily is too restrictive — it requires exact phrase match
+  const MGMT_GENERIC_WORDS = new Set(['investment','corporation','corp','inc','llc','management','property','properties','residential','realty','group','real','estate','company','co','partners','fund','capital','asset','homes','apartments','living','communities','associates','equity','ventures','holdings'])
+  const mgmtBrandName = confirmedMgmt
+    ? (confirmedMgmt.split(/\s+/).find(w => w.length > 2 && !MGMT_GENERIC_WORDS.has(w.toLowerCase())) || confirmedMgmt.split(' ')[0])
+    : ''
+
+  const propTarget = mgmtBrandName ? `"${mgmtBrandName}"` : `"${confirmedName}"`
   const geoTarget = `"${confirmedCity}"`
 
-  const [fccProviders, bulkResults, ownerResults, videoResults, roeResults] = await Promise.all([
+  const [fccProviders, bulkResults, ispCityResults, ownerResults, videoResults, roeResults] = await Promise.all([
     coords ? fccBroadbandLookup(coords.lat, coords.lng) : Promise.resolve([] as string[]),
     tavilySearch(
-      `"${confirmedName}" "${confirmedCity}" ${confirmedMgmt ? `"${confirmedMgmt}"` : ''} bulk internet OR "internet included" OR MDU OR "exclusive provider" OR ${ispKeywords}`,
+      // Use brand-name shortening — "Northland" not "Northland Investment Corporation"
+      `"${confirmedName}" "${confirmedCity}" ${mgmtBrandName ? `"${mgmtBrandName}"` : ''} bulk internet OR "internet included" OR MDU OR "exclusive provider" OR ${ispKeywords}`,
       5, 'bulk', 'advanced', false
+    ),
+    // City-level ISP fallback — catches MDU deals that mention the city but not the property name
+    serperSearch(
+      `"${confirmedCity}" apartments OR "apartment homes" "internet included" OR GIGstreem OR Hotwire OR "bulk internet" OR "MDU internet" OR "exclusive internet" ${mgmtBrandName ? `OR "${mgmtBrandName}"` : ''}`,
+      4, 'isp-city'
     ),
     serperSearch(
       `"${confirmedAddress || confirmedName}" sold acquired ownership "private equity" OR REIT`,
@@ -645,8 +686,8 @@ async function runPhase2(
   const fccLower = fccProviders.map(p => p.toLowerCase())
   const knownMduInFcc = fccLower.some(p => [...KNOWN_MDU_BULK_ISPS].some(mdu => p.includes(mdu)))
 
-  const allResults = [...bulkResults, ...ownerResults, ...videoResults, ...roeResults]
-  const usable = allResults.filter(r => (r.content || '').length > 40).slice(0, 18)
+  const allResults = [...bulkResults, ...ispCityResults, ...ownerResults, ...videoResults, ...roeResults]
+  const usable = allResults.filter(r => (r.content || '').length > 40).slice(0, 20)
 
   const snippets = usable
     .map((r, i) => `[${i + 1}][${r.source ?? 'web'}] ${r.title}\n${r.content.slice(0, 400)}`)
@@ -655,6 +696,10 @@ async function runPhase2(
   const fccCtx = fccProviders.length > 0
     ? `\n\nFCC BROADBAND MAP (confirmed at coordinates):\n${fccProviders.map(p => `• ${p}`).join('\n')}`
     : ''
+
+  // Check city-level ISP results for known MDU providers — they may confirm bulk deal
+  const cityIspLower = ispCityResults.flatMap(r => [r.title, r.content].join(' ').toLowerCase())
+  const cityConfirmedIsps = [...KNOWN_MDU_BULK_ISPS].filter(isp => cityIspLower.some(t => t.includes(isp)))
 
   // Separate video snippets for dedicated extraction
   const videoSnippets = videoResults.filter(r => (r.content || '').length > 30)
@@ -712,6 +757,24 @@ SOURCE TAGS IN RESULTS:
           agreement_type: 'bulk',
           confidence: 'high',
           evidence: `FCC map shows ${kp} — MDU-only ISP, exclusive bulk model`,
+        })
+      }
+    }
+  }
+
+  // City-level ISP confirmation — add any MDU providers confirmed from city search
+  for (const isp of cityConfirmedIsps) {
+    const displayName = fccProviders.find(p => p.toLowerCase().includes(isp)) || isp
+    if (!result.isp_providers.some(p => p.toLowerCase().includes(isp))) {
+      result.isp_providers.push(displayName)
+      result.bulk_detected = true
+      if (!result.bulk_agreements.some(a => (a.provider ?? '').toLowerCase().includes(isp))) {
+        result.bulk_agreements.push({
+          provider: displayName,
+          service_type: 'internet',
+          agreement_type: 'bulk',
+          confidence: 'medium',
+          evidence: `${isp} confirmed in ${confirmedCity} multifamily market — MDU-exclusive ISP`,
         })
       }
     }
@@ -1026,6 +1089,64 @@ const deepIntelTool: Anthropic.Tool = {
       },
       freshness_score: { type: 'number' },
       buying_trends: { type: 'string' },
+      outreach_plan: {
+        type: 'object',
+        description: '6-month structured outreach campaign calendar for SCOUT',
+        properties: {
+          month_1: {
+            type: 'object',
+            properties: {
+              theme: { type: 'string' },
+              actions: { type: 'array', items: { type: 'string' } },
+              goal: { type: 'string' },
+            },
+          },
+          month_2: {
+            type: 'object',
+            properties: {
+              theme: { type: 'string' },
+              actions: { type: 'array', items: { type: 'string' } },
+              goal: { type: 'string' },
+            },
+          },
+          month_3: {
+            type: 'object',
+            properties: {
+              theme: { type: 'string' },
+              actions: { type: 'array', items: { type: 'string' } },
+              goal: { type: 'string' },
+            },
+          },
+          month_4: {
+            type: 'object',
+            properties: {
+              theme: { type: 'string' },
+              actions: { type: 'array', items: { type: 'string' } },
+              goal: { type: 'string' },
+            },
+          },
+          month_5: {
+            type: 'object',
+            properties: {
+              theme: { type: 'string' },
+              actions: { type: 'array', items: { type: 'string' } },
+              goal: { type: 'string' },
+            },
+          },
+          month_6: {
+            type: 'object',
+            properties: {
+              theme: { type: 'string' },
+              actions: { type: 'array', items: { type: 'string' } },
+              goal: { type: 'string' },
+            },
+          },
+          total_touches: { type: 'number' },
+          primary_channel: { type: 'string' },
+          key_milestone: { type: 'string' },
+          expected_close_quarter: { type: 'string' },
+        },
+      },
     },
   },
 }
@@ -1072,14 +1193,17 @@ export async function POST(req: NextRequest) {
     const owner = p1.confirmed_owner || existingRecord?.owner_entity || ''
     const website = p1.confirmed_website || ''
 
-    // Pre-seed Phase 2 from DB — user-verified fields always win
+    // Pre-seed Phase 2 from DB — ALL existing data seeded; user-verified fields
+    // protect scalar overrides (roe_expiry_year); arrays are always unioned (never shrunk)
     const dbPhase2Seed = existingRecord ? {
-      isp_providers:    existingRecord.isp_providers_user_verified ? (existingRecord.isp_providers ?? []) : [],
-      video_providers:  existingRecord.video_providers_user_verified ? (existingRecord.video_providers ?? []) : [],
-      roe_expiry_year:  existingRecord.roe_expiry_user_verified ? (existingRecord.roe_expiry_year ?? null) : null,
-      roe_providers:    existingRecord.roe_providers ?? [],
+      isp_providers:    existingRecord.isp_providers ?? [],         // always seed — unioned with AI
+      video_providers:  existingRecord.video_providers ?? [],       // always seed — unioned with AI
+      roe_expiry_year:  existingRecord.roe_expiry_user_verified     // scalar: protect if user-verified, else AI can update
+        ? (existingRecord.roe_expiry_year ?? null)
+        : null,
+      roe_providers:    existingRecord.roe_providers ?? [],         // always seed — unioned with AI
       roe_detected:     existingRecord.roe_detected ?? false,
-      bulk_agreements:  existingRecord.bulk_agreements ?? [],
+      bulk_agreements:  existingRecord.bulk_agreements ?? [],       // always seed — merged with AI
     } : null
 
     if (existingRecord?.times_researched) {
@@ -1184,7 +1308,22 @@ key_finding: "[WHO] at [company] controls this. [WHY NOW: specific pain/contract
 pitch_strategy.primary_hook: 1 sentence using THIS property's pain + contract/ROE window
 behavioral_profile: decision_style, communication_pref, risk_tolerance, budget_orientation
 freshness_score (1-10): 10=ROE expiry known + recent acquisition; 8=contract expiry/bulk detected; 6=pain signals; 4=basic intel; 2=inference only
-buying_trends: 1-sentence sales trend insight for this property type`,
+buying_trends: 1-sentence sales trend insight for this property type
+
+OUTREACH PLAN — 6-MONTH CAMPAIGN CALENDAR:
+Build a month-by-month outreach strategy for SCOUT based on everything we know:
+- Month 1 theme: Awareness / First Touch (email + LinkedIn, lead with specific pain or ROE insight)
+- Month 2 theme: Education (value proof — case study at similar property or ROE savings angle)
+- Month 3 theme: Validation / Demo Request (propose site walk or virtual demo)
+- Month 4 theme: Proposal Prep (gather gate count, access points, scope assessment)
+- Month 5 theme: Proposal Delivery + ROI presentation
+- Month 6 theme: Close / Negotiation (urgency: contract window, upcoming renewal, or capex cycle)
+For each month: theme (short title), actions (3-5 specific tasks), goal (1-sentence outcome)
+Use THIS property's context — reference the actual ISP/ROE situation, the DM's behavioral profile, and the pain signals.
+primary_channel: "email" / "phone" / "linkedin" based on behavioral_profile.communication_pref
+key_milestone: the single most important event in the 6-month window (e.g. "ROE expires Q3 2027 — proposal must land by Q1 2027")
+expected_close_quarter: e.g. "Q3 2026" based on contract window + sales cycle length
+total_touches: count of all actions across 6 months`,
       messages: [{ role: 'user', content: `Property: ${property_name}\nLocation: ${city}, ${state}\n\n${synthesisData}` }],
     })
 
@@ -1224,23 +1363,57 @@ buying_trends: 1-sentence sales trend insight for this property type`,
       property: {
         name: property_name, address, city, state,
         units: p1.confirmed_units, class: rawData.property_class || null,
+        year_built: p1.confirmed_year_built || null,
         management_company: mgmt, owner_entity: finalOwner, old_name: null,
+      },
+      market_context: {
+        property_class: rawData.property_class || null,
+        year_built: p1.confirmed_year_built || null,
+        tech_generation: p3.proptech.tech_generation,
+        replacement_window: normStr(rawData.proptech?.replacement_window) || null,
+        acquisition_year: normStr(p2.acquisition_year) || null,
+        owner_type: normStr(p2.owner_type) || null,
+        sara_signals: rawData.proptech?.sara_signals ?? false,
+        buying_trends: normStr(rawData.buying_trends) || null,
       },
       pain_angles: p3.pain_signals.slice(0, 8).map(s => ({ type: s.type, quote: s.quote, severity: s.severity })),
       connectivity: {
         isp_providers: cleanIspProviders,
+        video_providers: cleanVideoProviders,
         bulk_detected: p2.bulk_detected,
         provider_confirmed: cleanIspProviders.length > 0,
         bulk_agreements: cleanBulkAgreements,
+        roe_detected: p2.roe_detected,
+        roe_providers: p2.roe_providers,
+        roe_expiry_year: p2.roe_expiry_year,
+        contract_urgency: (p2.roe_detected || p2.bulk_detected) ? 'high' : 'medium',
+        contract_window: p2.roe_expiry_year
+          ? `ROE expires ${p2.roe_expiry_year}`
+          : normStr((cleanBulkAgreements[0] as any)?.expiry_estimate) || null,
       },
-      proptech: { gate_operators: p3.proptech.gate_operators, access_control: p3.proptech.access_control, tech_generation: p3.proptech.tech_generation },
+      proptech: {
+        gate_operators: p3.proptech.gate_operators,
+        access_control: p3.proptech.access_control,
+        intercoms: p3.proptech.intercoms,
+        cameras: p3.proptech.cameras,
+        smart_locks: p3.proptech.smart_locks,
+        tech_generation: p3.proptech.tech_generation,
+        displacement_targets: normStrArr(rawData.proptech?.displacement_targets),
+        sara_signals: rawData.proptech?.sara_signals ?? false,
+      },
       contact_chain: mergedDMChain.slice(0, 5),
       email_format: p3.email_format,
+      behavioral_profile: rawData.behavioral_profile ?? null,
+      pitch_strategy: rawData.pitch_strategy ?? null,
+      key_finding: normStr(rawData.key_finding) ?? null,
       objection_flags: [
         ...(p2.bulk_detected && cleanIspProviders.length > 0 ? [`Existing bulk deal with ${cleanIspProviders[0]} — needs contract expiry`] : []),
+        ...(p2.roe_detected && !p2.roe_expiry_year ? ['ROE detected — expiry date unknown, verify with property'] : []),
+        ...(p2.roe_expiry_year ? [`ROE expires ${p2.roe_expiry_year} — contract window opens soon`] : []),
         ...(p2.acquisition_year && parseInt(p2.acquisition_year) >= new Date().getFullYear() - 1 ? ['Recent acquisition — capex window open'] : []),
       ],
-      outreach_sequence: ['email_1', 'call_1', 'linkedin_touch', 'email_2'],
+      outreach_plan: rawData.outreach_plan ?? null,
+      outreach_sequence: ['email_1', 'call_1', 'linkedin_touch', 'email_2', 'call_2', 'email_3'],
     }
 
     const prospectPayload = {
