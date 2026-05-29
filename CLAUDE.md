@@ -515,6 +515,18 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
   - Each correction sets corresponding `*_user_verified = true` flag — protected from future AI overwrites
 - ✅ Migration 100 (`supabase/migrations/100_aria_roe_learning_loop.sql`) — `aria_properties`: `roe_detected`, `roe_providers`, `roe_expiry_year` + `*_user_verified` boolean flags for ISP, video, ROE, DM contact fields; 2 new indexes
 
+### Completed — May 29, 2026 (session 10) — ARIA v7.3: Raw Content Reads + Social Search + Maps UI
+- ✅ ARIA engine v7.3 (`app/api/aria/research/deep/route.ts`) — `ARIA_ENGINE_VERSION = 'v7.3'`, `maxDuration = 120`, Sonnet `max_tokens: 2800`
+- ✅ **Phase 1A amenity deep read** — 3rd parallel search with `rawContent=true` targeting apartments.com/rentcafe.com amenity pages; Haiku extracts `listing_isp`, `listing_cable`, `listing_proptech[]`, `listing_bulk_detected` directly from full page text (no more 400-char snippet truncation cutting off GIGstreem/ButterflyMX etc.)
+- ✅ **Phase 1A snippet cap** — standard snippets capped at 600 chars (`.slice(0, 600)`) so Haiku prompt doesn't overflow; raw amenity content passes separately at 4000 chars per page
+- ✅ **dbPhase2Seed fix** — seeds ALL existing ISP/video/ROE data from DB unconditionally (was only seeding user-verified fields; root cause of GIGstreem disappearing on re-run); `roe_expiry_year` scalar still protected if `roe_expiry_user_verified = true`; listing-page ISPs/cables merged in at seed time
+- ✅ **Phase 3 social search** — 5th parallel search targeting `site:reddit.com OR "Google Reviews" OR site:facebook.com OR site:yelp.com` (6 results); feeds pain signals extraction
+- ✅ **Phase 3 proptech rawContent** — proptech search now `rawContent=true` with 2500 chars per result; website fetch also `rawContent=true` with 3000 chars per result
+- ✅ **Listing proptech distribution** — `listing_proptech[]` brands from Phase 1A distributed into correct Phase 3 category arrays (intercoms/access_control/gate_operators/cameras etc.) before Haiku processes them
+- ✅ **Parallel Haiku outreach plan** — `generateOutreachPlan()` runs via Haiku in `Promise.all` alongside Sonnet synthesis (~2s Haiku vs ~10s Sonnet = zero added latency); outreach_plan removed from Sonnet schema
+- ✅ **504 fix** — `maxDuration: 60 → 120`; Sonnet tokens 3500 → 2800 (outreach plan moved to Haiku)
+- ✅ **ARIA page — address moved** (`app/aria/page.tsx`) — detail header shows city/state only; full address + Google Maps iframe embed (street view capable) added to bottom of Property tab; `lat`/`lng` on `Property` interface
+
 ### Completed — May 29, 2026 (session 9) — ARIA v7.2: dbPhase2Seed Fix + SCOUT 6-Month Campaign
 - ✅ ARIA engine v7.2 (`app/api/aria/research/deep/route.ts`):
   - **dbPhase2Seed fix** — now seeds ALL existing ISP/video/ROE data from DB on every re-search (was only seeding user-verified fields — root cause of GIGstreem disappearing on re-run). Arrays are always unioned; `roe_expiry_year` scalar still protected if `roe_expiry_user_verified = true`
