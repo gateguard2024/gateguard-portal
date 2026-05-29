@@ -27,7 +27,7 @@ const supabaseDeep = createClient(
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
-const ARIA_ENGINE_VERSION = 'v7.0'
+const ARIA_ENGINE_VERSION = 'v7.1'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -275,6 +275,39 @@ function constructEmail(firstName: string, lastName: string, domain: string, for
   return `${f}.${l}@${domain}`
 }
 
+// ─── DB lookback: pre-seed from existing intel ───────────────────────────────
+
+interface AriaDbRecord {
+  id?: string
+  property_name?: string; address?: string; units?: number; year_built?: number
+  management_company?: string; owner_entity?: string; website?: string; phone?: string
+  isp_providers?: string[]; video_providers?: string[]
+  bulk_agreements?: any[]; roe_detected?: boolean; roe_providers?: string[]; roe_expiry_year?: number
+  isp_providers_user_verified?: boolean; video_providers_user_verified?: boolean
+  roe_expiry_user_verified?: boolean; dm_name_user_verified?: boolean
+  dm_email_user_verified?: boolean; dm_phone_user_verified?: boolean
+  dm_name?: string; dm_email?: string; dm_phone?: string; dm_title?: string
+  dm_linkedin_slug?: string; dm_chain?: any[]
+  times_researched?: number
+}
+
+async function lookupExistingProperty(query: string, cityHint: string | null): Promise<AriaDbRecord | null> {
+  try {
+    // Normalize query: strip city/state suffixes for the property name match
+    const namePart = query.replace(/,?\s+(atlanta|austin|dallas|houston|chicago|phoenix|denver|nashville|miami|charlotte|raleigh|seattle|boston|NYC|new york|los angeles|san francisco|[A-Z]{2})$/i, '').trim()
+    let q = supabaseDeep
+      .from('aria_properties')
+      .select('id,property_name,address,units,year_built,management_company,owner_entity,isp_providers,video_providers,bulk_agreements,roe_detected,roe_providers,roe_expiry_year,isp_providers_user_verified,video_providers_user_verified,roe_expiry_user_verified,dm_name,dm_email,dm_phone,dm_title,dm_linkedin_slug,dm_chain,dm_name_user_verified,dm_email_user_verified,dm_phone_user_verified,times_researched')
+      .ilike('property_name', `%${namePart}%`)
+    if (cityHint) {
+      // Try to narrow by city in address field
+      q = q.ilike('address', `%${cityHint}%`)
+    }
+    const { data } = await q.limit(1).maybeSingle()
+    return (data as AriaDbRecord | null)
+  } catch { return null }
+}
+
 // ─── PHASE 0: Query Classification ────────────────────────────────────────────
 
 type QueryType = 'specific_property' | 'city_prospect' | 'criteria_prospect' | 'contract_prospect'
@@ -510,6 +543,9 @@ interface Phase2Result {
   bulk_detected: boolean
   bulk_agreements: Array<{ provider: string; service_type: string; agreement_type: string; confidence: string; evidence: string; expiry_estimate?: string }>
   fcc_providers: string[]
+  roe_detected: boolean
+  roe_providers: string[]
+  roe_expiry_year: number | null
 }
 
 const KNOWN_MDU_BULK_ISPS = new Set([
@@ -518,6 +554,27 @@ const KNOWN_MDU_BULK_ISPS = new Set([
   'limecom', 'pocketinet', 'skybridge', 'bulk solutions', 'enterprise network services',
 ])
 
+const KNOWN_VIDEO_PROVIDERS = new Set([
+  'directv', 'dish network', 'dish tv', 'comcast', 'xfinity', 'spectrum tv',
+  'cox', 'mediacom', 'optimum', 'altice', 'breezeline', 'brightspeed', 'frontier',
+  'centurylink', 'lumen', 'tds telecom', 'consolidated communications',
+])
+
+// ─── Fetch live mdu_providers from DB ────────────────────────────────────────
+
+interface MduProvider { id: string; name: string; provider_type?: string; is_video?: boolean }
+
+async function fetchMduProviders(): Promise<MduProvider[]> {
+  try {
+    const { data } = await supabaseDeep
+      .from('mdu_providers')
+      .select('id, name, provider_type, is_video')
+      .eq('active', true)
+      .limit(80)
+    return (data ?? []) as MduProvider[]
+  } catch { return [] }
+}
+
 async function runPhase2(
   confirmedName: string,
   confirmedAddress: string,
@@ -525,56 +582,119 @@ async function runPhase2(
   confirmedState: string,
   confirmedMgmt: string,
   coords: { lat: number; lng: number } | null,
-  client: Anthropic
+  client: Anthropic,
+  dbProviders: MduProvider[] = []
 ): Promise<Phase2Result> {
   const blank: Phase2Result = {
     owner_entity: '', owner_type: '', acquisition_year: '',
     isp_providers: [], video_providers: [],
     bulk_detected: false, bulk_agreements: [], fcc_providers: [],
+    roe_detected: false, roe_providers: [], roe_expiry_year: null,
   }
 
   const geo = [confirmedCity, confirmedState].filter(Boolean).join(', ')
 
-  const [fccProviders, bulkResults, ownerResults] = await Promise.all([
+  // Build live keyword lists from DB + known sets
+  const dbIspNames = dbProviders
+    .filter(p => !p.is_video && p.provider_type !== 'video')
+    .map(p => p.name).slice(0, 12)
+  const dbVideoNames = dbProviders
+    .filter(p => p.is_video || p.provider_type === 'video' || [...KNOWN_VIDEO_PROVIDERS].some(v => p.name.toLowerCase().includes(v)))
+    .map(p => p.name).slice(0, 10)
+
+  // Merge DB video names with known set — always include the major players
+  const videoKeywords = [...new Set([
+    'DirecTV', 'Dish Network', 'Xfinity', 'Comcast', 'Spectrum TV', 'Spectrum',
+    ...dbVideoNames,
+  ])].slice(0, 10).join(' OR ')
+
+  // MDU ISP keywords from DB + known hardcoded list
+  const ispKeywords = [...new Set([
+    'GIGstreem', 'Hotwire', '"Pavlov Media"', '"Wired Broadband"', '"MDU Communications"',
+    ...dbIspNames.map(n => `"${n}"`),
+  ])].slice(0, 10).join(' OR ')
+
+  // Build all DB provider names for Haiku context
+  const allDbProviderNames = dbProviders.map(p => p.name).join(', ')
+
+  const propTarget = confirmedMgmt ? `"${confirmedMgmt}"` : `"${confirmedName}"`
+  const geoTarget = `"${confirmedCity}"`
+
+  const [fccProviders, bulkResults, ownerResults, videoResults, roeResults] = await Promise.all([
     coords ? fccBroadbandLookup(coords.lat, coords.lng) : Promise.resolve([] as string[]),
     tavilySearch(
-      `"${confirmedName}" "${confirmedCity}" "${confirmedMgmt}" bulk internet OR "internet included" OR MDU`,
+      `"${confirmedName}" "${confirmedCity}" ${confirmedMgmt ? `"${confirmedMgmt}"` : ''} bulk internet OR "internet included" OR MDU OR "exclusive provider" OR ${ispKeywords}`,
       5, 'bulk', 'advanced', false
     ),
     serperSearch(
       `"${confirmedAddress || confirmedName}" sold acquired ownership "private equity" OR REIT`,
       5, 'owner', 'news'
     ),
+    // Dedicated video provider search — cable/satellite/IPTV agreements
+    serperSearch(
+      `${propTarget} OR ${geoTarget} ${videoKeywords} multifamily OR apartment OR MDU OR "bulk video" OR "cable agreement"`,
+      5, 'video', 'news'
+    ),
+    // ROE / bulk telecom agreement search — contract terms + expiry signals
+    serperSearch(
+      `${propTarget} OR ${geoTarget} "right of entry" OR "ROE agreement" OR "bulk agreement" OR "exclusive service agreement" OR "telecom agreement" OR "internet service agreement" expire OR expiring OR renew OR term OR "contract end"`,
+      5, 'roe'
+    ),
   ])
 
   const fccLower = fccProviders.map(p => p.toLowerCase())
   const knownMduInFcc = fccLower.some(p => [...KNOWN_MDU_BULK_ISPS].some(mdu => p.includes(mdu)))
 
-  const allResults = [...bulkResults, ...ownerResults]
-  const usable = allResults.filter(r => (r.content || '').length > 40).slice(0, 12)
+  const allResults = [...bulkResults, ...ownerResults, ...videoResults, ...roeResults]
+  const usable = allResults.filter(r => (r.content || '').length > 40).slice(0, 18)
 
   const snippets = usable
-    .map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 400)}`)
+    .map((r, i) => `[${i + 1}][${r.source ?? 'web'}] ${r.title}\n${r.content.slice(0, 400)}`)
     .join('\n\n---\n\n')
 
   const fccCtx = fccProviders.length > 0
     ? `\n\nFCC BROADBAND MAP (confirmed at coordinates):\n${fccProviders.map(p => `• ${p}`).join('\n')}`
     : ''
 
+  // Separate video snippets for dedicated extraction
+  const videoSnippets = videoResults.filter(r => (r.content || '').length > 30)
+    .map((r, i) => `[V${i + 1}] ${r.title}\n${r.content.slice(0, 350)}`).join('\n\n---\n\n')
+
+  // Separate ROE snippets for dedicated extraction
+  const roeSnippets = roeResults.filter(r => (r.content || '').length > 30)
+    .map((r, i) => `[R${i + 1}] ${r.title}\n${r.content.slice(0, 350)}`).join('\n\n---\n\n')
+
+  const dbProviderCtx = allDbProviderNames
+    ? `\n\nKNOWN PROVIDER REFERENCE LIST (from our database — flag any of these if mentioned):\n${allDbProviderNames}`
+    : ''
+
   const extracted = snippets.length > 80
     ? await haikusExtract<Omit<Phase2Result, 'fcc_providers'>>(
-        `Extract ownership and connectivity data. Return ONLY valid JSON:
-{"owner_entity":"","owner_type":"","acquisition_year":"","isp_providers":[],"video_providers":[],"bulk_detected":false,"bulk_agreements":[]}
+        `Extract ownership, connectivity, video service, and ROE agreement data. Return ONLY valid JSON:
+{"owner_entity":"","owner_type":"","acquisition_year":"","isp_providers":[],"video_providers":[],"bulk_detected":false,"bulk_agreements":[],"roe_detected":false,"roe_providers":[],"roe_expiry_year":null}
 
 RULES:
 - owner_entity: investor/REIT/PE firm/LLC that owns the property
 - owner_type: "private_equity","reit","family_office","institutional","local" or ""
 - acquisition_year: 4-digit year of last sale/acquisition, or ""
-- isp_providers: actual ISPs (never management company names)
-- video_providers: cable/satellite/IPTV (DirecTV, Dish, Xfinity, Spectrum TV)
-- bulk_detected: true if internet included in rent OR bulk/exclusive deal found OR tech fee mentioned
-- bulk_agreements: [{"provider":"","service_type":"internet","agreement_type":"bulk","confidence":"high","evidence":"","expiry_estimate":""}]${fccCtx}`,
-        snippets, 700, client
+- isp_providers: actual ISPs serving the property (GIGstreem, Hotwire, Comcast, AT&T, Spectrum, etc. — NEVER management company names). Cross-reference the known provider list.
+- video_providers: cable/satellite/IPTV services (DirecTV, Dish Network, Comcast Xfinity, Spectrum TV, Cox TV, etc.). Look in [video] source snippets especially. Cross-reference known provider list.
+- bulk_detected: true if internet is included in rent, OR bulk/exclusive deal exists, OR "technology fee" / "tech fee" mentioned, OR MDU-only ISP present, OR any telecom agreement found
+- bulk_agreements: every confirmed or likely telecom service agreement. Format:
+  [{"provider":"GIGstreem","service_type":"internet","agreement_type":"bulk","confidence":"high","evidence":"internet included in rent","expiry_estimate":"Est. 2027-2029"}]
+  service_type: "internet","video","bundled"
+  agreement_type: "exclusive","bulk","preferred","unknown"
+  expiry_estimate: specific year if mentioned, else estimate from evidence (e.g. "Est. 2027-2029")
+- roe_detected: true if any right-of-entry, ROE, exclusive provider, or telecom service agreement language found in [roe] or any snippets
+- roe_providers: ALL ISP/cable companies named in ROE, bulk, or exclusive agreements
+- roe_expiry_year: 4-digit year when ROE/agreement expires or renews. Extract from: "expires YYYY", "contract ends YYYY", "agreement through YYYY", "renews in YYYY", "term ends YYYY". null if not found${fccCtx}${dbProviderCtx}
+
+SOURCE TAGS IN RESULTS:
+- [bulk]: internet/MDU agreement search results — primary ISP source
+- [video]: cable/satellite/IPTV search results — primary video source
+- [roe]: right-of-entry and contract term search results — primary ROE source
+- [owner]: ownership/acquisition news`,
+        snippets, 1400, client
       )
     : null
 
@@ -937,16 +1057,35 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // ── PHASE 1A: Specific property — listing sites + press ──────────────────
-    const p1 = await runPhase1A(rawQuery, anthropic)
+    // ── PHASE 1A + DB lookback in parallel ───────────────────────────────────
+    const [p1, existingRecord] = await Promise.all([
+      runPhase1A(rawQuery, anthropic),
+      lookupExistingProperty(rawQuery, classification.city_hint),
+    ])
 
-    const property_name = p1.confirmed_name || rawQuery
-    const address = p1.confirmed_address || ''
+    // ── Merge Phase 1A with existing DB record (DB fills gaps, fresh wins) ───
+    const property_name = p1.confirmed_name || existingRecord?.property_name || rawQuery
+    const address = p1.confirmed_address || existingRecord?.address || ''
     const city = p1.confirmed_city || classification.city_hint || ''
     const state = p1.confirmed_state || classification.state_hint || ''
-    const mgmt = p1.confirmed_management || classification.mgmt_hint || ''
-    const owner = p1.confirmed_owner || ''
+    const mgmt = p1.confirmed_management || existingRecord?.management_company || classification.mgmt_hint || ''
+    const owner = p1.confirmed_owner || existingRecord?.owner_entity || ''
     const website = p1.confirmed_website || ''
+
+    // Pre-seed Phase 2 from DB — user-verified fields always win
+    const dbPhase2Seed = existingRecord ? {
+      isp_providers:    existingRecord.isp_providers_user_verified ? (existingRecord.isp_providers ?? []) : [],
+      video_providers:  existingRecord.video_providers_user_verified ? (existingRecord.video_providers ?? []) : [],
+      roe_expiry_year:  existingRecord.roe_expiry_user_verified ? (existingRecord.roe_expiry_year ?? null) : null,
+      roe_providers:    existingRecord.roe_providers ?? [],
+      roe_detected:     existingRecord.roe_detected ?? false,
+      bulk_agreements:  existingRecord.bulk_agreements ?? [],
+    } : null
+
+    if (existingRecord?.times_researched) {
+      // Log the re-research count — useful for debugging and analytics
+      console.log(`[aria] Re-searching known property: ${property_name} (researched ${existingRecord.times_researched}x)`)
+    }
 
     // STOP: if no city/state confirmed and not specific
     if (!city && !state && !p1.is_specific_property) {
@@ -956,11 +1095,45 @@ export async function POST(req: NextRequest) {
     // Geocode
     const coords = await geocodeAddress(address || property_name, city, state)
 
-    // ── PHASES 2 + 3 in parallel ──────────────────────────────────────────────
-    const [p2, p3] = await Promise.all([
-      runPhase2(property_name, address, city, state, mgmt, coords, anthropic),
+    // ── PHASES 2 + 3 in parallel (+ mdu_providers DB fetch) ──────────────────
+    const [p2Raw, p3] = await Promise.all([
+      fetchMduProviders().then(dbProviders =>
+        runPhase2(property_name, address, city, state, mgmt, coords, anthropic, dbProviders)
+      ),
       runPhase3(property_name, city, state, mgmt, owner, website, anthropic),
     ])
+
+    // Merge Phase 2 with DB seed — user-verified fields from DB always win over AI results
+    const p2: typeof p2Raw = {
+      ...p2Raw,
+      // For user-verified DB fields, union them in; AI result fills any gaps
+      isp_providers: [
+        ...new Set([...(dbPhase2Seed?.isp_providers ?? []), ...p2Raw.isp_providers])
+      ],
+      video_providers: [
+        ...new Set([...(dbPhase2Seed?.video_providers ?? []), ...p2Raw.video_providers])
+      ],
+      roe_expiry_year: dbPhase2Seed?.roe_expiry_year ?? p2Raw.roe_expiry_year,
+      roe_providers: [
+        ...new Set([...(dbPhase2Seed?.roe_providers ?? []), ...p2Raw.roe_providers])
+      ],
+      roe_detected: p2Raw.roe_detected || dbPhase2Seed?.roe_detected || false,
+      // Merge bulk agreements: DB agreements merged with new findings
+      bulk_agreements: (() => {
+        const dbAgreements = dbPhase2Seed?.bulk_agreements ?? []
+        const newAgreements = p2Raw.bulk_agreements
+        if (!dbAgreements.length) return newAgreements
+        if (!newAgreements.length) return dbAgreements
+        // Union: prefer higher-confidence / user-verified
+        const result = [...dbAgreements]
+        for (const na of newAgreements) {
+          const key = `${(na.provider ?? '').toLowerCase()}:${na.service_type ?? ''}`
+          const exists = result.find(e => `${(e.provider ?? '').toLowerCase()}:${e.service_type ?? ''}` === key)
+          if (!exists) result.push(na)
+        }
+        return result
+      })(),
+    }
 
     const finalOwner = p2.owner_entity || owner || ''
 
@@ -969,7 +1142,7 @@ export async function POST(req: NextRequest) {
 ${JSON.stringify({ name: property_name, address, city, state, units: p1.confirmed_units, year_built: p1.confirmed_year_built, management_company: mgmt, website, phone: p1.confirmed_phone }, null, 2)}
 
 PHASE 2 — ENRICHMENT:
-${JSON.stringify({ owner_entity: finalOwner, owner_type: p2.owner_type, acquisition_year: p2.acquisition_year, fcc_providers: p2.fcc_providers, isp_providers: p2.isp_providers, video_providers: p2.video_providers, bulk_detected: p2.bulk_detected, bulk_agreements: p2.bulk_agreements }, null, 2)}
+${JSON.stringify({ owner_entity: finalOwner, owner_type: p2.owner_type, acquisition_year: p2.acquisition_year, fcc_providers: p2.fcc_providers, isp_providers: p2.isp_providers, video_providers: p2.video_providers, bulk_detected: p2.bulk_detected, bulk_agreements: p2.bulk_agreements, roe_detected: p2.roe_detected, roe_providers: p2.roe_providers, roe_expiry_year: p2.roe_expiry_year }, null, 2)}
 
 PHASE 3 — INTELLIGENCE:
 ${JSON.stringify({ pain_signals: p3.pain_signals.slice(0, 12), proptech: p3.proptech, contact_count: p3.contacts.length, email_format: p3.email_format }, null, 2)}`
@@ -984,27 +1157,33 @@ ${JSON.stringify({ pain_signals: p3.pain_signals.slice(0, 12), proptech: p3.prop
 CRITICAL RULES:
 1. property_details.units: copy from Phase 1
 2. property_details.management_company: copy from Phase 1 — NEVER overwrite with a person's name
-3. isp_providers / video_providers: copy from Phase 2
-4. bulk_agreements: copy from Phase 2. If no expiry yet, estimate:
-   - MDU fiber deals: year_built + 7-10
-   - Cable bulk deals: year_built + 5-7
-   Set expiry_estimate = "Est. [year]-[year]"
-5. proptech: copy from Phase 3
-6. extracted_contacts: copy from Phase 3 contacts
-7. pain_signals: copy from Phase 3 — up to 12 recent
-8. ownership: build from Phase 2 owner_entity + owner_type + acquisition_year
-9. If management_company blank but owner is RE firm → set management_company = owner_entity
-10. proptech.replacement_window: based on tech_generation + year_built (pre-2015=Immediate, 2015-19=1-3yr, 2020+=3-5yr)
+3. isp_providers: copy from Phase 2 isp_providers. If fcc_providers has names not in isp_providers, add them.
+4. video_providers: copy from Phase 2 video_providers. Look for DirecTV, Dish, Comcast, Xfinity, Spectrum, cable, satellite — populate this array, do NOT leave it empty if any evidence exists.
+5. bulk_agreements: copy ALL from Phase 2. Include video agreements (DirecTV MDU, Spectrum TV bulk) separately from internet agreements. For each agreement:
+   - If roe_expiry_year is set → use it as expiry_estimate
+   - Else if year_built known: MDU fiber = year_built+7 to year_built+10; cable bulk = year_built+5 to year_built+8
+   - Set expiry_estimate = "Est. [year]-[year+2]" or specific year if known
+6. proptech: copy from Phase 3
+7. extracted_contacts: copy from Phase 3 contacts
+8. pain_signals: copy from Phase 3 — up to 12 recent
+9. ownership: build from Phase 2 owner_entity + owner_type + acquisition_year
+10. If management_company blank but owner is RE firm → set management_company = owner_entity
+11. proptech.replacement_window: based on tech_generation + year_built (pre-2015=Immediate, 2015-19=1-3yr, 2020+=3-5yr)
 
-CONTRACT WINDOW (critical):
-- If acquisition_year is last 2 years, add "New ownership — capex window open" to capex_signal
+ROE / CONTRACT DATA:
+- Phase 2 includes roe_detected, roe_providers, roe_expiry_year — use these to populate bulk_agreements
+- If roe_expiry_year is present: set capex_signal = "ROE expires [year] — contract window open"
+- If roe_detected and no year: set capex_signal = "ROE/bulk agreement detected — verify expiry"
+
+CONTRACT WINDOW:
+- If acquisition_year is last 2 years: add "New ownership — capex window open" to capex_signal
 
 CONTACT PRIORITY: Property Manager > Regional > Asset Manager > CEO
 
-key_finding: "[WHO] at [company] controls this. [WHY NOW: specific pain/contract/acquisition signal]"
-pitch_strategy.primary_hook: 1 sentence using THIS property's pain + contract window
+key_finding: "[WHO] at [company] controls this. [WHY NOW: specific pain/contract/acquisition/ROE signal]"
+pitch_strategy.primary_hook: 1 sentence using THIS property's pain + contract/ROE window
 behavioral_profile: decision_style, communication_pref, risk_tolerance, budget_orientation
-freshness_score (1-10): 10=critical signals + recent acquisition; 8=contract expiry known; 6=pain signals; 4=basic intel; 2=inference only
+freshness_score (1-10): 10=ROE expiry known + recent acquisition; 8=contract expiry/bulk detected; 6=pain signals; 4=basic intel; 2=inference only
 buying_trends: 1-sentence sales trend insight for this property type`,
       messages: [{ role: 'user', content: `Property: ${property_name}\nLocation: ${city}, ${state}\n\n${synthesisData}` }],
     })
@@ -1081,6 +1260,9 @@ buying_trends: 1-sentence sales trend insight for this property type`,
         isp_providers: cleanIspProviders,
         video_providers: cleanVideoProviders,
         bulk_agreements: cleanBulkAgreements,
+        roe_detected: p2.roe_detected,
+        roe_providers: p2.roe_providers,
+        roe_expiry_year: p2.roe_expiry_year,
         _fcc_verified: p2.fcc_providers.length > 0,
         _fcc_providers: p2.fcc_providers,
         proptech: {
@@ -1126,8 +1308,10 @@ buying_trends: 1-sentence sales trend insight for this property type`,
         buy_score: rawData.freshness_score ? Math.round(rawData.freshness_score * 1.0 + 0) : 5,
         urgency: p3.pain_signals.filter(s => s.type === 'gate').length > 2 || p2.bulk_detected ? 'high' : 'medium',
         primary_concern: normStr(rawData.key_finding?.slice(0, 300)) ?? 'No critical vulnerabilities detected',
-        current_vendor: normStr((cleanBulkAgreements[0] as any)?.provider ?? cleanIspProviders[0]),
-        contract_window: normStr((cleanBulkAgreements[0] as any)?.expiry_estimate),
+        current_vendor: normStr((cleanBulkAgreements[0] as any)?.provider ?? cleanIspProviders[0] ?? p2.roe_providers[0]),
+        contract_window: p2.roe_expiry_year
+          ? `ROE expires ${p2.roe_expiry_year}`
+          : normStr((cleanBulkAgreements[0] as any)?.expiry_estimate),
         communication_style: normStr(rawData.behavioral_profile?.communication_pref) ?? 'Email',
       },
       behavioral_profile: rawData.behavioral_profile ?? null,

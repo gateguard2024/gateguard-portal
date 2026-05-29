@@ -61,6 +61,64 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// ── Merge helpers (learning loop — never destroy confirmed data) ──────────────
+
+/** Take fresh value unless it's empty/null, then fall back to existing */
+function mergeVal<T>(existing: T | null | undefined, fresh: T | null | undefined): T | null {
+  if (fresh !== null && fresh !== undefined) {
+    if (Array.isArray(fresh) && (fresh as unknown[]).length === 0) return (existing as T | null) ?? null
+    if (typeof fresh === 'string' && fresh.trim() === '') return (existing as T | null) ?? null
+    return fresh
+  }
+  return (existing as T | null) ?? null
+}
+
+/** Union two string arrays, deduplicated — never shrink */
+function mergeArr(existing: string[] | null | undefined, fresh: string[] | null | undefined): string[] | null {
+  const e = (existing ?? []).filter(Boolean)
+  const f = (fresh ?? []).filter(Boolean)
+  const merged = [...new Set([...e, ...f])]
+  return merged.length > 0 ? merged : null
+}
+
+/** Merge bulk_agreements: keep existing entries, add new ones not already present */
+function mergeBulkAgreements(existing: any[] | null | undefined, fresh: any[] | null | undefined): any[] | null {
+  const e = existing ?? []
+  const f = fresh ?? []
+  if (f.length === 0) return e.length > 0 ? e : null
+  if (e.length === 0) return f.length > 0 ? f : null
+  // Merge: fresh entries take precedence for same provider+service_type
+  const result = [...e]
+  for (const freshItem of f) {
+    const key = `${(freshItem.provider ?? '').toLowerCase()}:${freshItem.service_type ?? ''}`
+    const existingIdx = result.findIndex(ei =>
+      `${(ei.provider ?? '').toLowerCase()}:${ei.service_type ?? ''}` === key
+    )
+    if (existingIdx >= 0) {
+      // Merge: keep higher-confidence version, prefer user-verified
+      const ex = result[existingIdx]
+      const fConfidence = freshItem.confidence === 'high' ? 3 : freshItem.confidence === 'medium' ? 2 : 1
+      const eConfidence = ex.confidence === 'high' ? 3 : ex.confidence === 'medium' ? 2 : 1
+      // Prefer expiry_estimate with an actual year
+      const freshHasYear = /20\d{2}/.test(freshItem.expiry_estimate ?? '')
+      const existingHasYear = /20\d{2}/.test(ex.expiry_estimate ?? '')
+      result[existingIdx] = {
+        ...ex,
+        ...freshItem,
+        // Preserve expiry year if existing has one and fresh doesn't
+        expiry_estimate: (freshHasYear ? freshItem.expiry_estimate : null) ?? (existingHasYear ? ex.expiry_estimate : null) ?? freshItem.expiry_estimate ?? ex.expiry_estimate,
+        // Preserve user_verified flag
+        user_verified: ex.user_verified ?? freshItem.user_verified ?? false,
+        // Keep higher confidence
+        confidence: fConfidence >= eConfidence ? freshItem.confidence : ex.confidence,
+      }
+    } else {
+      result.push(freshItem)
+    }
+  }
+  return result
+}
+
 // ── Internal upsert — called by deep research route ──────────────────────────
 export async function POST(req: NextRequest) {
   try {
@@ -80,6 +138,15 @@ export async function POST(req: NextRequest) {
       const pt      = prop.proptech ?? {}
       const own     = p.ownership ?? {}
 
+      // ── Fetch existing record first (learning loop: never overwrite good data) ──
+      const propName = prop.name ?? 'Unknown Property'
+      const propAddr = prop.address ?? ''
+      const { data: existing } = await supabase
+        .from('aria_properties')
+        .select('*')
+        .ilike('property_name', propName)
+        .maybeSingle()
+
       // Collect new tech providers discovered (for auto-catalog growth)
       const techCategories: [string, string[]][] = [
         ['gate',           pt.gate_operators     ?? []],
@@ -90,10 +157,10 @@ export async function POST(req: NextRequest) {
         ['resident_app',   pt.resident_apps      ?? []],
         ['package',        pt.package_solutions  ?? []],
       ]
-      
+
       for (const [cat, vendors] of techCategories) {
         for (const vendor of vendors) {
-          if (!vendor) continue; // Skip empty strings
+          if (!vendor) continue
           const slug = vendor.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
           if (!techProviderUpdates.has(slug)) {
             techProviderUpdates.set(slug, { category: cat, names: [vendor] })
@@ -101,20 +168,22 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Extract contract expiry year from bulk_agreements or contract_window
-      let contractExpiryYear: number | null = null
+      // Extract contract expiry year — prefer roe_expiry_year, then bulk_agreements
+      let contractExpiryYear: number | null = prop.roe_expiry_year ?? null
       const bulkAgreements: any[] = prop.bulk_agreements ?? []
-      
-      for (const agreement of bulkAgreements) {
-        const expiry = agreement?.expiry_estimate ?? ''
-        const yearMatch = expiry.match(/\b(202\d|203\d)\b/)
-        if (yearMatch) {
-          const y = parseInt(yearMatch[1])
-          if (!contractExpiryYear || y < contractExpiryYear) contractExpiryYear = y
+
+      if (!contractExpiryYear) {
+        for (const agreement of bulkAgreements) {
+          const expiry = agreement?.expiry_estimate ?? ''
+          const yearMatch = expiry.match(/\b(202\d|203\d)\b/)
+          if (yearMatch) {
+            const y = parseInt(yearMatch[1])
+            if (!contractExpiryYear || y < contractExpiryYear) contractExpiryYear = y
+          }
         }
       }
-      
-      // Also try contract_window field like "Q1 2026", "mid-2027", "18 months"
+
+      // Also try contract_window field
       if (!contractExpiryYear && profile.contract_window) {
         const cw = profile.contract_window as string
         const yearMatch = cw.match(/\b(202\d|203\d)\b/)
@@ -124,56 +193,75 @@ export async function POST(req: NextRequest) {
         else if (/2\s*years?|18\s*months?/i.test(cw)) contractExpiryYear = new Date().getFullYear() + 2
       }
 
+      // Prefer existing confirmed contract expiry year unless new search found one
+      if (!contractExpiryYear && existing?.contract_expiry_year) {
+        contractExpiryYear = existing.contract_expiry_year
+      }
+
+      // ── Smart merge: new data takes precedence, but NEVER shrink arrays or null confirmed fields ──
+      const mergedBulkAgreements = mergeBulkAgreements(existing?.bulk_agreements, bulkAgreements.length ? bulkAgreements : null)
+      const mergedIspProviders   = mergeArr(existing?.isp_providers, prop.isp_providers)
+      const mergedVideoProviders = mergeArr(existing?.video_providers, prop.video_providers)
+      const mergedRoeProviders   = mergeArr(existing?.roe_providers, prop.roe_providers)
+
       const upsertData: Record<string, any> = {
-        property_name:         prop.name ?? 'Unknown Property',
-        address:               prop.address ?? '',
-        units:                 prop.units ?? null,
-        property_type:         prop.property_type ?? null,
-        class:                 prop.class ?? null,
-        year_built:            prop.year_built ?? null,
-        occupancy:             prop.occupancy ?? null,
-        management_company:    prop.management_company ?? null,
-        owner_entity:          prop.owner_entity ?? null,
-        owner_type:            own.owner_type ?? null,
-        portfolio_size:        own.portfolio_size ?? null,
-        acquisition_year:      own.acquisition_year ? parseInt(own.acquisition_year) : null,
-        hold_period:           own.hold_period ?? null,
-        capex_signal:          own.capex_signal ?? null,
-        dnb_duns:              own.dnb_duns ?? null,
-        isp_providers:         prop.isp_providers ?? null,
-        video_providers:       prop.video_providers ?? null,
-        bulk_agreements:       bulkAgreements.length ? bulkAgreements : null,
-        fcc_verified:          prop._fcc_verified ?? false,
-        gate_operators:        pt.gate_operators ?? null,
-        access_control:        pt.access_control ?? null,
-        intercoms:             pt.intercoms ?? null,
-        cameras:               pt.cameras ?? null,
-        smart_locks:           pt.smart_locks ?? null,
-        resident_apps:         pt.resident_apps ?? null,
-        package_solutions:     pt.package_solutions ?? null,
-        tech_generation:       pt.tech_generation ?? null,
-        sara_signals:          pt.sara_signals ?? false,
-        replacement_window:    pt.replacement_window ?? null,
-        displacement_targets:  pt.displacement_targets ?? null,
-        buy_score:             profile.buy_score ?? null,
-        urgency:               profile.urgency ?? null,
-        primary_concern:       profile.primary_concern ?? null,
-        current_vendor:        profile.current_vendor ?? null,
-        contract_window:       profile.contract_window ?? null,
+        property_name:         propName,
+        address:               propAddr,
+        units:                 mergeVal(existing?.units, prop.units),
+        property_type:         mergeVal(existing?.property_type, prop.property_type),
+        class:                 mergeVal(existing?.class, prop.class),
+        year_built:            mergeVal(existing?.year_built, prop.year_built),
+        occupancy:             mergeVal(existing?.occupancy, prop.occupancy),
+        management_company:    mergeVal(existing?.management_company, prop.management_company),
+        owner_entity:          mergeVal(existing?.owner_entity, prop.owner_entity),
+        owner_type:            mergeVal(existing?.owner_type, own.owner_type),
+        portfolio_size:        mergeVal(existing?.portfolio_size, own.portfolio_size),
+        acquisition_year:      mergeVal(existing?.acquisition_year, own.acquisition_year ? parseInt(own.acquisition_year) : null),
+        hold_period:           mergeVal(existing?.hold_period, own.hold_period),
+        capex_signal:          mergeVal(existing?.capex_signal, own.capex_signal),
+        dnb_duns:              mergeVal(existing?.dnb_duns, own.dnb_duns),
+        // ISP/video/ROE — always union, never shrink
+        isp_providers:         mergedIspProviders,
+        video_providers:       mergedVideoProviders,
+        bulk_agreements:       mergedBulkAgreements,
+        roe_detected:          prop.roe_detected || existing?.roe_detected || false,
+        roe_providers:         mergedRoeProviders,
+        roe_expiry_year:       mergeVal(existing?.roe_expiry_year, prop.roe_expiry_year),
+        fcc_verified:          prop._fcc_verified || existing?.fcc_verified || false,
+        // PropTech — union arrays
+        gate_operators:        mergeArr(existing?.gate_operators, pt.gate_operators),
+        access_control:        mergeArr(existing?.access_control, pt.access_control),
+        intercoms:             mergeArr(existing?.intercoms, pt.intercoms),
+        cameras:               mergeArr(existing?.cameras, pt.cameras),
+        smart_locks:           mergeArr(existing?.smart_locks, pt.smart_locks),
+        resident_apps:         mergeArr(existing?.resident_apps, pt.resident_apps),
+        package_solutions:     mergeArr(existing?.package_solutions, pt.package_solutions),
+        tech_generation:       mergeVal(existing?.tech_generation, pt.tech_generation),
+        sara_signals:          pt.sara_signals || existing?.sara_signals || false,
+        replacement_window:    mergeVal(existing?.replacement_window, pt.replacement_window),
+        displacement_targets:  mergeArr(existing?.displacement_targets, pt.displacement_targets),
+        // Profile
+        buy_score:             mergeVal(existing?.buy_score, profile.buy_score),
+        urgency:               mergeVal(existing?.urgency, profile.urgency),
+        primary_concern:       mergeVal(existing?.primary_concern, profile.primary_concern),
+        current_vendor:        mergeVal(existing?.current_vendor, profile.current_vendor),
+        contract_window:       mergeVal(existing?.contract_window, profile.contract_window),
         contract_expiry_year:  contractExpiryYear,
-        communication_style:   profile.communication_style ?? null,
-        pain_signals:          p.pain_signals ?? null,
-        behavioral_profile:    p.behavioral_profile ?? null,
-        pitch_strategy:        p.pitch_strategy ?? null,
-        freshness_score:       p.freshness_score ?? null,
-        dm_name:               dm.name ?? null,
-        dm_title:              dm.title ?? null,
-        dm_company:            dm.company ?? null,
-        dm_email:              dm.email ?? dm.top_email_format ?? null,
-        dm_phone:              dm.phone ?? null,
-        dm_linkedin_slug:      dm.linkedin_slug ?? null,
-        dm_chain:              p.decision_maker_chain ?? null,
-        scout_brief:           p.scout_brief ?? null,
+        communication_style:   mergeVal(existing?.communication_style, profile.communication_style),
+        // Intelligence
+        pain_signals:          (p.pain_signals?.length > 0) ? p.pain_signals : (existing?.pain_signals ?? null),
+        behavioral_profile:    mergeVal(existing?.behavioral_profile, p.behavioral_profile),
+        pitch_strategy:        mergeVal(existing?.pitch_strategy, p.pitch_strategy),
+        freshness_score:       mergeVal(existing?.freshness_score, p.freshness_score),
+        // Decision maker — only update if new data has a name (don't clobber user-verified contacts)
+        dm_name:               existing?.dm_name_user_verified ? existing.dm_name : mergeVal(existing?.dm_name, dm.name),
+        dm_title:              existing?.dm_name_user_verified ? existing.dm_title : mergeVal(existing?.dm_title, dm.title),
+        dm_company:            existing?.dm_name_user_verified ? existing.dm_company : mergeVal(existing?.dm_company, dm.company),
+        dm_email:              existing?.dm_email_user_verified ? existing.dm_email : mergeVal(existing?.dm_email, dm.email ?? dm.top_email_format),
+        dm_phone:              existing?.dm_phone_user_verified ? existing.dm_phone : mergeVal(existing?.dm_phone, dm.phone),
+        dm_linkedin_slug:      mergeVal(existing?.dm_linkedin_slug, dm.linkedin_slug),
+        dm_chain:              (p.decision_maker_chain?.length > 0) ? p.decision_maker_chain : (existing?.dm_chain ?? null),
+        scout_brief:           mergeVal(existing?.scout_brief, p.scout_brief),
         last_researched_at:    new Date().toISOString(),
         updated_at:            new Date().toISOString(),
       }
