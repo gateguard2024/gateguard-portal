@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Cpu, Zap, Users, Radio, Target,
   Building2, User, MapPin, CheckCircle2,
-  ExternalLink, Star, Copy, Send, Phone,
+  ExternalLink, Star, Copy, Send, Phone, MessageSquare,
   Loader2, Shield, Package, Wifi, AlertCircle,
   ChevronRight, TrendingUp, Globe, Clock, Download, Trash2, Check, Search, RefreshCw,
 } from "lucide-react";
@@ -281,7 +281,7 @@ const URGENCY_PILL: Record<string, string> = {
   low:      "bg-slate-100 text-slate-700",
 };
 
-type DetailTab = 'property' | 'proptech' | 'dm' | 'intel' | 'scout';
+type DetailTab = 'property' | 'proptech' | 'dm' | 'intel' | 'social' | 'scout';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -781,6 +781,7 @@ export default function ARIAPage() {
               { key: 'proptech', label: 'PropTech', badge: [p.property?.proptech?.gate_operators, p.property?.proptech?.access_control, p.property?.proptech?.cameras, p.property?.proptech?.intercoms].filter(a => a?.length).length || null },
               { key: 'dm',       label: 'Decision Matrix' },
               { key: 'intel',    label: 'AI Intel', badge: p.pain_signals?.length > 0 ? p.pain_signals.length : null },
+              { key: 'social',   label: 'Community', badge: p.pain_signals?.filter(s => isSocialSource(s)).length || null },
               { key: 'scout',    label: 'SCOUT', greenBadge: true },
             ] as { key: DetailTab; label: string; badge?: number | null; greenBadge?: boolean }[]).map(tab => {
               const isActive = activeTab === tab.key;
@@ -1558,6 +1559,151 @@ export default function ARIAPage() {
             </div>
           )}
         </div>
+      </div>
+    );
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function isSocialSource(sig: PainSignal): boolean {
+    const src = (sig.source || '').toLowerCase();
+    const url = (sig.url  || '').toLowerCase();
+    return ['social','reddit','review','google','yelp','facebook','twitter','x.com','listing-site','listing','apartment','rentcafe','rent.com','apartmentlist'].some(k => src.includes(k) || url.includes(k));
+  }
+
+  function getPlatformMeta(sig: PainSignal): { name: string; bg: string; text: string; border: string } {
+    const url = (sig.url  || '').toLowerCase();
+    const src = (sig.source || '').toLowerCase();
+    if (url.includes('reddit')     || src.includes('reddit'))     return { name: 'Reddit',         bg: 'bg-orange-50',  text: 'text-orange-700', border: 'border-orange-200/60' };
+    if (url.includes('google')     || src.includes('google'))     return { name: 'Google Reviews',  bg: 'bg-blue-50',    text: 'text-blue-700',   border: 'border-blue-200/60'   };
+    if (url.includes('yelp')       || src.includes('yelp'))       return { name: 'Yelp',            bg: 'bg-rose-50',    text: 'text-rose-700',   border: 'border-rose-200/60'   };
+    if (url.includes('facebook')   || src.includes('facebook'))   return { name: 'Facebook',        bg: 'bg-indigo-50',  text: 'text-indigo-700', border: 'border-indigo-200/60' };
+    if (url.includes('twitter')    || url.includes('x.com') || src.includes('twitter')) return { name: 'Twitter/X', bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-200/60' };
+    if (url.includes('apartments') || src.includes('listing'))    return { name: 'Apartments.com',  bg: 'bg-red-50',     text: 'text-red-700',    border: 'border-red-200/60'    };
+    if (url.includes('rentcafe')   || url.includes('rent.com') || url.includes('apartmentlist')) return { name: 'Listing Site', bg: 'bg-violet-50', text: 'text-violet-700', border: 'border-violet-200/60' };
+    return { name: 'Resident Review', bg: 'bg-slate-100', text: 'text-slate-600', border: 'border-slate-200/60' };
+  }
+
+  const TECH_SIGNAL_TYPES = new Set(['internet_complaint', 'access_complaint', 'gate_complaint', 'tech_complaint', 'wifi_complaint', 'intercom_complaint', 'lock_complaint', 'package_complaint', 'camera_complaint', 'fob_complaint']);
+  const TECH_KEYWORDS = ['gate', 'fob', 'access', 'intercom', 'internet', 'wifi', 'wi-fi', 'smart lock', 'package locker', 'camera', 'buzzer', 'key card', 'app', 'entry', 'callbox', 'call box', 'liftmaster', 'doorking', 'linear', 'aiphone'];
+
+  function isTechSignal(sig: PainSignal): boolean {
+    if (TECH_SIGNAL_TYPES.has(sig.signal_type)) return true;
+    const q = (sig.quote || '').toLowerCase();
+    return TECH_KEYWORDS.some(k => q.includes(k));
+  }
+
+  // ── Community tab ─────────────────────────────────────────────────────────
+  function SocialTab({ p }: { p: Prospect }) {
+    const SEV_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
+    const allSocial = (p.pain_signals || [])
+      .filter(isSocialSource)
+      .sort((a, b) => {
+        const s = (SEV_ORDER[a.severity] ?? 2) - (SEV_ORDER[b.severity] ?? 2);
+        if (s !== 0) return s;
+        const da = a.date && a.date !== 'unknown' ? new Date(a.date).getTime() : 0;
+        const db = b.date && b.date !== 'unknown' ? new Date(b.date).getTime() : 0;
+        return db - da;
+      });
+
+    // Tech-specific posts first, everything else after
+    const techPosts  = allSocial.filter(isTechSignal);
+    const otherPosts = allSocial.filter(s => !isTechSignal(s));
+    const prioritized = [...techPosts, ...otherPosts];
+    const shown = prioritized.slice(0, 5);
+    const extra = prioritized.length - shown.length;
+
+    if (shown.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
+          <MessageSquare size={32} className="opacity-20" />
+          <p className="text-sm font-bold text-slate-500">No community signals found</p>
+          <p className="text-xs font-medium text-center max-w-xs">Social searches returned no resident posts for this property. Run a fresh search to try again.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-5 max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-500">
+
+        {/* Header */}
+        <div className="flex items-start justify-between px-1">
+          <div>
+            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+              <MessageSquare size={15} className="text-rose-500" />
+              Community Temperature
+            </h3>
+            <p className="text-[11px] text-slate-400 mt-0.5 font-medium">What residents are posting — Reddit, Google Reviews, Yelp, listing sites</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {techPosts.length > 0 && (
+              <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-rose-50 text-rose-600 border border-rose-200/60">{techPosts.length} tech complaints</span>
+            )}
+            <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">{prioritized.length} total</span>
+          </div>
+        </div>
+
+        {/* Post cards */}
+        {shown.map((sig, i) => {
+          const plat = getPlatformMeta(sig);
+          const sev  = SIGNAL_SEVERITY[sig.severity] ?? SIGNAL_SEVERITY.low;
+          const Icon = SIGNAL_ICONS[sig.signal_type] || AlertCircle;
+          const isTech = isTechSignal(sig);
+          return (
+            <div key={i} className={cn("rounded-2xl bg-white shadow-sm overflow-hidden relative border", sev.border)}>
+              {/* Severity stripe */}
+              <div className={cn("absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl", sev.bg)} />
+
+              <div className="p-5 pl-6">
+                {/* Post header */}
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={cn("text-[10px] font-bold px-2.5 py-1 rounded-full border", plat.bg, plat.text, plat.border)}>
+                      {plat.name}
+                    </span>
+                    {isTech && (
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200/60">⚡ Tech Complaint</span>
+                    )}
+                    <span className="text-[10px] font-mono text-slate-400">
+                      {sig.date && sig.date !== 'unknown' ? sig.date : 'Date unknown'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider border", sev.badge, sev.border.replace('200','100'))}>{sig.severity}</span>
+                    <div className={cn("p-1.5 rounded-lg bg-white border", sev.text, sev.border.replace('200','100'))}>
+                      <Icon size={13} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* The quote — styled as a social post */}
+                <blockquote className="relative pl-5">
+                  <span className="absolute left-0 top-[-4px] text-3xl leading-none text-slate-200 font-serif select-none" aria-hidden>&ldquo;</span>
+                  <p className="text-sm text-slate-800 leading-relaxed font-medium">{sig.quote}</p>
+                </blockquote>
+
+                {/* Source link */}
+                {sig.url && (
+                  <a href={sig.url} target="_blank" rel="noopener noreferrer"
+                    className="mt-4 flex items-center gap-1.5 text-[10px] font-mono text-slate-400 hover:text-[#6B7EFF] transition-colors border-t border-slate-100 pt-3 group">
+                    <ExternalLink size={10} className="shrink-0 group-hover:text-[#6B7EFF]" />
+                    <span className="truncate">{sig.url.replace(/^https?:\/\//, '')}</span>
+                  </a>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Overflow notice */}
+        {extra > 0 && (
+          <p className="text-center text-[11px] text-slate-400 font-medium py-2">
+            +{extra} more signals in the{' '}
+            <button onClick={() => setActiveTab('intel')} className="text-[#6B7EFF] font-bold hover:underline underline-offset-2">
+              AI Intel tab
+            </button>
+          </p>
+        )}
       </div>
     );
   }
@@ -2364,6 +2510,7 @@ export default function ARIAPage() {
                 {activeTab === 'proptech' && <PropTechTab p={prospect} />}
                 {activeTab === 'dm'       && <DMTab p={prospect} />}
                 {activeTab === 'intel'    && <IntelTab p={prospect} />}
+                {activeTab === 'social'   && <SocialTab p={prospect} />}
                 {activeTab === 'scout'    && <ScoutTab p={prospect} />}
               </div>
             </div>
@@ -2486,11 +2633,11 @@ export default function ARIAPage() {
                 <p className="text-xs font-medium text-slate-500 mt-0.5">{prospect.property?.address}</p>
               </div>
               <div className="bg-white border-b border-slate-200/60 flex overflow-x-auto no-scrollbar">
-                {(['property', 'proptech', 'dm', 'intel', 'scout'] as DetailTab[]).map(tab => (
+                {(['property', 'proptech', 'dm', 'intel', 'social', 'scout'] as DetailTab[]).map(tab => (
                   <button key={tab} onClick={() => setActiveTab(tab)}
                     className={cn("whitespace-nowrap px-5 py-3 text-xs font-bold capitalize border-b-2 transition-colors",
                       activeTab === tab ? "border-[#6B7EFF] text-[#6B7EFF]" : "border-transparent text-slate-400")}>
-                    {tab === 'dm' ? 'DM' : tab === 'proptech' ? 'PropTech' : tab}
+                    {tab === 'dm' ? 'DM' : tab === 'proptech' ? 'PropTech' : tab === 'social' ? 'Community' : tab}
                   </button>
                 ))}
               </div>
@@ -2499,6 +2646,7 @@ export default function ARIAPage() {
                 {activeTab === 'proptech' && <PropTechTab p={prospect} />}
                 {activeTab === 'dm'       && <DMTab p={prospect} />}
                 {activeTab === 'intel'    && <IntelTab p={prospect} />}
+                {activeTab === 'social'   && <SocialTab p={prospect} />}
                 {activeTab === 'scout'    && <ScoutTab p={prospect} />}
               </div>
             </div>
