@@ -32,7 +32,7 @@ export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
 // Version: Year.MonthRevision — increment revision on each engine change this month
-const ARIA_ENGINE_VERSION = 'v6.55'
+const ARIA_ENGINE_VERSION = 'v6.56'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -137,22 +137,35 @@ async function geocodeAddress(address: string, city: string, state: string): Pro
 }
 
 // ─── FCC Broadband Map API (free) ─────────────────────────────────────────────
+// NOTE: GET /listAvailability returns 405 as of 2025 — API requires POST with JSON body
 
 async function fccBroadbandLookup(lat: number, lng: number): Promise<string[]> {
   try {
-    const res = await fetch(
-      `https://broadbandmap.fcc.gov/api/public/map/listAvailability?latitude=${lat.toFixed(6)}&longitude=${lng.toFixed(6)}&unit=location`,
-      { headers: { 'User-Agent': 'GateGuard-ARIA/2.0' }, signal: AbortSignal.timeout(6000) }
+    // Try POST first (current FCC BDC API format)
+    const postRes = await fetch(
+      'https://broadbandmap.fcc.gov/api/public/map/listAvailability',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'User-Agent': 'GateGuard-ARIA/2.0' },
+        body: JSON.stringify({ latitude: parseFloat(lat.toFixed(6)), longitude: parseFloat(lng.toFixed(6)), unit: 'location', limit_to_isp: 'N' }),
+        signal: AbortSignal.timeout(6000),
+      }
     )
-    if (!res.ok) return []
-    const data = await res.json()
-    const providers: Array<{ brand_name: string; technology: string }> = data?.results ?? data?.availability ?? []
-    return [...new Set(
-      providers
-        .filter(p => p.technology && !['60', '70', '300', '400'].includes(String(p.technology)))
-        .map(p => p.brand_name)
-        .filter(Boolean)
-    )]
+    if (postRes.ok) {
+      const data = await postRes.json()
+      const providers: Array<{ brand_name: string; technology: string }> = data?.results ?? data?.availability ?? data?.data ?? []
+      const names = [...new Set(providers.filter(p => p.technology && !['60','70','300','400'].includes(String(p.technology))).map(p => p.brand_name).filter(Boolean))]
+      if (names.length > 0) return names
+    }
+    // Fallback: try GET with query params (original format, in case it comes back)
+    const getRes = await fetch(
+      `https://broadbandmap.fcc.gov/api/public/map/listAvailability?latitude=${lat.toFixed(6)}&longitude=${lng.toFixed(6)}&unit=location`,
+      { headers: { 'User-Agent': 'GateGuard-ARIA/2.0' }, signal: AbortSignal.timeout(5000) }
+    )
+    if (!getRes.ok) return []
+    const data2 = await getRes.json()
+    const providers2: Array<{ brand_name: string; technology: string }> = data2?.results ?? data2?.availability ?? []
+    return [...new Set(providers2.filter(p => p.technology && !['60','70','300','400'].includes(String(p.technology))).map(p => p.brand_name).filter(Boolean))]
   } catch { return [] }
 }
 
@@ -193,17 +206,28 @@ interface ApolloEnrichment { name?: string; title?: string; email?: string; phon
 
 async function apolloSearchContacts(company: string, titles: string[], location?: string): Promise<ApolloEnrichment[]> {
   if (!process.env.APOLLO_API_KEY) return []
-  try {
-    const res = await fetch('https://api.apollo.io/api/v1/mixed_people/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Api-Key': process.env.APOLLO_API_KEY },
-      body: JSON.stringify({ q_organization_name: company, person_titles: titles, person_locations: location ? [location] : [], per_page: 6 }),
-      signal: AbortSignal.timeout(10000),
-    })
-    if (!res.ok) return []
-    const data = await res.json()
-    return (data?.people ?? []).slice(0, 6)
-  } catch { return [] }
+  const key = process.env.APOLLO_API_KEY
+  // Apollo changed auth in 2024: try Bearer first, fall back to X-Api-Key
+  const tryApollo = async (authHeader: Record<string, string>) => {
+    try {
+      const res = await fetch('https://api.apollo.io/api/v1/mixed_people/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeader },
+        body: JSON.stringify({ q_organization_name: company, person_titles: titles, person_locations: location ? [location] : [], per_page: 8 }),
+        signal: AbortSignal.timeout(8000),
+      })
+      if (res.status === 403 || res.status === 401) return null
+      if (!res.ok) return []
+      const data = await res.json()
+      return (data?.people ?? []).slice(0, 8) as ApolloEnrichment[]
+    } catch { return null }
+  }
+  // Try Bearer token (new format)
+  const bearerResult = await tryApollo({ 'Authorization': `Bearer ${key}` })
+  if (bearerResult !== null) return bearerResult
+  // Fall back to X-Api-Key (old format)
+  const legacyResult = await tryApollo({ 'X-Api-Key': key })
+  return legacyResult ?? []
 }
 
 // ─── ProxyCurl (1 call max) ───────────────────────────────────────────────────
@@ -246,15 +270,16 @@ async function runStep0(query: string, client: Anthropic): Promise<StepBootstrap
     confirmed_owner: null, confirmed_website: null, confirmed_phone: null, is_specific_property: false,
   }
 
-  // Two parallel Serper searches: (1) broad web, (2) news/press releases
+  // Two parallel Serper searches: (1) broad web with QUOTED name, (2) news/press releases
+  // Quoted name is critical — unquoted lets Serper drift to unrelated properties
   // Press releases are the most reliable source for units + year built + owner entity
   const [results, newsResults] = await Promise.all([
     serperSearch(
-      `${query} apartments units address "year built" ownership management contact phone`,
+      `"${query}" apartments units address "year built" ownership management contact phone`,
       7, 'bootstrap'
     ),
     serperSearch(
-      `"${query}" apartments "units" completed OR opened OR acquired OR developed OR "apartment homes"`,
+      `"${query}" apartments "units" OR "apartment homes" completed OR opened OR acquired OR developed`,
       4, 'bootstrap-news', 'news'
     ),
   ])
@@ -359,8 +384,8 @@ RULES:
 - units: integer ONLY — scan deeply for patterns like "312 apartment homes", "312 units", "312 homes", "Total Units: 312", "312-unit" — do NOT return null if ANY number of units appears ANYWHERE in the text
 - year_built: 4-digit integer — look for "built in YYYY", "Year Built: YYYY", "constructed YYYY", "opened YYYY"
 - property_class: "A","B", or "C" only — look for "Class A", "Class B", luxury/premium=A, standard=B, affordable=C
-- website: official property URL (not apartments.com)
-- phone: leasing office phone number
+- website: official property URL (not apartments.com/zillow/rentcafe) — look for the community's own domain
+- phone: extract ANY phone number format — "+1 833-571-2103", "(803) 866-6906", "Phone Number+1..." — the leasing office or main contact number
 - email_domain: extract domain from any email or official website found
 - management_company: ONLY if explicitly named as manager/operator — NOT the property name itself
 - isp_hints: any internet provider named as included amenity or "internet included"
@@ -428,11 +453,12 @@ async function runStep3(name: string, oldName: string, city: string, state: stri
 
   const [reviewResults, redditResults, internetResults, gateResults, socialResults] = await Promise.all([
     tavilySearch(`${nameQ} ${geo} reviews internet wifi gate access problems site:apartmentratings.com OR site:apartments.com OR site:yelp.com`, 4, 'pain', 'advanced'),
-    tavilySearch(`${nameQ} ${geo} internet OR wifi OR gate OR "access control" complaints site:reddit.com`, 3, 'pain'),
+    // Reddit via Serper: Google indexes Reddit far better than Tavily for apartment-specific complaints
+    serperSearch(`${nameQ} ${geo} site:reddit.com internet OR wifi OR gate OR crime OR "break in" OR "broken into"`, 5, 'reddit-pain'),
     tavilySearch(`${nameQ} ${geo} "no choice" OR "forced" OR "mandatory" OR "only option" internet wifi provider`, 3, 'pain', 'advanced'),
-    tavilySearch(`${nameQ} ${geo} "gate broken" OR "gate down" OR "gate not working" OR "can't get in"`, 3, 'pain'),
+    tavilySearch(`${nameQ} ${geo} "gate broken" OR "gate down" OR "gate not working" OR "break-in" OR "broken into" OR "car break"`, 3, 'pain'),
     // Social: events, announcements, upgrades — not just complaints
-    serperSearch(`"${nameQ.replace(/"/g, '')}" ${geo} site:facebook.com OR site:instagram.com OR site:nextdoor.com`, 5, 'social-events'),
+    serperSearch(`"${nameQ.replace(/"/g, '')}" ${geo} site:facebook.com OR site:instagram.com OR site:nextdoor.com`, 4, 'social-events'),
   ])
 
   const allResults = [...reviewResults, ...redditResults, ...internetResults, ...gateResults, ...socialResults]
