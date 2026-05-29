@@ -781,7 +781,7 @@ export default function ARIAPage() {
               { key: 'proptech', label: 'PropTech', badge: [p.property?.proptech?.gate_operators, p.property?.proptech?.access_control, p.property?.proptech?.cameras, p.property?.proptech?.intercoms].filter(a => a?.length).length || null },
               { key: 'dm',       label: 'Decision Matrix' },
               { key: 'intel',    label: 'AI Intel', badge: p.pain_signals?.length > 0 ? p.pain_signals.length : null },
-              { key: 'social',   label: 'Community', badge: p.pain_signals?.filter(s => isSocialSource(s)).length || null },
+              { key: 'social',   label: 'Community', badge: p.pain_signals?.length || null },
               { key: 'scout',    label: 'SCOUT', greenBadge: true },
             ] as { key: DetailTab; label: string; badge?: number | null; greenBadge?: boolean }[]).map(tab => {
               const isActive = activeTab === tab.key;
@@ -1597,7 +1597,6 @@ export default function ARIAPage() {
     const SEV_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
     const allSocial = (p.pain_signals || [])
-      .filter(isSocialSource)
       .sort((a, b) => {
         const s = (SEV_ORDER[a.severity] ?? 2) - (SEV_ORDER[b.severity] ?? 2);
         if (s !== 0) return s;
@@ -1617,8 +1616,8 @@ export default function ARIAPage() {
       return (
         <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
           <MessageSquare size={32} className="opacity-20" />
-          <p className="text-sm font-bold text-slate-500">No community signals found</p>
-          <p className="text-xs font-medium text-center max-w-xs">Social searches returned no resident posts for this property. Run a fresh search to try again.</p>
+          <p className="text-sm font-bold text-slate-500">No signals found for this property</p>
+          <p className="text-xs font-medium text-center max-w-xs">Run a fresh ARIA search — social searches, listing reviews, and pain signals populate here.</p>
         </div>
       );
     }
@@ -1633,7 +1632,7 @@ export default function ARIAPage() {
               <MessageSquare size={15} className="text-rose-500" />
               Community Temperature
             </h3>
-            <p className="text-[11px] text-slate-400 mt-0.5 font-medium">What residents are posting — Reddit, Google Reviews, Yelp, listing sites</p>
+            <p className="text-[11px] text-slate-400 mt-0.5 font-medium">What people are saying — Reddit, Google Reviews, listing sites, resident forums</p>
           </div>
           <div className="flex items-center gap-2">
             {techPosts.length > 0 && (
