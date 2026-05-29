@@ -447,7 +447,7 @@ async function runPhase1A(query: string, client: Anthropic): Promise<Phase1Resul
   const snippets = allResults
     .filter(r => (r.content || '').length > 30)
     .slice(0, 10)
-    .map((r, i) => `[${i + 1}] ${r.title}\nURL: ${r.url}\n${r.content}`)
+    .map((r, i) => `[${i + 1}] ${r.title}\nURL: ${r.url}\n${r.content.slice(0, 600)}`)  // capped — raw content passes separately
     .join('\n\n---\n\n')
 
   // Amenity raw content — first 4000 chars of each page (amenities usually near top)
