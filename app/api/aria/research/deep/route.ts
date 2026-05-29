@@ -30,6 +30,9 @@ const supabaseDeep = createClient(
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
+// Version: Year.MonthRevision — increment revision on each engine change this month
+const ARIA_ENGINE_VERSION = 'v6.52'
+
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
 // ─── Normalization helpers ────────────────────────────────────────────────────
@@ -216,6 +219,62 @@ async function proxycurlProfile(linkedinUrl: string): Promise<ProxycurlProfile |
   } catch { return null }
 }
 
+// ─── STEP 0: Bootstrap ────────────────────────────────────────────────────────
+// Single broad Serper search BEFORE any targeted searches.
+// Finds: official website, press releases, owner announcements → confirms city/state/units/year_built
+// Critical: if Step 0 returns a city/state, that overrides all geo hints (prevents Atlanta vs Charleston errors)
+
+interface StepBootstrap {
+  confirmed_name: string | null
+  confirmed_address: string | null
+  confirmed_city: string | null
+  confirmed_state: string | null
+  confirmed_units: number | null
+  confirmed_year_built: number | null
+  confirmed_management: string | null
+  confirmed_owner: string | null
+  confirmed_website: string | null
+  confirmed_phone: string | null
+  is_specific_property: boolean
+}
+
+async function runStep0(query: string, client: Anthropic): Promise<StepBootstrap> {
+  const blank: StepBootstrap = {
+    confirmed_name: null, confirmed_address: null, confirmed_city: null, confirmed_state: null,
+    confirmed_units: null, confirmed_year_built: null, confirmed_management: null,
+    confirmed_owner: null, confirmed_website: null, confirmed_phone: null, is_specific_property: false,
+  }
+
+  // Broad Serper — no site: restrictions — finds official website + owner press releases
+  const results = await serperSearch(
+    `${query} apartments units address "year built" ownership management contact phone`,
+    8, 'bootstrap'
+  )
+  if (results.length === 0) return blank
+
+  const snippets = results.map((r, i) => `[${i + 1}] ${r.title}\nURL: ${r.url}\n${r.content}`).join('\n\n---\n\n')
+
+  const extracted = await haikusExtract<StepBootstrap>(
+    `Extract property facts. Return ONLY valid JSON:
+{"confirmed_name":null,"confirmed_address":null,"confirmed_city":null,"confirmed_state":null,"confirmed_units":null,"confirmed_year_built":null,"confirmed_management":null,"confirmed_owner":null,"confirmed_website":null,"confirmed_phone":null,"is_specific_property":false}
+RULES:
+- confirmed_name: exact property/community name found in results (not the query, the real name)
+- confirmed_address: full street address (number + street + city + state + zip) if found
+- confirmed_city + confirmed_state: REQUIRED — extract from address or any location mention — NEVER guess
+- confirmed_units: scan for "N units", "N-unit community", "N apartment homes", "N homes" — integer only
+- confirmed_year_built: 4-digit year from "built in YYYY", "Year Built: YYYY", "constructed in YYYY", "opened YYYY"
+- confirmed_management: management/operating company name — NOT the owner/investment firm
+- confirmed_owner: investment/ownership entity (REIT, private equity firm, LLC owner)
+- confirmed_website: official property or management company website
+- confirmed_phone: leasing office or main contact phone
+- is_specific_property: true if results clearly identify ONE specific named property
+- null for ANYTHING not found — never guess or infer city/state`,
+    snippets, 700, client
+  )
+
+  return extracted || blank
+}
+
 // ─── Step interfaces ──────────────────────────────────────────────────────────
 
 interface StepIdentity {
@@ -256,20 +315,26 @@ interface StepPeople {
 
 // ─── STEP 1: Identity ─────────────────────────────────────────────────────────
 
-async function runStep1(name: string, hintCity: string, hintState: string, hintMgmt: string, client: Anthropic): Promise<StepIdentity> {
+async function runStep1(name: string, hintCity: string, hintState: string, hintMgmt: string, hintAddress: string, hintWebsite: string, client: Anthropic): Promise<StepIdentity> {
   const blank: StepIdentity = {
-    name, address: '', city: hintCity, state: hintState, units: null, year_built: null,
-    property_class: null, property_type: 'multifamily', website: '', phone: '', email: '',
+    name, address: hintAddress, city: hintCity, state: hintState, units: null, year_built: null,
+    property_class: null, property_type: 'multifamily', website: hintWebsite, phone: '', email: '',
     email_domain: '', management_company: hintMgmt, isp_hints: [], coords: null,
   }
   const geo = [hintCity, hintState].filter(Boolean).join(', ')
 
-  const [listingResults, unitResults, contactResults] = await Promise.all([
-    tavilySearch(`"${name}" ${geo} apartments site:apartments.com OR site:rentcafe.com OR site:zillow.com OR site:apartmentlist.com`, 3, 'identity', 'advanced', true),
-    tavilySearch(`"${name}" ${geo} "apartment homes" OR "units" "year built" OR "built in" OR "constructed" floor plans occupancy`, 3, 'identity', 'basic', true),
-    tavilySearch(`"${name}" ${geo} leasing office phone contact website management`, 2, 'identity'),
+  const [listingResults, unitResults, websiteResults, contactResults] = await Promise.all([
+    // Listing sites — advanced depth + raw content for unit tables
+    tavilySearch(`"${name}" ${geo} apartments site:apartments.com OR site:rentcafe.com OR site:zillow.com OR site:apartmentlist.com OR site:forrent.com`, 3, 'identity', 'advanced', true),
+    // Broad search — no site restriction — finds official site + press releases
+    tavilySearch(`"${name}" ${geo} apartments "unit" OR "units" OR "homes" "year built" OR "built" floor plans occupancy`, 3, 'identity', 'advanced', true),
+    // Official website + owner/mgmt press releases — no site restriction
+    hintWebsite
+      ? tavilySearch(`site:${hintWebsite.replace(/^https?:\/\//, '').replace(/\/.*/, '')} units "year built" floor plans amenities`, 3, 'identity', 'basic', true)
+      : tavilySearch(`"${name}" ${geo} official site OR "property website" OR "leasing" units "year built" amenities technology`, 3, 'identity', 'basic', true),
+    tavilySearch(`"${name}" ${geo} leasing office phone contact management company`, 2, 'identity'),
   ])
-  const allResults = [...listingResults, ...unitResults, ...contactResults]
+  const allResults = [...listingResults, ...unitResults, ...websiteResults, ...contactResults]
   const usable = allResults.filter(r => (r.raw_content || r.content)?.length > 40).slice(0, 10)
   if (usable.length === 0) return blank
 
@@ -351,24 +416,29 @@ async function runStep3(name: string, oldName: string, city: string, state: stri
   const geo = [city, state].filter(Boolean).join(', ')
   const nameQ = [name, oldName].filter(Boolean).map(n => `"${n}"`).join(' OR ')
 
-  const [reviewResults, redditResults, internetResults, gateResults] = await Promise.all([
+  const [reviewResults, redditResults, internetResults, gateResults, socialResults] = await Promise.all([
     tavilySearch(`${nameQ} ${geo} reviews internet wifi gate access problems site:apartmentratings.com OR site:apartments.com OR site:yelp.com`, 4, 'pain', 'advanced'),
     tavilySearch(`${nameQ} ${geo} internet OR wifi OR gate OR "access control" complaints site:reddit.com`, 3, 'pain'),
     tavilySearch(`${nameQ} ${geo} "no choice" OR "forced" OR "mandatory" OR "only option" internet wifi provider`, 3, 'pain', 'advanced'),
     tavilySearch(`${nameQ} ${geo} "gate broken" OR "gate down" OR "gate not working" OR "can't get in"`, 3, 'pain'),
+    // Social: events, announcements, upgrades — not just complaints
+    serperSearch(`"${nameQ.replace(/"/g, '')}" ${geo} site:facebook.com OR site:instagram.com OR site:nextdoor.com`, 5, 'social-events'),
   ])
 
-  const allResults = [...reviewResults, ...redditResults, ...internetResults, ...gateResults]
+  const allResults = [...reviewResults, ...redditResults, ...internetResults, ...gateResults, ...socialResults]
   const usable = allResults.filter(r => r.content?.length > 60).slice(0, 14)
   if (usable.length === 0) return { ...blank, raw_excerpts: allResults }
 
   const snippets = usable.map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 400)}`).join('\n\n---\n\n')
   const extracted = await haikusExtract<Omit<StepPainSignals, 'raw_excerpts'>>(
-    `Extract resident pain signals from reviews. Focus on: gate issues, internet/wifi problems, camera/security, management, crime, smart locks. Return ONLY valid JSON:
+    `Extract resident pain signals AND social announcements. Return ONLY valid JSON:
 {"signals":[{"type":"gate","quote":"","source":"","date":"","severity":"high"}],"gate_issue_count":0,"internet_issue_count":0}
 type options: "gate","internet","camera","crime","management","smart_lock","general"
-quote: verbatim (max 120 chars). severity: high=safety/major failure, medium=recurring, low=minor.
-Include up to 12 signals. Prefer last 6-12 months. ONLY negative signals.`,
+quote: verbatim (max 150 chars).
+severity: high=safety/major failure or recent announcement of upgrade, medium=recurring issue or planned change, low=minor complaint.
+Include up to 14 signals. Prefer last 12 months. Include BOTH:
+1. Negative signals: complaints, failures, "broken gate", "wifi terrible", "only option", forced service
+2. Positive signals (type="general"): social posts about upgrades, "new gate", "new cameras", "ButterflyMX installed", tech announcements`,
     snippets, 800, client
   )
   return { ...(extracted || blank), raw_excerpts: allResults }
@@ -492,24 +562,34 @@ async function runStep5(
   const entity = mgmt || owner
   const hasGatePain = painSignals.some(s => s.type === 'gate')
 
-  const [gateResults, accessResults, addressResults, entityResults, socialResults] = await Promise.all([
+  const [gateResults, accessResults, addressResults, packageResults, entityResults, socialResults] = await Promise.all([
     tavilySearch(`"${name}" ${location} ${hasGatePain ? '"gate" "broken" OR "replaced" OR "installed"' : ''} DoorKing OR LiftMaster OR Viking OR Linear OR FAAC OR ButterflyMX OR Aiphone gate intercom access`, 4, 'proptech'),
-    tavilySearch(`"${name}" ${location} Brivo OR Openpath OR HID OR SALTO OR Verkada OR Avigilon OR SmartRent OR GateWise OR Latch cameras security`, 4, 'proptech'),
+    tavilySearch(`"${name}" ${location} Brivo OR Openpath OR HID OR SALTO OR Verkada OR Avigilon OR SmartRent OR GateWise OR Latch cameras security "smart lock"`, 4, 'proptech'),
     tavilySearch(`"${name}" ${location} "new" OR "installed" OR "upgraded" OR "replaced" gate OR intercom OR camera OR "access control" OR "smart lock" OR "package locker" 2022 OR 2023 OR 2024 OR 2025`, 3, 'proptech'),
+    // Package / EV / smart home — explicit separate search
+    tavilySearch(`"${name}" ${location} "package locker" OR "Amazon Hub" OR "package room" OR "parcel pending" OR "package concierge" OR "EV charging" OR "smart home" OR "thermostat" OR "keyless" OR "Latch" OR "August" OR "Yale"`, 3, 'proptech-extra'),
     entity ? tavilySearch(`"${entity}" ButterflyMX OR DoorKing OR SmartRent OR Brivo OR LiftMaster OR Verkada portfolio standard`, 3, 'proptech') : Promise.resolve([] as TavilyResult[]),
-    // Serper → Google indexes public Facebook/social pages announcing new tech installs
     serperSearch(`"${name}" ${location} "new gate" OR "new intercom" OR "ButterflyMX" OR "new cameras" OR "upgraded" OR "smart access" site:facebook.com OR site:instagram.com OR site:nextdoor.com`, 4, 'serper-social'),
   ])
 
-  const usable = [...gateResults, ...accessResults, ...addressResults, ...entityResults, ...socialResults].filter(r => r.content?.length > 40).slice(0, 14)
+  const usable = [...gateResults, ...accessResults, ...addressResults, ...packageResults, ...entityResults, ...socialResults].filter(r => r.content?.length > 40).slice(0, 16)
   if (usable.length === 0) return blank
 
   const snippets = usable.map((r, i) => `[${i + 1}] ${r.title}\n${r.content.slice(0, 350)}`).join('\n\n---\n\n')
   const extracted = await haikusExtract<StepPropTech>(
-    `Extract technology brands found. Return ONLY valid JSON:
-{"gate_operators":[],"access_control":[],"intercoms":[],"cameras":[],"smart_locks":[],"resident_apps":[],"tech_generation":"legacy"}
-Known brands — gates: DoorKing/LiftMaster/Viking/Linear/FAAC/PDK; access: Brivo/HID/SALTO/Openpath; intercoms: ButterflyMX/Aiphone/Viking/2N; cameras: Verkada/Avigilon/EagleEye/Hanwha; locks: SmartRent/GateWise/Latch/August/Yale
-tech_generation: "legacy"=pre-2018, "modern"=2018+ cloud, "hybrid"=mix. Empty arrays if not found.`,
+    `Extract ALL property technology brands found. Return ONLY valid JSON:
+{"gate_operators":[],"access_control":[],"intercoms":[],"cameras":[],"smart_locks":[],"resident_apps":[],"package_solutions":[],"tech_generation":"legacy"}
+Known brands:
+- gates: DoorKing/LiftMaster/Viking/Linear/FAAC/PDK/FAAC/Doorbird
+- access: Brivo/HID/SALTO/Openpath/PDK/Kisi
+- intercoms: ButterflyMX/Aiphone/Viking/2N/Doorbird/Verkada
+- cameras: Verkada/Avigilon/EagleEye/Hanwha/Axis/Hikvision/Dahua
+- smart_locks: SmartRent/GateWise/Latch/August/Yale/Schlage/Kwikset/igloohome
+- resident_apps: SmartRent/Entrata/RealPage/Yardi/AppFolio/Knock/Funnel
+- package_solutions: "Parcel Pending"/"Amazon Hub"/"Package Concierge"/"Luxer One"/"Butterfly Package"/"package locker"/"package room"
+- Also note: EV charging, smart thermostats, solar if mentioned
+tech_generation: "legacy"=pre-2018 hardware, "modern"=2018+ cloud-managed, "hybrid"=mix
+Empty arrays for anything not found — never fabricate brand names.`,
     snippets, 400, client
   )
   return extracted || blank
@@ -722,14 +802,36 @@ export async function POST(req: NextRequest) {
     const hintState = (raw.state as string) || ''
     const hintMgmt  = (raw.management_company as string) || ''
 
+    // ── Step 0: Bootstrap (broad Serper — no site restrictions) ──────────────
+    // Finds official website, press releases, owner announcements
+    // CRITICAL: confirmed city/state from Step 0 overrides all hints — prevents geo errors
+    const s0 = await runStep0(rawQuery, anthropic)
+    const bootstrapCity    = s0.confirmed_city  || hintCity
+    const bootstrapState   = s0.confirmed_state || hintState
+    const bootstrapMgmt    = s0.confirmed_management || hintMgmt
+    const bootstrapAddress = s0.confirmed_address || (raw.address as string) || ''
+    const bootstrapWebsite = s0.confirmed_website || ''
+
     // ── Step 1: Identity ──────────────────────────────────────────────────────
-    const s1 = await runStep1(rawQuery, hintCity, hintState, hintMgmt, anthropic)
-    const property_name = s1.name || rawQuery
-    const address       = (raw.address as string) || s1.address || ''
-    const city          = hintCity  || s1.city  || ''
-    const state         = hintState || s1.state || ''
-    const mgmt          = s1.management_company || ''
+    const s1 = await runStep1(
+      s0.confirmed_name || rawQuery,
+      bootstrapCity, bootstrapState, bootstrapMgmt,
+      bootstrapAddress, bootstrapWebsite, anthropic
+    )
+
+    // Step 0 confirmed data wins over Step 1 inferences for core facts
+    const property_name = s0.confirmed_name || s1.name || rawQuery
+    const address       = bootstrapAddress   || s1.address || ''
+    const city          = bootstrapCity      || s1.city    || ''
+    const state         = bootstrapState     || s1.state   || ''
+    const mgmt          = s0.confirmed_management || s1.management_company || ''
     const location      = [city, state].filter(Boolean).join(', ') || address || ''
+
+    // Merge Step 0 facts as ground-truth overrides into s1
+    if (s0.confirmed_units    && !s1.units)       s1.units       = s0.confirmed_units
+    if (s0.confirmed_year_built && !s1.year_built) s1.year_built  = s0.confirmed_year_built
+    if (s0.confirmed_phone    && !s1.phone)       s1.phone       = s0.confirmed_phone
+    if (s0.confirmed_website  && !s1.website)     s1.website     = s0.confirmed_website
 
     // ── DB lookups + Step 2 in parallel ──────────────────────────────────────
     let portfolioIspBlock = ''
@@ -771,7 +873,7 @@ export async function POST(req: NextRequest) {
       ]),
     ])
 
-    const owner    = normStr(s2.owner_entity) || ''
+    const owner    = normStr(s2.owner_entity) || s0.confirmed_owner || ''
     const old_name = normStr(s2.old_name) || ''
 
     // ── Steps 3, 4, 5 in parallel ─────────────────────────────────────────────
@@ -974,7 +1076,7 @@ freshness_score (1-5): 5=contract expiry this year or confirmed pain <3mo; 4=pai
       const { data: searchRow } = await supabaseDeep.from('aria_searches').insert({
         query: originalQuery,
         query_interpretation: old_name ? `"${property_name}" (formerly "${old_name}")` : `ARIA v2 — ${property_name}`,
-        results: { mode: 'deep', prospects: [prospectPayload], fccVerified: s4.fcc_providers.length > 0, webIntelligence: true },
+        results: { mode: 'deep', engine_version: ARIA_ENGINE_VERSION, prospects: [prospectPayload], fccVerified: s4.fcc_providers.length > 0, webIntelligence: true },
         search_type: 'deep', user_id: userId,
         user_name: portalUser.name, user_email: portalUser.email,
         org_id: portalUser.org_id ?? null,
@@ -1014,7 +1116,8 @@ freshness_score (1-5): 5=contract expiry this year or confirmed pain <3mo; 4=pai
     const edgarHit = s4.fcc_providers.length === 0
     return NextResponse.json({
       mode: 'deep',
-      query_interpretation: old_name ? `"${property_name}" (formerly "${old_name}")` : `ARIA v2 Intel — ${property_name}`,
+      engine_version: ARIA_ENGINE_VERSION,
+      query_interpretation: old_name ? `"${property_name}" (formerly "${old_name}")` : `ARIA ${ARIA_ENGINE_VERSION} — ${property_name}`,
       prospects: [prospectPayload],
       savedSearchId,
       sources: s3.raw_excerpts.filter(r => r.url && r.score > 0.3).slice(0, 8).map(r => ({
