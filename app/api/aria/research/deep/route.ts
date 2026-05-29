@@ -13,7 +13,8 @@
  * Step 6: People     — PM + Regional + Asset Manager; 6 parallel sources; email construction (~8s)
  * Step 7: Synthesis  — Sonnet assembles into structured output (~8s)
  *
- * Total: ~40-52s | ~16 searches (Tavily + Serper) | ~$0.52/search
+ * Total: ~32-42s | ~16 searches (Tavily + Serper) | ~$0.52/search
+ * Parallelism: Steps 3+4+5+6 run concurrently — saves ~8s vs sequential Step 6
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -31,7 +32,7 @@ export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
 // Version: Year.MonthRevision — increment revision on each engine change this month
-const ARIA_ENGINE_VERSION = 'v6.53'
+const ARIA_ENGINE_VERSION = 'v6.54'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -67,7 +68,7 @@ async function tavilySearch(query: string, maxResults = 4, source = 'web', depth
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.TAVILY_API_KEY}` },
       body: JSON.stringify({ query, search_depth: depth, max_results: maxResults, include_answer: false, include_raw_content: rawContent, include_images: false }),
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(6000),
     })
     if (!res.ok) return []
     const data = await res.json()
@@ -86,7 +87,7 @@ async function serperSearch(query: string, maxResults = 5, source = 'serper', ty
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-API-KEY': process.env.SERPER_API_KEY },
       body: JSON.stringify({ q: query, num: maxResults, gl: 'us', hl: 'en' }),
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(5000),
     })
     if (!res.ok) return []
     const data = await res.json()
@@ -213,7 +214,7 @@ async function proxycurlProfile(linkedinUrl: string): Promise<ProxycurlProfile |
   if (!process.env.PROXYCURL_API_KEY) return null
   try {
     const params = new URLSearchParams({ url: linkedinUrl, use_cache: 'if-recent', fallback_to_cache: 'on-error', skills: 'exclude', inferred_salary: 'exclude' })
-    const res = await fetch(`https://nubela.co/proxycurl/api/v2/linkedin?${params}`, { headers: { Authorization: `Bearer ${process.env.PROXYCURL_API_KEY}` }, signal: AbortSignal.timeout(10000) })
+    const res = await fetch(`https://nubela.co/proxycurl/api/v2/linkedin?${params}`, { headers: { Authorization: `Bearer ${process.env.PROXYCURL_API_KEY}` }, signal: AbortSignal.timeout(4000) })
     if (!res.ok) return null
     return await res.json()
   } catch { return null }
@@ -982,11 +983,13 @@ export async function POST(req: NextRequest) {
     const owner    = normStr(s2.owner_entity) || s0.confirmed_owner || ''
     const old_name = normStr(s2.old_name) || ''
 
-    // ── Steps 3, 4, 5 in parallel ─────────────────────────────────────────────
-    const [s3, s4, s5] = await Promise.all([
+    // ── Steps 3, 4, 5, 6 all in parallel ─────────────────────────────────────
+    // Step 6 (People) is independent of Steps 4+5 — runs concurrently, saves ~8s
+    const [s3, s4, s5, s6] = await Promise.all([
       runStep3(property_name, old_name, city, state, anthropic),
       runStep4(property_name, old_name, city, state, mgmt, owner, s1.coords, portfolioIspBlock, cachedDetectionsBlock, priorFindingsBlock, anthropic),
       runStep5(property_name, location, mgmt, owner, [], anthropic),
+      runStep6(property_name, city, state, mgmt, owner, s1.email_domain, bootstrapWebsite, [], anthropic),
     ])
 
     // ── Step 4B: ISP Confirmation (only if bulk detected + provider unknown) ──
@@ -1002,9 +1005,6 @@ export async function POST(req: NextRequest) {
         }
       }
     }
-
-    // ── Step 6: People ────────────────────────────────────────────────────────
-    const s6 = await runStep6(property_name, city, state, mgmt, owner, s1.email_domain, bootstrapWebsite, s3.raw_excerpts, anthropic)
 
     // ── Step 7: Sonnet synthesis ───────────────────────────────────────────────
     const siloSummary = `STEP 1 — IDENTITY (verified):
