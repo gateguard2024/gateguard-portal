@@ -45,6 +45,8 @@ function isBypassPath(pathname: string): boolean {
     ) ||
     // ARIA diagnostic — internal read-only audit tool
     pathname.startsWith('/api/aria/diagnostic') ||
+    // Inngest webhook — event routing; platform authenticates via signing key
+    pathname.startsWith('/api/inngest') ||
     // Auth flows
     pathname.startsWith('/sign-in') ||
     pathname.startsWith('/sign-up') ||

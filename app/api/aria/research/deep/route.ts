@@ -1329,7 +1329,16 @@ Example output: "Ask for [First Name] by name. If blocked: 'I'm following up wit
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = await auth()
+    // ── Auth: Clerk session OR internal service key (from Inngest background jobs) ──
+    let userId: string | null = null
+    const serviceKey = req.headers.get('x-service-key')
+    if (serviceKey && serviceKey === process.env.ARIA_SERVICE_KEY && serviceKey.length > 8) {
+      // Trusted internal call from Inngest — skip Clerk session check
+      userId = 'inngest-service'
+    } else {
+      const { userId: clerkId } = await auth()
+      userId = clerkId
+    }
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     if (!process.env.TAVILY_API_KEY) return NextResponse.json({ error: 'TAVILY_API_KEY not configured' }, { status: 503 })
 
