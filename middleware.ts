@@ -43,6 +43,8 @@ function isBypassPath(pathname: string): boolean {
         p => pathname.slice('/api/signatures/'.length).startsWith(p)
       )
     ) ||
+    // ARIA diagnostic — internal read-only audit tool
+    pathname.startsWith('/api/aria/diagnostic') ||
     // Auth flows
     pathname.startsWith('/sign-in') ||
     pathname.startsWith('/sign-up') ||

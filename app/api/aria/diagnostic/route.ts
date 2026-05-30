@@ -176,23 +176,57 @@ function renderSearch(s: any, idx: number): string {
 }
 
 export async function GET(_req: NextRequest) {
+  // Debug: check env vars are present
+  const hasSupabaseUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL
+  const hasServiceKey  = !!process.env.SUPABASE_SERVICE_ROLE_KEY
+
   try {
-    // Last 5 searches across all users — admin diagnostic
-    const { data: rows, error } = await supabase
+    if (!hasSupabaseUrl || !hasServiceKey) {
+      return new NextResponse(
+        `<html><body style="font-family:sans-serif;padding:24px;color:#dc2626">
+          <h2>Missing env vars</h2>
+          <p>NEXT_PUBLIC_SUPABASE_URL: ${hasSupabaseUrl ? '✓' : '✗ MISSING'}</p>
+          <p>SUPABASE_SERVICE_ROLE_KEY: ${hasServiceKey ? '✓' : '✗ MISSING'}</p>
+        </body></html>`,
+        { headers: { 'Content-Type': 'text/html' }, status: 500 }
+      )
+    }
+
+    // Last 5 searches across all users — try deep first, fall back to any type
+    let { data: rows, error } = await supabase
       .from('aria_searches')
       .select('id, query, query_interpretation, created_at, results, search_type, user_email')
       .eq('search_type', 'deep')
       .order('created_at', { ascending: false })
       .limit(5)
 
+    // If no deep searches found, try all types
+    if (!rows?.length && !error) {
+      const fallback = await supabase
+        .from('aria_searches')
+        .select('id, query, query_interpretation, created_at, results, search_type, user_email')
+        .order('created_at', { ascending: false })
+        .limit(5)
+      rows = fallback.data
+      error = fallback.error
+    }
+
     if (error) {
-      return new NextResponse(`<pre>DB error: ${error.message}</pre>`, { headers: { 'Content-Type': 'text/html' } })
+      return new NextResponse(
+        `<html><body style="font-family:sans-serif;padding:24px;color:#dc2626"><h2>DB error</h2><pre>${error.message}</pre><p>Code: ${error.code}</p></body></html>`,
+        { headers: { 'Content-Type': 'text/html' } }
+      )
     }
 
     if (!rows || rows.length === 0) {
-      return new NextResponse(`<html><body style="font-family:sans-serif;padding:24px"><h2>No deep searches found</h2></body></html>`, {
-        headers: { 'Content-Type': 'text/html' }
-      })
+      return new NextResponse(
+        `<html><body style="font-family:sans-serif;padding:24px">
+          <h2>No searches found in aria_searches table</h2>
+          <p style="color:#64748b">The table exists but has no rows. Run a search in ARIA first.</p>
+          <p style="color:#64748b;font-size:11px;margin-top:8px">Env: URL=${hasSupabaseUrl} KEY=${hasServiceKey}</p>
+        </body></html>`,
+        { headers: { 'Content-Type': 'text/html' } }
+      )
     }
 
     const html = `<!DOCTYPE html>
