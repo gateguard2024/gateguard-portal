@@ -1136,9 +1136,19 @@ const deepIntelTool: Anthropic.Tool = {
       },
       extracted_contacts: {
         type: 'array',
+        description: 'Strict contact schema — every item must have all fields. phone: raw number OR "Apollo Missing – Defaulting to Office: {number}" if no direct line. phone_source: "direct" if Apollo returned a line, "office_main" if falling back to leasing office, null if neither.',
         items: {
           type: 'object',
-          properties: { name: { type: 'string' }, title: { type: 'string' }, company: { type: 'string' }, email: { type: 'string' }, linkedin_slug: { type: 'string' } },
+          required: ['name', 'title', 'company', 'email', 'phone', 'phone_source', 'linkedin_slug'],
+          properties: {
+            name: { type: 'string' },
+            title: { type: 'string' },
+            company: { type: 'string' },
+            email: { type: 'string', description: 'Email address or empty string — never null' },
+            phone: { type: 'string', description: 'Direct number, "Apollo Missing – Defaulting to Office: XXX" if office fallback, or "" if none' },
+            phone_source: { type: ['string', 'null'], enum: ['direct', 'office_main', null], description: '"direct" = Apollo returned a line; "office_main" = falling back to leasing office; null = no phone' },
+            linkedin_slug: { type: 'string', description: 'LinkedIn path after /in/ — no full URL' },
+          },
         },
       },
       key_finding: { type: 'string' },
@@ -1282,6 +1292,39 @@ RULES:
   return await haikusExtract<OutreachPlan>(prompt, '', 1200, client)
 }
 
+// ─── Haiku: Gatekeeper navigation tip ────────────────────────────────────────
+// Generates a 1-2 sentence cold-call script for reaching a property manager
+// through a leasing office receptionist. Runs in parallel with Sonnet synthesis.
+
+async function generateGatekeeperTip(
+  contactName: string,
+  contactTitle: string,
+  propertyName: string,
+  managementCompany: string,
+  officePhone: string | null,
+  ispProvider: string,
+  client: Anthropic
+): Promise<string | null> {
+  if (!contactName) return null
+  const phoneCtx = officePhone ? ` Call ${officePhone}.` : ''
+  const result = await haikusExtract<{ tip: string }>(
+    `Write a gatekeeper navigation script for a GateGuard sales rep trying to reach ${contactName} (${contactTitle || 'property decision-maker'}) at "${propertyName}"${managementCompany ? ` (${managementCompany})` : ''}.${phoneCtx}
+
+GateGuard installs gate, access control, and intercom systems for multifamily properties. Current provider: ${ispProvider || 'unknown'}.
+
+Return ONLY valid JSON: {"tip":""}
+
+The script must:
+- Be 1-2 sentences, conversational tone
+- Tell the rep to ask for the contact by first name
+- Give a professional non-sales-y reason: reference a "connectivity and access review" or the property's "upcoming gate system assessment"
+- Include a brief objection-handler if blocked ("they were expecting my call regarding...")
+Example output: "Ask for [First Name] by name. If blocked: 'I'm following up with [First Name] about the gate and access control assessment we have scheduled for the property — they're expecting my call.'"`,
+    '', 250, client
+  )
+  return normStr(result?.tip) || null
+}
+
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -1411,6 +1454,15 @@ export async function POST(req: NextRequest) {
 
     const finalOwner = p2.owner_entity || owner || ''
 
+    // ── Determine best contact early — needed for gatekeeper tip ─────────────
+    const earlyBestContact = p3.contacts.find(c => c.role_type === 'property_manager')
+      || p3.contacts.find(c => c.role_type === 'regional_manager')
+      || p3.contacts.find(c => c.role_type === 'asset_manager')
+      || p3.contacts[0]
+
+    // Leasing office phone (Phase 1A — confirmed from listing page)
+    const officePhone = normStr(p1.confirmed_phone)
+
     // ── PHASE 4: Synthesis ────────────────────────────────────────────────────
     const synthesisData = `PHASE 1 — VERIFIED IDENTITY:
 ${JSON.stringify({ name: property_name, address, city, state, units: p1.confirmed_units, year_built: p1.confirmed_year_built, management_company: mgmt, website, phone: p1.confirmed_phone }, null, 2)}
@@ -1425,7 +1477,7 @@ ${JSON.stringify({ pain_signals: p3.pain_signals.slice(0, 12), proptech: p3.prop
     // Haiku is ~5x faster than Sonnet; both kick off at the same time so the
     // outreach plan is ready by the time Sonnet finishes. This prevents the
     // outreach plan from adding any latency to the critical path.
-    const [message, outreachPlanResult] = await Promise.all([
+    const [message, outreachPlanResult, gatekeeperTipResult] = await Promise.all([
       anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 2800,
@@ -1443,7 +1495,7 @@ CRITICAL RULES:
    - Else if year_built known: MDU fiber = year_built+7 to year_built+10; cable bulk = year_built+5 to year_built+8
    - Set expiry_estimate = "Est. [year]-[year+2]" or specific year if known
 6. proptech: copy from Phase 3
-7. extracted_contacts: copy from Phase 3 contacts
+7. extracted_contacts: copy from Phase 3 contacts. STRICT SCHEMA — every item must have: name (string), title (string), company (string), email (string or ""), phone (raw number OR "Apollo Missing – Defaulting to Office: {leasing_number}" OR ""), phone_source ("direct"|"office_main"|null), linkedin_slug (path after /in/ or ""). Never omit fields, never use null for string fields.
 8. pain_signals: copy from Phase 3 — up to 12 recent
 9. ownership: build from Phase 2 owner_entity + owner_type + acquisition_year
 10. If management_company blank but owner is RE firm → set management_company = owner_entity
@@ -1479,6 +1531,16 @@ buying_trends: 1-sentence sales trend insight for this property type`,
         p2.acquisition_year,
         anthropic
       ),
+      // Haiku generates a gatekeeper navigation script in parallel (fast, ~0.5s)
+      generateGatekeeperTip(
+        normStr(earlyBestContact?.name) ?? '',
+        normStr(earlyBestContact?.title) ?? '',
+        property_name,
+        mgmt,
+        officePhone,
+        p2.isp_providers[0] || '',
+        anthropic
+      ),
     ])
 
     const toolBlock = message.content.find(b => b.type === 'tool_use') as Anthropic.ToolUseBlock | undefined
@@ -1493,17 +1555,25 @@ buying_trends: 1-sentence sales trend insight for this property type`,
     const cleanVideoProviders = normStrArr(p2.video_providers.length ? p2.video_providers : (rawData.video_providers ?? []))
     const cleanBulkAgreements = p2.bulk_agreements.length ? p2.bulk_agreements : (rawData.bulk_agreements ?? [])
 
-    const mergedDMChain = p3.contacts.filter(c => c.name).map(c => ({
-      name: c.name, title: c.title, company: c.company || mgmt || finalOwner,
-      role_type: c.role_type, email: c.email, top_email_format: p3.email_format,
-      phone: c.phone || '',
-      linkedin_slug: c.linkedin?.split('/in/')?.[1] || '',
-    }))
+    const mergedDMChain = p3.contacts.filter(c => c.name).map(c => {
+      const directPhone = normStr(c.phone)
+      return {
+        name: c.name, title: c.title, company: c.company || mgmt || finalOwner,
+        role_type: c.role_type, email: c.email, top_email_format: p3.email_format,
+        // Phone hierarchy: direct line first, then leasing office, then empty
+        phone: directPhone ?? (officePhone ?? ''),
+        phone_source: (directPhone ? 'direct' : (officePhone ? 'office_main' : null)) as 'direct' | 'office_main' | null,
+        linkedin_slug: c.linkedin?.split('/in/')?.[1] || '',
+        gatekeeper_tip: null as string | null, // patched onto primary DM below
+      }
+    })
 
-    const bestContact = p3.contacts.find(c => c.role_type === 'property_manager')
-      || p3.contacts.find(c => c.role_type === 'regional_manager')
-      || p3.contacts.find(c => c.role_type === 'asset_manager')
-      || p3.contacts[0]
+    // Patch gatekeeper tip onto the primary DM in the chain
+    if (mergedDMChain.length > 0 && gatekeeperTipResult) {
+      mergedDMChain[0].gatekeeper_tip = gatekeeperTipResult
+    }
+
+    const bestContact = earlyBestContact
 
     const fallback = (rawData.extracted_contacts || [])[0] || {}
 
@@ -1618,17 +1688,26 @@ buying_trends: 1-sentence sales trend insight for this property type`,
         title: normStr(bestContact?.title || fallback.title) ?? null,
         company: normStr(bestContact?.company || fallback.company) ?? mgmt ?? '',
         email: normStr(bestContact?.email || fallback.email) ?? '',
-        phone: normStr(bestContact?.phone) ?? '',
+        // Phone hierarchy: Apollo direct line → leasing office (labelled) → empty
+        phone: normStr(bestContact?.phone) ?? (officePhone ?? ''),
+        phone_source: (normStr(bestContact?.phone) ? 'direct' : (officePhone ? 'office_main' : null)) as 'direct' | 'office_main' | null,
+        gatekeeper_tip: gatekeeperTipResult ?? null,
         tenure_years: 0,
         top_email_format: p3.email_format || '',
         linkedin_slug: normStr(bestContact?.linkedin?.split('/in/')?.[1] || fallback.linkedin_slug) ?? '',
       },
       decision_maker_chain: mergedDMChain.length > 0 ? mergedDMChain
-        : (rawData.extracted_contacts || []).filter((c: any) => normStr(c.name)).map((c: any) => ({
-            name: normStr(c.name) ?? '', title: normStr(c.title) ?? '', company: normStr(c.company) ?? '',
-            role_type: 'unknown', email: normStr(c.email) ?? '', top_email_format: '',
-            phone: '', linkedin_slug: normStr(c.linkedin_slug) ?? '',
-          })),
+        : (rawData.extracted_contacts || []).filter((c: any) => normStr(c.name)).map((c: any) => {
+            const directPhone = normStr(c.phone)
+            return {
+              name: normStr(c.name) ?? '', title: normStr(c.title) ?? '', company: normStr(c.company) ?? '',
+              role_type: 'unknown', email: normStr(c.email) ?? '', top_email_format: '',
+              phone: directPhone ?? (officePhone ?? ''),
+              phone_source: (directPhone ? 'direct' : (officePhone ? 'office_main' : null)) as 'direct' | 'office_main' | null,
+              gatekeeper_tip: null as string | null,
+              linkedin_slug: normStr(c.linkedin_slug) ?? '',
+            }
+          }),
       ownership: {
         owner_entity: normStr(finalOwner || rawData.ownership?.owner_entity),
         owner_type: normStr(p2.owner_type || rawData.ownership?.owner_type),

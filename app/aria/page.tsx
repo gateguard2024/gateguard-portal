@@ -89,6 +89,8 @@ interface DecisionMaker {
   email: string;
   top_email_format: string;
   phone: string;
+  phone_source?: 'direct' | 'office_main' | null;
+  gatekeeper_tip?: string | null;
   tenure_years: number;
 }
 
@@ -160,6 +162,8 @@ interface DecisionMakerChainItem {
   email: string;
   top_email_format: string;
   phone?: string;
+  phone_source?: 'direct' | 'office_main' | null;
+  gatekeeper_tip?: string | null;
   notes?: string;
   dm_hooks?: string[];
 }
@@ -1121,9 +1125,23 @@ export default function ARIAPage() {
                 <p className="font-mono text-[10px] text-slate-600 bg-slate-50 px-2 py-1 rounded w-fit border border-slate-100">{dm.top_email_format || dm.email}</p>
               )}
               {dm.phone && (
-                <div className="flex items-center gap-1.5">
-                  <Phone size={11} className="text-slate-400 shrink-0" />
-                  <span className="font-mono text-[10px] text-slate-700 font-bold">{dm.phone}</span>
+                <div className="group relative">
+                  <div className="flex items-center gap-1.5">
+                    <Phone size={11} className={dm.phone_source === 'office_main' ? 'text-amber-400 shrink-0' : 'text-emerald-500 shrink-0'} />
+                    <span className={`font-mono text-[10px] font-bold ${dm.phone_source === 'office_main' ? 'text-amber-700' : 'text-slate-700'}`}>{dm.phone}</span>
+                    {dm.phone_source === 'office_main' && (
+                      <span className="text-[8px] font-bold uppercase text-amber-600 bg-amber-50 border border-amber-200/60 px-1.5 py-0.5 rounded">
+                        Office · Ask for {dm.name?.split(' ')[0]}
+                      </span>
+                    )}
+                  </div>
+                  {/* Gatekeeper tip tooltip */}
+                  {dm.gatekeeper_tip && (
+                    <div className="hidden group-hover:block absolute z-50 left-0 bottom-full mb-2 w-72 bg-slate-900 text-white text-[10px] leading-relaxed rounded-xl p-3 shadow-xl border border-slate-700/60">
+                      <p className="text-[8px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">📞 Gatekeeper Strategy</p>
+                      <p className="text-slate-200">{dm.gatekeeper_tip}</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1191,9 +1209,28 @@ export default function ARIAPage() {
                 {p.decision_maker?.top_email_format || p.decision_maker?.email || 'N/A'}
               </p>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500 font-medium">Direct Line</span>
-              <span className="font-mono text-slate-700 font-bold">{p.decision_maker?.phone || 'N/A'}</span>
+            <div className="group relative">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">
+                  {p.decision_maker?.phone_source === 'office_main' ? (
+                    <span className="flex items-center gap-1">
+                      <span>📞</span>
+                      <span>Office Main Line</span>
+                      <span className="text-[9px] text-amber-500 font-bold">(Ask for {p.decision_maker?.name?.split(' ')[0]})</span>
+                    </span>
+                  ) : 'Direct Line'}
+                </span>
+                <span className={`font-mono font-bold text-xs ${p.decision_maker?.phone_source === 'office_main' ? 'text-amber-700' : 'text-slate-700'}`}>
+                  {p.decision_maker?.phone || 'N/A'}
+                </span>
+              </div>
+              {/* Gatekeeper tip — visible on hover when phone is office line */}
+              {p.decision_maker?.gatekeeper_tip && (
+                <div className="hidden group-hover:block absolute z-50 right-0 top-full mt-2 w-80 bg-slate-900 text-white text-[10px] leading-relaxed rounded-xl p-3 shadow-xl border border-slate-700/60">
+                  <p className="text-[8px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">📞 Gatekeeper Strategy</p>
+                  <p className="text-slate-200">{p.decision_maker.gatekeeper_tip}</p>
+                </div>
+              )}
             </div>
             <div className="flex items-center justify-between">
               <span className="text-slate-500 font-medium">Estimated Tenure</span>
