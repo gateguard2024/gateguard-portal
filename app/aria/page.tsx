@@ -211,6 +211,7 @@ interface CrossRefNote {
 interface SocialSearchResult {
   social_posts: SocialPost[];
   cross_reference_notes: CrossRefNote[];
+  property_phone?: string | null;
 }
 
 interface ResearchResult {
@@ -1680,6 +1681,14 @@ export default function ARIAPage() {
 
   // ── Community tab ─────────────────────────────────────────────────────────
   function SocialTab({ p }: { p: Prospect }) {
+    const [expandedE2, setExpandedE2] = useState<Set<number>>(new Set());
+    const toggleE2 = (i: number) => setExpandedE2(prev => {
+      const next = new Set(prev);
+      next.has(i) ? next.delete(i) : next.add(i);
+      return next;
+    });
+    const QUOTE_PREVIEW_LEN = 220;
+
     const SEV_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
     const allSocial = (p.pain_signals || [])
@@ -1700,7 +1709,8 @@ export default function ARIAPage() {
 
     const e2Posts  = socialResults?.social_posts      ?? [];
     const e2Notes  = socialResults?.cross_reference_notes ?? [];
-    const hasAny   = shown.length > 0 || e2Posts.length > 0 || socialLoading;
+    const propPhone = socialResults?.property_phone ?? null;
+    const hasAny   = shown.length > 0 || e2Posts.length > 0 || socialLoading || propPhone;
 
     if (!hasAny) {
       return (
@@ -1738,6 +1748,24 @@ export default function ARIAPage() {
             )}
           </div>
         </div>
+
+        {/* Property phone — surfaced from Engine 2 social search */}
+        {propPhone && (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-50/60 border border-emerald-200/60 shadow-sm">
+            <Phone size={14} className="text-emerald-600 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-700/70 mb-0.5">Property / Leasing Office</p>
+              <p className="text-sm font-bold text-emerald-900 tracking-wide">{propPhone}</p>
+            </div>
+            <button
+              onClick={() => { navigator.clipboard.writeText(propPhone); }}
+              className="p-1.5 rounded-lg bg-white border border-emerald-200 text-emerald-600 hover:bg-emerald-50 transition-colors"
+              title="Copy phone number"
+            >
+              <Copy size={12} />
+            </button>
+          </div>
+        )}
 
         {/* Cross-reference notes from Engine 2 */}
         {e2Notes.length > 0 && (
@@ -1778,6 +1806,13 @@ export default function ARIAPage() {
           const sev  = SIGNAL_SEVERITY[sig.severity] ?? SIGNAL_SEVERITY.low;
           const Icon = SIGNAL_ICONS[sig.signal_type] || AlertCircle;
           const isTech = isTechSignal(sig);
+          const isLong = sig.quote.length > QUOTE_PREVIEW_LEN;
+          // Engine 1 cards use a separate expanded set keyed by 'e1-{i}'
+          const e1Key = 1000 + i;
+          const isExpanded = expandedE2.has(e1Key);
+          const displayText = isLong && !isExpanded
+            ? sig.quote.slice(0, QUOTE_PREVIEW_LEN) + '…'
+            : sig.quote;
           return (
             <div key={i} className={cn("rounded-2xl bg-white shadow-sm overflow-hidden relative border", sev.border)}>
               {/* Severity stripe */}
@@ -1805,11 +1840,19 @@ export default function ARIAPage() {
                   </div>
                 </div>
 
-                {/* The quote — styled as a social post */}
+                {/* The quote — styled as a social post, collapsible if long */}
                 <blockquote className="relative pl-5">
                   <span className="absolute left-0 top-[-4px] text-3xl leading-none text-slate-200 font-serif select-none" aria-hidden>&ldquo;</span>
-                  <p className="text-sm text-slate-800 leading-relaxed font-medium">{sig.quote}</p>
+                  <p className="text-sm text-slate-800 leading-relaxed font-medium">{displayText}</p>
                 </blockquote>
+                {isLong && (
+                  <button
+                    onClick={() => toggleE2(e1Key)}
+                    className="mt-2 ml-5 text-[10px] font-bold text-[#6B7EFF] hover:underline underline-offset-2"
+                  >
+                    {isExpanded ? '▲ Show less' : '▼ Show full post'}
+                  </button>
+                )}
 
                 {/* Source link */}
                 {sig.url && (
@@ -1884,10 +1927,29 @@ export default function ARIAPage() {
                       </div>
                     )}
 
-                    <blockquote className="relative pl-5">
-                      <span className="absolute left-0 top-[-4px] text-3xl leading-none text-slate-200 font-serif select-none" aria-hidden>&ldquo;</span>
-                      <p className="text-sm text-slate-800 leading-relaxed font-medium">{post.quote}</p>
-                    </blockquote>
+                    {(() => {
+                      const isLong = post.quote.length > QUOTE_PREVIEW_LEN;
+                      const isExpanded = expandedE2.has(i);
+                      const displayText = isLong && !isExpanded
+                        ? post.quote.slice(0, QUOTE_PREVIEW_LEN) + '…'
+                        : post.quote;
+                      return (
+                        <div>
+                          <blockquote className="relative pl-5">
+                            <span className="absolute left-0 top-[-4px] text-3xl leading-none text-slate-200 font-serif select-none" aria-hidden>&ldquo;</span>
+                            <p className="text-sm text-slate-800 leading-relaxed font-medium">{displayText}</p>
+                          </blockquote>
+                          {isLong && (
+                            <button
+                              onClick={() => toggleE2(i)}
+                              className="mt-2 ml-5 text-[10px] font-bold text-[#6B7EFF] hover:underline underline-offset-2"
+                            >
+                              {isExpanded ? '▲ Show less' : '▼ Show full post'}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {post.url && (
                       <a href={post.url} target="_blank" rel="noopener noreferrer"

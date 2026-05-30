@@ -128,19 +128,19 @@ export async function POST(req: NextRequest) {
 
     const TECH_KEYWORDS = 'gate OR "gate access" OR "call box" OR intercom OR "access control" OR "smart lock" OR "fob" OR internet OR WiFi OR DirecTV OR "Dish Network" OR camera OR "security camera" OR "package locker" OR "Amazon Hub"'
 
-    const [propertyResults, mgmtResults, bulkResults] = await Promise.all([
+    const [propertyResults, mgmtResults, bulkResults, phoneResults] = await Promise.all([
 
-      // Search 1 — property-level social (Reddit, Google Reviews, Yelp, listing reviews)
+      // Search 1 — property-level social (Reddit, Google Reviews, Yelp, listing reviews) — up to 10
       serperSocial(
         `site:reddit.com OR site:google.com/maps OR site:yelp.com OR site:apartments.com "${property_name}" ${city} (${TECH_KEYWORDS}) review OR complaint OR resident`,
-        8
+        10
       ),
 
       // Search 2 — management company social (catches complaints that name the mgmt co, not just the property)
       management_company
         ? serperSocial(
             `"${management_company}" "${city}" (${TECH_KEYWORDS}) resident review complaint 2024 OR 2025`,
-            6
+            8
           )
         : Promise.resolve([]),
 
@@ -148,6 +148,12 @@ export async function POST(req: NextRequest) {
       serperSocial(
         `"${property_name}" ${loc} (DirecTV OR "Dish Network" OR "Comcast" OR "no choice" OR "only option" OR "bulk agreement" OR "technology fee" OR "internet included" OR "cable included") resident`,
         6
+      ),
+
+      // Search 4 — leasing office phone number
+      serperSocial(
+        `"${property_name}" ${loc} leasing phone contact site:apartments.com OR site:rentcafe.com OR site:zillow.com OR site:apartmentlist.com OR site:forrent.com`,
+        4
       ),
     ])
 
@@ -165,22 +171,42 @@ export async function POST(req: NextRequest) {
     ].filter(Boolean).join('\n\n')
 
     if (!allSnippets) {
-      return NextResponse.json({ social_posts: [], cross_reference_notes: [] })
+      return NextResponse.json({ social_posts: [], cross_reference_notes: [], property_phone: null })
     }
 
-    // ── Haiku Pass 1: extract social posts ────────────────────────────────────
+    // ── Haiku Pass 0: extract property phone ─────────────────────────────────
 
-    const extractionPrompt = `You are analyzing search results about a multifamily property. Extract individual resident reviews, social media posts, and community complaints.
+    const phoneSnippets = formatSnippets(phoneResults, 'PHONE LOOKUP')
+    let property_phone: string | null = null
+    if (phoneSnippets) {
+      try {
+        const phoneMsg = await anthropic.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 100,
+          messages: [{
+            role: 'user',
+            content: `Extract the leasing office or main contact phone number for "${property_name}" in ${loc} from these search results. Return ONLY the phone number (format: (xxx) xxx-xxxx or xxx-xxx-xxxx). If multiple numbers found, return the most likely leasing/main office number. If none found, return null.\n\n${phoneSnippets}`,
+          }],
+        })
+        const phoneText = (phoneMsg.content[0]?.type === 'text' ? phoneMsg.content[0].text : '').trim()
+        const phoneMatch = phoneText.match(/\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/)
+        property_phone = phoneMatch ? phoneMatch[0] : null
+      } catch { /* fail silently */ }
+    }
+
+    // ── Haiku Pass 1: extract social posts (up to 10) ────────────────────────
+
+    const extractionPrompt = `You are analyzing search results about a multifamily property. Extract individual resident reviews, social media posts, and community complaints. Extract up to 10 of the best, most specific posts.
 
 Property: "${property_name}", ${loc}
 
 Return ONLY a valid JSON array of social posts. Use this exact schema:
-[{"platform":"Reddit","date":"2024-06-15","quote":"exact resident quote or paraphrase","tech_mentioned":["DirecTV","gate"],"signal_type":"internet_complaint","severity":"high","url":"https://..."}]
+[{"platform":"Reddit","date":"2024-06-15","quote":"FULL exact resident quote — do not truncate, include the complete text","tech_mentioned":["DirecTV","gate"],"signal_type":"internet_complaint","severity":"high","url":"https://..."}]
 
 Rules:
 - platform: derive from URL — "Reddit", "Google Reviews", "Yelp", "Facebook", "Apartments.com", "News", or "Resident Review"
 - date: ISO date if found, "unknown" if not
-- quote: the ACTUAL words from the resident/reviewer — verbatim or close paraphrase. Never marketing copy.
+- quote: the COMPLETE verbatim words from the resident/reviewer — do NOT truncate or summarize. Include the full post text.
 - tech_mentioned: array of tech/service brands or categories mentioned (gate, internet, DirecTV, Dish, smart lock, fob, intercom, camera, etc.)
 - signal_type: one of gate_complaint | internet_complaint | access_complaint | video_complaint | security_complaint | lock_complaint | package_complaint | positive_review | general_complaint
 - severity: "high" (major pain, blocking issue), "medium" (notable complaint), "low" (minor or positive)
@@ -225,15 +251,12 @@ Rules:
 - If social posts mention a provider NOT in the tech stack, flag it as type "new_finding"
 - Return [] if there are no meaningful cross-reference insights`
 
-    // Run both Haiku passes in parallel
-    const [rawPosts, crossRefNotes] = await Promise.all([
+    // Run both Haiku passes in parallel (phone already done above)
+    const [rawPosts] = await Promise.all([
       haikusExtractArray<{
         platform: string; date: string; quote: string; tech_mentioned: string[];
         signal_type: string; severity: string; url?: string;
-      }>(extractionPrompt, `SEARCH RESULTS:\n${allSnippets}`, 1800),
-
-      // We'll run cross-ref after we get posts — do it sequentially below
-      Promise.resolve(null as null),
+      }>(extractionPrompt, `SEARCH RESULTS:\n${allSnippets}`, 2800),
     ])
 
     // Now run cross-ref with actual posts
@@ -246,20 +269,23 @@ Rules:
     }>(
       crossRefPrompt.replace('[SOCIAL_POSTS_PLACEHOLDER]', postsForCrossRef),
       '',
-      800
+      1000
     )
 
-    // Normalize output
-    const social_posts = rawPosts.map(p => ({
-      platform:      p.platform     || 'Resident Review',
-      date:          p.date         || 'unknown',
-      quote:         p.quote        || '',
-      tech_mentioned: Array.isArray(p.tech_mentioned) ? p.tech_mentioned : [],
-      signal_type:   p.signal_type  || 'general_complaint',
-      severity:      (['high','medium','low'].includes(p.severity) ? p.severity : 'medium') as 'high' | 'medium' | 'low',
-      url:           p.url,
-      source:        'social_search' as const,
-    })).filter(p => p.quote.length > 10)
+    // Normalize output — keep up to 10 posts
+    const social_posts = rawPosts
+      .map(p => ({
+        platform:      p.platform     || 'Resident Review',
+        date:          p.date         || 'unknown',
+        quote:         p.quote        || '',
+        tech_mentioned: Array.isArray(p.tech_mentioned) ? p.tech_mentioned : [],
+        signal_type:   p.signal_type  || 'general_complaint',
+        severity:      (['high','medium','low'].includes(p.severity) ? p.severity : 'medium') as 'high' | 'medium' | 'low',
+        url:           p.url,
+        source:        'social_search' as const,
+      }))
+      .filter(p => p.quote.length > 10)
+      .slice(0, 10)
 
     const cross_reference_notes = actualCrossRefNotes.map(n => ({
       provider:       n.provider      || '',
@@ -269,10 +295,10 @@ Rules:
       type:           n.type          || 'confirmation',
     })).filter(n => n.note.length > 10)
 
-    return NextResponse.json({ social_posts, cross_reference_notes })
+    return NextResponse.json({ social_posts, cross_reference_notes, property_phone })
 
   } catch (err) {
     console.error('[ARIA Social]', err)
-    return NextResponse.json({ social_posts: [], cross_reference_notes: [] })
+    return NextResponse.json({ social_posts: [], cross_reference_notes: [], property_phone: null })
   }
 }
