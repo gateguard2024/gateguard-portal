@@ -61,6 +61,8 @@ interface PropTech {
 interface Property {
   name: string;
   address: string;
+  city?: string;
+  state?: string;
   units: number;
   year_built: number;
   management_company: string;
@@ -185,6 +187,30 @@ interface Prospect {
   freshness_score?: number;
   buying_trends?: string;
   outreach_plan?: OutreachPlan;
+}
+
+interface SocialPost {
+  platform: string;
+  date: string;
+  quote: string;
+  tech_mentioned: string[];
+  signal_type: string;
+  severity: 'high' | 'medium' | 'low';
+  url?: string;
+  source?: 'social_search';
+}
+
+interface CrossRefNote {
+  provider: string;
+  note: string;
+  confidence: 'high' | 'medium' | 'low';
+  evidence_count: number;
+  type: string;
+}
+
+interface SocialSearchResult {
+  social_posts: SocialPost[];
+  cross_reference_notes: CrossRefNote[];
 }
 
 interface ResearchResult {
@@ -370,6 +396,8 @@ export default function ARIAPage() {
   const [candidates, setCandidates]         = useState<Candidate[]>([]);
   const [queryInterpretation, setQueryInterpretation] = useState('');
   const [viewMode, setViewMode]             = useState<ViewMode>('idle');
+  const [socialResults, setSocialResults]   = useState<SocialSearchResult | null>(null);
+  const [socialLoading, setSocialLoading]   = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   // Suppress unused warning — viewMode reserved for richer state tracking
   void viewMode;
@@ -440,6 +468,8 @@ export default function ARIAPage() {
     setSelectedProspect(0);
     setActiveTab('property');
     setViewMode('running');
+    setSocialResults(null);
+    setSocialLoading(false);
     setPhase(1);
 
     const apiPromise = fetch('/api/aria/research/deep', {
@@ -513,6 +543,40 @@ export default function ARIAPage() {
       runARIA();
     }
   }, [pendingRerun, phase, runARIA]);
+
+  // Engine 2 — social search fires automatically once Engine 1 completes
+  useEffect(() => {
+    if (phase !== 6 || !results) return;
+    const p = results.prospects?.[0];
+    if (!p?.property?.name) return;
+    const prop = p.property;
+    // Derive city/state: prefer explicit fields → scout_queue → parse from address
+    const sq = p.scout_queue;
+    const city  = prop.city  || sq?.property?.city  || prop.address?.split(',').slice(-3,-2)[0]?.trim() || '';
+    const state = prop.state || sq?.property?.state || prop.address?.split(',').slice(-2,-1)[0]?.trim() || '';
+    if (!city) return; // need at least city for social search to be meaningful
+    setSocialResults(null);
+    setSocialLoading(true);
+    fetch('/api/aria/social', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        property_name:      prop.name,
+        city,
+        state,
+        management_company: prop.management_company ?? '',
+        isp_providers:      prop.isp_providers      ?? [],
+        video_providers:    prop.video_providers     ?? [],
+        bulk_agreements:    prop.bulk_agreements     ?? [],
+        gate_operators:     prop.proptech?.gate_operators  ?? [],
+        access_control:     prop.proptech?.access_control  ?? [],
+      }),
+    })
+      .then(r => r.ok ? r.json() : { social_posts: [], cross_reference_notes: [] })
+      .then(d => setSocialResults(d))
+      .catch(() => setSocialResults({ social_posts: [], cross_reference_notes: [] }))
+      .finally(() => setSocialLoading(false));
+  }, [phase, results]);
 
   async function importSearch(id: string) {
     setImporting(id);
@@ -781,7 +845,7 @@ export default function ARIAPage() {
               { key: 'proptech', label: 'PropTech', badge: [p.property?.proptech?.gate_operators, p.property?.proptech?.access_control, p.property?.proptech?.cameras, p.property?.proptech?.intercoms].filter(a => a?.length).length || null },
               { key: 'dm',       label: 'Decision Matrix' },
               { key: 'intel',    label: 'AI Intel', badge: p.pain_signals?.length > 0 ? p.pain_signals.length : null },
-              { key: 'social',   label: 'Community', badge: p.pain_signals?.length || null },
+              { key: 'social',   label: 'Community', badge: ((p.pain_signals?.length ?? 0) + (socialResults?.social_posts?.length ?? 0)) || null },
               { key: 'scout',    label: 'SCOUT', greenBadge: true },
             ] as { key: DetailTab; label: string; badge?: number | null; greenBadge?: boolean }[]).map(tab => {
               const isActive = activeTab === tab.key;
@@ -1411,6 +1475,28 @@ export default function ARIAPage() {
                 </div>
               </div>
             )}
+
+            {/* Social evidence footnotes from Engine 2 cross-reference */}
+            {(socialResults?.cross_reference_notes?.length ?? 0) > 0 && (
+              <div className="mt-4 pt-3 border-t border-slate-100">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-[#6B7EFF] mb-2 flex items-center gap-1">
+                  <Globe size={9} /> Social Evidence
+                </p>
+                <div className="space-y-1.5">
+                  {(socialResults!.cross_reference_notes).map((n, i) => (
+                    <div key={i} className="flex items-start gap-2 text-[10px] text-slate-600">
+                      <span className={cn("shrink-0 mt-0.5 font-bold px-1.5 py-0.5 rounded text-[9px] border",
+                        n.type === 'confirmation'  ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                        n.type === 'contradiction' ? 'bg-red-50 text-red-700 border-red-200' :
+                        n.type === 'new_finding'   ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                                     'bg-slate-100 text-slate-600 border-slate-200'
+                      )}>{n.provider}</span>
+                      <span className="font-medium leading-relaxed">{n.note}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1612,7 +1698,11 @@ export default function ARIAPage() {
     const shown = prioritized.slice(0, 5);
     const extra = prioritized.length - shown.length;
 
-    if (shown.length === 0) {
+    const e2Posts  = socialResults?.social_posts      ?? [];
+    const e2Notes  = socialResults?.cross_reference_notes ?? [];
+    const hasAny   = shown.length > 0 || e2Posts.length > 0 || socialLoading;
+
+    if (!hasAny) {
       return (
         <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
           <MessageSquare size={32} className="opacity-20" />
@@ -1621,6 +1711,8 @@ export default function ARIAPage() {
         </div>
       );
     }
+
+    const totalCount = prioritized.length + e2Posts.length;
 
     return (
       <div className="space-y-5 max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -1638,9 +1730,47 @@ export default function ARIAPage() {
             {techPosts.length > 0 && (
               <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-rose-50 text-rose-600 border border-rose-200/60">{techPosts.length} tech complaints</span>
             )}
-            <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">{prioritized.length} total</span>
+            <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">{totalCount} total</span>
+            {socialLoading && (
+              <span className="flex items-center gap-1 text-[10px] text-[#6B7EFF] font-bold">
+                <Loader2 size={11} className="animate-spin" /> Social search…
+              </span>
+            )}
           </div>
         </div>
+
+        {/* Cross-reference notes from Engine 2 */}
+        {e2Notes.length > 0 && (
+          <div className="rounded-2xl bg-gradient-to-br from-blue-50/60 to-indigo-50/40 border border-blue-200/60 p-4 shadow-sm">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-blue-600 mb-3 flex items-center gap-1.5">
+              <Zap size={10} /> AI Cross-Reference — Engine 1 × Social Search
+            </p>
+            <div className="space-y-2">
+              {e2Notes.map((note, i) => (
+                <div key={i} className={cn("rounded-xl px-3.5 py-2.5 text-xs flex items-start gap-2.5 border",
+                  note.type === 'confirmation'  ? 'bg-emerald-50/80 border-emerald-200/60 text-emerald-900' :
+                  note.type === 'contradiction' ? 'bg-red-50/80 border-red-200/60 text-red-900' :
+                  note.type === 'new_finding'   ? 'bg-amber-50/80 border-amber-200/60 text-amber-900' :
+                                                  'bg-white border-slate-200/60 text-slate-800'
+                )}>
+                  <span className="shrink-0 mt-0.5 font-bold text-[10px] px-1.5 py-0.5 rounded-md border"
+                    style={{ background: note.type === 'confirmation' ? '#D1FAE5' : note.type === 'contradiction' ? '#FEE2E2' : note.type === 'new_finding' ? '#FEF3C7' : '#F1F5F9',
+                             color: note.type === 'confirmation' ? '#065F46' : note.type === 'contradiction' ? '#991B1B' : note.type === 'new_finding' ? '#92400E' : '#475569',
+                             borderColor: note.type === 'confirmation' ? '#A7F3D0' : note.type === 'contradiction' ? '#FECACA' : note.type === 'new_finding' ? '#FDE68A' : '#CBD5E1',
+                           }}>
+                    {note.provider}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <span className="font-medium leading-relaxed">{note.note}</span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[9px] font-mono opacity-60">{note.type.replace('_',' ')} · {note.confidence} confidence · {note.evidence_count} post{note.evidence_count !== 1 ? 's' : ''}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Post cards */}
         {shown.map((sig, i) => {
@@ -1702,6 +1832,75 @@ export default function ARIAPage() {
               AI Intel tab
             </button>
           </p>
+        )}
+
+        {/* ── Engine 2: Social Search (last 6 months) ── */}
+        {(e2Posts.length > 0 || socialLoading) && (
+          <div className="pt-2">
+            <div className="flex items-center gap-2 mb-3 px-1">
+              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-[#6B7EFF]/30 to-transparent" />
+              <span className="text-[9px] font-bold uppercase tracking-widest text-[#6B7EFF] flex items-center gap-1">
+                <Globe size={10} /> Social Search — Last 6 Months
+              </span>
+              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-[#6B7EFF]/30 to-transparent" />
+            </div>
+
+            {socialLoading && e2Posts.length === 0 && (
+              <div className="flex items-center justify-center gap-2 py-8 text-[#6B7EFF]">
+                <Loader2 size={16} className="animate-spin" />
+                <span className="text-xs font-bold">Searching Reddit, Google Reviews, Yelp…</span>
+              </div>
+            )}
+
+            {e2Posts.map((post, i) => {
+              const SEV_COLORS = {
+                high:   { bg: 'bg-red-400',    border: 'border-red-200',   badge: 'bg-red-50 text-red-600',      text: 'text-red-500' },
+                medium: { bg: 'bg-amber-400',  border: 'border-amber-200', badge: 'bg-amber-50 text-amber-600',  text: 'text-amber-500' },
+                low:    { bg: 'bg-slate-300',  border: 'border-slate-200', badge: 'bg-slate-100 text-slate-500', text: 'text-slate-400' },
+              };
+              const sc = SEV_COLORS[post.severity] ?? SEV_COLORS.low;
+              return (
+                <div key={i} className={cn("rounded-2xl bg-white shadow-sm overflow-hidden relative border mb-4", sc.border)}>
+                  <div className={cn("absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl", sc.bg)} />
+                  <div className="p-5 pl-6">
+                    <div className="flex items-start justify-between gap-3 mb-4">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-bold px-2.5 py-1 rounded-full border bg-[#6B7EFF]/10 text-[#4F46E5] border-[#6B7EFF]/25">
+                          {post.platform}
+                        </span>
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200/60">📡 Social Search</span>
+                        <span className="text-[10px] font-mono text-slate-400">
+                          {post.date && post.date !== 'unknown' ? post.date : 'Date unknown'}
+                        </span>
+                      </div>
+                      <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider border shrink-0", sc.badge, sc.border.replace('200','100'))}>{post.severity}</span>
+                    </div>
+
+                    {post.tech_mentioned?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-3">
+                        {post.tech_mentioned.map((t, j) => (
+                          <span key={j} className="text-[9px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200 font-mono">{t}</span>
+                        ))}
+                      </div>
+                    )}
+
+                    <blockquote className="relative pl-5">
+                      <span className="absolute left-0 top-[-4px] text-3xl leading-none text-slate-200 font-serif select-none" aria-hidden>&ldquo;</span>
+                      <p className="text-sm text-slate-800 leading-relaxed font-medium">{post.quote}</p>
+                    </blockquote>
+
+                    {post.url && (
+                      <a href={post.url} target="_blank" rel="noopener noreferrer"
+                        className="mt-4 flex items-center gap-1.5 text-[10px] font-mono text-slate-400 hover:text-[#6B7EFF] transition-colors border-t border-slate-100 pt-3 group">
+                        <ExternalLink size={10} className="shrink-0 group-hover:text-[#6B7EFF]" />
+                        <span className="truncate">{post.url.replace(/^https?:\/\//, '')}</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
     );
