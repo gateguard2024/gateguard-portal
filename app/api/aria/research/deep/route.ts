@@ -1361,8 +1361,8 @@ export async function POST(req: NextRequest) {
       console.log(`[aria] Re-searching known property: ${property_name} (researched ${existingRecord.times_researched}x)`)
     }
 
-    // STOP: if no city/state confirmed and not specific
-    if (!city && !state && !p1.is_specific_property) {
+    // STOP: only if we have zero identity signal — confirmed_name alone is enough to proceed
+    if (!city && !state && !p1.is_specific_property && !p1.confirmed_name && !property_name) {
       return NextResponse.json({ error: 'Property not found. Try a more specific query (include city/state).' }, { status: 404 })
     }
 
