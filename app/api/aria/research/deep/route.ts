@@ -443,11 +443,11 @@ async function runPhase1A(query: string, client: Anthropic): Promise<Phase1Resul
   const allResults = [...listingResults, ...pressResults]
   if (allResults.length === 0 && amenityResults.length === 0) return blank
 
-  // Standard identity snippets (400 chars)
+  // Standard identity snippets — 900 chars (was 600, bumped to catch unit counts that appear mid-listing)
   const snippets = allResults
     .filter(r => (r.content || '').length > 30)
     .slice(0, 10)
-    .map((r, i) => `[${i + 1}] ${r.title}\nURL: ${r.url}\n${r.content.slice(0, 600)}`)  // capped — raw content passes separately
+    .map((r, i) => `[${i + 1}] ${r.title}\nURL: ${r.url}\n${r.content.slice(0, 900)}`)
     .join('\n\n---\n\n')
 
   // Amenity raw content — first 4000 chars of each page (amenities usually near top)
@@ -468,12 +468,12 @@ IDENTITY RULES:
 - confirmed_name: exact community name found in results (not the query — the real name)
 - confirmed_address: full street address if found
 - confirmed_city + confirmed_state: REQUIRED if any geo context exists
-- confirmed_units: patterns: "312 units", "312-unit", "Total Units: 312", "N studio to"
-- confirmed_year_built: from "built YYYY", "Year Built: YYYY", "opened YYYY", "completed YYYY"
+- confirmed_units: LOOK HARD — patterns: "312 units", "312-unit", "Total Units: 312", "N studio to", "312 apartments", "312 homes", "312 available", "Showing X of 312", "312 floor plans", "312 residences", "312 apartment homes". Even if you see only "studio - 3 bed" floor plans listed, count the distinct plans as a minimum.
+- confirmed_year_built: from "built YYYY", "Year Built: YYYY", "opened YYYY", "completed YYYY", "constructed YYYY", "established YYYY"
 - confirmed_management: company managing day-to-day operations
 - confirmed_owner: investor/developer/owner entity
 - confirmed_website: official property URL (NOT apartments.com/zillow)
-- confirmed_phone: leasing office phone number
+- confirmed_phone: leasing office phone — look for (xxx) xxx-xxxx or xxx-xxx-xxxx format in listings, contact sections, or footer
 - is_specific_property: true if results clearly identify ONE specific named property
 
 AMENITY/TECHNOLOGY RULES (look especially in ===AMENITY PAGES===):
@@ -764,7 +764,7 @@ RULES:
 - isp_providers: actual ISPs serving the property (GIGstreem, Hotwire, Comcast, AT&T, Spectrum, etc. — NEVER management company names). Cross-reference the known provider list.
 - video_providers: cable/satellite/IPTV services (DirecTV, Dish Network, Comcast Xfinity, Spectrum TV, Cox TV, etc.). Look in [video] source snippets especially. Cross-reference known provider list.
 - bulk_detected: true if internet is included in rent, OR bulk/exclusive deal exists, OR "technology fee" / "tech fee" mentioned, OR MDU-only ISP present, OR any telecom agreement found
-- bulk_agreements: every confirmed or likely telecom service agreement. Format:
+- bulk_agreements: MAXIMUM 2 total — at most 1 with service_type "internet" AND at most 1 with service_type "video". ONLY include a provider if there is DIRECT EVIDENCE it has an exclusive/bulk/ROE agreement with THIS SPECIFIC PROPERTY (not just the city). Do NOT add providers just because they operate in the metro area or appear in FCC coverage data. The bulk internet provider is typically a single MDU-specialist ISP (e.g. GIGstreem, Hotwire, Pavlov, Bsquared). Return [] if no direct property-level evidence exists. Format:
   [{"provider":"GIGstreem","service_type":"internet","agreement_type":"bulk","confidence":"high","evidence":"internet included in rent","expiry_estimate":"Est. 2027-2029"}]
   service_type: "internet","video","bundled"
   agreement_type: "exclusive","bulk","preferred","unknown"
@@ -818,6 +818,20 @@ SOURCE TAGS IN RESULTS:
       }
     }
   }
+
+  // ── Enforce max 1 bulk agreement per service_type ────────────────────────
+  // (guards against Haiku or city-search adding multiple internet/video entries)
+  const CONF_RANK: Record<string, number> = { confirmed: 4, high: 3, medium: 2, low: 1 }
+  const deduped: typeof result.bulk_agreements = []
+  for (const svcType of ['internet', 'video', 'bundled'] as const) {
+    const matching = result.bulk_agreements.filter(a => a.service_type === svcType)
+    if (!matching.length) continue
+    const best = matching.reduce((a, b) =>
+      (CONF_RANK[a.confidence ?? 'low'] ?? 1) >= (CONF_RANK[b.confidence ?? 'low'] ?? 1) ? a : b
+    )
+    deduped.push(best)
+  }
+  result.bulk_agreements = deduped
 
   return result
 }
@@ -1563,6 +1577,8 @@ buying_trends: 1-sentence sales trend insight for this property type`,
       property: {
         name: property_name,
         address: normStr(address) || property_name,
+        city: city || null,
+        state: state || null,
         units: normInt(p1.confirmed_units ?? rawData.property_details?.units ?? rawData.units),
         property_type: normStr(rawData.property_details?.property_type) ?? 'multifamily',
         class: normStr(rawData.property_details?.class ?? rawData.property_class),

@@ -70,6 +70,7 @@ interface Property {
   property_type: string;
   class: string;
   occupancy: string;
+  phone?: string | null;
   isp_providers?: string[];
   video_providers?: string[];
   bulk_agreements?: BulkAgreement[];
@@ -906,6 +907,18 @@ export default function ARIAPage() {
                 <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Management</p>
                 <p className="text-xs font-bold text-slate-700 mt-1">{p.property?.management_company || '—'}</p>
               </div>
+              {p.property?.phone && (
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Leasing Office Phone</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Phone size={11} className="text-emerald-500 shrink-0" />
+                    <a href={`tel:${p.property.phone}`} className="text-xs font-bold text-emerald-700 hover:underline">{p.property.phone}</a>
+                    <button onClick={() => navigator.clipboard.writeText(p.property?.phone ?? '')} className="ml-1 text-slate-400 hover:text-[#6B7EFF] transition-colors">
+                      <Copy size={10} />
+                    </button>
+                  </div>
+                </div>
+              )}
               <div>
                 <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Owner entity</p>
                 <p className="text-[11px] text-slate-500 mt-1">{p.property?.owner_entity || '—'}</p>
