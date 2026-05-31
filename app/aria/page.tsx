@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, memo } from "react";
 import {
   Cpu, Zap, Users, Radio, Target,
   Building2, User, MapPin, CheckCircle2,
@@ -298,6 +298,165 @@ const PIPELINE_PARTICLES = [
   { x: 92, y: 70, s: 1.5, d: 1.4  },
   { x: 14, y: 50, s: 1,   d: 0.35 },
 ];
+
+// ── PipelinePanel — module-level memo component ──────────────────────────────
+// MUST be defined outside the main component so React sees a stable component
+// type across renders. When nested inside a function component, React unmounts
+// and remounts it on every parent state change, resetting all CSS animations.
+const PipelinePanel = memo(function PipelinePanel({ phase, synthStep }: { phase: number; synthStep: number }) {
+  return (
+    <div className="flex flex-col h-full overflow-hidden relative select-none"
+      style={{ background: 'radial-gradient(ellipse at 50% 25%, #0a1628 0%, #050c1a 55%, #000208 100%)' }}>
+
+      {/* Perspective grid */}
+      <div className="absolute inset-0 pointer-events-none" aria-hidden="true"
+        style={{ backgroundImage: 'linear-gradient(rgba(107,126,255,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(107,126,255,0.035) 1px, transparent 1px)', backgroundSize: '48px 48px' }} />
+
+      {/* Top scan line */}
+      <div className="absolute top-0 left-0 right-0 h-px pointer-events-none" aria-hidden="true"
+        style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(107,126,255,0.9) 50%, transparent 100%)', animation: 'aria-shimmer 2.4s ease-in-out infinite' }} />
+
+      {/* Corner brackets */}
+      <div className="absolute top-4 left-4 w-8 h-8 pointer-events-none" aria-hidden="true">
+        <div className="absolute top-0 left-0 w-full h-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
+        <div className="absolute top-0 left-0 h-full w-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
+      </div>
+      <div className="absolute top-4 right-4 w-8 h-8 pointer-events-none" aria-hidden="true">
+        <div className="absolute top-0 right-0 w-full h-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
+        <div className="absolute top-0 right-0 h-full w-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
+      </div>
+      <div className="absolute bottom-4 left-4 w-8 h-8 pointer-events-none" aria-hidden="true">
+        <div className="absolute bottom-0 left-0 w-full h-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
+        <div className="absolute bottom-0 left-0 h-full w-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
+      </div>
+      <div className="absolute bottom-4 right-4 w-8 h-8 pointer-events-none" aria-hidden="true">
+        <div className="absolute bottom-0 right-0 w-full h-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
+        <div className="absolute bottom-0 right-0 h-full w-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
+      </div>
+
+      {/* Floating particles */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+        {PIPELINE_PARTICLES.map((pt, i) => (
+          <div key={i} className="absolute rounded-full"
+            style={{ left: `${pt.x}%`, top: `${pt.y}%`, width: `${pt.s}px`, height: `${pt.s}px`, background: `rgba(107,126,255,${pt.s > 1.5 ? 0.5 : 0.3})`, boxShadow: `0 0 ${pt.s * 3}px rgba(107,126,255,0.4)`, animation: `aria-pulse ${2 + pt.d}s ease-in-out infinite`, animationDelay: `${pt.d}s` }} />
+        ))}
+      </div>
+
+      {/* Main content */}
+      <div className="relative z-10 flex flex-col items-center justify-center h-full gap-10 px-8 py-10">
+
+        {/* Central ARIA logo with orbital rings */}
+        <div className="relative flex items-center justify-center" style={{ width: '180px', height: '180px' }}>
+          {/* Ring 1 — fast inner */}
+          <div className="absolute rounded-full" style={{ width: '90px', height: '90px', border: '1px solid rgba(107,126,255,0.3)', animation: 'spin 7s linear infinite' }}>
+            <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full"
+              style={{ background: '#6B7EFF', boxShadow: '0 0 12px 5px rgba(107,126,255,0.7)' }} />
+          </div>
+          {/* Ring 2 — medium reverse */}
+          <div className="absolute rounded-full" style={{ width: '128px', height: '128px', border: '1px solid rgba(167,139,250,0.15)', animation: 'spin 13s linear infinite reverse' }}>
+            <div className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-2 h-2 rounded-full"
+              style={{ background: '#A78BFA', boxShadow: '0 0 9px 3px rgba(167,139,250,0.6)' }} />
+          </div>
+          {/* Ring 3 — slow outer */}
+          <div className="absolute rounded-full" style={{ width: '170px', height: '170px', border: '1px solid rgba(107,126,255,0.07)', animation: 'spin 21s linear infinite' }} />
+
+          {/* Core logo — enlarged */}
+          <div className="relative z-10 w-20 h-20 rounded-2xl flex flex-col items-center justify-center gap-1"
+            style={{ background: 'linear-gradient(145deg, #0d2150 0%, #1a3470 45%, #6B7EFF 100%)', boxShadow: '0 0 40px rgba(107,126,255,0.45), 0 0 80px rgba(107,126,255,0.14), inset 0 1px 0 rgba(255,255,255,0.12)', border: '1px solid rgba(107,126,255,0.35)' }}>
+            <span className="text-white font-bold text-xl tracking-tighter leading-none" style={{ textShadow: '0 0 20px rgba(107,126,255,1)' }}>AR</span>
+            <span className="text-[8px] font-bold tracking-[0.25em] leading-none" style={{ color: 'rgba(165,180,252,0.65)' }}>IA</span>
+          </div>
+        </div>
+
+        {/* Phase nodes row */}
+        <div className="w-full max-w-[420px]">
+          <div className="flex items-start">
+            {PHASES.map((p, idx) => {
+              const status = phase > p.id ? 'done' : phase === p.id ? 'running' : 'queued';
+              const Icon = p.icon;
+              const isLast = idx === PHASES.length - 1;
+              return (
+                <div key={p.id} className={cn('flex items-center min-w-0', isLast ? '' : 'flex-1')}>
+                  {/* Node */}
+                  <div className="flex flex-col items-center gap-2 shrink-0">
+                    <div className="relative">
+                      {status === 'running' && (
+                        <div className="absolute -inset-3 rounded-full pointer-events-none"
+                          style={{ background: 'radial-gradient(circle, rgba(107,126,255,0.25) 0%, transparent 70%)', animation: 'aria-pulse 1.4s ease-in-out infinite' }} />
+                      )}
+                      <div className="w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-700"
+                        style={{
+                          background: status === 'done' ? 'linear-gradient(135deg, #065f46, #059669)' :
+                                      status === 'running' ? 'linear-gradient(135deg, #1a3470, #6B7EFF)' :
+                                      'rgba(255,255,255,0.04)',
+                          border: `1px solid ${status === 'done' ? 'rgba(16,185,129,0.55)' : status === 'running' ? 'rgba(107,126,255,0.75)' : 'rgba(255,255,255,0.08)'}`,
+                          boxShadow: status === 'running' ? '0 0 20px rgba(107,126,255,0.55), 0 0 45px rgba(107,126,255,0.18), inset 0 1px 0 rgba(255,255,255,0.1)' :
+                                     status === 'done' ? '0 0 14px rgba(16,185,129,0.35)' : 'none',
+                        }}>
+                        {status === 'done' ? (
+                          <Check size={16} style={{ color: '#6ee7b7' }} />
+                        ) : status === 'running' ? (
+                          <Loader2 size={16} className="animate-spin" style={{ color: '#c7d2fe' }} />
+                        ) : (
+                          <Icon size={16} style={{ color: 'rgba(255,255,255,0.22)' }} />
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-center leading-tight w-16 truncate"
+                      style={{ color: status === 'done' ? '#34D399' : status === 'running' ? '#818CF8' : 'rgba(255,255,255,0.18)' }}>
+                      {p.name}
+                    </span>
+                  </div>
+
+                  {/* Connector beam */}
+                  {!isLast && (
+                    <div className="flex-1 h-px relative overflow-hidden self-start mt-[23px] mx-1">
+                      <div className="absolute inset-0" style={{ background: 'rgba(255,255,255,0.05)' }} />
+                      {phase > p.id && (
+                        <div className="absolute inset-0"
+                          style={{ background: 'linear-gradient(90deg, rgba(16,185,129,0.6), rgba(16,185,129,0.2))' }} />
+                      )}
+                      {phase === p.id && p.id < 5 && (
+                        <div className="absolute inset-0"
+                          style={{ background: 'linear-gradient(90deg, rgba(107,126,255,0.8) 0%, rgba(107,126,255,0.05) 100%)', animation: `aria-fill ${PHASE_DURATIONS[p.id]}ms ease-in-out forwards` }} />
+                      )}
+                      {phase === p.id && p.id === 5 && (
+                        <div className="absolute inset-0"
+                          style={{ background: 'linear-gradient(90deg, #6B7EFF, #A78BFA, #6B7EFF)', backgroundSize: '200% 100%', animation: 'aria-shimmer 1.4s ease-in-out infinite' }} />
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Status readout */}
+        <div className="flex flex-col items-center gap-3">
+          <div className="flex items-center gap-2.5 px-5 py-2.5 rounded-full"
+            style={{ background: 'rgba(107,126,255,0.07)', border: '1px solid rgba(107,126,255,0.18)', backdropFilter: 'blur(8px)' }}>
+            <span className="w-1.5 h-1.5 rounded-full shrink-0"
+              style={{ background: '#6B7EFF', boxShadow: '0 0 8px rgba(107,126,255,1)', animation: 'aria-pulse 0.9s ease-in-out infinite' }} />
+            <span className="text-[10px] font-mono tracking-wide"
+              style={{ color: 'rgba(165,180,252,0.85)' }}>
+              {phase === 5
+                ? SYNTHESIS_STEPS[synthStep]
+                : phase > 0
+                  ? `[${PHASES[phase - 1]?.name?.toUpperCase() ?? 'SYS'}] — Acquiring telemetry...`
+                  : 'Initializing ARIA engine...'}
+            </span>
+          </div>
+          <div className="text-[8px] font-mono text-center tracking-widest uppercase"
+            style={{ color: 'rgba(255,255,255,0.12)' }}>
+            {phase === 5 ? 'Claude Sonnet · Synthesis Mode Active' : 'ARIA Intelligence Engine · v7.3'}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+});
 
 const SOURCE_DISPLAY: Record<string, string> = {
   'listing-site': 'Property Listing', 'LISTING-SITE': 'Property Listing',
@@ -2479,162 +2638,6 @@ export default function ARIAPage() {
     );
   }
 
-  // ── Pipeline panel — 2035 holographic HUD ────────────────────────────────
-  function PipelinePanel() {
-    return (
-      <div className="flex flex-col h-full overflow-hidden relative select-none"
-        style={{ background: 'radial-gradient(ellipse at 50% 25%, #0a1628 0%, #050c1a 55%, #000208 100%)' }}>
-
-        {/* Perspective grid */}
-        <div className="absolute inset-0 pointer-events-none" aria-hidden="true"
-          style={{ backgroundImage: 'linear-gradient(rgba(107,126,255,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(107,126,255,0.035) 1px, transparent 1px)', backgroundSize: '48px 48px' }} />
-
-        {/* Top scan line */}
-        <div className="absolute top-0 left-0 right-0 h-px pointer-events-none" aria-hidden="true"
-          style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(107,126,255,0.9) 50%, transparent 100%)', animation: 'aria-shimmer 2.4s ease-in-out infinite' }} />
-
-        {/* Corner brackets — HUD aesthetic */}
-        <div className="absolute top-4 left-4 w-8 h-8 pointer-events-none" aria-hidden="true">
-          <div className="absolute top-0 left-0 w-full h-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
-          <div className="absolute top-0 left-0 h-full w-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
-        </div>
-        <div className="absolute top-4 right-4 w-8 h-8 pointer-events-none" aria-hidden="true">
-          <div className="absolute top-0 right-0 w-full h-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
-          <div className="absolute top-0 right-0 h-full w-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
-        </div>
-        <div className="absolute bottom-4 left-4 w-8 h-8 pointer-events-none" aria-hidden="true">
-          <div className="absolute bottom-0 left-0 w-full h-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
-          <div className="absolute bottom-0 left-0 h-full w-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
-        </div>
-        <div className="absolute bottom-4 right-4 w-8 h-8 pointer-events-none" aria-hidden="true">
-          <div className="absolute bottom-0 right-0 w-full h-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
-          <div className="absolute bottom-0 right-0 h-full w-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
-        </div>
-
-        {/* Floating particles */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-          {PIPELINE_PARTICLES.map((pt, i) => (
-            <div key={i} className="absolute rounded-full"
-              style={{ left: `${pt.x}%`, top: `${pt.y}%`, width: `${pt.s}px`, height: `${pt.s}px`, background: `rgba(107,126,255,${pt.s > 1.5 ? 0.5 : 0.3})`, boxShadow: `0 0 ${pt.s * 3}px rgba(107,126,255,0.4)`, animation: `aria-pulse ${2 + pt.d}s ease-in-out infinite`, animationDelay: `${pt.d}s` }} />
-          ))}
-        </div>
-
-        {/* Main content */}
-        <div className="relative z-10 flex flex-col items-center justify-center h-full gap-10 px-8 py-10">
-
-          {/* Central ARIA logo with orbital rings */}
-          <div className="relative flex items-center justify-center" style={{ width: '148px', height: '148px' }}>
-            {/* Ring 1 — fast inner */}
-            <div className="absolute rounded-full" style={{ width: '72px', height: '72px', border: '1px solid rgba(107,126,255,0.3)', animation: 'spin 7s linear infinite' }}>
-              <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full"
-                style={{ background: '#6B7EFF', boxShadow: '0 0 10px 4px rgba(107,126,255,0.7)' }} />
-            </div>
-            {/* Ring 2 — medium reverse */}
-            <div className="absolute rounded-full" style={{ width: '104px', height: '104px', border: '1px solid rgba(167,139,250,0.15)', animation: 'spin 13s linear infinite reverse' }}>
-              <div className="absolute top-1/2 -right-1 -translate-y-1/2 w-1.5 h-1.5 rounded-full"
-                style={{ background: '#A78BFA', boxShadow: '0 0 7px 2px rgba(167,139,250,0.6)' }} />
-            </div>
-            {/* Ring 3 — slow outer */}
-            <div className="absolute rounded-full" style={{ width: '140px', height: '140px', border: '1px solid rgba(107,126,255,0.07)', animation: 'spin 21s linear infinite' }} />
-
-            {/* Core logo */}
-            <div className="relative z-10 w-16 h-16 rounded-2xl flex flex-col items-center justify-center gap-0.5"
-              style={{ background: 'linear-gradient(145deg, #0d2150 0%, #1a3470 45%, #6B7EFF 100%)', boxShadow: '0 0 35px rgba(107,126,255,0.4), 0 0 70px rgba(107,126,255,0.12), inset 0 1px 0 rgba(255,255,255,0.12)', border: '1px solid rgba(107,126,255,0.3)' }}>
-              <span className="text-white font-bold text-base tracking-tighter leading-none" style={{ textShadow: '0 0 18px rgba(107,126,255,1)' }}>AR</span>
-              <span className="text-[7px] font-bold tracking-[0.2em] leading-none" style={{ color: 'rgba(165,180,252,0.6)' }}>IA</span>
-            </div>
-          </div>
-
-          {/* Phase nodes row */}
-          <div className="w-full max-w-md">
-            <div className="flex items-start">
-              {PHASES.map((p, idx) => {
-                const status = phase > p.id ? 'done' : phase === p.id ? 'running' : 'queued';
-                const Icon = p.icon;
-                const isLast = idx === PHASES.length - 1;
-                return (
-                  <div key={p.id} className={cn('flex items-center min-w-0', isLast ? '' : 'flex-1')}>
-                    {/* Node */}
-                    <div className="flex flex-col items-center gap-2 shrink-0">
-                      <div className="relative">
-                        {status === 'running' && (
-                          <div className="absolute -inset-3 rounded-full pointer-events-none"
-                            style={{ background: 'radial-gradient(circle, rgba(107,126,255,0.22) 0%, transparent 70%)', animation: 'aria-pulse 1.4s ease-in-out infinite' }} />
-                        )}
-                        <div className="w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-700"
-                          style={{
-                            background: status === 'done' ? 'linear-gradient(135deg, #065f46, #059669)' :
-                                        status === 'running' ? 'linear-gradient(135deg, #1a3470, #6B7EFF)' :
-                                        'rgba(255,255,255,0.03)',
-                            border: `1px solid ${status === 'done' ? 'rgba(16,185,129,0.55)' : status === 'running' ? 'rgba(107,126,255,0.75)' : 'rgba(255,255,255,0.07)'}`,
-                            boxShadow: status === 'running' ? '0 0 18px rgba(107,126,255,0.5), 0 0 40px rgba(107,126,255,0.15), inset 0 1px 0 rgba(255,255,255,0.1)' :
-                                       status === 'done' ? '0 0 12px rgba(16,185,129,0.3)' : 'none',
-                          }}>
-                          {status === 'done' ? (
-                            <Check size={13} style={{ color: '#6ee7b7' }} />
-                          ) : status === 'running' ? (
-                            <Loader2 size={13} className="animate-spin" style={{ color: '#c7d2fe' }} />
-                          ) : (
-                            <Icon size={13} style={{ color: 'rgba(255,255,255,0.2)' }} />
-                          )}
-                        </div>
-                      </div>
-                      <span className="text-[8px] font-bold uppercase tracking-widest text-center leading-tight w-14 truncate"
-                        style={{ color: status === 'done' ? '#34D399' : status === 'running' ? '#818CF8' : 'rgba(255,255,255,0.18)' }}>
-                        {p.name}
-                      </span>
-                    </div>
-
-                    {/* Connector beam */}
-                    {!isLast && (
-                      <div className="flex-1 h-px relative overflow-hidden self-start mt-[18px] mx-0.5">
-                        <div className="absolute inset-0" style={{ background: 'rgba(255,255,255,0.05)' }} />
-                        {phase > p.id && (
-                          <div className="absolute inset-0"
-                            style={{ background: 'linear-gradient(90deg, rgba(16,185,129,0.6), rgba(16,185,129,0.2))' }} />
-                        )}
-                        {phase === p.id && p.id < 5 && (
-                          <div className="absolute inset-0"
-                            style={{ background: 'linear-gradient(90deg, rgba(107,126,255,0.8) 0%, rgba(107,126,255,0.05) 100%)', animation: `aria-fill ${PHASE_DURATIONS[p.id]}ms ease-in-out forwards` }} />
-                        )}
-                        {phase === p.id && p.id === 5 && (
-                          <div className="absolute inset-0"
-                            style={{ background: 'linear-gradient(90deg, #6B7EFF, #A78BFA, #6B7EFF)', backgroundSize: '200% 100%', animation: 'aria-shimmer 1.4s ease-in-out infinite' }} />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Status readout */}
-          <div className="flex flex-col items-center gap-3">
-            <div className="flex items-center gap-2.5 px-5 py-2.5 rounded-full"
-              style={{ background: 'rgba(107,126,255,0.07)', border: '1px solid rgba(107,126,255,0.18)', backdropFilter: 'blur(8px)' }}>
-              <span className="w-1.5 h-1.5 rounded-full shrink-0"
-                style={{ background: '#6B7EFF', boxShadow: '0 0 8px rgba(107,126,255,1)', animation: 'aria-pulse 0.9s ease-in-out infinite' }} />
-              <span className="text-[10px] font-mono tracking-wide"
-                style={{ color: 'rgba(165,180,252,0.85)' }}>
-                {phase === 5
-                  ? SYNTHESIS_STEPS[synthStep]
-                  : phase > 0
-                    ? `[${PHASES[phase - 1]?.name?.toUpperCase() ?? 'SYS'}] — Acquiring telemetry...`
-                    : 'Initializing ARIA engine...'}
-              </span>
-            </div>
-            <div className="text-[8px] font-mono text-center tracking-widest uppercase"
-              style={{ color: 'rgba(255,255,255,0.12)' }}>
-              {phase === 5 ? 'Claude Sonnet · Synthesis Mode Active' : 'ARIA Intelligence Engine · v7.3'}
-            </div>
-          </div>
-
-        </div>
-      </div>
-    );
-  }
-
   // ── Candidate grid panel ──────────────────────────────────────────────────
   function CandidateGrid() {
     if (candidates.length === 0) {
@@ -3034,7 +3037,7 @@ export default function ARIAPage() {
           {dbView ? (
             <IntelDBPanel />
           ) : isRunning ? (
-            <PipelinePanel />
+            <PipelinePanel phase={phase} synthStep={synthStep} />
           ) : candidates.length > 0 ? (
             <CandidateGrid />
           ) : error ? (
@@ -3120,7 +3123,7 @@ export default function ARIAPage() {
 
         <div className="flex-1 overflow-y-auto">
           {isRunning ? (
-            <div className="p-4"><PipelinePanel /></div>
+            <div className="p-4"><PipelinePanel phase={phase} synthStep={synthStep} /></div>
           ) : candidates.length > 0 ? (
             <CandidateGrid />
           ) : error ? (

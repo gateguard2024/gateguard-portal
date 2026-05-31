@@ -420,11 +420,12 @@ async function runPhase1A(query: string, client: Anthropic): Promise<Phase1Resul
     listing_proptech: [], listing_bulk_detected: false,
   }
 
-  // Three parallel searches:
+  // Four parallel searches:
   // 1. Listing sites — snippet only (fast identity confirmation)
   // 2. Press/news — unit count, year built
-  // 3. Amenities deep-read — raw full-page content to catch ISP/cable/gate in amenities section
-  const [listingResults, pressResults, amenityResults] = await Promise.all([
+  // 3. Unit count web search — targets pages that explicitly mention total unit counts
+  // 4. Amenities deep-read — raw full-page content to catch ISP/cable/gate in amenities section
+  const [listingResults, pressResults, unitCountResults, amenityResults] = await Promise.all([
     tavilySearch(
       `"${query}" apartments site:apartments.com OR site:rentcafe.com OR site:zillow.com OR site:apartmentlist.com`,
       4, 'listing', 'advanced', false
@@ -433,6 +434,11 @@ async function runPhase1A(query: string, client: Anthropic): Promise<Phase1Resul
       `"${query}" apartments "apartment homes" OR units completed OR opened OR built`,
       5, 'press', 'news'
     ),
+    // Dedicated unit count web search — finds total unit count from property databases and real estate sites
+    serperSearch(
+      `"${query}" apartments "total units" OR "unit count" OR "floor plans" OR "apartment homes" -"available units"`,
+      5, 'unit_count', 'search'
+    ),
     // Raw content fetch — amenities sections explicitly list ISP/cable/gate providers
     tavilySearch(
       `"${query}" apartments amenities internet cable intercom gate access`,
@@ -440,14 +446,14 @@ async function runPhase1A(query: string, client: Anthropic): Promise<Phase1Resul
     ),
   ])
 
-  const allResults = [...listingResults, ...pressResults]
+  const allResults = [...listingResults, ...pressResults, ...unitCountResults]
   if (allResults.length === 0 && amenityResults.length === 0) return blank
 
-  // Standard identity snippets — 900 chars (was 600, bumped to catch unit counts that appear mid-listing)
+  // Standard identity snippets — 1200 chars (bumped to catch unit counts that appear mid-listing)
   const snippets = allResults
     .filter(r => (r.content || '').length > 30)
-    .slice(0, 10)
-    .map((r, i) => `[${i + 1}] ${r.title}\nURL: ${r.url}\n${r.content.slice(0, 900)}`)
+    .slice(0, 12)
+    .map((r, i) => `[${i + 1}] ${r.title}\nURL: ${r.url}\n${r.content.slice(0, 1200)}`)
     .join('\n\n---\n\n')
 
   // Amenity raw content — first 4000 chars of each page (amenities usually near top)
@@ -468,7 +474,7 @@ IDENTITY RULES:
 - confirmed_name: exact community name found in results (not the query — the real name)
 - confirmed_address: full street address if found
 - confirmed_city + confirmed_state: REQUIRED if any geo context exists
-- confirmed_units: LOOK HARD — patterns: "312 units", "312-unit", "Total Units: 312", "N studio to", "312 apartments", "312 homes", "312 available", "Showing X of 312", "312 floor plans", "312 residences", "312 apartment homes". Even if you see only "studio - 3 bed" floor plans listed, count the distinct plans as a minimum.
+- confirmed_units: LOOK HARD in ALL sections including ===AMENITY PAGES=== — patterns: "312 units", "312-unit", "Total Units: 312", "312 Apartments for Rent", "312 apartment homes", "312 homes", "Showing X of 312", "312 floor plans", "312 residences", "N studio to", "View 312 floor plans", "312 available". Also scan amenity pages for "X units" near top of page or in page title. If you find the number anywhere, return it — do not return null just because the first snippet doesn't mention it.
 - confirmed_year_built: from "built YYYY", "Year Built: YYYY", "opened YYYY", "completed YYYY", "constructed YYYY", "established YYYY"
 - confirmed_management: company managing day-to-day operations
 - confirmed_owner: investor/developer/owner entity
@@ -483,7 +489,7 @@ AMENITY/TECHNOLOGY RULES (look especially in ===AMENITY PAGES===):
 - listing_proptech: array of ALL named proptech brands — gate systems (DoorKing, LiftMaster, Viking, FAAC), intercoms (ButterflyMX, Aiphone, Viking, 2N), access (Brivo, HID, Openpath, Kisi), cameras (Verkada, Avigilon), smart locks (SmartRent, Latch), any brand name in amenities section
 - listing_bulk_detected: true if amenities say "internet included", "fiber included", "tech fee", "technology fee", "cable included", OR any ISP/cable provider explicitly listed as an amenity
 - null/[] if not found — never guess`,
-    combinedSnippets, 1400, client
+    combinedSnippets, 1600, client
   )
 
   if (!extracted) return blank
