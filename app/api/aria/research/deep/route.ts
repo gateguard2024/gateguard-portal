@@ -27,13 +27,42 @@ const supabaseDeep = createClient(
 export const maxDuration = 120
 export const dynamic = 'force-dynamic'
 
-const ARIA_ENGINE_VERSION = 'v7.2'
+const ARIA_ENGINE_VERSION = 'v7.4'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
 // ─── Normalization helpers ────────────────────────────────────────────────────
 
 const SENTINEL_STRINGS = new Set(['null','undefined','unknown','n/a','na','none','not found','not available','','—','–','-','0','tbd','?'])
+
+// ─── ISP / Video service-description blocklists ───────────────────────────────
+// These are SERVICE DESCRIPTIONS, not company names. Never store them as providers.
+const ISP_SERVICE_DESCRIPTIONS = new Set([
+  'wireless high speed internet', 'high-speed internet', 'high speed internet',
+  'internet included', 'fiber internet', 'gigabit internet', 'broadband',
+  'internet access', 'wi-fi', 'wifi', 'high speed internet service',
+  'internet service', 'internet', 'cable internet', 'fiber optic internet',
+  'fast internet', 'included internet', 'complimentary internet', 'free internet',
+  'high speed wireless', 'wireless internet', 'gigabit fiber', 'fiber optic',
+  'fiber-optic', 'high-speed', 'highspeed', 'ultra-fast internet',
+  'gigabit service', 'high speed access', 'internet access included',
+  'fiber optic service', 'gig internet', 'gigabit broadband',
+])
+
+const VIDEO_SERVICE_DESCRIPTIONS = new Set([
+  'cable tv', 'cable included', 'satellite tv', 'tv service', 'streaming',
+  'cable service', 'satellite television', 'cable television', 'tv included',
+  'basic cable', 'premium cable', 'digital cable', 'cable and internet',
+  'cable', 'television', 'tv', 'satellite', 'streaming service',
+  'cable access', 'satellite access', 'video service',
+])
+
+function filterProviderNames(values: string[], blocklist: Set<string>): string[] {
+  return values.filter(v => {
+    if (!v || v.length < 2) return false
+    return !blocklist.has(v.toLowerCase().trim())
+  })
+}
 
 function normStr(val: unknown): string | null {
   if (val === null || val === undefined) return null
@@ -110,6 +139,56 @@ async function serperSearch(
       score: 0.8,
       source,
     }))
+  } catch { return [] }
+}
+
+// ─── Serper with Knowledge Graph extraction ──────────────────────────────────
+// Like serperSearch but also reads Google's Knowledge Panel for phone/address.
+// Returns a synthetic "[KG]" result prepended if the KG has a phone number.
+
+async function serperSearchKG(query: string, maxResults = 5, source = 'serper'): Promise<TavilyResult[]> {
+  if (!process.env.SERPER_API_KEY) return []
+  try {
+    const res = await fetch('https://google.serper.dev/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-KEY': process.env.SERPER_API_KEY },
+      body: JSON.stringify({ q: query, num: maxResults, gl: 'us', hl: 'en' }),
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) return []
+    const data = await res.json()
+    const results: TavilyResult[] = []
+
+    // Knowledge Graph — Google's business card (has phone, address, website for known entities)
+    const kg = data.knowledgeGraph as Record<string, any> | undefined
+    if (kg) {
+      const phone = kg.attributes?.Phone || kg.attributes?.['Phone number'] || kg.phone || ''
+      const addr  = kg.attributes?.Address || kg.address || ''
+      const site  = kg.website || kg.siteLinks?.[0]?.link || ''
+      if (phone || addr) {
+        results.push({
+          title: `[KG] ${kg.title || query}`,
+          url: site,
+          content: [
+            phone ? `Phone: ${phone}` : '',
+            addr  ? `Address: ${addr}` : '',
+            kg.description ? kg.description.slice(0, 200) : '',
+          ].filter(Boolean).join(' | '),
+          score: 1.0,
+          source,
+        })
+      }
+    }
+
+    // Organic results
+    const organicResults = (data.organic ?? []).slice(0, maxResults).map((r: any) => ({
+      title: r.title ?? '',
+      url: r.link ?? '',
+      content: [r.snippet].filter(Boolean).join(' — '),
+      score: 0.8,
+      source,
+    }))
+    return [...results, ...organicResults]
   } catch { return [] }
 }
 
@@ -423,12 +502,13 @@ async function runPhase1A(query: string, client: Anthropic): Promise<Phase1Resul
     listing_proptech: [], listing_bulk_detected: false,
   }
 
-  // Four parallel searches:
+  // Five parallel searches:
   // 1. Listing sites — snippet only (fast identity confirmation)
   // 2. Press/news — unit count, year built
   // 3. Unit count web search — targets pages that explicitly mention total unit counts
   // 4. Amenities deep-read — raw full-page content to catch ISP/cable/gate in amenities section
-  const [listingResults, pressResults, unitCountResults, amenityResults] = await Promise.all([
+  // 5. Phone/contact — Google Knowledge Graph + leasing office contact page (mandatory field)
+  const [listingResults, pressResults, unitCountResults, amenityResults, phoneResults] = await Promise.all([
     tavilySearch(
       `"${query}" apartments site:apartments.com OR site:rentcafe.com OR site:zillow.com OR site:apartmentlist.com`,
       4, 'listing', 'advanced', false
@@ -447,9 +527,14 @@ async function runPhase1A(query: string, client: Anthropic): Promise<Phase1Resul
       `"${query}" apartments amenities internet cable intercom gate access`,
       2, 'amenities', 'advanced', true  // rawContent = TRUE — reads the full page
     ),
+    // Dedicated phone search — Google Knowledge Graph returns phone number directly for known properties
+    serperSearchKG(
+      `"${query}" apartments leasing office phone contact`,
+      3, 'phone'
+    ),
   ])
 
-  const allResults = [...listingResults, ...pressResults, ...unitCountResults]
+  const allResults = [...listingResults, ...pressResults, ...unitCountResults, ...phoneResults]
   if (allResults.length === 0 && amenityResults.length === 0) return blank
 
   // Standard identity snippets — 1200 chars (bumped to catch unit counts that appear mid-listing)
@@ -482,13 +567,13 @@ IDENTITY RULES:
 - confirmed_management: company managing day-to-day operations
 - confirmed_owner: investor/developer/owner entity
 - confirmed_website: official property URL (NOT apartments.com/zillow)
-- confirmed_phone: leasing office phone — look for (xxx) xxx-xxxx or xxx-xxx-xxxx format in listings, contact sections, or footer
+- confirmed_phone: leasing office phone — PRIORITY: check [phone] source snippets FIRST — they contain "Phone: (xxx) xxx-xxxx" from Google's business listing. Also look for (xxx) xxx-xxxx or xxx-xxx-xxxx format in listings, contact sections, or footer anywhere in results. This is a MANDATORY field — search every snippet.
 - is_specific_property: true if results clearly identify ONE specific named property
 
 AMENITY/TECHNOLOGY RULES (look especially in ===AMENITY PAGES===):
 - listing_url: apartments.com OR rentcafe.com URL for this property if found
-- listing_isp: ISP/internet provider named in amenities — e.g. "GIGstreem", "Hotwire", "Comcast", "AT&T Fiber". Look for: "High-speed internet", "Fiber internet", "Gigabit internet", "Internet included", provider name in amenities list
-- listing_cable: cable/satellite/TV provider — e.g. "DirecTV", "Dish", "Spectrum TV", "Xfinity". Look in amenities for "cable", "satellite TV", "DIRECTV"
+- listing_isp: COMPANY NAME of the internet provider — e.g. "GIGstreem", "Hotwire", "Comcast", "AT&T Fiber", "Spectrum", "Cox", "Ziply Fiber". Return the COMPANY NAME only. NEVER return service descriptions: "Wireless High Speed Internet", "High-speed internet", "Fiber internet", "Gigabit internet", "Internet included", "Broadband", "Internet access", "Wi-Fi" — these describe WHAT the service is, not WHO provides it. If you only see a service description with no company name, return null.
+- listing_cable: COMPANY NAME of the cable/satellite/TV provider — e.g. "DirecTV", "Dish Network", "Spectrum TV", "Xfinity". Return ONLY the company name. NEVER return: "Cable TV", "Cable included", "Satellite TV", "TV service", "Streaming", "Cable service" — these are service descriptions, not provider names. If you only see service descriptions, return null.
 - listing_proptech: array of ALL named proptech brands — gate systems (DoorKing, LiftMaster, Viking, FAAC), intercoms (ButterflyMX, Aiphone, Viking, 2N), access (Brivo, HID, Openpath, Kisi), cameras (Verkada, Avigilon), smart locks (SmartRent, Latch), any brand name in amenities section
 - listing_bulk_detected: true if amenities say "internet included", "fiber included", "tech fee", "technology fee", "cable included", OR any ISP/cable provider explicitly listed as an amenity
 - null/[] if not found — never guess`,
@@ -496,9 +581,18 @@ AMENITY/TECHNOLOGY RULES (look especially in ===AMENITY PAGES===):
   )
 
   if (!extracted) return blank
+
+  // Post-extraction guard: strip service descriptions masquerading as provider names
+  const rawIsp = normStr(extracted.listing_isp)
+  const rawCable = normStr(extracted.listing_cable)
+  const cleanIsp = rawIsp && !ISP_SERVICE_DESCRIPTIONS.has(rawIsp.toLowerCase().trim()) ? rawIsp : null
+  const cleanCable = rawCable && !VIDEO_SERVICE_DESCRIPTIONS.has(rawCable.toLowerCase().trim()) ? rawCable : null
+
   return {
     ...blank,
     ...extracted,
+    listing_isp: cleanIsp,
+    listing_cable: cleanCable,
     listing_proptech: normStrArr(extracted.listing_proptech),
     listing_bulk_detected: extracted.listing_bulk_detected ?? false,
   }
@@ -624,15 +718,55 @@ interface Phase2Result {
 }
 
 const KNOWN_MDU_BULK_ISPS = new Set([
-  'gigstreem', 'hotwire', 'pavlov media', 'mdu communications', 'wired broadband',
-  'all west', 'broadstripe', 'sonic mdu', 'xenon networks', 'apogee',
-  'limecom', 'pocketinet', 'skybridge', 'bulk solutions', 'enterprise network services',
+  // National incumbents / telcos
+  'spectrum', 'spectrum community solutions', 'charter communications',
+  'at&t', 'at&t connected communities', 'att fiber',
+  'comcast', 'xfinity', 'xfinity communities',
+  'cox', 'cox communities',
+  'quantum fiber', 'lumen', 'centurylink',
+  'verizon', 'verizon fios', 'fios',
+  'google fiber', 'webpass', 'google fiber webpass',
+  'frontier', 'frontier communications',
+  'optimum', 'altice', 'altice usa', 'suddenlink',
+  'breezeline', 'atlantic broadband',
+  'windstream', 'kinetic', 'kinetic communities',
+  'astound broadband', 'rcn', 'grande communications', 'wave broadband',
+  'brightspeed',
+  'mediacom', 'tds telecom', 'consolidated communications',
+  // MDU-focused managed Wi-Fi integrators
+  'gigstreem', 'gigstreem managed wifi',
+  'hotwire', 'hotwire communications', 'fision',
+  'pavlov media',
+  'smartaira', 'consolidated smart systems',
+  'dojonetworks', 'dojo networks',
+  'starry', 'starry internet',
+  'white sky',
+  'boingo', 'boingo wireless',
+  'nextlink', 'nextlink internet',
+  'midco',
+  'single digits',
+  'gonetspeed',
+  'spot on networks',
+  'mdu communications', 'mdu datacom',
+  'wired broadband', 'all west', 'broadstripe', 'sonic mdu',
+  'xenon networks', 'apogee', 'limecom', 'pocketinet', 'skybridge',
+  'bulk solutions', 'enterprise network services',
+  'onestop communications',
+  'lux speed', 'giggle fiber', 'resound networks', 'aeronet',
 ])
 
 const KNOWN_VIDEO_PROVIDERS = new Set([
-  'directv', 'dish network', 'dish tv', 'comcast', 'xfinity', 'spectrum tv',
-  'cox', 'mediacom', 'optimum', 'altice', 'breezeline', 'brightspeed', 'frontier',
-  'centurylink', 'lumen', 'tds telecom', 'consolidated communications',
+  'directv', 'directv for business', 'directv stream', 'directv mdu',
+  'dish network', 'dish tv', 'dish fiber', 'dish satellite',
+  'comcast', 'xfinity', 'spectrum tv', 'spectrum',
+  'cox', 'cox tv', 'mediacom', 'optimum', 'altice',
+  'breezeline', 'brightspeed', 'frontier', 'centurylink', 'lumen',
+  'tds telecom', 'consolidated communications', 'sling tv', 'sling',
+  'philo', 'fubo', 'fubo tv',
+  // DirectTV dealers / hybrid integrators
+  'commercial satellite sales', 'css', 'restech services',
+  'usa wireless satellite', 'total media concepts', 'touchstone 1',
+  'smartaira',  // also does bulk DirecTV
 ])
 
 // ─── Fetch live mdu_providers from DB ────────────────────────────────────────
@@ -680,14 +814,17 @@ async function runPhase2(
   // Merge DB video names with known set — always include the major players
   const videoKeywords = [...new Set([
     'DirecTV', 'Dish Network', 'Xfinity', 'Comcast', 'Spectrum TV', 'Spectrum',
+    'Dish Fiber', 'Sling TV', 'Philo', 'FuboTV',
     ...dbVideoNames,
-  ])].slice(0, 10).join(' OR ')
+  ])].slice(0, 12).join(' OR ')
 
   // MDU ISP keywords from DB + known hardcoded list
   const ispKeywords = [...new Set([
     'GIGstreem', 'Hotwire', '"Pavlov Media"', '"Wired Broadband"', '"MDU Communications"',
+    '"DojoNetworks"', '"Smartaira"', '"Single Digits"', '"White Sky"', 'Boingo',
+    '"Starry Internet"', '"GoNetspeed"', '"Midco"', '"Nextlink"', '"MDU Datacom"',
     ...dbIspNames.map(n => `"${n}"`),
-  ])].slice(0, 10).join(' OR ')
+  ])].slice(0, 15).join(' OR ')
 
   // Build all DB provider names for Haiku context
   const allDbProviderNames = dbProviders.map(p => p.name).join(', ')
@@ -771,8 +908,8 @@ RULES:
 - owner_entity: investor/REIT/PE firm/LLC that owns the property
 - owner_type: "private_equity","reit","family_office","institutional","local" or ""
 - acquisition_year: 4-digit year of last sale/acquisition, or ""
-- isp_providers: actual ISPs serving the property (GIGstreem, Hotwire, Comcast, AT&T, Spectrum, etc. — NEVER management company names). Cross-reference the known provider list.
-- video_providers: cable/satellite/IPTV services (DirecTV, Dish Network, Comcast Xfinity, Spectrum TV, Cox TV, etc.). Look in [video] source snippets especially. Cross-reference known provider list.
+- isp_providers: COMPANY NAMES ONLY of actual ISPs serving this property (e.g. GIGstreem, Hotwire, Comcast, AT&T Fiber, Spectrum, Cox, Ziply Fiber, Pavlov Media). NEVER include management company names. NEVER include service descriptions — "Wireless High Speed Internet", "High-speed internet", "Fiber internet", "Gigabit internet", "Internet included", "Broadband", "Internet access", "Wi-Fi", "High Speed Internet Service" are what the service IS, not WHO provides it. If you only see service descriptions with no company name, leave this array empty. Cross-reference the known provider list.
+- video_providers: COMPANY NAMES ONLY of cable/satellite/IPTV providers (e.g. DirecTV, Dish Network, Xfinity, Spectrum TV, Cox TV, Optimum, Mediacom). Look in [video] source snippets especially. NEVER include service descriptions — "Cable TV", "Cable included", "Satellite TV", "TV service", "Streaming", "Cable service" are service descriptions, not company names. Empty array if only service descriptions found. Cross-reference the known provider list.
 - bulk_detected: true if internet is included in rent, OR bulk/exclusive deal exists, OR "technology fee" / "tech fee" mentioned, OR MDU-only ISP present, OR any telecom agreement found
 - bulk_agreements: MAXIMUM 2 total — at most 1 with service_type "internet" AND at most 1 with service_type "video". ONLY include a provider if there is DIRECT EVIDENCE it has an exclusive/bulk/ROE agreement with THIS SPECIFIC PROPERTY (not just the city). Do NOT add providers just because they operate in the metro area or appear in FCC coverage data. The bulk internet provider is typically a single MDU-specialist ISP (e.g. GIGstreem, Hotwire, Pavlov, Bsquared). Return [] if no direct property-level evidence exists. Format:
   [{"provider":"GIGstreem","service_type":"internet","agreement_type":"bulk","confidence":"high","evidence":"internet included in rent","expiry_estimate":"Est. 2027-2029"}]
@@ -835,6 +972,10 @@ SOURCE TAGS IN RESULTS:
     deduped.push(best)
   }
   result.bulk_agreements = deduped
+
+  // Post-extraction guard: strip service descriptions masquerading as ISP/video provider names
+  result.isp_providers = filterProviderNames(result.isp_providers, ISP_SERVICE_DESCRIPTIONS)
+  result.video_providers = filterProviderNames(result.video_providers, VIDEO_SERVICE_DESCRIPTIONS)
 
   return result
 }
@@ -904,7 +1045,7 @@ async function runPhase3(
     // PropTech: raw content fetch — amenities pages explicitly name gate/intercom/camera brands
     // NOTE: no geo phrase — proptech pages rarely include "Atlanta, GA" verbatim
     tavilySearch(
-      `"${confirmedName}" ButterflyMX OR DoorKing OR Brivo OR Openpath OR Verkada OR Avigilon OR SmartRent OR Latch OR LiftMaster OR HID OR SALTO OR Viking OR Linear OR PDK OR "access control" OR intercom OR "gate system"`,
+      `"${confirmedName}" ButterflyMX OR DoorKing OR Brivo OR Openpath OR Verkada OR Avigilon OR SmartRent OR Latch OR LiftMaster OR HID OR SALTO OR Viking OR Linear OR PDK OR Swiftlane OR Kastle OR Flock OR "Eagle Eye" OR "Rhombus" OR "Deep Sentinel" OR CellGate OR "access control" OR intercom OR "gate system"`,
       3, 'proptech', 'advanced', true  // rawContent = TRUE — reads full technology pages
     ),
     // Contacts: LinkedIn — use management company name; fall back to property name if entity unknown
@@ -936,7 +1077,7 @@ async function runPhase3(
     // Proptech brand mentions in resident reviews — catches specific tech complaints and praise
     // Targets any Google-indexed review mentioning technology brands or amenity systems
     serperSearch(
-      `"${confirmedName}" ButterflyMX OR SmartRent OR Latch OR "package locker" OR "package room" OR "Amazon Hub" OR "gate code" OR "key fob" OR "water damage" OR "water sensor" OR thermostat OR "smart home" OR automation reviews OR residents`,
+      `"${confirmedName}" ButterflyMX OR SmartRent OR Latch OR Verkada OR "Flock Safety" OR "package locker" OR "package room" OR "Amazon Hub" OR "gate code" OR "key fob" OR "water damage" OR "water sensor" OR thermostat OR "smart home" OR automation reviews OR residents`,
       8, 'proptech_reviews', 'search', 'qdr:m6'
     ),
     // Property website raw content — owner/property site often lists all tech partners + amenities
@@ -1002,17 +1143,17 @@ Up to 20 signals. Include BOTH complaints and positive mentions. Prefer last 12 
     ? await haikusExtract<Phase3Result['proptech']>(
         `Extract ALL property technology brands mentioned. Return ONLY valid JSON:
 {"gate_operators":[],"access_control":[],"intercoms":[],"cameras":[],"smart_locks":[],"resident_apps":[],"package_solutions":[],"tech_generation":"legacy"}
-Known brands:
-- gate_operators: DoorKing/LiftMaster/Viking/Linear/FAAC/PDK/Elite Gates/LIFTMASTER
-- access_control: Brivo/HID/SALTO/Openpath/PDK/Kisi/Allegion/Schlage/Nexkey
-- intercoms: ButterflyMX/Aiphone/Viking/2N/Doorbird/Verkada Door/Doorbell Camera/CallBox
-- cameras: Verkada/Avigilon/EagleEye/Hanwha/Axis/Hikvision/Dahua/Bosch
-- smart_locks: SmartRent/GateWise/Latch/August/Yale/Schlage/Kwikset/igloohome
-- resident_apps: SmartRent/Entrata/RealPage/Yardi/AppFolio/Rent Manager/BuildingLink
-- package_solutions: "Parcel Pending"/"Amazon Hub"/"Package Concierge"/"Luxer One"/"Fetch"
-tech_generation: "legacy"=pre-2018 brands dominant, "modern"=2018+ brands, "hybrid"=mix
+Known brands (extract company name exactly as written):
+- gate_operators: DoorKing/DKS/LiftMaster/Viking/Linear/FAAC/PDK/Elite Gates/CellGate/Rently/Doorking
+- access_control: Brivo/HID/SALTO/Openpath/Motorola/PDK/Kisi/Allegion/Schlage/Nexkey/Kastle/Swiftlane/Assa Abloy/Yale/August/Latch/Rently
+- intercoms: ButterflyMX/Aiphone/Viking/2N/DoorBird/Doorbird/Verkada/CallBox/Swiftlane/CellGate
+- cameras: Verkada/Avigilon/Eagle Eye Networks/Rhombus Systems/Hanwha/Axis/Hikvision/Dahua/Bosch/Pelco/Flock Safety/Deep Sentinel/Stealth Monitoring/Ring
+- smart_locks: SmartRent/Latch/August/Yale/Schlage/Kwikset/Assa Abloy/igloohome/SALTO/Allegion
+- resident_apps: SmartRent/Entrata/RealPage/Yardi/AppFolio/Rent Manager/BuildingLink/Rently
+- package_solutions: "Parcel Pending"/"Amazon Hub"/"Package Concierge"/"Luxer One"/"Fetch"/"Butterfly Package"
+tech_generation: "legacy"=pre-2018 brands dominant (DoorKing, Aiphone, analog cameras), "modern"=2018+ brands (ButterflyMX, Verkada, Brivo, SmartRent), "hybrid"=mix
 IMPORTANT: scan full page text — proptech brands often appear in: "Community Features", "Building Features", "Amenities", "Technology", "Access" sections${listingProptechCtx}`,
-        proptechSnippets, 800, client)
+        proptechSnippets, 900, client)
     : null
 
   // Contact extraction — merge LinkedIn hits + management company web results
