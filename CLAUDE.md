@@ -1,6 +1,6 @@
 # GateGuard Portal — Claude Context (Active Reference)
 
-> Last trimmed: May 29, 2026 (session 7). Full sprint history, /tech docs, SARA Plus intel → CLAUDE.archive.md
+> Last trimmed: May 30, 2026 (session 11). Full sprint history, /tech docs, SARA Plus intel → CLAUDE.archive.md
 
 ---
 
@@ -526,6 +526,20 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 - ✅ **Parallel Haiku outreach plan** — `generateOutreachPlan()` runs via Haiku in `Promise.all` alongside Sonnet synthesis (~2s Haiku vs ~10s Sonnet = zero added latency); outreach_plan removed from Sonnet schema
 - ✅ **504 fix** — `maxDuration: 60 → 120`; Sonnet tokens 3500 → 2800 (outreach plan moved to Haiku)
 - ✅ **ARIA page — address moved** (`app/aria/page.tsx`) — detail header shows city/state only; full address + Google Maps iframe embed (street view capable) added to bottom of Property tab; `lat`/`lng` on `Property` interface
+
+### Completed — May 30, 2026 (session 11) — ARIA SWR Fast-Path + Inngest Background Enrichment + Supabase Realtime + 2035 PipelinePanel
+- ✅ **SWR fast-path** (`app/aria/page.tsx`) — cache check fires before full pipeline; cache hit → instant result (<200ms); stale hit → show data + fire Inngest re-enrichment; miss → full pipeline animation. State: `cacheStatus` (`fresh | stale | re-enriching | null`), `cacheAgeHours`, `propertyId`
+- ✅ **Cache status badges** — TopBar shows emerald "Cached · Xh/Xd ago" (fresh), amber "Stale · Xd ago", brand-blue "Re-enriching..." with spinner (stale+enriching)
+- ✅ **`/api/aria/cache` route** (`app/api/aria/cache/route.ts`) — fast Supabase lookup (<200ms); fuzzy-match logic (lastTwo/skipFirst/fullNorm patterns); full `dbRowToProspect()` mapper; 14-day freshness TTL. **Stale cache bug fixed**: always returns `{ hit: true, is_stale: boolean }` — was previously returning `{ hit: false }` for stale records, breaking the entire fast-path
+- ✅ **`/api/aria/enrich` route** (`app/api/aria/enrich/route.ts`) — POST fires Inngest `aria/property.enrich` event; Clerk auth; returns `{ queued: true }`
+- ✅ **Inngest background enrichment** (`inngest/functions/enrich-property.ts`) — `aria-enrich-property` function; v4 API: `triggers` array in options object (not separate 3rd arg); calls `/api/aria/research/deep` with `x-service-key` header to bypass Clerk; 90s timeout; 2 retries
+- ✅ **Inngest infrastructure** — `inngest/client.ts` + `app/api/inngest/route.ts` (serves `enrichProperty`); `middleware.ts` bypasses Clerk for `/api/inngest`; Vercel integration connected (gateguard-portal only); `ARIA_SERVICE_KEY` env var added; custom production domain `portal.gateguard.co` configured in Inngest → avoids preview URL sync failure
+- ✅ **Supabase Realtime subscription** (`app/aria/page.tsx`) — `useEffect` on `cacheStatus === 're-enriching'`; `postgres_changes` UPDATE subscription on `aria_properties` filtered by `id=eq.${propertyId}`; fires `applyFreshResult()` (re-fetches cache, updates UI, sets `cacheStatus → 'fresh'`); 30s fallback poll detects freshness via `cache_age_hours < 1` OR `< snapshotAgeHours - 0.5`; 3-minute hard timeout; channel cleaned up on unmount
+- ✅ **`aria_properties` added to `supabase_realtime` publication** — done on prod Supabase (Database → Publications → supabase_realtime → Add tables → aria_properties). Beta Supabase still needs this step
+- ✅ **2035 PipelinePanel redesign** (`app/aria/page.tsx`) — dark radial navy-to-black HUD background; 48px grid overlay; animated scan line; HUD corner brackets; `PIPELINE_PARTICLES` fixed array (no `Math.random()` — prevents position teleporting on re-render); central ARIA logo with 3 orbital rings at 7s/13s/21s speeds (middle: reverse, different colors); 5 phase nodes with inline gradient styles; connector beams with `aria-fill`/`aria-shimmer` animations; status pill; "Claude Sonnet · Synthesis Mode Active" footer in phase 5
+
+### Pending — Beta Supabase Realtime
+- Add `aria_properties` to `supabase_realtime` publication on **beta** Supabase project (only done on prod)
 
 ### Completed — May 29, 2026 (session 9) — ARIA v7.2: dbPhase2Seed Fix + SCOUT 6-Month Campaign
 - ✅ ARIA engine v7.2 (`app/api/aria/research/deep/route.ts`):
