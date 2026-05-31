@@ -642,12 +642,15 @@ export default function ARIAPage() {
       .subscribe();
 
     // Fallback: light poll every 30s in case Realtime isn't enabled for this table
+    // Detects re-enrichment completion when cache_age_hours drops below 1 (just re-enriched)
     const poll = setInterval(async () => {
       try {
         const r = await fetch(`/api/aria/cache?query=${encodeURIComponent(query)}`);
         if (!r.ok) return;
         const d = await r.json();
-        if (d.hit && d.cache_age_hours !== null && (snapshotAgeHours === null || d.cache_age_hours < snapshotAgeHours - 0.5)) {
+        const justRefreshed = d.hit && d.cache_age_hours !== null && d.cache_age_hours < 1;
+        const fresherThanSnapshot = d.hit && d.cache_age_hours !== null && snapshotAgeHours !== null && d.cache_age_hours < snapshotAgeHours - 0.5;
+        if (justRefreshed || fresherThanSnapshot) {
           void applyFreshResult();
           clearInterval(poll);
         }

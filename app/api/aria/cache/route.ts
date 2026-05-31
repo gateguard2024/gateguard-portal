@@ -163,14 +163,14 @@ export async function GET(req: NextRequest) {
     const ageHours = Math.floor(ageMs / (1000 * 60 * 60))
     const ageDays = ageHours / 24
 
-    if (ageDays > FRESHNESS_DAYS) {
-      return NextResponse.json({ hit: false, reason: 'stale', cache_age_hours: ageHours, property_id: row.id })
-    }
-
+    // Always return the data — client decides freshness.
+    // is_stale=true means the client should fire background re-enrichment via Inngest.
+    const isStale = ageDays > FRESHNESS_DAYS
     const prospect = dbRowToProspect(row)
 
     return NextResponse.json({
       hit: true,
+      is_stale: isStale,
       property_id: row.id,
       property_name: row.property_name,
       cache_age_hours: ageHours,
