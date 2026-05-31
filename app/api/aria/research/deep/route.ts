@@ -893,10 +893,11 @@ async function runPhase3(
     : ''
   const domainForEmail = mgmtDomain || websiteDomain
 
-  // 5 parallel searches — including social/reviews + raw-content proptech
-  const [painResults, proptechResults, contactResults, socialResults, websiteResults] = await Promise.all([
-    // Pain signals: Google reviews + resident complaints
-    serperSearch(`"${confirmedName}" "${geo}" reviews complaints internet gate crime`, 5, 'pain'),
+  // 6 parallel searches — social split into reddit + reviews for better indexed coverage
+  // NOTE: Facebook/Instagram/Twitter are NOT indexed by Google — never use as site: targets
+  const [painResults, proptechResults, contactResults, redditResults, reviewResults, websiteResults] = await Promise.all([
+    // Pain signals: general complaints search (Serper organic)
+    serperSearch(`"${confirmedName}" ${confirmedCity} reviews complaints internet gate crime`, 5, 'pain'),
     // PropTech: raw content fetch — amenities pages explicitly name gate/intercom/camera brands
     tavilySearch(
       `"${confirmedName}" "${geo}" ButterflyMX OR DoorKing OR Brivo OR Openpath OR Verkada OR Avigilon OR SmartRent OR Latch OR LiftMaster OR HID OR SALTO OR Viking OR Linear OR PDK`,
@@ -906,10 +907,17 @@ async function runPhase3(
     entity
       ? serperSearch(`"${entity}" "${geo}" "community manager" OR "regional manager" site:linkedin.com`, 5, 'contacts')
       : Promise.resolve([] as TavilyResult[]),
-    // Social signals: Reddit + Google reviews + Facebook property page
+    // Reddit: NO forced geo phrase — Reddit posts rarely include city/state in text
+    // Google indexes Reddit well; parentheses omitted — Serper doesn't support boolean grouping
     serperSearch(
-      `"${confirmedName}" "${geo}" (site:reddit.com OR "Google Reviews" OR site:facebook.com OR site:yelp.com) internet OR gate OR management OR crime 2024 OR 2025`,
-      6, 'social'
+      `"${confirmedName}" site:reddit.com internet OR wifi OR gate OR crime OR management OR complaints OR "no security"`,
+      6, 'reddit'
+    ),
+    // Review sites: ApartmentRatings (best for MF complaints), Yelp, Apartments.com reviews
+    // These are all Google-indexed; Google Maps reviews surface via apartments.com embeds
+    serperSearch(
+      `"${confirmedName}" ${confirmedCity} site:apartmentratings.com OR site:yelp.com OR site:apartments.com reviews complaints`,
+      6, 'reviews'
     ),
     // Property website raw content — owner/property site often lists all tech partners + amenities
     confirmedWebsite
@@ -917,21 +925,24 @@ async function runPhase3(
       : Promise.resolve([] as TavilyResult[]),
   ])
 
+  // Merge both social result sets
+  const socialResults = [...redditResults, ...reviewResults]
+
   const allResults = [...painResults, ...proptechResults, ...contactResults, ...socialResults, ...websiteResults]
 
-  // Pain signal extraction — includes social posts (Reddit, Google reviews, Facebook)
+  // Pain signal extraction — includes social posts (Reddit, ApartmentRatings, Yelp)
   const painAllSources = [...painResults, ...socialResults]
-  const painSnippets = painAllSources.filter(r => (r.content || '').length > 40).slice(0, 12)
+  const painSnippets = painAllSources.filter(r => (r.content || '').length > 40).slice(0, 16)
     .map((r, i) => `[${i + 1}][${r.source ?? 'review'}] ${r.title}\n${r.content.slice(0, 500)}`)
     .join('\n\n---\n\n')
 
   const painExtracted = painSnippets.length > 80
     ? await haikusExtract<{ signals: PainSignal[] }>(
-        `Extract resident pain signals from reviews, Reddit, Google Maps, Facebook posts. Return ONLY valid JSON:
+        `Extract resident pain signals from reviews, Reddit posts, ApartmentRatings, Yelp, and Google reviews. Return ONLY valid JSON:
 {"signals":[{"type":"gate","quote":"","source":"","date":"","severity":"high"}]}
 type: "gate","internet","camera","crime","management","smart_lock","general"
 quote: verbatim resident or user quote (max 150 chars) — prioritize direct quotes from real tenants
-source: "Google Reviews","Reddit","Facebook","Yelp","ApartmentRatings", etc.
+source: "Google Reviews","Reddit","Yelp","ApartmentRatings","Apartments.com", etc. — use source tag in brackets
 date: any date signal found ("2024","Jan 2025","3 months ago" → approximate year)
 severity: high=safety/major failure/no working gate/internet outage, medium=recurring issue, low=minor
 Up to 15 signals. Prefer last 18 months. Include internet/gate specific quotes.`,
