@@ -43,6 +43,9 @@ function isBypassPath(pathname: string): boolean {
         p => pathname.slice('/api/signatures/'.length).startsWith(p)
       )
     ) ||
+    // ARIA API routes — handlers call getCurrentUser() internally for auth on GET;
+    // POST /api/aria/properties is called server-to-server (no Clerk session available)
+    pathname.startsWith('/api/aria/') ||
     // ARIA diagnostic — internal read-only audit tool
     pathname.startsWith('/api/aria/diagnostic') ||
     // Inngest webhook — event routing; platform authenticates via signing key

@@ -122,6 +122,16 @@ function mergeBulkAgreements(existing: any[] | null | undefined, fresh: any[] | 
 // ── Internal upsert — called by deep research route ──────────────────────────
 export async function POST(req: NextRequest) {
   try {
+    // Auth: accept either a valid Clerk session OR the internal service key
+    const serviceKey = req.headers.get('x-service-key')
+    const validServiceKey = process.env.ARIA_SERVICE_KEY
+    if (!serviceKey || !validServiceKey || serviceKey !== validServiceKey) {
+      // Fall back to Clerk auth for portal calls
+      try { await getCurrentUser() } catch {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+    }
+
     const body = await req.json()
     const prospects: any[] = body.prospects ?? []
 

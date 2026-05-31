@@ -384,25 +384,25 @@ const PipelinePanel = memo(function PipelinePanel({ phase, synthStep }: { phase:
                         <div className="absolute -inset-3 rounded-full pointer-events-none"
                           style={{ background: 'radial-gradient(circle, rgba(107,126,255,0.25) 0%, transparent 70%)', animation: 'aria-pulse 1.4s ease-in-out infinite' }} />
                       )}
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-700"
+                      <div className="w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-700"
                         style={{
                           background: status === 'done' ? 'linear-gradient(135deg, #065f46, #059669)' :
                                       status === 'running' ? 'linear-gradient(135deg, #1a3470, #6B7EFF)' :
                                       'rgba(255,255,255,0.04)',
                           border: `1px solid ${status === 'done' ? 'rgba(16,185,129,0.55)' : status === 'running' ? 'rgba(107,126,255,0.75)' : 'rgba(255,255,255,0.08)'}`,
-                          boxShadow: status === 'running' ? '0 0 20px rgba(107,126,255,0.55), 0 0 45px rgba(107,126,255,0.18), inset 0 1px 0 rgba(255,255,255,0.1)' :
-                                     status === 'done' ? '0 0 14px rgba(16,185,129,0.35)' : 'none',
+                          boxShadow: status === 'running' ? '0 0 24px rgba(107,126,255,0.6), 0 0 55px rgba(107,126,255,0.2), inset 0 1px 0 rgba(255,255,255,0.1)' :
+                                     status === 'done' ? '0 0 16px rgba(16,185,129,0.4)' : 'none',
                         }}>
                         {status === 'done' ? (
-                          <Check size={16} style={{ color: '#6ee7b7' }} />
+                          <Check size={22} style={{ color: '#6ee7b7' }} />
                         ) : status === 'running' ? (
-                          <Loader2 size={16} className="animate-spin" style={{ color: '#c7d2fe' }} />
+                          <Loader2 size={22} className="animate-spin" style={{ color: '#c7d2fe' }} />
                         ) : (
-                          <Icon size={16} style={{ color: 'rgba(255,255,255,0.22)' }} />
+                          <Icon size={22} style={{ color: 'rgba(255,255,255,0.22)' }} />
                         )}
                       </div>
                     </div>
-                    <span className="text-[9px] font-bold uppercase tracking-widest text-center leading-tight w-16 truncate"
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-center leading-tight w-20 truncate"
                       style={{ color: status === 'done' ? '#34D399' : status === 'running' ? '#818CF8' : 'rgba(255,255,255,0.18)' }}>
                       {p.name}
                     </span>
@@ -410,7 +410,7 @@ const PipelinePanel = memo(function PipelinePanel({ phase, synthStep }: { phase:
 
                   {/* Connector beam */}
                   {!isLast && (
-                    <div className="flex-1 h-px relative overflow-hidden self-start mt-[23px] mx-1">
+                    <div className="flex-1 h-px relative overflow-hidden self-start mt-[31px] mx-1">
                       <div className="absolute inset-0" style={{ background: 'rgba(255,255,255,0.05)' }} />
                       {phase > p.id && (
                         <div className="absolute inset-0"
@@ -2804,10 +2804,19 @@ export default function ARIAPage() {
       <div className="flex flex-col h-full overflow-hidden bg-white/50">
         <div className="bg-white border-b border-slate-200/60 px-6 py-4 shadow-sm z-10">
           <div className="flex items-center gap-3 mb-3">
+            {(isDone || candidates.length > 0) && (
+              <button onClick={() => setDbView(false)}
+                className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 hover:text-[#6B7EFF] transition-colors -ml-1 mr-1">
+                <ArrowLeft size={13} />
+                Back
+              </button>
+            )}
             <Globe size={16} className="text-[#6B7EFF]" />
             <h2 className="text-base font-bold text-slate-900 tracking-tight">Intelligence Database</h2>
             <span className="text-[10px] px-2 py-1 rounded-md bg-[#6B7EFF]/10 border border-[#6B7EFF]/20 text-[#6B7EFF] font-bold font-mono">{dbTotal} logged</span>
-            <span className="ml-auto text-[10px] font-medium text-slate-400">Autonomous Storage</span>
+            <button onClick={() => setDbView(false)} className="ml-auto p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors" title="Close Intel DB">
+              <X size={14} />
+            </button>
           </div>
           <div className="flex items-center gap-2">
             <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200/60 rounded-xl px-3 py-2 focus-within:border-[#6B7EFF]/50 focus-within:bg-white transition-colors shadow-inner">

@@ -913,10 +913,11 @@ async function runPhase3(
       `"${confirmedName}" ButterflyMX OR DoorKing OR Brivo OR Openpath OR Verkada OR Avigilon OR SmartRent OR Latch OR LiftMaster OR HID OR SALTO OR Viking OR Linear OR PDK OR "access control" OR intercom OR "gate system"`,
       3, 'proptech', 'advanced', true  // rawContent = TRUE — reads full technology pages
     ),
-    // Contacts: LinkedIn
-    entity
-      ? serperSearch(`"${entity}" "${geo}" "community manager" OR "regional manager" site:linkedin.com`, 5, 'contacts')
-      : Promise.resolve([] as TavilyResult[]),
+    // Contacts: LinkedIn — use management company name; fall back to property name if entity unknown
+    serperSearch(
+      `"${entity ?? confirmedName}" "${confirmedCity ?? geo}" "community manager" OR "regional manager" OR "property manager" OR "asset manager" site:linkedin.com`,
+      6, 'contacts'
+    ),
     // Reddit — last 6 months, expanded proptech keywords
     // Google indexes Reddit well; parentheses omitted — Serper doesn't support boolean grouping
     serperSearch(
