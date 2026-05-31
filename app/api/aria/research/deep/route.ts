@@ -716,17 +716,18 @@ async function runPhase2(
       4, 'isp-city'
     ),
     serperSearch(
-      `"${confirmedAddress || confirmedName}" sold acquired ownership "private equity" OR REIT`,
+      `"${confirmedAddress || confirmedName}" ownership OR owner OR acquired OR sold OR purchased "private equity" OR REIT OR LLC OR "real estate" OR "investment" OR "capital" OR "fund"`,
       5, 'owner', 'news'
     ),
     // Dedicated video provider search — cable/satellite/IPTV agreements
+    // REQUIRE property name (not OR city alone) to avoid city-level noise
     serperSearch(
-      `${propTarget} OR ${geoTarget} ${videoKeywords} multifamily OR apartment OR MDU OR "bulk video" OR "cable agreement"`,
+      `"${confirmedName}" ${confirmedCity} ${videoKeywords} OR "cable included" OR "satellite included" OR "bulk video" OR "cable agreement" OR "TV included"`,
       5, 'video', 'news'
     ),
     // ROE / bulk telecom agreement search — contract terms + expiry signals
     serperSearch(
-      `${propTarget} OR ${geoTarget} "right of entry" OR "ROE agreement" OR "bulk agreement" OR "exclusive service agreement" OR "telecom agreement" OR "internet service agreement" expire OR expiring OR renew OR term OR "contract end"`,
+      `${propTarget} ${confirmedCity} "right of entry" OR "ROE agreement" OR "bulk agreement" OR "exclusive service agreement" OR "telecom agreement" expire OR expiring OR renew OR term OR "contract end"`,
       5, 'roe'
     ),
   ])
@@ -810,21 +811,14 @@ SOURCE TAGS IN RESULTS:
     }
   }
 
-  // City-level ISP confirmation — add any MDU providers confirmed from city search
+  // City-level ISP confirmation — adds to isp_providers as a possible signal only.
+  // NEVER creates a bulk_agreement from city-level evidence — that requires property-specific evidence.
+  // bulk_detected is NOT set here; only set if Haiku finds direct property evidence above.
   for (const isp of cityConfirmedIsps) {
     const displayName = fccProviders.find(p => p.toLowerCase().includes(isp)) || isp
     if (!result.isp_providers.some(p => p.toLowerCase().includes(isp))) {
       result.isp_providers.push(displayName)
-      result.bulk_detected = true
-      if (!result.bulk_agreements.some(a => (a.provider ?? '').toLowerCase().includes(isp))) {
-        result.bulk_agreements.push({
-          provider: displayName,
-          service_type: 'internet',
-          agreement_type: 'bulk',
-          confidence: 'medium',
-          evidence: `${isp} confirmed in ${confirmedCity} multifamily market — MDU-exclusive ISP`,
-        })
-      }
+      // Do NOT push to bulk_agreements — no direct property-level evidence
     }
   }
 
@@ -902,9 +896,9 @@ async function runPhase3(
     : ''
   const domainForEmail = mgmtDomain || websiteDomain
 
-  // 7 parallel searches — 3 social searches for broad review/resident coverage
+  // 8 parallel searches — 3 social + 1 mgmt website for broader contact + ownership coverage
   // NOTE: Facebook/Instagram/Twitter are NOT indexed by Google — never use as site: targets
-  const [painResults, proptechResults, contactResults, redditResults, reviewResults, proptechReviewResults, websiteResults] = await Promise.all([
+  const [painResults, proptechResults, contactResults, mgmtWebResults, redditResults, reviewResults, proptechReviewResults, websiteResults] = await Promise.all([
     // Pain signals: general complaints search (Serper organic)
     serperSearch(`"${confirmedName}" ${confirmedCity} reviews complaints internet gate crime`, 5, 'pain'),
     // PropTech: raw content fetch — amenities pages explicitly name gate/intercom/camera brands
@@ -914,9 +908,18 @@ async function runPhase3(
       3, 'proptech', 'advanced', true  // rawContent = TRUE — reads full technology pages
     ),
     // Contacts: LinkedIn — use management company name; fall back to property name if entity unknown
+    // Unquoted city = flexible geo matching; expanded titles catch more roles
     serperSearch(
-      `"${entity ?? confirmedName}" "${confirmedCity ?? geo}" "community manager" OR "regional manager" OR "property manager" OR "asset manager" site:linkedin.com`,
-      6, 'contacts'
+      `"${entity ?? confirmedName}" ${confirmedCity} "community manager" OR "regional manager" OR "property manager" OR "asset manager" OR "leasing manager" OR "onsite manager" OR "portfolio manager" OR "director of operations" site:linkedin.com`,
+      8, 'contacts'
+    ),
+    // Management company / ownership web presence — staff page, about page, ownership news
+    // Catches leadership pages, press releases, and EDGAR/SEC filings for fund-owned properties
+    serperSearch(
+      entity
+        ? `"${entity}" ${confirmedCity} "property manager" OR "regional manager" OR "team" OR "leadership" OR "contact us" OR "about us" -site:linkedin.com`
+        : `"${confirmedName}" ${confirmedCity} "managed by" OR "management company" OR "owned by" OR "ownership" OR "developer"`,
+      5, 'mgmt-web'
     ),
     // Reddit — last 6 months, expanded proptech keywords
     // Google indexes Reddit well; parentheses omitted — Serper doesn't support boolean grouping
@@ -945,7 +948,7 @@ async function runPhase3(
   // Merge all three social result sets
   const socialResults = [...redditResults, ...reviewResults, ...proptechReviewResults]
 
-  const allResults = [...painResults, ...proptechResults, ...contactResults, ...socialResults, ...websiteResults]
+  const allResults = [...painResults, ...proptechResults, ...contactResults, ...mgmtWebResults, ...socialResults, ...websiteResults]
 
   // Pain signal extraction — includes all social posts (Reddit, ApartmentRatings, Yelp, proptech reviews)
   const painAllSources = [...painResults, ...socialResults]
@@ -1012,13 +1015,14 @@ IMPORTANT: scan full page text — proptech brands often appear in: "Community F
         proptechSnippets, 800, client)
     : null
 
-  // Contact extraction
-  const contactSnippets = contactResults.filter(r => (r.content || '').length > 30).slice(0, 8)
+  // Contact extraction — merge LinkedIn hits + management company web results
+  const allContactSources = [...contactResults, ...mgmtWebResults]
+  const contactSnippets = allContactSources.filter(r => (r.content || '').length > 30).slice(0, 12)
     .map((r, i) => `[${i + 1}] ${r.title}\nURL: ${r.url}\n${r.content.slice(0, 350)}`).join('\n\n---\n\n')
 
   const contactExtracted = contactSnippets.length > 60
     ? await haikusExtract<{ contacts: Array<StepContact & { linkedin_url?: string }> }>(
-        `Extract every named individual at "${entity}" or "${confirmedName}". Return ONLY valid JSON:
+        `Extract every named individual at "${entity || confirmedName}" or "${confirmedName}". Return ONLY valid JSON:
 {"contacts":[{"name":"","title":"","company":"","role_type":"property_manager","email":"","phone":"","linkedin":""}]}
 role_type: "property_manager","regional_manager","asset_manager","corporate"
 - email: any address found, even partial
@@ -1027,8 +1031,9 @@ role_type: "property_manager","regional_manager","asset_manager","corporate"
 - Only real "First Last" names (no companies or titles as names)
 - Include LinkedIn search hits even with brief snippets — URL alone proves existence
 - If LinkedIn slug contains a name, infer it
+- Also extract the management company name if it appears in snippets and is not already known ("${entity || 'unknown'}")
 - Empty array if no names found`,
-        contactSnippets, 700, client)
+        contactSnippets, 800, client)
     : null
 
   const webContacts: StepContact[] = ((contactExtracted?.contacts ?? []) as StepContact[])
@@ -1520,7 +1525,7 @@ PHASE 2 — ENRICHMENT:
 ${JSON.stringify({ owner_entity: finalOwner, owner_type: p2.owner_type, acquisition_year: p2.acquisition_year, fcc_providers: p2.fcc_providers, isp_providers: p2.isp_providers, video_providers: p2.video_providers, bulk_detected: p2.bulk_detected, bulk_agreements: p2.bulk_agreements, roe_detected: p2.roe_detected, roe_providers: p2.roe_providers, roe_expiry_year: p2.roe_expiry_year }, null, 2)}
 
 PHASE 3 — INTELLIGENCE:
-${JSON.stringify({ pain_signals: p3.pain_signals.slice(0, 12), proptech: p3.proptech, contact_count: p3.contacts.length, email_format: p3.email_format }, null, 2)}`
+${JSON.stringify({ pain_signals: p3.pain_signals.slice(0, 12), proptech: p3.proptech, contacts: p3.contacts.slice(0, 8).map(c => ({ name: c.name, title: c.title, company: c.company, role_type: c.role_type })), email_format: p3.email_format }, null, 2)}`
 
     // ── PHASE 4: Sonnet synthesis + Haiku outreach plan — run in PARALLEL ───────
     // Haiku is ~5x faster than Sonnet; both kick off at the same time so the
@@ -1547,7 +1552,7 @@ CRITICAL RULES:
 7. extracted_contacts: copy from Phase 3 contacts. STRICT SCHEMA — every item must have: name (string), title (string), company (string), email (string or ""), phone (raw number OR "Apollo Missing – Defaulting to Office: {leasing_number}" OR ""), phone_source ("direct"|"office_main"|null), linkedin_slug (path after /in/ or ""). Never omit fields, never use null for string fields.
 8. pain_signals: copy from Phase 3 — up to 20. Map Phase 3 type → signal_type: gate→gate_access, internet→internet, video_service→video_service, access_control→access_control, camera→camera_security, security→crime, package_locker→package_theft, smart_lock→smart_lock, automation→automation, water_sensor→water_sensor, intercom→intercom, crime→crime, management→management, general→general
 9. ownership: build from Phase 2 owner_entity + owner_type + acquisition_year
-10. If management_company blank but owner is RE firm → set management_company = owner_entity
+10. If management_company blank: first check contacts[].company for a recurring company name among property_manager/regional_manager contacts — use that. Else if owner is a known RE firm → set management_company = owner_entity
 11. proptech.replacement_window: based on tech_generation + year_built (pre-2015=Immediate, 2015-19=1-3yr, 2020+=3-5yr)
 
 ROE / CONTRACT DATA:
