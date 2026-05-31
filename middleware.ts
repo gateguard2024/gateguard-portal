@@ -29,8 +29,10 @@ function isBypassPath(pathname: string): boolean {
     pathname.startsWith('/show') ||
     // Show lead API — called from public page
     pathname.startsWith('/api/show-lead') ||
-    // CRM leads API — fetches show_leads for portal CRM (list + detail)
-    pathname.startsWith('/api/crm/') ||
+    // NOTE: /api/crm/ was previously bypassed here — removed because it caused
+    // getCurrentUser() to fall back to SYSTEM_USER for all CRM routes,
+    // logging every activity under Russel's account instead of the logged-in user.
+    // show_leads capture uses /api/show-lead (already bypassed above), not /api/crm/.
     // Property request portal — public form for property managers (no Clerk)
     pathname.startsWith('/request/') ||
     pathname.startsWith('/api/request') ||

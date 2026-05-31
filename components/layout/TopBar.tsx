@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
 import { Bell, Search, ChevronDown, X, Settings, User } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { HelpCircle, LogOut, CalendarDays } = require("lucide-react") as any;
@@ -14,6 +15,33 @@ interface TopBarProps {
 
 export function TopBar({ title, subtitle, actions }: TopBarProps) {
   const router = useRouter();
+  const { user } = useUser();
+
+  // Derive display values from live Clerk session
+  const userName = user
+    ? [user.firstName, user.lastName].filter(Boolean).join(' ')
+    : 'Loading...'
+  const userEmail = user?.emailAddresses[0]?.emailAddress ?? ''
+  const userInitials = user
+    ? [user.firstName, user.lastName]
+        .filter(Boolean)
+        .map((n) => (n as string)[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2)
+    : '··'
+  const orgTier = (user?.publicMetadata?.org_tier as string) ?? ''
+  const orgLabel =
+    orgTier === 'corporate'         ? 'GateGuard Corporate'
+    : orgTier === 'master_agent'    ? 'Master Agent'
+    : orgTier === 'master_dealer'   ? 'Master Dealer'
+    : orgTier === 'full_dealer'     ? 'Full Dealer'
+    : orgTier === 'service_dealer'  ? 'Service Dealer'
+    : orgTier === 'install_contractor' ? 'Install Contractor'
+    : orgTier === 'sales_partner'   ? 'Sales Partner'
+    : orgTier === 'client'          ? 'Client'
+    : 'GateGuard'
+
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [bellOpen, setBellOpen] = useState(false);
@@ -195,18 +223,18 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
             onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
           >
-            <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold" style={{ background: 'rgba(37,99,235,0.25)', border: '1px solid rgba(37,99,235,0.4)', color: '#93c5fd' }}>RF</div>
+            <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold" style={{ background: 'rgba(37,99,235,0.25)', border: '1px solid rgba(37,99,235,0.4)', color: '#93c5fd' }}>{userInitials}</div>
             <div className="hidden sm:block text-left">
-              <p className="text-xs font-semibold leading-tight" style={{ color: '#fafaf9' }}>Russel Feldman</p>
-              <p className="text-[10px] leading-tight" style={{ color: '#78716c' }}>GateGuard Corporate</p>
+              <p className="text-xs font-semibold leading-tight" style={{ color: '#fafaf9' }}>{userName}</p>
+              <p className="text-[10px] leading-tight" style={{ color: '#78716c' }}>{orgLabel}</p>
             </div>
             <ChevronDown size={12} style={{ color: '#78716c' }} className={`transition-transform ${profileOpen ? "rotate-180" : ""}`} />
           </button>
           {profileOpen && (
             <div className="absolute right-0 top-full mt-1.5 w-52 bg-white border border-border rounded-xl shadow-lg z-50 py-1 overflow-hidden">
               <div className="px-4 py-3 border-b border-border">
-                <p className="text-sm font-semibold text-foreground">Russel Feldman</p>
-                <p className="text-xs text-muted-foreground">rfeldman@gateguard.co</p>
+                <p className="text-sm font-semibold text-foreground">{userName}</p>
+                <p className="text-xs text-muted-foreground">{userEmail}</p>
               </div>
               <Link href="/admin" onClick={() => setProfileOpen(false)}
                 className="flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-slate-50 transition-colors">

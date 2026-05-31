@@ -154,6 +154,7 @@ const NAV_SECTIONS: NavSection[] = [
     icon: Globe,
     color: "#6B7EFF",
     items: [
+      { label: "Nexus Tracker",     href: "/tracker",        icon: ClipboardList, description: "Bug & enhancement tracker", badge: "Beta" },
       { label: "Playbooks",        href: "/playbooks",      icon: BookOpen, description: "Internal playbooks and SOPs" },
       { label: "Co-Op Pool",       href: "/marketing/coop", icon: Users,    description: "Shared lead pool" },
       { label: "Customer Portals", href: "/portal",         icon: Globe,    description: "Property manager view" },
@@ -297,6 +298,7 @@ export function Sidebar() {
     "/reviews":                "dealer.reviews",
     "/training":               "dealer.training",
     "/marketing/website":      "dealer.dealer_sites",
+    "/tracker":                "nexus.tracker",
     "/playbooks":              "internal.playbooks",
     "/marketing/coop":         "internal.coop",
     "/portal":                 "internal.portals",
