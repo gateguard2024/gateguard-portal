@@ -14,6 +14,7 @@ const { LayoutList, ArrowLeft, BarChart3, Edit2 } = require("lucide-react") as a
 void BarChart3; void Edit2;
 import { cn } from "@/lib/utils";
 import { TopBar } from "@/components/layout/TopBar";
+import { supabase } from "@/lib/supabase";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -428,6 +429,7 @@ export default function ARIAPage() {
   const [socialLoading, setSocialLoading]   = useState(false);
   const [cacheStatus, setCacheStatus]       = useState<'fresh' | 'stale' | 're-enriching' | null>(null);
   const [cacheAgeHours, setCacheAgeHours]   = useState<number | null>(null);
+  const [propertyId, setPropertyId]         = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   // Suppress unused warning — viewMode reserved for richer state tracking
   void viewMode;
@@ -502,6 +504,7 @@ export default function ARIAPage() {
     setSocialLoading(false);
     setCacheStatus(null);
     setCacheAgeHours(null);
+    setPropertyId(null);
 
     // ── SWR fast-path: check Intel DB cache first ──────────────────────────
     try {
@@ -515,6 +518,7 @@ export default function ARIAPage() {
           setPhase(6);
           const ageHours: number = cacheData.cache_age_hours ?? 9999;
           setCacheAgeHours(ageHours);
+          setPropertyId(cacheData.property_id ?? null);
           if (ageHours < 14 * 24) {
             setCacheStatus('fresh');
           } else {
@@ -608,30 +612,57 @@ export default function ARIAPage() {
     }
   }, [pendingRerun, phase, runARIA]);
 
-  // Re-enriching poll — when Inngest background job finishes, refresh the result
+  // Re-enriching: Supabase Realtime subscription — instant push when Inngest job completes
   useEffect(() => {
-    if (cacheStatus !== 're-enriching' || !query) return;
+    if (cacheStatus !== 're-enriching' || !propertyId || !query) return;
+
     const snapshotAgeHours = cacheAgeHours;
+
+    async function applyFreshResult() {
+      try {
+        const r = await fetch(`/api/aria/cache?query=${encodeURIComponent(query)}`);
+        if (!r.ok) return;
+        const d = await r.json();
+        if (d.hit && d.prospects?.length > 0) {
+          setResults({ mode: 'deep', query_interpretation: query, prospects: d.prospects });
+          setCacheStatus('fresh');
+          setCacheAgeHours(d.cache_age_hours ?? null);
+        }
+      } catch { /* ignore */ }
+    }
+
+    // Primary: Supabase Realtime — fires the instant the row is upserted by the deep route
+    const channel = supabase
+      .channel(`aria-prop-${propertyId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'aria_properties', filter: `id=eq.${propertyId}` },
+        () => { void applyFreshResult(); }
+      )
+      .subscribe();
+
+    // Fallback: light poll every 30s in case Realtime isn't enabled for this table
     const poll = setInterval(async () => {
       try {
         const r = await fetch(`/api/aria/cache?query=${encodeURIComponent(query)}`);
         if (!r.ok) return;
         const d = await r.json();
-        // Enrichment done when cache_age_hours is significantly fresher than our snapshot
         if (d.hit && d.cache_age_hours !== null && (snapshotAgeHours === null || d.cache_age_hours < snapshotAgeHours - 0.5)) {
-          if (d.prospects?.length > 0) {
-            setResults({ mode: 'deep', query_interpretation: query, prospects: d.prospects });
-          }
-          setCacheStatus('fresh');
-          setCacheAgeHours(d.cache_age_hours);
+          void applyFreshResult();
           clearInterval(poll);
         }
       } catch { /* ignore */ }
-    }, 6000);
-    // Stop polling after 3 minutes regardless
-    const timeout = setTimeout(() => clearInterval(poll), 180_000);
-    return () => { clearInterval(poll); clearTimeout(timeout); };
-  }, [cacheStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, 30_000);
+
+    // Stop both after 3 minutes
+    const timeout = setTimeout(() => { clearInterval(poll); void supabase.removeChannel(channel); }, 180_000);
+
+    return () => {
+      void supabase.removeChannel(channel);
+      clearInterval(poll);
+      clearTimeout(timeout);
+    };
+  }, [cacheStatus, propertyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Engine 2 — social search fires automatically once Engine 1 completes
   useEffect(() => {
