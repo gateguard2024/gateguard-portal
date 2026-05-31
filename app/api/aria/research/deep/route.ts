@@ -1805,13 +1805,29 @@ buying_trends: 1-sentence sales trend insight for this property type`,
     })()
 
     // ── Persist to Intel DB (non-blocking) ────────────────────────────────────
+    // NOTE: Use the same baseUrl pattern as Inngest — NEXT_PUBLIC_APP_URL first,
+    // then VERCEL_URL (deployment URL), then localhost. NEXT_PUBLIC_APP_URL alone
+    // was falling back to localhost:3000 in production when the env var wasn't set.
     void (async () => {
       try {
-        await fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/api/aria/properties`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+        const baseUrl =
+          process.env.NEXT_PUBLIC_APP_URL ||
+          (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+        const upsertRes = await fetch(`${baseUrl}/api/aria/properties`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-service-key': process.env.ARIA_SERVICE_KEY ?? '',
+          },
           body: JSON.stringify({ prospects: [prospectPayload] }),
         })
-      } catch { }
+        if (!upsertRes.ok) {
+          const errText = await upsertRes.text().catch(() => '')
+          console.error(`[aria/deep] Intel DB upsert failed ${upsertRes.status}: ${errText.slice(0, 200)}`)
+        }
+      } catch (e) {
+        console.error('[aria/deep] Intel DB upsert threw:', e instanceof Error ? e.message : e)
+      }
     })()
 
     // Suppress unused warning for contractExpiryYear (used in non-blocking write)
