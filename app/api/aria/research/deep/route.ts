@@ -899,8 +899,9 @@ async function runPhase3(
     // Pain signals: general complaints search (Serper organic)
     serperSearch(`"${confirmedName}" ${confirmedCity} reviews complaints internet gate crime`, 5, 'pain'),
     // PropTech: raw content fetch — amenities pages explicitly name gate/intercom/camera brands
+    // NOTE: no geo phrase — proptech pages rarely include "Atlanta, GA" verbatim
     tavilySearch(
-      `"${confirmedName}" "${geo}" ButterflyMX OR DoorKing OR Brivo OR Openpath OR Verkada OR Avigilon OR SmartRent OR Latch OR LiftMaster OR HID OR SALTO OR Viking OR Linear OR PDK`,
+      `"${confirmedName}" ButterflyMX OR DoorKing OR Brivo OR Openpath OR Verkada OR Avigilon OR SmartRent OR Latch OR LiftMaster OR HID OR SALTO OR Viking OR Linear OR PDK OR "access control" OR intercom OR "gate system"`,
       3, 'proptech', 'advanced', true  // rawContent = TRUE — reads full technology pages
     ),
     // Contacts: LinkedIn
@@ -1081,26 +1082,27 @@ Examples: "firstname.lastname@domain.com", "flastname@domain.com", "firstname@do
   })
 
   // Merge listing-verified proptech into extracted proptech
-  // listingProptech is already confirmed from amenity page — never discard it
+  // IMPORTANT: listing_proptech from Phase 1A is always applied regardless of whether
+  // the Phase 3 proptech search found anything — never gate it on proptechExtracted != null
   const finalProptech: Phase3Result['proptech'] = {
     ...(proptechExtracted ?? blank.proptech),
   }
-  if (listingProptech.length > 0 && proptechExtracted) {
+  if (listingProptech.length > 0) {
     // Distribute listing proptech brands into the right category arrays
     for (const brand of listingProptech) {
       const b = brand.toLowerCase()
-      if (['butterflyMX','aiphone','2n','doorbird','callbox'].some(i => b.includes(i.toLowerCase()))) {
+      if (['butterflymx','aiphone','2n','doorbird','callbox'].some(i => b.includes(i))) {
         if (!finalProptech.intercoms.some(x => x.toLowerCase() === b)) finalProptech.intercoms.push(brand)
-      } else if (['brivo','hid','openpath','kisi','salto','pdk','allegion'].some(i => b.includes(i.toLowerCase()))) {
+      } else if (['brivo','hid','openpath','kisi','salto','pdk','allegion'].some(i => b.includes(i))) {
         if (!finalProptech.access_control.some(x => x.toLowerCase() === b)) finalProptech.access_control.push(brand)
-      } else if (['liftmaster','doorking','viking','linear','faac','elite'].some(i => b.includes(i.toLowerCase()))) {
+      } else if (['liftmaster','doorking','viking','linear','faac','elite'].some(i => b.includes(i))) {
         if (!finalProptech.gate_operators.some(x => x.toLowerCase() === b)) finalProptech.gate_operators.push(brand)
-      } else if (['verkada','avigilon','eagle','hanwha','axis','hikvision','dahua'].some(i => b.includes(i.toLowerCase()))) {
+      } else if (['verkada','avigilon','eagle','hanwha','axis','hikvision','dahua'].some(i => b.includes(i))) {
         if (!finalProptech.cameras.some(x => x.toLowerCase() === b)) finalProptech.cameras.push(brand)
-      } else if (['smartrent','latch','august','yale','schlage','kwikset','gatewise'].some(i => b.includes(i.toLowerCase()))) {
+      } else if (['smartrent','latch','august','yale','schlage','kwikset','gatewise'].some(i => b.includes(i))) {
         if (!finalProptech.smart_locks.some(x => x.toLowerCase() === b)) finalProptech.smart_locks.push(brand)
       }
-      // If brand doesn't fit known categories, still log it (Sonnet will categorize it)
+      // Unknown brand: Sonnet will categorize it during synthesis
     }
   }
 
