@@ -27,6 +27,20 @@ ON CONFLICT (slug) DO NOTHING;
 -- Grant Data API access (required — Supabase enforces this Oct 30 2026)
 -- Note: mdu_providers already exists, no GRANT needed for ALTER-style inserts
 
+-- ─── aria_tech_providers: Extend category CHECK to include 'isp' ─────────────
+-- The original constraint only covers gate/access_control/intercom/camera/smart_lock/
+-- resident_app/package/other. ISP/managed-Wi-Fi providers need their own category.
+
+ALTER TABLE public.aria_tech_providers
+  DROP CONSTRAINT IF EXISTS aria_tech_providers_category_check;
+
+ALTER TABLE public.aria_tech_providers
+  ADD CONSTRAINT aria_tech_providers_category_check
+  CHECK (category IN (
+    'gate','access_control','intercom','camera',
+    'smart_lock','resident_app','package','other','isp'
+  ));
+
 -- ─── aria_tech_providers: Add missing camera/security brands ─────────────────
 
 INSERT INTO public.aria_tech_providers (name, slug, category, aliases, displacement_target, notes)
@@ -49,7 +63,7 @@ VALUES
    'Cellular-based gate access control + video intercom. Popular in sprawling HOAs where cable runs to front gate are prohibitive.'),
   ('Rently', 'rently', 'gate', ARRAY['Rently Access'], true,
    'Access control hardware + self-guided tour technology. Smart lock + entry combined.'),
-  -- ISP/Managed Wi-Fi entries in aria_tech_providers (for proptech catalog tracking)
+  -- ISP/Managed Wi-Fi entries (category 'isp' — now allowed by updated constraint)
   ('GigStreem', 'gigstreem-isp', 'isp', ARRAY['Gigstreem','GIGstreem'], true,
    'National managed Wi-Fi. MDU-only. Portfolio-level deals. AMLI, UDR. SARA target.'),
   ('Hotwire Communications', 'hotwire-isp', 'isp', ARRAY['Hotwire','Fision'], true,
