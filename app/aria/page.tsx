@@ -5,7 +5,7 @@ import {
   Cpu, Zap, Users, Radio, Target,
   Building2, User, MapPin, CheckCircle2,
   ExternalLink, Star, Copy, Send, Phone, MessageSquare,
-  Loader2, Shield, Package, Wifi, AlertCircle,
+  Loader2, Shield, Package, Wifi, AlertCircle, Key, Activity,
   ChevronRight, TrendingUp, Globe, Clock, Download, Trash2, Check, Search, RefreshCw,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
