@@ -9,7 +9,7 @@ import {
   ChevronRight, TrendingUp, Globe, Clock, Download, Trash2, Check, Search, RefreshCw,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { LayoutList, ArrowLeft, BarChart3, Edit2 } = require("lucide-react") as any;
+const { LayoutList, ArrowLeft, BarChart3, Edit2, Camera } = require("lucide-react") as any;
 // Silence "unused" warnings — kept for downstream visual refinements
 void BarChart3; void Edit2;
 import { cn } from "@/lib/utils";
@@ -480,6 +480,9 @@ function displaySource(raw: string | undefined): string {
 const SIGNAL_ICONS: Record<string, React.ElementType> = {
   gate_access: Shield, package_theft: Package, internet: Wifi,
   intercom: Radio, visitor_management: Users, mdu_tv: Globe,
+  video_service: Globe, access_control: Key, camera_security: Camera,
+  smart_lock: Key, automation: Zap, water_sensor: Activity,
+  crime: Shield, management: Users,
 };
 
 const SIGNAL_SEVERITY: Record<string, { bg: string; border: string; text: string; badge: string }> = {
@@ -1852,7 +1855,7 @@ export default function ARIAPage() {
   // ── Intel tab ─────────────────────────────────────────────────────────────
   function IntelTab({ p }: { p: Prospect }) {
     const cutoff = new Date();
-    cutoff.setMonth(cutoff.getMonth() - 12);
+    cutoff.setMonth(cutoff.getMonth() - 6);
     const recentSignals = (p.pain_signals || []).filter(sig => {
       if (!sig.date || sig.date === 'unknown') return true;
       const d = new Date(sig.date);
@@ -1937,7 +1940,7 @@ export default function ARIAPage() {
             <div className="flex items-center gap-2">
               <Radio size={16} className="text-rose-500" />
               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-700">Intent Signals</h3>
-              <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">Last 12 months</span>
+              <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">Last 6 months</span>
             </div>
             <div className="flex items-center gap-2">
               {hiddenCount > 0 && (
@@ -2015,8 +2018,22 @@ export default function ARIAPage() {
     return { name: 'Resident Review', bg: 'bg-slate-100', text: 'text-slate-600', border: 'border-slate-200/60' };
   }
 
-  const TECH_SIGNAL_TYPES = new Set(['internet_complaint', 'access_complaint', 'gate_complaint', 'tech_complaint', 'wifi_complaint', 'intercom_complaint', 'lock_complaint', 'package_complaint', 'camera_complaint', 'fob_complaint']);
-  const TECH_KEYWORDS = ['gate', 'fob', 'access', 'intercom', 'internet', 'wifi', 'wi-fi', 'smart lock', 'package locker', 'camera', 'buzzer', 'key card', 'app', 'entry', 'callbox', 'call box', 'liftmaster', 'doorking', 'linear', 'aiphone'];
+  const TECH_SIGNAL_TYPES = new Set([
+    'gate_access', 'internet', 'video_service', 'access_control', 'camera_security',
+    'package_theft', 'smart_lock', 'automation', 'water_sensor', 'intercom',
+    // legacy types from older data
+    'internet_complaint', 'access_complaint', 'gate_complaint', 'tech_complaint',
+    'wifi_complaint', 'intercom_complaint', 'lock_complaint', 'package_complaint',
+    'camera_complaint', 'fob_complaint',
+  ]);
+  const TECH_KEYWORDS = [
+    'gate', 'fob', 'access', 'intercom', 'internet', 'wifi', 'wi-fi',
+    'smart lock', 'package locker', 'package room', 'amazon hub', 'camera',
+    'buzzer', 'key card', 'app', 'entry', 'callbox', 'call box',
+    'liftmaster', 'doorking', 'linear', 'aiphone', 'butterflymx', 'brivo',
+    'thermostat', 'smart home', 'automation', 'water sensor', 'leak', 'flood',
+    'cable', 'streaming', 'directv', 'dish', 'fiber', 'gigabit',
+  ];
 
   function isTechSignal(sig: PainSignal): boolean {
     if (TECH_SIGNAL_TYPES.has(sig.signal_type)) return true;

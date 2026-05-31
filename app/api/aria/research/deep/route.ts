@@ -86,15 +86,18 @@ async function serperSearch(
   query: string,
   maxResults = 5,
   source = 'serper',
-  type: 'search' | 'news' = 'search'
+  type: 'search' | 'news' = 'search',
+  tbs?: string  // time-based filter: 'qdr:m6' = last 6 months, 'qdr:y' = last year
 ): Promise<TavilyResult[]> {
   if (!process.env.SERPER_API_KEY) return []
   try {
     const endpoint = type === 'news' ? 'https://google.serper.dev/news' : 'https://google.serper.dev/search'
+    const body: Record<string, unknown> = { q: query, num: maxResults, gl: 'us', hl: 'en' }
+    if (tbs) body.tbs = tbs
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-API-KEY': process.env.SERPER_API_KEY },
-      body: JSON.stringify({ q: query, num: maxResults, gl: 'us', hl: 'en' }),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(5000),
     })
     if (!res.ok) return []
@@ -851,7 +854,7 @@ interface StepContact {
 }
 
 interface PainSignal {
-  type: 'gate' | 'internet' | 'camera' | 'crime' | 'management' | 'smart_lock' | 'general'
+  type: 'gate' | 'internet' | 'video_service' | 'access_control' | 'camera' | 'security' | 'package_locker' | 'smart_lock' | 'automation' | 'water_sensor' | 'intercom' | 'crime' | 'management' | 'general'
   quote: string; source: string; date: string; severity: 'high' | 'medium' | 'low'
 }
 
@@ -899,9 +902,9 @@ async function runPhase3(
     : ''
   const domainForEmail = mgmtDomain || websiteDomain
 
-  // 6 parallel searches — social split into reddit + reviews for better indexed coverage
+  // 7 parallel searches — 3 social searches for broad review/resident coverage
   // NOTE: Facebook/Instagram/Twitter are NOT indexed by Google — never use as site: targets
-  const [painResults, proptechResults, contactResults, redditResults, reviewResults, websiteResults] = await Promise.all([
+  const [painResults, proptechResults, contactResults, redditResults, reviewResults, proptechReviewResults, websiteResults] = await Promise.all([
     // Pain signals: general complaints search (Serper organic)
     serperSearch(`"${confirmedName}" ${confirmedCity} reviews complaints internet gate crime`, 5, 'pain'),
     // PropTech: raw content fetch — amenities pages explicitly name gate/intercom/camera brands
@@ -914,17 +917,23 @@ async function runPhase3(
     entity
       ? serperSearch(`"${entity}" "${geo}" "community manager" OR "regional manager" site:linkedin.com`, 5, 'contacts')
       : Promise.resolve([] as TavilyResult[]),
-    // Reddit: NO forced geo phrase — Reddit posts rarely include city/state in text
+    // Reddit — last 6 months, expanded proptech keywords
     // Google indexes Reddit well; parentheses omitted — Serper doesn't support boolean grouping
     serperSearch(
-      `"${confirmedName}" site:reddit.com internet OR wifi OR gate OR crime OR management OR complaints OR "no security"`,
-      6, 'reddit'
+      `"${confirmedName}" site:reddit.com internet OR wifi OR fiber OR gate OR "access control" OR intercom OR package OR locker OR "smart lock" OR cameras OR security OR management OR lease OR maintenance`,
+      8, 'reddit', 'search', 'qdr:m6'
     ),
-    // Review sites: ApartmentRatings (best for MF complaints), Yelp, Apartments.com reviews
-    // These are all Google-indexed; Google Maps reviews surface via apartments.com embeds
+    // Review sites — last 6 months, all reviews (good AND bad) mentioning tech/amenities
+    // ApartmentRatings is best for MF; apartments.com and Yelp also indexed by Google
     serperSearch(
-      `"${confirmedName}" ${confirmedCity} site:apartmentratings.com OR site:yelp.com OR site:apartments.com reviews complaints`,
-      6, 'reviews'
+      `"${confirmedName}" ${confirmedCity} site:apartmentratings.com OR site:yelp.com OR site:apartments.com internet OR wifi OR gate OR security OR package OR locker OR intercom OR cameras OR "smart lock" OR cable OR streaming`,
+      8, 'reviews', 'search', 'qdr:m6'
+    ),
+    // Proptech brand mentions in resident reviews — catches specific tech complaints and praise
+    // Targets any Google-indexed review mentioning technology brands or amenity systems
+    serperSearch(
+      `"${confirmedName}" ButterflyMX OR SmartRent OR Latch OR "package locker" OR "package room" OR "Amazon Hub" OR "gate code" OR "key fob" OR "water damage" OR "water sensor" OR thermostat OR "smart home" OR automation reviews OR residents`,
+      8, 'proptech_reviews', 'search', 'qdr:m6'
     ),
     // Property website raw content — owner/property site often lists all tech partners + amenities
     confirmedWebsite
@@ -932,28 +941,39 @@ async function runPhase3(
       : Promise.resolve([] as TavilyResult[]),
   ])
 
-  // Merge both social result sets
-  const socialResults = [...redditResults, ...reviewResults]
+  // Merge all three social result sets
+  const socialResults = [...redditResults, ...reviewResults, ...proptechReviewResults]
 
   const allResults = [...painResults, ...proptechResults, ...contactResults, ...socialResults, ...websiteResults]
 
-  // Pain signal extraction — includes social posts (Reddit, ApartmentRatings, Yelp)
+  // Pain signal extraction — includes all social posts (Reddit, ApartmentRatings, Yelp, proptech reviews)
   const painAllSources = [...painResults, ...socialResults]
-  const painSnippets = painAllSources.filter(r => (r.content || '').length > 40).slice(0, 16)
-    .map((r, i) => `[${i + 1}][${r.source ?? 'review'}] ${r.title}\n${r.content.slice(0, 500)}`)
+  const painSnippets = painAllSources.filter(r => (r.content || '').length > 40).slice(0, 24)
+    .map((r, i) => `[${i + 1}][${r.source ?? 'review'}] ${r.title}\n${r.content.slice(0, 600)}`)
     .join('\n\n---\n\n')
 
   const painExtracted = painSnippets.length > 80
     ? await haikusExtract<{ signals: PainSignal[] }>(
-        `Extract resident pain signals from reviews, Reddit posts, ApartmentRatings, Yelp, and Google reviews. Return ONLY valid JSON:
+        `Extract resident pain signals AND positive mentions from reviews, Reddit posts, ApartmentRatings, Yelp, and Google reviews. Return ONLY valid JSON:
 {"signals":[{"type":"gate","quote":"","source":"","date":"","severity":"high"}]}
-type: "gate","internet","camera","crime","management","smart_lock","general"
-quote: verbatim resident or user quote (max 150 chars) — prioritize direct quotes from real tenants
-source: "Google Reviews","Reddit","Yelp","ApartmentRatings","Apartments.com", etc. — use source tag in brackets
+type: "gate","internet","video_service","access_control","camera","security","package_locker","smart_lock","automation","water_sensor","intercom","management","crime","general"
+- gate: gate not working, gate always open, gate broken, piggybacking, gate code issues
+- internet: wifi slow, internet outage, ISP problems, fiber issues, included internet quality
+- video_service: cable included, DirecTV, streaming box, TV package, channel issues
+- access_control: key fob, fob not working, door not locking, entry system, building access
+- camera: cameras broken, no cameras, cameras added, surveillance improvement
+- security: safety concerns, break-ins, lighting, patrol, no security guard
+- package_locker: package room, Amazon Hub, package stolen, locker broken, delivery issues
+- smart_lock: SmartRent, Latch, keyless entry, app-controlled lock, lock malfunction
+- automation: smart thermostat, Nest, app-controlled, smart home features, automation issues
+- water_sensor: flooding, leak, water damage, sensor alert, pipe burst
+- intercom: ButterflyMX, visitor access, buzzer not working, guest entry
+quote: verbatim resident or user quote (max 180 chars) — ALWAYS include exact words when available, good OR bad
+source: "Google Reviews","Reddit","Yelp","ApartmentRatings","Apartments.com","Nextdoor" etc.
 date: any date signal found ("2024","Jan 2025","3 months ago" → approximate year)
-severity: high=safety/major failure/no working gate/internet outage, medium=recurring issue, low=minor
-Up to 15 signals. Prefer last 18 months. Include internet/gate specific quotes.`,
-        painSnippets, 900, client)
+severity: high=safety/major failure/no working gate/internet outage, medium=recurring issue, low=minor complaint or positive mention
+Up to 20 signals. Include BOTH complaints and positive mentions. Prefer last 12 months. Do not skip positive reviews.`,
+        painSnippets, 1200, client)
     : null
 
   // PropTech extraction — uses raw content so full page text is available
@@ -1206,7 +1226,7 @@ const deepIntelTool: Anthropic.Tool = {
           type: 'object',
           properties: {
             source: { type: 'string' }, date: { type: 'string' },
-            signal_type: { type: 'string', enum: ['gate_access', 'internet', 'package_theft', 'intercom', 'general'] },
+            signal_type: { type: 'string', enum: ['gate_access', 'internet', 'video_service', 'access_control', 'camera_security', 'package_theft', 'smart_lock', 'automation', 'water_sensor', 'intercom', 'crime', 'management', 'general'] },
             quote: { type: 'string' }, severity: { type: 'string', enum: ['high', 'medium', 'low'] },
           },
         },
@@ -1524,7 +1544,7 @@ CRITICAL RULES:
    - Set expiry_estimate = "Est. [year]-[year+2]" or specific year if known
 6. proptech: copy from Phase 3
 7. extracted_contacts: copy from Phase 3 contacts. STRICT SCHEMA — every item must have: name (string), title (string), company (string), email (string or ""), phone (raw number OR "Apollo Missing – Defaulting to Office: {leasing_number}" OR ""), phone_source ("direct"|"office_main"|null), linkedin_slug (path after /in/ or ""). Never omit fields, never use null for string fields.
-8. pain_signals: copy from Phase 3 — up to 12 recent
+8. pain_signals: copy from Phase 3 — up to 20. Map Phase 3 type → signal_type: gate→gate_access, internet→internet, video_service→video_service, access_control→access_control, camera→camera_security, security→crime, package_locker→package_theft, smart_lock→smart_lock, automation→automation, water_sensor→water_sensor, intercom→intercom, crime→crime, management→management, general→general
 9. ownership: build from Phase 2 owner_entity + owner_type + acquisition_year
 10. If management_company blank but owner is RE firm → set management_company = owner_entity
 11. proptech.replacement_window: based on tech_generation + year_built (pre-2015=Immediate, 2015-19=1-3yr, 2020+=3-5yr)
