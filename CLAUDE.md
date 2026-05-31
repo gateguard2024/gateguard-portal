@@ -1,6 +1,6 @@
 # GateGuard Portal — Claude Context (Active Reference)
 
-> Last trimmed: May 30, 2026 (session 11). Full sprint history, /tech docs, SARA Plus intel → CLAUDE.archive.md
+> Last trimmed: May 31, 2026 (session 12). Full sprint history, /tech docs, SARA Plus intel → CLAUDE.archive.md
 
 ---
 
@@ -173,8 +173,8 @@
 - Mobile: `mobileTab` state (`'list' | 'property' | 'dm' | 'scout'`), bottom nav 4 tabs fixed at 56px
 - `require()` needed for `LayoutList, ArrowLeft`
 
-**ARIA deep engine (session 9 — v7.2):**
-- Current version: `v7.2`
+**ARIA deep engine (session 12 — v7.4):**
+- Current version: `v7.4`
 - Model: `claude-sonnet-4-6`
 - APIs (graceful fallback if keys absent): Apollo (`APOLLO_API_KEY`), Prospeo (`PROSPEO_API_KEY`), NinjaPear (`NINJAPEAR_API_KEY`, formerly ProxyCurl), PDL (`PDL_API_KEY`)
 - Apollo endpoint: `POST /api/v1/people/match` (name + domain → email + phone). Old `/mixed_people/search` is deprecated (was returning 403). Auth: `Bearer` token.
@@ -365,8 +365,8 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 - `floor_plans` + `floor_plan_devices` + esign tables — Design section (migration 071)
 - `service_catalog` + enrollment tables — Service Marketplace (migration 070)
 - `aria_properties` — persistent property intel DB (migration 098). Never deleted by app. Upserted by every ARIA deep search. Unique on `(lower(property_name), lower(address))`. Fields: full proptech stack, DM chain, behavioral_profile, pitch_strategy, `contract_expiry_year`, `sales_stage`, `sales_notes`, `times_researched`
-- `aria_tech_providers` — auto-growing gate/access/intercom/camera/lock/app vendor catalog (migration 098). 50+ seeded. `displacement_target` flag. `times_detected` counter
-- `mdu_providers` — ISP + video provider reference table (migration 071). 40+ seeded national/specialist/regional providers
+- `aria_tech_providers` — auto-growing gate/access/intercom/camera/lock/app/isp vendor catalog (migrations 098 + 101). 70+ seeded. `displacement_target` flag. `times_detected` counter. Category CHECK now includes `'isp'` (migration 101 extended it)
+- `mdu_providers` — ISP + video provider reference table (migrations 071 + 101). 55+ seeded national/specialist/regional providers (added Hotwire, Smartaira, White Sky, Windstream, Nextlink, GoNetspeed, Sling/Philo/Fubo MDU, etc.)
 - `mdu_provider_detections` — confirmed/suspected ISP/video provider at a specific property (migration 071)
 
 ---
@@ -375,6 +375,8 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 
 | Migration | What | Status |
 |-----------|------|--------|
+| 101 | Expand `mdu_providers` (14 new ISP/video entries) + `aria_tech_providers` (camera/gate/isp additions) + extend category CHECK to include `'isp'` | ✅ beta + prod (run SQL patch for ISP rows) |
+| 100 | `aria_properties` ROE + learning loop `*_user_verified` flags | ✅ beta + prod |
 | 098 | `aria_properties` (persistent intel DB) + `aria_tech_providers` (auto-growing catalog) + RPCs | ✅ beta + prod |
 | 097 | document_signatures.document_html TEXT column | ✅ beta + prod |
 | 096 | organizations.entity_type TEXT column | ✅ beta + prod |
@@ -538,6 +540,19 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 - ✅ **`aria_properties` added to `supabase_realtime` publication** — done on prod Supabase (Database → Publications → supabase_realtime → Add tables → aria_properties). Beta Supabase still needs this step
 - ✅ **2035 PipelinePanel redesign** (`app/aria/page.tsx`) — dark radial navy-to-black HUD background; 48px grid overlay; animated scan line; HUD corner brackets; `PIPELINE_PARTICLES` fixed array (no `Math.random()` — prevents position teleporting on re-render); central ARIA logo with 3 orbital rings at 7s/13s/21s speeds (middle: reverse, different colors); 5 phase nodes with inline gradient styles; connector beams with `aria-fill`/`aria-shimmer` animations; status pill; "Claude Sonnet · Synthesis Mode Active" footer in phase 5
 
+### Completed — May 31, 2026 (session 12) — ARIA v7.4: Data Quality + Provider Catalog
+- ✅ **ARIA engine v7.4** (`app/api/aria/research/deep/route.ts`)
+- ✅ **ISP/video service-description naming guard** — `ISP_SERVICE_DESCRIPTIONS` + `VIDEO_SERVICE_DESCRIPTIONS` blocklists (25+ terms each: "Wireless High Speed Internet", "High-speed internet", "Cable TV", etc.). `filterProviderNames()` strips them post-extraction in Phase 1A and Phase 2. Both Haiku prompts updated with explicit COMPANY NAME ONLY / NEVER rules.
+- ✅ **Dedicated phone search** — new `serperSearchKG()` function reads Google Knowledge Graph (`knowledgeGraph.attributes.Phone`) alongside organic results. Added as 5th parallel search in Phase 1A. Haiku prompt updated to check `[phone]` source snippets first — mandatory field.
+- ✅ **Expanded `KNOWN_MDU_BULK_ISPS`** — 40+ entries: full national/regional landscape (Spectrum, AT&T, Verizon Fios, Google Fiber Webpass, Frontier, Breezeline, Windstream, Astound/RCN, DojoNetworks, Smartaira, Starry, White Sky, Boingo, Nextlink, Midco, Single Digits, GoNetspeed, etc.)
+- ✅ **Expanded `KNOWN_VIDEO_PROVIDERS`** — added Dish Fiber, Sling TV, Philo, FuboTV, DirecTV dealers (CSS, ResTech, Touchstone 1, Smartaira)
+- ✅ **Expanded `ispKeywords`** — DojoNetworks, Smartaira, Single Digits, White Sky, Boingo, Starry, GoNetspeed, Midco, Nextlink, MDU Datacom (up to 15 terms)
+- ✅ **Phase 3 proptech search + review queries** — added Swiftlane, Kastle, Flock Safety, Eagle Eye, Rhombus, Deep Sentinel, CellGate, Verkada
+- ✅ **Phase 3 proptech Haiku brand list** — full roster: Swiftlane, Kastle, DoorBird, CellGate, Rently, Flock Safety, Deep Sentinel, Stealth Monitoring, Rhombus Systems, Eagle Eye Networks, Ring for Business added to all category arrays
+- ✅ **Migration 101** (`supabase/migrations/101_provider_catalog_expansion.sql`) — seeds `mdu_providers` (14 new: Hotwire, Smartaira, White Sky, Windstream, Nextlink, GoNetspeed, Lux Speed, Resound, Aeronet, OneStop, Sling/Philo/Fubo MDU); seeds `aria_tech_providers` (camera: Eagle Eye, Deep Sentinel, Flock Safety, Stealth Monitoring, Rhombus, Ring; gate: CellGate, Rently; isp: GigStreem, Hotwire, Pavlov, Smartaira, DojoNetworks, White Sky, Boingo, Single Digits, Starry, Midco, Nextlink, GoNetspeed); extends category CHECK to include `'isp'`
+- ✅ **Migration 101 patch** — applied on beta + prod via Supabase SQL editor (ISP rows failed first run due to missing `'isp'` in CHECK; constraint extended + rows re-inserted)
+- ✅ Middleware fix (committed `b24ceb09`) — `/api/aria/` moved from `isBypassPath` into `clerkHandler` with early `NextResponse.next()`; fixes "auth() was called but Clerk can't detect usage of clerkMiddleware()" telemetry error
+
 ### Pending — Beta Supabase Realtime
 - Add `aria_properties` to `supabase_realtime` publication on **beta** Supabase project (only done on prod)
 
@@ -548,7 +563,8 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
   - **Expanded scoutQueue** — SCOUT now receives full campaign brief: `market_context` (tech_generation, replacement_window, acquisition_year, buying_trends), `connectivity` extended (video_providers, roe_detected, roe_expiry_year, contract_urgency, contract_window), `proptech` extended (intercoms, cameras, smart_locks, displacement_targets, sara_signals), `behavioral_profile`, `pitch_strategy`, `key_finding`, full `objection_flags` (ROE + acquisition), `outreach_plan`, extended `outreach_sequence` (6 touches)
 
 ### Pending — Migrations to Run
-- Migrations 093–100 deployed on beta + prod ✅
+- Migrations 093–101 deployed on beta + prod ✅
+- Migration 101 ISP rows: run SQL patch in Supabase SQL editor (beta + prod) to extend CHECK constraint and insert ISP entries — see session 12 notes above
 
 ### Pending — CPQ Phase 2
 - Add `unit_cost` column to `quote_line_items` (migration 092) — enables real margin vs. estimated
