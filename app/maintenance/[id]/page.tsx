@@ -13,6 +13,7 @@ const { ArrowLeft, Edit2, Timer, Tag, ClipboardList, PhoneCall, PhoneOutgoing, N
 import { TopBar } from '@/components/layout/TopBar'
 import { QuickActions } from '@/components/shared/QuickActions'
 import { cn } from '@/lib/utils'
+import { TrackerBoard } from '@/components/tracker/TrackerBoard'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -537,7 +538,7 @@ export default function WorkOrderDetailPage() {
   const [selectedInvItem, setSelectedInvItem] = useState<InventorySearchResult | null>(null)
 
   // Active tab
-  const [tab, setTab] = useState<'details' | 'comments' | 'parts' | 'field_tickets' | 'time' | 'crew' | 'schedule' | 'calls' | 'costs'>('details')
+  const [tab, setTab] = useState<'details' | 'comments' | 'parts' | 'field_tickets' | 'time' | 'crew' | 'schedule' | 'calls' | 'costs' | 'tasks'>('details')
 
   // Job Costs state
   const [jobCosts, setJobCosts] = useState<{ costs: any[]; summary: any }>({ costs: [], summary: null })
@@ -1309,6 +1310,7 @@ export default function WorkOrderDetailPage() {
                   { key: 'comments',      label: `Comments (${comments.length})`,          icon: MessageSquare },
                   { key: 'parts',         label: `Parts (${partsUsed.length})`,            icon: Package       },
                   { key: 'costs',         label: 'Job Costs',                              icon: DollarSign    },
+                  { key: 'tasks',         label: 'Tasks',                                  icon: ClipboardList },
                 ] as const).map(t => {
                   const Icon = t.icon
                   return (
@@ -2339,6 +2341,13 @@ export default function WorkOrderDetailPage() {
               {/* ── Calls tab ── */}
               {tab === 'calls' && wo && (
                 <CallsTab workOrderId={wo.id} workOrder={wo} />
+              )}
+
+              {/* ── Tasks tab ── */}
+              {tab === 'tasks' && wo && (
+                <div className="py-2">
+                  <TrackerBoard entityType="work_order" entityId={wo.id} />
+                </div>
               )}
             </div>
 

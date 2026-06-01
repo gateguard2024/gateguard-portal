@@ -21,6 +21,7 @@ const SaveIcon = ({ size }: { size: number }) => (
 import { cn } from "@/lib/utils";
 import { QuickActions } from "@/components/shared/QuickActions";
 import { SlideOver, SlideOverFooter } from "@/components/ui/SlideOver";
+import { TrackerBoard } from "@/components/tracker/TrackerBoard";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Lead {
@@ -1200,6 +1201,12 @@ export default function LeadDetailPage() {
                 onActivityAdded={handleActivityAdded}
                 triggerOpen={triggerLogActivity}
               />
+
+              {/* Tracker Tasks */}
+              <div className="bg-card border border-border rounded-xl p-4">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Tasks</h3>
+                <TrackerBoard entityType="lead" entityId={id} />
+              </div>
             </div>
           </div>
 

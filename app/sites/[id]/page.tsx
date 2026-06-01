@@ -12,6 +12,7 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { Inbox, Edit3, Edit2, RotateCcw } = require('lucide-react') as any
 import { QuickActions } from '@/components/shared/QuickActions'
+import { TrackerBoard } from '@/components/tracker/TrackerBoard'
 
 /* ─── types ──────────────────────────────────────────── */
 interface Site {
@@ -249,7 +250,7 @@ function formatDateTime(iso: string | null) {
 }
 
 /* ─── Main page ──────────────────────────────────────── */
-type Tab = 'overview' | 'assets' | 'events' | 'work_orders' | 'requests' | 'pm_schedules' | 'opportunities' | 'quotes' | 'warranty'
+type Tab = 'overview' | 'assets' | 'events' | 'work_orders' | 'requests' | 'pm_schedules' | 'opportunities' | 'quotes' | 'warranty' | 'tasks'
 
 interface SiteOpportunity {
   id: string
@@ -579,6 +580,7 @@ export default function SiteDetailPage() {
     { id: 'opportunities', label: 'Opportunities', icon: FileText,      count: siteOpps.length },
     { id: 'quotes',        label: 'Quotes',        icon: FileText,      count: siteQuotes.length },
     { id: 'warranty',      label: 'Warranty & RMA', icon: ShieldCheck },
+    { id: 'tasks',         label: 'Tasks',          icon: ClipboardList },
   ]
 
   return (
@@ -1628,6 +1630,11 @@ export default function SiteDetailPage() {
             )
           })()}
         </div>
+      )}
+
+      {/* ── Tab: Tasks ─────────────────────────────────────────────────── */}
+      {tab === 'tasks' && id && (
+        <TrackerBoard entityType="site" entityId={id} />
       )}
 
       {/* RMA Update SlideOver */}
