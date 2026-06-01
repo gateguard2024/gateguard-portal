@@ -375,6 +375,8 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 
 | Migration | What | Status |
 |-----------|------|--------|
+| 104 | `tracker_items.owner_user_id TEXT` + `due_date DATE` + indexes | ⏳ run on beta then prod |
+| 103 | `tracker_groups.entity_type TEXT` + `entity_id UUID` + DROP NOT NULL org_id + index | ⏳ run on beta then prod |
 | 101 | Expand `mdu_providers` (14 new ISP/video entries) + `aria_tech_providers` (camera/gate/isp additions) + extend category CHECK to include `'isp'` | ✅ beta + prod (run SQL patch for ISP rows) |
 | 100 | `aria_properties` ROE + learning loop `*_user_verified` flags | ✅ beta + prod |
 | 098 | `aria_properties` (persistent intel DB) + `aria_tech_providers` (auto-growing catalog) + RPCs | ✅ beta + prod |
@@ -553,6 +555,28 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 - ✅ **Migration 101 patch** — applied on beta + prod via Supabase SQL editor (ISP rows failed first run due to missing `'isp'` in CHECK; constraint extended + rows re-inserted)
 - ✅ Middleware fix (committed `b24ceb09`) — `/api/aria/` moved from `isBypassPath` into `clerkHandler` with early `NextResponse.next()`; fixes "auth() was called but Clerk can't detect usage of clerkMiddleware()" telemetry error
 
+### Completed — June 1, 2026 (session 13) — Nexus Tracker Phase 2: Platform-Wide Work OS
+
+- ✅ **Migration 103** (`supabase/migrations/103_tracker_entity_embed.sql`) — `tracker_groups.entity_type TEXT` + `entity_id UUID` + `org_id DROP NOT NULL` + entity index; run on beta + prod
+- ✅ **Migration 104** (`supabase/migrations/104_tracker_assignee_duedate.sql`) — `tracker_items.owner_user_id TEXT` + `due_date DATE` + indexes; run on beta + prod
+- ✅ **`app/api/tracker/groups/route.ts`** — full rewrite with `ENTITY_SEEDS` map (6 entity types: work_order, opportunity, site, lead, dealer, quote); entity-filtered GET + entity-aware POST (`org_id: null` for entity boards); auto-seeds groups if none exist
+- ✅ **`app/api/tracker/items/route.ts`** — added `group_ids` comma-separated param, `include_subitems` param (default excludes via `.is('parent_item_id', null)`), `owner_user_id` + `due_date` in POST body
+- ✅ **`components/tracker/TrackerBoard.tsx`** — reusable light-themed board component: props `entityType?`, `entityId?`, `defaultView?`, `compact?`; board + table views; sub-items with expand/collapse; NL quick-add bar; new item modal with OrgUser picker + due date; item drawer with status quick actions + Details edit section (inline assignee + due date edit with user dropdown, overdue badge); AI TL;DR; comments; card aura system
+- ✅ **`app/crm/opportunities/[id]/page.tsx`** — Tasks tab added (inside col-span-2, correct position); Create Invoice quick link in right sidebar (pre-fills opportunity_id, site_id, account, amount)
+- ✅ **`app/maintenance/[id]/page.tsx`** — Tasks tab added to work order detail
+- ✅ **`app/sites/[id]/page.tsx`** — Tasks tab added to site detail
+- ✅ **`app/crm/leads/[id]/page.tsx`** — TrackerBoard embedded as Tasks card in left column
+- ✅ **`app/api/calendar/events/route.ts`** — `tracker_task` event type added (violet `#8B5CF6`); items with due_date in range, not done/wont_fix, scoped to user or org
+- ✅ **`app/calendar/page.tsx`** — `tracker_task` color/bg/label support added to calendar display
+
+**TrackerBoard drawer Details section:**
+- Assignee field: text input with OrgUser picker dropdown (fetches `/api/admin/users`); onBlur auto-patches `owner_name` + `owner_user_id`; click from list patches immediately; "Use as custom name" option for free-text assignees
+- Due Date field: date input auto-patches on change; red overdue badge if past due
+
+**Pending — run migrations on Supabase:**
+- Migration 103: run on beta then prod (`ALTER TABLE tracker_groups ADD COLUMN entity_type, entity_id; DROP NOT NULL org_id`)
+- Migration 104: run on beta then prod (`ALTER TABLE tracker_items ADD COLUMN owner_user_id, due_date`)
+
 ### Pending — Beta Supabase Realtime
 - Add `aria_properties` to `supabase_realtime` publication on **beta** Supabase project (only done on prod)
 
@@ -565,6 +589,8 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 ### Pending — Migrations to Run
 - Migrations 093–101 deployed on beta + prod ✅
 - Migration 101 ISP rows: run SQL patch in Supabase SQL editor (beta + prod) to extend CHECK constraint and insert ISP entries — see session 12 notes above
+- **Migration 103** — tracker entity embed (`tracker_groups` entity_type/entity_id columns): run on beta then prod
+- **Migration 104** — tracker assignee + due date (`tracker_items` owner_user_id/due_date columns): run on beta then prod
 
 ### Pending — CPQ Phase 2
 - Add `unit_cost` column to `quote_line_items` (migration 092) — enables real margin vs. estimated
