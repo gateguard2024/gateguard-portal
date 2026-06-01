@@ -31,15 +31,24 @@ interface TrackerItem {
   priority?: string | null
   status: string
   owner_name?: string | null
+  owner_user_id?: string | null
   reporter_name?: string | null
   date_reported?: string | null
   target_release?: string | null
+  due_date?: string | null
   notes?: string | null
   position: number
   parent_item_id?: string | null
   created_at: string
   updated_at: string
   subItems?: TrackerItem[]
+}
+
+interface OrgUser {
+  id: string
+  name: string
+  email: string
+  role: string
 }
 
 interface TrackerComment {
@@ -118,15 +127,28 @@ export function TrackerBoard({ entityType, entityId, defaultView = 'board', comp
   const [aiSummary,  setAiSummary]   = useState<string | null>(null)
 
   // New item modal
-  const [showNewModal,  setShowNewModal]  = useState(false)
-  const [newItemGroup,  setNewItemGroup]  = useState('')
-  const [newTitle,      setNewTitle]      = useState('')
-  const [newType,       setNewType]       = useState('task')
-  const [newStatus,     setNewStatus]     = useState('new')
-  const [newSeverity,   setNewSeverity]   = useState('')
-  const [newPriority,   setNewPriority]   = useState('')
-  const [newNotes,      setNewNotes]      = useState('')
-  const [saving,        setSaving]        = useState(false)
+  const [showNewModal,   setShowNewModal]   = useState(false)
+  const [newItemGroup,   setNewItemGroup]   = useState('')
+  const [newTitle,       setNewTitle]       = useState('')
+  const [newType,        setNewType]        = useState('task')
+  const [newStatus,      setNewStatus]      = useState('new')
+  const [newSeverity,    setNewSeverity]    = useState('')
+  const [newPriority,    setNewPriority]    = useState('')
+  const [newNotes,       setNewNotes]       = useState('')
+  const [newOwnerName,   setNewOwnerName]   = useState('')
+  const [newOwnerUserId, setNewOwnerUserId] = useState('')
+  const [newDueDate,     setNewDueDate]     = useState('')
+  const [saving,         setSaving]         = useState(false)
+
+  // Org users for assignee picker
+  const [orgUsers,       setOrgUsers]       = useState<OrgUser[]>([])
+  const [showUserPicker, setShowUserPicker] = useState(false)
+
+  // Drawer edit state (assignee + due date on existing items)
+  const [drawerOwnerName,      setDrawerOwnerName]      = useState('')
+  const [drawerOwnerUserId,    setDrawerOwnerUserId]    = useState('')
+  const [drawerDueDate,        setDrawerDueDate]        = useState('')
+  const [showDrawerUserPicker, setShowDrawerUserPicker] = useState(false)
 
   // NL bar
   const [nlInput, setNlInput] = useState('')
@@ -172,6 +194,22 @@ export function TrackerBoard({ entityType, entityId, defaultView = 'board', comp
 
   useEffect(() => { void loadAll() }, [loadAll])
 
+  // Fetch org users once for assignee picker
+  useEffect(() => {
+    fetch('/api/admin/users')
+      .then(r => r.ok ? r.json() : { users: [] })
+      .then(d => {
+        const list: OrgUser[] = (d.users ?? []).map((u: Record<string, unknown>) => ({
+          id:    u.id as string,
+          name:  [u.first_name, u.last_name].filter(Boolean).join(' ') || (u.email as string),
+          email: u.email as string,
+          role:  (u.role as string) ?? '',
+        }))
+        setOrgUsers(list)
+      })
+      .catch(() => {})
+  }, [])
+
   // ── Sub-items ────────────────────────────────────────────────────────────────
 
   const topItems = items.filter(i => !i.parent_item_id)
@@ -195,10 +233,14 @@ export function TrackerBoard({ entityType, entityId, defaultView = 'board', comp
         group_id: newItemGroup, title: newTitle, type: newType,
         status: newStatus, severity: newSeverity || null,
         priority: newPriority || null, notes: newNotes || null,
+        owner_name: newOwnerName || null,
+        owner_user_id: newOwnerUserId || null,
+        due_date: newDueDate || null,
       }),
     })
     setShowNewModal(false)
     setNewTitle(''); setNewNotes('')
+    setNewOwnerName(''); setNewOwnerUserId(''); setNewDueDate('')
     setSaving(false)
     await loadAll()
   }
@@ -207,6 +249,7 @@ export function TrackerBoard({ entityType, entityId, defaultView = 'board', comp
     setNewItemGroup(groupId ?? (groups[0]?.id ?? ''))
     setNewType('task'); setNewStatus('new')
     setNewSeverity(''); setNewPriority(''); setNewNotes('')
+    setNewOwnerName(''); setNewOwnerUserId(''); setNewDueDate('')
     setShowNewModal(true)
   }
 
@@ -249,9 +292,27 @@ export function TrackerBoard({ entityType, entityId, defaultView = 'board', comp
     setActiveItem(item)
     setDrawerTab('comments')
     setAiSummary(null)
+    setDrawerOwnerName(item.owner_name ?? '')
+    setDrawerOwnerUserId(item.owner_user_id ?? '')
+    setDrawerDueDate(item.due_date ?? '')
+    setShowDrawerUserPicker(false)
     const res = await fetch(`/api/tracker/items/${item.id}/comments`)
     if (res.ok) setComments(await res.json())
     else setComments([])
+  }
+
+  const saveDrawerOwner = () => {
+    if (!activeItem) return
+    patchItem(activeItem.id, {
+      owner_name:    drawerOwnerName    || null,
+      owner_user_id: drawerOwnerUserId  || null,
+    })
+  }
+
+  const saveDrawerDueDate = (date: string) => {
+    setDrawerDueDate(date)
+    if (!activeItem) return
+    patchItem(activeItem.id, { due_date: date || null })
   }
 
   const sendComment = async () => {
@@ -429,6 +490,12 @@ export function TrackerBoard({ entityType, entityId, defaultView = 'board', comp
                                 {item.owner_name && (
                                   <span className="flex items-center gap-1 text-[10px] text-slate-400">
                                     <User className="w-2.5 h-2.5" />{item.owner_name}
+                                  </span>
+                                )}
+                                {item.due_date && (
+                                  <span className={`flex items-center gap-1 text-[10px] font-medium ${new Date(item.due_date + 'T12:00:00') < new Date() ? 'text-red-500' : 'text-slate-400'}`}>
+                                    <Clock className="w-2.5 h-2.5" />
+                                    {new Date(item.due_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                                   </span>
                                 )}
                               </div>
@@ -640,6 +707,83 @@ export function TrackerBoard({ entityType, entityId, defaultView = 'board', comp
               ))}
             </div>
 
+            {/* Details — Assignee + Due Date (inline edit) */}
+            <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+              <div className="grid grid-cols-2 gap-4">
+                {/* Assignee */}
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Assignee</p>
+                  <div className="relative">
+                    <input
+                      value={drawerOwnerName}
+                      onChange={e => { setDrawerOwnerName(e.target.value); setDrawerOwnerUserId('') }}
+                      onFocus={() => setShowDrawerUserPicker(true)}
+                      onBlur={() => { setTimeout(() => setShowDrawerUserPicker(false), 150); saveDrawerOwner() }}
+                      placeholder="Unassigned"
+                      className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-[#6B7EFF] bg-white placeholder-slate-400"
+                    />
+                    {showDrawerUserPicker && orgUsers.length > 0 && (
+                      <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-40 overflow-y-auto">
+                        {orgUsers
+                          .filter(u => !drawerOwnerName || u.name.toLowerCase().includes(drawerOwnerName.toLowerCase()))
+                          .slice(0, 8)
+                          .map(u => (
+                            <button
+                              key={u.id}
+                              type="button"
+                              className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center gap-2"
+                              onMouseDown={e => e.preventDefault()}
+                              onClick={() => {
+                                setDrawerOwnerName(u.name)
+                                setDrawerOwnerUserId(u.id)
+                                setShowDrawerUserPicker(false)
+                                patchItem(activeItem.id, { owner_name: u.name, owner_user_id: u.id })
+                              }}
+                            >
+                              <div className="w-5 h-5 rounded-full bg-[#6B7EFF]/10 flex items-center justify-center shrink-0">
+                                <span className="text-[9px] text-[#6B7EFF] font-bold">{u.name[0]}</span>
+                              </div>
+                              <div>
+                                <div className="font-medium text-slate-700">{u.name}</div>
+                                <div className="text-[10px] text-slate-400">{u.role}</div>
+                              </div>
+                            </button>
+                          ))}
+                        {drawerOwnerName && (
+                          <button
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-xs text-slate-500 hover:bg-slate-50 border-t border-slate-100"
+                            onMouseDown={e => e.preventDefault()}
+                            onClick={() => {
+                              setShowDrawerUserPicker(false)
+                              patchItem(activeItem.id, { owner_name: drawerOwnerName, owner_user_id: null })
+                            }}
+                          >
+                            Use &quot;{drawerOwnerName}&quot; as custom name
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {/* Due Date */}
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Due Date</p>
+                  <input
+                    type="date"
+                    value={drawerDueDate}
+                    onChange={e => saveDrawerDueDate(e.target.value)}
+                    className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-[#6B7EFF] bg-white"
+                  />
+                  {drawerDueDate && new Date(drawerDueDate + 'T12:00:00') < new Date() && (
+                    <p className="text-[10px] text-red-500 mt-1 flex items-center gap-1">
+                      <AlertTriangle className="w-2.5 h-2.5" /> Overdue
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Notes */}
             {activeItem.notes && (
               <div className="px-5 py-3 border-b border-slate-100">
@@ -796,12 +940,57 @@ export function TrackerBoard({ entityType, entityId, defaultView = 'board', comp
                   </select>
                 </div>
               </div>
+              {/* Assignee + Due Date */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-slate-600 block mb-1">Assign To</label>
+                  <div className="relative">
+                    <input
+                      value={newOwnerName}
+                      onChange={e => { setNewOwnerName(e.target.value); setNewOwnerUserId('') }}
+                      onFocus={() => setShowUserPicker(true)}
+                      placeholder="Type name or pick user…"
+                      className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#6B7EFF] placeholder-slate-400"
+                    />
+                    {showUserPicker && orgUsers.length > 0 && (
+                      <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-36 overflow-y-auto">
+                        {orgUsers.filter(u => !newOwnerName || u.name.toLowerCase().includes(newOwnerName.toLowerCase())).slice(0, 8).map(u => (
+                          <button
+                            key={u.id}
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center gap-2"
+                            onClick={() => { setNewOwnerName(u.name); setNewOwnerUserId(u.id); setShowUserPicker(false) }}
+                          >
+                            <div className="w-5 h-5 rounded-full bg-[#6B7EFF]/10 flex items-center justify-center shrink-0">
+                              <span className="text-[9px] text-[#6B7EFF] font-bold">{u.name[0]}</span>
+                            </div>
+                            <div>
+                              <div className="font-medium text-slate-700">{u.name}</div>
+                              <div className="text-[10px] text-slate-400">{u.role}</div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600 block mb-1">Due Date</label>
+                  <input
+                    type="date"
+                    value={newDueDate}
+                    onChange={e => setNewDueDate(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#6B7EFF]"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="text-xs font-medium text-slate-600 block mb-1">Notes</label>
                 <textarea
                   value={newNotes}
                   onChange={e => setNewNotes(e.target.value)}
-                  rows={3}
+                  rows={2}
                   placeholder="Optional details…"
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#6B7EFF] resize-none placeholder-slate-400"
                 />

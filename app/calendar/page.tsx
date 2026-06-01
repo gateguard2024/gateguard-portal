@@ -16,7 +16,7 @@ const { CalendarDays, CalendarClock, Link2Off, GripVertical, Timer, Zap } = requ
 
 interface CalendarEvent {
   id: string;
-  type: "todo" | "work_order" | "work_order_phase" | "pm_schedule" | "gcal" | "crm_activity";
+  type: "todo" | "work_order" | "work_order_phase" | "pm_schedule" | "gcal" | "crm_activity" | "tracker_task";
   title: string;
   date: string;       // YYYY-MM-DD
   time?: string;      // HH:MM
@@ -69,6 +69,7 @@ function colorForType(type: CalendarEvent["type"]): string {
   if (type === "pm_schedule")      return "#0B7285";
   if (type === "gcal")             return "#15803d";
   if (type === "crm_activity")     return "#7C3AED";
+  if (type === "tracker_task")    return "#8B5CF6";
   return "#6B7EFF";
 }
 
@@ -78,6 +79,7 @@ function bgForType(type: CalendarEvent["type"]): string {
   if (type === "pm_schedule")      return "bg-teal-700";
   if (type === "gcal")             return "bg-emerald-700";
   if (type === "crm_activity")     return "bg-violet-700";
+  if (type === "tracker_task")    return "bg-violet-500";
   return "bg-[#6B7EFF]";
 }
 
@@ -249,6 +251,7 @@ function EventPopover({
     : event.type === "work_order_phase" ? "WO Phase"
     : event.type === "pm_schedule"   ? "PM Schedule"
     : event.type === "crm_activity"  ? "CRM Activity"
+    : event.type === "tracker_task"  ? "Tracker Task"
     : "Google Calendar";
 
   const color = colorForType(event.type);

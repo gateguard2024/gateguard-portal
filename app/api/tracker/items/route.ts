@@ -80,8 +80,8 @@ export async function POST(req: NextRequest) {
 
     const {
       group_id, title, type = 'bug', module, severity, priority,
-      status = 'new', owner_name, reporter_name, date_reported,
-      target_release, notes, position = 0, parent_item_id,
+      status = 'new', owner_name, owner_user_id, reporter_name, date_reported,
+      target_release, due_date, notes, position = 0, parent_item_id,
     } = body
 
     if (!group_id) return NextResponse.json({ error: 'group_id is required' }, { status: 400 })
@@ -93,10 +93,12 @@ export async function POST(req: NextRequest) {
         group_id, title, type, module: module || null,
         severity: severity || null, priority: priority || null,
         status, owner_name: owner_name || null,
+        owner_user_id: owner_user_id || null,
         reporter_user_id: user.id !== 'system' ? user.id : null,
         reporter_name: reporter_name || user.name,
         date_reported: date_reported || new Date().toISOString().split('T')[0],
         target_release: target_release || null,
+        due_date: due_date || null,
         notes: notes || null,
         position, parent_item_id: parent_item_id || null,
         org_id: user.org_id,

@@ -1775,6 +1775,11 @@ export default function OpportunityDetailPage() {
               </div>
             </div>
           )}
+
+          {/* ── TASKS TAB ── */}
+          {activeTab === "tasks" && id && (
+            <TrackerBoard entityType="opportunity" entityId={id} />
+          )}
         </div>
 
         {/* RIGHT — col-span-1 */}
@@ -2202,6 +2207,15 @@ export default function OpportunityDetailPage() {
                 <ExternalLink size={11} className="text-muted-foreground ml-auto" />
               </Link>
 
+              <Link
+                href={`/billing/invoices/new?opportunity_id=${id}${opp.site_id ? `&site_id=${opp.site_id}` : ''}${opp.account_name ? `&account=${encodeURIComponent(opp.account_name)}` : ''}${opp.amount ? `&amount=${opp.amount}` : ''}`}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-accent transition-colors text-sm"
+              >
+                <FileText size={14} className="text-emerald-600" />
+                <span className="text-foreground">Create Invoice</span>
+                <ExternalLink size={11} className="text-muted-foreground ml-auto" />
+              </Link>
+
               {opp.stage === "won" ? (
                 <>
                   <Link
@@ -2445,13 +2459,6 @@ export default function OpportunityDetailPage() {
               })}
             </div>
           )}
-        </div>
-      )}
-
-      {/* ── TASKS TAB ──────────────────────────────────────────────────── */}
-      {activeTab === "tasks" && id && (
-        <div className="px-6 py-4">
-          <TrackerBoard entityType="opportunity" entityId={id} />
         </div>
       )}
 

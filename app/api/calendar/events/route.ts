@@ -11,7 +11,7 @@ const supabase = createClient(
 
 export interface CalendarEvent {
   id: string
-  type: 'todo' | 'work_order' | 'work_order_phase' | 'pm_schedule' | 'gcal' | 'crm_activity'
+  type: 'todo' | 'work_order' | 'work_order_phase' | 'pm_schedule' | 'gcal' | 'crm_activity' | 'tracker_task'
   title: string
   date: string       // YYYY-MM-DD
   time?: string      // HH:MM if has time
@@ -172,6 +172,38 @@ export async function GET(req: NextRequest) {
         color:            ACTIVITY_COLORS[act.type] ?? '#7C3AED',
         link:             act.opportunity_id ? `/crm/opportunities/${act.opportunity_id}` : '/crm',
         opportunity_name: oppName,
+      })
+    }
+
+    // ── Tracker Tasks (items with due dates) ─────────────────────────────────
+    // Pull tracker items assigned to the current user OR in their org
+    const trackerQuery = supabase
+      .from('tracker_items')
+      .select('id, title, type, status, priority, due_date, owner_user_id, owner_name, group_id, org_id')
+      .not('due_date', 'is', null)
+      .gte('due_date', startDate)
+      .lte('due_date', endDate)
+      .neq('status', 'done')
+      .neq('status', 'wont_fix')
+      .order('due_date', { ascending: true })
+
+    const { data: trackerItems } = await trackerQuery
+
+    for (const task of trackerItems ?? []) {
+      // Show if assigned to current user OR if org_id matches (for org-scoped boards)
+      const isAssignedToMe = task.owner_user_id === user.id
+      const isInMyOrg      = !user.isCorporate ? task.org_id === user.org_id : true
+
+      if (!isAssignedToMe && !isInMyOrg) continue
+
+      events.push({
+        id:     task.id,
+        type:   'tracker_task',
+        title:  task.title ?? 'Tracker Task',
+        date:   task.due_date,
+        status: task.status ?? 'new',
+        color:  '#8B5CF6',   // violet — distinct from other event types
+        link:   '/tracker',
       })
     }
 
