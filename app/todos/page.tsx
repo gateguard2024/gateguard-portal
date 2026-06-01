@@ -946,6 +946,13 @@ export default function TodosPage() {
   const [selected, setSelected]   = useState<Todo | null>(null);
   const [showDone, setShowDone]   = useState(false);
 
+  // Create modal
+  const [showCreate,   setShowCreate]   = useState(false);
+  const [createTitle,  setCreateTitle]  = useState('');
+  const [createPriority, setCreatePriority] = useState<Todo['priority']>('normal');
+  const [createDue,    setCreateDue]    = useState('');
+  const [createSaving, setCreateSaving] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
@@ -971,6 +978,27 @@ export default function TodosPage() {
     });
     const data = await res.json();
     if (res.ok) setTodos(prev => [data, ...prev]);
+  }
+
+  async function submitCreate() {
+    if (!createTitle.trim()) return;
+    setCreateSaving(true);
+    const res = await fetch("/api/todos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title:    createTitle.trim(),
+        priority: createPriority,
+        due_date: createDue || null,
+      }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setTodos(prev => [data, ...prev]);
+      setShowCreate(false);
+      setCreateTitle(''); setCreatePriority('normal'); setCreateDue('');
+    }
+    setCreateSaving(false);
   }
 
   async function toggleDone(id: string, done: boolean) {
@@ -1043,6 +1071,14 @@ export default function TodosPage() {
         subtitle="Tasks, action items, and team assignments"
         actions={
           <div className="flex items-center gap-2">
+            {/* New Task button */}
+            <button
+              onClick={() => { setCreateTitle(''); setCreatePriority('normal'); setCreateDue(''); setShowCreate(true); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#6B7EFF] hover:bg-[#5a6ee8] text-white rounded-lg text-xs font-semibold transition-colors shadow-sm"
+            >
+              <Plus size={13} /> New Task
+            </button>
+
             {/* Scope toggle */}
             <div className="flex items-center bg-white border border-slate-200 rounded-lg p-0.5">
               {(["mine", "assigned"] as const).map(s => (
@@ -1178,6 +1214,78 @@ export default function TodosPage() {
         )}
 
       </div>
+
+      {/* ── Create Task Modal ─────────────────────────────────────────────── */}
+      {showCreate && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm"
+          onClick={() => setShowCreate(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+              <h3 className="text-sm font-semibold text-slate-900">New Task</h3>
+              <button onClick={() => setShowCreate(false)} className="p-1 hover:bg-slate-100 rounded text-slate-400">
+                <X size={14} />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div>
+                <label className="text-xs font-medium text-slate-600 block mb-1">Task *</label>
+                <input
+                  autoFocus
+                  value={createTitle}
+                  onChange={e => setCreateTitle(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') void submitCreate(); if (e.key === 'Escape') setShowCreate(false); }}
+                  placeholder="What needs to be done?"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#6B7EFF] placeholder-slate-400"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-slate-600 block mb-1">Priority</label>
+                  <select
+                    value={createPriority}
+                    onChange={e => setCreatePriority(e.target.value as Todo['priority'])}
+                    className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#6B7EFF] bg-white"
+                  >
+                    <option value="high">High</option>
+                    <option value="normal">Normal</option>
+                    <option value="low">Low</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600 block mb-1">Due Date</label>
+                  <input
+                    type="date"
+                    value={createDue}
+                    onChange={e => setCreateDue(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#6B7EFF]"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-200 bg-slate-50">
+              <button
+                onClick={() => setShowCreate(false)}
+                className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void submitCreate()}
+                disabled={!createTitle.trim() || createSaving}
+                className="px-4 py-2 text-sm font-semibold bg-[#6B7EFF] hover:bg-[#5a6ee8] disabled:opacity-50 text-white rounded-lg transition-colors flex items-center gap-1.5"
+              >
+                {createSaving ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+                Create Task
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Detail Slide-Over */}
       {selected && (
