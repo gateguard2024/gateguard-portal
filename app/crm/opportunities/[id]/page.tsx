@@ -2219,7 +2219,7 @@ export default function OpportunityDetailPage() {
               {opp.stage === "won" ? (
                 <>
                   <Link
-                    href={`/projects?new=1&opp_id=${opp.id}&opp_name=${encodeURIComponent(opp.name ?? '')}&site_id=${opp.site_id ?? ''}&site_name=${encodeURIComponent(opp.site_name ?? '')}&value=${opp.amount ?? ''}`}
+                    href={`/projects?new=1&opp_id=${opp.id}&opp_name=${encodeURIComponent(opp.name ?? '')}&site_id=${opp.site_id ?? ''}&site_name=${encodeURIComponent(opp.account_name ?? '')}&value=${opp.amount ?? ''}`}
                     className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[#6B7EFF]/10 transition-colors text-sm border border-[#6B7EFF]/30"
                   >
                     <Wrench size={14} className="text-[#6B7EFF]" />
