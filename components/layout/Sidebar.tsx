@@ -15,7 +15,7 @@ import {
   ClipboardCheck, Building2, DollarSign,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, Tv: Satellite, Flame, Hash, Ruler, PenTool, MousePointer, FileSignature, HardHat, Trophy } = require("lucide-react") as any;
+const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, Tv: Satellite, Flame, Hash, Ruler, PenTool, MousePointer, FileSignature, HardHat, Trophy, Briefcase } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useUser, useClerk, useSession } from "@clerk/nextjs";
@@ -96,6 +96,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Field & Tech",
     icon: TechIcon,
     items: [
+      { label: "Projects",        href: "/projects",       icon: Briefcase,    description: "Job tracking — install, service, and project boards" },
       { label: "Incidents",       href: "/incidents",      icon: AlertOctagon, description: "Gate failures, security events" },
       { label: "Tech Tool",       href: "/tech",           icon: Zap,          description: "AI field diagnostic tool", badge: "AI" },
       { label: "Knowledge Base",  href: "/kb",             icon: BookOpen,     description: "Articles and manuals" },
@@ -276,6 +277,7 @@ export function Sidebar() {
     "/tech":                   "field.tech_tool",
     "/kb":                     "field.kb",
     "/products":               "field.products",
+    "/projects":               "field.work_orders",
     "/maintenance":            "field.work_orders",
     "/dispatch":               "field.dispatch",
     "/inventory":              "field.inventory",
