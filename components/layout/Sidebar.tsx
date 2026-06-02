@@ -86,7 +86,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Documents",
     icon: FileText,
     items: [
-      { label: "Contracts",         href: "/contracts",         icon: FileCheck,   description: "Contract storage" },
+      { label: "Documents",         href: "/documents",         icon: FileText,    description: "Agreements, permits, certificates & legal docs" },
       { label: "Renewals",          href: "/renewals",          icon: Repeat,      description: "Contract renewals and alerts" },
       { label: "Vendor Compliance", href: "/vendor-compliance", icon: ShieldCheck, description: "Vendor permits, certs, expiry alerts" },
     ],
@@ -269,7 +269,7 @@ export function Sidebar() {
     "/billing":                "business.billing",
     "/expenses":               "business.expenses",
     "/revenue":                "business.revenue",
-    "/contracts":              "documents.contracts",
+    "/documents":              "documents.contracts",
     "/renewals":               "documents.renewals",
     "/vendor-compliance":      "documents.vendor_compliance",
     "/incidents":              "field.incidents",
@@ -681,7 +681,7 @@ export function Sidebar() {
                     if (item.href === "/expenses"         && !showFinancials) return null;
                     if (item.href === "/renewals"         && !showFinancials) return null;
                     if (item.href === "/revenue"          && !showFinancials) return null;
-                    if (item.href === "/contracts"        && !showFinancials) return null;
+                    if (item.href === "/documents"        && !showFinancials) return null;
                     if (item.href === "/reps"             && !showCommissions)return null;
                     if (item.href === "/sites"            && !showSites)      return null;
                     if (item.href === "/maintenance"      && !showWOs)        return null;
