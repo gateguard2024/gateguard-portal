@@ -592,6 +592,65 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 - **Migration 103** — tracker entity embed (`tracker_groups` entity_type/entity_id columns): run on beta then prod
 - **Migration 104** — tracker assignee + due date (`tracker_items` owner_user_id/due_date columns): run on beta then prod
 
+### From Platform Review Meeting (June 2026) — Prioritized Build Queue
+
+#### 🔴 P0 — Critical Bugs (fix immediately)
+1. **ARIA search history scoped to current user** — `app/api/aria/searches/route.ts` GET must filter by `user_id` (or `org_id` for org-scoped). Currently shows all users' history → privacy/cross-pollination bug.
+2. **Expenses page 404** — `/business/expenses` route does not exist. Either create the page or remove it from the sidebar nav.
+3. **Documents "New Contract" button non-functional** — button exists but does nothing. Must present 3 options: Upload existing, Start from scratch, Use template.
+
+#### 🟠 P1 — ARIA Engine & Data Quality
+4. **DM Scoring system (1–10)** — score should appear on every property card and detail view:
+   - 1–3: Property phone number retrieved
+   - 3–5: Onsite contact identified (manager name)
+   - 5–7: Senior management info available
+   - 7–9: Ownership/entity identified
+   - 9–10: Full chain — phone + onsite + mgmt + ownership
+5. **Primary property phone always required** — engine must return property office phone or explicitly return "No data found." Never blank. Already partially built via `serperSearchKG()` — enforce as mandatory in synthesis.
+6. **Unit count always required** — same rule. "No data found" > blank.
+7. **Year built, occupancy, last sale date** — these three fields must always be attempted. Return "No data found" if missing rather than omitting the field entirely. Add dedicated search step if needed.
+8. **Financial & connectivity fields standardization** — define exactly what "financial" means (NOI, cap rate, last sale price, assessed value) and what "connectivity" means (ISP, bulk agreement Y/N, ROE Y/N, expiry). Populate all or say "No data found."
+9. **"No data found" policy** — across all ARIA fields: if a search was attempted and returned nothing, display "No data found" not a blank cell.
+10. **Prop tech inference with accuracy %** — if reviews/social mention camera issues but no brand is found, infer "Camera system (suspected, ~70% confidence)." Gate with no manufacturer → assign probability based on market share (e.g., LiftMaster 60-70% when unspecified in market). Show confidence badge on inferred data.
+11. **Search filter checkboxes above Launch ARIA** — add filter chips/checkboxes above the search button: "All prop tech" (default) | "ISP/Internet" | "Cable/Video" | "Gate/Access" | "Cameras." Filters what ARIA searches for and what's highlighted in results.
+12. **Sales script / cold call guide in PropTech tab** — replace generic AI recommendations with a structured cold call script based on the specific property's pain signals, tech stack, and DM profile. Junior staff script + senior reference format. Populated by ARIA synthesis from actual findings.
+13. **"AR" logo box improvement** — the left-side ARIA identifier box needs visual polish (see design notes from meeting).
+
+#### 🟡 P2 — CRM & Job Workflow (major feature)
+14. **Won opportunity → Job conversion** — when an opportunity is marked "Won," a "Create Job" CTA appears. This transitions the record into a `jobs` / `projects` table (new). Job types:
+    - **New Install** — full workflow: deposit → PO/procurement → assembly → schedule install → QC/handoff → final billing
+    - **Service Job** — SLA-tracked, recurring, linked to a site service contract
+    - **Small Install → Service** — install that converts to an ongoing service client on completion
+15. **Job workflow stages** (for New Install type):
+    1. Deposit collected (links to invoice)
+    2. Equipment verification & procurement (PO creation, order, tracking, receive confirmation)
+    3. Assembly / staging (if needed)
+    4. Installation scheduled + completed
+    5. QC + client handoff sign-off
+    6. Final billing
+16. **Projects section in nav** — `/projects` route with kanban + list view for all active jobs.
+
+#### 🟡 P2 — UI/UX Platform-Wide
+17. **ARIA main content area theming** — lighter background in the right panel content area, possibly fading from the base color toward a very dark blue/black center to create contrast with the left bar. The tabbed section feels "clickier" (too many borders/shadows) vs the dashboard. Match dashboard card quality.
+18. **Platform-wide UI audit** — full-site review to bring every page's card quality, typography, and spacing up to the level of the dashboard and left nav. Log all pages that look like they predate the design system.
+19. **User permissions — prevent cross-pollination** — users must not see other users' records (especially ARIA search history). Audit all list endpoints for user/org scoping gaps.
+
+#### 🟡 P2 — Documents & Contracts
+20. **New Contract flow** — three paths from the "New Contract" button:
+    - Upload existing PDF/DOCX
+    - Start from scratch (blank DOCX editor or template chooser)
+    - Use template (pull from NDA template, Dealer Agreement template, or custom)
+    Link resulting document to the entity (site, opportunity, dealer) it was created from.
+
+#### 🟡 P2 — Floor Plans & Design
+21. **Floor plan overhaul** — current drawing tool is too primitive. Research Bluebeam Revu and System Surveyor for feature parity. Requirements: orthogonal/snapping drawing, room labels, device placement with icons, scale indicator.
+22. **Link floor plans → system design → as-built** — a property should have one "Design" record that has three states: Floor Plan (pre-install), System Design (with device spec), As-Built (post-install confirmed). All three linked and versioned.
+
+#### 🟢 P3 — Research & Strategy
+23. **Task management competitive research** — before next tracker sprint, review Monday.com, Asana, ClickUp, Wrike, Trello, Freedcamp, ProofHub shell structure and UX patterns. Document what to adopt.
+24. **AI handoff strategy** — define how AI guides users on each landing page ("Mickey Mouse simple" principle). Each major page should have a contextual AI prompt that tells a new user exactly what to do next based on their data state.
+25. **Bluebeam + System Surveyor research** — document feature list of both tools before floor plan overhaul begins.
+
 ### Pending — CPQ Phase 2
 - Add `unit_cost` column to `quote_line_items` (migration 092) — enables real margin vs. estimated
 - Make margin % column editable inline per line item
@@ -622,6 +681,14 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 - `SERPER_API_KEY` — ARIA Deep + web search: Google Search API via serper.dev
 
 ### Feature backlog
+- **"Pencil In" / Draft Calendar Placeholder** — lightweight way to block time on the calendar without triggering formal workflows or sending any communications. Applies to todos, work orders (jobs), and calendar events. Key behaviors:
+  - `is_draft: boolean` flag on `todos`, `work_orders`, and a new `calendar_blocks` table (for standalone placeholders with no linked record)
+  - Draft items appear on the calendar in a distinct visual style (dashed border, lighter color, pencil ✏ icon)
+  - Draft WOs: skips Resend dispatch notification, skips any client-facing status updates — just blocks the tech's schedule
+  - Draft todos: not surfaced in "Assigned Out" view, not included in EOS scorecard counts
+  - "Confirm" action on a draft item promotes it to real (triggers normal workflow from that point)
+  - "Pencil In" button available from calendar quick-add bar (existing), todo creation modal, and WO creation flow
+  - Migration needed: `ALTER TABLE todos ADD COLUMN is_draft BOOLEAN DEFAULT false`; `ALTER TABLE work_orders ADD COLUMN is_draft BOOLEAN DEFAULT false`; new `calendar_blocks` table for pure placeholders
 - Photo evidence on work orders
 - EOS persistence (Rocks/Scorecard/Issues/To-Dos → Supabase)
 - LPR integration (Eagle Eye LPR → Brivo credential or gate relay)

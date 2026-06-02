@@ -1,11 +1,11 @@
 /**
  * GET /api/aria/searches
- * Returns all non-expired ARIA searches for the caller's org hierarchy, newest first.
+ * Returns non-expired ARIA searches belonging to the current user, newest first.
+ * Scoped to user_id — never leaks other users' search history.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { resolveOrgScope } from '@/lib/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,28 +16,16 @@ const supabase = createClient(
 
 export async function GET(_req: NextRequest) {
   try {
-    const user  = await getCurrentUser()
-    const scope = await resolveOrgScope(user)
+    const user = await getCurrentUser()
 
-    let query = supabase
+    // Always scope to the current user — no one sees another user's search history
+    const query = supabase
       .from('aria_searches')
       .select('id, query, query_interpretation, imported_count, imported_at, expires_at, created_at, results')
+      .eq('user_id', user.id)
       .gt('expires_at', new Date().toISOString())
       .order('created_at', { ascending: false })
       .limit(50)
-
-    // ── Security & Hierarchy Boundary ───────────────────────────────────────
-    // If not a global admin, scope searches to the user's allowed org tree.
-    if (!scope.all) {
-      const allowedIds = scope.ids && scope.ids.length > 0 ? scope.ids : (scope.own_id ? [scope.own_id] : [])
-      
-      if (allowedIds.length > 0) {
-        query = query.in('org_id', allowedIds)
-      } else {
-        // If the user has no org affiliation, return empty to prevent data leakage
-        return NextResponse.json({ searches: [] })
-      }
-    }
 
     const { data, error } = await query
     
