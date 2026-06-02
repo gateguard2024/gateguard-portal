@@ -27,7 +27,7 @@ const supabaseDeep = createClient(
 export const maxDuration = 120
 export const dynamic = 'force-dynamic'
 
-const ARIA_ENGINE_VERSION = 'v7.4'
+const ARIA_ENGINE_VERSION = 'v7.5'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -1295,14 +1295,20 @@ const deepIntelTool: Anthropic.Tool = {
   description: 'Return the structured deep property intelligence report.',
   input_schema: {
     type: 'object' as const,
-    required: ['property_details', 'isp_providers', 'video_providers', 'bulk_agreements', 'extracted_contacts', 'key_finding', 'confidence', 'proptech', 'pain_signals'],
+    required: ['property_details', 'isp_providers', 'video_providers', 'bulk_agreements', 'extracted_contacts', 'key_finding', 'confidence', 'proptech', 'pain_signals', 'property_phone', 'inferred_proptech'],
     properties: {
       property_details: {
         type: 'object',
         properties: {
-          units: { type: 'number' }, year_built: { type: 'number' },
-          management_company: { type: 'string' }, property_type: { type: 'string' },
-          class: { type: 'string' }, occupancy: { type: 'string' },
+          units:              { anyOf: [{ type: 'number' }, { type: 'string' }], description: 'Unit count as integer, or "No data found" if not found' },
+          year_built:         { anyOf: [{ type: 'number' }, { type: 'string' }], description: 'Year built as integer, or "No data found" if not found' },
+          management_company: { type: 'string' },
+          property_type:      { type: 'string' },
+          class:              { type: 'string' },
+          occupancy:          { type: 'string', description: 'Occupancy rate e.g. "94%" or "No data found"' },
+          last_sale_date:     { type: 'string', description: 'Most recent sale date e.g. "March 2021" or "No data found"' },
+          last_sale_price:    { type: 'string', description: 'Most recent sale price e.g. "$24M" or "No data found"' },
+          assessed_value:     { type: 'string', description: 'County assessed value or "No data found"' },
         },
       },
       isp_providers: { type: 'array', items: { type: 'string' } },
@@ -1396,6 +1402,21 @@ const deepIntelTool: Anthropic.Tool = {
       },
       freshness_score: { type: 'number' },
       buying_trends: { type: 'string' },
+      property_phone: { type: 'string', description: 'Leasing office / main property phone number, or "No data found"' },
+      inferred_proptech: {
+        type: 'array',
+        description: 'Proptech items inferred from context (reviews, pain signals, market) when no brand was explicitly found',
+        items: {
+          type: 'object',
+          required: ['category', 'name', 'confidence_pct', 'reason'],
+          properties: {
+            category:       { type: 'string', enum: ['gate_operator', 'access_control', 'intercom', 'camera', 'smart_lock', 'resident_app', 'package'] },
+            name:           { type: 'string', description: 'Brand name or "Unknown brand" if only category is known' },
+            confidence_pct: { type: 'number', description: 'Confidence 0-100. 90+=explicitly mentioned, 70-89=strongly implied, 50-69=market inference' },
+            reason:         { type: 'string', description: 'Why this was inferred' },
+          },
+        },
+      },
     },
   },
 }
@@ -1696,6 +1717,15 @@ CRITICAL RULES:
 10. If management_company blank: first check contacts[].company for a recurring company name among property_manager/regional_manager contacts — use that. Else if owner is a known RE firm → set management_company = owner_entity
 11. proptech.replacement_window: based on tech_generation + year_built (pre-2015=Immediate, 2015-19=1-3yr, 2020+=3-5yr)
 
+12. property_phone: MANDATORY — copy from Phase 1 confirmed_phone. If Phase 1 has no phone, set to "No data found". NEVER leave blank or null.
+13. property_details.units: if not found in Phase 1, set to "No data found". NEVER leave blank.
+14. property_details.year_built: if not found, set to "No data found". NEVER leave blank.
+15. property_details.occupancy: look in Phase 2/3 data. If not found, set to "No data found".
+16. property_details.last_sale_date: extract from Phase 2 ownership/acquisition data. Format as "Month YYYY" or "YYYY". If not found, set to "No data found".
+17. property_details.last_sale_price: extract from Phase 2. Format as "$XM" or "$X,XXX,XXX". If not found, set to "No data found".
+18. property_details.assessed_value: look in Phase 2 permit/county data. If not found, set to "No data found".
+19. inferred_proptech: REQUIRED even if empty []. For each proptech CATEGORY where pain signals or reviews suggest a system exists but NO specific brand was found, add one inference entry. Example: reviews mention gate malfunctions, gate_operators[] is empty → add {category:"gate_operator", name:"Unknown brand", confidence_pct:65, reason:"Reviews mention gate access issues; no brand confirmed; LiftMaster ~60% MDU market share"}. Only infer if category arrays are empty AND evidence exists.
+
 ROE / CONTRACT DATA:
 - Phase 2 includes roe_detected, roe_providers, roe_expiry_year — use these to populate bulk_agreements
 - If roe_expiry_year is present: set capex_signal = "ROE expires [year] — contract window open"
@@ -1852,7 +1882,7 @@ buying_trends: 1-sentence sales trend insight for this property type`,
         management_company: normStr(mgmt ?? rawData.property_details?.management_company) || normStr(finalOwner ?? rawData.ownership?.owner_entity) || null,
         owner_entity: normStr(finalOwner || rawData.ownership?.owner_entity),
         old_name: null,
-        phone: normStr(p1.confirmed_phone),
+        phone: normStr(p1.confirmed_phone) ?? normStr(rawData.property_phone) ?? null,
         website: normStr(website),
         isp_providers: cleanIspProviders,
         video_providers: cleanVideoProviders,
@@ -1877,6 +1907,7 @@ buying_trends: 1-sentence sales trend insight for this property type`,
           replacement_window: normStr(rawData.proptech?.replacement_window),
           displacement_targets: normStrArr(rawData.proptech?.displacement_targets),
         },
+        inferred_proptech: rawData.inferred_proptech ?? [],
       },
       decision_maker: {
         name: normStr(bestContact?.name || fallback.name) ?? null,

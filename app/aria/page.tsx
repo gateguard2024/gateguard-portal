@@ -64,22 +64,33 @@ interface Property {
   address: string;
   city?: string;
   state?: string;
-  units: number;
-  year_built: number;
+  units: number | string;
+  year_built: number | string;
   management_company: string;
   owner_entity: string;
   property_type: string;
   class: string;
   occupancy: string;
+  last_sale_date?: string;
+  last_sale_price?: string;
+  assessed_value?: string;
   phone?: string | null;
   isp_providers?: string[];
   video_providers?: string[];
   bulk_agreements?: BulkAgreement[];
   proptech?: PropTech;
+  inferred_proptech?: InferredProptech[];
   _fcc_verified?: boolean;
   _fcc_providers?: string[];
   lat?: number | null;
   lng?: number | null;
+}
+
+interface InferredProptech {
+  category: 'gate_operator' | 'access_control' | 'intercom' | 'camera' | 'smart_lock' | 'resident_app' | 'package';
+  name: string;
+  confidence_pct: number;
+  reason: string;
 }
 
 interface DecisionMaker {
@@ -246,6 +257,26 @@ interface Candidate {
 type ViewMode = 'idle' | 'running' | 'candidates' | 'result';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
+
+/* ─── DM Contact Score (1-10) ──────────────────────────────── */
+function computeDmScore(prospect: Prospect | null): { score: number; label: string; color: string; bg: string } {
+  if (!prospect) return { score: 0, label: 'No data', color: 'text-slate-400', bg: 'bg-slate-100 border-slate-200' }
+  const chain = prospect.decision_maker_chain ?? []
+  const phone = prospect.property?.phone
+  let score = 0
+  if (phone && phone !== 'No data found' && String(phone).length > 5) score += 3
+  if (chain.some((c: DecisionMakerChainItem) => c.role_type === 'property_manager' && c.name && c.name !== 'Unknown')) score += 2
+  if (chain.some((c: DecisionMakerChainItem) => ['regional_manager', 'asset_manager'].includes(c.role_type) && c.name && c.name !== 'Unknown')) score += 2
+  if ((prospect.ownership?.owner_entity && prospect.ownership.owner_entity !== 'Unknown')
+    || chain.some((c: DecisionMakerChainItem) => c.role_type === 'owner' && c.name && c.name !== 'Unknown')) score += 2
+  if (chain.some((c: DecisionMakerChainItem) => c.email && c.email.includes('@'))) score += 1
+  score = Math.min(10, Math.max(1, score))
+  if (score <= 3) return { score, label: 'Phone only', color: 'text-red-600', bg: 'bg-red-50 border-red-200' }
+  if (score <= 5) return { score, label: "Manager ID'd", color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200' }
+  if (score <= 7) return { score, label: 'Mgmt found', color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200' }
+  if (score <= 9) return { score, label: "Owner ID'd", color: 'text-violet-600', bg: 'bg-violet-50 border-violet-200' }
+  return { score: 10, label: 'Full chain', color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-200' }
+}
 
 const PHASES = [
   { id: 1, name: "Listing Sites",   icon: Building2, sources: ["apartments.com", "RentCafe", "Zillow"] },
@@ -552,6 +583,7 @@ function scoreBg(score: number) {
 
 export default function ARIAPage() {
   const [query, setQuery]                   = useState("");
+  const [searchFocus, setSearchFocus] = useState<'all' | 'isp' | 'video' | 'gate' | 'cameras'>('all')
   const [phase, setPhase]                   = useState(0);
   const [synthStep, setSynthStep]           = useState(0);
   const [results, setResults]               = useState<ResearchResult | null>(null);
@@ -704,7 +736,7 @@ export default function ARIAPage() {
     const apiPromise = fetch('/api/aria/research/deep', {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: query.trim() }),
+      body: JSON.stringify({ query: query.trim(), search_focus: searchFocus !== 'all' ? searchFocus : undefined }),
     }).then(async r => {
       const text = await r.text();
       try { return JSON.parse(text); }
@@ -1059,6 +1091,14 @@ export default function ARIAPage() {
           {p.property?.units && (
             <span className="text-[9px] font-mono px-2 py-0.5 rounded-md bg-slate-100/80 text-slate-500 border border-slate-200/50">{p.property.units} U</span>
           )}
+          {(() => {
+            const dm = computeDmScore(p as Prospect)
+            return (
+              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${dm.bg} ${dm.color}`}>
+                DM {dm.score}/10
+              </span>
+            )
+          })()}
           {p.property?.proptech?.sara_signals && (
             <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-600 border border-purple-100">SARA</span>
           )}
@@ -1472,6 +1512,33 @@ export default function ARIAPage() {
     return (
       <div className="space-y-5 max-w-4xl animate-in fade-in slide-in-from-bottom-2 duration-500">
 
+          {/* DM Score summary */}
+          {(() => {
+            const dm = computeDmScore(p)
+            return (
+              <div className={`flex items-center gap-3 p-3 rounded-xl border mb-4 ${dm.bg}`}>
+                <div className={`text-2xl font-black font-mono ${dm.color}`}>{dm.score}<span className="text-sm font-normal opacity-60">/10</span></div>
+                <div>
+                  <p className={`text-xs font-bold ${dm.color}`}>Contact Quality</p>
+                  <p className={`text-[10px] ${dm.color} opacity-75`}>{dm.label}</p>
+                </div>
+                <div className="ml-auto flex flex-col items-end gap-0.5">
+                  {([
+                    { label: 'Phone', met: !!(p.property?.phone && p.property.phone !== 'No data found') },
+                    { label: 'Manager', met: !!(p.decision_maker_chain ?? []).some((c: DecisionMakerChainItem) => c.role_type === 'property_manager' && c.name !== 'Unknown') },
+                    { label: 'Sr. Mgmt', met: !!(p.decision_maker_chain ?? []).some((c: DecisionMakerChainItem) => ['regional_manager','asset_manager'].includes(c.role_type)) },
+                    { label: 'Owner', met: !!(p.ownership?.owner_entity && p.ownership.owner_entity !== 'Unknown') },
+                  ] as {label:string; met:boolean}[]).map(row => (
+                    <div key={row.label} className="flex items-center gap-1.5">
+                      <span className={`text-[9px] ${dm.color} opacity-70`}>{row.label}</span>
+                      <span className={`text-[9px] font-bold ${row.met ? dm.color : 'text-slate-300'}`}>{row.met ? '✓' : '–'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
+
         {/* Primary contact card + CRM import */}
         <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4">
@@ -1848,6 +1915,89 @@ export default function ARIAPage() {
             )}
           </div>
         )}
+
+          {/* ── Cold Call Script ──────────────────────────── */}
+          {(p as Prospect | undefined)?.pitch_strategy?.primary_hook && (
+            <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-base">📞</span>
+                <p className="text-xs font-bold uppercase tracking-widest text-slate-700">Cold Call Script</p>
+                <span className="ml-auto text-[9px] font-bold px-2 py-0.5 rounded-full bg-brand-100 text-brand-600 border border-brand-200">AI-generated</span>
+              </div>
+              <div className="space-y-3 text-sm">
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  <p className="text-[10px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">Opening</p>
+                  <p className="text-slate-700 leading-relaxed">
+                    {`"Hi, may I speak with ${(p as Prospect).decision_maker?.name || (p as Prospect).decision_maker_chain?.[0]?.name || 'the property manager'}? This is [your name] from GateGuard — we work with ${(p as Prospect).property.management_company || 'multifamily communities'} to modernize access and security systems."`}
+                  </p>
+                </div>
+                <div className="p-3 bg-brand-50/60 rounded-xl border border-brand-100">
+                  <p className="text-[10px] font-bold uppercase text-brand-500 mb-1.5 tracking-wider">Your Hook</p>
+                  <p className="text-slate-700 leading-relaxed">{`"${(p as Prospect).pitch_strategy!.primary_hook}"`}</p>
+                </div>
+                {(p as Prospect).pain_signals?.[0]?.quote && (
+                  <div className="p-3 bg-red-50/60 rounded-xl border border-red-100">
+                    <p className="text-[10px] font-bold uppercase text-red-500 mb-1.5 tracking-wider">Pain Signal Reference</p>
+                    <p className="text-slate-700 leading-relaxed italic">{`"I noticed residents have mentioned issues — one review said: '${(p as Prospect).pain_signals[0].quote.slice(0, 120)}…' — is that something your team is tracking?"`}</p>
+                  </div>
+                )}
+                {(p as Prospect).scout_queue?.connectivity?.roe_expiry_year && (
+                  <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-100">
+                    <p className="text-[10px] font-bold uppercase text-amber-600 mb-1.5 tracking-wider">Contract Angle</p>
+                    <p className="text-slate-700 leading-relaxed">{`"I also know your bulk agreement is coming up around ${(p as Prospect).scout_queue!.connectivity.roe_expiry_year} — we like to start conversations 90 days before renewal so you can compare options without pressure."`}</p>
+                  </div>
+                )}
+                <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-100">
+                  <p className="text-[10px] font-bold uppercase text-emerald-600 mb-1.5 tracking-wider">Close / CTA</p>
+                  <p className="text-slate-700 leading-relaxed">{`"Would it make sense to schedule a quick 15-minute call — I can walk you through what we've done for similar ${(p as Prospect).property.units ? (p as Prospect).property.units + '-unit' : 'comparable'} communities and you can tell me if it's even relevant for you."`}</p>
+                </div>
+                {((p as Prospect).pitch_strategy?.avoid?.length ?? 0) > 0 && (
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <p className="text-[10px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">Things to Avoid</p>
+                    <ul className="space-y-1">
+                      {(p as Prospect).pitch_strategy!.avoid!.map((a: string, i: number) => (
+                        <li key={i} className="text-xs text-slate-600 flex items-start gap-1.5">
+                          <span className="text-red-400 mt-0.5">✗</span>{a}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Inferred Proptech ─────────────────────────── */}
+          {((p as Prospect | undefined)?.property?.inferred_proptech ?? []).length > 0 && (
+            <div className="bg-amber-50/60 rounded-2xl border border-amber-200/60 p-5 shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-base">🔍</span>
+                <p className="text-xs font-bold uppercase tracking-widest text-amber-700">Likely Equipment (Inferred)</p>
+                <span className="ml-auto text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 border border-amber-200">AI inference</span>
+              </div>
+              <div className="space-y-3">
+                {((p as Prospect).property.inferred_proptech ?? []).map((item: InferredProptech, idx: number) => (
+                  <div key={idx} className="flex items-start gap-3 p-3 bg-white/80 rounded-xl border border-amber-100">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="text-sm font-semibold text-slate-800">{item.name}</span>
+                        <span className="text-[10px] text-amber-600 font-medium capitalize">{item.category.replace(/_/g, ' ')}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">{item.reason}</p>
+                    </div>
+                    <div className={`shrink-0 text-center px-2 py-1 rounded-lg border ${
+                      item.confidence_pct >= 80 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+                      item.confidence_pct >= 60 ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                      'bg-slate-50 border-slate-200 text-slate-600'
+                    }`}>
+                      <p className="text-sm font-black">{item.confidence_pct}%</p>
+                      <p className="text-[9px] font-medium">confidence</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
       </div>
     );
   }
@@ -3005,6 +3155,28 @@ export default function ARIAPage() {
               />
               {isRunning && <Loader2 size={12} className="text-[#6B7EFF] animate-spin shrink-0" />}
             </div>
+          {/* Search focus filter chips */}
+          <div className="flex gap-1.5 flex-wrap mb-2">
+            {([
+              { key: 'all',     label: 'All' },
+              { key: 'isp',     label: 'ISP / Internet' },
+              { key: 'video',   label: 'Cable / Video' },
+              { key: 'gate',    label: 'Gate & Access' },
+              { key: 'cameras', label: 'Cameras' },
+            ] as const).map(f => (
+              <button
+                key={f.key}
+                onClick={() => setSearchFocus(f.key)}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all ${
+                  searchFocus === f.key
+                    ? 'bg-[#6B7EFF] text-white border-[#6B7EFF]'
+                    : 'bg-white/10 text-slate-400 border-white/20 hover:border-[#6B7EFF]/60 hover:text-white'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
             <button
               onClick={runARIA}
               disabled={isRunning || !query.trim()}
