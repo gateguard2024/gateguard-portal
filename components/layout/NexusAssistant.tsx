@@ -23,6 +23,27 @@ interface Alert {
   icon: 'todo' | 'quote' | 'wo' | 'scout'
 }
 
+interface PendingAction {
+  toolName: string
+  toolArgs: Record<string, unknown>
+  reasoning: string
+  riskLevel: 'medium' | 'high'
+  summary: string
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+interface UndoState {
+  summary: string
+  revertPayload: Record<string, unknown>
+  countdown: number
+}
+
+interface LastLowRiskAction {
+  summary: string
+  reasoning: string
+  revertPayload: Record<string, unknown>
+}
+
 // ─── Quick prompt chips ──────────────────────────────────────────────────────
 const QUICK_PROMPTS = [
   "What's overdue today?",
@@ -35,7 +56,8 @@ const QUICK_PROMPTS = [
 const ACTION_PROMPTS = [
   { label: '📝 Add to-do', prompt: 'Create a to-do: ' },
   { label: '🔧 New work order', prompt: 'Create a work order: ' },
-  { label: '✅ Mark done', prompt: 'Mark to-do as done: ' },
+  { label: '💰 New lead', prompt: 'Create a new lead: ' },
+  { label: '🎯 New opportunity', prompt: 'Create an opportunity: ' },
 ]
 
 // ─── Alert icon map ──────────────────────────────────────────────────────────
@@ -85,6 +107,70 @@ function AssistantMessage({ content }: { content: string }) {
   return <div className="text-[13px] leading-relaxed text-slate-700">{elements}</div>
 }
 
+// ─── ConfirmationCard component ──────────────────────────────────────────────
+function ConfirmationCard({ action, onExecute, onSkip }: { action: PendingAction; onExecute: () => void; onSkip: () => void }) {
+  const isHigh = action.riskLevel === 'high'
+  const accentColor = isHigh ? '#D97706' : '#6B7EFF'
+  const badgeLabel = isHigh ? 'HIGH RISK' : 'CONFIRM ACTION'
+
+  return (
+    <div className="mx-1 my-1 rounded-xl overflow-hidden border" style={{ borderColor: `${accentColor}40` }}>
+      {/* Header */}
+      <div className="px-3 py-2 flex items-center justify-between" style={{ background: `linear-gradient(135deg, #0B1728 0%, ${accentColor}22 100%)` }}>
+        <div className="flex items-center gap-2">
+          <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: accentColor }} />
+          <span className="text-[9px] font-bold tracking-widest uppercase" style={{ color: accentColor }}>NEXUS ACTION</span>
+        </div>
+        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: `${accentColor}22`, color: accentColor }}>{badgeLabel}</span>
+      </div>
+      {/* Body */}
+      <div className="px-3 py-2.5" style={{ background: 'linear-gradient(180deg, #0f1e3a 0%, #0B1728 100%)' }}>
+        <p className="text-[13px] font-semibold text-white leading-snug">{action.summary}</p>
+        {action.reasoning && (
+          <p className="text-[11px] text-slate-400 mt-1 italic leading-relaxed">&ldquo;{action.reasoning}&rdquo;</p>
+        )}
+      </div>
+      {/* Actions */}
+      <div className="px-3 py-2 flex gap-2 justify-end" style={{ background: '#0B1728' }}>
+        <button
+          onClick={onSkip}
+          className="text-[11px] text-slate-400 hover:text-slate-200 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors font-medium"
+        >
+          Skip
+        </button>
+        <button
+          onClick={onExecute}
+          className="text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-all hover:opacity-90 active:scale-95 text-white"
+          style={{ backgroundColor: accentColor }}
+        >
+          Execute →
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── UndoToast component ─────────────────────────────────────────────────────
+function UndoToast({ undoState, onUndo, onDismiss }: { undoState: UndoState; onUndo: () => void; onDismiss: () => void }) {
+  return (
+    <div className="mx-3 mb-1.5 flex items-center justify-between px-3 py-1.5 rounded-lg border border-amber-200 bg-amber-50">
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-amber-600 text-[11px]">✓</span>
+        <span className="text-[11px] text-amber-800 font-medium truncate">{undoState.summary}</span>
+      </div>
+      <div className="flex items-center gap-2 shrink-0 ml-2">
+        <button onClick={onUndo} className="text-[11px] font-semibold text-amber-700 hover:text-amber-900 underline underline-offset-1">
+          Undo
+        </button>
+        <span className="text-[10px] text-amber-500 font-mono">{undoState.countdown}s</span>
+        <button onClick={onDismiss} className="text-amber-400 hover:text-amber-600">
+          <X size={10} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main component ──────────────────────────────────────────────────────────
 export function NexusAssistant() {
   const pathname = usePathname()
@@ -99,8 +185,11 @@ export function NexusAssistant() {
   const [briefingDone, setBriefingDone] = useState(false)
   const [wins, setWins] = useState<Array<{ id: string; type: string; title: string; description: string; time: string }>>([])
   const [activeTab, setActiveTab] = useState<'chat' | 'wins'>('chat')
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
+  const [undoState, setUndoState] = useState<UndoState | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const undoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const sessionKey = 'nexus_session_briefed'
 
   // Persist enabled state
@@ -196,6 +285,72 @@ export function NexusAssistant() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
 
+  // Undo countdown timer
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    if (!undoState) return
+    const timer = setInterval(() => {
+      setUndoState(prev => {
+        if (!prev) return null
+        if (prev.countdown <= 1) { clearInterval(timer); return null }
+        return { ...prev, countdown: prev.countdown - 1 }
+      })
+    }, 1000)
+    return () => clearInterval(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!undoState])
+
+  const executeAction = async (action: PendingAction) => {
+    setPendingAction(null)
+    setIsLoading(true)
+    try {
+      const res = await fetch('/api/assistant/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ toolName: action.toolName, toolArgs: action.toolArgs }),
+      })
+      const data = await res.json() as { success: boolean; message?: string; error?: string; revertPayload?: Record<string, unknown> }
+
+      const confirmMsg = data.success
+        ? `✓ Done — ${data.message ?? action.summary}`
+        : `⚠ Action failed: ${data.error ?? 'Unknown error'}`
+
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        role: 'assistant' as const,
+        content: confirmMsg,
+        timestamp: new Date(),
+        actionConfirmed: 'work_order', // reuse existing badge style
+      }])
+
+      // Start undo countdown for successful actions
+      if (data.success && data.revertPayload) {
+        setUndoState({ summary: action.summary, revertPayload: data.revertPayload, countdown: 30 })
+      }
+    } catch {
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant' as const, content: 'Action failed — please try again.', timestamp: new Date() }])
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const revertAction = async () => {
+    if (!undoState) return
+    if (undoTimerRef.current) clearInterval(undoTimerRef.current)
+    const snapshot = undoState
+    setUndoState(null)
+    try {
+      await fetch('/api/assistant/revert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ revertPayload: snapshot.revertPayload }),
+      })
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant' as const, content: `↩ Undone — "${snapshot.summary}" has been reverted.`, timestamp: new Date() }])
+    } catch {
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant' as const, content: 'Undo failed. Please revert manually.', timestamp: new Date() }])
+    }
+  }
+
   const sendMessage = async (text?: string) => {
     const content = (text ?? input).trim()
     if (!content || isLoading) return
@@ -215,7 +370,12 @@ export function NexusAssistant() {
           userName: '',
         }),
       })
-      const data = await res.json() as { response?: string; actionsExecuted?: string[] }
+      const data = await res.json() as {
+        response?: string;
+        actionsExecuted?: string[];
+        pendingAction?: PendingAction;
+        lastLowRiskAction?: LastLowRiskAction;
+      }
 
       // Derive a single confirmation chip from the first action executed
       let actionConfirmed: Message['actionConfirmed'] = null
@@ -231,6 +391,19 @@ export function NexusAssistant() {
         timestamp: new Date(),
         actionConfirmed,
       }])
+
+      // Handle pending action (medium/high risk)
+      if (data.pendingAction) {
+        setPendingAction(data.pendingAction)
+      }
+      // Handle low-risk undo toast
+      if (data.lastLowRiskAction?.revertPayload) {
+        setUndoState({
+          summary: data.lastLowRiskAction.summary,
+          revertPayload: data.lastLowRiskAction.revertPayload,
+          countdown: 30,
+        })
+      }
     } catch {
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
@@ -430,6 +603,17 @@ export function NexusAssistant() {
                 )}
               </div>
 
+              {/* Pending action confirmation */}
+              {pendingAction && (
+                <div className="shrink-0 px-1">
+                  <ConfirmationCard
+                    action={pendingAction}
+                    onExecute={() => executeAction(pendingAction)}
+                    onSkip={() => setPendingAction(null)}
+                  />
+                </div>
+              )}
+
               {/* Quick prompts — shown when chat is empty */}
               {messages.length <= 1 && (
                 <div className="shrink-0 px-3 pb-2 flex flex-wrap gap-1.5">
@@ -458,6 +642,15 @@ export function NexusAssistant() {
                     </button>
                   ))}
                 </div>
+              )}
+
+              {/* Undo toast */}
+              {undoState && (
+                <UndoToast
+                  undoState={undoState}
+                  onUndo={revertAction}
+                  onDismiss={() => { if (undoTimerRef.current) clearInterval(undoTimerRef.current); setUndoState(null) }}
+                />
               )}
 
               {/* Input */}
