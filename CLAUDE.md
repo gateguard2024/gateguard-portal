@@ -1,6 +1,6 @@
 # GateGuard Portal — Claude Context (Active Reference)
 
-> Last trimmed: May 31, 2026 (session 12). Full sprint history, /tech docs, SARA Plus intel → CLAUDE.archive.md
+> Last trimmed: June 2, 2026 (session 14). Full sprint history, /tech docs, SARA Plus intel → CLAUDE.archive.md
 
 ---
 
@@ -173,8 +173,8 @@
 - Mobile: `mobileTab` state (`'list' | 'property' | 'dm' | 'scout'`), bottom nav 4 tabs fixed at 56px
 - `require()` needed for `LayoutList, ArrowLeft`
 
-**ARIA deep engine (session 12 — v7.4):**
-- Current version: `v7.4`
+**ARIA deep engine (session 14 — v7.6):**
+- Current version: `v7.6`
 - Model: `claude-sonnet-4-6`
 - APIs (graceful fallback if keys absent): Apollo (`APOLLO_API_KEY`), Prospeo (`PROSPEO_API_KEY`), NinjaPear (`NINJAPEAR_API_KEY`, formerly ProxyCurl), PDL (`PDL_API_KEY`)
 - Apollo endpoint: `POST /api/v1/people/match` (name + domain → email + phone). Old `/mixed_people/search` is deprecated (was returning 403). Auth: `Bearer` token.
@@ -208,7 +208,46 @@
 |------|---------|
 | `components/layout/Sidebar.tsx` | Navigation — add new routes here |
 | `components/layout/PortalShell.tsx` | Wraps all portal pages; detects standalone (tech/proposal/approve) |
-| `components/layout/NexusAssistant.tsx` | Floating AI PA — alerts + chat |
+| `components/layout/NexusAssistant.tsx` | Floating AI PA — alerts + chat + **Action Engine** (ConfirmationCard, UndoToast, risk-tiered execution) |
+
+### Nexus Action Engine
+| File | Purpose |
+|------|---------|
+| `lib/assistant-executor.ts` | Shared executor for all 16 tools — returns `RevertPayload` for every action; fetches previous state before mutations so undo is exact |
+| `app/api/assistant/execute/route.ts` | POST `{toolName, toolArgs}` → executes tool + returns `{success, message, revertPayload}` |
+| `app/api/assistant/revert/route.ts` | POST `{revertPayload}` → delete (for creates) or update (for mutations) to restore prior state |
+| `app/api/assistant/chat/route.ts` | Agentic loop: 16 tools (6 ops + 10 Sales/CRM), `reasoning` required on every tool, risk-tiered execution |
+
+**Action Engine design notes (session 14):**
+- **16 tools total:** create/update/complete_todo, create/reschedule/update_work_order_status + create_work_order, create_lead, update_lead_stage, assign_lead, create_opportunity, update_opportunity_stage, mark_opportunity_won (HIGH), mark_opportunity_lost (HIGH), log_crm_activity, schedule_followup, create_quote
+- **Risk tiers:** Low (auto-execute + undo toast 30s) | Medium (ConfirmationCard in chat, brand blue) | High (ConfirmationCard in chat, amber)
+- **Reasoning field:** every tool has `reasoning: string` (required) — Claude must explain WHY in one sentence before acting
+- **ConfirmationCard:** dark navy gradient (`#0B1728`), pulsing risk-color dot, bold summary, italic reasoning snippet, Skip | Execute buttons
+- **UndoToast:** amber strip above input, 30s countdown, Undo link calls `/api/assistant/revert`
+- **RevertPayload:** `{ operation: 'delete', table, id }` for creates / `{ operation: 'update', table, id, data: previousValues }` for mutations
+
+### Floor Plans & Design Tool
+| File | Purpose |
+|------|---------|
+| `app/design/floor-plans/page.tsx` | Professional drawing platform — Fabric.js canvas, 4 tabs, 7 tools, 28 device types, camera FOV cones, rack diagrams, wire schedule, BOM |
+| `app/design/system/page.tsx` | Design system tab — color/typography reference |
+
+**Floor plan design notes (session 14 — Fabric.js platform):**
+- **4 tabs:** Floor Plan (canvas) | Rack Diagram (React, not Fabric) | Wire Schedule | BOM
+- **7 tool modes:** select, device, cable, fov (camera cone), text, measure, erase
+- **Fabric.js dynamic import** — `await import('fabric')` inside `useEffect` only (SSR safe). `new fabric.Canvas('drawing-canvas', {...})`
+- **Orthogonal cable routing:** `(x1,y1) → (midX,y1) → (midX,y2) → (x2,y2)` — mid-X L-shaped polylines
+- **Camera FOV:** Fabric.js `Polygon` (triangle for standard), `Circle` (fisheye 360°)
+- **Rack diagram:** pure React component `RackPanelView`, `U_HEIGHT = 36px`, 16 equipment types (NVR, switches, patch panels, ACS, controllers, UPS, PDU, etc.), dark `#0d1117` front-panel style
+- **28 device types:** cameras, intercoms, access readers, gate operators, NVR/DVR, switches, UPS, patch panels, lock controllers, etc.
+- **Other features:** background image import, multi-plan support, scale tool, export PNG/SVG, keyboard shortcuts (Delete, Escape, +/-), zoom/pan
+
+### Projects / Job OS
+| File | Purpose |
+|------|---------|
+| `app/projects/page.tsx` | Job OS with 5 views (Board/List/Gantt/Calendar/Map) — full project lifecycle for install/service/convert jobs |
+| `app/api/projects/route.ts` | GET (list + filters) + POST (create job from opportunity) |
+| `app/api/projects/[id]/route.ts` | GET single + PATCH + DELETE |
 
 ### Calendar
 | File | Purpose |
@@ -375,8 +414,9 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 
 | Migration | What | Status |
 |-----------|------|--------|
-| 104 | `tracker_items.owner_user_id TEXT` + `due_date DATE` + indexes | ⏳ run on beta then prod |
-| 103 | `tracker_groups.entity_type TEXT` + `entity_id UUID` + DROP NOT NULL org_id + index | ⏳ run on beta then prod |
+| 106 | `tracker_items.data JSONB + priority TEXT + tags TEXT[]` + `tracker_dependencies` + `tracker_automations` + `tracker_activity` tables | ⏳ run on beta then prod |
+| 104 | `tracker_items.owner_user_id TEXT` + `due_date DATE` + indexes | ✅ beta + prod |
+| 103 | `tracker_groups.entity_type TEXT` + `entity_id UUID` + DROP NOT NULL org_id + index | ✅ beta + prod |
 | 101 | Expand `mdu_providers` (14 new ISP/video entries) + `aria_tech_providers` (camera/gate/isp additions) + extend category CHECK to include `'isp'` | ✅ beta + prod (run SQL patch for ISP rows) |
 | 100 | `aria_properties` ROE + learning loop `*_user_verified` flags | ✅ beta + prod |
 | 098 | `aria_properties` (persistent intel DB) + `aria_tech_providers` (auto-growing catalog) + RPCs | ✅ beta + prod |
@@ -586,18 +626,33 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
   - **6-month outreach_plan** added to Sonnet tool schema — Sonnet builds a month-by-month campaign calendar using this property's actual pain signals, ROE/contract window, behavioral profile, and DM data. Fields: `month_1..month_6` (theme + actions[] + goal), `total_touches`, `primary_channel`, `key_milestone`, `expected_close_quarter`
   - **Expanded scoutQueue** — SCOUT now receives full campaign brief: `market_context` (tech_generation, replacement_window, acquisition_year, buying_trends), `connectivity` extended (video_providers, roe_detected, roe_expiry_year, contract_urgency, contract_window), `proptech` extended (intercoms, cameras, smart_locks, displacement_targets, sara_signals), `behavioral_profile`, `pitch_strategy`, `key_finding`, full `objection_flags` (ROE + acquisition), `outreach_plan`, extended `outreach_sequence` (6 touches)
 
+### Completed — June 2, 2026 (session 14) — Floor Plan Platform + PM OS + ARIA v7.6 + Nexus Action Engine
+
+- ✅ **Floor plan platform rewrite** (`app/design/floor-plans/page.tsx`, 1,603 lines) — Fabric.js canvas drawing tool (dynamic import for SSR safety); 4 tabs (Floor Plan / Rack / Wire / BOM); 7 tool modes; 28 device types; camera FOV cones (Polygon for standard, Circle for fisheye); orthogonal cable routing (`midX` L-shape); rack diagram as pure React `RackPanelView` (1U=36px, dark front-panel); background image import; multi-plan support; export PNG; keyboard shortcuts
+- ✅ **Project Management OS** (`app/tracker/page.tsx`) — full 7-view rewrite: Board, Table, Gantt (with dependencies + critical path), Calendar, Chart, Workload, Timeline; 7 view components in `components/tracker/views/`; rich column types; automation engine UI; Monday/Smartsheet-comparable
+- ✅ **Migration 106** (`supabase/migrations/106_tracker_pm_os.sql`) — `tracker_items.data JSONB + priority + tags`; `tracker_dependencies`, `tracker_automations`, `tracker_activity` tables; all with GRANT blocks
+- ✅ **ARIA engine v7.6** (`app/api/aria/research/deep/route.ts`) — Haiku Phase 0 query rewriting (`rewriteQuery()` → structured property/city/ISP/proptech search variants); `filterByScore()` (min 0.4 Tavily score); `deduplicateByUrl()`; `SOURCE_AUTHORITY_WEIGHTS` tagging `[AUTH:1-10]` per URL domain (fcc.gov=10, loopnet.com=8, reddit.com=3, etc.); multi-contact Apollo (top 3 parallel `Promise.all`); EDGAR ownership + last sale transaction searches in Phase 2
+- ✅ **Dashboard gradient** (`app/page.tsx`) — `linear-gradient(180deg, rgba(107,126,255,0.09) 0%, rgba(107,126,255,0.03) 80px, #f8fafc 180px)` applied as inline style on outer div (Option C approved)
+- ✅ **Nexus Action Engine** — 5 files:
+  - `lib/assistant-executor.ts` — 16 tools, each returns exact `RevertPayload`; pre-fetches current state before mutations; low-risk execution shared between chat + execute routes
+  - `app/api/assistant/execute/route.ts` — POST endpoint for confirmed medium/high risk actions
+  - `app/api/assistant/revert/route.ts` — POST endpoint for 30s undo window
+  - `app/api/assistant/chat/route.ts` — 16 tools with required `reasoning` field; risk-tiered loop (low=auto-execute→undo toast, medium/high=return `pendingAction`→ confirmation gate); 10 new Sales/CRM tools: create_lead, update_lead_stage, assign_lead, create_opportunity, update_opportunity_stage, mark_opportunity_won (HIGH), mark_opportunity_lost (HIGH), log_crm_activity, schedule_followup, create_quote
+  - `components/layout/NexusAssistant.tsx` — ConfirmationCard (dark navy gradient, pulsing dot, reasoning snippet, Skip | Execute), UndoToast (amber strip, 30s countdown), `executeAction()`, `revertAction()`, updated ACTION_PROMPTS with Lead + Opportunity chips
+- ✅ **P0 bugs fixed** — ARIA search history scoped to user; `/business/expenses` 404 resolved; Documents "New Contract" button wired (3 paths: Upload / Scratch / Template)
+- ✅ **Projects page** (`app/projects/page.tsx`) — Job OS with job types (New Install / Service / Convert), 5 views, "Create Job" CTA on won opportunities
+- ✅ **Research completed** — Task management competitive analysis (Monday/Asana/ClickUp/Smartsheet); Bluebeam + System Surveyor feature audit; Sequential search architecture best practices + ARIA gap analysis; AI handoff strategy (Nexus contextual prompts per page)
+
 ### Pending — Migrations to Run
-- Migrations 093–101 deployed on beta + prod ✅
-- Migration 101 ISP rows: run SQL patch in Supabase SQL editor (beta + prod) to extend CHECK constraint and insert ISP entries — see session 12 notes above
-- **Migration 103** — tracker entity embed (`tracker_groups` entity_type/entity_id columns): run on beta then prod
-- **Migration 104** — tracker assignee + due date (`tracker_items` owner_user_id/due_date columns): run on beta then prod
+- Migrations 093–104 deployed on beta + prod ✅
+- **Migration 106** — tracker PM OS (`tracker_items.data/priority/tags` + `tracker_dependencies` + `tracker_automations` + `tracker_activity`): run on beta then prod
 
 ### From Platform Review Meeting (June 2026) — Prioritized Build Queue
 
-#### 🔴 P0 — Critical Bugs (fix immediately)
-1. **ARIA search history scoped to current user** — `app/api/aria/searches/route.ts` GET must filter by `user_id` (or `org_id` for org-scoped). Currently shows all users' history → privacy/cross-pollination bug.
-2. **Expenses page 404** — `/business/expenses` route does not exist. Either create the page or remove it from the sidebar nav.
-3. **Documents "New Contract" button non-functional** — button exists but does nothing. Must present 3 options: Upload existing, Start from scratch, Use template.
+#### 🔴 P0 — Critical Bugs
+1. ✅ **ARIA search history scoped to current user** — fixed in session 13
+2. ✅ **Expenses page 404** — fixed in session 13
+3. ✅ **Documents "New Contract" button** — wired in session 13 (3 paths: Upload / Scratch / Template)
 
 #### 🟠 P1 — ARIA Engine & Data Quality
 4. **DM Scoring system (1–10)** — score should appear on every property card and detail view:
@@ -628,7 +683,7 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
     4. Installation scheduled + completed
     5. QC + client handoff sign-off
     6. Final billing
-16. **Projects section in nav** — `/projects` route with kanban + list view for all active jobs.
+16. ✅ **Projects section in nav** — built in session 14: `/projects` with 5 views, linked from won opportunities
 
 #### 🟡 P2 — UI/UX Platform-Wide
 17. **ARIA main content area theming** — lighter background in the right panel content area, possibly fading from the base color toward a very dark blue/black center to create contrast with the left bar. The tabbed section feels "clickier" (too many borders/shadows) vs the dashboard. Match dashboard card quality.
@@ -643,13 +698,13 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
     Link resulting document to the entity (site, opportunity, dealer) it was created from.
 
 #### 🟡 P2 — Floor Plans & Design
-21. **Floor plan overhaul** — current drawing tool is too primitive. Research Bluebeam Revu and System Surveyor for feature parity. Requirements: orthogonal/snapping drawing, room labels, device placement with icons, scale indicator.
+21. ✅ **Floor plan overhaul** — built in session 14: Fabric.js platform with orthogonal routing, camera FOV cones, rack diagrams, 28 device types, BOM, wire schedule
 22. **Link floor plans → system design → as-built** — a property should have one "Design" record that has three states: Floor Plan (pre-install), System Design (with device spec), As-Built (post-install confirmed). All three linked and versioned.
 
 #### 🟢 P3 — Research & Strategy
-23. **Task management competitive research** — before next tracker sprint, review Monday.com, Asana, ClickUp, Wrike, Trello, Freedcamp, ProofHub shell structure and UX patterns. Document what to adopt.
-24. **AI handoff strategy** — define how AI guides users on each landing page ("Mickey Mouse simple" principle). Each major page should have a contextual AI prompt that tells a new user exactly what to do next based on their data state.
-25. **Bluebeam + System Surveyor research** — document feature list of both tools before floor plan overhaul begins.
+23. ✅ **Task management competitive research** — completed session 14: Monday/Asana/ClickUp/Smartsheet audit documented
+24. ✅ **AI handoff strategy** — completed session 14: Nexus contextual prompt strategy per page documented
+25. ✅ **Bluebeam + System Surveyor research** — completed session 14: full feature audit documented
 
 ### Pending — CPQ Phase 2
 - Add `unit_cost` column to `quote_line_items` (migration 092) — enables real margin vs. estimated
@@ -666,7 +721,7 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
 - Task #50 — Client portal at portal.gateguard.co/[site-slug] (property manager dashboard)
 - Task #86 — Internal API Subscriptions page at `/admin/api-sources` (see ARIA_DATA_SOURCES.md on Desktop)
 - Task #132 — Site Service Analytics tab on /sites/[id]
-- Task #163 — NEXUS action tools — write/update To-Dos + WOs via chat
+- ✅ Task #163 — NEXUS Action Engine shipped (session 14) — 16 tools, risk tiers, ConfirmationCard, undo
 - Task #117 — Portal Help Center
 
 ### Pending env vars / infra
