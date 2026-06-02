@@ -29,13 +29,13 @@ export default function NexusHome() {
   const { user }  = useUser()
   const firstName = user?.firstName ?? 'there'
 
-  // null = no popup; string = which tab popup is open
+  // null = no popup open; string = which tab is expanded
   const [activeModal, setActiveModal] = useState<string | null>(null)
   const [messages,    setMessages]    = useState<ChatMessage[]>([])
   const [isLoading,   setIsLoading]   = useState(false)
 
   const handleQuery = useCallback(async (query: string) => {
-    setActiveModal(null)   // dismiss popup if open
+    setActiveModal(null)   // dismiss popup when user types
     const next: ChatMessage[] = [...messages, { role: 'user', content: query }]
     setMessages(next)
     setIsLoading(true)

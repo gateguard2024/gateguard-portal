@@ -2,9 +2,17 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter }   from 'next/navigation'
-import { NexusBottomNav } from '@/components/nexus/NexusBottomNav'
+import { NexusBottomNav }        from '@/components/nexus/NexusBottomNav'
+import { ActionCommandBar }      from '@/components/nexus/ActionCommandBar'
 import { OpportunityActionCard } from '@/components/nexus/OpportunityActionCard'
 import type { ActionItem }       from '@/components/nexus/OpportunityActionCard'
+
+// ─── Chat types ───────────────────────────────────────────────────────────────
+
+interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
 
 // ─── Filter types ─────────────────────────────────────────────────────────────
 
@@ -33,6 +41,30 @@ export default function OppsPage() {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
   const [loading,   setLoading]   = useState(true)
   const [error,     setError]     = useState<string | null>(null)
+
+  // ── NL command bar ───────────────────────────────────────────────────────
+  const [chatMessages,  setChatMessages]  = useState<ChatMessage[]>([])
+  const [chatLoading,   setChatLoading]   = useState(false)
+  const [showChat,      setShowChat]      = useState(false)
+
+  const handleQuery = useCallback(async (query: string) => {
+    const next: ChatMessage[] = [...chatMessages, { role: 'user', content: query }]
+    setChatMessages(next)
+    setChatLoading(true)
+    setShowChat(true)
+    try {
+      const res  = await fetch('/api/assistant/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: next }),
+      })
+      const data = await res.json()
+      setChatMessages(prev => [...prev, { role: 'assistant', content: data.response ?? data.message ?? 'Done.' }])
+    } catch {
+      setChatMessages(prev => [...prev, { role: 'assistant', content: 'Something went wrong.' }])
+    } finally {
+      setChatLoading(false)
+    }
+  }, [chatMessages])
 
   // ── Fetch leads + opportunities ──────────────────────────────────────────
   useEffect(() => {
@@ -246,6 +278,32 @@ export default function OppsPage() {
           </button>
         ))}
       </div>
+
+      {/* NL command bar */}
+      <div className="relative z-10 px-5 pt-3 pb-1">
+        <ActionCommandBar onSubmit={handleQuery} isLoading={chatLoading} />
+      </div>
+
+      {/* Inline chat response (dismissible) */}
+      {showChat && chatMessages.length > 0 && (
+        <div className="relative z-10 mx-5 mt-2 rounded-2xl p-4" style={{ background: 'rgba(255,255,255,0.03)', border: '0.5px solid rgba(255,255,255,0.08)' }}>
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.2)' }}>Nexus</span>
+            <button onClick={() => { setShowChat(false); setChatMessages([]) }} style={{ color: 'rgba(255,255,255,0.2)', fontSize: 13 }}>✕</button>
+          </div>
+          <div className="space-y-2">
+            {chatMessages.map((m, i) => (
+              <div key={i} className={`rounded-xl px-3 py-2 text-sm ${m.role === 'user' ? 'ml-8 text-right' : 'mr-8'}`}
+                style={m.role === 'user'
+                  ? { background: 'rgba(107,126,255,0.18)', border: '0.5px solid rgba(107,126,255,0.3)', color: 'rgba(255,255,255,0.85)' }
+                  : { background: 'rgba(255,255,255,0.03)', border: '0.5px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.7)' }
+                }>
+                {m.content}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Main content */}
       <main className="relative z-10 flex-1 px-5 pt-2 pb-32 overflow-y-auto">
