@@ -2219,6 +2219,14 @@ export default function OpportunityDetailPage() {
               {opp.stage === "won" ? (
                 <>
                   <Link
+                    href={`/projects?new=1&opp_id=${opp.id}&opp_name=${encodeURIComponent(opp.title ?? '')}&site_id=${opp.site_id ?? ''}&site_name=${encodeURIComponent(opp.site_name ?? '')}&value=${opp.total_value ?? ''}`}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[#6B7EFF]/10 transition-colors text-sm border border-[#6B7EFF]/30"
+                  >
+                    <Wrench size={14} className="text-[#6B7EFF]" />
+                    <span className="text-[#6B7EFF] font-semibold">Create Job</span>
+                    <Plus size={11} className="text-[#6B7EFF] ml-auto" />
+                  </Link>
+                  <Link
                     href="/maintenance"
                     className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-accent transition-colors text-sm"
                   >
