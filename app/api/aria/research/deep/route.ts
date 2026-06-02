@@ -27,7 +27,7 @@ const supabaseDeep = createClient(
 export const maxDuration = 120
 export const dynamic = 'force-dynamic'
 
-const ARIA_ENGINE_VERSION = 'v7.5'
+const ARIA_ENGINE_VERSION = 'v7.6'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -79,6 +79,61 @@ function normInt(val: unknown): number | null {
 function normStrArr(arr: unknown): string[] {
   if (!Array.isArray(arr)) return []
   return arr.map(v => normStr(v)).filter((v): v is string => v !== null)
+}
+
+// ─── IMP-1: Tavily Score Filtering ───────────────────────────────────────────
+// Filter low-relevance Tavily results before passing to Haiku.
+// Keeps at least 3 results so we never starve the extraction prompt.
+
+function filterByScore<T extends { score?: number }>(results: T[], minScore = 0.4): T[] {
+  const filtered = results.filter(r => (r.score ?? 1) >= minScore)
+  return filtered.length >= 3 ? filtered : results.slice(0, 3)
+}
+
+// ─── IMP-2: Snippet Deduplication by URL ─────────────────────────────────────
+// Removes duplicate search results (same URL) before building Haiku prompts.
+// Strips query-string variants so ?utm_source=google doesn't bypass dedup.
+
+function deduplicateByUrl<T extends { url?: string }>(results: T[]): T[] {
+  const seen = new Set<string>()
+  return results.filter(r => {
+    if (!r.url) return true
+    const key = r.url.split('?')[0]  // normalize: strip query string
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+// ─── IMP-3: Source Authority Ranking ─────────────────────────────────────────
+// Domain-level authority score (1-10). Higher-authority sources win when data
+// conflicts. Haiku is instructed to prefer higher-authority facts.
+
+const SOURCE_AUTHORITY: Record<string, number> = {
+  'fcc.gov': 10, 'sec.gov': 10, 'census.gov': 9,
+  'loopnet.com': 8, 'costar.com': 8, 'multifamilyexecutive.com': 8,
+  'nmhc.org': 8, 'apartmentlist.com': 7, 'apartments.com': 7,
+  'rentcafe.com': 7, 'zillow.com': 6, 'redfin.com': 6,
+  'apartmentratings.com': 6, 'google.com': 5,
+  'yelp.com': 4, 'reddit.com': 3, 'facebook.com': 3,
+}
+
+function sourceAuthority(url: string): number {
+  try {
+    const hostname = new URL(url).hostname.replace('www.', '')
+    for (const [domain, weight] of Object.entries(SOURCE_AUTHORITY)) {
+      if (hostname === domain || hostname.endsWith('.' + domain)) return weight
+    }
+  } catch { /* invalid URL */ }
+  return 5
+}
+
+function tagSnippetWithAuthority(r: { url?: string; content?: string; title?: string; source?: string }): string {
+  const auth = sourceAuthority(r.url ?? '')
+  let domain = 'unknown'
+  try { domain = new URL(r.url ?? '').hostname.replace('www.', '') } catch { /* skip */ }
+  const sourceTag = r.source ? `[${r.source}]` : ''
+  return `[AUTH:${auth}]${sourceTag}[${domain}] ${r.content ?? r.title ?? ''}`
 }
 
 // ─── Tavily ───────────────────────────────────────────────────────────────────
@@ -417,6 +472,73 @@ async function lookupExistingProperty(query: string, cityHint: string | null): P
   } catch { return null }
 }
 
+// ─── IMP-4: Query Rewriting ───────────────────────────────────────────────────
+// Expands the raw user query into intent-specific sub-queries before any search.
+// Runs in parallel with the DB cache lookup at the start of specific_property flow.
+// Inspired by Perplexity's query rewriting approach.
+
+interface RewrittenQuery {
+  property_name: string
+  address_variations: string[]
+  city_state: string
+  owner_search: string
+  isp_search: string
+  proptech_search: string
+  review_search: string
+  contact_search: string
+}
+
+async function rewriteQuery(rawQuery: string, client: Anthropic): Promise<RewrittenQuery> {
+  const fallback: RewrittenQuery = {
+    property_name: rawQuery,
+    address_variations: [rawQuery],
+    city_state: '',
+    owner_search: `${rawQuery} property owner management company`,
+    isp_search: `${rawQuery} internet provider`,
+    proptech_search: `${rawQuery} security access control gate`,
+    review_search: `${rawQuery} reviews`,
+    contact_search: `${rawQuery} property manager`,
+  }
+  try {
+    const msg = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 500,
+      system: 'You are a query expansion engine for a property intelligence system. Generate targeted sub-queries from the user query. Return ONLY valid JSON, no other text.',
+      messages: [{
+        role: 'user',
+        content: `Property search query: "${rawQuery}"
+
+Return JSON:
+{
+  "property_name": "clean property name without city/state",
+  "address_variations": ["full address variation 1", "full address variation 2"],
+  "city_state": "City ST",
+  "owner_search": "query to find owner/management company",
+  "isp_search": "query to find internet/ISP at this property",
+  "proptech_search": "query to find security/access/cameras/gates at property",
+  "review_search": "query to find resident reviews and complaints",
+  "contact_search": "query to find property manager or DM contact info"
+}`,
+      }],
+    })
+    const text = msg.content[0]?.type === 'text' ? msg.content[0].text : '{}'
+    const match = text.match(/\{[\s\S]*\}/)
+    const parsed = JSON.parse(match?.[0] ?? '{}') as Partial<RewrittenQuery>
+    return {
+      property_name: parsed.property_name ?? rawQuery,
+      address_variations: parsed.address_variations ?? [rawQuery],
+      city_state: parsed.city_state ?? '',
+      owner_search: parsed.owner_search ?? `${rawQuery} property owner management company`,
+      isp_search: parsed.isp_search ?? `${rawQuery} internet service provider`,
+      proptech_search: parsed.proptech_search ?? `${rawQuery} security cameras access control gate`,
+      review_search: parsed.review_search ?? `${rawQuery} resident reviews complaints`,
+      contact_search: parsed.contact_search ?? `${rawQuery} property manager contact`,
+    }
+  } catch {
+    return fallback
+  }
+}
+
 // ─── PHASE 0: Query Classification ────────────────────────────────────────────
 
 type QueryType = 'specific_property' | 'city_prospect' | 'criteria_prospect' | 'contract_prospect'
@@ -534,14 +656,16 @@ async function runPhase1A(query: string, client: Anthropic): Promise<Phase1Resul
     ),
   ])
 
-  const allResults = [...listingResults, ...pressResults, ...unitCountResults, ...phoneResults]
+  // IMP-1: filter Tavily results by score; IMP-2: deduplicate by URL
+  const filteredListing = filterByScore(listingResults, 0.4)
+  const allResults = deduplicateByUrl([...filteredListing, ...pressResults, ...unitCountResults, ...phoneResults])
   if (allResults.length === 0 && amenityResults.length === 0) return blank
 
-  // Standard identity snippets — 1200 chars (bumped to catch unit counts that appear mid-listing)
+  // Standard identity snippets — 1200 chars; IMP-3: tag with source authority
   const snippets = allResults
     .filter(r => (r.content || '').length > 30)
     .slice(0, 12)
-    .map((r, i) => `[${i + 1}] ${r.title}\nURL: ${r.url}\n${r.content.slice(0, 1200)}`)
+    .map((r, i) => `[${i + 1}] ${tagSnippetWithAuthority(r).slice(0, 1250)}`)
     .join('\n\n---\n\n')
 
   // Amenity raw content — first 4000 chars of each page (amenities usually near top)
@@ -557,6 +681,8 @@ async function runPhase1A(query: string, client: Anthropic): Promise<Phase1Resul
   const extracted = await haikusExtract<Phase1Result>(
     `Extract verified property facts AND amenity/technology data. Return ONLY valid JSON:
 {"confirmed_name":null,"confirmed_address":null,"confirmed_city":null,"confirmed_state":null,"confirmed_units":null,"confirmed_year_built":null,"confirmed_management":null,"confirmed_owner":null,"confirmed_website":null,"confirmed_phone":null,"is_specific_property":false,"listing_url":null,"listing_isp":null,"listing_cable":null,"listing_proptech":[],"listing_bulk_detected":false}
+
+SOURCE AUTHORITY: Each snippet starts with [AUTH:N] where N=1-10. Prefer higher-authority sources (8-10) when data conflicts. Auth 8-10 = government/industry/listing sites. Auth 3-5 = social/review sites.
 
 IDENTITY RULES:
 - confirmed_name: exact community name found in results (not the query — the real name)
@@ -715,6 +841,10 @@ interface Phase2Result {
   roe_detected: boolean
   roe_providers: string[]
   roe_expiry_year: number | null
+  // IMP-6: EDGAR + last sale fields
+  edgar_signal: boolean
+  last_sale_price: string
+  last_sale_date: string
 }
 
 const KNOWN_MDU_BULK_ISPS = new Set([
@@ -792,13 +922,15 @@ async function runPhase2(
   confirmedMgmt: string,
   coords: { lat: number; lng: number } | null,
   client: Anthropic,
-  dbProviders: MduProvider[] = []
+  dbProviders: MduProvider[] = [],
+  rewritten: RewrittenQuery | null = null
 ): Promise<Phase2Result> {
   const blank: Phase2Result = {
     owner_entity: '', owner_type: '', acquisition_year: '',
     isp_providers: [], video_providers: [],
     bulk_detected: false, bulk_agreements: [], fcc_providers: [],
     roe_detected: false, roe_providers: [], roe_expiry_year: null,
+    edgar_signal: false, last_sale_price: '', last_sale_date: '',
   }
 
   const geo = [confirmedCity, confirmedState].filter(Boolean).join(', ')
@@ -840,13 +972,15 @@ async function runPhase2(
   const propTarget = mgmtBrandName ? `"${mgmtBrandName}"` : `"${confirmedName}"`
   const geoTarget = `"${confirmedCity}"`
 
-  const [fccProviders, bulkResults, ispCityResults, ownerResults, videoResults, roeResults] = await Promise.all([
+  // IMP-6: also run EDGAR signal search + last-sale transaction search in parallel
+  const [fccProviders, bulkResults, ispCityResults, ownerResults, videoResults, roeResults, edgarResults, transactionResults] = await Promise.all([
     coords ? fccBroadbandLookup(coords.lat, coords.lng) : Promise.resolve([] as string[]),
+    // IMP-1: filter by Tavily score (min 0.5 for Phase 2 — precision over recall here)
     tavilySearch(
       // Use brand-name shortening — "Northland" not "Northland Investment Corporation"
       `"${confirmedName}" "${confirmedCity}" ${mgmtBrandName ? `"${mgmtBrandName}"` : ''} bulk internet OR "internet included" OR MDU OR "exclusive provider" OR ${ispKeywords}`,
       5, 'bulk', 'advanced', false
-    ),
+    ).then(r => filterByScore(r, 0.5)),
     // City-level ISP fallback — catches MDU deals that mention the city but not the property name
     serperSearch(
       `"${confirmedCity}" apartments OR "apartment homes" "internet included" OR GIGstreem OR Hotwire OR "bulk internet" OR "MDU internet" OR "exclusive internet" ${mgmtBrandName ? `OR "${mgmtBrandName}"` : ''}`,
@@ -867,16 +1001,31 @@ async function runPhase2(
       `${propTarget} ${confirmedCity} "right of entry" OR "ROE agreement" OR "bulk agreement" OR "exclusive service agreement" OR "telecom agreement" expire OR expiring OR renew OR term OR "contract end"`,
       5, 'roe'
     ),
+    // IMP-6: EDGAR/SEC filing search — fund/REIT-owned properties file 8-K/10-K with acquisition price + unit count
+    tavilySearch(
+      rewritten?.owner_search
+        ? `${rewritten.owner_search} SEC EDGAR annual report 10-K multifamily acquisition REIT`
+        : `"${confirmedName}" "${confirmedCity}" SEC EDGAR annual report 10-K multifamily acquisition REIT`,
+      3, 'edgar', 'basic', false
+    ).then(r => filterByScore(r, 0.4)),
+    // IMP-6: Last sale / transaction search — property sale price and date
+    serperSearch(
+      rewritten?.owner_search
+        ? `${rewritten.owner_search} sold acquisition purchase price "multifamily"`
+        : `"${confirmedName}" "${confirmedCity}" sold acquisition purchase price`,
+      3, 'sale', 'news'
+    ),
   ])
 
   const fccLower = fccProviders.map(p => p.toLowerCase())
   const knownMduInFcc = fccLower.some(p => [...KNOWN_MDU_BULK_ISPS].some(mdu => p.includes(mdu)))
 
-  const allResults = [...bulkResults, ...ispCityResults, ...ownerResults, ...videoResults, ...roeResults]
+  // IMP-2: deduplicate by URL; IMP-3: tag with source authority; IMP-6: include edgar + sale results
+  const allResults = deduplicateByUrl([...bulkResults, ...ispCityResults, ...ownerResults, ...videoResults, ...roeResults, ...edgarResults, ...transactionResults])
   const usable = allResults.filter(r => (r.content || '').length > 40).slice(0, 20)
 
   const snippets = usable
-    .map((r, i) => `[${i + 1}][${r.source ?? 'web'}] ${r.title}\n${r.content.slice(0, 400)}`)
+    .map((r, i) => `[${i + 1}] ${tagSnippetWithAuthority(r).slice(0, 450)}`)
     .join('\n\n---\n\n')
 
   const fccCtx = fccProviders.length > 0
@@ -901,8 +1050,8 @@ async function runPhase2(
 
   const extracted = snippets.length > 80
     ? await haikusExtract<Omit<Phase2Result, 'fcc_providers'>>(
-        `Extract ownership, connectivity, video service, and ROE agreement data. Return ONLY valid JSON:
-{"owner_entity":"","owner_type":"","acquisition_year":"","isp_providers":[],"video_providers":[],"bulk_detected":false,"bulk_agreements":[],"roe_detected":false,"roe_providers":[],"roe_expiry_year":null}
+        `Extract ownership, connectivity, video service, ROE agreement, and financial transaction data. Return ONLY valid JSON:
+{"owner_entity":"","owner_type":"","acquisition_year":"","isp_providers":[],"video_providers":[],"bulk_detected":false,"bulk_agreements":[],"roe_detected":false,"roe_providers":[],"roe_expiry_year":null,"edgar_signal":false,"last_sale_price":"","last_sale_date":""}
 
 RULES:
 - owner_entity: investor/REIT/PE firm/LLC that owns the property
@@ -918,9 +1067,12 @@ RULES:
   expiry_estimate: specific year if mentioned, else estimate from evidence (e.g. "Est. 2027-2029")
 - roe_detected: true if any right-of-entry, ROE, exclusive provider, or telecom service agreement language found in [roe] or any snippets
 - roe_providers: ALL ISP/cable companies named in ROE, bulk, or exclusive agreements
-- roe_expiry_year: 4-digit year when ROE/agreement expires or renews. Extract from: "expires YYYY", "contract ends YYYY", "agreement through YYYY", "renews in YYYY", "term ends YYYY". null if not found${fccCtx}${dbProviderCtx}
+- roe_expiry_year: 4-digit year when ROE/agreement expires or renews. Extract from: "expires YYYY", "contract ends YYYY", "agreement through YYYY", "renews in YYYY", "term ends YYYY". null if not found
+- edgar_signal: true if [edgar] source snippets contain SEC filing references (10-K, 8-K, REIT, public company, annual report) for this property or its owner
+- last_sale_price: dollar amount of most recent sale if found in [sale] or [edgar] snippets (e.g. "$24.5M", "$145,000,000"). "" if not found.
+- last_sale_date: year or "Month YYYY" of most recent sale/acquisition. Extract from [sale] or [owner] snippets. "" if not found.${fccCtx}${dbProviderCtx}
 
-SOURCE TAGS IN RESULTS:
+SOURCE AUTHORITY + TAGS: Each snippet starts with [AUTH:N][source-tag][domain]. Prefer auth 8-10 (government/industry) over auth 3-5 (social/reviews) when data conflicts.
 - [bulk]: internet/MDU agreement search results — primary ISP source
 - [video]: cable/satellite/IPTV search results — primary video source
 - [roe]: right-of-entry and contract term search results — primary ROE source
@@ -1018,7 +1170,8 @@ async function runPhase3(
   confirmedOwner: string,
   confirmedWebsite: string,
   client: Anthropic,
-  listingProptech: string[] = []
+  listingProptech: string[] = [],
+  rewritten: RewrittenQuery | null = null
 ): Promise<Phase3Result> {
   const blank: Phase3Result = {
     pain_signals: [],
@@ -1039,23 +1192,25 @@ async function runPhase3(
 
   // 8 parallel searches — 3 social + 1 mgmt website for broader contact + ownership coverage
   // NOTE: Facebook/Instagram/Twitter are NOT indexed by Google — never use as site: targets
+  // IMP-4: use rewritten query sub-queries for better intent alignment
+  const p3ContactQuery = rewritten?.contact_search
+    ?? `"${entity ?? confirmedName}" ${confirmedCity} "community manager" OR "regional manager" OR "property manager" OR "asset manager" OR "leasing manager" OR "onsite manager" OR "portfolio manager" OR "director of operations" site:linkedin.com`
+  const p3ProptechQuery = rewritten?.proptech_search
+    ? `${rewritten.proptech_search} ButterflyMX OR DoorKing OR Brivo OR Openpath OR Verkada OR SmartRent OR Latch OR LiftMaster OR HID OR SALTO OR Swiftlane OR Kastle OR Flock OR "Eagle Eye" OR "Rhombus" OR CellGate OR "access control" OR intercom OR "gate system"`
+    : `"${confirmedName}" ButterflyMX OR DoorKing OR Brivo OR Openpath OR Verkada OR Avigilon OR SmartRent OR Latch OR LiftMaster OR HID OR SALTO OR Viking OR Linear OR PDK OR Swiftlane OR Kastle OR Flock OR "Eagle Eye" OR "Rhombus" OR "Deep Sentinel" OR CellGate OR "access control" OR intercom OR "gate system"`
+  const p3ReviewQuery = rewritten?.review_search
+    ?? `"${confirmedName}" ${confirmedCity} site:apartmentratings.com OR site:yelp.com OR site:apartments.com internet OR wifi OR gate OR security OR package OR locker OR intercom OR cameras OR "smart lock" OR cable OR streaming`
+  const p3PainQuery = rewritten?.review_search
+    ?? `"${confirmedName}" ${confirmedCity} reviews complaints internet gate crime`
+
   const [painResults, proptechResults, contactResults, mgmtWebResults, redditResults, reviewResults, proptechReviewResults, websiteResults] = await Promise.all([
-    // Pain signals: general complaints search (Serper organic)
-    serperSearch(`"${confirmedName}" ${confirmedCity} reviews complaints internet gate crime`, 5, 'pain'),
-    // PropTech: raw content fetch — amenities pages explicitly name gate/intercom/camera brands
-    // NOTE: no geo phrase — proptech pages rarely include "Atlanta, GA" verbatim
-    tavilySearch(
-      `"${confirmedName}" ButterflyMX OR DoorKing OR Brivo OR Openpath OR Verkada OR Avigilon OR SmartRent OR Latch OR LiftMaster OR HID OR SALTO OR Viking OR Linear OR PDK OR Swiftlane OR Kastle OR Flock OR "Eagle Eye" OR "Rhombus" OR "Deep Sentinel" OR CellGate OR "access control" OR intercom OR "gate system"`,
-      3, 'proptech', 'advanced', true  // rawContent = TRUE — reads full technology pages
-    ),
-    // Contacts: LinkedIn — use management company name; fall back to property name if entity unknown
-    // Unquoted city = flexible geo matching; expanded titles catch more roles
-    serperSearch(
-      `"${entity ?? confirmedName}" ${confirmedCity} "community manager" OR "regional manager" OR "property manager" OR "asset manager" OR "leasing manager" OR "onsite manager" OR "portfolio manager" OR "director of operations" site:linkedin.com`,
-      8, 'contacts'
-    ),
+    // Pain signals — IMP-4: use rewritten review query for better targeting
+    serperSearch(p3PainQuery, 5, 'pain'),
+    // PropTech: raw content fetch — IMP-1: filter by Tavily score before Haiku
+    tavilySearch(p3ProptechQuery, 3, 'proptech', 'advanced', true).then(r => filterByScore(r, 0.4)),
+    // Contacts: LinkedIn — IMP-4: use rewritten contact_search query
+    serperSearch(p3ContactQuery, 8, 'contacts'),
     // Management company / ownership web presence — staff page, about page, ownership news
-    // Catches leadership pages, press releases, and EDGAR/SEC filings for fund-owned properties
     serperSearch(
       entity
         ? `"${entity}" ${confirmedCity} "property manager" OR "regional manager" OR "team" OR "leadership" OR "contact us" OR "about us" -site:linkedin.com`
@@ -1063,26 +1218,20 @@ async function runPhase3(
       5, 'mgmt-web'
     ),
     // Reddit — last 6 months, expanded proptech keywords
-    // Google indexes Reddit well; parentheses omitted — Serper doesn't support boolean grouping
     serperSearch(
       `"${confirmedName}" site:reddit.com internet OR wifi OR fiber OR gate OR "access control" OR intercom OR package OR locker OR "smart lock" OR cameras OR security OR management OR lease OR maintenance`,
       8, 'reddit', 'search', 'qdr:m6'
     ),
-    // Review sites — last 6 months, all reviews (good AND bad) mentioning tech/amenities
-    // ApartmentRatings is best for MF; apartments.com and Yelp also indexed by Google
-    serperSearch(
-      `"${confirmedName}" ${confirmedCity} site:apartmentratings.com OR site:yelp.com OR site:apartments.com internet OR wifi OR gate OR security OR package OR locker OR intercom OR cameras OR "smart lock" OR cable OR streaming`,
-      8, 'reviews', 'search', 'qdr:m6'
-    ),
-    // Proptech brand mentions in resident reviews — catches specific tech complaints and praise
-    // Targets any Google-indexed review mentioning technology brands or amenity systems
+    // Review sites — last 6 months — IMP-4: use rewritten review query
+    serperSearch(p3ReviewQuery, 8, 'reviews', 'search', 'qdr:m6'),
+    // Proptech brand mentions in resident reviews
     serperSearch(
       `"${confirmedName}" ButterflyMX OR SmartRent OR Latch OR Verkada OR "Flock Safety" OR "package locker" OR "package room" OR "Amazon Hub" OR "gate code" OR "key fob" OR "water damage" OR "water sensor" OR thermostat OR "smart home" OR automation reviews OR residents`,
       8, 'proptech_reviews', 'search', 'qdr:m6'
     ),
-    // Property website raw content — owner/property site often lists all tech partners + amenities
+    // Property website raw content — IMP-1: filter low-score Tavily results
     confirmedWebsite
-      ? tavilySearch(confirmedWebsite, 1, 'website', 'advanced', true)
+      ? tavilySearch(confirmedWebsite, 1, 'website', 'advanced', true).then(r => filterByScore(r, 0.3))
       : Promise.resolve([] as TavilyResult[]),
   ])
 
@@ -1092,9 +1241,11 @@ async function runPhase3(
   const allResults = [...painResults, ...proptechResults, ...contactResults, ...mgmtWebResults, ...socialResults, ...websiteResults]
 
   // Pain signal extraction — includes all social posts (Reddit, ApartmentRatings, Yelp, proptech reviews)
-  const painAllSources = [...painResults, ...socialResults]
+  // IMP-2: deduplicate by URL before assembling Haiku context
+  // IMP-3: tag each snippet with source authority so Haiku can weight higher-authority facts
+  const painAllSources = deduplicateByUrl([...painResults, ...socialResults])
   const painSnippets = painAllSources.filter(r => (r.content || '').length > 40).slice(0, 24)
-    .map((r, i) => `[${i + 1}][${r.source ?? 'review'}] ${r.title}\n${r.content.slice(0, 600)}`)
+    .map((r, i) => `[${i + 1}] ${tagSnippetWithAuthority(r)}`)
     .join('\n\n---\n\n')
 
   const painExtracted = painSnippets.length > 80
@@ -1113,6 +1264,7 @@ type: "gate","internet","video_service","access_control","camera","security","pa
 - automation: smart thermostat, Nest, app-controlled, smart home features, automation issues
 - water_sensor: flooding, leak, water damage, sensor alert, pipe burst
 - intercom: ButterflyMX, visitor access, buzzer not working, guest entry
+SOURCE AUTHORITY: Each snippet starts with [AUTH:N] where N=1-10. Higher authority = more trustworthy. Prefer auth 6-10 for facts; auth 3-4 (reddit/yelp) good for sentiment/quotes.
 quote: verbatim resident or user quote (max 180 chars) — ALWAYS include exact words when available, good OR bad
 source: "Google Reviews","Reddit","Yelp","ApartmentRatings","Apartments.com","Nextdoor" etc.
 date: any date signal found ("2024","Jan 2025","3 months ago" → approximate year)
@@ -1181,6 +1333,7 @@ role_type: "property_manager","regional_manager","asset_manager","corporate"
     .filter(c => normStr(c.name) !== null && c.name.includes(' '))
 
   // Apollo + NinjaPear + Email Format — all parallel
+  // IMP-5: enrich top 3 contacts via Apollo (was top 1 only) — triples email coverage
   const topContact = webContacts[0]
   const topContactParts = topContact?.name?.trim().split(/\s+/) ?? []
   const contactCompany = topContact?.company || ''
@@ -1205,30 +1358,46 @@ Examples: "firstname.lastname@domain.com", "flastname@domain.com", "firstname@do
     return normStr(efResult?.format) || ''
   })()
 
-  const [emailFormat, apolloTopResult, ninjaProfile] = await Promise.all([
+  // Enrich top 3 contacts via Apollo in parallel (IMP-5)
+  const contactsToEnrich = webContacts.slice(0, 3).filter(c => c.name && c.name.includes(' '))
+  const [emailFormat, apolloResults, ninjaProfile] = await Promise.all([
     emailFormatP,
-    (topContact?.name && apolloDomain)
-      ? apolloEnrichPerson(topContact.name, apolloDomain)
-      : Promise.resolve(null),
+    // IMP-5: batch Apollo enrichment for top 3 contacts
+    process.env.APOLLO_API_KEY
+      ? Promise.all(contactsToEnrich.map(async (contact) => {
+          const cDomain =
+            deriveMgmtDomain(contact.company || '') ||
+            deriveMgmtDomain(confirmedMgmt) ||
+            deriveMgmtDomain(confirmedOwner) ||
+            domainForEmail
+          if (!contact.name || !cDomain) return null
+          return apolloEnrichPerson(contact.name, cDomain)
+        }))
+      : Promise.resolve(contactsToEnrich.map(() => null)),
+    // NinjaPear validation for top contact only (employment check)
     (topContact?.name && topContact.name.includes(' ') && (apolloDomain || domainForEmail))
       ? ninjapearValidatePerson(topContactParts[0], topContactParts[topContactParts.length - 1], apolloDomain || domainForEmail)
       : Promise.resolve(null),
   ])
 
+  // IMP-5: The legacy single-contact name for backwards compat
+  const apolloTopResult = apolloResults?.[0] ?? null
+
   const allContacts: StepContact[] = [...webContacts]
 
-  // Patch Apollo email + phone onto top contact
-  if (apolloTopResult && topContact) {
-    const idx = allContacts.findIndex(c => c.name.toLowerCase() === topContact.name.toLowerCase())
-    if (idx >= 0) {
-      if (apolloTopResult.email) allContacts[idx].email = apolloTopResult.email
-      if (apolloTopResult.phone_numbers?.[0]) allContacts[idx].phone = apolloTopResult.phone_numbers[0]
-      if (apolloTopResult.title) allContacts[idx].title = apolloTopResult.title
-      if (apolloTopResult.linkedin_url) allContacts[idx].linkedin = apolloTopResult.linkedin_url
-    }
-  }
+  // IMP-5: Patch Apollo results onto all enriched contacts (top 3)
+  contactsToEnrich.forEach((contact, i) => {
+    const enriched = apolloResults?.[i]
+    if (!enriched) return
+    const idx = allContacts.findIndex(c => c.name.toLowerCase() === contact.name.toLowerCase())
+    if (idx < 0) return
+    if (enriched.email) allContacts[idx].email = enriched.email
+    if (enriched.phone_numbers?.[0]) allContacts[idx].phone = enriched.phone_numbers[0]
+    if (enriched.title) allContacts[idx].title = enriched.title
+    if (enriched.linkedin_url) allContacts[idx].linkedin = enriched.linkedin_url
+  })
 
-  // Patch NinjaPear validation
+  // Patch NinjaPear validation onto top contact
   if (ninjaProfile && topContact) {
     const currentExp = (ninjaProfile.work_experience ?? []).find(e => e.end_date === null)
     const idx = allContacts.findIndex(c => c.name.toLowerCase() === topContact.name.toLowerCase())
@@ -1568,10 +1737,13 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // ── PHASE 1A + DB lookback in parallel ───────────────────────────────────
-    const [p1, existingRecord] = await Promise.all([
+    // ── PHASE 1A + DB lookback + Query Rewriting in parallel ────────────────
+    // IMP-4: rewriteQuery expands the raw query into intent-specific sub-queries.
+    // Runs concurrently with DB lookup and Phase 1A — zero latency impact.
+    const [p1, existingRecord, rewritten] = await Promise.all([
       runPhase1A(rawQuery, anthropic),
       lookupExistingProperty(rawQuery, classification.city_hint),
+      rewriteQuery(rawQuery, anthropic),
     ])
 
     // ── Merge Phase 1A with existing DB record (DB fills gaps, fresh wins) ───
@@ -1629,12 +1801,13 @@ export async function POST(req: NextRequest) {
     const coords = await geocodeAddress(address || property_name, city, state)
 
     // ── PHASES 2 + 3 in parallel (+ mdu_providers DB fetch) ──────────────────
+    // IMP-4: pass rewritten queries to both Phase 2 and Phase 3 for intent-specific searches
     const [p2Raw, p3] = await Promise.all([
       fetchMduProviders().then(dbProviders =>
-        runPhase2(property_name, address, city, state, mgmt, coords, anthropic, dbProviders)
+        runPhase2(property_name, address, city, state, mgmt, coords, anthropic, dbProviders, rewritten)
       ),
-      // Pass Phase 1A listing data into Phase 3 so proptech pre-seeded from amenities
-      runPhase3(property_name, city, state, mgmt, owner, website, anthropic, p1.listing_proptech),
+      // Pass Phase 1A listing data + rewritten queries into Phase 3
+      runPhase3(property_name, city, state, mgmt, owner, website, anthropic, p1.listing_proptech, rewritten),
     ])
 
     // Merge Phase 2 with DB+listing seed — user-verified DB > listing-verified > AI
@@ -1684,7 +1857,7 @@ export async function POST(req: NextRequest) {
 ${JSON.stringify({ name: property_name, address, city, state, units: p1.confirmed_units, year_built: p1.confirmed_year_built, management_company: mgmt, website, phone: p1.confirmed_phone }, null, 2)}
 
 PHASE 2 — ENRICHMENT:
-${JSON.stringify({ owner_entity: finalOwner, owner_type: p2.owner_type, acquisition_year: p2.acquisition_year, fcc_providers: p2.fcc_providers, isp_providers: p2.isp_providers, video_providers: p2.video_providers, bulk_detected: p2.bulk_detected, bulk_agreements: p2.bulk_agreements, roe_detected: p2.roe_detected, roe_providers: p2.roe_providers, roe_expiry_year: p2.roe_expiry_year }, null, 2)}
+${JSON.stringify({ owner_entity: finalOwner, owner_type: p2.owner_type, acquisition_year: p2.acquisition_year, fcc_providers: p2.fcc_providers, isp_providers: p2.isp_providers, video_providers: p2.video_providers, bulk_detected: p2.bulk_detected, bulk_agreements: p2.bulk_agreements, roe_detected: p2.roe_detected, roe_providers: p2.roe_providers, roe_expiry_year: p2.roe_expiry_year, edgar_signal: p2.edgar_signal, last_sale_price: p2.last_sale_price, last_sale_date: p2.last_sale_date }, null, 2)}
 
 PHASE 3 — INTELLIGENCE:
 ${JSON.stringify({ pain_signals: p3.pain_signals.slice(0, 12), proptech: p3.proptech, contacts: p3.contacts.slice(0, 8).map(c => ({ name: c.name, title: c.title, company: c.company, role_type: c.role_type })), email_format: p3.email_format }, null, 2)}`
@@ -1721,8 +1894,9 @@ CRITICAL RULES:
 13. property_details.units: if not found in Phase 1, set to "No data found". NEVER leave blank.
 14. property_details.year_built: if not found, set to "No data found". NEVER leave blank.
 15. property_details.occupancy: look in Phase 2/3 data. If not found, set to "No data found".
-16. property_details.last_sale_date: extract from Phase 2 ownership/acquisition data. Format as "Month YYYY" or "YYYY". If not found, set to "No data found".
-17. property_details.last_sale_price: extract from Phase 2. Format as "$XM" or "$X,XXX,XXX". If not found, set to "No data found".
+16. property_details.last_sale_date: extract from Phase 2 last_sale_date field (IMP-6 EDGAR/transaction search). Format as "Month YYYY" or "YYYY". If not found, set to "No data found".
+17. property_details.last_sale_price: extract from Phase 2 last_sale_price field (IMP-6). Format as "$XM" or "$X,XXX,XXX". If not found, set to "No data found".
+17b. edgar_signal: set to true if Phase 2 edgar_signal=true — indicates REIT/fund ownership with SEC filings.
 18. property_details.assessed_value: look in Phase 2 permit/county data. If not found, set to "No data found".
 19. inferred_proptech: REQUIRED even if empty []. For each proptech CATEGORY where pain signals or reviews suggest a system exists but NO specific brand was found, add one inference entry. Example: reviews mention gate malfunctions, gate_operators[] is empty → add {category:"gate_operator", name:"Unknown brand", confidence_pct:65, reason:"Reviews mention gate access issues; no brand confirmed; LiftMaster ~60% MDU market share"}. Only infer if category arrays are empty AND evidence exists.
 

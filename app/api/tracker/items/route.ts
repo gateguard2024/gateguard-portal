@@ -31,8 +31,10 @@ export async function GET(req: NextRequest) {
       .from('tracker_items')
       .select(`
         id, group_id, title, type, module, severity, priority, status,
-        owner_name, reporter_name, date_reported, target_release,
+        owner_name, owner_user_id, reporter_name, date_reported, target_release,
         affected_site_id, notes, position, parent_item_id,
+        data, tags, progress_pct, start_date, estimated_hours, actual_hours,
+        watcher_ids, source, due_date,
         created_at, updated_at
       `)
       .eq('org_id', user.org_id ?? '00000000-0000-0000-0000-000000000000')
@@ -79,9 +81,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
 
     const {
-      group_id, title, type = 'bug', module, severity, priority,
+      group_id, title, type = 'task', module, severity, priority = 'medium',
       status = 'new', owner_name, owner_user_id, reporter_name, date_reported,
-      target_release, due_date, notes, position = 0, parent_item_id,
+      target_release, due_date, start_date, notes, position = 0, parent_item_id,
+      data: itemData, tags, progress_pct, estimated_hours, actual_hours,
     } = body
 
     if (!group_id) return NextResponse.json({ error: 'group_id is required' }, { status: 400 })
@@ -99,9 +102,15 @@ export async function POST(req: NextRequest) {
         date_reported: date_reported || new Date().toISOString().split('T')[0],
         target_release: target_release || null,
         due_date: due_date || null,
+        start_date: start_date || null,
         notes: notes || null,
         position, parent_item_id: parent_item_id || null,
         org_id: user.org_id,
+        data: itemData ?? {},
+        tags: tags ?? [],
+        progress_pct: progress_pct ?? 0,
+        estimated_hours: estimated_hours ?? null,
+        actual_hours: actual_hours ?? null,
       })
       .select()
       .single()

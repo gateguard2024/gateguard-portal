@@ -1,285 +1,294 @@
 'use client'
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { TopBar } from '@/components/layout/TopBar'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
-  Plus, X, ChevronDown, ChevronRight, Send, Layers,
-  Loader2, Trash2, User,
+  Plus, Search, Filter, X, Download, Users, Settings,
+  Loader2, Check, ChevronDown,
 } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Mic, Sparkles, Bot } = require('lucide-react') as any
+const {
+  BarChart3, GanttChart, LayoutGrid, Table2, Columns, Zap, CalendarDays,
+  TrendingUp, UserCheck, Briefcase,
+} = require('lucide-react') as any
+import { TopBar } from '@/components/layout/TopBar'
+import { BoardView } from '@/components/tracker/views/BoardView'
+import { TableView } from '@/components/tracker/views/TableView'
+import { GanttView } from '@/components/tracker/views/GanttView'
+import { CalendarView } from '@/components/tracker/views/CalendarView'
+import { ChartView } from '@/components/tracker/views/ChartView'
+import { WorkloadView } from '@/components/tracker/views/WorkloadView'
+import { TimelineView } from '@/components/tracker/views/TimelineView'
+import { ItemDrawer } from '@/components/tracker/ItemDrawer'
+import { AutomationsPanel } from '@/components/tracker/AutomationsPanel'
+import type { TrackerItem, TrackerGroup } from '@/components/tracker/views/BoardView'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+type ViewMode = 'board' | 'table' | 'gantt' | 'calendar' | 'chart' | 'workload' | 'timeline'
 
-interface TrackerGroup {
+interface OrgUser { id: string; name: string; email: string; role: string }
+interface Dependency { id: string; from_item_id: string; to_item_id: string; dep_type: string }
+
+interface FilterRule {
   id: string
-  name: string
-  color: string
-  position: number
-  org_id: string
-  created_at: string
+  field: string
+  condition: string
+  value: string
 }
 
-interface TrackerItem {
-  id: string
-  group_id: string
-  title: string
-  type: 'bug' | 'enhancement' | 'question' | 'task'
-  module?: string
-  severity?: string
-  priority?: string
-  status: 'new' | 'in_progress' | 'done' | 'blocked' | 'on_hold'
-  owner_name?: string
-  reporter_name?: string
-  date_reported?: string
-  target_release?: string
-  notes?: string
-  position: number
-  created_at: string
-  updated_at: string
+const VIEW_TABS: { key: ViewMode; label: string; icon: React.ReactNode }[] = [
+  { key: 'board',    label: 'Board',    icon: <Columns size={14} /> },
+  { key: 'table',    label: 'Table',    icon: <Table2 size={14} /> },
+  { key: 'gantt',    label: 'Gantt',    icon: <GanttChart size={14} /> },
+  { key: 'calendar', label: 'Calendar', icon: <CalendarDays size={14} /> },
+  { key: 'chart',    label: 'Charts',   icon: <BarChart3 size={14} /> },
+  { key: 'workload', label: 'Workload', icon: <UserCheck size={14} /> },
+  { key: 'timeline', label: 'Timeline', icon: <TrendingUp size={14} /> },
+]
+
+const FILTER_FIELDS = [
+  { key: 'status',     label: 'Status' },
+  { key: 'priority',   label: 'Priority' },
+  { key: 'owner_name', label: 'Assignee' },
+  { key: 'due_date',   label: 'Due Date' },
+  { key: 'tags',       label: 'Tags' },
+]
+
+const FILTER_CONDITIONS: Record<string, string[]> = {
+  status:     ['is', 'is not'],
+  priority:   ['is', 'is not'],
+  owner_name: ['is', 'is not', 'contains'],
+  due_date:   ['is before', 'is after', 'is exactly'],
+  tags:       ['contains'],
 }
 
-interface TrackerComment {
-  id: string
-  item_id: string
-  author_name: string
-  author_initials: string
-  body: string
-  created_at: string
+const STATUS_VALUES = ['new', 'in_progress', 'in_review', 'on_hold', 'done', 'blocked', 'wont_fix']
+const PRIORITY_VALUES = ['low', 'medium', 'high', 'critical']
+
+function applyFilters(items: TrackerItem[], filters: FilterRule[]): TrackerItem[] {
+  if (filters.length === 0) return items
+  return items.filter(item => {
+    return filters.every(f => {
+      const rawVal = (item as unknown as Record<string, unknown>)[f.field]
+      const val = Array.isArray(rawVal) ? rawVal.join(' ') : String(rawVal ?? '').toLowerCase()
+      const fval = f.value.toLowerCase()
+      switch (f.condition) {
+        case 'is':         return val === fval
+        case 'is not':     return val !== fval
+        case 'contains':   return val.includes(fval)
+        case 'is before':  return item.due_date ? new Date(item.due_date) < new Date(f.value) : false
+        case 'is after':   return item.due_date ? new Date(item.due_date) > new Date(f.value) : false
+        case 'is exactly': return val === fval
+        default:           return true
+      }
+    })
+  })
 }
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function cardAura(item: TrackerItem): { border: string; shadow: string; bg: string } {
-  if (item.severity === '5_critical') {
-    return { border: '#ef4444', shadow: '0 0 14px rgba(239,68,68,0.20)', bg: 'rgba(239,68,68,0.07)' }
-  }
-  if (item.status === 'in_progress') {
-    return { border: '#f59e0b', shadow: '0 0 12px rgba(245,158,11,0.16)', bg: 'rgba(245,158,11,0.05)' }
-  }
-  if (item.type === 'enhancement') {
-    return { border: '#8b5cf6', shadow: '0 0 10px rgba(139,92,246,0.14)', bg: 'rgba(139,92,246,0.05)' }
-  }
-  if (item.status === 'done') {
-    return { border: '#10b981', shadow: '0 0 8px rgba(16,185,129,0.12)', bg: 'rgba(16,185,129,0.04)' }
-  }
-  if (item.status === 'blocked') {
-    return { border: '#f97316', shadow: '0 0 10px rgba(249,115,22,0.15)', bg: 'rgba(249,115,22,0.05)' }
-  }
-  if (item.type === 'question') {
-    return { border: '#db2777', shadow: '0 0 8px rgba(219,39,119,0.10)', bg: 'rgba(219,39,119,0.04)' }
-  }
-  if (item.type === 'bug' && item.status === 'new') {
-    return { border: '#ef4444', shadow: '0 0 10px rgba(239,68,68,0.12)', bg: 'rgba(239,68,68,0.04)' }
-  }
-  return { border: '#1e3a5f', shadow: 'none', bg: 'rgba(255,255,255,0.025)' }
-}
-
-function typeColor(type: string): string {
-  if (type === 'bug')         return '#ef4444'
-  if (type === 'enhancement') return '#8b5cf6'
-  if (type === 'question')    return '#db2777'
-  return '#6B7EFF'
-}
-
-function statusLabel(s: string): string {
-  return s === 'new' ? 'New'
-    : s === 'in_progress' ? 'In Progress'
-    : s === 'done'        ? 'Done'
-    : s === 'blocked'     ? 'Blocked'
-    : s === 'on_hold'     ? 'On Hold'
-    : s
-}
-
-function severityLabel(s: string): string {
-  return s === '1_info'      ? 'Info'
-    : s === '2_minor'        ? 'Minor'
-    : s === '3_moderate'     ? 'Moderate'
-    : s === '4_major'        ? 'Major'
-    : s === '5_critical'     ? 'Critical'
-    : s
-}
-
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1)  return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24)  return `${hrs}h ago`
-  return `${Math.floor(hrs / 24)}d ago`
-}
-
-// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function TrackerPage() {
-  const [groups,          setGroups]          = useState<TrackerGroup[]>([])
-  const [items,           setItems]           = useState<TrackerItem[]>([])
-  const [selectedItem,    setSelectedItem]    = useState<TrackerItem | null>(null)
-  const [comments,        setComments]        = useState<TrackerComment[]>([])
-  const [drawerTab,       setDrawerTab]       = useState<'timeline' | 'updates' | 'files'>('timeline')
-  const [filterType,      setFilterType]      = useState<string>('all')
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
-  const [newComment,      setNewComment]      = useState('')
-  const [showNewItem,     setShowNewItem]     = useState(false)
-  const [loading,         setLoading]         = useState(true)
-  const [submitting,      setSubmitting]      = useState(false)
-  const [newItemForm,     setNewItemForm]     = useState({
-    title: '', group_id: '', type: 'bug', module: '', severity: '', priority: 'medium',
-  })
-  const commentRef = useRef<HTMLTextAreaElement>(null)
+  const [groups,       setGroups]       = useState<TrackerGroup[]>([])
+  const [items,        setItems]        = useState<TrackerItem[]>([])
+  const [orgUsers,     setOrgUsers]     = useState<OrgUser[]>([])
+  const [dependencies, setDependencies] = useState<Dependency[]>([])
+  const [loading,      setLoading]      = useState(true)
+  const [view,         setView]         = useState<ViewMode>('board')
+  const [activeItem,   setActiveItem]   = useState<TrackerItem | null>(null)
+  const [showAutomations, setShowAutomations] = useState(false)
+  const [search,       setSearch]       = useState('')
+  const [showFilter,   setShowFilter]   = useState(false)
+  const [filters,      setFilters]      = useState<FilterRule[]>([])
+  const [selectedIds,  setSelectedIds]  = useState<Set<string>>(new Set())
+  const [showBulkMenu, setShowBulkMenu] = useState(false)
+  const [showMobileViewMenu, setShowMobileViewMenu] = useState(false)
 
-  // ─── Data ──────────────────────────────────────────────────────────────────
+  // ── Data loading ─────────────────────────────────────────────────────────────
 
-  const fetchAll = useCallback(async () => {
+  const loadGroups = useCallback(async () => {
+    const res = await fetch('/api/tracker/groups')
+    if (!res.ok) return []
+    return await res.json() as TrackerGroup[]
+  }, [])
+
+  const loadItems = useCallback(async (groupIds: string[]) => {
+    if (!groupIds.length) return []
+    const params = new URLSearchParams({ group_ids: groupIds.join(','), include_subitems: 'true' })
+    const res = await fetch(`/api/tracker/items?${params}`)
+    if (!res.ok) return []
+    return await res.json() as TrackerItem[]
+  }, [])
+
+  const loadAll = useCallback(async () => {
+    setLoading(true)
+    const grps = await loadGroups()
+    setGroups(grps)
+    const allItems = await loadItems(grps.map(g => g.id))
+    setItems(allItems)
+
+    // Load dependencies
     try {
-      const [gRes, iRes] = await Promise.all([
-        fetch('/api/tracker/groups'),
-        fetch('/api/tracker/items'),
-      ])
-      const g: TrackerGroup[] = await gRes.json()
-      const i: TrackerItem[]  = await iRes.json()
-      const gs = Array.isArray(g) ? g : []
-      const is = Array.isArray(i) ? i : []
-      setGroups(gs)
-      setItems(is)
-      if (gs.length > 0) {
-        setNewItemForm(f => f.group_id ? f : { ...f, group_id: gs[0].id })
+      const dRes = await fetch('/api/tracker/dependencies')
+      if (dRes.ok) {
+        const d = await dRes.json()
+        setDependencies(d.dependencies ?? [])
       }
-    } catch (_) {
-      /* silently ignore */
-    } finally {
-      setLoading(false)
-    }
+    } catch { /* noop */ }
+
+    setLoading(false)
+  }, [loadGroups, loadItems])
+
+  useEffect(() => { void loadAll() }, [loadAll])
+
+  // Load org users
+  useEffect(() => {
+    fetch('/api/admin/users')
+      .then(r => r.ok ? r.json() : { users: [] })
+      .then(d => {
+        const list: OrgUser[] = (d.users ?? []).map((u: Record<string, unknown>) => ({
+          id:    u.id as string,
+          name:  [u.first_name, u.last_name].filter(Boolean).join(' ') || (u.email as string),
+          email: u.email as string,
+          role:  (u.role as string) ?? '',
+        }))
+        setOrgUsers(list)
+      })
+      .catch(() => {})
   }, [])
 
-  useEffect(() => { fetchAll() }, [fetchAll])
+  // ── Item actions ─────────────────────────────────────────────────────────────
 
-  const fetchComments = useCallback(async (itemId: string) => {
-    try {
-      const res = await fetch(`/api/tracker/items/${itemId}/comments`)
-      const c: TrackerComment[] = await res.json()
-      setComments(Array.isArray(c) ? c : [])
-    } catch (_) { setComments([]) }
-  }, [])
-
-  // ─── Actions ───────────────────────────────────────────────────────────────
-
-  const handleSelectItem = useCallback((item: TrackerItem) => {
-    setSelectedItem(item)
-    setDrawerTab('timeline')
-    fetchComments(item.id)
-  }, [fetchComments])
-
-  const handleUpdateStatus = useCallback(async (id: string, status: TrackerItem['status']) => {
+  const handleItemUpdate = useCallback(async (id: string, patch: Record<string, unknown>) => {
     try {
       const res = await fetch(`/api/tracker/items/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify(patch),
       })
-      const updated: TrackerItem = await res.json()
-      setItems(prev => prev.map(it => it.id === id ? updated : it))
-      setSelectedItem(prev => prev?.id === id ? updated : prev)
-    } catch (_) { /* noop */ }
+      if (res.ok) {
+        const updated: TrackerItem = await res.json()
+        setItems(prev => prev.map(i => i.id === id ? { ...i, ...updated } : i))
+        setActiveItem(prev => prev?.id === id ? { ...prev, ...updated } : prev)
+      }
+    } catch { /* noop */ }
   }, [])
 
-  const handleDeleteItem = useCallback(async (id: string) => {
-    if (!confirm('Delete this item?')) return
-    try {
-      await fetch(`/api/tracker/items/${id}`, { method: 'DELETE' })
-      setItems(prev => prev.filter(it => it.id !== id))
-      if (selectedItem?.id === id) setSelectedItem(null)
-    } catch (_) { /* noop */ }
-  }, [selectedItem])
+  const handleItemDelete = useCallback((id: string) => {
+    void fetch(`/api/tracker/items/${id}`, { method: 'DELETE' })
+    setItems(prev => prev.filter(i => i.id !== id))
+    setActiveItem(prev => prev?.id === id ? null : prev)
+  }, [])
 
-  const handleAddComment = useCallback(async () => {
-    if (!newComment.trim() || !selectedItem) return
-    setSubmitting(true)
-    try {
-      const res = await fetch(`/api/tracker/items/${selectedItem.id}/comments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: newComment.trim() }),
-      })
-      const c: TrackerComment = await res.json()
-      setComments(prev => [...prev, c])
-      setNewComment('')
-    } catch (_) { /* noop */ } finally { setSubmitting(false) }
-  }, [newComment, selectedItem])
-
-  const handleCreateItem = useCallback(async () => {
-    if (!newItemForm.title.trim() || !newItemForm.group_id) return
-    setSubmitting(true)
+  const handleItemCreate = useCallback(async (groupId: string, status: string, title: string, dueDate?: string) => {
+    const targetGroupId = groupId || groups[0]?.id
+    if (!targetGroupId) return
     try {
       const res = await fetch('/api/tracker/items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...newItemForm,
-          severity: newItemForm.severity || undefined,
-          module:   newItemForm.module   || undefined,
+          group_id: targetGroupId, title, status,
+          type: 'task',
+          due_date: dueDate ?? null,
         }),
       })
       if (res.ok) {
-        setShowNewItem(false)
-        setNewItemForm(f => ({ ...f, title: '', module: '', severity: '' }))
-        await fetchAll()
+        const newItem: TrackerItem = await res.json()
+        setItems(prev => [newItem, ...prev])
       }
-    } catch (_) { /* noop */ } finally { setSubmitting(false) }
-  }, [newItemForm, fetchAll])
+    } catch { /* noop */ }
+  }, [groups])
 
-  // ─── Derived ───────────────────────────────────────────────────────────────
+  // ── Bulk actions ─────────────────────────────────────────────────────────────
 
-  const filteredItems = filterType === 'all'
-    ? items
-    : items.filter(i => i.type === filterType)
+  const bulkUpdate = useCallback(async (patch: Record<string, unknown>) => {
+    await Promise.all(Array.from(selectedIds).map(id => handleItemUpdate(id, patch)))
+    setSelectedIds(new Set())
+    setShowBulkMenu(false)
+  }, [selectedIds, handleItemUpdate])
 
-  // ─── Render ────────────────────────────────────────────────────────────────
+  const bulkDelete = useCallback(() => {
+    if (!confirm(`Delete ${selectedIds.size} items?`)) return
+    Array.from(selectedIds).forEach(handleItemDelete)
+    setSelectedIds(new Set())
+  }, [selectedIds, handleItemDelete])
+
+  // ── Filter helpers ────────────────────────────────────────────────────────────
+
+  function addFilter() {
+    setFilters(prev => [...prev, {
+      id: Math.random().toString(36).slice(2),
+      field: 'status', condition: 'is', value: '',
+    }])
+  }
+
+  function updateFilter(id: string, patch: Partial<FilterRule>) {
+    setFilters(prev => prev.map(f => f.id === id ? { ...f, ...patch } : f))
+  }
+
+  function removeFilter(id: string) {
+    setFilters(prev => prev.filter(f => f.id !== id))
+  }
+
+  // ── Derived data ─────────────────────────────────────────────────────────────
+
+  const searchedItems = search
+    ? items.filter(i => i.title.toLowerCase().includes(search.toLowerCase()))
+    : items
+
+  const filteredItems = applyFilters(searchedItems, filters)
+
+  // ── Export CSV ────────────────────────────────────────────────────────────────
+
+  function exportCsv() {
+    const topItems = filteredItems.filter(i => !i.parent_item_id)
+    const rows = [
+      ['Title', 'Status', 'Priority', 'Assignee', 'Due Date', 'Progress', 'Tags', 'Group'],
+      ...topItems.map(i => [
+        i.title, i.status, i.priority, i.owner_name ?? '', i.due_date ?? '',
+        String(i.progress_pct ?? 0) + '%',
+        (i.tags ?? []).join(', '),
+        groups.find(g => g.id === i.group_id)?.name ?? '',
+      ]),
+    ]
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const a = document.createElement('a')
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv)
+    a.download = `tracker-export-${new Date().toISOString().split('T')[0]}.csv`
+    a.click()
+  }
+
+  // ── Item click ───────────────────────────────────────────────────────────────
+
+  const handleItemClick = useCallback((item: TrackerItem) => {
+    setActiveItem(item)
+  }, [])
+
+  // ── Render ────────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', background: '#060e1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Loader2 size={32} style={{ color: '#6B7EFF', animation: 'spin 1s linear infinite' }} />
+      <div style={{ minHeight: '100vh', background: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Loader2 size={28} style={{ color: '#6B7EFF', animation: 'spin 1s linear infinite' }} />
+        <style jsx global>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     )
   }
 
+  const topItemCount = filteredItems.filter(i => !i.parent_item_id).length
+  const doneCount    = filteredItems.filter(i => i.status === 'done' && !i.parent_item_id).length
+  const defaultGroupId = groups[0]?.id ?? ''
+
   return (
-    <div style={{ minHeight: '100vh', background: '#060e1a', display: 'flex', flexDirection: 'column' }}>
-      {/* ── TopBar ── */}
+    <div style={{ minHeight: '100vh', background: '#F8FAFC', display: 'flex', flexDirection: 'column' }}>
+
+      {/* TopBar */}
       <TopBar
         title="Nexus Tracker"
-        subtitle="Bugs · Enhancements · Questions"
+        subtitle={`${topItemCount} items · ${doneCount} done`}
         actions={
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            {(['all', 'bug', 'enhancement', 'question', 'task'] as const).map(t => (
-              <button
-                key={t}
-                onClick={() => setFilterType(t)}
-                style={{
-                  padding: '4px 11px', borderRadius: 20, fontSize: 12, fontWeight: 600,
-                  border: filterType === t
-                    ? `1px solid ${t === 'all' ? '#6B7EFF' : typeColor(t)}`
-                    : '1px solid rgba(255,255,255,0.07)',
-                  background: filterType === t
-                    ? `${t === 'all' ? '#6B7EFF' : typeColor(t)}22`
-                    : 'transparent',
-                  color: filterType === t
-                    ? (t === 'all' ? '#a5b4fc' : typeColor(t))
-                    : '#475569',
-                  cursor: 'pointer', textTransform: 'capitalize',
-                }}
-              >
-                {t === 'all' ? 'All' : t}
-              </button>
-            ))}
             <button
-              onClick={() => setShowNewItem(true)}
+              onClick={() => { handleItemCreate('', 'new', 'New Task') }}
               style={{
-                display: 'flex', alignItems: 'center', gap: 5,
-                padding: '6px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px',
+                borderRadius: 8, fontSize: 13, fontWeight: 600,
                 background: '#6B7EFF', color: '#fff', border: 'none', cursor: 'pointer',
-                marginLeft: 4,
               }}
             >
               <Plus size={14} /> New Item
@@ -288,563 +297,346 @@ export default function TrackerPage() {
         }
       />
 
-      {/* ── Body ── */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
-
-        {/* ── Board ── */}
-        <div style={{
-          flex: 1, overflowY: 'auto', padding: '28px 32px',
-          background: '#070e20',
-        }}>
-          {groups.length === 0 ? (
-            <div style={{ textAlign: 'center', color: '#334155', paddingTop: 80 }}>
-              <Layers size={40} style={{ margin: '0 auto 14px', display: 'block', opacity: 0.4 }} />
-              <p style={{ fontSize: 14 }}>Run migration 102 and refresh to see groups.</p>
-            </div>
-          ) : (
-            groups.map(group => {
-              const groupItems = filteredItems.filter(it => it.group_id === group.id)
-              const isCollapsed = collapsedGroups.has(group.id)
-
-              return (
-                <div key={group.id} style={{ marginBottom: 36 }}>
-                  {/* Group header */}
-                  <div
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 10, marginBottom: isCollapsed ? 0 : 14,
-                      cursor: 'pointer', userSelect: 'none',
-                    }}
-                    onClick={() => setCollapsedGroups(prev => {
-                      const next = new Set(prev)
-                      next.has(group.id) ? next.delete(group.id) : next.add(group.id)
-                      return next
-                    })}
-                  >
-                    <div style={{
-                      width: 10, height: 10, borderRadius: '50%',
-                      background: group.color,
-                      boxShadow: `0 0 8px ${group.color}88`,
-                    }} />
-                    <span style={{
-                      fontSize: 12, fontWeight: 700, color: '#e2e8f0',
-                      letterSpacing: '0.06em', textTransform: 'uppercase',
-                    }}>
-                      {group.name}
-                    </span>
-                    <span style={{ fontSize: 11, color: '#334155', fontWeight: 500 }}>
-                      {groupItems.length}
-                    </span>
-                    <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.04)' }} />
-                    {isCollapsed
-                      ? <ChevronRight size={13} color="#334155" />
-                      : <ChevronDown size={13} color="#334155" />
-                    }
-                  </div>
-
-                  {/* Cards */}
-                  {!isCollapsed && (
-                    <div>
-                      {groupItems.length === 0 && (
-                        <p style={{ fontSize: 12, color: '#1e3a5f', fontStyle: 'italic', paddingLeft: 4, margin: '0 0 10px' }}>
-                          No items
-                        </p>
-                      )}
-
-                      {groupItems.map(item => {
-                        const aura = cardAura(item)
-                        const isSelected = selectedItem?.id === item.id
-                        return (
-                          <div
-                            key={item.id}
-                            onClick={() => handleSelectItem(item)}
-                            style={{
-                              background: isSelected ? 'rgba(107,126,255,0.09)' : aura.bg,
-                              border: `1px solid ${isSelected ? '#6B7EFF55' : aura.border + '55'}`,
-                              borderLeft: `3px solid ${aura.border}`,
-                              boxShadow: isSelected ? '0 0 16px rgba(107,126,255,0.18)' : aura.shadow,
-                              borderRadius: 9,
-                              padding: '10px 14px',
-                              marginBottom: 7,
-                              cursor: 'pointer',
-                              transition: 'box-shadow 0.15s ease, border-color 0.15s ease',
-                            }}
-                          >
-                            {/* Type + chips row */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5, flexWrap: 'wrap' }}>
-                              <span style={{
-                                fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
-                                color: typeColor(item.type), letterSpacing: '0.05em',
-                              }}>
-                                {item.type}
-                              </span>
-                              {item.severity && (
-                                <span style={{ fontSize: 10, color: '#64748b', background: 'rgba(255,255,255,0.04)', padding: '1px 6px', borderRadius: 4 }}>
-                                  {severityLabel(item.severity)}
-                                </span>
-                              )}
-                              {item.module && (
-                                <span style={{ fontSize: 10, color: '#475569', background: 'rgba(255,255,255,0.04)', padding: '1px 6px', borderRadius: 4 }}>
-                                  {item.module}
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Title */}
-                            <p style={{ fontSize: 13, fontWeight: 500, color: '#e2e8f0', margin: '0 0 7px', lineHeight: 1.4 }}>
-                              {item.title}
-                            </p>
-
-                            {/* Status + meta row */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                              <span style={{
-                                fontSize: 10, padding: '2px 8px', borderRadius: 10, fontWeight: 600,
-                                background: item.status === 'done'        ? 'rgba(16,185,129,0.12)'
-                                  : item.status === 'in_progress'         ? 'rgba(245,158,11,0.12)'
-                                  : item.status === 'blocked'             ? 'rgba(249,115,22,0.12)'
-                                  : item.status === 'on_hold'             ? 'rgba(100,116,139,0.10)'
-                                  :                                         'rgba(148,163,184,0.07)',
-                                color: item.status === 'done'             ? '#10b981'
-                                  : item.status === 'in_progress'         ? '#f59e0b'
-                                  : item.status === 'blocked'             ? '#f97316'
-                                  : item.status === 'on_hold'             ? '#64748b'
-                                  :                                         '#475569',
-                              }}>
-                                {statusLabel(item.status)}
-                              </span>
-                              {item.owner_name && (
-                                <span style={{ fontSize: 10, color: '#475569', display: 'flex', alignItems: 'center', gap: 3 }}>
-                                  <User size={9} /> {item.owner_name}
-                                </span>
-                              )}
-                              <span style={{ fontSize: 10, color: '#1e3a5f', marginLeft: 'auto' }}>
-                                {timeAgo(item.created_at)}
-                              </span>
-                            </div>
-                          </div>
-                        )
-                      })}
-
-                      {/* NL Automation bar */}
-                      <div style={{
-                        display: 'flex', alignItems: 'center', gap: 8, marginTop: 8,
-                        background: 'rgba(107,126,255,0.03)',
-                        border: '1px dashed rgba(107,126,255,0.10)',
-                        borderRadius: 8, padding: '7px 12px',
-                      }}>
-                        <Bot size={13} color="#6B7EFF" style={{ flexShrink: 0, opacity: 0.6 }} />
-                        <input
-                          placeholder={`Tell Nexus what to do with ${group.name}…`}
-                          onClick={e => e.stopPropagation()}
-                          style={{
-                            flex: 1, background: 'none', border: 'none', outline: 'none',
-                            fontSize: 12, color: '#475569', fontStyle: 'italic',
-                          }}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )
-            })
+      {/* Sub-toolbar */}
+      <div style={{
+        background: '#fff', borderBottom: '1px solid #E2E8F0',
+        padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+      }}>
+        {/* Search */}
+        <div style={{ position: 'relative', flex: '1 1 200px', maxWidth: 280 }}>
+          <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94A3B8', pointerEvents: 'none' }} />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search items..."
+            style={{
+              width: '100%', paddingLeft: 30, paddingRight: 10, paddingTop: 6, paddingBottom: 6,
+              border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 13, outline: 'none',
+              background: '#F8FAFC', boxSizing: 'border-box',
+            }}
+          />
+          {search && (
+            <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
+              <X size={12} color="#94A3B8" />
+            </button>
           )}
         </div>
 
-        {/* ── Right Drawer ── */}
-        {selectedItem && (
-          <div style={{
-            width: 360, flexShrink: 0,
-            background: '#0a1222',
-            borderLeft: '1px solid rgba(255,255,255,0.055)',
-            display: 'flex', flexDirection: 'column',
-            overflow: 'hidden',
-          }}>
-            {/* Drawer top */}
-            <div style={{ padding: '16px 16px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                  <div style={{ width: 7, height: 7, borderRadius: '50%', background: typeColor(selectedItem.type) }} />
-                  <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: typeColor(selectedItem.type), letterSpacing: '0.07em' }}>
-                    {selectedItem.type}
-                  </span>
-                </div>
-                <button
-                  onClick={() => setSelectedItem(null)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#334155', padding: 2 }}
-                >
-                  <X size={15} />
-                </button>
-              </div>
+        {/* View tabs — desktop */}
+        <div style={{ display: 'flex', gap: 2, background: '#F1F5F9', padding: '3px', borderRadius: 9, flexWrap: 'nowrap', overflowX: 'auto' }} className="hidden-on-mobile">
+          {VIEW_TABS.map(vt => (
+            <button
+              key={vt.key}
+              onClick={() => setView(vt.key)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '5px 11px', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                border: 'none',
+                background: view === vt.key ? '#fff' : 'transparent',
+                color: view === vt.key ? '#1E293B' : '#64748B',
+                boxShadow: view === vt.key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                whiteSpace: 'nowrap',
+                transition: 'background 0.1s, box-shadow 0.1s',
+              }}
+            >
+              {vt.icon} {vt.label}
+            </button>
+          ))}
+        </div>
 
-              <h2 style={{ fontSize: 14, fontWeight: 600, color: '#e2e8f0', margin: '0 0 10px', lineHeight: 1.4 }}>
-                {selectedItem.title}
-              </h2>
-
-              {/* AI TL;DR */}
-              <div style={{
-                display: 'flex', gap: 8, alignItems: 'flex-start',
-                background: 'rgba(107,126,255,0.055)', borderRadius: 8,
-                border: '1px solid rgba(107,126,255,0.12)',
-                padding: '8px 10px', marginBottom: 12,
-              }}>
-                <Sparkles size={12} color="#6B7EFF" style={{ marginTop: 2, flexShrink: 0 }} />
-                <p style={{ fontSize: 11, color: '#94a3b8', margin: 0, fontStyle: 'italic', lineHeight: 1.55 }}>
-                  {selectedItem.type === 'bug'
-                    ? `${severityLabel(selectedItem.severity || '2_minor')} bug in ${selectedItem.module || 'the portal'}. Status: ${statusLabel(selectedItem.status).toLowerCase()}.${selectedItem.owner_name ? ` Owner: ${selectedItem.owner_name}.` : ' Unassigned.'}`
-                    : selectedItem.type === 'enhancement'
-                    ? `Enhancement for ${selectedItem.module || 'the system'}${selectedItem.priority ? ` — ${selectedItem.priority} priority` : ''}${selectedItem.target_release ? `. Target: ${selectedItem.target_release}` : ''}.`
-                    : `${selectedItem.type.charAt(0).toUpperCase() + selectedItem.type.slice(1)} — ${statusLabel(selectedItem.status).toLowerCase()}${selectedItem.notes ? '. ' + selectedItem.notes.slice(0, 70) + '…' : '.'}`
-                  }
-                </p>
-              </div>
-
-              {/* Status buttons */}
-              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 12 }}>
-                {(['new', 'in_progress', 'done', 'blocked', 'on_hold'] as const).map(s => (
-                  <button
-                    key={s}
-                    onClick={() => handleUpdateStatus(selectedItem.id, s)}
-                    style={{
-                      fontSize: 10, fontWeight: 600, padding: '4px 9px', borderRadius: 6,
-                      border: selectedItem.status === s
-                        ? '1.5px solid #6B7EFF'
-                        : '1px solid rgba(255,255,255,0.07)',
-                      background: selectedItem.status === s
-                        ? 'rgba(107,126,255,0.14)'
-                        : 'rgba(255,255,255,0.025)',
-                      color: selectedItem.status === s ? '#a5b4fc' : '#334155',
-                      cursor: 'pointer', transition: 'all 0.1s',
-                    }}
-                  >
-                    {statusLabel(s)}
-                  </button>
-                ))}
-              </div>
-
-              {/* Tabs */}
-              <div style={{ display: 'flex' }}>
-                {(['timeline', 'updates', 'files'] as const).map(t => (
-                  <button
-                    key={t}
-                    onClick={() => setDrawerTab(t)}
-                    style={{
-                      flex: 1, padding: '7px 0', fontSize: 11, fontWeight: 600,
-                      background: 'none', border: 'none', cursor: 'pointer',
-                      textTransform: 'capitalize',
-                      color: drawerTab === t ? '#6B7EFF' : '#334155',
-                      borderBottom: `2px solid ${drawerTab === t ? '#6B7EFF' : 'transparent'}`,
-                      transition: 'all 0.12s',
-                    }}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Drawer body */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px' }}>
-
-              {drawerTab === 'timeline' && (
-                <div>
-                  {/* Meta chips */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 14 }}>
-                    {selectedItem.severity && (
-                      <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, background: 'rgba(239,68,68,0.08)', color: '#fca5a5', fontWeight: 500 }}>
-                        {severityLabel(selectedItem.severity)}
-                      </span>
-                    )}
-                    {selectedItem.priority && (
-                      <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, background: 'rgba(245,158,11,0.08)', color: '#fde68a', fontWeight: 500 }}>
-                        {selectedItem.priority}
-                      </span>
-                    )}
-                    {selectedItem.module && (
-                      <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, background: 'rgba(107,126,255,0.08)', color: '#a5b4fc', fontWeight: 500 }}>
-                        {selectedItem.module}
-                      </span>
-                    )}
-                    {selectedItem.target_release && (
-                      <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, background: 'rgba(16,185,129,0.08)', color: '#6ee7b7', fontWeight: 500 }}>
-                        🎯 {selectedItem.target_release}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Context Mirrors */}
-                  <div style={{ marginBottom: 16 }}>
-                    <p style={{ fontSize: 10, fontWeight: 700, color: '#1e3a5f', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 7px' }}>
-                      Context Mirrors
-                    </p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                      <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 7, padding: '8px 10px' }}>
-                        <p style={{ fontSize: 11, color: '#6B7EFF', fontWeight: 600, margin: '0 0 3px' }}>📋 Work Order</p>
-                        <p style={{ fontSize: 11, color: '#334155', margin: 0 }}>No linked WO — open Dispatch to associate</p>
-                      </div>
-                      <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 7, padding: '8px 10px' }}>
-                        <p style={{ fontSize: 11, color: '#8b5cf6', fontWeight: 600, margin: '0 0 3px' }}>💼 Quote</p>
-                        <p style={{ fontSize: 11, color: '#334155', margin: 0 }}>No quote linked — view Quotes to attach</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Notes */}
-                  {selectedItem.notes && (
-                    <div style={{ marginBottom: 14 }}>
-                      <p style={{ fontSize: 10, fontWeight: 700, color: '#1e3a5f', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 6px' }}>
-                        Notes
-                      </p>
-                      <p style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6, margin: 0 }}>
-                        {selectedItem.notes}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Reporter */}
-                  {selectedItem.reporter_name && (
-                    <p style={{ fontSize: 11, color: '#1e3a5f', marginBottom: 14 }}>
-                      Reported by <span style={{ color: '#475569' }}>{selectedItem.reporter_name}</span>
-                      {selectedItem.date_reported ? ` on ${selectedItem.date_reported}` : ''}
-                    </p>
-                  )}
-
-                  {/* Delete */}
-                  <button
-                    onClick={() => handleDeleteItem(selectedItem.id)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 6,
-                      fontSize: 11, color: '#ef4444',
-                      background: 'rgba(239,68,68,0.05)',
-                      border: '1px solid rgba(239,68,68,0.12)',
-                      borderRadius: 6, padding: '5px 10px', cursor: 'pointer',
-                    }}
-                  >
-                    <Trash2 size={11} /> Delete item
-                  </button>
-                </div>
-              )}
-
-              {drawerTab === 'updates' && (
-                <div>
-                  {comments.length === 0 && (
-                    <p style={{ fontSize: 12, color: '#1e3a5f', fontStyle: 'italic', margin: 0 }}>
-                      No updates yet.
-                    </p>
-                  )}
-                  {comments.map(c => (
-                    <div key={c.id} style={{ display: 'flex', gap: 9, marginBottom: 16 }}>
-                      <div style={{
-                        width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
-                        background: '#12213d',
-                        border: '1px solid rgba(107,126,255,0.18)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 10, fontWeight: 700, color: '#a5b4fc',
-                      }}>
-                        {c.author_initials}
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: '#cbd5e1' }}>{c.author_name}</span>
-                          <span style={{ fontSize: 10, color: '#1e3a5f' }}>{timeAgo(c.created_at)}</span>
-                        </div>
-                        <p style={{ fontSize: 12, color: '#64748b', margin: '3px 0 0', lineHeight: 1.55 }}>
-                          {c.body}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {drawerTab === 'files' && (
-                <p style={{ fontSize: 12, color: '#1e3a5f', fontStyle: 'italic', margin: 0 }}>
-                  File attachments coming in a future update.
-                </p>
-              )}
-            </div>
-
-            {/* Reply bar */}
-            <div style={{ padding: '10px 12px', borderTop: '1px solid rgba(255,255,255,0.05)', background: '#080f1d' }}>
-              <div style={{ display: 'flex', gap: 7, alignItems: 'flex-end' }}>
-                <textarea
-                  ref={commentRef}
-                  value={newComment}
-                  onChange={e => setNewComment(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddComment() } }}
-                  placeholder="Add an update…"
-                  rows={2}
+        {/* View picker — mobile */}
+        <div style={{ position: 'relative' }} className="mobile-view-picker">
+          <button
+            onClick={() => setShowMobileViewMenu(!showMobileViewMenu)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '6px 12px', borderRadius: 8, border: '1px solid #E2E8F0',
+              background: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#374151',
+            }}
+          >
+            {VIEW_TABS.find(v => v.key === view)?.icon}
+            {VIEW_TABS.find(v => v.key === view)?.label}
+            <ChevronDown size={12} />
+          </button>
+          {showMobileViewMenu && (
+            <div style={{
+              position: 'absolute', top: '100%', left: 0, zIndex: 30,
+              background: '#fff', border: '1px solid #E2E8F0',
+              borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+              minWidth: 160, marginTop: 4, overflow: 'hidden',
+            }}>
+              {VIEW_TABS.map(vt => (
+                <button key={vt.key} onClick={() => { setView(vt.key); setShowMobileViewMenu(false) }}
                   style={{
-                    flex: 1, resize: 'none',
-                    background: 'rgba(255,255,255,0.04)',
-                    border: '1px solid rgba(255,255,255,0.07)',
-                    borderRadius: 8, color: '#e2e8f0', fontSize: 12,
-                    padding: '7px 10px', outline: 'none',
-                  }}
-                />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  <button
-                    onClick={handleAddComment}
-                    disabled={!newComment.trim() || submitting}
-                    style={{
-                      width: 32, height: 32, borderRadius: 8, border: 'none',
-                      cursor: newComment.trim() ? 'pointer' : 'default',
-                      background: newComment.trim() ? '#6B7EFF' : 'rgba(255,255,255,0.04)',
-                      color: newComment.trim() ? '#fff' : '#1e3a5f',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      transition: 'background 0.1s',
-                    }}
-                  >
-                    {submitting
-                      ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
-                      : <Send size={12} />
-                    }
-                  </button>
-                  <button style={{
-                    width: 32, height: 32, borderRadius: 8,
-                    border: '1px solid rgba(255,255,255,0.06)',
-                    background: 'rgba(255,255,255,0.02)', color: '#1e3a5f',
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                    padding: '9px 14px', border: 'none', background: view === vt.key ? '#EEF2FF' : 'transparent',
+                    color: view === vt.key ? '#6B7EFF' : '#374151', fontSize: 13, cursor: 'pointer',
+                    fontWeight: view === vt.key ? 700 : 400,
                   }}>
-                    <Mic size={12} />
-                  </button>
-                </div>
-              </div>
+                  {view === vt.key && <Check size={12} />}
+                  {vt.icon} {vt.label}
+                </button>
+              ))}
             </div>
+          )}
+        </div>
+
+        {/* Divider */}
+        <div style={{ width: 1, height: 24, background: '#E2E8F0', flexShrink: 0 }} />
+
+        {/* Filter button */}
+        <button
+          onClick={() => setShowFilter(!showFilter)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px',
+            borderRadius: 8, border: `1px solid ${showFilter ? '#6B7EFF' : '#E2E8F0'}`,
+            background: showFilter ? '#EEF2FF' : '#fff', fontSize: 12, fontWeight: 600,
+            color: showFilter ? '#6B7EFF' : '#64748B', cursor: 'pointer',
+          }}
+        >
+          <Filter size={13} />
+          Filter
+          {filters.length > 0 && (
+            <span style={{ background: '#6B7EFF', color: '#fff', borderRadius: 10, padding: '1px 6px', fontSize: 10 }}>
+              {filters.length}
+            </span>
+          )}
+        </button>
+
+        {/* Group by (cosmetic) */}
+        <button style={{
+          display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px',
+          borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff',
+          fontSize: 12, fontWeight: 600, color: '#64748B', cursor: 'pointer',
+        }}>
+          <Briefcase size={13} /> Group
+        </button>
+
+        {/* Columns */}
+        <button style={{
+          display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px',
+          borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff',
+          fontSize: 12, fontWeight: 600, color: '#64748B', cursor: 'pointer',
+        }}>
+          <Settings size={13} /> Columns
+        </button>
+
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          {/* Automations */}
+          <button
+            onClick={() => setShowAutomations(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px',
+              borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff',
+              fontSize: 12, fontWeight: 600, color: '#64748B', cursor: 'pointer',
+            }}
+          >
+            <Zap size={13} /> Automations
+          </button>
+
+          {/* Export */}
+          <button
+            onClick={exportCsv}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px',
+              borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff',
+              fontSize: 12, fontWeight: 600, color: '#64748B', cursor: 'pointer',
+            }}
+          >
+            <Download size={13} /> Export
+          </button>
+        </div>
+      </div>
+
+      {/* Filter bar */}
+      {showFilter && (
+        <div style={{
+          background: '#fff', borderBottom: '1px solid #E2E8F0',
+          padding: '10px 24px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+        }}>
+          {filters.map(f => (
+            <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: '4px 8px' }}>
+              <select value={f.field} onChange={e => updateFilter(f.id, { field: e.target.value, condition: FILTER_CONDITIONS[e.target.value]?.[0] ?? 'is', value: '' })}
+                style={{ border: 'none', background: 'transparent', fontSize: 12, outline: 'none', color: '#374151', fontWeight: 600 }}>
+                {FILTER_FIELDS.map(ff => <option key={ff.key} value={ff.key}>{ff.label}</option>)}
+              </select>
+              <select value={f.condition} onChange={e => updateFilter(f.id, { condition: e.target.value })}
+                style={{ border: 'none', background: 'transparent', fontSize: 12, outline: 'none', color: '#64748B' }}>
+                {(FILTER_CONDITIONS[f.field] ?? ['is']).map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              {f.field === 'status' ? (
+                <select value={f.value} onChange={e => updateFilter(f.id, { value: e.target.value })}
+                  style={{ border: 'none', background: 'transparent', fontSize: 12, outline: 'none', color: '#374151' }}>
+                  <option value="">any</option>
+                  {STATUS_VALUES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              ) : f.field === 'priority' ? (
+                <select value={f.value} onChange={e => updateFilter(f.id, { value: e.target.value })}
+                  style={{ border: 'none', background: 'transparent', fontSize: 12, outline: 'none', color: '#374151' }}>
+                  <option value="">any</option>
+                  {PRIORITY_VALUES.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              ) : (
+                <input value={f.value} onChange={e => updateFilter(f.id, { value: e.target.value })}
+                  placeholder="value..."
+                  style={{ border: 'none', background: 'transparent', fontSize: 12, outline: 'none', color: '#374151', width: 90 }} />
+              )}
+              <button onClick={() => removeFilter(f.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: '#94A3B8' }}>
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+          <button onClick={addFilter}
+            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 7, border: '1px dashed #E2E8F0', background: 'transparent', fontSize: 12, color: '#64748B', cursor: 'pointer' }}>
+            <Plus size={12} /> Add filter
+          </button>
+          {filters.length > 0 && (
+            <button onClick={() => setFilters([])} style={{ fontSize: 12, color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500 }}>
+              Clear all
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div style={{
+          background: '#1E293B', padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <span style={{ fontSize: 13, color: '#fff', fontWeight: 600 }}>{selectedIds.size} selected</span>
+          <div style={{ position: 'relative' }}>
+            <button onClick={() => setShowBulkMenu(!showBulkMenu)} style={{
+              display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 7,
+              border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: 12, cursor: 'pointer',
+            }}>
+              Change Status <ChevronDown size={12} />
+            </button>
+            {showBulkMenu && (
+              <div style={{
+                position: 'absolute', top: '100%', left: 0, zIndex: 30,
+                background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.12)', minWidth: 160, marginTop: 4, overflow: 'hidden',
+              }}>
+                {['new', 'in_progress', 'done', 'blocked', 'on_hold'].map(s => (
+                  <button key={s} onClick={() => bulkUpdate({ status: s })}
+                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', background: 'transparent', fontSize: 12, cursor: 'pointer', color: '#374151' }}>
+                    {s.replace(/_/g, ' ')}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+          <button onClick={() => bulkUpdate({ owner_name: null })} style={{ padding: '5px 12px', borderRadius: 7, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: 12, cursor: 'pointer' }}>
+            <Users size={13} style={{ display: 'inline', marginRight: 5 }} />
+            Unassign
+          </button>
+          <button onClick={bulkDelete} style={{ padding: '5px 12px', borderRadius: 7, border: '1px solid rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.15)', color: '#FCA5A5', fontSize: 12, cursor: 'pointer' }}>
+            Delete
+          </button>
+          <button onClick={() => setSelectedIds(new Set())} style={{ marginLeft: 'auto', color: '#94A3B8', background: 'none', border: 'none', cursor: 'pointer', display: 'flex' }}>
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
+      {/* Main content */}
+      <div style={{ flex: 1, padding: '20px 24px', overflowY: 'auto' }}>
+        {groups.length === 0 ? (
+          <div style={{ textAlign: 'center', paddingTop: 80 }}>
+            <LayoutGrid size={40} style={{ margin: '0 auto 12px', display: 'block', color: '#CBD5E1' }} />
+            <p style={{ fontSize: 14, color: '#94A3B8' }}>No boards yet. Run migration 106 and refresh.</p>
+          </div>
+        ) : (
+          <>
+            {view === 'board' && (
+              <BoardView
+                items={filteredItems}
+                groups={groups}
+                onItemClick={handleItemClick}
+                onItemCreate={handleItemCreate}
+              />
+            )}
+            {view === 'table' && (
+              <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden' }}>
+                <TableView
+                  items={filteredItems}
+                  groups={groups}
+                  orgUsers={orgUsers}
+                  onItemClick={handleItemClick}
+                  onItemUpdate={handleItemUpdate}
+                  onItemCreate={handleItemCreate}
+                  selectedIds={selectedIds}
+                  onToggleSelect={id => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })}
+                  onSelectAll={ids => setSelectedIds(new Set(ids))}
+                />
+              </div>
+            )}
+            {view === 'gantt' && (
+              <GanttView
+                items={filteredItems}
+                groups={groups}
+                dependencies={dependencies}
+                onItemClick={handleItemClick}
+                onItemUpdate={handleItemUpdate}
+              />
+            )}
+            {view === 'calendar' && (
+              <CalendarView
+                items={filteredItems}
+                onItemClick={handleItemClick}
+                onItemCreate={(gId, status, title, dueDate) => handleItemCreate(gId || defaultGroupId, status, title, dueDate)}
+                defaultGroupId={defaultGroupId}
+              />
+            )}
+            {view === 'chart' && (
+              <ChartView
+                items={filteredItems}
+                groups={groups}
+              />
+            )}
+            {view === 'workload' && (
+              <WorkloadView
+                items={filteredItems}
+                orgUsers={orgUsers}
+              />
+            )}
+            {view === 'timeline' && (
+              <TimelineView
+                items={filteredItems}
+                orgUsers={orgUsers}
+                onItemClick={handleItemClick}
+              />
+            )}
+          </>
         )}
       </div>
 
-      {/* ── New Item Modal ── */}
-      {showNewItem && (
-        <div
-          style={{
-            position: 'fixed', inset: 0,
-            background: 'rgba(0,0,0,0.72)',
-            zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-          onClick={() => setShowNewItem(false)}
-        >
-          <div
-            style={{
-              background: '#0d1829', borderRadius: 12,
-              border: '1px solid rgba(107,126,255,0.22)',
-              boxShadow: '0 24px 64px rgba(0,0,0,0.55)',
-              width: 440, maxWidth: '92vw', padding: '24px',
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h2 style={{ fontSize: 15, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>New Tracker Item</h2>
-              <button
-                onClick={() => setShowNewItem(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#334155' }}
-              >
-                <X size={17} />
-              </button>
-            </div>
+      {/* Item Drawer */}
+      {activeItem && (
+        <ItemDrawer
+          item={activeItem}
+          groups={groups}
+          allItems={items}
+          orgUsers={orgUsers}
+          onClose={() => setActiveItem(null)}
+          onUpdate={handleItemUpdate}
+          onDelete={handleItemDelete}
+        />
+      )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <input
-                autoFocus
-                placeholder="Item title…"
-                value={newItemForm.title}
-                onChange={e => setNewItemForm(f => ({ ...f, title: e.target.value }))}
-                onKeyDown={e => { if (e.key === 'Enter') handleCreateItem() }}
-                style={{
-                  width: '100%', padding: '10px 12px', borderRadius: 8, boxSizing: 'border-box',
-                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.10)',
-                  color: '#e2e8f0', fontSize: 14, outline: 'none',
-                }}
-              />
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                {/* Group */}
-                <select
-                  value={newItemForm.group_id}
-                  onChange={e => setNewItemForm(f => ({ ...f, group_id: e.target.value }))}
-                  style={{ padding: '8px 10px', borderRadius: 8, background: '#0d1829', border: '1px solid rgba(255,255,255,0.10)', color: '#e2e8f0', fontSize: 12, outline: 'none' }}
-                >
-                  {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                </select>
-
-                {/* Type */}
-                <select
-                  value={newItemForm.type}
-                  onChange={e => setNewItemForm(f => ({ ...f, type: e.target.value }))}
-                  style={{ padding: '8px 10px', borderRadius: 8, background: '#0d1829', border: '1px solid rgba(255,255,255,0.10)', color: '#e2e8f0', fontSize: 12, outline: 'none' }}
-                >
-                  <option value="bug">Bug</option>
-                  <option value="enhancement">Enhancement</option>
-                  <option value="question">Question</option>
-                  <option value="task">Task</option>
-                </select>
-
-                {/* Severity */}
-                <select
-                  value={newItemForm.severity}
-                  onChange={e => setNewItemForm(f => ({ ...f, severity: e.target.value }))}
-                  style={{ padding: '8px 10px', borderRadius: 8, background: '#0d1829', border: '1px solid rgba(255,255,255,0.10)', color: '#e2e8f0', fontSize: 12, outline: 'none' }}
-                >
-                  <option value="">Severity…</option>
-                  <option value="1_info">Info</option>
-                  <option value="2_minor">Minor</option>
-                  <option value="3_moderate">Moderate</option>
-                  <option value="4_major">Major</option>
-                  <option value="5_critical">Critical</option>
-                </select>
-
-                {/* Priority */}
-                <select
-                  value={newItemForm.priority}
-                  onChange={e => setNewItemForm(f => ({ ...f, priority: e.target.value }))}
-                  style={{ padding: '8px 10px', borderRadius: 8, background: '#0d1829', border: '1px solid rgba(255,255,255,0.10)', color: '#e2e8f0', fontSize: 12, outline: 'none' }}
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                  <option value="critical">Critical</option>
-                </select>
-              </div>
-
-              {/* Module */}
-              <input
-                placeholder="Module (e.g. CRM, Quotes, Dispatch)"
-                value={newItemForm.module}
-                onChange={e => setNewItemForm(f => ({ ...f, module: e.target.value }))}
-                style={{
-                  width: '100%', padding: '8px 12px', borderRadius: 8, boxSizing: 'border-box',
-                  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-                  color: '#e2e8f0', fontSize: 13, outline: 'none',
-                }}
-              />
-            </div>
-
-            <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setShowNewItem(false)}
-                style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, background: 'none', border: '1px solid rgba(255,255,255,0.09)', color: '#475569', cursor: 'pointer' }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateItem}
-                disabled={!newItemForm.title.trim() || submitting}
-                style={{
-                  padding: '8px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                  background: newItemForm.title.trim() ? '#6B7EFF' : '#12213d',
-                  color: newItemForm.title.trim() ? '#fff' : '#1e3a5f',
-                  border: 'none', cursor: newItemForm.title.trim() ? 'pointer' : 'default',
-                  transition: 'background 0.1s',
-                }}
-              >
-                {submitting ? 'Creating…' : 'Create Item'}
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Automations Panel */}
+      {showAutomations && (
+        <AutomationsPanel onClose={() => setShowAutomations(false)} />
       )}
 
       <style jsx global>{`
         @keyframes spin { to { transform: rotate(360deg); } }
+        @media (min-width: 768px) {
+          .mobile-view-picker { display: none; }
+        }
+        @media (max-width: 767px) {
+          .hidden-on-mobile { display: none !important; }
+        }
       `}</style>
     </div>
   )

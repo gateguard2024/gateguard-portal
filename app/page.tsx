@@ -189,7 +189,7 @@ export default async function DashboardPage() {
   const xpPct = Math.round((myXP / xpNext) * 100);
 
   return (
-    <div className="flex flex-col min-h-full">
+    <div className="flex flex-col min-h-full" style={{ background: 'linear-gradient(180deg, rgba(107,126,255,0.09) 0%, rgba(107,126,255,0.03) 80px, #f8fafc 180px)' }}>
       <TopBar
         title="Nexus Dashboard"
         subtitle="GateGuard — Gate Guard, LLC · System Operator"

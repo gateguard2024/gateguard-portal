@@ -22,15 +22,15 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
 /**
  * PATCH /api/tracker/items/[id]
- * Updatable fields: title, type, module, severity, priority, status,
- *                   owner_name, target_release, notes, group_id
  */
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const body = await req.json()
     const allowed = [
       'title', 'type', 'module', 'severity', 'priority', 'status',
-      'owner_name', 'target_release', 'notes', 'group_id', 'position',
+      'owner_name', 'owner_user_id', 'target_release', 'notes', 'group_id', 'position',
+      'due_date', 'start_date', 'progress_pct', 'tags', 'data',
+      'estimated_hours', 'actual_hours', 'watcher_ids', 'parent_item_id',
     ]
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const patch: Record<string, any> = { updated_at: new Date().toISOString() }
