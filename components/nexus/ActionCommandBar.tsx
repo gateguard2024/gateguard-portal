@@ -1,23 +1,31 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
+import { useModalScope, SCOPE_PLACEHOLDER } from '@/components/nexus/context/ModalScopeContext'
 
 interface Props {
-  onSubmit: (query: string) => void
-  isLoading?: boolean
+  onSubmit:    (query: string) => void
+  isLoading?:  boolean
+  /** Override placeholder — if omitted, auto-resolved from ModalScopeContext */
+  placeholder?: string
 }
 
-export function ActionCommandBar({ onSubmit, isLoading = false }: Props) {
+export function ActionCommandBar({ onSubmit, isLoading = false, placeholder: placeholderProp }: Props) {
   const [value, setValue] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Read scope from context — drives placeholder and API metadata
+  const { scope, isCommandLoading } = useModalScope()
+  const activePlaceholder = placeholderProp ?? SCOPE_PLACEHOLDER[scope]
+  const activeLoading     = isLoading || isCommandLoading
+
   const handleSubmit = useCallback(() => {
     const trimmed = value.trim()
-    if (!trimmed || isLoading) return
+    if (!trimmed || activeLoading) return
     onSubmit(trimmed)
     setValue('')
-  }, [value, isLoading, onSubmit])
+  }, [value, activeLoading, onSubmit])
 
   return (
     <div className="w-full max-w-2xl">
@@ -55,8 +63,8 @@ export function ActionCommandBar({ onSubmit, isLoading = false }: Props) {
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-          placeholder="Ask Nexus anything — schedule, leads, quotes, field ops..."
-          disabled={isLoading}
+          placeholder={activePlaceholder}
+          disabled={activeLoading}
           className="flex-1 bg-transparent outline-none text-sm"
           style={{
             color: 'rgba(255,255,255,0.85)',
@@ -106,7 +114,7 @@ export function ActionCommandBar({ onSubmit, isLoading = false }: Props) {
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={!value.trim() || isLoading}
+            disabled={!value.trim() || activeLoading}
             aria-label="Send"
             className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200"
             style={{
