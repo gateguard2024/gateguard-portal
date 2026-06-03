@@ -89,20 +89,42 @@ export default function NexusHome() {
       {/* ── Main content ──────────────────────────────────────────────────────── */}
       <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-6 pb-36">
 
-        {/* Logo block */}
-        <div className="flex items-center gap-4 mb-6">
+        {/* Logo block — icon stacked above text */}
+        <div className="flex flex-col items-center mb-6 gap-3">
+          {/* Geometric crystal icon */}
           <div style={{
-            width: 52, height: 52, borderRadius: 15,
-            background: 'linear-gradient(140deg, rgba(107,126,255,0.32) 0%, rgba(107,126,255,0.07) 100%)',
-            border: '1px solid rgba(107,126,255,0.45)',
+            width: 72, height: 72,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 0 28px rgba(107,126,255,0.3)',
+            filter: 'drop-shadow(0 0 18px rgba(107,126,255,0.45))',
           }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M4 20V4l16 16V4" stroke="#6B7EFF" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+            <svg width="68" height="68" viewBox="0 0 68 68" fill="none" aria-hidden="true">
+              {/* Outer octagon */}
+              <polygon
+                points="34,4 52,12 64,28 64,40 52,56 34,64 16,56 4,40 4,28 16,12"
+                stroke="rgba(255,255,255,0.88)" strokeWidth="1.4" fill="none"
+              />
+              {/* Mid octagon */}
+              <polygon
+                points="34,14 47,20 56,32 56,36 47,48 34,54 21,48 12,36 12,32 21,20"
+                stroke="rgba(107,126,255,0.55)" strokeWidth="1" fill="none"
+              />
+              {/* Inner ring */}
+              <circle cx="34" cy="34" r="9" stroke="rgba(255,255,255,0.35)" strokeWidth="1" fill="none"/>
+              {/* Facet lines — top */}
+              <line x1="34" y1="4"  x2="34" y2="25" stroke="rgba(255,255,255,0.18)" strokeWidth="1"/>
+              {/* Facet lines — bottom */}
+              <line x1="34" y1="43" x2="34" y2="64" stroke="rgba(255,255,255,0.18)" strokeWidth="1"/>
+              {/* Facet lines — left */}
+              <line x1="4"  y1="34" x2="25" y2="34" stroke="rgba(255,255,255,0.18)" strokeWidth="1"/>
+              {/* Facet lines — right */}
+              <line x1="43" y1="34" x2="64" y2="34" stroke="rgba(255,255,255,0.18)" strokeWidth="1"/>
+              {/* Center glow dot */}
+              <circle cx="34" cy="34" r="2.5" fill="rgba(107,126,255,0.9)"/>
             </svg>
           </div>
-          <div>
+
+          {/* Text */}
+          <div className="text-center">
             <h1
               className="text-4xl font-bold uppercase"
               style={{ color: 'rgba(255,255,255,0.96)', letterSpacing: '0.28em', lineHeight: 1 }}
@@ -111,7 +133,7 @@ export default function NexusHome() {
             </h1>
             <p
               className="text-xs uppercase"
-              style={{ color: 'rgba(107,126,255,0.65)', letterSpacing: '0.22em', marginTop: 3 }}
+              style={{ color: 'rgba(107,126,255,0.65)', letterSpacing: '0.22em', marginTop: 4 }}
             >
               by Gate Guard
             </p>
