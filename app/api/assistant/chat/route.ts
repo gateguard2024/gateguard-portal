@@ -509,6 +509,87 @@ function detectOperationalIntent(msg: string): OperationalIntent | null {
   return null
 }
 
+// ─── Disambiguation pre-processor ────────────────────────────────────────────
+
+type DisambiguationEntity = 'aria' | 'leads' | 'work_orders' | 'quotes' | 'opportunities' | 'field'
+
+interface DisambiguationOptionData {
+  label:     string
+  sub:       string
+  hex:       string
+  requery?:  string
+  href?:     string
+  toolName?: string
+}
+
+function detectDisambiguationIntent(msg: string): DisambiguationEntity | null {
+  const m = msg.trim()
+  if (m.length > 28) return null
+  if (/^aria$/i.test(m))                                                         return 'aria'
+  if (/^(leads?|prospects?)$/i.test(m))                                          return 'leads'
+  if (/^(work[\s-]?orders?|wo#?\d*|jobs?|dispatch|field\s?service)$/i.test(m))  return 'work_orders'
+  if (/^(quotes?|proposals?)$/i.test(m))                                         return 'quotes'
+  if (/^(opps?|opportunit(ies|y)?|pipeline|deals?)$/i.test(m))                  return 'opportunities'
+  if (/^(field|techs?|technicians?)$/i.test(m))                                 return 'field'
+  return null
+}
+
+const DISAMBIG_OPTIONS: Record<DisambiguationEntity, { prompt: string; options: DisambiguationOptionData[] }> = {
+  aria: {
+    prompt: 'What would you like to do with ARIA?',
+    options: [
+      { label: 'ARIA Search',    sub: 'Research a property or prospect', hex: '#6B7EFF', href: '/aria' },
+      { label: 'New Lead',       sub: 'Add a prospect to the pipeline',  hex: '#34d399', requery: 'create a new lead' },
+      { label: 'Intel Database', sub: 'Browse saved ARIA research',      hex: '#a5b4ff', href: '/aria' },
+    ],
+  },
+  leads: {
+    prompt: 'What would you like to do with leads?',
+    options: [
+      { label: 'Show All Leads',    sub: 'View your open lead pipeline', hex: '#6B7EFF', requery: 'show me all leads' },
+      { label: 'Add New Lead',      sub: 'Create a prospect manually',   hex: '#34d399', requery: 'create a new lead' },
+      { label: 'Run ARIA Research', sub: 'Deep intel on a property',     hex: '#a5b4ff', href: '/aria' },
+    ],
+  },
+  work_orders: {
+    prompt: 'What would you like to do with work orders?',
+    options: [
+      { label: 'Open Work Orders',  sub: 'View jobs in the queue',      hex: '#6B7EFF', requery: 'show me open work orders' },
+      { label: 'Create Work Order', sub: 'Schedule a new service job',  hex: '#34d399', requery: 'create a new work order' },
+      { label: 'Go to Dispatch',    sub: 'Full dispatch board',         hex: '#fbbf24', href: '/dispatch' },
+    ],
+  },
+  quotes: {
+    prompt: 'What would you like to do with quotes?',
+    options: [
+      { label: 'Recent Quotes', sub: 'View active proposals', hex: '#6B7EFF', requery: 'show me recent quotes' },
+      { label: 'New Quote',     sub: 'Build a new proposal',  hex: '#34d399', href: '/quotes/new' },
+      { label: 'All Quotes',    sub: 'Full quote management', hex: '#a5b4ff', href: '/quotes' },
+    ],
+  },
+  opportunities: {
+    prompt: 'What would you like to do with opportunities?',
+    options: [
+      { label: 'Open Deals',      sub: 'View pipeline deals', hex: '#6B7EFF', requery: 'show me open opportunities' },
+      { label: 'New Opportunity', sub: 'Add to pipeline',     hex: '#34d399', requery: 'create a new opportunity' },
+      { label: 'Full Pipeline',   sub: 'CRM pipeline board',  hex: '#a5b4ff', href: '/crm/opportunities' },
+    ],
+  },
+  field: {
+    prompt: 'What would you like to do with the field team?',
+    options: [
+      { label: 'Open Work Orders', sub: 'Jobs in the queue',       hex: '#6B7EFF', requery: 'show me open work orders' },
+      { label: 'Tech Roster',      sub: 'View field technicians',  hex: '#34d399', href: '/dispatch' },
+      { label: 'Dispatch Board',   sub: 'Schedule & assign jobs',  hex: '#fbbf24', href: '/dispatch' },
+    ],
+  },
+}
+
+function buildDisambiguationResponse(entity: DisambiguationEntity): Record<string, unknown> {
+  const cfg = DISAMBIG_OPTIONS[entity]
+  return { type: 'disambiguation', entity, prompt: cfg.prompt, options: cfg.options }
+}
+
 // ─── Format helpers ──────────────────────────────────────────────────────────
 function fmtDollar(v: number | undefined | null): string {
   return v ? `$${Number(v).toLocaleString()}` : ''
@@ -827,6 +908,15 @@ export async function POST(req: NextRequest) {
     const data = await fetchPortalData('daily_briefing', user?.org_id ?? null)
     liveData = data as Record<string, unknown>
     dataContext = `\nLIVE DATA — Daily Briefing:\n${JSON.stringify(data)}`
+  }
+
+  // ─── Disambiguation pre-processor ──────────────────────────────────────────
+  // Single-word / very short entity names (e.g. "ARIA", "leads", "quotes") get
+  // glass option buttons instead of a text response. Runs first so "leads"
+  // doesn't also fall through to the find_leads operational intent.
+  const disambigEntity = detectDisambiguationIntent(lastMsg)
+  if (disambigEntity) {
+    return NextResponse.json(buildDisambiguationResponse(disambigEntity))
   }
 
   // ─── Operational intent pre-processor ───────────────────────────────────────

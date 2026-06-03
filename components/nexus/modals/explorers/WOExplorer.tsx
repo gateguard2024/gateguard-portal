@@ -42,8 +42,8 @@ function hexRgb(h: string) {
 // ─── Row component ────────────────────────────────────────────────────────────
 
 function WOGridRow({
-  wo, onAssign, onDismiss,
-}: { wo: WOItem; onAssign: () => Promise<void>; onDismiss: () => void }) {
+  wo, onAssign, onDismiss, onOpenDetail,
+}: { wo: WOItem; onAssign: () => Promise<void>; onDismiss: () => void; onOpenDetail: () => void }) {
   const [phase, setPhase]   = useState<'idle' | 'confirm' | 'busy' | 'done'>('idle')
   const [expanded, setExp]  = useState(false)
   const dot  = PRIORITY_HEX[wo.priority] ?? '#6B7EFF'
@@ -90,10 +90,16 @@ function WOGridRow({
         <span className="w-2 h-2 rounded-full flex-shrink-0"
           style={{ background: dot, boxShadow: `0 0 5px ${dot}90` }} />
 
-        {/* WO number */}
-        <span className="text-[10px] font-mono truncate" style={{ color: 'rgba(107,126,255,0.8)' }}>
+        {/* WO number — clickable to open detail pane */}
+        <button
+          onClick={e => { e.stopPropagation(); onOpenDetail() }}
+          className="text-[10px] font-mono truncate text-left transition-all underline decoration-dotted underline-offset-2"
+          style={{ color: 'rgba(107,126,255,0.8)', textDecorationColor: 'rgba(107,126,255,0.4)' }}
+          onMouseEnter={e => (e.currentTarget.style.color = 'rgba(107,126,255,1)')}
+          onMouseLeave={e => (e.currentTarget.style.color = 'rgba(107,126,255,0.8)')}
+        >
           {wo.wo_number}
-        </span>
+        </button>
 
         {/* Title */}
         <span className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.82)' }}>
@@ -168,12 +174,214 @@ function WOGridRow({
   )
 }
 
+// ─── WO Detail Pane ──────────────────────────────────────────────────────────
+
+function WODetailPane({
+  wo, onAssign, onDismiss, onBack,
+}: { wo: WOItem; onAssign: () => Promise<void>; onDismiss: () => void; onBack: () => void }) {
+  const [phase, setPhase] = useState<'idle' | 'confirm' | 'busy' | 'done'>('idle')
+  const dot        = PRIORITY_HEX[wo.priority] ?? '#6B7EFF'
+  const rgb        = hexRgb(dot)
+  const scoreColor = wo.ai_score >= 85 ? '#34d399' : wo.ai_score >= 70 ? '#fbbf24' : '#f87171'
+
+  async function handleAssign() {
+    if (phase === 'idle')    { setPhase('confirm'); return }
+    if (phase === 'confirm') {
+      setPhase('busy')
+      try    { await onAssign(); setPhase('done') }
+      catch  { setPhase('confirm') }
+    }
+  }
+
+  return (
+    <>
+      <style>{`
+        @keyframes nexus-detail-in {
+          from { opacity: 0; transform: translateY(8px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .nexus-detail { animation: nexus-detail-in 0.2s cubic-bezier(0.16,1,0.3,1) both; }
+      `}</style>
+
+      <div className="nexus-detail space-y-3">
+
+        {/* Back button */}
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 transition-colors"
+          style={{ color: 'rgba(107,126,255,0.5)' }}
+          onMouseEnter={e => (e.currentTarget.style.color = 'rgba(107,126,255,0.9)')}
+          onMouseLeave={e => (e.currentTarget.style.color = 'rgba(107,126,255,0.5)')}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <path d="M9 3L5 7l4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <span className="text-xs font-medium">Back to list</span>
+        </button>
+
+        {/* WO header card */}
+        <div
+          className="rounded-xl p-4 space-y-2.5"
+          style={{
+            background: `rgba(${rgb},0.07)`,
+            border: `0.5px solid rgba(${rgb},0.28)`,
+          }}
+        >
+          {/* Top row: dot + WO# + status + score */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span
+              className="w-2 h-2 rounded-full flex-shrink-0"
+              style={{ background: dot, boxShadow: `0 0 6px ${dot}90` }}
+            />
+            <span className="text-[11px] font-mono font-semibold" style={{ color: 'rgba(107,126,255,0.9)' }}>
+              {wo.wo_number}
+            </span>
+            <span
+              className="text-[10px] px-2 py-0.5 rounded font-medium"
+              style={{ background: `rgba(${rgb},0.15)`, color: dot, border: `0.5px solid rgba(${rgb},0.3)` }}
+            >
+              {STATUS_LABEL[wo.status] ?? wo.status}
+            </span>
+            <span
+              className="text-[10px] px-1.5 py-0.5 rounded capitalize"
+              style={{ background: `rgba(${rgb},0.1)`, color: dot, border: `0.5px solid rgba(${rgb},0.2)` }}
+            >
+              {wo.priority}
+            </span>
+            <span className="ml-auto text-xs font-mono font-bold" style={{ color: scoreColor }}>
+              AI {wo.ai_score}
+            </span>
+          </div>
+
+          {/* Title */}
+          <p className="text-sm font-semibold leading-snug" style={{ color: 'rgba(255,255,255,0.92)' }}>
+            {wo.title}
+          </p>
+
+          {/* Customer */}
+          {wo.customer_name && (
+            <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
+              {wo.customer_name}
+            </p>
+          )}
+        </div>
+
+        {/* AI Reasoning */}
+        <div
+          className="rounded-xl p-3.5 space-y-1.5"
+          style={{
+            background: 'rgba(107,126,255,0.04)',
+            border: '0.5px solid rgba(107,126,255,0.12)',
+            borderLeft: '2px solid rgba(107,126,255,0.4)',
+          }}
+        >
+          <p className="text-[9px] uppercase tracking-widest font-mono" style={{ color: 'rgba(107,126,255,0.45)' }}>
+            AI Reasoning
+          </p>
+          <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.62)' }}>
+            {wo.ai_reasoning}
+          </p>
+        </div>
+
+        {/* Tech recommendation */}
+        <div
+          className="rounded-xl p-3.5 space-y-2.5"
+          style={{ background: 'rgba(255,255,255,0.025)', border: '0.5px solid rgba(255,255,255,0.07)' }}
+        >
+          <p className="text-[9px] uppercase tracking-widest font-mono" style={{ color: 'rgba(255,255,255,0.22)' }}>
+            Recommended Tech
+          </p>
+
+          {wo.recommended_tech ? (
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.85)' }}>
+                  {wo.recommended_tech.name}
+                </p>
+                <p className="text-[10px] mt-0.5 capitalize" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  {wo.recommended_tech.status}
+                </p>
+              </div>
+
+              {phase === 'done' ? (
+                <div
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px]"
+                  style={{ background: 'rgba(52,211,153,0.1)', border: '0.5px solid rgba(52,211,153,0.25)', color: '#34d399' }}
+                >
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                    <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#34d399" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  Assigned
+                </div>
+              ) : (
+                <button
+                  onClick={handleAssign}
+                  disabled={phase === 'busy'}
+                  className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all"
+                  style={
+                    phase === 'confirm'
+                      ? { background: 'rgba(251,191,36,0.2)', border: '0.5px solid rgba(251,191,36,0.4)', color: '#fbbf24' }
+                      : { background: 'rgba(107,126,255,0.18)', border: '0.5px solid rgba(107,126,255,0.4)', color: '#a5b4ff' }
+                  }
+                >
+                  {phase === 'busy' ? '…' : phase === 'confirm' ? 'Confirm Assignment' : 'Assign Tech'}
+                </button>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.2)' }}>
+              No tech recommended — assign manually in Dispatch.
+            </p>
+          )}
+        </div>
+
+        {/* Action row */}
+        <div className="flex gap-2 pt-0.5">
+          <a
+            href="/dispatch"
+            className="flex-1 text-center text-[11px] py-2 rounded-lg font-medium transition-all"
+            style={{
+              background: 'rgba(107,126,255,0.12)',
+              border: '0.5px solid rgba(107,126,255,0.3)',
+              color: '#a5b4ff',
+            }}
+          >
+            Open in Dispatch ↗
+          </a>
+          <button
+            onClick={onDismiss}
+            className="px-3 py-2 rounded-lg text-[11px] transition-all"
+            style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.28)' }}
+          >
+            Dismiss
+          </button>
+        </div>
+
+      </div>
+    </>
+  )
+}
+
 // ─── Explorer ─────────────────────────────────────────────────────────────────
 
 export function WOExplorer({ workOrders, dismissed, onAssign, onDismiss, onBack }: Props) {
-  const [filter, setFilter] = useState<WOFilter>('all')
-  const [sortBy, setSortBy] = useState<SortKey>('ai_score')
-  const [sortAsc, setSortAsc] = useState(false)
+  const [filter,     setFilter]     = useState<WOFilter>('all')
+  const [sortBy,     setSortBy]     = useState<SortKey>('ai_score')
+  const [sortAsc,    setSortAsc]    = useState(false)
+  const [selectedWO, setSelectedWO] = useState<WOItem | null>(null)
+
+  // ── Detail view — show WO detail pane when a WO is selected ─────────────────
+  if (selectedWO) {
+    return (
+      <WODetailPane
+        key={selectedWO.id}
+        wo={selectedWO}
+        onAssign={() => onAssign(selectedWO)}
+        onDismiss={() => { onDismiss(selectedWO.id); setSelectedWO(null) }}
+        onBack={() => setSelectedWO(null)}
+      />
+    )
+  }
 
   const visible = workOrders
     .filter(wo => !dismissed.has(wo.id))
@@ -309,6 +517,7 @@ export function WOExplorer({ workOrders, dismissed, onAssign, onDismiss, onBack 
               wo={wo}
               onAssign={() => onAssign(wo)}
               onDismiss={() => onDismiss(wo.id)}
+              onOpenDetail={() => setSelectedWO(wo)}
             />
           ))}
         </div>

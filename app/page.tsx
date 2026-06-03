@@ -24,6 +24,15 @@ interface ActionCard {
   actions: ActionCardAction[]
 }
 
+interface DisambiguationOption {
+  label:     string
+  sub:       string
+  hex:       string
+  requery?:  string
+  href?:     string
+  toolName?: string
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
@@ -31,6 +40,11 @@ interface ChatMessage {
     title?: string
     cards: ActionCard[]
     proactive?: ActionCard[]
+  }
+  disambiguationResponse?: {
+    entity:  string
+    prompt:  string
+    options: DisambiguationOption[]
   }
 }
 
@@ -157,6 +171,103 @@ function CardResponseView({
   )
 }
 
+// ─── Disambiguation glass card ────────────────────────────────────────────────
+
+function DisambiguationView({
+  response,
+  onRequery,
+  onNavigate,
+  onExecute,
+}: {
+  response: NonNullable<ChatMessage['disambiguationResponse']>
+  onRequery: (q: string) => void
+  onNavigate: (href: string) => void
+  onExecute: (toolName: string, toolArgs: Record<string, unknown>) => void
+}) {
+  const [customText, setCustomText] = useState('')
+
+  return (
+    <div
+      className="rounded-2xl p-4 space-y-3 w-full"
+      style={{
+        background: 'rgba(255,255,255,0.03)',
+        border: '0.5px solid rgba(107,126,255,0.28)',
+        backdropFilter: 'blur(16px)',
+      }}
+    >
+      {/* Prompt */}
+      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.55)' }}>
+        {response.prompt}
+      </p>
+
+      {/* Option grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        {response.options.map((opt, i) => {
+          const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(opt.hex)
+          const rgb = r ? `${parseInt(r[1],16)},${parseInt(r[2],16)},${parseInt(r[3],16)}` : '107,126,255'
+          return (
+            <button
+              key={i}
+              onClick={() => {
+                if (opt.requery)       onRequery(opt.requery)
+                else if (opt.href)     onNavigate(opt.href)
+                else if (opt.toolName) onExecute(opt.toolName, {})
+              }}
+              className="rounded-xl p-3 text-left transition-all space-y-1 group"
+              style={{
+                background:   `rgba(${rgb},0.07)`,
+                border:       `0.5px solid rgba(${rgb},0.2)`,
+              }}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = `rgba(${rgb},0.5)`)}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = `rgba(${rgb},0.2)`)}
+            >
+              <p className="text-[11px] font-semibold transition-colors" style={{ color: opt.hex }}>
+                {opt.label}
+              </p>
+              <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                {opt.sub}
+              </p>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Something else — free text */}
+      <div className="flex gap-2 items-center pt-0.5">
+        <input
+          type="text"
+          value={customText}
+          onChange={e => setCustomText(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && customText.trim()) {
+              onRequery(customText.trim())
+              setCustomText('')
+            }
+          }}
+          placeholder="Something else…"
+          className="flex-1 text-xs outline-none"
+          style={{
+            padding: '6px 10px',
+            background: 'rgba(255,255,255,0.04)',
+            border: '0.5px solid rgba(255,255,255,0.09)',
+            borderRadius: 8,
+            color: 'rgba(255,255,255,0.7)',
+          }}
+        />
+        {customText.trim() && (
+          <button
+            onClick={() => { onRequery(customText.trim()); setCustomText('') }}
+            className="text-[10px] px-2.5 py-1.5 rounded-lg font-medium transition-all"
+            style={{ background: 'rgba(107,126,255,0.18)', border: '0.5px solid rgba(107,126,255,0.4)', color: '#a5b4ff' }}
+          >
+            Go
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Nav ──────────────────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
@@ -216,6 +327,20 @@ export default function NexusHome() {
       })
       const data = await res.json()
 
+      // ── Disambiguation response (single-word entity name) ─────────────────
+      if (data.type === 'disambiguation') {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: '',
+          disambiguationResponse: {
+            entity:  data.entity,
+            prompt:  data.prompt,
+            options: data.options ?? [],
+          },
+        }])
+        return
+      }
+
       // ── ActionCards response (operational query) ───────────────────────────
       if (data.type === 'action_cards') {
         setMessages(prev => [...prev, {
@@ -249,7 +374,7 @@ export default function NexusHome() {
   return (
     <div
       className="min-h-screen flex flex-col relative overflow-hidden"
-      style={{ background: 'radial-gradient(circle at 50% 35%, #0d1f4e 0%, #060e28 38%, #020810 65%, #000306 100%)' }}
+      style={{ background: 'radial-gradient(ellipse at 50% 25%, #0a1628 0%, #050c1a 55%, #000208 100%)' }}
     >
       {/* Grid overlay */}
       <div
@@ -359,6 +484,14 @@ export default function NexusHome() {
                   >
                     {m.content}
                   </div>
+                ) : m.disambiguationResponse ? (
+                  /* ── Disambiguation (entity name shortcut) ───────────────── */
+                  <DisambiguationView
+                    response={m.disambiguationResponse}
+                    onRequery={handleQuery}
+                    onNavigate={handleNavigate}
+                    onExecute={executeCardAction}
+                  />
                 ) : m.cardResponse ? (
                   /* ── ActionCards (operational query) ─────────────────────── */
                   <CardResponseView
