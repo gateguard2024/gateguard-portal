@@ -2,113 +2,164 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { ActionCard } from '@/components/nexus/ActionCard'
 
-const CARD_STYLE = {
-  background: 'rgba(255,255,255,0.04)',
-  border: '0.5px solid rgba(255,255,255,0.09)',
-  backdropFilter: 'blur(8px)',
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface TodayWO {
+  id:               string
+  wo_number:        string
+  title:            string
+  customer_name:    string | null
+  priority:         string
+  status:           string
+  already_assigned: boolean
+  recommended_tech: { id: string; name: string; status: string } | null
+  ai_score:         number
+  ai_reasoning:     string
 }
 
-function CountBadge({ n }: { n: number | null }) {
-  if (n === null) return null
-  if (n === 0) return (
-    <span className="text-xs rounded-full px-1.5 py-0.5" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.25)' }}>
-      0
-    </span>
-  )
-  return (
-    <span className="text-xs font-medium rounded-full px-1.5 py-0.5" style={{ background: '#6B7EFF', color: '#fff' }}>
-      {n > 99 ? '99+' : n}
-    </span>
-  )
+const PRIORITY_COLOR: Record<string, 'red' | 'amber' | 'blue' | 'green'> = {
+  critical: 'red',
+  high:     'amber',
+  normal:   'blue',
+  low:      'green',
 }
+
+const STATUS_LABEL: Record<string, string> = {
+  open:        'Pending',
+  scheduled:   'Assigned',
+  in_progress: 'In Progress',
+  completed:   'Done',
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function MyDayModal() {
-  const [todoCount, setTodoCount] = useState<number | null>(null)
-  const [woCount,   setWoCount]   = useState<number | null>(null)
+  const [workOrders, setWorkOrders] = useState<TodayWO[]>([])
+  const [loading,    setLoading]    = useState(true)
+  const [dismissed,  setDismissed]  = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    // Open todos
-    fetch('/api/todos?limit=100')
+    fetch('/api/dispatch/work-orders/today')
       .then(r => r.json())
-      .then(d => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const list = d.todos ?? d.records ?? []
-        setTodoCount(list.filter((t: any) => !t.completed).length)
-      })
-      .catch(() => {})
-
-    // Today's work orders — filter by today's date client-side
-    const today = new Date().toISOString().split('T')[0]
-    fetch('/api/dispatch/work-orders?limit=50')
-      .then(r => r.json())
-      .then(d => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const list = d.work_orders ?? d.records ?? []
-        const todayWos = list.filter((wo: any) => {
-          const s = wo.scheduled_date ?? wo.created_at ?? ''
-          return s.startsWith(today)
-        })
-        setWoCount(todayWos.length)
-      })
-      .catch(() => {})
+      .then(d => setWorkOrders(d.work_orders ?? []))
+      .catch(() => setWorkOrders([]))
+      .finally(() => setLoading(false))
   }, [])
 
+  const visible = workOrders.filter(wo => !dismissed.has(wo.id)).slice(0, 3)
+
+  async function executeAssignment(wo: TodayWO) {
+    if (!wo.recommended_tech) throw new Error('No technician available.')
+    const res = await fetch('/api/assistant/execute', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        toolName: 'assign_technician',
+        toolArgs: {
+          work_order_id:   wo.id,
+          technician_id:   wo.recommended_tech.id,
+          technician_name: wo.recommended_tech.name,
+          reasoning:       wo.ai_reasoning,
+        },
+      }),
+    })
+    const data = await res.json()
+    if (!data.success) throw new Error(data.error ?? 'Assignment failed.')
+  }
+
   return (
-    <div className="grid grid-cols-3 gap-3 w-full">
+    <div className="w-full space-y-3">
 
-      {/* Work orders */}
-      <Link href="/dispatch" className="group rounded-2xl p-4 transition-all duration-200 hover:scale-[1.02]"
-        style={{ ...CARD_STYLE, borderColor: 'rgba(107,126,255,0.18)' }}>
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(107,126,255,0.18)' }}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                <rect x="1" y="4" width="12" height="8" rx="1.5" stroke="#6B7EFF" strokeWidth="1.2"/>
-                <path d="M4 4V3a3 3 0 016 0v1" stroke="#6B7EFF" strokeWidth="1.2" strokeLinecap="round"/>
-              </svg>
-            </div>
-            <span className="text-xs tracking-widest uppercase" style={{ color: 'rgba(107,126,255,0.8)' }}>Today</span>
-          </div>
-          <CountBadge n={woCount} />
+      {/* ── Work Orders — agentic action cards ───────────────────────────── */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[10px] uppercase tracking-[0.14em]" style={{ color: 'rgba(107,126,255,0.55)' }}>
+            Work orders today
+          </p>
+          <Link
+            href="/dispatch"
+            className="text-[10px] transition-colors"
+            style={{ color: 'rgba(255,255,255,0.25)' }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.6)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.25)')}
+          >
+            See all →
+          </Link>
         </div>
-        <p className="text-sm font-medium mb-1" style={{ color: 'rgba(255,255,255,0.85)' }}>Work orders</p>
-        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.28)' }}>Today&apos;s schedule</p>
-      </Link>
 
-      {/* Todos */}
-      <Link href="/todos" className="group rounded-2xl p-4 transition-all duration-200 hover:scale-[1.02]"
-        style={CARD_STYLE}>
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(52,211,153,0.15)' }}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                <path d="M2 7l3 3 7-7" stroke="#34d399" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
-            <span className="text-xs tracking-widest uppercase" style={{ color: 'rgba(52,211,153,0.7)' }}>To-dos</span>
+        {loading && (
+          <div className="flex items-center gap-2 py-4 px-4 rounded-xl"
+            style={{ background: 'rgba(255,255,255,0.03)', border: '0.5px solid rgba(255,255,255,0.07)' }}>
+            <div className="w-4 h-4 rounded-full border-2 border-blue-600/30 border-t-blue-500 animate-spin flex-shrink-0" />
+            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>Loading today&apos;s jobs…</p>
           </div>
-          <CountBadge n={todoCount} />
-        </div>
-        <p className="text-sm font-medium mb-1" style={{ color: 'rgba(255,255,255,0.85)' }}>Open tasks</p>
-        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.28)' }}>Your assigned items</p>
-      </Link>
+        )}
 
-      {/* Calendar */}
-      <Link href="/calendar" className="group rounded-2xl p-4 transition-all duration-200 hover:scale-[1.02]"
-        style={CARD_STYLE}>
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(251,191,36,0.12)' }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-              <rect x="1" y="2.5" width="12" height="10" rx="1.5" stroke="#fbbf24" strokeWidth="1.2"/>
-              <path d="M4 1.5v2M10 1.5v2M1 6h12" stroke="#fbbf24" strokeWidth="1.2" strokeLinecap="round"/>
+        {!loading && visible.length === 0 && (
+          <div className="py-4 px-4 rounded-xl text-center"
+            style={{ background: 'rgba(255,255,255,0.03)', border: '0.5px solid rgba(255,255,255,0.07)' }}>
+            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>No open work orders today</p>
+            <Link href="/dispatch" className="text-xs mt-1 block"
+              style={{ color: 'rgba(107,126,255,0.6)' }}>
+              View dispatch →
+            </Link>
+          </div>
+        )}
+
+        {!loading && visible.map(wo => (
+          <div key={wo.id} className="mb-2 last:mb-0">
+            <ActionCard
+              title={`${wo.wo_number}: ${wo.title}`}
+              subtitle={wo.customer_name ?? undefined}
+              status={STATUS_LABEL[wo.status] ?? wo.status}
+              statusColor={PRIORITY_COLOR[wo.priority] ?? 'blue'}
+              aiScore={wo.ai_score}
+              aiContext={wo.recommended_tech ? 'Technician Recommendation' : 'No technician available'}
+              reasoning={wo.ai_reasoning}
+              actionLabel={wo.recommended_tech ? `Assign ${wo.recommended_tech.name}` : 'View in Dispatch'}
+              confirmLabel="Confirm Assignment"
+              onExecute={() => executeAssignment(wo)}
+              onDismiss={() => setDismissed(prev => new Set([...prev, wo.id]))}
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* ── Quick links: Tasks + Calendar ────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-2 pt-1">
+        <Link href="/todos"
+          className="rounded-xl p-3 flex items-center gap-2 transition-all hover:scale-[1.02]"
+          style={{ background: 'rgba(52,211,153,0.08)', border: '0.5px solid rgba(52,211,153,0.18)' }}>
+          <div className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
+            style={{ background: 'rgba(52,211,153,0.18)' }}>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+              <path d="M1.5 6l2.5 2.5L10.5 2" stroke="#34d399" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <span className="text-xs tracking-widest uppercase" style={{ color: 'rgba(251,191,36,0.7)' }}>Calendar</span>
-        </div>
-        <p className="text-sm font-medium mb-1" style={{ color: 'rgba(255,255,255,0.85)' }}>Schedule</p>
-        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.28)' }}>Upcoming events</p>
-      </Link>
+          <div>
+            <p className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.8)' }}>Open tasks</p>
+            <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.28)' }}>Your to-dos</p>
+          </div>
+        </Link>
+
+        <Link href="/calendar"
+          className="rounded-xl p-3 flex items-center gap-2 transition-all hover:scale-[1.02]"
+          style={{ background: 'rgba(251,191,36,0.08)', border: '0.5px solid rgba(251,191,36,0.18)' }}>
+          <div className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
+            style={{ background: 'rgba(251,191,36,0.15)' }}>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+              <rect x="0.5" y="2" width="11" height="9" rx="1.5" stroke="#fbbf24" strokeWidth="1.1"/>
+              <path d="M3.5 1v2M8.5 1v2M0.5 5h11" stroke="#fbbf24" strokeWidth="1.1" strokeLinecap="round"/>
+            </svg>
+          </div>
+          <div>
+            <p className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.8)' }}>Schedule</p>
+            <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.28)' }}>Calendar</p>
+          </div>
+        </Link>
+      </div>
 
     </div>
   )

@@ -32,6 +32,7 @@ const TOOL_RISK_PROFILES: Record<string, 'low' | 'medium' | 'high'> = {
   update_opportunity_stage: 'medium',
   create_quote: 'medium',
   // High — confirmation card with red/amber warning
+  assign_technician: 'high',
   mark_opportunity_won: 'high',
   mark_opportunity_lost: 'high',
 }
@@ -42,6 +43,7 @@ function buildActionSummary(toolName: string, args: Record<string, unknown>): st
     case 'create_todo':          return `Create to-do: "${args.title}"`
     case 'update_todo':          return `Update to-do`
     case 'complete_todo':        return `Mark to-do as done`
+    case 'assign_technician':    return `Assign ${args.technician_name} to work order`
     case 'reschedule_work_order':return `Reschedule work order to ${args.scheduled_date}`
     case 'update_work_order_status': return `Set work order status → ${args.status}`
     case 'create_work_order':    return `Create work order: "${args.title}"`
@@ -121,6 +123,19 @@ const BASE_TOOLS: Anthropic.Tool[] = [
     },
   },
   // ── Work Orders ────────────────────────────────────────────────────────
+  {
+    name: 'assign_technician',
+    description: 'Assign a technician to a work order. HIGH RISK — always show ConfirmationCard before executing.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        work_order_id:   { type: 'string', description: 'The work order ID' },
+        technician_id:   { type: 'string', description: 'The technician ID to assign' },
+        technician_name: { type: 'string', description: 'The technician name (for display)' },
+      },
+      required: ['work_order_id', 'technician_id', 'technician_name'],
+    },
+  },
   {
     name: 'create_work_order',
     description: 'Create a new work order.',

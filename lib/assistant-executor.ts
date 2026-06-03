@@ -195,6 +195,47 @@ export async function executeToolWithRevert(
       }
     }
 
+    // ── Dispatch: Assign Technician ────────────────────────────────────────
+
+    case 'assign_technician': {
+      const id       = args.work_order_id as string
+      const techId   = args.technician_id as string
+      const techName = args.technician_name as string
+
+      const { data: existing, error: fetchError } = await supabase
+        .from('work_orders')
+        .select('assignee_id, assignee_name, status')
+        .eq('id', id)
+        .single()
+
+      if (fetchError) return { success: false, error: fetchError.message }
+
+      const prev = existing as { assignee_id: string | null; assignee_name: string | null; status: string }
+
+      const { error } = await supabase
+        .from('work_orders')
+        .update({ assignee_id: techId, assignee_name: techName, status: 'scheduled' })
+        .eq('id', id)
+
+      if (error) return { success: false, error: error.message }
+
+      return {
+        success: true,
+        message: `${techName} assigned to work order.`,
+        id,
+        revertPayload: {
+          operation: 'update',
+          table: 'work_orders',
+          id,
+          data: {
+            assignee_id:   prev.assignee_id   ?? null,
+            assignee_name: prev.assignee_name ?? null,
+            status:        prev.status,
+          },
+        },
+      }
+    }
+
     // ── CRM Leads ──────────────────────────────────────────────────────────
 
     case 'create_lead': {
