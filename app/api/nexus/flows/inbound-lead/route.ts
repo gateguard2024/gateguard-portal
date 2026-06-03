@@ -14,10 +14,15 @@ type InboundLeadPayload = {
   contactName?: string
   propertyName?: string
   need?: string
+  forceCreate?: boolean
 }
 
 function clean(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function escapeLike(value: string): string {
+  return value.replace(/[%_]/g, match => `\\${match}`)
 }
 
 export async function POST(req: NextRequest) {
@@ -29,9 +34,39 @@ export async function POST(req: NextRequest) {
     const propertyName = clean(body.propertyName)
     const need = clean(body.need)
     const source = clean(body.source) || 'phone'
+    const forceCreate = body.forceCreate === true
 
     if (!contactName) {
       return NextResponse.json({ success: false, message: 'Contact name is required.' }, { status: 400 })
+    }
+
+    if (!forceCreate) {
+      const nameTerm = escapeLike(contactName)
+      const companyTerm = escapeLike(propertyName)
+      const orFilters = [`name.ilike.%${nameTerm}%`]
+      if (companyTerm) orFilters.push(`company.ilike.%${companyTerm}%`)
+
+      const { data: matches, error: matchError } = await supabase
+        .from('crm_leads')
+        .select('id, name, company, stage, source, created_at')
+        .or(orFilters.join(','))
+        .not('stage', 'in', '(closed_lost,lost,won,converted)')
+        .order('created_at', { ascending: false })
+        .limit(5)
+
+      if (!matchError && matches && matches.length > 0) {
+        return NextResponse.json({
+          success: false,
+          duplicateCheck: true,
+          message: 'Possible existing lead found. Use an existing record or confirm this is new before creating another.',
+          matches,
+          nextCards: [
+            { title: 'Use Existing Lead', subtitle: 'Open the closest matching lead and keep working there.', action: 'use_existing_lead' },
+            { title: 'Create New Anyway', subtitle: 'This is a different person, property, or opportunity.', action: 'force_create_lead' },
+            { title: 'Add More Info', subtitle: 'Add phone, email, address, or context to improve the match.', action: 'add_more_info' },
+          ],
+        }, { status: 409 })
+      }
     }
 
     const notes = [
@@ -58,8 +93,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: leadError.message }, { status: 500 })
     }
 
-    // Best-effort activity log. Some environments may not have this table/shape yet,
-    // so lead creation should not fail if activity logging is unavailable.
     await supabase.from('crm_activities').insert({
       lead_id: lead.id,
       type: 'call',
