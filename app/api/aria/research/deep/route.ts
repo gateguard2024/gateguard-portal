@@ -89,7 +89,7 @@ async function saveCandidatesToDB(
     name: string; address?: string; city?: string; state?: string
     units?: number; year_built?: number; management_company?: string
     isp_signal?: string; bulk_detected?: boolean; pain_brief?: string
-    buy_score_estimate?: number
+    buy_score_estimate?: number; gate_signal?: boolean
   }>
 ): Promise<string[]> {
   if (!runId || !candidates.length) return []
@@ -109,9 +109,9 @@ async function saveCandidatesToDB(
       isp_providers:  c.isp_signal ? [c.isp_signal] : [],
       bulk_agreement_hint: c.bulk_detected ?? false,
       pain_signals:   c.pain_brief ? [c.pain_brief] : [],
-      gate_issue_detected: !!(c.pain_brief?.toLowerCase().includes('gate')),
+      gate_issue_detected: c.gate_signal ?? !!(c.pain_brief?.toLowerCase().includes('gate')),
       top_evidence_snippet: c.pain_brief ?? null,
-      status: i === 0 ? 'selected' : 'pending',
+      status: 'pending',
     }))
     const { data } = await supabaseDeep.from('aria_candidates').insert(rows).select('id')
     await supabaseDeep.from('aria_search_runs').update({ candidate_count: candidates.length }).eq('id', runId)
@@ -880,12 +880,17 @@ interface Candidate {
   bulk_detected?: boolean
   pain_brief?: string
   buy_score_estimate?: number
+  // v8 Ticket 4: lightweight enrichment fields (top-3 only)
+  confirmed_phone?: string
+  gate_signal?: boolean
+  ownership_entity?: string
 }
 
 interface CandidateResponse {
   type: 'candidates'
   candidates: Candidate[]
   query_interpretation: string
+  raw_results?: TavilyResult[]
 }
 
 async function runPhase1B(query: string, classification: QueryClassification, client: Anthropic): Promise<CandidateResponse> {
@@ -965,7 +970,72 @@ Empty array if no real properties found.`,
     type: 'candidates',
     candidates,
     query_interpretation: normStr(extracted.query_interpretation) || `Properties matching: ${query}`,
+    raw_results: allResults,
   }
+}
+
+// ─── TOP-3 LIGHTWEIGHT ENRICHMENT (Phase 1B only) ───────────────────────────
+// For prospecting queries: run 1 Serper search per top-3 candidate and extract
+// units, phone, management co., ownership, gate signal, and pain signal.
+// All 3 searches + 3 Haiku extractions run in parallel — adds ~2-4s to Phase 1B.
+
+async function enrichTopCandidates(candidates: Candidate[], client: Anthropic): Promise<Candidate[]> {
+  const top3 = candidates.slice(0, 3)
+  if (top3.length === 0) return candidates
+
+  // 3 parallel Serper searches — 1 per top candidate
+  const searchResultSets = await Promise.all(
+    top3.map(c => {
+      const geo = [c.city, c.state].filter(Boolean).join(', ')
+      return serperSearch(
+        `"${c.name}" ${geo} units phone management ownership gate access control internet`,
+        5, 'enrich'
+      )
+    })
+  )
+
+  // 3 parallel Haiku extractions — one per candidate
+  const enrichedTop3 = await Promise.all(
+    top3.map(async (c, i) => {
+      const results = searchResultSets[i]
+      if (!results.length) return c
+      const snippets = results.slice(0, 5)
+        .map((r, j) => `[${j + 1}] ${r.title}\nURL: ${r.url}\n${(r.content ?? '').slice(0, 400)}`)
+        .join('\n\n---\n\n')
+      const extracted = await haikusExtract<{
+        units: number | null
+        phone: string | null
+        management_company: string | null
+        ownership_entity: string | null
+        gate_signal: boolean
+        pain_signal: string | null
+      }>(
+        `Extract facts about "${c.name}" in ${c.city ?? ''}, ${c.state ?? ''}. Return ONLY valid JSON:
+{"units":null,"phone":null,"management_company":null,"ownership_entity":null,"gate_signal":false,"pain_signal":null}
+
+RULES:
+- units: total residential unit count as integer, else null
+- phone: property office/leasing phone in US format e.g. "(404) 555-1234", else null
+- management_company: who manages this property (company name like Greystar, Lincoln, etc.), else null
+- ownership_entity: who owns this property (LLC, REIT, investor name), else null
+- gate_signal: true if ANY result mentions gated, gate, access control, security entry, key fob
+- pain_signal: short verbatim resident complaint (max 120 chars), prioritize gate/internet/security, else null`,
+        snippets, 700, client
+      )
+      if (!extracted) return c
+      return {
+        ...c,
+        units:            extracted.units ?? c.units,
+        management_company: normStr(extracted.management_company) || c.management_company,
+        confirmed_phone:    normStr(extracted.phone) || c.confirmed_phone,
+        ownership_entity:   normStr(extracted.ownership_entity) || c.ownership_entity,
+        gate_signal:        extracted.gate_signal || c.gate_signal || false,
+        pain_brief:         normStr(extracted.pain_signal) || c.pain_brief,
+      } as Candidate
+    })
+  )
+
+  return [...enrichedTop3, ...candidates.slice(3)]
 }
 
 // ─── PHASE 2: Enrichment (parallel) ─────────────────────────────────────────
@@ -1877,15 +1947,36 @@ export async function POST(req: NextRequest) {
 
       const candidateResult = await runPhase1B(rawQuery, classification, anthropic)
 
+      // v8 Ticket 4: enrich top-3 candidates with lightweight Serper+Haiku pass
+      // Runs in parallel (3 searches + 3 Haiku calls) — adds ~2-4s, zero blocking
+      const enrichedCandidates = candidateResult.candidates.length > 0
+        ? await enrichTopCandidates(candidateResult.candidates, anthropic)
+        : candidateResult.candidates
+
       // v8: Persist ALL candidates before returning — none are dropped or discarded
-      const candidateIds = (searchRunId && candidateResult.candidates.length > 0)
-        ? await saveCandidatesToDB(searchRunId, candidateResult.candidates)
+      const candidateIds = (searchRunId && enrichedCandidates.length > 0)
+        ? await saveCandidatesToDB(searchRunId, enrichedCandidates)
         : []
+
+      // v8: Save Phase 1B source evidence — raw search results with URLs (non-blocking)
+      if (searchRunId && candidateResult.raw_results?.length) {
+        const p1bEvidence = candidateResult.raw_results.slice(0, 18).map(r => ({
+          fact_type: 'candidate_source',
+          extracted_value: (r.title ?? '').slice(0, 200),
+          source_url: r.url || undefined,
+          source_type: r.source ?? 'web',
+          source_authority: sourceAuthority(r.url ?? ''),
+          confidence: Math.round(Math.min(1, r.score ?? 0.6) * 100),
+          raw_snippet: (r.content ?? '').slice(0, 600),
+          phase_found: 1,
+        }))
+        saveEvidencePackets(searchRunId, null, p1bEvidence)
+      }
 
       // v8: Mark run complete with stats
       if (searchRunId) {
         void completeSearchRun(searchRunId, 'complete', {
-          candidate_count: candidateResult.candidates.length,
+          candidate_count: enrichedCandidates.length,
           duration_ms: Date.now() - runStart,
         })
       }
@@ -1895,13 +1986,13 @@ export async function POST(req: NextRequest) {
         mode: 'candidates',
         engine_version: ARIA_ENGINE_VERSION,
         search_run_id: searchRunId,
-        candidates: candidateResult.candidates.map((c, i) => ({
+        candidates: enrichedCandidates.map((c, i) => ({
           ...c,
           rank_position: i + 1,
           _candidate_id: candidateIds[i] ?? null,
         })),
         query_interpretation: candidateResult.query_interpretation,
-        candidate_count: candidateResult.candidates.length,
+        candidate_count: enrichedCandidates.length,
       })
     }
 
@@ -2020,30 +2111,46 @@ export async function POST(req: NextRequest) {
     // v8: Check quality gates — required field checklist before synthesis
     const qualityGates = checkQualityGates(p1, p2, p3)
 
-    // v8: Save Phase 1A + Phase 2 key evidence (non-blocking, best-effort)
+    // v8: Save Phase 1A + Phase 2 + Phase 3 key evidence (non-blocking, best-effort)
     if (searchRunId) {
       const evidenceFacts: Parameters<typeof saveEvidencePackets>[2] = []
-      // Phase 1A facts
-      if (p1.confirmed_phone)      evidenceFacts.push({ fact_type: 'phone',      extracted_value: p1.confirmed_phone,      source_type: 'listing',  confidence: 90, phase_found: 1 })
-      if (p1.confirmed_units)      evidenceFacts.push({ fact_type: 'units',      extracted_value: String(p1.confirmed_units), source_type: 'listing', confidence: 85, phase_found: 1 })
-      if (p1.confirmed_address)    evidenceFacts.push({ fact_type: 'address',    extracted_value: p1.confirmed_address,    source_type: 'listing',  confidence: 90, phase_found: 1 })
-      if (p1.listing_isp)          evidenceFacts.push({ fact_type: 'isp',        extracted_value: p1.listing_isp,          source_type: 'listing',  confidence: 95, phase_found: 1 })
-      if (p1.confirmed_management) evidenceFacts.push({ fact_type: 'owner',      extracted_value: p1.confirmed_management, source_type: 'listing',  confidence: 80, phase_found: 1 })
+      // Phase 1A facts — include listing page URL as source
+      const listingUrl = p1.listing_url ?? undefined
+      if (p1.confirmed_phone)      evidenceFacts.push({ fact_type: 'phone',   extracted_value: p1.confirmed_phone,             source_url: listingUrl, source_type: 'listing', confidence: 90, phase_found: 1 })
+      if (p1.confirmed_units)      evidenceFacts.push({ fact_type: 'units',   extracted_value: String(p1.confirmed_units),     source_url: listingUrl, source_type: 'listing', confidence: 85, phase_found: 1 })
+      if (p1.confirmed_address)    evidenceFacts.push({ fact_type: 'address', extracted_value: p1.confirmed_address,           source_url: listingUrl, source_type: 'listing', confidence: 90, phase_found: 1 })
+      if (p1.listing_isp)          evidenceFacts.push({ fact_type: 'isp',     extracted_value: p1.listing_isp,                 source_url: listingUrl, source_type: 'listing', confidence: 95, phase_found: 1 })
+      if (p1.confirmed_management) evidenceFacts.push({ fact_type: 'owner',   extracted_value: p1.confirmed_management,        source_url: listingUrl, source_type: 'listing', confidence: 80, phase_found: 1 })
       // Phase 2 facts
-      if (p2.owner_entity)         evidenceFacts.push({ fact_type: 'owner',      extracted_value: p2.owner_entity,         source_type: 'owner',    confidence: 75, phase_found: 2 })
-      if (p2.roe_expiry_year)      evidenceFacts.push({ fact_type: 'roe',        extracted_value: String(p2.roe_expiry_year), source_type: 'roe',   confidence: 80, phase_found: 2 })
+      if (p2.owner_entity)    evidenceFacts.push({ fact_type: 'owner', extracted_value: p2.owner_entity,              source_type: 'owner', confidence: 75, phase_found: 2 })
+      if (p2.roe_expiry_year) evidenceFacts.push({ fact_type: 'roe',   extracted_value: String(p2.roe_expiry_year),   source_type: 'roe',   confidence: 80, phase_found: 2 })
       p2.isp_providers.slice(0, 3).forEach(isp =>
         evidenceFacts.push({ fact_type: 'isp', extracted_value: isp, source_type: 'bulk', confidence: 70, phase_found: 2 })
       )
-      // Phase 3 contacts
+      // Phase 3 contacts — include LinkedIn URL as source
       p3.contacts.slice(0, 3).forEach(c =>
-        evidenceFacts.push({ fact_type: 'contact', extracted_value: `${c.name} (${c.title})`, source_type: 'contacts', confidence: 75, phase_found: 3 })
+        evidenceFacts.push({ fact_type: 'contact', extracted_value: `${c.name} (${c.title})`, source_url: c.linkedin || undefined, source_type: 'contacts', confidence: 75, phase_found: 3 })
       )
       // Pain signals
       p3.pain_signals.slice(0, 5).forEach(s =>
         evidenceFacts.push({ fact_type: 'pain_signal', extracted_value: s.quote.slice(0, 200), source_type: s.source, confidence: 65, phase_found: 3 })
       )
       if (evidenceFacts.length > 0) saveEvidencePackets(searchRunId, null, evidenceFacts)
+
+      // v8: Save Phase 3 raw source excerpts as bulk evidence — each result gets source_url + raw_snippet
+      if (p3.raw_excerpts.length > 0) {
+        const p3BulkEvidence = p3.raw_excerpts.slice(0, 15).map(r => ({
+          fact_type: 'source_excerpt',
+          extracted_value: (r.title ?? '').slice(0, 200),
+          source_url: r.url || undefined,
+          source_type: r.source ?? 'web',
+          source_authority: sourceAuthority(r.url ?? ''),
+          confidence: Math.round(Math.min(1, r.score ?? 0.5) * 100),
+          raw_snippet: (r.content ?? '').slice(0, 600),
+          phase_found: 3,
+        }))
+        saveEvidencePackets(searchRunId, null, p3BulkEvidence)
+      }
     }
 
     // ── Determine best contact early — needed for gatekeeper tip ─────────────
