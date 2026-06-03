@@ -4,8 +4,8 @@ import { useState, useRef, useCallback } from 'react'
 import { useModalScope, SCOPE_PLACEHOLDER } from '@/components/nexus/context/ModalScopeContext'
 
 interface Props {
-  onSubmit:    (query: string) => void
-  isLoading?:  boolean
+  onSubmit: (query: string) => void | Promise<void>
+  isLoading?: boolean
   /** Override placeholder — if omitted, auto-resolved from ModalScopeContext */
   placeholder?: string
 }
@@ -18,12 +18,13 @@ export function ActionCommandBar({ onSubmit, isLoading = false, placeholder: pla
   // Read scope from context — drives placeholder and API metadata
   const { scope, isCommandLoading } = useModalScope()
   const activePlaceholder = placeholderProp ?? SCOPE_PLACEHOLDER[scope]
-  const activeLoading     = isLoading || isCommandLoading
+  const activeLoading = isLoading || isCommandLoading
+  const canSubmit = Boolean(value.trim()) && !activeLoading
 
   const handleSubmit = useCallback(() => {
     const trimmed = value.trim()
     if (!trimmed || activeLoading) return
-    onSubmit(trimmed)
+    void onSubmit(trimmed)
     setValue('')
   }, [value, activeLoading, onSubmit])
 
@@ -62,7 +63,12 @@ export function ActionCommandBar({ onSubmit, isLoading = false, placeholder: pla
           onChange={e => setValue(e.target.value)}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
-          onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              handleSubmit()
+            }
+          }}
           placeholder={activePlaceholder}
           disabled={activeLoading}
           className="flex-1 bg-transparent outline-none text-sm"
@@ -114,15 +120,15 @@ export function ActionCommandBar({ onSubmit, isLoading = false, placeholder: pla
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={!value.trim() || activeLoading}
+            disabled={!canSubmit}
             aria-label="Send"
             className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200"
             style={{
-              background: value.trim() && !isLoading ? '#6B7EFF' : 'rgba(107,126,255,0.15)',
-              opacity: !value.trim() ? 0.4 : 1,
+              background: canSubmit ? '#6B7EFF' : 'rgba(107,126,255,0.15)',
+              opacity: canSubmit ? 1 : 0.4,
             }}
           >
-            {isLoading ? (
+            {activeLoading ? (
               <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" className="animate-spin">
                 <circle cx="7" cy="7" r="5.5" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5"/>
                 <path d="M7 1.5A5.5 5.5 0 0112.5 7" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
