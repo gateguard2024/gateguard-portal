@@ -93,13 +93,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: leadError.message }, { status: 500 })
     }
 
-    await supabase.from('crm_activities').insert({
-      lead_id: lead.id,
-      type: 'call',
-      subject: `Inbound call: ${contactName}`,
-      body: notes,
-      ...(user.org_id ? { org_id: user.org_id } : {}),
-    }).throwOnError().catch(() => null)
+    try {
+      await supabase.from('crm_activities').insert({
+        lead_id: lead.id,
+        type: 'call',
+        subject: `Inbound call: ${contactName}`,
+        body: notes,
+        ...(user.org_id ? { org_id: user.org_id } : {}),
+      })
+    } catch {
+      // Best-effort activity log. Lead creation should not fail if activity logging is unavailable.
+    }
 
     return NextResponse.json({
       success: true,
