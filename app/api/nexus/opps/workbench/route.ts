@@ -59,7 +59,6 @@ export async function GET(req: NextRequest) {
     supabase
       .from('leads')
       .select('id, contact_name, company_name, stage, source, notes, created_at, updated_at, email, phone, location, opportunity_id')
-      .is('converted_at', null)
       .is('lost_at', null)
       .order('updated_at', { ascending: false })
       .limit(20),
@@ -70,7 +69,6 @@ export async function GET(req: NextRequest) {
     supabase
       .from('leads')
       .select('id, contact_name, company_name, stage, source, notes, created_at, updated_at, email, phone, location, opportunity_id')
-      .is('converted_at', null)
       .is('lost_at', null)
       .order('updated_at', { ascending: true })
       .limit(10),
