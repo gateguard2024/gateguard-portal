@@ -2,14 +2,159 @@
 
 import { useState, useCallback } from 'react'
 import { useUser }          from '@clerk/nextjs'
+import { useRouter }        from 'next/navigation'
 import { ActionCommandBar } from '@/components/nexus/ActionCommandBar'
 import { DynamicModal }     from '@/components/nexus/DynamicModal'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface ActionCardAction {
+  label: string
+  href?: string
+  toolName?: string
+  toolArgs?: Record<string, unknown>
+}
+
+interface ActionCard {
+  hex: string
+  tag: string
+  urgent?: boolean
+  headline: string
+  sub?: string
+  actions: ActionCardAction[]
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
+  cardResponse?: {
+    title?: string
+    cards: ActionCard[]
+    proactive?: ActionCard[]
+  }
+}
+
+// ─── ActionCard sub-components ────────────────────────────────────────────────
+
+function hexToRgb(hex: string): string {
+  const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+  return r ? `${parseInt(r[1],16)},${parseInt(r[2],16)},${parseInt(r[3],16)}` : '107,126,255'
+}
+
+function ActionCardItem({
+  card,
+  onExecute,
+  onNavigate,
+}: {
+  card: ActionCard
+  onExecute: (toolName: string, toolArgs: Record<string, unknown>) => void
+  onNavigate: (href: string) => void
+}) {
+  const rgb = hexToRgb(card.hex)
+  return (
+    <div
+      className="rounded-2xl p-3.5 flex flex-col gap-2.5"
+      style={{
+        background:     `rgba(${rgb},0.07)`,
+        border:         `1px solid rgba(${rgb},${card.urgent ? 0.4 : 0.2})`,
+        backdropFilter: 'blur(16px)',
+        boxShadow:      card.urgent ? `0 0 20px rgba(${rgb},0.14)` : 'none',
+      }}
+    >
+      {/* Tag row */}
+      <div className="flex items-center gap-1.5">
+        {card.urgent && (
+          <span
+            className="w-1.5 h-1.5 rounded-full animate-pulse flex-shrink-0"
+            style={{ background: card.hex }}
+          />
+        )}
+        <span
+          className="text-[9px] uppercase tracking-widest font-mono"
+          style={{ color: `rgba(${rgb},0.65)` }}
+        >
+          {card.tag}
+        </span>
+      </div>
+      {/* Headline */}
+      <p className="text-xs font-medium leading-snug" style={{ color: 'rgba(255,255,255,0.9)' }}>
+        {card.headline}
+      </p>
+      {/* Sub */}
+      {card.sub && (
+        <p className="text-[9px] leading-normal" style={{ color: 'rgba(255,255,255,0.32)' }}>
+          {card.sub}
+        </p>
+      )}
+      {/* Actions */}
+      <div className="flex gap-1.5 mt-auto flex-wrap">
+        {card.actions.map((action, j) => (
+          <button
+            key={j}
+            onClick={() => {
+              if (action.href)     onNavigate(action.href)
+              else if (action.toolName) onExecute(action.toolName, action.toolArgs ?? {})
+            }}
+            className="text-[10px] px-2.5 py-1.5 rounded-lg font-medium transition-all flex-shrink-0"
+            style={
+              j === 0
+                ? { background: `rgba(${rgb},0.18)`, border: `0.5px solid rgba(${rgb},0.4)`,  color: card.hex }
+                : { background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.45)' }
+            }
+          >
+            {action.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function CardResponseView({
+  title,
+  cards,
+  proactive,
+  onExecute,
+  onNavigate,
+}: {
+  title?: string
+  cards: ActionCard[]
+  proactive?: ActionCard[]
+  onExecute: (toolName: string, toolArgs: Record<string, unknown>) => void
+  onNavigate: (href: string) => void
+}) {
+  const displayCards = cards.length > 0 ? cards : (proactive ?? [])
+  const isEmpty      = cards.length === 0 && !proactive?.length
+  if (isEmpty) return null
+
+  return (
+    <div className="space-y-2.5 w-full">
+      {title && (
+        <p
+          className="text-[9px] uppercase tracking-widest font-mono"
+          style={{ color: 'rgba(255,255,255,0.28)' }}
+        >
+          {title}
+        </p>
+      )}
+      <div className={`grid gap-2.5 ${
+        displayCards.length === 1
+          ? 'grid-cols-1'
+          : displayCards.length === 2
+          ? 'grid-cols-1 sm:grid-cols-2'
+          : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+      }`}>
+        {displayCards.map((card, i) => (
+          <ActionCardItem
+            key={i}
+            card={card}
+            onExecute={onExecute}
+            onNavigate={onNavigate}
+          />
+        ))}
+      </div>
+    </div>
+  )
 }
 
 // ─── Nav ──────────────────────────────────────────────────────────────────────
@@ -27,12 +172,36 @@ const NAV_ITEMS = [
 
 export default function NexusHome() {
   const { user }  = useUser()
+  const router    = useRouter()
   const firstName = user?.firstName ?? 'there'
 
   // null = no popup open; string = which tab is expanded
   const [activeModal, setActiveModal] = useState<string | null>(null)
   const [messages,    setMessages]    = useState<ChatMessage[]>([])
   const [isLoading,   setIsLoading]   = useState(false)
+
+  // Navigate from card actions
+  const handleNavigate = useCallback((href: string) => {
+    router.push(href)
+  }, [router])
+
+  // Execute a tool from a card action button
+  const executeCardAction = useCallback(async (toolName: string, toolArgs: Record<string, unknown>) => {
+    try {
+      const res = await fetch('/api/assistant/execute', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ toolName, toolArgs, reasoning: 'User confirmed action via NEXUS action card' }),
+      })
+      const d = await res.json()
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: d.message ?? `✓ Done — ${toolName.replace(/_/g, ' ')}`,
+      }])
+    } catch {
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Action failed. Please try again.' }])
+    }
+  }, [])
 
   const handleQuery = useCallback(async (query: string) => {
     setActiveModal(null)   // dismiss popup when user types
@@ -46,7 +215,26 @@ export default function NexusHome() {
         body:    JSON.stringify({ messages: next }),
       })
       const data = await res.json()
-      setMessages(prev => [...prev, { role: 'assistant', content: data.response ?? data.message ?? 'Done.' }])
+
+      // ── ActionCards response (operational query) ───────────────────────────
+      if (data.type === 'action_cards') {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: '',
+          cardResponse: {
+            title:    data.title,
+            cards:    data.cards    ?? [],
+            proactive: data.proactive,
+          },
+        }])
+        return
+      }
+
+      // ── Regular text / pending action response ─────────────────────────────
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: data.response ?? data.message ?? 'Done.',
+      }])
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Something went wrong. Please try again.' }])
     } finally {
@@ -162,18 +350,33 @@ export default function NexusHome() {
               ← Clear
             </button>
             {messages.map((m, i) => (
-              <div
-                key={i}
-                className={`rounded-xl px-4 py-3 text-sm leading-relaxed ${
-                  m.role === 'user' ? 'ml-12 text-right' : 'mr-12'
-                }`}
-                style={
-                  m.role === 'user'
-                    ? { background: 'rgba(107,126,255,0.18)', border: '0.5px solid rgba(107,126,255,0.35)', color: 'rgba(255,255,255,0.88)' }
-                    : { background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.72)' }
-                }
-              >
-                {m.content}
+              <div key={i}>
+                {m.role === 'user' ? (
+                  /* ── User bubble ─────────────────────────────────────────── */
+                  <div
+                    className="ml-12 text-right rounded-xl px-4 py-3 text-sm leading-relaxed"
+                    style={{ background: 'rgba(107,126,255,0.18)', border: '0.5px solid rgba(107,126,255,0.35)', color: 'rgba(255,255,255,0.88)' }}
+                  >
+                    {m.content}
+                  </div>
+                ) : m.cardResponse ? (
+                  /* ── ActionCards (operational query) ─────────────────────── */
+                  <CardResponseView
+                    title={m.cardResponse.title}
+                    cards={m.cardResponse.cards}
+                    proactive={m.cardResponse.proactive}
+                    onExecute={executeCardAction}
+                    onNavigate={handleNavigate}
+                  />
+                ) : m.content ? (
+                  /* ── Text response (non-operational / tool confirmation) ─── */
+                  <div
+                    className="mr-12 rounded-xl px-4 py-3 text-sm leading-relaxed"
+                    style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.72)' }}
+                  >
+                    {m.content}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>

@@ -443,6 +443,324 @@ async function fetchPortalData(dataType: string, orgId: string | null) {
   }
 }
 
+// ─── ActionCards types (returned for operational read queries) ──────────────
+interface ActionCardAction {
+  label: string
+  href?: string
+  toolName?: string
+  toolArgs?: Record<string, unknown>
+}
+
+interface ActionCard {
+  hex: string
+  tag: string
+  urgent?: boolean
+  headline: string
+  sub?: string
+  actions: ActionCardAction[]
+}
+
+interface ActionCardsResponse {
+  type: 'action_cards'
+  title?: string
+  cards: ActionCard[]
+  proactive?: ActionCard[]
+}
+
+// ─── Stage / priority color maps ────────────────────────────────────────────
+const STAGE_HEX: Record<string, string> = {
+  prospect:  '#6B7EFF', qualified: '#34d399', proposal:    '#fbbf24',
+  negotiation: '#f97316', won: '#34d399',    lost:        '#6b7280',
+  new: '#6B7EFF', contacted: '#a5b4ff',      aria_draft:  '#a855f7',
+  survey_requested: '#fbbf24', proposal_sent: '#f97316',
+}
+
+const PRIORITY_HEX: Record<string, string> = {
+  low: '#34d399', normal: '#6B7EFF', high: '#fbbf24',
+  urgent: '#ef4444', critical: '#ef4444',
+}
+
+const QUOTE_STATUS_HEX: Record<string, string> = {
+  draft: '#6b7280', sent: '#6B7EFF', viewed: '#fbbf24',
+  accepted: '#34d399', rejected: '#ef4444',
+}
+
+// ─── Operational intent detection ───────────────────────────────────────────
+type OperationalIntent =
+  | 'find_opportunities'
+  | 'find_leads'
+  | 'find_work_orders'
+  | 'find_quotes'
+  | 'morning_briefing'
+  | 'intake_lead'
+
+function detectOperationalIntent(msg: string): OperationalIntent | null {
+  const m = msg.toLowerCase()
+  // Intake lead — must check BEFORE find_leads to avoid false match
+  if (/\b(called about|interested in (our |the |a )?service|new (lead|property)|came in (about|asking))\b/.test(m)) {
+    return 'intake_lead'
+  }
+  // Find queries
+  if (/\b(opportunit|pipeline|open deal|new opp|show.*deal|find.*deal)\b/.test(m))  return 'find_opportunities'
+  if (/\b(lead|prospect)\b/.test(m) && !/\b(create|add|new lead)\b/.test(m))        return 'find_leads'
+  if (/\b(work order|open job|service call|\bwos?\b|dispatch job)\b/.test(m))        return 'find_work_orders'
+  if (/\b(quote|proposal)\b/.test(m) && !/\b(create|new quote|new proposal)\b/.test(m)) return 'find_quotes'
+  if (/\b(briefing|morning|today.s status|what do i have|what.s today|daily)\b/.test(m)) return 'morning_briefing'
+  return null
+}
+
+// ─── Format helpers ──────────────────────────────────────────────────────────
+function fmtDollar(v: number | undefined | null): string {
+  return v ? `$${Number(v).toLocaleString()}` : ''
+}
+
+function timeAgoShort(iso?: string): string {
+  if (!iso) return ''
+  const diff = Date.now() - new Date(iso).getTime()
+  const d = Math.floor(diff / 86400000)
+  const h = Math.floor(diff / 3600000)
+  if (d > 0) return `${d}d ago`
+  if (h > 0) return `${h}h ago`
+  return 'just now'
+}
+
+// ─── Build ActionCards response for each intent ──────────────────────────────
+async function buildActionCardsResponse(
+  intent: OperationalIntent,
+  rawMsg: string,
+  orgId: string | null,
+): Promise<ActionCardsResponse | null> {
+
+  switch (intent) {
+
+    case 'find_opportunities': {
+      const opps = (await fetchPortalData('opportunities_open', orgId) as Array<{
+        id: string; name?: string; account_name?: string; stage?: string; value?: number; updated_at?: string
+      }>) ?? []
+
+      if (!opps.length) {
+        return {
+          type: 'action_cards', title: 'No open opportunities',
+          cards: [],
+          proactive: [{
+            hex: '#6B7EFF', tag: 'GET STARTED',
+            headline: 'No open opportunities — ready to build your pipeline?',
+            sub: 'Create your first opportunity or explore existing leads.',
+            actions: [
+              { label: 'New Opportunity', href: '/crm/opportunities' },
+              { label: 'View All Leads',  href: '/crm/leads' },
+            ],
+          }],
+        }
+      }
+      return {
+        type: 'action_cards',
+        title: `Open Opportunities (${opps.length})`,
+        cards: opps.slice(0, 6).map(opp => ({
+          hex: STAGE_HEX[opp.stage ?? ''] ?? '#6B7EFF',
+          tag: (opp.stage ?? 'OPPORTUNITY').toUpperCase().replace(/_/g, ' '),
+          headline: [opp.name, opp.account_name].filter(Boolean).join(' · '),
+          sub: [fmtDollar(opp.value), timeAgoShort(opp.updated_at)].filter(Boolean).join(' · '),
+          actions: [{ label: 'View Details', href: `/crm/opportunities/${opp.id}` }],
+        })),
+      }
+    }
+
+    case 'find_leads': {
+      const leads = (await fetchPortalData('leads_open', orgId) as Array<{
+        id: string; name?: string; company?: string; stage?: string; source?: string; created_at?: string
+      }>) ?? []
+
+      if (!leads.length) {
+        return {
+          type: 'action_cards', title: 'No open leads',
+          cards: [],
+          proactive: [{
+            hex: '#34d399', tag: 'GET STARTED',
+            headline: 'Pipeline is clear — no open leads right now.',
+            sub: 'Add a new lead or run ARIA to find prospects.',
+            actions: [
+              { label: 'Add Lead',        href: '/crm/leads' },
+              { label: 'Run ARIA Intel',  href: '/aria' },
+            ],
+          }],
+        }
+      }
+      return {
+        type: 'action_cards',
+        title: `Open Leads (${leads.length})`,
+        cards: leads.slice(0, 6).map(lead => ({
+          hex: STAGE_HEX[lead.stage ?? ''] ?? '#6B7EFF',
+          tag: (lead.stage ?? 'LEAD').toUpperCase().replace(/_/g, ' '),
+          headline: [lead.name, lead.company].filter(Boolean).join(' · '),
+          sub: [lead.source, timeAgoShort(lead.created_at)].filter(Boolean).join(' · '),
+          actions: [{ label: 'View Details', href: `/crm/leads/${lead.id}` }],
+        })),
+      }
+    }
+
+    case 'find_work_orders': {
+      const wos = (await fetchPortalData('work_orders_open', orgId) as Array<{
+        id: string; title?: string; status?: string; priority?: string; scheduled_date?: string; property_name?: string
+      }>) ?? []
+
+      if (!wos.length) {
+        return {
+          type: 'action_cards', title: 'No open work orders',
+          cards: [],
+          proactive: [{
+            hex: '#fbbf24', tag: 'ALL CLEAR',
+            headline: 'No open work orders — field ops are clear.',
+            sub: 'Create a new work order or check the dispatch board.',
+            actions: [
+              { label: 'New Work Order', href: '/maintenance' },
+              { label: 'Dispatch Board', href: '/dispatch' },
+            ],
+          }],
+        }
+      }
+      return {
+        type: 'action_cards',
+        title: `Open Work Orders (${wos.length})`,
+        cards: wos.slice(0, 6).map(wo => ({
+          hex: PRIORITY_HEX[wo.priority ?? 'normal'] ?? '#6B7EFF',
+          tag: (wo.priority ?? 'NORMAL').toUpperCase(),
+          urgent: wo.priority === 'urgent' || wo.priority === 'critical',
+          headline: [wo.title, wo.property_name].filter(Boolean).join(' · '),
+          sub: [
+            wo.status?.replace(/_/g, ' '),
+            wo.scheduled_date ? `Scheduled ${wo.scheduled_date}` : '',
+          ].filter(Boolean).join(' · '),
+          actions: [
+            { label: 'View Details', href: `/maintenance/${wo.id}` },
+            { label: 'Dispatch',     href: '/dispatch' },
+          ],
+        })),
+      }
+    }
+
+    case 'find_quotes': {
+      const quotes = (await fetchPortalData('quotes_recent', orgId) as Array<{
+        id: string; quote_number?: string; title?: string; status?: string;
+        total_one_time?: number; total_mrr?: number; created_at?: string
+      }>) ?? []
+
+      if (!quotes.length) {
+        return {
+          type: 'action_cards', title: 'No recent quotes',
+          cards: [],
+          proactive: [{
+            hex: '#6B7EFF', tag: 'GET STARTED',
+            headline: 'No quotes in your pipeline — ready to build one?',
+            sub: 'Start with a scenario template or build from scratch.',
+            actions: [
+              { label: 'New Quote',       href: '/quotes/new' },
+              { label: 'View All Quotes', href: '/quotes' },
+            ],
+          }],
+        }
+      }
+      return {
+        type: 'action_cards',
+        title: `Recent Quotes (${quotes.length})`,
+        cards: quotes.slice(0, 6).map(q => ({
+          hex: QUOTE_STATUS_HEX[q.status ?? 'draft'] ?? '#6B7EFF',
+          tag: (q.status ?? 'DRAFT').toUpperCase(),
+          headline: q.title ?? q.quote_number ?? 'Quote',
+          sub: [
+            fmtDollar(q.total_one_time),
+            q.total_mrr ? `${fmtDollar(q.total_mrr)}/mo MRR` : '',
+            timeAgoShort(q.created_at),
+          ].filter(Boolean).join(' · '),
+          actions: [{ label: 'View Quote', href: `/quotes/${q.id}` }],
+        })),
+      }
+    }
+
+    case 'morning_briefing': {
+      const briefing = await fetchPortalData('daily_briefing', orgId) as {
+        overdue_todos: Array<{ id: string; title?: string; priority?: string; due_date?: string }>
+        open_wos:      Array<{ id: string; title?: string; status?: string;  priority?: string }>
+        expiring_quotes: Array<{ id: string; quote_number?: string; title?: string; valid_until?: string }>
+      }
+      const cards: ActionCard[] = []
+      for (const t of (briefing?.overdue_todos ?? []).slice(0, 2)) {
+        cards.push({
+          hex: PRIORITY_HEX[t.priority ?? 'normal'], tag: 'OVERDUE TODO', urgent: true,
+          headline: t.title ?? 'To-Do',
+          sub: t.due_date ? `Was due ${t.due_date}` : undefined,
+          actions: [{ label: 'View Todos', href: '/todos' }],
+        })
+      }
+      for (const wo of (briefing?.open_wos ?? []).slice(0, 2)) {
+        cards.push({
+          hex: '#fbbf24', tag: 'OPEN JOB', urgent: wo.priority === 'urgent',
+          headline: wo.title ?? 'Work Order',
+          sub: wo.status?.replace(/_/g, ' '),
+          actions: [{ label: 'View', href: `/maintenance/${wo.id}` }],
+        })
+      }
+      for (const q of (briefing?.expiring_quotes ?? []).slice(0, 2)) {
+        cards.push({
+          hex: '#f97316', tag: 'EXPIRING QUOTE', urgent: true,
+          headline: q.title ?? q.quote_number ?? 'Quote',
+          sub: q.valid_until ? `Expires ${q.valid_until}` : undefined,
+          actions: [{ label: 'View Quote', href: `/quotes/${q.id}` }],
+        })
+      }
+      if (!cards.length) {
+        return {
+          type: 'action_cards', title: "All clear — nothing urgent today",
+          cards: [],
+          proactive: [{
+            hex: '#34d399', tag: 'ALL CLEAR',
+            headline: "Nothing overdue, no open jobs, no expiring quotes.",
+            sub: "You're up to date. Great work!",
+            actions: [
+              { label: 'Check Pipeline', href: '/crm' },
+              { label: 'View Dispatch',  href: '/dispatch' },
+            ],
+          }],
+        }
+      }
+      return {
+        type: 'action_cards',
+        title: `Today's Briefing — ${cards.length} item${cards.length !== 1 ? 's' : ''} need attention`,
+        cards,
+      }
+    }
+
+    case 'intake_lead': {
+      // Extract property/company name from message
+      const nameMatch =
+        rawMsg.match(/^(.+?)\s+called about/i)?.[1]?.trim() ??
+        rawMsg.match(/^(.+?)\s+interested in/i)?.[1]?.trim() ??
+        rawMsg.match(/new (?:lead|property)[:\s]+(.+)/i)?.[1]?.trim() ??
+        rawMsg.match(/^(.+?)\s+came in asking/i)?.[1]?.trim()
+
+      if (!nameMatch || nameMatch.split(' ').length > 6) return null  // Too ambiguous — fall through to Claude
+
+      const name = nameMatch.charAt(0).toUpperCase() + nameMatch.slice(1)
+      return {
+        type: 'action_cards',
+        title: `New Lead: ${name}`,
+        cards: [{
+          hex: '#34d399', tag: 'NEW LEAD',
+          headline: `Add "${name}" as a new lead?`,
+          sub: 'This will create a CRM lead record and add it to your pipeline.',
+          actions: [
+            { label: 'Yes, Create Lead', toolName: 'create_lead', toolArgs: { name, stage: 'new' } },
+            { label: 'Open CRM',         href: '/crm/leads' },
+          ],
+        }],
+      }
+    }
+
+    default:
+      return null
+  }
+}
+
 // ─── PendingAction type (returned when medium/high risk tool is triggered) ──
 interface PendingAction {
   toolName: string
@@ -509,6 +827,15 @@ export async function POST(req: NextRequest) {
     const data = await fetchPortalData('daily_briefing', user?.org_id ?? null)
     liveData = data as Record<string, unknown>
     dataContext = `\nLIVE DATA — Daily Briefing:\n${JSON.stringify(data)}`
+  }
+
+  // ─── Operational intent pre-processor ───────────────────────────────────────
+  // For known read/find queries, skip the agentic loop entirely and return
+  // structured ActionCards so the frontend renders glass UI, not a text bubble.
+  const operationalIntent = detectOperationalIntent(lowerMsg)
+  if (operationalIntent) {
+    const actionCardsResult = await buildActionCardsResponse(operationalIntent, lastMsg, user?.org_id ?? null)
+    if (actionCardsResult) return NextResponse.json(actionCardsResult)
   }
 
   const systemPrompt = `You are NEXUS, the personal AI assistant built into the GateGuard dealer portal. You are concise, direct, and helpful. You know the portal inside-out and can answer questions, look up data, remind about tasks, navigate the user to the right page, and take actions directly in the portal.
