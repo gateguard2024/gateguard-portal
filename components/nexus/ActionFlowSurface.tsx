@@ -5,12 +5,13 @@ import { useRouter } from 'next/navigation'
 
 export type NexusTabId = 'my-day' | 'recent' | 'opps' | 'jobs' | 'field' | 'people'
 
-type StepId = 'start' | 'lead-source' | 'research' | 'opportunity' | 'call-name' | 'call-property' | 'call-need' | 'call-review'
+type StepId = 'start' | 'research' | 'opportunity' | 'call-name' | 'call-property' | 'call-need' | 'call-review' | 'workbench'
 
 type FlowAction =
   | { kind: 'next'; stepId: StepId }
   | { kind: 'route'; href: string }
   | { kind: 'assistant'; prompt: string; scope: string }
+  | { kind: 'workbench'; focus?: WorkbenchFocus }
 
 type FlowCard = {
   title: string
@@ -32,6 +33,30 @@ type InboundLeadDraft = {
   need: string
 }
 
+type WorkbenchRecord = {
+  id: string
+  name: string
+  company?: string | null
+  account_name?: string | null
+  stage?: string | null
+  source?: string | null
+  value?: number | null
+  notes?: string | null
+  created_at?: string | null
+}
+
+type WorkbenchFocus = 'openLeads' | 'needsAttention' | 'openOpportunities' | 'proposalFollowUps' | 'search'
+
+type WorkbenchData = {
+  stats?: Record<string, number>
+  openLeads?: WorkbenchRecord[]
+  needsAttention?: WorkbenchRecord[]
+  openOpportunities?: WorkbenchRecord[]
+  proposalFollowUps?: WorkbenchRecord[]
+  leads?: WorkbenchRecord[]
+  opportunities?: WorkbenchRecord[]
+}
+
 const EMPTY_DRAFT: InboundLeadDraft = {
   source: 'unknown',
   contactName: '',
@@ -39,25 +64,15 @@ const EMPTY_DRAFT: InboundLeadDraft = {
   need: '',
 }
 
-const STEPS: Record<Exclude<StepId, 'call-name' | 'call-property' | 'call-need' | 'call-review'>, { eyebrow: string; title: string; subtitle: string; cards: FlowCard[] }> = {
+const STEPS: Record<Exclude<StepId, 'call-name' | 'call-property' | 'call-need' | 'call-review' | 'workbench'>, { eyebrow: string; title: string; subtitle: string; cards: FlowCard[] }> = {
   start: {
     eyebrow: 'Revenue flow',
-    title: 'What are we starting with?',
-    subtitle: 'Pick one simple card. Nexus will guide the next step.',
+    title: 'What are we doing with revenue today?',
+    subtitle: 'Create something new or work what is already open.',
     cards: [
       { title: 'Someone Called', subtitle: 'Capture a phone lead step by step.', hex: '#34d399', action: { kind: 'next', stepId: 'call-name' } },
-      { title: 'Create Opportunity', subtitle: 'There is a real deal to work.', hex: '#6B7EFF', action: { kind: 'next', stepId: 'opportunity' } },
-      { title: 'View Pipeline', subtitle: 'See active leads and open deals.', hex: '#fbbf24', action: { kind: 'route', href: '/crm' } },
-    ],
-  },
-  'lead-source': {
-    eyebrow: 'Create Lead / Step 1',
-    title: 'Where did the lead come from?',
-    subtitle: 'No forms yet. Pick the source, then Nexus asks one question at a time.',
-    cards: [
-      { title: 'Website Lead', subtitle: 'They came from the website or form.', hex: '#34d399', action: { kind: 'assistant', prompt: 'Create a new website lead. Ask me only for missing details one at a time.', scope: 'opps_leads' } },
-      { title: 'Phone Call', subtitle: 'They called or texted about service.', hex: '#6B7EFF', action: { kind: 'next', stepId: 'call-name' } },
-      { title: 'Research First', subtitle: 'Run property intel before outreach.', hex: '#a855f7', action: { kind: 'next', stepId: 'research' } },
+      { title: 'Work Existing Leads', subtitle: 'Open leads, opportunities, follow-ups, and search.', hex: '#6B7EFF', action: { kind: 'workbench', focus: 'openLeads' } },
+      { title: 'Create Opportunity', subtitle: 'There is a real deal to work.', hex: '#fbbf24', action: { kind: 'next', stepId: 'opportunity' } },
     ],
   },
   research: {
@@ -67,7 +82,7 @@ const STEPS: Record<Exclude<StepId, 'call-name' | 'call-property' | 'call-need' 
     cards: [
       { title: 'Run ARIA', subtitle: 'Research a property or management company.', hex: '#a855f7', action: { kind: 'route', href: '/aria' } },
       { title: 'Pitch Brief', subtitle: 'Generate simple outreach notes.', hex: '#6B7EFF', action: { kind: 'assistant', prompt: 'Generate a pitch brief for the last ARIA search', scope: 'opps_leads' } },
-      { title: 'Back', subtitle: 'Choose another lead path.', hex: '#34d399', action: { kind: 'next', stepId: 'lead-source' } },
+      { title: 'Back', subtitle: 'Return to revenue choices.', hex: '#34d399', action: { kind: 'next', stepId: 'start' } },
     ],
   },
   opportunity: {
@@ -80,6 +95,14 @@ const STEPS: Record<Exclude<StepId, 'call-name' | 'call-property' | 'call-need' 
       { title: 'Follow-Up', subtitle: 'Make sure the deal does not stall.', hex: '#34d399', action: { kind: 'assistant', prompt: 'Schedule a follow-up for this opportunity. Ask what account or deal it is for.', scope: 'opps_leads' } },
     ],
   },
+}
+
+const WORKBENCH_LABELS: Record<WorkbenchFocus, string> = {
+  openLeads: 'Open Leads',
+  needsAttention: 'Needs Attention Today',
+  openOpportunities: 'Open Opportunities',
+  proposalFollowUps: 'Proposal Follow-Ups',
+  search: 'Search Person / Property',
 }
 
 function rgb(hex: string): string {
@@ -107,6 +130,16 @@ async function createInboundLead(draft: InboundLeadDraft): Promise<{ message: st
   const data = await res.json().catch(() => ({}))
   if (!res.ok || data.success === false) throw new Error(data?.message ?? 'Could not create lead.')
   return { message: data.message ?? 'Lead created.', nextCards: Array.isArray(data.nextCards) ? data.nextCards : [] }
+}
+
+async function loadWorkbench(query?: string): Promise<WorkbenchData> {
+  const url = query?.trim()
+    ? `/api/nexus/opps/workbench?q=${encodeURIComponent(query.trim())}`
+    : '/api/nexus/opps/workbench'
+  const res = await fetch(url)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok || data.success === false) throw new Error(data?.message ?? 'Could not load workbench.')
+  return data as WorkbenchData
 }
 
 function FlowCardButton({ card, disabled, onAction }: { card: FlowCard; disabled: boolean; onAction: (action: FlowAction) => void }) {
@@ -148,6 +181,33 @@ function CaptureStep({ label, help, value, onChange, onNext, onBack }: { label: 
   )
 }
 
+function RecordList({ records, emptyText }: { records: WorkbenchRecord[]; emptyText: string }) {
+  if (records.length === 0) {
+    return <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.42)' }}>{emptyText}</div>
+  }
+
+  return (
+    <div className="space-y-2">
+      {records.map(record => (
+        <div key={record.id} className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{record.name}</div>
+              <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                {record.company ?? record.account_name ?? 'No property/company attached'}
+              </div>
+            </div>
+            <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.14em]" style={{ background: 'rgba(107,126,255,0.1)', color: 'rgba(165,180,255,0.9)', border: '1px solid rgba(107,126,255,0.18)' }}>
+              {record.stage ?? 'open'}
+            </div>
+          </div>
+          {record.notes && <div className="mt-3 line-clamp-2 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.38)' }}>{record.notes}</div>}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null }) {
   const router = useRouter()
   const [stepId, setStepId] = useState<StepId>('start')
@@ -155,14 +215,33 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [nextCards, setNextCards] = useState<NextCard[]>([])
+  const [workbench, setWorkbench] = useState<WorkbenchData | null>(null)
+  const [workbenchFocus, setWorkbenchFocus] = useState<WorkbenchFocus>('openLeads')
+  const [searchTerm, setSearchTerm] = useState('')
 
-  const simpleStep = stepId === 'call-name' || stepId === 'call-property' || stepId === 'call-need' || stepId === 'call-review' ? null : STEPS[stepId]
+  const simpleStep = stepId === 'call-name' || stepId === 'call-property' || stepId === 'call-need' || stepId === 'call-review' || stepId === 'workbench' ? null : STEPS[stepId]
 
   function resetFlow() {
     setStepId('start')
     setDraft(EMPTY_DRAFT)
     setStatus(null)
     setNextCards([])
+  }
+
+  async function openWorkbench(focus: WorkbenchFocus = 'openLeads') {
+    setBusy(true)
+    setStatus(null)
+    setNextCards([])
+    try {
+      const data = await loadWorkbench(focus === 'search' ? searchTerm : undefined)
+      setWorkbench(data)
+      setWorkbenchFocus(focus)
+      setStepId('workbench')
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Could not load workbench.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function submitInboundLead() {
@@ -184,6 +263,10 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
   async function handleAction(action: FlowAction) {
     setStatus(null)
     setNextCards([])
+    if (action.kind === 'workbench') {
+      await openWorkbench(action.focus ?? 'openLeads')
+      return
+    }
     if (action.kind === 'next') {
       if (action.stepId === 'call-name') setDraft({ ...EMPTY_DRAFT, source: 'phone' })
       setStepId(action.stepId)
@@ -203,14 +286,18 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
     }
   }
 
+  const focusedRecords = workbenchFocus === 'search'
+    ? [...(workbench?.leads ?? []), ...(workbench?.opportunities ?? [])]
+    : workbench?.[workbenchFocus] ?? []
+
   return (
     <section className="mt-9 w-full max-w-4xl">
       <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.022))', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 24px 80px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.06)', backdropFilter: 'blur(24px)' }}>
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(107,126,255,0.62)' }}>{simpleStep?.eyebrow ?? 'Someone Called'}</div>
-            <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.94)' }}>{simpleStep?.title ?? 'Capture the lead one step at a time.'}</h2>
-            <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.42)' }}>{simpleStep?.subtitle ?? 'No CRM training needed. Answer the simple question, then press Next.'}</p>
+            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(107,126,255,0.62)' }}>{stepId === 'workbench' ? 'Opps / Leads Workbench' : simpleStep?.eyebrow ?? 'Someone Called'}</div>
+            <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.94)' }}>{stepId === 'workbench' ? 'Work what is already open.' : simpleStep?.title ?? 'Capture the lead one step at a time.'}</h2>
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.42)' }}>{stepId === 'workbench' ? 'Open leads, attention items, opportunities, proposal follow-ups, or search by person/property.' : simpleStep?.subtitle ?? 'No CRM training needed. Answer the simple question, then press Next.'}</p>
           </div>
           <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(107,126,255,0.1)', color: 'rgba(165,180,255,0.9)', border: '1px solid rgba(107,126,255,0.18)' }}>
             {activeTab === 'opps' || !activeTab ? 'New Opps / Leads' : 'Guided Flow'}
@@ -220,6 +307,28 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
         {simpleStep && (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {simpleStep.cards.map(card => <FlowCardButton key={card.title} card={card} disabled={busy} onAction={handleAction} />)}
+          </div>
+        )}
+
+        {stepId === 'workbench' && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
+              {(['openLeads', 'needsAttention', 'openOpportunities', 'proposalFollowUps', 'search'] as WorkbenchFocus[]).map(focus => (
+                <button key={focus} type="button" onClick={() => void openWorkbench(focus)} className="rounded-2xl p-3 text-left text-xs transition-all" style={{ background: workbenchFocus === focus ? 'rgba(107,126,255,0.16)' : 'rgba(255,255,255,0.035)', border: workbenchFocus === focus ? '1px solid rgba(107,126,255,0.32)' : '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.78)' }}>
+                  <div className="font-semibold">{WORKBENCH_LABELS[focus]}</div>
+                  {focus !== 'search' && <div className="mt-1 opacity-50">{workbench?.stats?.[focus] ?? 0} items</div>}
+                </button>
+              ))}
+            </div>
+
+            {workbenchFocus === 'search' && (
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void openWorkbench('search') }} placeholder="Search person, property, company, or notes" className="flex-1 rounded-2xl px-4 py-3 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(107,126,255,0.22)', color: 'rgba(255,255,255,0.88)' }} />
+                <button type="button" onClick={() => void openWorkbench('search')} className="rounded-2xl px-4 py-3 text-sm" style={{ background: '#6B7EFF', color: 'white' }}>Search</button>
+              </div>
+            )}
+
+            <RecordList records={focusedRecords} emptyText="Nothing found here yet." />
           </div>
         )}
 
