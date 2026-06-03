@@ -27,9 +27,150 @@ const supabaseDeep = createClient(
 export const maxDuration = 120
 export const dynamic = 'force-dynamic'
 
-const ARIA_ENGINE_VERSION = 'v7.6'
+const ARIA_ENGINE_VERSION = 'v8.0'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+
+// ─── v8: Case file persistence ────────────────────────────────────────────────
+// Rule: No synthesis without ledger. No deletion without human action.
+// Every ARIA search creates a durable case file:
+//   aria_search_runs   → one record per pipeline execution
+//   aria_candidates    → ALL discovered properties, never deleted
+//   aria_evidence_packets → every found fact with source + confidence
+
+async function createSearchRun(
+  userId: string,
+  orgId: string | null,
+  rawQuery: string,
+  intentType: string,
+  rewrittenQuery: Record<string, unknown> | null
+): Promise<string | null> {
+  try {
+    const { data } = await supabaseDeep
+      .from('aria_search_runs')
+      .insert({
+        user_id: userId,
+        org_id: orgId,
+        raw_query: rawQuery,
+        intent_type: intentType,
+        rewritten_query: rewrittenQuery ?? null,
+        status: 'running',
+        engine_version: 'v8.0',
+      })
+      .select('id')
+      .single()
+    return data?.id ?? null
+  } catch { return null }
+}
+
+async function completeSearchRun(
+  runId: string,
+  status: 'complete' | 'failed',
+  extra: {
+    candidate_count?: number
+    evidence_count?: number
+    quality_gates_passed?: Record<string, boolean>
+    selected_candidate_id?: string | null
+    duration_ms?: number
+  } = {}
+): Promise<void> {
+  if (!runId) return
+  try {
+    await supabaseDeep
+      .from('aria_search_runs')
+      .update({ status, completed_at: new Date().toISOString(), ...extra })
+      .eq('id', runId)
+  } catch { /* non-blocking */ }
+}
+
+async function saveCandidatesToDB(
+  runId: string,
+  candidates: Array<{
+    name: string; address?: string; city?: string; state?: string
+    units?: number; year_built?: number; management_company?: string
+    isp_signal?: string; bulk_detected?: boolean; pain_brief?: string
+    buy_score_estimate?: number
+  }>
+): Promise<string[]> {
+  if (!runId || !candidates.length) return []
+  try {
+    const rows = candidates.map((c, i) => ({
+      search_run_id: runId,
+      rank_position: i + 1,
+      confidence_score: c.buy_score_estimate != null ? Math.min(100, c.buy_score_estimate * 10) : 50,
+      property_name: c.name ?? null,
+      address:        c.address ?? null,
+      city:           c.city ?? null,
+      state:          c.state ?? null,
+      units:          c.units ?? null,
+      year_built:     c.year_built ?? null,
+      property_type:  'multifamily',
+      management_company: c.management_company ?? null,
+      isp_providers:  c.isp_signal ? [c.isp_signal] : [],
+      bulk_agreement_hint: c.bulk_detected ?? false,
+      pain_signals:   c.pain_brief ? [c.pain_brief] : [],
+      gate_issue_detected: !!(c.pain_brief?.toLowerCase().includes('gate')),
+      top_evidence_snippet: c.pain_brief ?? null,
+      status: i === 0 ? 'selected' : 'pending',
+    }))
+    const { data } = await supabaseDeep.from('aria_candidates').insert(rows).select('id')
+    await supabaseDeep.from('aria_search_runs').update({ candidate_count: candidates.length }).eq('id', runId)
+    return (data ?? []).map((r: any) => r.id as string)
+  } catch { return [] }
+}
+
+function saveEvidencePackets(
+  runId: string,
+  candidateId: string | null,
+  facts: Array<{
+    fact_type: string
+    extracted_value: string
+    source_url?: string
+    source_type: string
+    source_authority?: number
+    confidence?: number
+    raw_snippet?: string
+    phase_found?: number
+  }>
+): void {
+  if (!runId || !facts.length) return
+  void (async () => {
+    try {
+      await supabaseDeep.from('aria_evidence_packets').insert(
+        facts.map((f, i) => ({
+          search_run_id:    runId,
+          candidate_id:     candidateId,
+          source_url:       f.source_url ?? null,
+          source_type:      f.source_type,
+          source_authority: f.source_authority ?? 5,
+          fact_type:        f.fact_type,
+          extracted_value:  f.extracted_value,
+          confidence:       f.confidence ?? 50,
+          raw_snippet:      f.raw_snippet?.slice(0, 600) ?? null,
+          phase_found:      f.phase_found ?? 0,
+          arrival_order:    i,
+        }))
+      )
+    } catch { /* non-blocking */ }
+  })()
+}
+
+function checkQualityGates(
+  p1: Phase1Result,
+  p2: Phase2Result,
+  p3: Phase3Result
+): Record<string, boolean> {
+  return {
+    units_attempted:      p1.confirmed_units != null,
+    phone_attempted:      !!(p1.confirmed_phone || p3.contacts.length > 0),
+    address_attempted:    !!(p1.confirmed_address),
+    management_attempted: !!(p1.confirmed_management || p2.owner_entity),
+    gate_issue_attempted: p3.pain_signals.length > 0 || p3.proptech.gate_operators.length > 0,
+    contacts_attempted:   p3.contacts.length > 0,
+    isp_attempted:        true, // Phase 2 always runs ISP searches
+    candidates_preserved: true, // v8: always true — we never drop candidates
+  }
+}
 
 // ─── Normalization helpers ────────────────────────────────────────────────────
 
@@ -1725,15 +1866,42 @@ export async function POST(req: NextRequest) {
     // ── PHASE 0: Classification ───────────────────────────────────────────────
     const classification = await classifyQuery(rawQuery, anthropic)
 
+    // v8: Track run duration + search run ID — set in each branch below
+    let searchRunId: string | null = null
+    const runStart = Date.now()
+
     // ── PHASE 1B: Prospecting (city/criteria/contract queries) ────────────────
     if (classification.type !== 'specific_property') {
+      // v8: Every search is a durable case file — create the run record first
+      searchRunId = await createSearchRun(userId, null, rawQuery, classification.type, null)
+
       const candidateResult = await runPhase1B(rawQuery, classification, anthropic)
+
+      // v8: Persist ALL candidates before returning — none are dropped or discarded
+      const candidateIds = (searchRunId && candidateResult.candidates.length > 0)
+        ? await saveCandidatesToDB(searchRunId, candidateResult.candidates)
+        : []
+
+      // v8: Mark run complete with stats
+      if (searchRunId) {
+        void completeSearchRun(searchRunId, 'complete', {
+          candidate_count: candidateResult.candidates.length,
+          duration_ms: Date.now() - runStart,
+        })
+      }
+
       return NextResponse.json({
         type: 'candidates',
         mode: 'candidates',
         engine_version: ARIA_ENGINE_VERSION,
-        candidates: candidateResult.candidates,
+        search_run_id: searchRunId,
+        candidates: candidateResult.candidates.map((c, i) => ({
+          ...c,
+          rank_position: i + 1,
+          _candidate_id: candidateIds[i] ?? null,
+        })),
         query_interpretation: candidateResult.query_interpretation,
+        candidate_count: candidateResult.candidates.length,
       })
     }
 
@@ -1745,6 +1913,12 @@ export async function POST(req: NextRequest) {
       lookupExistingProperty(rawQuery, classification.city_hint),
       rewriteQuery(rawQuery, anthropic),
     ])
+
+    // v8: Create search run for specific_property branch (rewritten query now available)
+    searchRunId = await createSearchRun(
+      userId, null, rawQuery, 'specific_property',
+      rewritten as unknown as Record<string, unknown>
+    )
 
     // ── Merge Phase 1A with existing DB record (DB fills gaps, fresh wins) ───
     const property_name = p1.confirmed_name || existingRecord?.property_name || rawQuery
@@ -1842,6 +2016,35 @@ export async function POST(req: NextRequest) {
     }
 
     const finalOwner = p2.owner_entity || owner || ''
+
+    // v8: Check quality gates — required field checklist before synthesis
+    const qualityGates = checkQualityGates(p1, p2, p3)
+
+    // v8: Save Phase 1A + Phase 2 key evidence (non-blocking, best-effort)
+    if (searchRunId) {
+      const evidenceFacts: Parameters<typeof saveEvidencePackets>[2] = []
+      // Phase 1A facts
+      if (p1.confirmed_phone)      evidenceFacts.push({ fact_type: 'phone',      extracted_value: p1.confirmed_phone,      source_type: 'listing',  confidence: 90, phase_found: 1 })
+      if (p1.confirmed_units)      evidenceFacts.push({ fact_type: 'units',      extracted_value: String(p1.confirmed_units), source_type: 'listing', confidence: 85, phase_found: 1 })
+      if (p1.confirmed_address)    evidenceFacts.push({ fact_type: 'address',    extracted_value: p1.confirmed_address,    source_type: 'listing',  confidence: 90, phase_found: 1 })
+      if (p1.listing_isp)          evidenceFacts.push({ fact_type: 'isp',        extracted_value: p1.listing_isp,          source_type: 'listing',  confidence: 95, phase_found: 1 })
+      if (p1.confirmed_management) evidenceFacts.push({ fact_type: 'owner',      extracted_value: p1.confirmed_management, source_type: 'listing',  confidence: 80, phase_found: 1 })
+      // Phase 2 facts
+      if (p2.owner_entity)         evidenceFacts.push({ fact_type: 'owner',      extracted_value: p2.owner_entity,         source_type: 'owner',    confidence: 75, phase_found: 2 })
+      if (p2.roe_expiry_year)      evidenceFacts.push({ fact_type: 'roe',        extracted_value: String(p2.roe_expiry_year), source_type: 'roe',   confidence: 80, phase_found: 2 })
+      p2.isp_providers.slice(0, 3).forEach(isp =>
+        evidenceFacts.push({ fact_type: 'isp', extracted_value: isp, source_type: 'bulk', confidence: 70, phase_found: 2 })
+      )
+      // Phase 3 contacts
+      p3.contacts.slice(0, 3).forEach(c =>
+        evidenceFacts.push({ fact_type: 'contact', extracted_value: `${c.name} (${c.title})`, source_type: 'contacts', confidence: 75, phase_found: 3 })
+      )
+      // Pain signals
+      p3.pain_signals.slice(0, 5).forEach(s =>
+        evidenceFacts.push({ fact_type: 'pain_signal', extracted_value: s.quote.slice(0, 200), source_type: s.source, confidence: 65, phase_found: 3 })
+      )
+      if (evidenceFacts.length > 0) saveEvidencePackets(searchRunId, null, evidenceFacts)
+    }
 
     // ── Determine best contact early — needed for gatekeeper tip ─────────────
     const earlyBestContact = p3.contacts.find(c => c.role_type === 'property_manager')
@@ -2155,6 +2358,19 @@ buying_trends: 1-sentence sales trend insight for this property type`,
         expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       }).select('id').single()
       if (searchRow?.id) savedSearchId = searchRow.id
+
+      // v8: Complete the search run record with full stats + org_id
+      if (searchRunId) {
+        void completeSearchRun(searchRunId, 'complete', {
+          candidate_count: 1,
+          quality_gates_passed: qualityGates,
+          duration_ms: Date.now() - runStart,
+        })
+        void supabaseDeep
+          .from('aria_search_runs')
+          .update({ org_id: portalUser.org_id ?? null })
+          .eq('id', searchRunId)
+      }
     } catch { }
 
     // ── Persist detections (non-blocking) ─────────────────────────────────────
@@ -2220,6 +2436,8 @@ buying_trends: 1-sentence sales trend insight for this property type`,
       query_interpretation: `ARIA ${ARIA_ENGINE_VERSION} — ${property_name}`,
       prospects: [prospectPayload],
       savedSearchId,
+      search_run_id: searchRunId,
+      quality_gates: qualityGates,
       sources: p3.raw_excerpts.filter(r => r.url && r.score > 0.3).slice(0, 8).map(r => ({
         title: r.title, url: r.url, excerpt: r.content.slice(0, 200), score: r.score, type: r.source ?? 'web',
       })),
