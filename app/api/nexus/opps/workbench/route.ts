@@ -29,6 +29,54 @@ async function safe<T>(promise: PromiseLike<{ data: T | null; error: unknown }>,
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const q = clean(searchParams.get('q'))
+  const leadId = clean(searchParams.get('leadId'))
+
+  if (leadId) {
+    const lead = await safe(
+      supabase
+        .from('crm_leads')
+        .select('id, name, company, stage, source, notes, created_at')
+        .eq('id', leadId)
+        .single(),
+      null
+    )
+
+    const activities = await safe(
+      supabase
+        .from('crm_activities')
+        .select('id, type, subject, body, due_at, completed_at, created_at')
+        .eq('lead_id', leadId)
+        .order('created_at', { ascending: false })
+        .limit(12),
+      []
+    )
+
+    const company = typeof lead === 'object' && lead && 'company' in lead ? String(lead.company ?? '') : ''
+    const opportunities = company
+      ? await safe(
+          supabase
+            .from('crm_opportunities')
+            .select('id, name, account_name, stage, value, notes, created_at')
+            .ilike('account_name', `%${escapeLike(company)}%`)
+            .order('created_at', { ascending: false })
+            .limit(8),
+          []
+        )
+      : []
+
+    return NextResponse.json({
+      success: true,
+      lead,
+      activities,
+      opportunities,
+      nextBestActions: [
+        { title: 'Log Call', subtitle: 'Capture what happened on the call.', action: 'log_call' },
+        { title: 'Schedule Follow-Up', subtitle: 'Create the next touch so it does not stall.', action: 'schedule_followup' },
+        { title: 'Create Opportunity', subtitle: 'Turn this lead into a real deal.', action: 'convert_lead' },
+        { title: 'Run ARIA', subtitle: 'Research the property before outreach.', action: 'run_aria' },
+      ],
+    })
+  }
 
   if (q) {
     const term = escapeLike(q)
