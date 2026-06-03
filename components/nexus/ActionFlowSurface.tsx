@@ -19,6 +19,12 @@ type FlowCard = {
   action: FlowAction
 }
 
+type NextCard = {
+  title: string
+  subtitle: string
+  action: string
+}
+
 type InboundLeadDraft = {
   source: 'phone' | 'website' | 'unknown'
   contactName: string
@@ -92,6 +98,17 @@ async function askNexus(prompt: string, scope: string, contextData?: Record<stri
   return data?.response ?? data?.message ?? 'Nexus is ready for the next step.'
 }
 
+async function createInboundLead(draft: InboundLeadDraft): Promise<{ message: string; nextCards: NextCard[] }> {
+  const res = await fetch('/api/nexus/flows/inbound-lead', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...draft, source: 'phone' }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok || data.success === false) throw new Error(data?.message ?? 'Could not create lead.')
+  return { message: data.message ?? 'Lead created.', nextCards: Array.isArray(data.nextCards) ? data.nextCards : [] }
+}
+
 function FlowCardButton({ card, disabled, onAction }: { card: FlowCard; disabled: boolean; onAction: (action: FlowAction) => void }) {
   const color = rgb(card.hex)
   return (
@@ -137,6 +154,7 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
   const [draft, setDraft] = useState<InboundLeadDraft>(EMPTY_DRAFT)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
+  const [nextCards, setNextCards] = useState<NextCard[]>([])
 
   const simpleStep = stepId === 'call-name' || stepId === 'call-property' || stepId === 'call-need' || stepId === 'call-review' ? null : STEPS[stepId]
 
@@ -144,15 +162,17 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
     setStepId('start')
     setDraft(EMPTY_DRAFT)
     setStatus(null)
+    setNextCards([])
   }
 
   async function submitInboundLead() {
     setBusy(true)
     setStatus(null)
+    setNextCards([])
     try {
-      const summary = `Create a new phone lead. Contact: ${draft.contactName}. Property: ${draft.propertyName}. Need: ${draft.need}. Create the lead and suggest the next best action.`
-      const response = await askNexus(summary, 'opps_leads', { ...draft, source: 'phone' })
-      setStatus(response)
+      const result = await createInboundLead(draft)
+      setStatus(result.message)
+      setNextCards(result.nextCards)
       setStepId('start')
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'That did not work. Try again.')
@@ -163,6 +183,7 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
 
   async function handleAction(action: FlowAction) {
     setStatus(null)
+    setNextCards([])
     if (action.kind === 'next') {
       if (action.stepId === 'call-name') setDraft({ ...EMPTY_DRAFT, source: 'phone' })
       setStepId(action.stepId)
@@ -218,6 +239,17 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
               <button type="button" onClick={() => setStepId('call-need')} className="rounded-full px-4 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.52)' }}>Back</button>
               <button type="button" disabled={busy} onClick={submitInboundLead} className="rounded-full px-4 py-2 text-xs disabled:opacity-40" style={{ background: '#34d399', color: '#03130c' }}>Create Lead</button>
             </div>
+          </div>
+        )}
+
+        {nextCards.length > 0 && (
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {nextCards.map(card => (
+              <div key={card.title} className="rounded-2xl p-4" style={{ background: 'rgba(52,211,153,0.055)', border: '1px solid rgba(52,211,153,0.16)', color: 'rgba(255,255,255,0.82)' }}>
+                <div className="text-sm font-semibold">{card.title}</div>
+                <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.45)' }}>{card.subtitle}</div>
+              </div>
+            ))}
           </div>
         )}
 
