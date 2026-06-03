@@ -51,7 +51,8 @@ export async function GET(req: NextRequest) {
       []
     )
 
-    const company = typeof lead === 'object' && lead && 'company' in lead ? String(lead.company ?? '') : ''
+    const leadRecord = lead as { company?: string | null } | null
+    const company = leadRecord?.company ? String(leadRecord.company) : ''
     const opportunities = company
       ? await safe(
           supabase
