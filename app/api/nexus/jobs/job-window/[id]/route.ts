@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentUser } from '@/lib/current-user'
+import { getCurrentUser, type PortalUser } from '@/lib/current-user'
 import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
 
 export const dynamic = 'force-dynamic'
@@ -12,6 +12,14 @@ const supabase = createClient(
 
 type RouteContext = { params: { id: string } }
 
+type JobRecord = Record<string, unknown> & {
+  id: string
+  org_id: string | null
+  wo_number?: string | null
+  title?: string | null
+  due_date?: string | null
+}
+
 async function safe<T>(promise: PromiseLike<{ data: T | null; error: unknown }>, fallback: T): Promise<T> {
   try {
     const { data, error } = await promise
@@ -22,15 +30,25 @@ async function safe<T>(promise: PromiseLike<{ data: T | null; error: unknown }>,
   }
 }
 
-export async function GET(_req: NextRequest, { params }: RouteContext) {
-  const user = await getCurrentUser()
+function clean(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
 
-  if (!user.canViewWOs) {
-    return NextResponse.json({ success: false, message: 'Work order access denied.' }, { status: 403 })
-  }
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0]?.toUpperCase())
+    .join('') || 'NX'
+}
 
+function jobLabel(job: JobRecord): string {
+  return [job.wo_number, job.title].filter(Boolean).join(' — ') || 'Job'
+}
+
+async function getScopedJob(jobId: string, user: PortalUser): Promise<{ job: JobRecord | null; error?: string }> {
   const scope = await resolveOrgScope(user)
-  const jobId = params.id
 
   let jobQuery = supabase
     .from('work_orders')
@@ -43,12 +61,28 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       scheduled_date, due_date, completed_at, created_at, updated_at
     `)
     .eq('id', jobId)
+
+  // TODO: Install contractor visibility needs a contractor-org assignment field.
+  // Live schema has org_id, assigned_to, and assignee_id only. Stage 2 scopes by org_id.
   jobQuery = applyOrgScope(jobQuery, scope)
 
-  const { data: job, error: jobError } = await jobQuery.maybeSingle()
+  const { data, error } = await jobQuery.maybeSingle()
+  if (error) return { job: null, error: error.message }
+  return { job: data as JobRecord | null }
+}
 
-  if (jobError) {
-    return NextResponse.json({ success: false, message: jobError.message }, { status: 500 })
+export async function GET(_req: NextRequest, { params }: RouteContext) {
+  const user = await getCurrentUser()
+
+  if (!user.canViewWOs) {
+    return NextResponse.json({ success: false, message: 'Work order access denied.' }, { status: 403 })
+  }
+
+  const jobId = params.id
+  const { job, error } = await getScopedJob(jobId, user)
+
+  if (error) {
+    return NextResponse.json({ success: false, message: error }, { status: 500 })
   }
 
   if (!job) {
@@ -188,4 +222,152 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       { title: 'Mark Complete', subtitle: 'Close this job when work is done.', action: 'mark_complete' },
     ],
   })
+}
+
+export async function POST(req: NextRequest, { params }: RouteContext) {
+  const user = await getCurrentUser()
+
+  if (!user.canViewWOs) {
+    return NextResponse.json({ success: false, message: 'Work order access denied.' }, { status: 403 })
+  }
+
+  const body = await req.json().catch(() => ({}))
+  const action = clean(body.action)
+  const { job, error } = await getScopedJob(params.id, user)
+
+  if (error) {
+    return NextResponse.json({ success: false, message: error }, { status: 500 })
+  }
+
+  if (!job) {
+    return NextResponse.json({ success: false, message: 'Job not found or outside your access.' }, { status: 404 })
+  }
+
+  const authorName = user.name || 'Nexus User'
+  const authorInitials = initials(authorName)
+
+  if (action === 'add_note') {
+    const note = clean(body.note ?? body.content ?? body.body)
+    if (!note) {
+      return NextResponse.json({ success: false, message: 'Tell Nexus what to remember.' }, { status: 400 })
+    }
+
+    const { data, error: insertError } = await supabase
+      .from('wo_comments')
+      .insert({ work_order_id: job.id, author_name: authorName, author_initials: authorInitials, content: note })
+      .select('id, author_name, author_initials, content, created_at')
+      .single()
+
+    if (insertError) {
+      return NextResponse.json({ success: false, message: insertError.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, message: 'Note added.', note: data })
+  }
+
+  if (action === 'create_task') {
+    const title = clean(body.title)
+    const notes = clean(body.notes ?? body.body)
+    const dueDate = clean(body.due_date ?? body.dueDate)
+    const priorityInput = clean(body.priority)
+    const priority = ['high', 'normal', 'low'].includes(priorityInput) ? priorityInput : 'normal'
+
+    if (!title) {
+      return NextResponse.json({ success: false, message: 'What needs to get done?' }, { status: 400 })
+    }
+
+    const { data, error: taskError } = await supabase
+      .from('todos')
+      .insert({
+        org_id: job.org_id,
+        title,
+        body: notes || null,
+        priority,
+        status: 'open',
+        due_date: dueDate || null,
+        created_by: user.id,
+        created_by_name: authorName,
+        assigned_to: user.id,
+        assigned_to_name: authorName,
+        linked_type: 'work_order',
+        linked_id: job.id,
+        linked_label: jobLabel(job),
+      })
+      .select('id, title, body, priority, status, due_date, linked_type, linked_id, linked_label, created_at, updated_at')
+      .single()
+
+    if (taskError) {
+      return NextResponse.json({ success: false, message: taskError.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, message: 'Task created.', task: data })
+  }
+
+  if (action === 'schedule_visit') {
+    const scheduledDate = clean(body.scheduled_date ?? body.scheduledDate)
+    const note = clean(body.note ?? body.notes)
+
+    if (!scheduledDate) {
+      return NextResponse.json({ success: false, message: 'Pick a visit date.' }, { status: 400 })
+    }
+
+    const updates: Record<string, unknown> = {
+      scheduled_date: scheduledDate,
+      status: 'scheduled',
+      updated_at: new Date().toISOString(),
+    }
+
+    if (!job.due_date) updates.due_date = scheduledDate
+
+    const { data, error: updateError } = await supabase
+      .from('work_orders')
+      .update(updates)
+      .eq('id', job.id)
+      .select('id, wo_number, title, status, scheduled_date, due_date, updated_at')
+      .single()
+
+    if (updateError) {
+      return NextResponse.json({ success: false, message: updateError.message }, { status: 500 })
+    }
+
+    if (note) {
+      const content = `Visit scheduled for ${scheduledDate}. ${note}`
+      const { error: noteError } = await supabase
+        .from('wo_comments')
+        .insert({ work_order_id: job.id, author_name: authorName, author_initials: authorInitials, content })
+      if (noteError) {
+        return NextResponse.json({ success: false, message: noteError.message }, { status: 500 })
+      }
+    }
+
+    return NextResponse.json({ success: true, message: 'Visit scheduled.', job: data })
+  }
+
+  if (action === 'mark_complete') {
+    const note = clean(body.note ?? body.notes)
+
+    const { data, error: updateError } = await supabase
+      .from('work_orders')
+      .update({ status: 'completed', completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', job.id)
+      .select('id, wo_number, title, status, completed_at, updated_at')
+      .single()
+
+    if (updateError) {
+      return NextResponse.json({ success: false, message: updateError.message }, { status: 500 })
+    }
+
+    if (note) {
+      const { error: noteError } = await supabase
+        .from('wo_comments')
+        .insert({ work_order_id: job.id, author_name: authorName, author_initials: authorInitials, content: `Job completed. ${note}` })
+      if (noteError) {
+        return NextResponse.json({ success: false, message: noteError.message }, { status: 500 })
+      }
+    }
+
+    return NextResponse.json({ success: true, message: 'Job marked complete.', job: data })
+  }
+
+  return NextResponse.json({ success: false, message: 'Unknown job action.' }, { status: 400 })
 }
