@@ -143,15 +143,26 @@ async function askNexus(prompt: string, scope: string, contextData?: Record<stri
   return data?.response ?? data?.message ?? 'Nexus is ready for the next step.'
 }
 
-async function createInboundLead(draft: InboundLeadDraft): Promise<{ message: string; nextCards: NextCard[] }> {
+async function createInboundLead(
+  draft: InboundLeadDraft
+): Promise<{ message: string; nextCards: NextCard[]; leadId?: string }> {
   const res = await fetch('/api/nexus/flows/inbound-lead', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...draft, source: 'phone' }),
   })
+
   const data = await res.json().catch(() => ({}))
-  if (!res.ok || data.success === false) throw new Error(data?.message ?? 'Could not create lead.')
-  return { message: data.message ?? 'Lead created.', nextCards: Array.isArray(data.nextCards) ? data.nextCards : [] }
+
+  if (!res.ok || data.success === false) {
+    throw new Error(data?.message ?? 'Could not create lead.')
+  }
+
+  return {
+    message: data.message ?? 'Lead created.',
+    nextCards: Array.isArray(data.nextCards) ? data.nextCards : [],
+    leadId: typeof data?.lead?.id === 'string' ? data.lead.id : undefined,
+  }
 }
 
 async function loadWorkbench(query?: string): Promise<WorkbenchData> {
@@ -377,20 +388,28 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
   }
 
   async function submitInboundLead() {
-    setBusy(true)
-    setStatus(null)
-    setNextCards([])
-    try {
-      const result = await createInboundLead(draft)
-      setStatus(result.message)
-      setNextCards(result.nextCards)
-      setStepId('start')
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'That did not work. Try again.')
-    } finally {
-      setBusy(false)
+  setBusy(true)
+  setStatus(null)
+  setNextCards([])
+
+  try {
+    const result = await createInboundLead(draft)
+
+    setStatus(result.message)
+    setNextCards(result.nextCards)
+    setDraft(EMPTY_DRAFT)
+
+    if (result.leadId) {
+      await openLead(result.leadId)
+    } else {
+      await openWorkbench('myLeads')
     }
+  } catch (error) {
+    setStatus(error instanceof Error ? error.message : 'That did not work. Try again.')
+  } finally {
+    setBusy(false)
   }
+}
 
   async function handleAction(action: FlowAction) {
     setStatus(null)
