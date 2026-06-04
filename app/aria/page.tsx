@@ -3236,7 +3236,7 @@ export default function ARIAPage() {
             <IntelDBPanel />
           ) : isRunning ? (
             <PipelinePanel phase={phase} synthStep={synthStep} />
-          ) : candidates.length > 0 ? (
+          ) : viewMode === 'candidates' ? (
             <CandidateGrid />
           ) : error ? (
             <div className="flex items-center justify-center h-full">
@@ -3322,7 +3322,7 @@ export default function ARIAPage() {
         <div className="flex-1 overflow-y-auto">
           {isRunning ? (
             <div className="p-4"><PipelinePanel phase={phase} synthStep={synthStep} /></div>
-          ) : candidates.length > 0 ? (
+          ) : viewMode === 'candidates' ? (
             <CandidateGrid />
           ) : error ? (
             <div className="p-4">

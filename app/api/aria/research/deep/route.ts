@@ -1356,6 +1356,16 @@ interface PainSignal {
   quote: string; source: string; date: string; severity: 'high' | 'medium' | 'low'
 }
 
+// v8 Ticket 5: PropTech Scout — confidence-scored proptech findings
+interface ProptechFinding {
+  category: 'gate_operator' | 'access_control' | 'intercom' | 'camera' | 'smart_lock' | 'resident_app' | 'package_solution'
+  brand: string
+  confidence: number       // 0–100; <60 = inferred, 60–79 = likely, 80+ = confirmed
+  evidence: string         // why we believe this (verbatim snippet or market inference note)
+  source_url: string | null
+  inferred: boolean        // true if inferred from market share, not directly found
+}
+
 interface Phase3Result {
   pain_signals: PainSignal[]
   proptech: {
@@ -1368,6 +1378,7 @@ interface Phase3Result {
     package_solutions: string[]
     tech_generation: 'legacy' | 'modern' | 'hybrid'
   }
+  proptech_findings: ProptechFinding[]   // v8: confidence-scored + sourced proptech
   contacts: StepContact[]
   email_format: string
   raw_excerpts: TavilyResult[]
@@ -1387,6 +1398,7 @@ async function runPhase3(
   const blank: Phase3Result = {
     pain_signals: [],
     proptech: { gate_operators: [], access_control: [], intercoms: [], cameras: [], smart_locks: [], resident_apps: [], package_solutions: [], tech_generation: 'legacy' },
+    proptech_findings: [],
     contacts: [],
     email_format: '',
     raw_excerpts: [],
@@ -1491,10 +1503,18 @@ Up to 20 signals. Include BOTH complaints and positive mentions. Prefer last 12 
     : ''
 
   // Build proptech snippets: use raw_content if available, else content
-  const websiteRaw = websiteResults.filter(r => r.raw_content && r.raw_content.length > 100)
+  // Build source index → URL map so PropTech Scout can cite sources
+  const filteredProptech = proptechResults.filter(r => (r.raw_content || r.content || '').length > 40).slice(0, 3)
+  const filteredWebsite = websiteResults.filter(r => r.raw_content && r.raw_content.length > 100)
+  const proptechSourceMap: Record<string, string> = {}
+  filteredProptech.forEach((r, i) => { proptechSourceMap[`P${i + 1}`] = r.url })
+  filteredWebsite.forEach((r, i) => { proptechSourceMap[`W${i + 1}`] = r.url })
+  // Add listing proptech sources to the map
+  if (listingProptech.length > 0) proptechSourceMap['listing'] = 'listing-page-verified'
+
+  const websiteRaw = filteredWebsite
     .map((r, i) => `[W${i + 1}] ${r.url}\n${r.raw_content!.slice(0, 3000)}`).join('\n\n---\n\n')
-  const proptechRaw = proptechResults.filter(r => (r.raw_content || r.content || '').length > 40)
-    .slice(0, 3)
+  const proptechRaw = filteredProptech
     .map((r, i) => {
       const body = r.raw_content ? r.raw_content.slice(0, 2500) : r.content.slice(0, 500)
       return `[P${i + 1}] ${r.title}\n${body}`
@@ -1502,9 +1522,11 @@ Up to 20 signals. Include BOTH complaints and positive mentions. Prefer last 12 
 
   const proptechSnippets = [proptechRaw, websiteRaw].filter(Boolean).join('\n\n===WEBSITE===\n\n')
 
-  const proptechExtracted = proptechSnippets.length > 80
-    ? await haikusExtract<Phase3Result['proptech']>(
-        `Extract ALL property technology brands mentioned. Return ONLY valid JSON:
+  // v8 Ticket 5: Run PropTech Scout (confidence-scored) in parallel with existing extraction
+  const [proptechExtracted, proptechFindings] = await Promise.all([
+    proptechSnippets.length > 80
+      ? haikusExtract<Phase3Result['proptech']>(
+          `Extract ALL property technology brands mentioned. Return ONLY valid JSON:
 {"gate_operators":[],"access_control":[],"intercoms":[],"cameras":[],"smart_locks":[],"resident_apps":[],"package_solutions":[],"tech_generation":"legacy"}
 Known brands (extract company name exactly as written):
 - gate_operators: DoorKing/DKS/LiftMaster/Viking/Linear/FAAC/PDK/Elite Gates/CellGate/Rently/Doorking
@@ -1516,8 +1538,44 @@ Known brands (extract company name exactly as written):
 - package_solutions: "Parcel Pending"/"Amazon Hub"/"Package Concierge"/"Luxer One"/"Fetch"/"Butterfly Package"
 tech_generation: "legacy"=pre-2018 brands dominant (DoorKing, Aiphone, analog cameras), "modern"=2018+ brands (ButterflyMX, Verkada, Brivo, SmartRent), "hybrid"=mix
 IMPORTANT: scan full page text — proptech brands often appear in: "Community Features", "Building Features", "Amenities", "Technology", "Access" sections${listingProptechCtx}`,
-        proptechSnippets, 900, client)
-    : null
+          proptechSnippets, 900, client)
+      : Promise.resolve(null),
+
+    // PropTech Scout: structured findings with confidence + source citation
+    proptechSnippets.length > 80
+      ? haikusExtract<{ findings: Array<{ category: string; brand: string; confidence: number; evidence: string; source_key: string; inferred: boolean }> }>(
+          `Extract every proptech brand with a confidence score. Return ONLY valid JSON:
+{"findings":[{"category":"gate_operator","brand":"","confidence":85,"evidence":"verbatim snippet or reason","source_key":"P1","inferred":false}]}
+
+category options: "gate_operator","access_control","intercom","camera","smart_lock","resident_app","package_solution"
+confidence: 0-100
+- 90-100: brand explicitly named in text (e.g., "ButterflyMX intercom system")
+- 70-89: brand mentioned in review or context clue (e.g., "the ButterflyMX app doesn't work")
+- 50-69: brand inferred from description (e.g., "video intercom" → likely ButterflyMX or Aiphone)
+- 30-49: inferred from market share for unnamed category (e.g., "gate system" at unbranded community)
+source_key: which source snippet this came from — e.g. "P1", "P2", "P3", "W1", "W2", or "listing" for listing-confirmed brands
+inferred: true if NOT directly named (confidence < 60), false if named in text
+
+For INFERRED brands with no name found:
+- Unnamed gate system: LiftMaster (60% market share) → confidence 40, inferred true
+- Unnamed intercom: ButterflyMX (most common modern) → confidence 35, inferred true
+- Unnamed cameras: Avigilon or Verkada (Class A) → confidence 35, inferred true
+Only infer ONE brand per unnamed category.${listingProptechCtx}`,
+          proptechSnippets, 800, client)
+      : Promise.resolve(null),
+  ])
+
+  // Resolve source_key → actual URL for each PropTech Scout finding
+  const resolvedProptechFindings: ProptechFinding[] = (proptechFindings?.findings ?? [])
+    .filter(f => normStr(f.brand) && f.category)
+    .map(f => ({
+      category: f.category as ProptechFinding['category'],
+      brand: f.brand,
+      confidence: Math.min(100, Math.max(0, f.confidence ?? 50)),
+      evidence: f.evidence ?? '',
+      source_url: proptechSourceMap[f.source_key ?? ''] ?? null,
+      inferred: f.inferred ?? false,
+    }))
 
   // Contact extraction — merge LinkedIn hits + management company web results
   const allContactSources = [...contactResults, ...mgmtWebResults]
@@ -1662,6 +1720,7 @@ Examples: "firstname.lastname@domain.com", "flastname@domain.com", "firstname@do
   return {
     pain_signals: painExtracted?.signals ?? [],
     proptech: finalProptech,
+    proptech_findings: resolvedProptechFindings,
     contacts: allContacts,
     email_format: emailFormat,
     raw_excerpts: allResults,
@@ -1912,6 +1971,48 @@ Example output: "Ask for [First Name] by name. If blocked: 'I'm following up wit
   return normStr(result?.tip) || null
 }
 
+// ─── Phase 4 synthesis fallback ──────────────────────────────────────────────
+// Builds rawData from deterministic phase results when Sonnet fails (504/overload).
+// Guarantees the search always returns something — phase data is never lost.
+function buildFallbackRawData(
+  p1: Phase1Result,
+  p2: Phase2Result,
+  p3: Phase3Result,
+  mgmt: string,
+  finalOwner: string
+): Record<string, any> {
+  return {
+    property_details: {
+      units:              p1.confirmed_units ?? 'No data found',
+      year_built:         (p1 as any).confirmed_year_built ?? 'No data found',
+      management_company: mgmt || 'No data found',
+      property_type:      'multifamily',
+      class:              'B',
+      occupancy:          'No data found',
+      last_sale_date:     p2.last_sale_date || 'No data found',
+      last_sale_price:    p2.last_sale_price || 'No data found',
+      assessed_value:     'No data found',
+    },
+    isp_providers:     p2.isp_providers,
+    video_providers:   p2.video_providers,
+    bulk_agreements:   p2.bulk_agreements,
+    extracted_contacts: p3.contacts,
+    key_finding:       'ARIA completed search and returned deterministic phase data. AI synthesis timed out — re-run to get full analysis.',
+    confidence:        'medium',
+    proptech:          p3.proptech,
+    pain_signals:      p3.pain_signals,
+    property_phone:    p1.confirmed_phone || 'No data found',
+    inferred_proptech: [],
+    ownership: {
+      owner_entity:     finalOwner,
+      owner_type:       p2.owner_type,
+      acquisition_year: p2.acquisition_year,
+    },
+    freshness_score:  5,
+    buying_trends:    'Synthesis unavailable — phase data preserved above.',
+  }
+}
+
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -2151,6 +2252,21 @@ export async function POST(req: NextRequest) {
         }))
         saveEvidencePackets(searchRunId, null, p3BulkEvidence)
       }
+
+      // v8 Ticket 5: Save PropTech Scout findings as proptech evidence packets
+      if (p3.proptech_findings.length > 0) {
+        const proptechEvidence = p3.proptech_findings.map(f => ({
+          fact_type: 'proptech',
+          extracted_value: `${f.brand} (${f.category})`,
+          source_url: f.source_url || undefined,
+          source_type: f.inferred ? 'inferred' : 'proptech',
+          source_authority: f.inferred ? 3 : 7,
+          confidence: f.confidence,
+          raw_snippet: f.evidence.slice(0, 600),
+          phase_found: 3,
+        }))
+        saveEvidencePackets(searchRunId, null, proptechEvidence)
+      }
     }
 
     // ── Determine best contact early — needed for gatekeeper tip ─────────────
@@ -2176,7 +2292,10 @@ ${JSON.stringify({ pain_signals: p3.pain_signals.slice(0, 12), proptech: p3.prop
     // Haiku is ~5x faster than Sonnet; both kick off at the same time so the
     // outreach plan is ready by the time Sonnet finishes. This prevents the
     // outreach plan from adding any latency to the critical path.
-    const [message, outreachPlanResult, gatekeeperTipResult] = await Promise.all([
+    // ── PHASE 4: Sonnet synthesis + Haiku outreach plan — run in PARALLEL ───────
+    // Promise.allSettled: if Sonnet fails (504/overload), fall back to deterministic
+    // phase data instead of throwing — search data is never lost.
+    const [messageResult, outreachResult, gatekeeperResult] = await Promise.allSettled([
       anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 2800,
@@ -2252,12 +2371,25 @@ buying_trends: 1-sentence sales trend insight for this property type`,
       ),
     ])
 
-    const toolBlock = message.content.find(b => b.type === 'tool_use') as Anthropic.ToolUseBlock | undefined
-    if (!toolBlock) throw new Error('No synthesis result from Claude')
-    const rawData = toolBlock.input as Record<string, any>
+    // Build rawData from Sonnet result — or fall back to deterministic phase data if Sonnet failed
+    let rawData: Record<string, any>
+    if (messageResult.status === 'fulfilled') {
+      const toolBlock = messageResult.value.content.find(b => b.type === 'tool_use') as Anthropic.ToolUseBlock | undefined
+      if (toolBlock) {
+        rawData = toolBlock.input as Record<string, any>
+      } else {
+        // Sonnet responded but returned no tool_use block — treat as synthesis failure
+        console.error('[aria] Phase 4 Sonnet returned no tool_use block')
+        rawData = buildFallbackRawData(p1, p2, p3, mgmt, finalOwner)
+      }
+    } else {
+      console.error('[aria] Phase 4 synthesis failed:', (messageResult as PromiseRejectedResult).reason)
+      rawData = buildFallbackRawData(p1, p2, p3, mgmt, finalOwner)
+    }
 
-    // outreachPlanResult is ready — Haiku finished while Sonnet was synthesising
-    const outreachPlan = outreachPlanResult ?? null
+    // outreachPlan + gatekeeper ready — Haiku finished while Sonnet was synthesising
+    const outreachPlan = outreachResult.status === 'fulfilled' ? outreachResult.value : null
+    const gatekeeperTipResult = gatekeeperResult.status === 'fulfilled' ? gatekeeperResult.value : null
 
     // ── Build final payload ───────────────────────────────────────────────────
     const cleanIspProviders = normStrArr(p2.isp_providers.length ? p2.isp_providers : (rawData.isp_providers ?? []))
@@ -2545,6 +2677,8 @@ buying_trends: 1-sentence sales trend insight for this property type`,
       savedSearchId,
       search_run_id: searchRunId,
       quality_gates: qualityGates,
+      // v8 Ticket 5: PropTech Scout findings with confidence scores + source URLs
+      proptech_findings: p3.proptech_findings,
       sources: p3.raw_excerpts.filter(r => r.url && r.score > 0.3).slice(0, 8).map(r => ({
         title: r.title, url: r.url, excerpt: r.content.slice(0, 200), score: r.score, type: r.source ?? 'web',
       })),
