@@ -9,6 +9,8 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+const GATEGUARD_ORG_ID = '00000000-0000-0000-0000-000000000001'
+
 type InboundLeadPayload = {
   source?: string
   contactName?: string
@@ -35,6 +37,7 @@ export async function POST(req: NextRequest) {
     const need = clean(body.need)
     const source = clean(body.source) || 'phone'
     const forceCreate = body.forceCreate === true
+    const orgId = user.org_id || GATEGUARD_ORG_ID
 
     if (!contactName) {
       return NextResponse.json({ success: false, message: 'Contact name is required.' }, { status: 400 })
@@ -43,15 +46,19 @@ export async function POST(req: NextRequest) {
     if (!forceCreate) {
       const nameTerm = escapeLike(contactName)
       const companyTerm = escapeLike(propertyName)
-      const orFilters = [`name.ilike.%${nameTerm}%`]
-      if (companyTerm) orFilters.push(`company.ilike.%${companyTerm}%`)
+      const orFilters = [`contact_name.ilike.%${nameTerm}%`]
+      if (companyTerm) {
+        orFilters.push(`company_name.ilike.%${companyTerm}%`)
+        orFilters.push(`location.ilike.%${companyTerm}%`)
+      }
 
       const { data: matches, error: matchError } = await supabase
-        .from('crm_leads')
-        .select('id, name, company, stage, source, created_at')
+        .from('leads')
+        .select('id, contact_name, company_name, location, stage, source, created_at, updated_at')
+        .eq('org_id', orgId)
         .or(orFilters.join(','))
-        .not('stage', 'in', '(closed_lost,lost,won,converted)')
-        .order('created_at', { ascending: false })
+        .is('lost_at', null)
+        .order('updated_at', { ascending: false })
         .limit(5)
 
       if (!matchError && matches && matches.length > 0) {
@@ -77,16 +84,17 @@ export async function POST(req: NextRequest) {
     ].filter(Boolean).join('\n')
 
     const { data: lead, error: leadError } = await supabase
-      .from('crm_leads')
+      .from('leads')
       .insert({
-        name: contactName,
-        company: propertyName || null,
-        stage: 'new',
-        source: 'nexus_inbound_flow',
+        org_id: orgId,
+        contact_name: contactName,
+        company_name: propertyName || null,
+        location: propertyName || null,
+        stage: 'prospect',
+        source: `nexus_${source}`,
         notes,
-        ...(user.org_id ? { org_id: user.org_id } : {}),
       })
-      .select('id, name, company, stage')
+      .select('id, contact_name, company_name, location, stage, source, created_at, updated_at')
       .single()
 
     if (leadError) {
@@ -94,12 +102,12 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      await supabase.from('crm_activities').insert({
-        lead_id: lead.id,
-        type: 'call',
-        subject: `Inbound call: ${contactName}`,
-        body: notes,
-        ...(user.org_id ? { org_id: user.org_id } : {}),
+      await supabase.from('activity_log').insert({
+        org_id: orgId,
+        entity_type: 'lead',
+        entity_id: lead.id,
+        action: 'created',
+        description: `Inbound lead captured: ${contactName}${propertyName ? ` at ${propertyName}` : ''}`,
       })
     } catch {
       // Best-effort activity log. Lead creation should not fail if activity logging is unavailable.
