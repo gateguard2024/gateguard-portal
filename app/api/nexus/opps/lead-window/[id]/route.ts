@@ -444,5 +444,124 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ success: true, message: 'Status updated.', lead: data })
   }
 
+  // ── create_opportunity ─────────────────────────────────────────────────────
+  if (action === 'create_opportunity') {
+    // Prevent duplicate: check lead.opportunity_id + any open opp with this lead_id
+    if (lead.opportunity_id) {
+      const { data: existingOpp } = await supabase
+        .from('opportunities')
+        .select('id, name, stage, est_mrr, account_name, created_at, updated_at')
+        .eq('id', lead.opportunity_id)
+        .maybeSingle()
+      if (existingOpp) {
+        return NextResponse.json({
+          success: true,
+          message: 'Opportunity already exists for this lead.',
+          opportunity: existingOpp,
+          lead,
+          existing: true,
+        })
+      }
+    }
+
+    // Also check by lead_id in case opportunity_id on lead was never set
+    const { data: existingByLeadId } = await supabase
+      .from('opportunities')
+      .select('id, name, stage, est_mrr, account_name, created_at, updated_at')
+      .eq('lead_id', lead.id)
+      .is('lost_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (existingByLeadId) {
+      // Backfill lead.opportunity_id if missing
+      if (!lead.opportunity_id) {
+        void supabase
+          .from('leads')
+          .update({ opportunity_id: existingByLeadId.id, updated_at: new Date().toISOString() })
+          .eq('id', lead.id)
+      }
+      return NextResponse.json({
+        success: true,
+        message: 'Opportunity already exists for this lead.',
+        opportunity: existingByLeadId,
+        lead,
+        existing: true,
+      })
+    }
+
+    // Generate a meaningful opportunity name
+    const oppName = lead.company_name
+      ? `${lead.company_name} — GateGuard Opportunity`
+      : lead.location
+        ? `${lead.location} — GateGuard Opportunity`
+        : lead.contact_name
+          ? `${lead.contact_name} — GateGuard Opportunity`
+          : 'New GateGuard Opportunity'
+
+    const optionalName = clean(body.name)
+    const optionalNextStep = clean(body.next_step)
+
+    // Insert opportunity carrying all lead context forward
+    const { data: newOpp, error: oppError } = await supabase
+      .from('opportunities')
+      .insert({
+        dealer_org_id:       lead.org_id,
+        lead_id:             lead.id,
+        contact_id:          lead.contact_id ?? null,
+        company_id:          lead.company_id ?? null,
+        rep_id:              profileId,
+        name:                optionalName || oppName,
+        stage:               'inquiry',
+        notes:               (lead as Record<string, unknown>).notes ?? null,
+        source:              (lead as Record<string, unknown>).source ?? null,
+        account_name:        lead.company_name ?? null,
+        management_co:       lead.company_name ?? null,
+        property_address:    lead.location ?? null,
+        site_contact_name:   lead.contact_name ?? null,
+        site_contact_phone:  (lead as Record<string, unknown>).phone ?? null,
+        site_contact_email:  (lead as Record<string, unknown>).email ?? null,
+        units:               (lead as Record<string, unknown>).unit_count ?? null,
+        next_step:           optionalNextStep || 'Schedule discovery call',
+        assigned_from_lead:  lead.id,
+      })
+      .select('id, name, stage, est_mrr, amount, account_name, next_step, created_at, updated_at')
+      .single()
+
+    if (oppError) {
+      return NextResponse.json({ success: false, message: oppError.message }, { status: 500 })
+    }
+
+    // Update lead: mark converted, link opportunity
+    void supabase
+      .from('leads')
+      .update({
+        stage:          'converted',
+        converted_at:   new Date().toISOString(),
+        opportunity_id: newOpp.id,
+        updated_at:     new Date().toISOString(),
+      })
+      .eq('id', lead.id)
+
+    // Log activity on lead
+    void supabase.from('activities').insert({
+      dealer_org_id:  lead.org_id,
+      created_by:     profileId,
+      type:           'note',
+      subject:        'Opportunity created',
+      body:           'Nexus converted this lead into an opportunity.',
+      lead_id:        lead.id,
+      opportunity_id: newOpp.id,
+    })
+
+    return NextResponse.json({
+      success: true,
+      message: 'Opportunity created.',
+      opportunity: newOpp,
+      lead,
+    })
+  }
+
   return NextResponse.json({ success: false, message: 'Unknown lead action.' }, { status: 400 })
 }

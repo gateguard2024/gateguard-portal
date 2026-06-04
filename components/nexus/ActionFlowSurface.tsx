@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { LeadGlassWindow } from '@/components/nexus/windows/LeadGlassWindow'
+import { OpportunityGlassWindow } from '@/components/nexus/windows/OpportunityGlassWindow'
 
 export type NexusTabId = 'my-day' | 'recent' | 'opps' | 'jobs' | 'field' | 'people'
 
@@ -209,12 +210,15 @@ function CaptureStep({ label, help, value, onChange, onNext, onBack }: { label: 
   )
 }
 
-function RecordList({ records, emptyText, onLeadClick, leadWindowBusy, loadingLeadId }: {
+function RecordList({ records, emptyText, onLeadClick, onOpportunityClick, leadWindowBusy, opportunityWindowBusy, loadingLeadId, loadingOpportunityId }: {
   records: WorkbenchRecord[]
   emptyText: string
   onLeadClick?: (id: string) => void
+  onOpportunityClick?: (id: string) => void
   leadWindowBusy?: boolean
+  opportunityWindowBusy?: boolean
   loadingLeadId?: string | null
+  loadingOpportunityId?: string | null
 }) {
   if (records.length === 0) {
     return <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.42)' }}>{emptyText}</div>
@@ -224,16 +228,18 @@ function RecordList({ records, emptyText, onLeadClick, leadWindowBusy, loadingLe
     <div className="space-y-2">
       {records.map(record => {
         const isLead = isLeadRecord(record)
-        const clickable = isLead && !!onLeadClick
-        const isLoading = leadWindowBusy && loadingLeadId === record.id
+        const isOpp = !isLead
+        const clickable = (isLead && !!onLeadClick) || (isOpp && !!onOpportunityClick)
+        const isLoading = (isLead && leadWindowBusy && loadingLeadId === record.id) ||
+                          (isOpp && opportunityWindowBusy && loadingOpportunityId === record.id)
 
         return (
           <div
             key={record.id}
-            onClick={clickable ? () => onLeadClick!(record.id) : undefined}
+            onClick={clickable ? () => isLead ? onLeadClick!(record.id) : onOpportunityClick!(record.id) : undefined}
             role={clickable ? 'button' : undefined}
             tabIndex={clickable ? 0 : undefined}
-            onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') onLeadClick!(record.id) } : undefined}
+            onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') isLead ? onLeadClick!(record.id) : onOpportunityClick!(record.id) } : undefined}
             className={clickable ? 'rounded-2xl p-4 transition-all cursor-pointer hover:-translate-y-0.5' : 'rounded-2xl p-4'}
             style={{
               background: isLoading ? 'rgba(107,126,255,0.12)' : 'rgba(255,255,255,0.035)',
@@ -277,11 +283,17 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
   const [workbenchFocus, setWorkbenchFocus] = useState<WorkbenchFocus>('openLeads')
   const [searchTerm, setSearchTerm] = useState('')
 
-  // Lead Glass Window state — workbench data is preserved while lead is open
+  // Lead Glass Window state
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
   const [leadWindowData, setLeadWindowData] = useState<Record<string, unknown> | null>(null)
   const [leadWindowBusy, setLeadWindowBusy] = useState(false)
   const [loadingLeadId, setLoadingLeadId] = useState<string | null>(null)
+
+  // Opportunity Glass Window state
+  const [selectedOpportunityId, setSelectedOpportunityId] = useState<string | null>(null)
+  const [opportunityWindowData, setOpportunityWindowData] = useState<Record<string, unknown> | null>(null)
+  const [opportunityWindowBusy, setOpportunityWindowBusy] = useState(false)
+  const [loadingOpportunityId, setLoadingOpportunityId] = useState<string | null>(null)
 
   const simpleStep = stepId === 'call-name' || stepId === 'call-property' || stepId === 'call-need' || stepId === 'call-review' || stepId === 'workbench' ? null : STEPS[stepId]
 
@@ -308,6 +320,29 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
     } catch {
       // Best-effort — if refresh fails, existing data stays visible
     }
+  }
+
+  async function openOpportunity(id: string) {
+    setOpportunityWindowBusy(true)
+    setLoadingOpportunityId(id)
+    try {
+      const res = await fetch(`/api/nexus/opps/opportunity-window/${id}`)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.success === false) throw new Error(data?.message ?? 'Could not open opportunity.')
+      setSelectedOpportunityId(id)
+      setOpportunityWindowData(data)
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Could not open opportunity.')
+    } finally {
+      setOpportunityWindowBusy(false)
+      setLoadingOpportunityId(null)
+    }
+  }
+
+  function closeOpportunityWindow() {
+    setSelectedOpportunityId(null)
+    setOpportunityWindowData(null)
+    // Workbench data preserved — no re-fetch
   }
 
   async function openLead(id: string) {
@@ -397,7 +432,7 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
     <section className="mt-9 w-full max-w-4xl">
       <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.022))', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 24px 80px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.06)', backdropFilter: 'blur(24px)' }}>
 
-        {/* ── Lead Glass Window (renders over workbench when a lead is open) ── */}
+        {/* ── Lead Glass Window ── */}
         {selectedLeadId && leadWindowData && (
           <LeadGlassWindow
             data={leadWindowData as Parameters<typeof LeadGlassWindow>[0]['data']}
@@ -406,8 +441,16 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
           />
         )}
 
-        {/* ── Normal flow — hidden while lead window is active ── */}
-        {!(selectedLeadId && leadWindowData) && (
+        {/* ── Opportunity Glass Window ── */}
+        {!selectedLeadId && selectedOpportunityId && opportunityWindowData && (
+          <OpportunityGlassWindow
+            data={opportunityWindowData as Parameters<typeof OpportunityGlassWindow>[0]['data']}
+            onBack={closeOpportunityWindow}
+          />
+        )}
+
+        {/* ── Normal flow — hidden while any glass window is active ── */}
+        {!(selectedLeadId && leadWindowData) && !(selectedOpportunityId && opportunityWindowData) && (
           <>
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
@@ -448,8 +491,11 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
                   records={focusedRecords}
                   emptyText={focusedEmptyText}
                   onLeadClick={openLead}
+                  onOpportunityClick={openOpportunity}
                   leadWindowBusy={leadWindowBusy}
+                  opportunityWindowBusy={opportunityWindowBusy}
                   loadingLeadId={loadingLeadId}
+                  loadingOpportunityId={loadingOpportunityId}
                 />
               </div>
             )}

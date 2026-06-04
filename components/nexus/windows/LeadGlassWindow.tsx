@@ -4,7 +4,7 @@ import { useState } from 'react'
 
 type AnyRecord = Record<string, any>
 
-type LeadAction = 'add_note' | 'log_call' | 'schedule_followup' | 'update_status'
+type LeadAction = 'create_opportunity' | 'add_note' | 'log_call' | 'schedule_followup' | 'update_status'
 
 type LeadGlassData = {
   lead?: AnyRecord | null
@@ -386,6 +386,7 @@ export function LeadGlassWindow({
             <div className="space-y-2">
               {/* Four real action buttons */}
               {([
+                { action: 'create_opportunity' as LeadAction, label: 'Create Opportunity', sub: 'This looks like a real deal.' },
                 { action: 'add_note' as LeadAction,        label: 'Add Note',           sub: 'Remember something about this lead.' },
                 { action: 'log_call' as LeadAction,        label: 'Log Call',           sub: 'Capture what happened on a call.' },
                 { action: 'schedule_followup' as LeadAction, label: 'Schedule Follow-Up', sub: 'Put the next touch on your list.' },
@@ -408,6 +409,18 @@ export function LeadGlassWindow({
               ))}
 
               {/* Inline action panels */}
+              {activeAction === 'create_opportunity' && (
+                <div className="rounded-2xl p-3 space-y-2" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(107,126,255,0.22)' }}>
+                  <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.72)' }}>
+                    Nexus will create an opportunity and carry forward this lead data. No duplicate will be created if one already exists.
+                  </p>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setActiveAction(null)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.045)', color: 'rgba(255,255,255,0.5)' }}>Cancel</button>
+                    <button type="button" disabled={actionBusy} onClick={() => submitLeadAction({ action: 'create_opportunity' })} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: '#6B7EFF', color: 'white' }}>{actionBusy ? 'Creating...' : 'Create Opportunity'}</button>
+                  </div>
+                </div>
+              )}
+
               {activeAction === 'add_note' && (
                 <div className="rounded-2xl p-3 space-y-2" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)' }}>
                   <textarea
