@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { JobGlassWindow } from '@/components/nexus/windows/JobGlassWindow'
 
 type JobsFocus = 'myJobs' | 'needsAttention' | 'scheduledToday' | 'openJobs' | 'recentlyUpdated' | 'search'
@@ -147,6 +147,11 @@ export function JobsSurface() {
     }
   }
 
+  useEffect(() => {
+    if (!jobsWorkbench && !busy) void openJobsWorkbench('myJobs')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   async function openJob(id: string) {
     setJobWindowBusy(true)
     setLoadingJobId(id)
@@ -200,7 +205,7 @@ export function JobsSurface() {
                 <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.94)' }}>What jobs need work?</h2>
                 <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.42)' }}>Open your jobs, scheduled visits, attention items, or search by job, site, or customer.</p>
               </div>
-              <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(52,211,153,0.1)', color: 'rgba(110,231,183,0.9)', border: '1px solid rgba(52,211,153,0.18)' }}>Jobs</div>
+              <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(52,211,153,0.1)', color: 'rgba(110,231,183,0.9)', border: '1px solid rgba(52,211,153,0.18)' }}>{busy ? 'Loading…' : 'Jobs'}</div>
             </div>
 
             <div className="space-y-4">
@@ -224,7 +229,7 @@ export function JobsSurface() {
 
               {!jobsWorkbench && (
                 <button type="button" disabled={busy} onClick={() => void openJobsWorkbench('myJobs')} className="w-full rounded-2xl p-4 text-left text-sm transition-all disabled:opacity-50" style={{ background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.18)', color: 'rgba(255,255,255,0.84)' }}>
-                  <div className="font-semibold">Load Jobs</div>
+                  <div className="font-semibold">{busy ? 'Loading Jobs…' : 'Load Jobs'}</div>
                   <div className="mt-1 text-xs opacity-50">Open your jobs workbench.</div>
                 </button>
               )}
