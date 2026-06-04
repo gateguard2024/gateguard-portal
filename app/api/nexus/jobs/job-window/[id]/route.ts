@@ -81,13 +81,8 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
   const jobId = params.id
   const { job, error } = await getScopedJob(jobId, user)
 
-  if (error) {
-    return NextResponse.json({ success: false, message: error }, { status: 500 })
-  }
-
-  if (!job) {
-    return NextResponse.json({ success: false, message: 'Job not found or outside your access.' }, { status: 404 })
-  }
+  if (error) return NextResponse.json({ success: false, message: error }, { status: 500 })
+  if (!job) return NextResponse.json({ success: false, message: 'Job not found or outside your access.' }, { status: 404 })
 
   const jobRecord = job as Record<string, unknown>
 
@@ -235,22 +230,15 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   const action = clean(body.action)
   const { job, error } = await getScopedJob(params.id, user)
 
-  if (error) {
-    return NextResponse.json({ success: false, message: error }, { status: 500 })
-  }
-
-  if (!job) {
-    return NextResponse.json({ success: false, message: 'Job not found or outside your access.' }, { status: 404 })
-  }
+  if (error) return NextResponse.json({ success: false, message: error }, { status: 500 })
+  if (!job) return NextResponse.json({ success: false, message: 'Job not found or outside your access.' }, { status: 404 })
 
   const authorName = user.name || 'Nexus User'
   const authorInitials = initials(authorName)
 
   if (action === 'add_note') {
     const note = clean(body.note ?? body.content ?? body.body)
-    if (!note) {
-      return NextResponse.json({ success: false, message: 'Tell Nexus what to remember.' }, { status: 400 })
-    }
+    if (!note) return NextResponse.json({ success: false, message: 'Tell Nexus what to remember.' }, { status: 400 })
 
     const { data, error: insertError } = await supabase
       .from('wo_comments')
@@ -258,10 +246,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       .select('id, author_name, author_initials, content, created_at')
       .single()
 
-    if (insertError) {
-      return NextResponse.json({ success: false, message: insertError.message }, { status: 500 })
-    }
-
+    if (insertError) return NextResponse.json({ success: false, message: insertError.message }, { status: 500 })
     return NextResponse.json({ success: true, message: 'Note added.', note: data })
   }
 
@@ -272,9 +257,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     const priorityInput = clean(body.priority)
     const priority = ['high', 'normal', 'low'].includes(priorityInput) ? priorityInput : 'normal'
 
-    if (!title) {
-      return NextResponse.json({ success: false, message: 'What needs to get done?' }, { status: 400 })
-    }
+    if (!title) return NextResponse.json({ success: false, message: 'What needs to get done?' }, { status: 400 })
 
     const { data, error: taskError } = await supabase
       .from('todos')
@@ -296,10 +279,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       .select('id, title, body, priority, status, due_date, linked_type, linked_id, linked_label, created_at, updated_at')
       .single()
 
-    if (taskError) {
-      return NextResponse.json({ success: false, message: taskError.message }, { status: 500 })
-    }
-
+    if (taskError) return NextResponse.json({ success: false, message: taskError.message }, { status: 500 })
     return NextResponse.json({ success: true, message: 'Task created.', task: data })
   }
 
@@ -307,9 +287,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     const scheduledDate = clean(body.scheduled_date ?? body.scheduledDate)
     const note = clean(body.note ?? body.notes)
 
-    if (!scheduledDate) {
-      return NextResponse.json({ success: false, message: 'Pick a visit date.' }, { status: 400 })
-    }
+    if (!scheduledDate) return NextResponse.json({ success: false, message: 'Pick a visit date.' }, { status: 400 })
 
     const updates: Record<string, unknown> = {
       scheduled_date: scheduledDate,
@@ -326,18 +304,13 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       .select('id, wo_number, title, status, scheduled_date, due_date, updated_at')
       .single()
 
-    if (updateError) {
-      return NextResponse.json({ success: false, message: updateError.message }, { status: 500 })
-    }
+    if (updateError) return NextResponse.json({ success: false, message: updateError.message }, { status: 500 })
 
     if (note) {
-      const content = `Visit scheduled for ${scheduledDate}. ${note}`
       const { error: noteError } = await supabase
         .from('wo_comments')
-        .insert({ work_order_id: job.id, author_name: authorName, author_initials: authorInitials, content })
-      if (noteError) {
-        return NextResponse.json({ success: false, message: noteError.message }, { status: 500 })
-      }
+        .insert({ work_order_id: job.id, author_name: authorName, author_initials: authorInitials, content: note })
+      if (noteError) return NextResponse.json({ success: false, message: noteError.message }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, message: 'Visit scheduled.', job: data })
@@ -353,17 +326,13 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       .select('id, wo_number, title, status, completed_at, updated_at')
       .single()
 
-    if (updateError) {
-      return NextResponse.json({ success: false, message: updateError.message }, { status: 500 })
-    }
+    if (updateError) return NextResponse.json({ success: false, message: updateError.message }, { status: 500 })
 
     if (note) {
       const { error: noteError } = await supabase
         .from('wo_comments')
         .insert({ work_order_id: job.id, author_name: authorName, author_initials: authorInitials, content: `Job completed. ${note}` })
-      if (noteError) {
-        return NextResponse.json({ success: false, message: noteError.message }, { status: 500 })
-      }
+      if (noteError) return NextResponse.json({ success: false, message: noteError.message }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, message: 'Job marked complete.', job: data })
