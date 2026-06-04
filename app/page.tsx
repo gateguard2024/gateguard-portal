@@ -23,8 +23,26 @@ const NAV_ITEMS: { label: string; id: NexusTabId }[] = [
 function NexusMark() {
   return (
     <div className="mb-6 flex flex-col items-center gap-3">
-      <div className="flex h-[72px] w-[72px] items-center justify-center rounded-[28px]" style={{ border: '1px solid rgba(107,126,255,0.32)', background: 'rgba(107,126,255,0.08)', boxShadow: '0 0 28px rgba(107,126,255,0.22)' }}>
-        <div className="h-6 w-6 rounded-full" style={{ border: '1px solid rgba(255,255,255,0.58)', boxShadow: 'inset 0 0 18px rgba(107,126,255,0.35)' }} />
+      <div
+        style={{
+          width: 72,
+          height: 72,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          filter: 'drop-shadow(0 0 18px rgba(107,126,255,0.45))',
+        }}
+      >
+        <svg width="68" height="68" viewBox="0 0 68 68" fill="none" aria-hidden="true">
+          <polygon points="34,4 52,12 64,28 64,40 52,56 34,64 16,56 4,40 4,28 16,12" stroke="rgba(255,255,255,0.88)" strokeWidth="1.4" fill="none" />
+          <polygon points="34,14 47,20 56,32 56,36 47,48 34,54 21,48 12,36 12,32 21,20" stroke="rgba(107,126,255,0.55)" strokeWidth="1" fill="none" />
+          <circle cx="34" cy="34" r="9" stroke="rgba(255,255,255,0.35)" strokeWidth="1" fill="none" />
+          <line x1="34" y1="4" x2="34" y2="25" stroke="rgba(255,255,255,0.18)" strokeWidth="1" />
+          <line x1="34" y1="43" x2="34" y2="64" stroke="rgba(255,255,255,0.18)" strokeWidth="1" />
+          <line x1="4" y1="34" x2="25" y2="34" stroke="rgba(255,255,255,0.18)" strokeWidth="1" />
+          <line x1="43" y1="34" x2="64" y2="34" stroke="rgba(255,255,255,0.18)" strokeWidth="1" />
+          <circle cx="34" cy="34" r="2.5" fill="rgba(107,126,255,0.9)" />
+        </svg>
       </div>
       <div className="text-center">
         <h1 className="text-4xl font-bold uppercase" style={{ color: 'rgba(255,255,255,0.96)', letterSpacing: '0.28em', lineHeight: 1 }}>NEXUS</h1>
