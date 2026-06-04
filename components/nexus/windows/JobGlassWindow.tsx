@@ -106,6 +106,15 @@ function ActionButton({ title, subtitle, active, disabled, onClick }: { title: s
   )
 }
 
+function FieldLabel({ label, helper }: { label: string; helper?: string }) {
+  return (
+    <div>
+      <div className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.58)' }}>{label}</div>
+      {helper && <div className="mt-0.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.34)' }}>{helper}</div>}
+    </div>
+  )
+}
+
 export function JobGlassWindow({
   data,
   onBack,
@@ -276,7 +285,9 @@ export function JobGlassWindow({
               {activeAction === 'create_task' && (
                 <div className="space-y-2 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(52,211,153,0.22)' }}>
                   <input value={taskTitle} onChange={e => setTaskTitle(e.target.value)} placeholder="What needs to get done?" className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(52,211,153,0.2)', color: 'rgba(255,255,255,0.88)' }} />
+                  <FieldLabel label="Due Date" helper="Pick when this task should be done." />
                   <input type="date" value={taskDueDate} onChange={e => setTaskDueDate(e.target.value)} className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.88)' }} />
+                  <FieldLabel label="Priority" />
                   <select value={taskPriority} onChange={e => setTaskPriority(e.target.value)} className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.88)' }}>
                     <option value="normal">Normal</option>
                     <option value="high">High</option>
@@ -292,8 +303,9 @@ export function JobGlassWindow({
 
               {activeAction === 'schedule_visit' && (
                 <div className="space-y-2 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(52,211,153,0.22)' }}>
+                  <FieldLabel label="Visit Date" helper="Pick when the team should go." />
                   <input type="date" value={visitDate} onChange={e => setVisitDate(e.target.value)} className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(52,211,153,0.2)', color: 'rgba(255,255,255,0.88)' }} />
-                  <textarea value={visitNote} onChange={e => setVisitNote(e.target.value)} placeholder="Anything the team should know?" rows={2} className="w-full resize-none rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.88)' }} />
+                  <textarea value={visitNote} onChange={e => setVisitNote(e.target.value)} placeholder="Optional note for the team, like gate code or best arrival time." rows={2} className="w-full resize-none rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.88)' }} />
                   <div className="flex gap-2">
                     <button type="button" onClick={() => setActiveAction(null)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.045)', color: 'rgba(255,255,255,0.5)' }}>Cancel</button>
                     <button type="button" disabled={actionBusy || !visitDate} onClick={() => submitJobAction({ action: 'schedule_visit', scheduled_date: visitDate, note: visitNote })} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: '#34d399', color: '#06120c' }}>{actionBusy ? 'Scheduling...' : 'Schedule Visit'}</button>
