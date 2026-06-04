@@ -105,7 +105,7 @@ export async function getCurrentUser(): Promise<PortalUser> {
     const canViewSites =
       isCorporate || isMasterDealer || isFullDealer || isServiceDealer
     const canViewCRM =
-      isCorporate || isMasterDealer || isFullDealer || isSalesPartner
+      isCorporate || isMasterDealer || isFullDealer || isSalesPartner || isServiceDealer
     const canViewCommissions =
       isCorporate || isMasterAgent || isMasterDealer || isFullDealer || isSalesPartner || isServiceDealer
     const canViewNetwork =

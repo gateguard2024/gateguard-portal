@@ -28,13 +28,14 @@ export async function PATCH(
 
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    // crm_activities has no updated_at column — never include it
+    const updates: Record<string, unknown> = {}
     if (body.subject      !== undefined) updates.subject      = body.subject
     if (body.body         !== undefined) updates.body         = body.body
     if (body.type         !== undefined) updates.type         = body.type
     if (body.due_at       !== undefined) updates.due_at       = body.due_at
     if (body.outcome      !== undefined) updates.outcome      = body.outcome
-    if (body.duration_mins !== undefined) updates.duration_mins = body.duration_mins
+    if (body.duration_mins !== undefined) updates.duration_min = body.duration_mins  // DB column: duration_min (no s)
 
     // Mark complete / reopen
     if (body.completed_at !== undefined) {
