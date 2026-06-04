@@ -458,6 +458,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
           success: true,
           message: 'Opportunity already exists for this lead.',
           opportunity: existingOpp,
+          opportunityId: existingOpp.id,
           lead,
           existing: true,
         })
@@ -475,17 +476,26 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       .maybeSingle()
 
     if (existingByLeadId) {
-      // Backfill lead.opportunity_id if missing
+      // Backfill lead — awaited so the lifecycle transition is committed before response
       if (!lead.opportunity_id) {
-        void supabase
+        const { error: linkError } = await supabase
           .from('leads')
-          .update({ opportunity_id: existingByLeadId.id, updated_at: new Date().toISOString() })
+          .update({
+            opportunity_id: existingByLeadId.id,
+            converted_at:   new Date().toISOString(),
+            stage:          'converted',
+            updated_at:     new Date().toISOString(),
+          })
           .eq('id', lead.id)
+        if (linkError) {
+          return NextResponse.json({ success: false, message: linkError.message }, { status: 500 })
+        }
       }
       return NextResponse.json({
         success: true,
         message: 'Opportunity already exists for this lead.',
         opportunity: existingByLeadId,
+        opportunityId: existingByLeadId.id,
         lead,
         existing: true,
       })
@@ -533,8 +543,8 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ success: false, message: oppError.message }, { status: 500 })
     }
 
-    // Update lead: mark converted, link opportunity
-    void supabase
+    // Update lead — awaited: lifecycle transition must commit before we respond
+    const { data: updatedLead, error: leadUpdateError } = await supabase
       .from('leads')
       .update({
         stage:          'converted',
@@ -543,23 +553,36 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         updated_at:     new Date().toISOString(),
       })
       .eq('id', lead.id)
+      .select('id, stage, converted_at, opportunity_id, updated_at')
+      .single()
 
-    // Log activity on lead
-    void supabase.from('activities').insert({
-      dealer_org_id:  lead.org_id,
-      created_by:     profileId,
-      type:           'note',
-      subject:        'Opportunity created',
-      body:           'Nexus converted this lead into an opportunity.',
-      lead_id:        lead.id,
-      opportunity_id: newOpp.id,
-    })
+    if (leadUpdateError) {
+      return NextResponse.json({ success: false, message: leadUpdateError.message }, { status: 500 })
+    }
+
+    // Log conversion activity — awaited: must be committed before response
+    const { error: activityError } = await supabase
+      .from('activities')
+      .insert({
+        dealer_org_id:  lead.org_id,
+        created_by:     profileId,
+        type:           'note',
+        subject:        'Opportunity created',
+        body:           'Nexus converted this lead into an opportunity.',
+        lead_id:        lead.id,
+        opportunity_id: newOpp.id,
+      })
+
+    if (activityError) {
+      return NextResponse.json({ success: false, message: activityError.message }, { status: 500 })
+    }
 
     return NextResponse.json({
       success: true,
       message: 'Opportunity created.',
       opportunity: newOpp,
-      lead,
+      opportunityId: newOpp.id,
+      lead: updatedLead,
     })
   }
 

@@ -438,6 +438,10 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
             data={leadWindowData as Parameters<typeof LeadGlassWindow>[0]['data']}
             onBack={closeLeadWindow}
             onRefresh={refreshOpenLead}
+            onOpenOpportunity={async (id: string) => {
+              closeLeadWindow()
+              await openOpportunity(id)
+            }}
           />
         )}
 

@@ -199,10 +199,12 @@ export function LeadGlassWindow({
   data,
   onBack,
   onRefresh,
+  onOpenOpportunity,
 }: {
   data: LeadGlassData
   onBack: () => void
   onRefresh?: () => Promise<void> | void
+  onOpenOpportunity?: (id: string) => void | Promise<void>
 }) {
   const lead = data.lead ?? {}
   const contacts = data.people?.contacts ?? []
@@ -245,8 +247,17 @@ export function LeadGlassWindow({
       if (!res.ok || result.success === false) {
         throw new Error(result?.message ?? 'Nexus could not complete that action.')
       }
+      // Extract opportunity ID if this was a create_opportunity action
+      const createdOpportunityId =
+        typeof result?.opportunityId === 'string'
+          ? result.opportunityId
+          : typeof result?.opportunity?.id === 'string'
+            ? result.opportunity.id
+            : null
+
       setActionMessage(result?.message ?? 'Done.')
       setActiveAction(null)
+
       // Reset form fields
       setNoteText('')
       setCallSummary('')
@@ -255,6 +266,16 @@ export function LeadGlassWindow({
       setFollowupTitle('Follow up on lead')
       setFollowupDate('')
       setFollowupNotes('')
+
+      const actionName = typeof payload.action === 'string' ? payload.action : ''
+
+      if (actionName === 'create_opportunity' && createdOpportunityId) {
+        // Auto-open the opportunity — user sees it immediately, no hunting required
+        await onRefresh?.()
+        await onOpenOpportunity?.(createdOpportunityId)
+        return
+      }
+
       await onRefresh?.()
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : 'That did not work. Try again.')
