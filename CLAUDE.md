@@ -1,6 +1,8 @@
 # GateGuard Portal — Claude Context (Active Reference)
 
-> Last trimmed: June 2, 2026 (session 14). Full sprint history, /tech docs, SARA Plus intel → CLAUDE.archive.md
+> Last trimmed: June 3, 2026 (session 15). Full sprint history, /tech docs, SARA Plus intel → CLAUDE.archive.md
+
+> **⚠️ BETA BRANCH:** All Nexus glass window work (Sprints A–C, Jobs Stage 1+2) is on `beta` only. Main has ARIA v8 engine fixes only. To work on Nexus: `git checkout beta`. Do not overwrite beta's Nexus files with main.
 
 ---
 
@@ -625,6 +627,29 @@ GRANT ALL ON TABLE public.example_table TO postgres, anon, authenticated, servic
   - **dbPhase2Seed fix** — now seeds ALL existing ISP/video/ROE data from DB on every re-search (was only seeding user-verified fields — root cause of GIGstreem disappearing on re-run). Arrays are always unioned; `roe_expiry_year` scalar still protected if `roe_expiry_user_verified = true`
   - **6-month outreach_plan** added to Sonnet tool schema — Sonnet builds a month-by-month campaign calendar using this property's actual pain signals, ROE/contract window, behavioral profile, and DM data. Fields: `month_1..month_6` (theme + actions[] + goal), `total_touches`, `primary_channel`, `key_milestone`, `expected_close_quarter`
   - **Expanded scoutQueue** — SCOUT now receives full campaign brief: `market_context` (tech_generation, replacement_window, acquisition_year, buying_trends), `connectivity` extended (video_providers, roe_detected, roe_expiry_year, contract_urgency, contract_window), `proptech` extended (intercoms, cameras, smart_locks, displacement_targets, sara_signals), `behavioral_profile`, `pitch_strategy`, `key_finding`, full `objection_flags` (ROE + acquisition), `outreach_plan`, extended `outreach_sequence` (6 touches)
+
+### Completed — June 3, 2026 (session 15) — Nexus Glass Workflow + ARIA v8 + Jobs Glass Window
+**⚠️ ALL SESSION 15 WORK IS ON `beta` ONLY. Main does not have these files.**
+
+- ✅ **Prime Directive added to CLAUDE.md** — "So easy a 5th grader can use it" with bad/good examples
+- ✅ **Patch 1 — Workbench Security** — `canViewCRM` added `isServiceDealer`; workbench scoped by `org_id`/`dealer_org_id`; `crm_activities` PATCH fixed (`updated_at` DNE, `duration_min` not `duration_mins`)
+- ✅ **Patch 3 — Lead Glass Window** — `LeadGlassWindow` component; workbench lead cards clickable; `openLead()` + `closeLeadWindow()`; 5-category duplicate guard
+- ✅ **Sprint 3.5 — My Leads** — workbench `myLeads` section via `profiles.id` lookup; `My Leads` tab first in workbench
+- ✅ **Sprint A — Lead Workspace Actions** — `lead-window/[id]` POST: `add_note`, `log_call`, `schedule_followup`, `update_status`; `getScopedLead()` security; `onRefresh` prop
+- ✅ **Sprint B — Lead → Opportunity** — `create_opportunity` action (awaited lead update + activity); `opportunity-window/[id]` GET; `OpportunityGlassWindow` component; opportunity cards clickable in workbench
+- ✅ **Sprint B Polish — Auto-Open Opportunity** — all 3 cases return `opportunityId`; `onOpenOpportunity` callback; `closeLeadWindow()` + `openOpportunity()` chained
+- ✅ **Sprint C — ARIA v8 Into Beta** — `app/api/aria/research/deep/route.ts` + `app/aria/page.tsx` copied from `origin/main`; all v8 tickets present; `docs/nexus/ARIA_ROUTE_MAP.md` created
+- ✅ **Jobs Stage 1** — `app/api/nexus/jobs/workbench/route.ts` (5 sections, My Jobs via `assigned_to`); `app/api/nexus/jobs/job-window/[id]/route.ts` GET (site/team/tasks/checklist/notes/parts/files); `JobGlassWindow` component (emerald accent, 10 sections); Jobs tab in ActionFlowSurface
+- ✅ **Jobs Stage 2** — `job-window/[id]` POST: `add_note` (wo_comments), `create_task` (todos), `schedule_visit` (WO update), `mark_complete` (WO update); `getScopedJob()` helper; `refreshOpenJob()`; 4 real action buttons + inline panels; Open Field View → `/maintenance/${job.id}`; Assign Team / Upload File disabled ("Coming in a future stage")
+- ✅ **Schema confirmed from live beta DB**: `work_orders` has `org_id`, `assigned_to`, `assignee_id` — `assignee_org_id` does NOT exist. Install contractor scoping is a future TODO.
+- ✅ **Nexus docs** — `docs/nexus/SESSION_15_CONTEXT.md`, `docs/nexus/SUPABASE_SCHEMA.json` (128 tables), `docs/nexus/ARIA_ROUTE_MAP.md`, `docs/nexus/PATCH_1_WORKBENCH_SECURITY.md`, `docs/nexus/PATCH_3_LEAD_GLASS_WINDOW.md`
+
+**Beta-only key files:**
+`components/nexus/ActionFlowSurface.tsx` · `components/nexus/windows/LeadGlassWindow.tsx` · `components/nexus/windows/OpportunityGlassWindow.tsx` · `components/nexus/windows/JobGlassWindow.tsx` · `app/api/nexus/opps/workbench/route.ts` · `app/api/nexus/opps/lead-window/[id]/route.ts` · `app/api/nexus/opps/opportunity-window/[id]/route.ts` · `app/api/nexus/jobs/workbench/route.ts` · `app/api/nexus/jobs/job-window/[id]/route.ts` · `app/api/nexus/flows/inbound-lead/route.ts` · `lib/current-user.ts` (canViewCRM fix)
+
+**To start next session on beta:** `git checkout beta && git pull origin beta`
+
+---
 
 ### Completed — June 2, 2026 (session 14) — Floor Plan Platform + PM OS + ARIA v7.6 + Nexus Action Engine
 

@@ -20,202 +20,178 @@ Nexus does the rest. This keeps us from accidentally rebuilding Salesforce.
 ## Repo
 
 `gateguard-portal` — portal.gateguard.co  
-Branch strategy: features go to `beta` first, then main after approval.  
-Git push rule: `git push origin main && git push origin main:beta`  
-**Current active branch for new work: `beta`**
+Branch strategy: ALL Nexus work goes to `beta` first, then to `main` after approval.  
+Git push rule (when merging to main): `git push origin main`  
+**All work below is on `beta` only unless explicitly noted.**
 
 ---
 
-## What Was Built This Session
+## Branch State (as of end of session)
 
-### ARIA v8 Reliability Refactor (on main)
+| Branch | State |
+|--------|-------|
+| `beta` | All Nexus sprints (A, B, B-polish, C, Jobs Stage 1 + 2), ARIA v8, org scoping fixes |
+| `main` | ARIA v8 engine fixes + CLAUDE.md updates only. Does NOT have Nexus glass windows. |
 
-**Ticket 1 — Candidate Preservation**
-- `saveCandidatesToDB`: status always `'pending'` (was auto-selecting first candidate)
+**To start a new session on beta:**
+```bash
+git fetch origin
+git checkout beta
+git pull origin beta
+```
 
-**Ticket 2 — Evidence Packet Persistence**
-- Phase 1B returns `raw_results` from `runPhase1B`
-- Phase 1B branch saves 18 source evidence packets with `source_url` + `raw_snippet`
-- Phase 1A facts include `listing_url` as `source_url`
-- Phase 3 contacts include LinkedIn URL as `source_url`
-- Phase 3 bulk: 15 `raw_excerpts` saved as `source_excerpt` evidence packets
-
-**Ticket 4 — Top-3 Lightweight Enrichment**
-- `enrichTopCandidates()`: 3 parallel Serper + 3 parallel Haiku for top candidates
-- Extracts units/phone/management/ownership/gate_signal/pain_brief
-- Merged before DB persist
-
-**Ticket 5 — PropTech Scout**
-- `ProptechFinding` interface: category/brand/confidence/evidence/source_url/inferred
-- Parallel Haiku PropTech Scout runs alongside existing proptech extraction
-- Confidence: 90+ = named in text, 70-89 = mentioned, 30-49 = inferred from market share
-- Saved as evidence packets, returned in API as `proptech_findings[]`
-
-**Phase 4 Synthesis Fallback**
-- `Promise.all` → `Promise.allSettled`
-- `buildFallbackRawData()` assembles rawData from p1/p2/p3 when Sonnet 504s
-- Search data never lost on timeout
-
-**CandidateGrid render fix** (`app/aria/page.tsx`)
-- `candidates.length > 0` → `viewMode === 'candidates'` (desktop + mobile)
-
----
-
-### Supabase Bug Fixes (on main)
-
-**`app/api/crm/activities/[id]/route.ts`**
-- Removed `updated_at` from PATCH updates — column does not exist on `crm_activities`
-- Fixed `duration_mins` → `duration_min` (correct DB column name)
-- Every activity PATCH was 500ing before this fix
-
-**`app/api/nexus/flows/inbound-lead/route.ts`**
-- Changed from `crm_leads` (table never existed) to `leads` table
-- Fixed column names: `name` → `contact_name`, `company` → `company_name`
-- Added `GATEGUARD_ORG_ID` fallback for corporate users
-- Activity log writes to `activity_log` (migration 001)
-
----
-
-### PATCH 1 — Workbench Security (beta only)
-
-**Files changed:**
-- `lib/current-user.ts` — added `isServiceDealer` to `canViewCRM`
-- `app/api/nexus/opps/workbench/route.ts` — auth + org scoping
-- `app/api/crm/activities/[id]/route.ts` — same fix as above
-
-**What it does:**
-- `getCurrentUser()` + 403 if `!user.canViewCRM`
-- `resolveOrgScope()` + `applyOrgScope()` on all 6 queries
-- `leads` scoped on `org_id`, `opportunities` scoped on `dealer_org_id`
-- `dealer_org_id` confirmed real: `002_crm_phase1.sql` line 105
-
-**canViewCRM tiers:**
-corporate | master_dealer | full_dealer | service_dealer | sales_partner → true  
-install_contractor | client → 403
-
-**Scope behavior:**
-- Corporate → all data
-- Master Agent/Dealer → subtree via `get_org_subtree` RPC
-- Full Dealer → self + descendants
-- Service Dealer / Sales Partner → self only
-
----
-
-### PATCH 3 — Workbench → Lead Glass Window (beta only)
-
-**Files changed:**
+**Protected beta files — never overwrite these:**
 - `components/nexus/ActionFlowSurface.tsx`
 - `components/nexus/windows/LeadGlassWindow.tsx`
-
-**What it does:**
-- Clicking a lead card in the workbench opens the Lead Glass Window
-- `openLead(id)` → GET `/api/nexus/opps/lead-window/[id]` → renders `LeadGlassWindow`
-- Back button restores workbench instantly (data preserved, no re-fetch)
-- Opportunity cards are NOT clickable (only leads open glass window)
-- Lead discrimination: `isLeadRecord()` checks for `contact_name` field presence
-- Loading state: card shows "Opening..." while fetching
-
-**LeadGlassWindow duplicate guard expanded:**
-- Was: single mixed list
-- Now: 5 labeled categories (Contact / Company / Property / Site / Opportunity Matches)
-- Display only, no actions, no DB writes
-
-**LeadGlassWindow sections:**
-Overview · People · Property/Site · Activity Timeline · Tasks · Files · Surveys · Related Opportunities · Duplicate Guard (5 categories) · Next Best Actions
+- `components/nexus/windows/OpportunityGlassWindow.tsx`
+- `components/nexus/windows/JobGlassWindow.tsx`
+- `app/api/nexus/opps/workbench/route.ts`
+- `app/api/nexus/opps/lead-window/[id]/route.ts`
+- `app/api/nexus/opps/opportunity-window/[id]/route.ts`
+- `app/api/nexus/jobs/workbench/route.ts`
+- `app/api/nexus/jobs/job-window/[id]/route.ts`
+- `app/api/nexus/flows/inbound-lead/route.ts`
+- `lib/current-user.ts`
+- `lib/org-scope.ts`
 
 ---
 
-## Key Files and Their Locations
+## Complete Build Log — What Is On Beta
 
-### Nexus Flow
-| File | Purpose |
-|------|---------|
-| `components/nexus/ActionFlowSurface.tsx` | Main Nexus action surface — flow cards, inbound lead capture, workbench, lead glass window |
-| `components/nexus/windows/LeadGlassWindow.tsx` | Lead glass workspace — full lead detail view |
-| `app/api/nexus/flows/inbound-lead/route.ts` | POST: captures phone lead → creates in `leads` table |
-| `app/api/nexus/opps/workbench/route.ts` | GET: scoped leads + opps for workbench |
-| `app/api/nexus/opps/lead-window/[id]/route.ts` | GET: full lead glass data |
+### Patch 1 — Workbench Security + Org Scoping
+- `lib/current-user.ts` — added `isServiceDealer` to `canViewCRM`
+- `app/api/nexus/opps/workbench/route.ts` — `getCurrentUser()` + `resolveOrgScope()` + `applyOrgScope()` on all 6 queries; `leads.org_id`, `opportunities.dealer_org_id` confirmed real
+- `app/api/crm/activities/[id]/route.ts` — removed `updated_at` (column DNE), fixed `duration_mins` → `duration_min`
 
-### Permissions
-| File | Purpose |
-|------|---------|
-| `lib/current-user.ts` | OrgTier type, all user flags, canView* permissions |
-| `lib/org-scope.ts` | `resolveOrgScope()` + `applyOrgScope()` — org hierarchy scoping |
+### Patch 3 — Workbench → Lead Glass Window
+- `components/nexus/ActionFlowSurface.tsx` — lead click state, `openLead()`, `closeLeadWindow()`, `refreshOpenLead()`
+- `components/nexus/windows/LeadGlassWindow.tsx` — full glass card with 5-category duplicate guard
 
-### ARIA Engine
-| File | Purpose |
-|------|---------|
-| `app/api/aria/research/deep/route.ts` | ARIA v8 — 4-phase engine, evidence packets, PropTech Scout |
-| `app/aria/page.tsx` | ARIA UI — candidate grid, pipeline panel, Intel DB |
+### Sprint 3.5 — My Leads
+- `app/api/nexus/opps/workbench/route.ts` — `myLeads` section via `profiles.id` lookup
+- `components/nexus/ActionFlowSurface.tsx` — My Leads tab first, `focusedEmptyText` per tab
+
+### Sprint A — Lead Workspace Actions
+- `app/api/nexus/opps/lead-window/[id]/route.ts` — POST: `add_note`, `log_call`, `schedule_followup`, `update_status`; security via `getScopedLead()`
+- `components/nexus/windows/LeadGlassWindow.tsx` — action buttons + inline panels, `submitLeadAction()`, `onRefresh` prop
+
+### Sprint B — Lead → Opportunity Glass Window
+- `app/api/nexus/opps/lead-window/[id]/route.ts` — POST: `create_opportunity` (dedupe check, awaited lead update, awaited activity, returns `opportunityId`)
+- `app/api/nexus/opps/opportunity-window/[id]/route.ts` — GET with full related data scoped by `dealer_org_id`
+- `components/nexus/windows/OpportunityGlassWindow.tsx` — amber accent, 8 sections
+- `components/nexus/ActionFlowSurface.tsx` — `openOpportunity()`, `closeOpportunityWindow()`, opportunity cards clickable
+
+### Sprint B Polish — Auto-Open Opportunity After Conversion
+- `app/api/nexus/opps/lead-window/[id]/route.ts` — all 3 opportunity cases now return `opportunityId`; lead update + activity log both awaited
+- `components/nexus/windows/LeadGlassWindow.tsx` — `onOpenOpportunity` prop; `submitLeadAction` detects `create_opportunity` + calls `onOpenOpportunity(id)`
+- `components/nexus/ActionFlowSurface.tsx` — passes `onOpenOpportunity={async (id) => { closeLeadWindow(); await openOpportunity(id) }}`
+
+### Sprint C — ARIA Workflow Into Beta
+- `app/api/aria/research/deep/route.ts` — copied from `origin/main` (all v8 tickets)
+- `app/aria/page.tsx` — copied from `origin/main` (CandidateGrid `viewMode === 'candidates'` fix)
+- `docs/nexus/ARIA_ROUTE_MAP.md` — future launch points for Lead/Opportunity/Site/Project
+
+### Jobs Stage 1 — Glass Window Foundation
+- `app/api/nexus/jobs/workbench/route.ts` — 5 sections (My Jobs, Needs Attention, Scheduled Today, Open Jobs, Recently Updated), `resolveProfileId()` for My Jobs via `work_orders.assigned_to`
+- `app/api/nexus/jobs/job-window/[id]/route.ts` — GET with site, assignedTeam, tasks, checklist, notes, parts, files, subWorkOrders, fieldTickets, timeEntries
+- `components/nexus/windows/JobGlassWindow.tsx` — emerald accent, 10 sections, Stage 1 actions display-only
+- `components/nexus/ActionFlowSurface.tsx` — Jobs tab, `openJob()`, `closeJobWindow()`, job cards clickable
+
+### Jobs Stage 2 — Actionable Job Glass Window
+- `app/api/nexus/jobs/job-window/[id]/route.ts` — POST: `add_note` (wo_comments), `create_task` (todos), `schedule_visit` (update WO + comment), `mark_complete` (update WO + comment); `getScopedJob()` helper; TODO comment for `assignee_org_id`
+- `components/nexus/windows/JobGlassWindow.tsx` — `useState` import, `JobAction` type, `onRefresh` prop, `submitJobAction()`, all 4 action buttons wired with inline panels
+- `components/nexus/ActionFlowSurface.tsx` — `refreshOpenJob()`, passes `onRefresh` to `JobGlassWindow`
+- **Field handoff:** Open Field View → `/maintenance/${job.id}` (existing safe legacy route), opens in new tab
+- **Disabled:** Assign Team, Upload File (labeled "Coming in a future stage")
 
 ---
 
-## Org Hierarchy (for reference)
+## Schema Facts Confirmed From Live DB
 
-| Tier | DB value | Abbreviation | TIER_RANK |
-|------|----------|-------------|-----------|
-| 0 | `corporate` | GG | 0 |
-| 1 | `master_agent` | MA | 1 |
-| 2 | `master_dealer` | MSO | 2 |
-| 3A | `full_dealer` | SO | 3 |
-| 3B | `service_dealer` | SP | 4 |
-| 3C | `install_contractor` | IP | 4 |
-| 3D | `sales_partner` | SLP | 4 |
-| 4 | `client` | — | 5 |
+```
+work_orders columns: org_id (uuid), assigned_to (uuid), assignee_id (uuid)
+work_orders.assignee_org_id: ❌ DOES NOT EXIST in live schema
+→ Use org_id scoping. Install contractor scoping is a future TODO.
 
-Pay schedule: $10/unit/mo → GG keeps $5 → Dealer pool $5 (MA $0.50 fixed, MSO $0.50 fixed, SP $3.00 default, SLP $1.00 default, IP $0 recurring)
-
----
-
-## Pending Commits (run from Mac Terminal)
-
-### PATCH 1 + activities fix (beta)
-```bash
-git checkout beta
-git checkout main -- \
-  lib/current-user.ts \
-  app/api/nexus/opps/workbench/route.ts \
-  "app/api/crm/activities/[id]/route.ts"
-git commit -m "fix: workbench security + canViewCRM service_dealer + activities PATCH"
-git push origin beta
+leads.assigned_to → profiles.id (UUID FK)
+opportunities.dealer_org_id → organizations.id (UUID FK, confirmed 002_crm_phase1.sql line 105)
+todos.assigned_to → TEXT (Clerk user ID — not a UUID FK)
+activities.dealer_org_id → organizations.id (NOT org_id)
+wo_comments columns: id, work_order_id, author_name, author_initials, content, created_at
 ```
 
-### PATCH 3 — Lead Glass Window (beta)
-```bash
-git checkout beta
-git checkout main -- \
-  components/nexus/ActionFlowSurface.tsx \
-  components/nexus/windows/LeadGlassWindow.tsx
-git commit -m "feat(patch-3): workbench → lead glass window"
-git push origin beta
+---
+
+## Identity Chain (canonical)
+
+```
+Clerk User
+  → profiles.clerk_user_id (TEXT)
+  → profiles.id (UUID)
+  → leads.assigned_to (UUID FK)
+  → work_orders.assigned_to (UUID FK)
+
+todos.assigned_to = Clerk user ID (TEXT) — different from above
 ```
 
-### All other session fixes (main)
+---
+
+## Current Nexus Glass Workflow
+
+```
+Someone Called → Inbound Lead Capture
+    ↓
+Create Lead → Workbench → My Leads / Open Leads
+    ↓
+Lead Glass Window
+  → Add Note / Log Call / Schedule Follow-Up / Update Status
+  → Create Opportunity (auto-opens Opportunity Glass Window)
+    ↓
+Opportunity Glass Window
+  → Next Best Actions (display only in Stage 1)
+    ↓
+Jobs Tab → My Jobs / Open Jobs / Scheduled Today
+    ↓
+Job Glass Window
+  → Add Note (wo_comments)
+  → Create Task (todos)
+  → Schedule Visit (updates work_orders)
+  → Mark Complete (updates work_orders)
+  → Open Field View → /maintenance/[id]
+```
+
+---
+
+## Files Not Yet Built
+
+- Opportunity Glass Window actions (Stage 2 TBD)
+- Assign Team on Job Glass Window
+- Upload File on Job Glass Window
+- Field Glass Window (Stage 1 TBD)
+- People tab glass window
+- ARIA integration inside Lead/Opportunity/Job glass windows
+
+---
+
+## Pending Commits (run from beta branch)
+
+All recent changes are already committed to beta via the sprints above.  
+To push everything to main when ready:
+
 ```bash
 git checkout main
-rm -f .git/HEAD.lock .git/index.lock
-git add -A
-git commit -m "fix: ARIA v8 evidence packets + synthesis fallback + activities + inbound lead"
+git merge beta --no-edit
 git push origin main
 ```
 
 ---
 
-## Known Issues / Next Steps
+## Key Reference Files
 
-### Not yet built
-- Opportunity Glass Window
-- Lead → Opportunity conversion flow
-- Activity logging from inside the glass window
-- Link/merge duplicate records
-- ARIA integration inside Lead Glass Window
-
-### Architecture notes
-- `leads` table (migration 001) is the canonical leads table — `contact_name`, `company_name`, `org_id`
-- `crm_leads` does NOT exist — never use it
-- `activity_log` (migration 001) is for leads; `crm_activities` (migration 008) is for opportunities
-- `opportunities.dealer_org_id` confirmed real (migration 002_crm_phase1.sql line 105)
-- `crm_activities` has NO `updated_at` column — never add it to PATCH updates
-
-### Beta has work not on main
-Run `git fetch origin beta:beta && git diff --name-only main beta` to check before starting new sessions.
+| File | Purpose |
+|------|---------|
+| `docs/nexus/ARIA_ROUTE_MAP.md` | ARIA routes + future launch points |
+| `docs/nexus/PATCH_1_WORKBENCH_SECURITY.md` | Workbench security patch notes |
+| `docs/nexus/PATCH_3_LEAD_GLASS_WINDOW.md` | Lead glass window patch notes |
+| `docs/nexus/SUPABASE_SCHEMA.json` | All 128 tables with columns + FK refs |
+| `CLAUDE.md` | Prime Directive + full session history |
