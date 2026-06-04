@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { LeadGlassWindow } from '@/components/nexus/windows/LeadGlassWindow'
 
 export type NexusTabId = 'my-day' | 'recent' | 'opps' | 'jobs' | 'field' | 'people'
 
@@ -33,11 +34,16 @@ type InboundLeadDraft = {
   need: string
 }
 
+// WorkbenchRecord covers both leads (contact_name) and opportunities (name)
 type WorkbenchRecord = {
   id: string
-  name: string
+  name?: string | null
+  contact_name?: string | null
   company?: string | null
+  company_name?: string | null
   account_name?: string | null
+  management_co?: string | null
+  location?: string | null
   stage?: string | null
   source?: string | null
   value?: number | null
@@ -110,6 +116,19 @@ function rgb(hex: string): string {
   return r ? `${parseInt(r[1], 16)},${parseInt(r[2], 16)},${parseInt(r[3], 16)}` : '107,126,255'
 }
 
+// Leads from the API have contact_name; opportunities have name
+function isLeadRecord(record: WorkbenchRecord): boolean {
+  return 'contact_name' in record
+}
+
+function recordDisplayName(record: WorkbenchRecord): string {
+  return record.contact_name ?? record.name ?? 'Untitled'
+}
+
+function recordDisplayCompany(record: WorkbenchRecord): string {
+  return record.company_name ?? record.company ?? record.account_name ?? record.management_co ?? 'No property or company attached'
+}
+
 async function askNexus(prompt: string, scope: string, contextData?: Record<string, unknown>) {
   const res = await fetch('/api/assistant/chat', {
     method: 'POST',
@@ -140,6 +159,13 @@ async function loadWorkbench(query?: string): Promise<WorkbenchData> {
   const data = await res.json().catch(() => ({}))
   if (!res.ok || data.success === false) throw new Error(data?.message ?? 'Could not load workbench.')
   return data as WorkbenchData
+}
+
+async function fetchLeadWindow(id: string): Promise<Record<string, unknown>> {
+  const res = await fetch(`/api/nexus/opps/lead-window/${id}`)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok || data.success === false) throw new Error(data?.message ?? 'Could not open lead.')
+  return data
 }
 
 function FlowCardButton({ card, disabled, onAction }: { card: FlowCard; disabled: boolean; onAction: (action: FlowAction) => void }) {
@@ -181,29 +207,59 @@ function CaptureStep({ label, help, value, onChange, onNext, onBack }: { label: 
   )
 }
 
-function RecordList({ records, emptyText }: { records: WorkbenchRecord[]; emptyText: string }) {
+function RecordList({ records, emptyText, onLeadClick, leadWindowBusy, loadingLeadId }: {
+  records: WorkbenchRecord[]
+  emptyText: string
+  onLeadClick?: (id: string) => void
+  leadWindowBusy?: boolean
+  loadingLeadId?: string | null
+}) {
   if (records.length === 0) {
     return <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.42)' }}>{emptyText}</div>
   }
 
   return (
     <div className="space-y-2">
-      {records.map(record => (
-        <div key={record.id} className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)' }}>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{record.name}</div>
-              <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                {record.company ?? record.account_name ?? 'No property/company attached'}
+      {records.map(record => {
+        const isLead = isLeadRecord(record)
+        const clickable = isLead && !!onLeadClick
+        const isLoading = leadWindowBusy && loadingLeadId === record.id
+
+        return (
+          <div
+            key={record.id}
+            onClick={clickable ? () => onLeadClick!(record.id) : undefined}
+            role={clickable ? 'button' : undefined}
+            tabIndex={clickable ? 0 : undefined}
+            onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') onLeadClick!(record.id) } : undefined}
+            className={clickable ? 'rounded-2xl p-4 transition-all cursor-pointer hover:-translate-y-0.5' : 'rounded-2xl p-4'}
+            style={{
+              background: isLoading ? 'rgba(107,126,255,0.12)' : 'rgba(255,255,255,0.035)',
+              border: isLoading ? '1px solid rgba(107,126,255,0.28)' : '1px solid rgba(255,255,255,0.08)',
+            }}
+          >
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>
+                    {isLoading ? 'Opening...' : recordDisplayName(record)}
+                  </div>
+                  {clickable && !isLoading && (
+                    <span className="text-[10px] opacity-40" style={{ color: 'rgba(107,126,255,0.9)' }}>Open →</span>
+                  )}
+                </div>
+                <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                  {recordDisplayCompany(record)}
+                </div>
+              </div>
+              <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.14em]" style={{ background: 'rgba(107,126,255,0.1)', color: 'rgba(165,180,255,0.9)', border: '1px solid rgba(107,126,255,0.18)', whiteSpace: 'nowrap' }}>
+                {record.stage ?? 'open'}
               </div>
             </div>
-            <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.14em]" style={{ background: 'rgba(107,126,255,0.1)', color: 'rgba(165,180,255,0.9)', border: '1px solid rgba(107,126,255,0.18)' }}>
-              {record.stage ?? 'open'}
-            </div>
+            {record.notes && <div className="mt-3 line-clamp-2 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.38)' }}>{record.notes}</div>}
           </div>
-          {record.notes && <div className="mt-3 line-clamp-2 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.38)' }}>{record.notes}</div>}
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -219,6 +275,12 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
   const [workbenchFocus, setWorkbenchFocus] = useState<WorkbenchFocus>('openLeads')
   const [searchTerm, setSearchTerm] = useState('')
 
+  // Lead Glass Window state — workbench data is preserved while lead is open
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
+  const [leadWindowData, setLeadWindowData] = useState<Record<string, unknown> | null>(null)
+  const [leadWindowBusy, setLeadWindowBusy] = useState(false)
+  const [loadingLeadId, setLoadingLeadId] = useState<string | null>(null)
+
   const simpleStep = stepId === 'call-name' || stepId === 'call-property' || stepId === 'call-need' || stepId === 'call-review' || stepId === 'workbench' ? null : STEPS[stepId]
 
   function resetFlow() {
@@ -226,6 +288,27 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
     setDraft(EMPTY_DRAFT)
     setStatus(null)
     setNextCards([])
+  }
+
+  function closeLeadWindow() {
+    setSelectedLeadId(null)
+    setLeadWindowData(null)
+    // Workbench data preserved — returns to prior view instantly, no re-fetch
+  }
+
+  async function openLead(id: string) {
+    setLeadWindowBusy(true)
+    setLoadingLeadId(id)
+    try {
+      const data = await fetchLeadWindow(id)
+      setSelectedLeadId(id)
+      setLeadWindowData(data)
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Could not open lead. Try again.')
+    } finally {
+      setLeadWindowBusy(false)
+      setLoadingLeadId(null)
+    }
   }
 
   async function openWorkbench(focus: WorkbenchFocus = 'openLeads') {
@@ -293,81 +376,101 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
   return (
     <section className="mt-9 w-full max-w-4xl">
       <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.022))', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 24px 80px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.06)', backdropFilter: 'blur(24px)' }}>
-        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(107,126,255,0.62)' }}>{stepId === 'workbench' ? 'Opps / Leads Workbench' : simpleStep?.eyebrow ?? 'Someone Called'}</div>
-            <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.94)' }}>{stepId === 'workbench' ? 'Work what is already open.' : simpleStep?.title ?? 'Capture the lead one step at a time.'}</h2>
-            <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.42)' }}>{stepId === 'workbench' ? 'Open leads, attention items, opportunities, proposal follow-ups, or search by person/property.' : simpleStep?.subtitle ?? 'No CRM training needed. Answer the simple question, then press Next.'}</p>
-          </div>
-          <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(107,126,255,0.1)', color: 'rgba(165,180,255,0.9)', border: '1px solid rgba(107,126,255,0.18)' }}>
-            {activeTab === 'opps' || !activeTab ? 'New Opps / Leads' : 'Guided Flow'}
-          </div>
-        </div>
 
-        {simpleStep && (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {simpleStep.cards.map(card => <FlowCardButton key={card.title} card={card} disabled={busy} onAction={handleAction} />)}
-          </div>
+        {/* ── Lead Glass Window (renders over workbench when a lead is open) ── */}
+        {selectedLeadId && leadWindowData && (
+          <LeadGlassWindow
+            data={leadWindowData as Parameters<typeof LeadGlassWindow>[0]['data']}
+            onBack={closeLeadWindow}
+          />
         )}
 
-        {stepId === 'workbench' && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
-              {(['openLeads', 'needsAttention', 'openOpportunities', 'proposalFollowUps', 'search'] as WorkbenchFocus[]).map(focus => (
-                <button key={focus} type="button" onClick={() => void openWorkbench(focus)} className="rounded-2xl p-3 text-left text-xs transition-all" style={{ background: workbenchFocus === focus ? 'rgba(107,126,255,0.16)' : 'rgba(255,255,255,0.035)', border: workbenchFocus === focus ? '1px solid rgba(107,126,255,0.32)' : '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.78)' }}>
-                  <div className="font-semibold">{WORKBENCH_LABELS[focus]}</div>
-                  {focus !== 'search' && <div className="mt-1 opacity-50">{workbench?.stats?.[focus] ?? 0} items</div>}
-                </button>
-              ))}
+        {/* ── Normal flow — hidden while lead window is active ── */}
+        {!(selectedLeadId && leadWindowData) && (
+          <>
+            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(107,126,255,0.62)' }}>{stepId === 'workbench' ? 'Opps / Leads Workbench' : simpleStep?.eyebrow ?? 'Someone Called'}</div>
+                <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.94)' }}>{stepId === 'workbench' ? 'Work what is already open.' : simpleStep?.title ?? 'Capture the lead one step at a time.'}</h2>
+                <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.42)' }}>{stepId === 'workbench' ? 'Open leads, attention items, opportunities, proposal follow-ups, or search by person/property.' : simpleStep?.subtitle ?? 'No CRM training needed. Answer the simple question, then press Next.'}</p>
+              </div>
+              <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(107,126,255,0.1)', color: 'rgba(165,180,255,0.9)', border: '1px solid rgba(107,126,255,0.18)' }}>
+                {activeTab === 'opps' || !activeTab ? 'New Opps / Leads' : 'Guided Flow'}
+              </div>
             </div>
 
-            {workbenchFocus === 'search' && (
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void openWorkbench('search') }} placeholder="Search person, property, company, or notes" className="flex-1 rounded-2xl px-4 py-3 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(107,126,255,0.22)', color: 'rgba(255,255,255,0.88)' }} />
-                <button type="button" onClick={() => void openWorkbench('search')} className="rounded-2xl px-4 py-3 text-sm" style={{ background: '#6B7EFF', color: 'white' }}>Search</button>
+            {simpleStep && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {simpleStep.cards.map(card => <FlowCardButton key={card.title} card={card} disabled={busy} onAction={handleAction} />)}
               </div>
             )}
 
-            <RecordList records={focusedRecords} emptyText="Nothing found here yet." />
-          </div>
-        )}
+            {stepId === 'workbench' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
+                  {(['openLeads', 'needsAttention', 'openOpportunities', 'proposalFollowUps', 'search'] as WorkbenchFocus[]).map(focus => (
+                    <button key={focus} type="button" onClick={() => void openWorkbench(focus)} className="rounded-2xl p-3 text-left text-xs transition-all" style={{ background: workbenchFocus === focus ? 'rgba(107,126,255,0.16)' : 'rgba(255,255,255,0.035)', border: workbenchFocus === focus ? '1px solid rgba(107,126,255,0.32)' : '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.78)' }}>
+                      <div className="font-semibold">{WORKBENCH_LABELS[focus]}</div>
+                      {focus !== 'search' && <div className="mt-1 opacity-50">{workbench?.stats?.[focus] ?? 0} items</div>}
+                    </button>
+                  ))}
+                </div>
 
-        {stepId === 'call-name' && <CaptureStep label="Who called?" help="Type the person name. If you only know the company, enter that." value={draft.contactName} onChange={contactName => setDraft(prev => ({ ...prev, contactName }))} onNext={() => setStepId('call-property')} onBack={resetFlow} />}
-        {stepId === 'call-property' && <CaptureStep label="What property or company?" help="Enter the property, management company, or account name." value={draft.propertyName} onChange={propertyName => setDraft(prev => ({ ...prev, propertyName }))} onNext={() => setStepId('call-need')} onBack={() => setStepId('call-name')} />}
-        {stepId === 'call-need' && <CaptureStep label="What do they need?" help="Example: gate guard, camera monitoring, quote, service, or site walk." value={draft.need} onChange={need => setDraft(prev => ({ ...prev, need }))} onNext={() => setStepId('call-review')} onBack={() => setStepId('call-property')} />}
+                {workbenchFocus === 'search' && (
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void openWorkbench('search') }} placeholder="Search person, property, company, or notes" className="flex-1 rounded-2xl px-4 py-3 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(107,126,255,0.22)', color: 'rgba(255,255,255,0.88)' }} />
+                    <button type="button" onClick={() => void openWorkbench('search')} className="rounded-2xl px-4 py-3 text-sm" style={{ background: '#6B7EFF', color: 'white' }}>Search</button>
+                  </div>
+                )}
 
-        {stepId === 'call-review' && (
-          <div className="rounded-3xl p-4" style={{ background: 'rgba(52,211,153,0.055)', border: '1px solid rgba(52,211,153,0.18)' }}>
-            <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>Ready to create the lead?</div>
-            <div className="mt-3 grid gap-2 text-xs" style={{ color: 'rgba(255,255,255,0.66)' }}>
-              <div>Contact: {draft.contactName}</div>
-              <div>Property: {draft.propertyName}</div>
-              <div>Need: {draft.need}</div>
-            </div>
-            <div className="mt-4 flex justify-between gap-3">
-              <button type="button" onClick={() => setStepId('call-need')} className="rounded-full px-4 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.52)' }}>Back</button>
-              <button type="button" disabled={busy} onClick={submitInboundLead} className="rounded-full px-4 py-2 text-xs disabled:opacity-40" style={{ background: '#34d399', color: '#03130c' }}>Create Lead</button>
-            </div>
-          </div>
-        )}
-
-        {nextCards.length > 0 && (
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {nextCards.map(card => (
-              <div key={card.title} className="rounded-2xl p-4" style={{ background: 'rgba(52,211,153,0.055)', border: '1px solid rgba(52,211,153,0.16)', color: 'rgba(255,255,255,0.82)' }}>
-                <div className="text-sm font-semibold">{card.title}</div>
-                <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.45)' }}>{card.subtitle}</div>
+                <RecordList
+                  records={focusedRecords}
+                  emptyText="Nothing found here yet."
+                  onLeadClick={openLead}
+                  leadWindowBusy={leadWindowBusy}
+                  loadingLeadId={loadingLeadId}
+                />
               </div>
-            ))}
-          </div>
+            )}
+
+            {stepId === 'call-name' && <CaptureStep label="Who called?" help="Type the person name. If you only know the company, enter that." value={draft.contactName} onChange={contactName => setDraft(prev => ({ ...prev, contactName }))} onNext={() => setStepId('call-property')} onBack={resetFlow} />}
+            {stepId === 'call-property' && <CaptureStep label="What property or company?" help="Enter the property, management company, or account name." value={draft.propertyName} onChange={propertyName => setDraft(prev => ({ ...prev, propertyName }))} onNext={() => setStepId('call-need')} onBack={() => setStepId('call-name')} />}
+            {stepId === 'call-need' && <CaptureStep label="What do they need?" help="Example: gate guard, camera monitoring, quote, service, or site walk." value={draft.need} onChange={need => setDraft(prev => ({ ...prev, need }))} onNext={() => setStepId('call-review')} onBack={() => setStepId('call-property')} />}
+
+            {stepId === 'call-review' && (
+              <div className="rounded-3xl p-4" style={{ background: 'rgba(52,211,153,0.055)', border: '1px solid rgba(52,211,153,0.18)' }}>
+                <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>Ready to create the lead?</div>
+                <div className="mt-3 grid gap-2 text-xs" style={{ color: 'rgba(255,255,255,0.66)' }}>
+                  <div>Contact: {draft.contactName}</div>
+                  <div>Property: {draft.propertyName}</div>
+                  <div>Need: {draft.need}</div>
+                </div>
+                <div className="mt-4 flex justify-between gap-3">
+                  <button type="button" onClick={() => setStepId('call-need')} className="rounded-full px-4 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.52)' }}>Back</button>
+                  <button type="button" disabled={busy} onClick={submitInboundLead} className="rounded-full px-4 py-2 text-xs disabled:opacity-40" style={{ background: '#34d399', color: '#03130c' }}>Create Lead</button>
+                </div>
+              </div>
+            )}
+
+            {nextCards.length > 0 && (
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {nextCards.map(card => (
+                  <div key={card.title} className="rounded-2xl p-4" style={{ background: 'rgba(52,211,153,0.055)', border: '1px solid rgba(52,211,153,0.16)', color: 'rgba(255,255,255,0.82)' }}>
+                    <div className="text-sm font-semibold">{card.title}</div>
+                    <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.45)' }}>{card.subtitle}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.28)' }}>Pick one card. Nexus gives the next obvious step.</div>
+              {stepId !== 'start' && <button type="button" onClick={resetFlow} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}>Start over</button>}
+            </div>
+
+            {(busy || status) && <div className="mt-4 rounded-2xl px-4 py-3 text-xs" style={{ background: 'rgba(107,126,255,0.08)', border: '1px solid rgba(107,126,255,0.16)', color: 'rgba(255,255,255,0.72)' }}>{busy ? 'Nexus is working...' : status}</div>}
+          </>
         )}
-
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.28)' }}>Pick one card. Nexus gives the next obvious step.</div>
-          {stepId !== 'start' && <button type="button" onClick={resetFlow} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}>Start over</button>}
-        </div>
-
-        {(busy || status) && <div className="mt-4 rounded-2xl px-4 py-3 text-xs" style={{ background: 'rgba(107,126,255,0.08)', border: '1px solid rgba(107,126,255,0.16)', color: 'rgba(255,255,255,0.72)' }}>{busy ? 'Nexus is working...' : status}</div>}
       </div>
     </section>
   )
