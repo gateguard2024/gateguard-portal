@@ -78,6 +78,13 @@ export function LeadGlassWindow({ data, onBack }: { data: LeadGlassData; onBack:
   const sites = data.properties?.sites ?? []
   const activities = [...(data.activity?.crmActivities ?? []), ...(data.activity?.activities ?? [])]
   const nextBestActions = data.nextBestActions ?? []
+  const possibleMatches = [
+    ...(company ? [{ type: 'Company', title: value(company.name, 'Possible company'), subtitle: [company.website, company.city, company.state].filter(Boolean).join(' • ') }] : []),
+    ...contacts.map(contact => ({ type: 'Person', title: personName(contact), subtitle: [contact.title, contact.email, contact.phone].filter(Boolean).join(' • ') })),
+    ...possibleProperties.map(property => ({ type: 'Property', title: value(property.name, 'Possible property'), subtitle: [property.address, property.city, property.state].filter(Boolean).join(', ') })),
+    ...sites.map(site => ({ type: 'Site', title: value(site.name, 'Possible site'), subtitle: [site.address, site.city, site.state].filter(Boolean).join(', ') })),
+    ...(data.opportunities ?? []).map(opp => ({ type: 'Opportunity', title: value(opp.name, 'Possible opportunity'), subtitle: [opp.stage, opp.account_name, opp.next_step].filter(Boolean).join(' • ') })),
+  ]
 
   return (
     <div className="space-y-4">
@@ -111,6 +118,11 @@ export function LeadGlassWindow({ data, onBack }: { data: LeadGlassData; onBack:
               <div>Email: {value(lead.email)}</div>
               <div>Phone: {value(lead.phone)}</div>
             </div>
+          </Section>
+
+          <Section title="Possible Matches / Duplicate Guard" count={possibleMatches.length}>
+            <p className="mb-3 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.42)' }}>Before creating new people, companies, properties, jobs, or opportunities, check these possible existing records and update/link instead of duplicating.</p>
+            <ListBlock records={possibleMatches} emptyText="No possible existing records found yet." render={match => <MiniRow title={match.title} subtitle={match.subtitle || 'Review before creating a duplicate.'} meta={match.type} />} />
           </Section>
 
           <Section title="People" count={contacts.length}>
