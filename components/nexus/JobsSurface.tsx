@@ -168,6 +168,16 @@ export function JobsSurface() {
     setJobWindowData(null)
   }
 
+  async function refreshOpenJob() {
+    if (!selectedJobId) return
+    try {
+      const data = await fetchJobWindow(selectedJobId)
+      setJobWindowData(data)
+    } catch {
+      // Keep current job visible if refresh fails.
+    }
+  }
+
   const focusedJobs = jobsFocus === 'search' ? jobsWorkbench?.jobs ?? [] : jobsWorkbench?.[jobsFocus] ?? []
   const focusedJobsEmptyText = jobsFocus === 'myJobs'
     ? 'No jobs assigned to you yet.'
@@ -181,7 +191,7 @@ export function JobsSurface() {
     <section className="mt-9 w-full max-w-4xl">
       <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.022))', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 24px 80px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.06)', backdropFilter: 'blur(24px)' }}>
         {selectedJobId && jobWindowData ? (
-          <JobGlassWindow data={jobWindowData as Parameters<typeof JobGlassWindow>[0]['data']} onBack={closeJobWindow} />
+          <JobGlassWindow data={jobWindowData as Parameters<typeof JobGlassWindow>[0]['data']} onBack={closeJobWindow} onRefresh={refreshOpenJob} />
         ) : (
           <>
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
