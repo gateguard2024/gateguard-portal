@@ -298,6 +298,18 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
     // Workbench data preserved — returns to prior view instantly, no re-fetch
   }
 
+  // Refresh the open lead window in place after an action (note/call/followup/status)
+  // Does NOT reset workbench data or re-fetch workbench
+  async function refreshOpenLead() {
+    if (!selectedLeadId) return
+    try {
+      const data = await fetchLeadWindow(selectedLeadId)
+      setLeadWindowData(data)
+    } catch {
+      // Best-effort — if refresh fails, existing data stays visible
+    }
+  }
+
   async function openLead(id: string) {
     setLeadWindowBusy(true)
     setLoadingLeadId(id)
@@ -390,6 +402,7 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
           <LeadGlassWindow
             data={leadWindowData as Parameters<typeof LeadGlassWindow>[0]['data']}
             onBack={closeLeadWindow}
+            onRefresh={refreshOpenLead}
           />
         )}
 

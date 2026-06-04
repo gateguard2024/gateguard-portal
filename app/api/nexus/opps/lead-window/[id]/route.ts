@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentUser } from '@/lib/current-user'
+import { getCurrentUser, type PortalUser } from '@/lib/current-user'
+import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,6 +9,25 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+// ─── Shared types ─────────────────────────────────────────────────────────────
+
+type RouteContext = { params: { id: string } }
+
+type LeadRecord = {
+  id: string
+  org_id: string | null
+  assigned_to?: string | null
+  contact_id?: string | null
+  company_id?: string | null
+  company_name?: string | null
+  contact_name?: string | null
+  location?: string | null
+  stage?: string | null
+  opportunity_id?: string | null
+}
+
+// ─── Shared helpers ───────────────────────────────────────────────────────────
 
 async function safe<T>(promise: PromiseLike<{ data: T | null; error: unknown }>, fallback: T): Promise<T> {
   try {
@@ -19,42 +39,67 @@ async function safe<T>(promise: PromiseLike<{ data: T | null; error: unknown }>,
   }
 }
 
-type RouteContext = {
-  params: {
-    id: string
-  }
+function clean(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
 }
+
+function leadLabel(lead: LeadRecord): string {
+  return [lead.contact_name, lead.company_name || lead.location].filter(Boolean).join(' — ') || 'Lead'
+}
+
+// Resolve internal profiles.id UUID from Clerk user ID
+// leads.assigned_to → profiles.id (UUID FK), NOT Clerk user ID
+async function getProfileId(clerkUserId: string): Promise<string | null> {
+  if (!clerkUserId || clerkUserId === 'system') return null
+  const { data } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('clerk_user_id', clerkUserId)
+    .maybeSingle()
+  return (data as { id: string } | null)?.id ?? null
+}
+
+// Fetch lead with org-scope enforcement — uses resolveOrgScope + applyOrgScope
+// Handles corporate (all), subtree (MSO/MA/SO), self-only (SP/SD)
+async function getScopedLead(
+  leadId: string,
+  user: PortalUser
+): Promise<{ lead: LeadRecord | null; error?: string }> {
+  const scope = await resolveOrgScope(user)
+
+  let query = supabase
+    .from('leads')
+    .select('id, org_id, assigned_to, company_name, contact_name, email, phone, property_type, unit_count, location, stage, source, notes, created_at, updated_at, contact_id, company_id, opportunity_id')
+    .eq('id', leadId)
+
+  query = applyOrgScope(query, scope)
+
+  const { data, error } = await query.maybeSingle()
+  if (error) return { lead: null, error: error.message }
+  return { lead: data as LeadRecord | null }
+}
+
+// ─── GET — full lead glass data ───────────────────────────────────────────────
 
 export async function GET(_req: NextRequest, { params }: RouteContext) {
   const user = await getCurrentUser()
-  const leadId = params.id
 
-  const lead = await safe(
-    supabase
-      .from('leads')
-      .select('id, org_id, assigned_to, company_name, contact_name, email, phone, property_type, unit_count, location, stage, source, notes, created_at, updated_at, contact_id, company_id, opportunity_id')
-      .eq('id', leadId)
-      .single(),
-    null
-  )
+  if (!user.canViewCRM) {
+    return NextResponse.json({ success: false, message: 'CRM access denied.' }, { status: 403 })
+  }
+
+  const leadId = params.id
+  const { lead, error } = await getScopedLead(leadId, user)
+
+  if (error) {
+    return NextResponse.json({ success: false, message: error }, { status: 500 })
+  }
 
   if (!lead) {
-    return NextResponse.json({ success: false, message: 'Lead not found.' }, { status: 404 })
+    return NextResponse.json({ success: false, message: 'Lead not found or outside your access.' }, { status: 404 })
   }
 
-  const leadRecord = lead as {
-    id: string
-    org_id: string | null
-    contact_id?: string | null
-    company_id?: string | null
-    company_name?: string | null
-    location?: string | null
-    opportunity_id?: string | null
-  }
-
-  if (!user.isCorporate && user.org_id && leadRecord.org_id && user.org_id !== leadRecord.org_id) {
-    return NextResponse.json({ success: false, message: 'You do not have access to this lead.' }, { status: 403 })
-  }
+  const leadRecord = lead
 
   const contact = leadRecord.contact_id
     ? await safe(
@@ -203,20 +248,10 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
   return NextResponse.json({
     success: true,
     lead,
-    people: {
-      primaryContact: contact,
-      contacts,
-    },
+    people: { primaryContact: contact, contacts },
     company,
-    properties: {
-      linked: properties,
-      possible: directProperties,
-      sites,
-    },
-    activity: {
-      activities,
-      crmActivities,
-    },
+    properties: { linked: properties, possible: directProperties, sites },
+    activity: { activities, crmActivities },
     todos,
     attachments,
     surveys,
@@ -228,4 +263,186 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       { title: 'Create Opportunity', subtitle: 'Convert this lead into a real revenue opportunity.', action: 'create_opportunity' },
     ],
   })
+}
+
+// ─── POST — lead workspace actions ───────────────────────────────────────────
+
+export async function POST(req: NextRequest, { params }: RouteContext) {
+  const user = await getCurrentUser()
+
+  if (!user.canViewCRM) {
+    return NextResponse.json({ success: false, message: 'CRM access denied.' }, { status: 403 })
+  }
+
+  const body = await req.json().catch(() => ({}))
+  const action = clean(body.action)
+
+  const { lead, error } = await getScopedLead(params.id, user)
+
+  if (error) {
+    return NextResponse.json({ success: false, message: error }, { status: 500 })
+  }
+
+  if (!lead) {
+    return NextResponse.json({ success: false, message: 'Lead not found or outside your access.' }, { status: 404 })
+  }
+
+  const profileId = await getProfileId(user.id)
+
+  // ── add_note ────────────────────────────────────────────────────────────────
+  if (action === 'add_note') {
+    const note = clean(body.note ?? body.body ?? body.description)
+
+    if (!note) {
+      return NextResponse.json({ success: false, message: 'Tell Nexus what to remember.' }, { status: 400 })
+    }
+
+    const { data, error: insertError } = await supabase
+      .from('activities')
+      .insert({
+        dealer_org_id: lead.org_id,
+        created_by: profileId,
+        type: 'note',
+        subject: 'Note added',
+        body: note,
+        lead_id: lead.id,
+      })
+      .select('id, type, subject, body, due_at, completed_at, created_at')
+      .single()
+
+    if (insertError) {
+      return NextResponse.json({ success: false, message: insertError.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, message: 'Note added.', activity: data })
+  }
+
+  // ── log_call ────────────────────────────────────────────────────────────────
+  if (action === 'log_call') {
+    const summary = clean(body.summary ?? body.body ?? body.note)
+    const outcome = clean(body.outcome)
+    const duration = clean(body.duration)
+
+    if (!summary) {
+      return NextResponse.json({ success: false, message: 'What happened on the call?' }, { status: 400 })
+    }
+
+    const bodyText = [
+      summary,
+      outcome ? `Outcome: ${outcome}` : null,
+      duration ? `Duration: ${duration}` : null,
+    ].filter(Boolean).join('\n')
+
+    const { data, error: insertError } = await supabase
+      .from('activities')
+      .insert({
+        dealer_org_id: lead.org_id,
+        created_by: profileId,
+        type: 'call',
+        subject: 'Call logged',
+        body: bodyText,
+        lead_id: lead.id,
+      })
+      .select('id, type, subject, body, due_at, completed_at, created_at')
+      .single()
+
+    if (insertError) {
+      return NextResponse.json({ success: false, message: insertError.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, message: 'Call logged.', activity: data })
+  }
+
+  // ── schedule_followup ───────────────────────────────────────────────────────
+  if (action === 'schedule_followup') {
+    const title = clean(body.title) || 'Follow up on lead'
+    const notes = clean(body.body ?? body.notes)
+    const dueDate = clean(body.due_date ?? body.dueDate)
+    const priorityInput = clean(body.priority)
+    const priority = ['high', 'normal', 'low'].includes(priorityInput) ? priorityInput : 'normal'
+
+    const { data, error: todoError } = await supabase
+      .from('todos')
+      .insert({
+        org_id: lead.org_id,
+        title,
+        body: notes || null,
+        priority,
+        status: 'open',
+        due_date: dueDate || null,
+        created_by: user.id,
+        created_by_name: user.name,
+        assigned_to: user.id,
+        assigned_to_name: user.name,
+        linked_type: 'lead',
+        linked_id: lead.id,
+        linked_label: leadLabel(lead),
+      })
+      .select('id, title, body, priority, status, due_date, linked_type, linked_id, linked_label, created_at, updated_at')
+      .single()
+
+    if (todoError) {
+      return NextResponse.json({ success: false, message: todoError.message }, { status: 500 })
+    }
+
+    // Best-effort activity log for the follow-up
+    void supabase.from('activities').insert({
+      dealer_org_id: lead.org_id,
+      created_by: profileId,
+      type: 'task',
+      subject: 'Follow-up scheduled',
+      body: [title, dueDate ? `Due: ${dueDate}` : null, notes].filter(Boolean).join('\n'),
+      lead_id: lead.id,
+      due_at: dueDate ? `${dueDate}T12:00:00.000Z` : null,
+    })
+
+    return NextResponse.json({ success: true, message: 'Follow-up scheduled.', todo: data })
+  }
+
+  // ── update_status ───────────────────────────────────────────────────────────
+  if (action === 'update_status') {
+    const stage = clean(body.stage)
+
+    const allowedStages = [
+      'prospect', 'new', 'contacted', 'qualified', 'qualifying',
+      'proposal', 'negotiation', 'converted', 'won', 'lost', 'dead',
+    ]
+
+    if (!allowedStages.includes(stage)) {
+      return NextResponse.json({ success: false, message: 'Choose a valid lead status.' }, { status: 400 })
+    }
+
+    const updates: Record<string, unknown> = {
+      stage,
+      updated_at: new Date().toISOString(),
+    }
+
+    if (stage === 'converted') updates.converted_at = new Date().toISOString()
+    if (stage === 'won')       updates.won_at       = new Date().toISOString()
+    if (stage === 'lost' || stage === 'dead') updates.lost_at = new Date().toISOString()
+
+    const { data, error: updateError } = await supabase
+      .from('leads')
+      .update(updates)
+      .eq('id', lead.id)
+      .select('id, stage, updated_at, converted_at, won_at, lost_at')
+      .single()
+
+    if (updateError) {
+      return NextResponse.json({ success: false, message: updateError.message }, { status: 500 })
+    }
+
+    void supabase.from('activities').insert({
+      dealer_org_id: lead.org_id,
+      created_by: profileId,
+      type: 'note',
+      subject: 'Status updated',
+      body: `Lead moved to ${stage}.`,
+      lead_id: lead.id,
+    })
+
+    return NextResponse.json({ success: true, message: 'Status updated.', lead: data })
+  }
+
+  return NextResponse.json({ success: false, message: 'Unknown lead action.' }, { status: 400 })
 }
