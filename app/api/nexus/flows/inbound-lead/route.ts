@@ -27,6 +27,18 @@ function escapeLike(value: string): string {
   return value.replace(/[%_]/g, match => `\\${match}`)
 }
 
+async function getProfileId(clerkUserId: string): Promise<string | null> {
+  if (!clerkUserId || clerkUserId === 'system') return null
+
+  const { data } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('clerk_user_id', clerkUserId)
+    .maybeSingle()
+
+  return (data as { id: string } | null)?.id ?? null
+}
+
 export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser()
@@ -111,6 +123,20 @@ export async function POST(req: NextRequest) {
       })
     } catch {
       // Best-effort activity log. Lead creation should not fail if activity logging is unavailable.
+    }
+
+    try {
+      const profileId = await getProfileId(user.id)
+      await supabase.from('activities').insert({
+        dealer_org_id: orgId,
+        created_by: profileId,
+        type: 'note',
+        subject: 'Lead created',
+        body: `Lead captured from Someone Called flow.${need ? `\nNeed: ${need}` : ''}`,
+        lead_id: lead.id,
+      })
+    } catch {
+      // Best-effort timeline activity. Lead creation should not fail if timeline logging is unavailable.
     }
 
     return NextResponse.json({
