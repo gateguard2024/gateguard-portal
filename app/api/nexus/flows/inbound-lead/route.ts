@@ -27,6 +27,19 @@ function escapeLike(value: string): string {
   return value.replace(/[%_]/g, match => `\\${match}`)
 }
 
+function normalizeSource(value: string): string {
+  const source = value || 'phone'
+  if (['phone', 'walk_in', 'outbound', 'website'].includes(source)) return source
+  return 'phone'
+}
+
+function sourceLabel(source: string): string {
+  if (source === 'walk_in') return 'Walk-In'
+  if (source === 'outbound') return 'Outbound Cold Call'
+  if (source === 'website') return 'Website / Other'
+  return 'Phone Call'
+}
+
 async function getProfileId(clerkUserId: string): Promise<string | null> {
   if (!clerkUserId || clerkUserId === 'system') return null
 
@@ -47,9 +60,10 @@ export async function POST(req: NextRequest) {
     const contactName = clean(body.contactName)
     const propertyName = clean(body.propertyName)
     const need = clean(body.need)
-    const source = clean(body.source) || 'phone'
+    const source = normalizeSource(clean(body.source))
     const forceCreate = body.forceCreate === true
     const orgId = user.org_id || GATEGUARD_ORG_ID
+    const profileId = await getProfileId(user.id)
 
     if (!contactName) {
       return NextResponse.json({ success: false, message: 'Contact name is required.' }, { status: 400 })
@@ -89,7 +103,7 @@ export async function POST(req: NextRequest) {
     }
 
     const notes = [
-      `Inbound source: ${source}`,
+      `Lead source: ${sourceLabel(source)}`,
       propertyName ? `Property/company: ${propertyName}` : null,
       need ? `Need: ${need}` : null,
       `Captured by Nexus flow for ${user.name}`,
@@ -99,6 +113,7 @@ export async function POST(req: NextRequest) {
       .from('leads')
       .insert({
         org_id: orgId,
+        assigned_to: profileId,
         contact_name: contactName,
         company_name: propertyName || null,
         location: propertyName || null,
@@ -106,7 +121,7 @@ export async function POST(req: NextRequest) {
         source: `nexus_${source}`,
         notes,
       })
-      .select('id, contact_name, company_name, location, stage, source, created_at, updated_at')
+      .select('id, contact_name, company_name, location, stage, source, assigned_to, created_at, updated_at')
       .single()
 
     if (leadError) {
@@ -119,20 +134,19 @@ export async function POST(req: NextRequest) {
         entity_type: 'lead',
         entity_id: lead.id,
         action: 'created',
-        description: `Inbound lead captured: ${contactName}${propertyName ? ` at ${propertyName}` : ''}`,
+        description: `${sourceLabel(source)} lead captured: ${contactName}${propertyName ? ` at ${propertyName}` : ''}`,
       })
     } catch {
       // Best-effort activity log. Lead creation should not fail if activity logging is unavailable.
     }
 
     try {
-      const profileId = await getProfileId(user.id)
       await supabase.from('activities').insert({
         dealer_org_id: orgId,
         created_by: profileId,
         type: 'note',
         subject: 'Lead created',
-        body: `Lead captured from Someone Called flow.${need ? `\nNeed: ${need}` : ''}`,
+        body: `Lead captured from ${sourceLabel(source)} flow.${need ? `\nNeed: ${need}` : ''}`,
         lead_id: lead.id,
       })
     } catch {
@@ -146,7 +160,7 @@ export async function POST(req: NextRequest) {
       nextCards: [
         { title: 'Run ARIA', subtitle: 'Research the property before outreach.', action: 'run_aria' },
         { title: 'Create Opportunity', subtitle: 'Turn this lead into a deal.', action: 'create_opportunity' },
-        { title: 'Schedule Follow-Up', subtitle: 'Make sure the next touch is planned.', action: 'schedule_followup' },
+        { title: 'Create Task / Follow-Up', subtitle: 'Make sure the next touch is planned.', action: 'schedule_followup' },
       ],
     })
   } catch (error) {
