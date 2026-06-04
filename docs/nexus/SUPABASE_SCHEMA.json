@@ -1,0 +1,7969 @@
+{
+  "_meta": {
+    "generated": "2026-06-03",
+    "repo": "gateguard-portal",
+    "total_tables": 128,
+    "note": "leads.assigned_to \u2192 profiles.id (internal UUID). profiles.clerk_user_id is the Clerk bridge. todos.assigned_to is TEXT (Clerk user ID directly, not FK)."
+  },
+  "_user_identity": {
+    "clerk_user_id": "TEXT stored in profiles.clerk_user_id \u2014 not an FK",
+    "profiles.id": "UUID \u2014 internal portal user record",
+    "leads.assigned_to": "UUID \u2192 profiles(id) \u2014 use profiles.id to join, not Clerk ID",
+    "work_orders.assigned_to": "UUID \u2192 profiles(id)",
+    "todos.assigned_to": "TEXT \u2014 stores Clerk user ID directly (no FK)"
+  },
+  "tables": {
+    "organizations": {
+      "_migration": "001_initial_schema",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "uuid_generate_v4()"
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "tier": {
+          "type": "org_tier",
+          "required": true
+        },
+        "parent_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "slug": {
+          "type": "text"
+        },
+        "logo_url": {
+          "type": "text"
+        },
+        "primary_color": {
+          "type": "text",
+          "default": "#22d3ee"
+        },
+        "status": {
+          "type": "account_status",
+          "default": "active"
+        },
+        "primary_email": {
+          "type": "text"
+        },
+        "primary_phone": {
+          "type": "text"
+        },
+        "address": {
+          "type": "text"
+        },
+        "city": {
+          "type": "text"
+        },
+        "state": {
+          "type": "text"
+        },
+        "zip": {
+          "type": "text"
+        },
+        "eagleeye_account_id": {
+          "type": "text"
+        },
+        "brivo_account_id": {
+          "type": "text"
+        },
+        "brivo_site_id": {
+          "type": "text"
+        },
+        "quickbooks_realm_id": {
+          "type": "text"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "profiles": {
+      "_migration": "001_initial_schema",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "uuid_generate_v4()"
+        },
+        "clerk_user_id": {
+          "type": "text",
+          "required": true
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id",
+          "required": true
+        },
+        "role": {
+          "type": "user_role",
+          "required": true
+        },
+        "first_name": {
+          "type": "text"
+        },
+        "last_name": {
+          "type": "text"
+        },
+        "email": {
+          "type": "text",
+          "required": true
+        },
+        "phone": {
+          "type": "text"
+        },
+        "avatar_url": {
+          "type": "text"
+        },
+        "theme": {
+          "type": "text",
+          "default": "dark"
+        },
+        "notifications_email": {
+          "type": "boolean",
+          "default": "true"
+        },
+        "notifications_sms": {
+          "type": "boolean",
+          "default": "true"
+        },
+        "last_login_at": {
+          "type": "timestamptz"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "properties": {
+      "_migration": "001_initial_schema",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "uuid_generate_v4()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id",
+          "required": true
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "address": {
+          "type": "text"
+        },
+        "city": {
+          "type": "text"
+        },
+        "state": {
+          "type": "text"
+        },
+        "zip": {
+          "type": "text"
+        },
+        "property_type": {
+          "type": "text"
+        },
+        "unit_count": {
+          "type": "int"
+        },
+        "eagleeye_location_id": {
+          "type": "text"
+        },
+        "brivo_site_id": {
+          "type": "text"
+        },
+        "status": {
+          "type": "device_status",
+          "default": "unknown"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "devices": {
+      "_migration": "001_initial_schema",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "uuid_generate_v4()"
+        },
+        "property_id": {
+          "type": "uuid",
+          "references": "properties.id",
+          "required": true
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id",
+          "required": true
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "device_type": {
+          "type": "text",
+          "required": true
+        },
+        "manufacturer": {
+          "type": "text"
+        },
+        "model": {
+          "type": "text"
+        },
+        "serial_number": {
+          "type": "text"
+        },
+        "eagleeye_device_id": {
+          "type": "text"
+        },
+        "brivo_device_id": {
+          "type": "text"
+        },
+        "status": {
+          "type": "device_status",
+          "default": "unknown"
+        },
+        "ip_address": {
+          "type": "text"
+        },
+        "firmware_version": {
+          "type": "text"
+        },
+        "install_date": {
+          "type": "date"
+        },
+        "warranty_expires": {
+          "type": "date"
+        },
+        "last_seen_at": {
+          "type": "timestamptz"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "contacts": {
+      "_migration": "001_initial_schema",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "uuid_generate_v4()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id",
+          "required": true
+        },
+        "first_name": {
+          "type": "text"
+        },
+        "last_name": {
+          "type": "text"
+        },
+        "email": {
+          "type": "text"
+        },
+        "phone": {
+          "type": "text"
+        },
+        "title": {
+          "type": "text"
+        },
+        "is_primary": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "quotes": {
+      "_migration": "001_initial_schema",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "uuid_generate_v4()"
+        },
+        "quote_number": {
+          "type": "text",
+          "required": true
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id",
+          "required": true
+        },
+        "client_org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "created_by": {
+          "type": "uuid",
+          "references": "profiles.id"
+        },
+        "title": {
+          "type": "text",
+          "required": true
+        },
+        "status": {
+          "type": "quote_status",
+          "default": "draft"
+        },
+        "total_one_time": {
+          "type": "numeric",
+          "default": "0"
+        },
+        "total_mrr": {
+          "type": "numeric",
+          "default": "0"
+        },
+        "valid_until": {
+          "type": "date"
+        },
+        "accepted_at": {
+          "type": "timestamptz"
+        },
+        "signed_by": {
+          "type": "text"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "pdf_url": {
+          "type": "text"
+        },
+        "share_token": {
+          "type": "text",
+          "default": "encode(gen_random_bytes(16)"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "quote_line_items": {
+      "_migration": "001_initial_schema",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "uuid_generate_v4()"
+        },
+        "quote_id": {
+          "type": "uuid",
+          "references": "quotes.id",
+          "required": true
+        },
+        "sort_order": {
+          "type": "int",
+          "default": "0"
+        },
+        "category": {
+          "type": "text"
+        },
+        "description": {
+          "type": "text",
+          "required": true
+        },
+        "qty": {
+          "type": "int",
+          "default": "1"
+        },
+        "unit_price": {
+          "type": "numeric",
+          "required": true
+        },
+        "is_recurring": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "work_orders": {
+      "_migration": "001_initial_schema",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "uuid_generate_v4()"
+        },
+        "wo_number": {
+          "type": "text",
+          "required": true
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id",
+          "required": true
+        },
+        "client_org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "property_id": {
+          "type": "uuid",
+          "references": "properties.id"
+        },
+        "device_id": {
+          "type": "uuid",
+          "references": "devices.id"
+        },
+        "created_by": {
+          "type": "uuid",
+          "references": "profiles.id"
+        },
+        "assigned_to": {
+          "type": "uuid",
+          "references": "profiles.id"
+        },
+        "title": {
+          "type": "text",
+          "required": true
+        },
+        "description": {
+          "type": "text"
+        },
+        "priority": {
+          "type": "wo_priority",
+          "default": "medium"
+        },
+        "status": {
+          "type": "wo_status",
+          "default": "open"
+        },
+        "due_date": {
+          "type": "date"
+        },
+        "completed_at": {
+          "type": "timestamptz"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "invoices": {
+      "_migration": "001_initial_schema",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "uuid_generate_v4()"
+        },
+        "invoice_number": {
+          "type": "text",
+          "required": true
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id",
+          "required": true
+        },
+        "client_org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "created_by": {
+          "type": "uuid",
+          "references": "profiles.id"
+        },
+        "title": {
+          "type": "text"
+        },
+        "status": {
+          "type": "invoice_status",
+          "default": "draft"
+        },
+        "is_recurring": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "amount": {
+          "type": "numeric",
+          "required": true
+        },
+        "due_date": {
+          "type": "date"
+        },
+        "paid_at": {
+          "type": "timestamptz"
+        },
+        "quickbooks_invoice_id": {
+          "type": "text"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "leads": {
+      "_migration": "001_initial_schema",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "uuid_generate_v4()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id",
+          "required": true
+        },
+        "assigned_to": {
+          "type": "uuid",
+          "references": "profiles.id"
+        },
+        "company_name": {
+          "type": "text"
+        },
+        "contact_name": {
+          "type": "text"
+        },
+        "email": {
+          "type": "text"
+        },
+        "phone": {
+          "type": "text"
+        },
+        "property_type": {
+          "type": "text"
+        },
+        "unit_count": {
+          "type": "int"
+        },
+        "location": {
+          "type": "text"
+        },
+        "stage": {
+          "type": "lead_stage",
+          "default": "prospect"
+        },
+        "source": {
+          "type": "text"
+        },
+        "partner_org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "won_at": {
+          "type": "timestamptz"
+        },
+        "lost_at": {
+          "type": "timestamptz"
+        },
+        "lost_reason": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "activity_log": {
+      "_migration": "001_initial_schema",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "uuid_generate_v4()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id",
+          "required": true
+        },
+        "actor_id": {
+          "type": "uuid",
+          "references": "profiles.id"
+        },
+        "entity_type": {
+          "type": "text",
+          "required": true
+        },
+        "entity_id": {
+          "type": "uuid",
+          "required": true
+        },
+        "action": {
+          "type": "text",
+          "required": true
+        },
+        "description": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "companies": {
+      "_migration": "002_crm_phase1",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "uuid_generate_v4()"
+        },
+        "dealer_org_id": {
+          "type": "uuid",
+          "references": "organizations.id",
+          "required": true
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "type": {
+          "type": "company_type",
+          "default": "prospect"
+        },
+        "primary_contact_id": {
+          "type": "uuid"
+        },
+        "website": {
+          "type": "text"
+        },
+        "billing_address": {
+          "type": "text"
+        },
+        "city": {
+          "type": "text"
+        },
+        "state": {
+          "type": "text"
+        },
+        "zip": {
+          "type": "text"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "contact_properties": {
+      "_migration": "002_crm_phase1",
+      "columns": {
+        "contact_id": {
+          "type": "uuid",
+          "references": "contacts.id",
+          "required": true
+        },
+        "property_id": {
+          "type": "uuid",
+          "references": "properties.id",
+          "required": true
+        },
+        "role": {
+          "type": "contact_role",
+          "default": "other"
+        },
+        "is_primary": {
+          "type": "boolean",
+          "default": "false"
+        }
+      }
+    },
+    "company_properties": {
+      "_migration": "002_crm_phase1",
+      "columns": {
+        "company_id": {
+          "type": "uuid",
+          "references": "companies.id",
+          "required": true
+        },
+        "property_id": {
+          "type": "uuid",
+          "references": "properties.id",
+          "required": true
+        }
+      }
+    },
+    "opportunities": {
+      "_migration": "002_crm_phase1",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "uuid_generate_v4()"
+        },
+        "dealer_org_id": {
+          "type": "uuid",
+          "references": "organizations.id",
+          "required": true
+        },
+        "lead_id": {
+          "type": "uuid",
+          "references": "leads.id"
+        },
+        "contact_id": {
+          "type": "uuid",
+          "references": "contacts.id"
+        },
+        "company_id": {
+          "type": "uuid",
+          "references": "companies.id"
+        },
+        "property_id": {
+          "type": "uuid",
+          "references": "properties.id"
+        },
+        "rep_id": {
+          "type": "uuid",
+          "references": "profiles.id"
+        },
+        "quote_id": {
+          "type": "uuid",
+          "references": "quotes.id"
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "stage": {
+          "type": "opp_stage",
+          "default": "inquiry"
+        },
+        "est_setup": {
+          "type": "numeric"
+        },
+        "est_mrr": {
+          "type": "numeric"
+        },
+        "close_date": {
+          "type": "date"
+        },
+        "lost_reason": {
+          "type": "text"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "won_at": {
+          "type": "timestamptz"
+        },
+        "lost_at": {
+          "type": "timestamptz"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "customers": {
+      "_migration": "002_crm_phase1",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "uuid_generate_v4()"
+        },
+        "dealer_org_id": {
+          "type": "uuid",
+          "references": "organizations.id",
+          "required": true
+        },
+        "opportunity_id": {
+          "type": "uuid",
+          "references": "opportunities.id",
+          "required": true
+        },
+        "company_id": {
+          "type": "uuid",
+          "references": "companies.id"
+        },
+        "property_id": {
+          "type": "uuid",
+          "references": "properties.id",
+          "required": true
+        },
+        "primary_contact_id": {
+          "type": "uuid",
+          "references": "contacts.id"
+        },
+        "status": {
+          "type": "customer_status",
+          "default": "active"
+        },
+        "mrr": {
+          "type": "numeric",
+          "default": "0"
+        },
+        "setup_total": {
+          "type": "numeric",
+          "default": "0"
+        },
+        "contract_start": {
+          "type": "date"
+        },
+        "contract_end": {
+          "type": "date"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "activities": {
+      "_migration": "002_crm_phase1",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "uuid_generate_v4()"
+        },
+        "dealer_org_id": {
+          "type": "uuid",
+          "references": "organizations.id",
+          "required": true
+        },
+        "created_by": {
+          "type": "uuid",
+          "references": "profiles.id"
+        },
+        "type": {
+          "type": "activity_type",
+          "required": true
+        },
+        "subject": {
+          "type": "text",
+          "required": true
+        },
+        "body": {
+          "type": "text"
+        },
+        "lead_id": {
+          "type": "uuid",
+          "references": "leads.id"
+        },
+        "opportunity_id": {
+          "type": "uuid",
+          "references": "opportunities.id"
+        },
+        "contact_id": {
+          "type": "uuid",
+          "references": "contacts.id"
+        },
+        "company_id": {
+          "type": "uuid",
+          "references": "companies.id"
+        },
+        "customer_id": {
+          "type": "uuid",
+          "references": "customers.id"
+        },
+        "due_at": {
+          "type": "timestamptz"
+        },
+        "completed_at": {
+          "type": "timestamptz"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "attachments": {
+      "_migration": "002_crm_phase1",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "uuid_generate_v4()"
+        },
+        "dealer_org_id": {
+          "type": "uuid",
+          "references": "organizations.id",
+          "required": true
+        },
+        "uploaded_by": {
+          "type": "uuid",
+          "references": "profiles.id"
+        },
+        "file_name": {
+          "type": "text",
+          "required": true
+        },
+        "url": {
+          "type": "text",
+          "required": true
+        },
+        "file_type": {
+          "type": "text"
+        },
+        "size_bytes": {
+          "type": "bigint"
+        },
+        "type": {
+          "type": "attachment_type",
+          "default": "document"
+        },
+        "opportunity_id": {
+          "type": "uuid",
+          "references": "opportunities.id"
+        },
+        "lead_id": {
+          "type": "uuid",
+          "references": "leads.id"
+        },
+        "quote_id": {
+          "type": "uuid",
+          "references": "quotes.id"
+        },
+        "activity_id": {
+          "type": "uuid",
+          "references": "activities.id"
+        },
+        "customer_id": {
+          "type": "uuid",
+          "references": "customers.id"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "products": {
+      "_migration": "003_products",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "sku": {
+          "type": "text",
+          "required": true
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "brand": {
+          "type": "text",
+          "required": true,
+          "default": ""
+        },
+        "category": {
+          "type": "text",
+          "required": true,
+          "default": ""
+        },
+        "subcategory": {
+          "type": "text",
+          "required": true,
+          "default": ""
+        },
+        "description": {
+          "type": "text",
+          "required": true,
+          "default": ""
+        },
+        "specs": {
+          "type": "text",
+          "required": true,
+          "default": ""
+        },
+        "msrp": {
+          "type": "numeric",
+          "required": true,
+          "default": "0"
+        },
+        "dealer_cost": {
+          "type": "numeric",
+          "required": true,
+          "default": "0"
+        },
+        "sell_price": {
+          "type": "numeric",
+          "required": true,
+          "default": "0"
+        },
+        "adi_sku": {
+          "type": "text",
+          "required": true,
+          "default": ""
+        },
+        "image_url": {
+          "type": "text",
+          "required": true,
+          "default": ""
+        },
+        "active": {
+          "type": "boolean",
+          "required": true,
+          "default": "true"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "manual_chunks": {
+      "_migration": "004_kb_vectors",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "product_id": {
+          "type": "uuid",
+          "required": true
+        },
+        "manual_url": {
+          "type": "text"
+        },
+        "page_number": {
+          "type": "int"
+        },
+        "section_title": {
+          "type": "text"
+        },
+        "chunk_index": {
+          "type": "int",
+          "required": true
+        },
+        "content": {
+          "type": "text",
+          "required": true
+        },
+        "embedding": {
+          "type": "vector"
+        },
+        "token_count": {
+          "type": "int"
+        },
+        "processed_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "troubleshoot_sessions": {
+      "_migration": "004_kb_vectors",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "product_id": {
+          "type": "uuid"
+        },
+        "user_id": {
+          "type": "text"
+        },
+        "symptom": {
+          "type": "text",
+          "required": true
+        },
+        "error_code": {
+          "type": "text"
+        },
+        "steps_taken": {
+          "type": "jsonb",
+          "required": true,
+          "default": "[]'::jsonb"
+        },
+        "chunks_used": {
+          "type": "uuid[]",
+          "required": true,
+          "default": "{}"
+        },
+        "resolved": {
+          "type": "boolean"
+        },
+        "resolution_note": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "kb_articles": {
+      "_migration": "004_kb_vectors",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "product_id": {
+          "type": "uuid"
+        },
+        "category": {
+          "type": "text",
+          "required": true
+        },
+        "title": {
+          "type": "text",
+          "required": true
+        },
+        "description": {
+          "type": "text"
+        },
+        "content": {
+          "type": "text"
+        },
+        "difficulty": {
+          "type": "text",
+          "required": true,
+          "default": "Basic"
+        },
+        "helpful_count": {
+          "type": "int",
+          "required": true,
+          "default": "0"
+        },
+        "author": {
+          "type": "text"
+        },
+        "embedding": {
+          "type": "vector"
+        },
+        "active": {
+          "type": "boolean",
+          "required": true,
+          "default": "true"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "residents": {
+      "_migration": "006_sync_tables",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "uuid_generate_v4()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id",
+          "required": true
+        },
+        "brivo_user_id": {
+          "type": "text",
+          "required": true
+        },
+        "first_name": {
+          "type": "text",
+          "required": true,
+          "default": ""
+        },
+        "last_name": {
+          "type": "text",
+          "required": true,
+          "default": ""
+        },
+        "email": {
+          "type": "text"
+        },
+        "phone": {
+          "type": "text"
+        },
+        "unit_number": {
+          "type": "text"
+        },
+        "mac_address": {
+          "type": "text"
+        },
+        "unifi_group_id": {
+          "type": "text"
+        },
+        "active": {
+          "type": "boolean",
+          "required": true,
+          "default": "true"
+        },
+        "last_synced_at": {
+          "type": "timestamptz"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "sync_log": {
+      "_migration": "006_sync_tables",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "uuid_generate_v4()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "sync_type": {
+          "type": "text",
+          "required": true
+        },
+        "status": {
+          "type": "text",
+          "required": true
+        },
+        "upserted": {
+          "type": "int",
+          "default": "0"
+        },
+        "deactivated": {
+          "type": "int",
+          "default": "0"
+        },
+        "unifi_synced": {
+          "type": "int",
+          "default": "0"
+        },
+        "error_msg": {
+          "type": "text"
+        },
+        "details": {
+          "type": "jsonb"
+        },
+        "duration_ms": {
+          "type": "int"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "device_suggestions": {
+      "_migration": "007_device_suggestions",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "product_id": {
+          "type": "uuid",
+          "references": "products.id",
+          "required": true
+        },
+        "device_def": {
+          "type": "jsonb",
+          "required": true
+        },
+        "wiring_hints": {
+          "type": "jsonb",
+          "default": "[]'::jsonb"
+        },
+        "status": {
+          "type": "text",
+          "required": true,
+          "default": "ai_generated"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "opportunity_stage_history": {
+      "_migration": "008_crm_full",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "opportunity_id": {
+          "type": "uuid",
+          "references": "opportunities.id",
+          "required": true
+        },
+        "stage": {
+          "type": "text",
+          "required": true
+        },
+        "amount": {
+          "type": "numeric"
+        },
+        "probability": {
+          "type": "integer"
+        },
+        "changed_by_name": {
+          "type": "text"
+        },
+        "changed_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "opportunity_contacts": {
+      "_migration": "008_crm_full",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "opportunity_id": {
+          "type": "uuid",
+          "references": "opportunities.id",
+          "required": true
+        },
+        "contact_name": {
+          "type": "text",
+          "required": true
+        },
+        "contact_title": {
+          "type": "text"
+        },
+        "contact_email": {
+          "type": "text"
+        },
+        "contact_phone": {
+          "type": "text"
+        },
+        "role": {
+          "type": "text",
+          "default": "Site"
+        },
+        "is_primary": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "crm_activities": {
+      "_migration": "008_crm_full",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "opportunity_id": {
+          "type": "uuid",
+          "references": "opportunities.id"
+        },
+        "lead_id": {
+          "type": "uuid"
+        },
+        "contact_name": {
+          "type": "text"
+        },
+        "type": {
+          "type": "text",
+          "required": true,
+          "default": "note"
+        },
+        "subject": {
+          "type": "text",
+          "required": true
+        },
+        "body": {
+          "type": "text"
+        },
+        "outcome": {
+          "type": "text"
+        },
+        "direction": {
+          "type": "text"
+        },
+        "duration_min": {
+          "type": "integer"
+        },
+        "due_at": {
+          "type": "timestamptz"
+        },
+        "completed_at": {
+          "type": "timestamptz"
+        },
+        "created_by_name": {
+          "type": "text",
+          "default": "Russel"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "show_lead_assignments": {
+      "_migration": "008_crm_full",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "show_lead_id": {
+          "type": "uuid",
+          "references": "show_leads.id",
+          "required": true
+        },
+        "assigned_to": {
+          "type": "text",
+          "required": true
+        },
+        "assigned_by": {
+          "type": "text",
+          "default": "Russel"
+        },
+        "note": {
+          "type": "text"
+        },
+        "status": {
+          "type": "text",
+          "default": "new"
+        },
+        "converted_opp_id": {
+          "type": "uuid",
+          "references": "opportunities.id"
+        },
+        "assigned_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "user_permissions": {
+      "_migration": "008_crm_full",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "clerk_user_id": {
+          "type": "text",
+          "required": true
+        },
+        "email": {
+          "type": "text",
+          "required": true
+        },
+        "full_name": {
+          "type": "text"
+        },
+        "role": {
+          "type": "text",
+          "default": "viewer"
+        },
+        "org_id": {
+          "type": "uuid"
+        },
+        "can_see_crm": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "can_see_crm_all_orgs": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "can_see_maintenance": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "can_see_tech": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "can_see_products": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "can_see_quotes": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "can_see_billing": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "can_see_reps": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "can_see_compliance": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "can_see_reports": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "can_see_map": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "can_see_scorecard": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "can_see_directv": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "can_see_aria": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "can_see_cameras": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "can_see_access_control": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "can_see_network": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "can_see_admin": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "can_see_dashboard": {
+          "type": "boolean",
+          "default": "true"
+        },
+        "can_create": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "can_edit": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "can_delete": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "can_invite": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "is_active": {
+          "type": "boolean",
+          "default": "true"
+        },
+        "invited_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "last_seen_at": {
+          "type": "timestamptz"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "eos_vto": {
+      "_migration": "010_eos_tables",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "core_values": {
+          "type": "jsonb",
+          "default": "[]'::jsonb"
+        },
+        "purpose": {
+          "type": "text"
+        },
+        "niche": {
+          "type": "text"
+        },
+        "ten_year_target": {
+          "type": "text"
+        },
+        "target_market": {
+          "type": "text"
+        },
+        "three_uniques": {
+          "type": "jsonb",
+          "default": "[]'::jsonb"
+        },
+        "proven_process": {
+          "type": "jsonb",
+          "default": "[]'::jsonb"
+        },
+        "guarantee": {
+          "type": "text"
+        },
+        "picture_3yr": {
+          "type": "jsonb",
+          "default": "{}'::jsonb"
+        },
+        "plan_1yr": {
+          "type": "jsonb",
+          "default": "{}'::jsonb"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "eos_rocks": {
+      "_migration": "010_eos_tables",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "quarter": {
+          "type": "text",
+          "required": true
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "owner": {
+          "type": "text",
+          "required": true
+        },
+        "status": {
+          "type": "text",
+          "required": true,
+          "default": "On"
+        },
+        "progress": {
+          "type": "integer",
+          "required": true,
+          "default": "0"
+        },
+        "due_date": {
+          "type": "text",
+          "required": true,
+          "default": "Jun"
+        },
+        "is_company_rock": {
+          "type": "boolean",
+          "default": "true"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "eos_scorecard": {
+      "_migration": "010_eos_tables",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "owner": {
+          "type": "text",
+          "required": true
+        },
+        "goal": {
+          "type": "text",
+          "required": true
+        },
+        "unit": {
+          "type": "text"
+        },
+        "sort_order": {
+          "type": "integer",
+          "default": "0"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "eos_scorecard_entries": {
+      "_migration": "010_eos_tables",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "scorecard_id": {
+          "type": "uuid",
+          "references": "eos_scorecard.id"
+        },
+        "week_of": {
+          "type": "date",
+          "required": true
+        },
+        "value": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "eos_issues": {
+      "_migration": "010_eos_tables",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "description": {
+          "type": "text",
+          "required": true
+        },
+        "type": {
+          "type": "text",
+          "required": true,
+          "default": "Company"
+        },
+        "owner": {
+          "type": "text",
+          "required": true
+        },
+        "priority": {
+          "type": "text",
+          "required": true,
+          "default": "Normal"
+        },
+        "status": {
+          "type": "text",
+          "required": true,
+          "default": "Open"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "resolved_at": {
+          "type": "timestamptz"
+        },
+        "resolution_note": {
+          "type": "text"
+        }
+      }
+    },
+    "eos_todos": {
+      "_migration": "010_eos_tables",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "text": {
+          "type": "text",
+          "required": true
+        },
+        "owner": {
+          "type": "text",
+          "required": true
+        },
+        "due_date": {
+          "type": "date"
+        },
+        "meeting": {
+          "type": "text"
+        },
+        "done": {
+          "type": "boolean",
+          "required": true,
+          "default": "false"
+        },
+        "done_at": {
+          "type": "timestamptz"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "technicians": {
+      "_migration": "011_work_orders",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "initials": {
+          "type": "text",
+          "required": true
+        },
+        "role": {
+          "type": "text",
+          "required": true,
+          "default": "Tech"
+        },
+        "status": {
+          "type": "text",
+          "required": true,
+          "default": "offline"
+        },
+        "phone": {
+          "type": "text"
+        },
+        "email": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "NOW()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "NOW()"
+        }
+      }
+    },
+    "sites": {
+      "_migration": "012_site_assets",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "master_dealer_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "install_dealer_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "service_dealer_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "address": {
+          "type": "text"
+        },
+        "city": {
+          "type": "text"
+        },
+        "state": {
+          "type": "text"
+        },
+        "zip": {
+          "type": "text"
+        },
+        "property_type": {
+          "type": "text",
+          "default": "Multifamily"
+        },
+        "units": {
+          "type": "integer"
+        },
+        "crm_customer_id": {
+          "type": "uuid"
+        },
+        "crm_opp_id": {
+          "type": "uuid"
+        },
+        "status": {
+          "type": "text",
+          "required": true,
+          "default": "active"
+        },
+        "primary_contact_name": {
+          "type": "text"
+        },
+        "primary_contact_email": {
+          "type": "text"
+        },
+        "primary_contact_phone": {
+          "type": "text"
+        },
+        "pm_name": {
+          "type": "text"
+        },
+        "pm_email": {
+          "type": "text"
+        },
+        "pm_phone": {
+          "type": "text"
+        },
+        "gate_code": {
+          "type": "text"
+        },
+        "parking_notes": {
+          "type": "text"
+        },
+        "access_notes": {
+          "type": "text"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "site_assets": {
+      "_migration": "012_site_assets",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "site_id": {
+          "type": "uuid",
+          "references": "sites.id",
+          "required": true
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "product_id": {
+          "type": "uuid",
+          "references": "products.id"
+        },
+        "product_name": {
+          "type": "text",
+          "required": true
+        },
+        "product_sku": {
+          "type": "text"
+        },
+        "product_category": {
+          "type": "text"
+        },
+        "serial_number": {
+          "type": "text"
+        },
+        "mac_address": {
+          "type": "text"
+        },
+        "ip_address": {
+          "type": "text"
+        },
+        "firmware_version": {
+          "type": "text"
+        },
+        "location_note": {
+          "type": "text",
+          "required": true,
+          "default": "Main"
+        },
+        "location_zone": {
+          "type": "text"
+        },
+        "work_order_id": {
+          "type": "uuid",
+          "references": "work_orders.id"
+        },
+        "installed_by": {
+          "type": "text"
+        },
+        "installed_at": {
+          "type": "timestamptz"
+        },
+        "install_notes": {
+          "type": "text"
+        },
+        "status": {
+          "type": "text",
+          "required": true,
+          "default": "active"
+        },
+        "last_seen_at": {
+          "type": "timestamptz"
+        },
+        "offline_since": {
+          "type": "timestamptz"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "site_asset_terminals": {
+      "_migration": "012_site_assets",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "site_asset_id": {
+          "type": "uuid",
+          "references": "site_assets.id",
+          "required": true
+        },
+        "terminal_id": {
+          "type": "text",
+          "required": true
+        },
+        "terminal_label": {
+          "type": "text"
+        },
+        "terminal_function": {
+          "type": "text"
+        },
+        "connected_to_asset_id": {
+          "type": "uuid",
+          "references": "site_assets.id"
+        },
+        "connected_to_terminal": {
+          "type": "text"
+        },
+        "connected_to_label": {
+          "type": "text"
+        },
+        "wire_color": {
+          "type": "text"
+        },
+        "cable_type": {
+          "type": "text"
+        },
+        "cable_run_ft": {
+          "type": "integer"
+        },
+        "conduit": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "conduit_notes": {
+          "type": "text"
+        },
+        "verification_status": {
+          "type": "text",
+          "required": true,
+          "default": "unverified"
+        },
+        "verified_at": {
+          "type": "timestamptz"
+        },
+        "verified_by": {
+          "type": "text"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "site_events": {
+      "_migration": "012_site_assets",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "site_id": {
+          "type": "uuid",
+          "references": "sites.id",
+          "required": true
+        },
+        "asset_id": {
+          "type": "uuid",
+          "references": "site_assets.id"
+        },
+        "event_type": {
+          "type": "text",
+          "required": true
+        },
+        "event_source": {
+          "type": "text",
+          "default": "manual"
+        },
+        "summary": {
+          "type": "text"
+        },
+        "metadata": {
+          "type": "jsonb"
+        },
+        "severity": {
+          "type": "text",
+          "default": "info"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "sensitive_fields": {
+      "_migration": "013_org_isolation",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "table_name": {
+          "type": "text",
+          "required": true
+        },
+        "column_name": {
+          "type": "text",
+          "required": true
+        },
+        "min_role": {
+          "type": "text",
+          "required": true,
+          "default": "dealer"
+        },
+        "note": {
+          "type": "text"
+        }
+      }
+    },
+    "sensitive_field_access_log": {
+      "_migration": "013_org_isolation",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "type": "text",
+          "required": true
+        },
+        "org_id": {
+          "type": "uuid"
+        },
+        "table_name": {
+          "type": "text",
+          "required": true
+        },
+        "record_id": {
+          "type": "uuid",
+          "required": true
+        },
+        "fields": {
+          "type": "text[]",
+          "required": true
+        },
+        "ip_address": {
+          "type": "text"
+        },
+        "accessed_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "wo_checklist_items": {
+      "_migration": "014_cmms_enhancement",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "work_order_id": {
+          "type": "uuid",
+          "references": "work_orders.id",
+          "required": true
+        },
+        "title": {
+          "type": "text",
+          "required": true
+        },
+        "completed": {
+          "type": "boolean",
+          "required": true,
+          "default": "false"
+        },
+        "completed_at": {
+          "type": "timestamptz"
+        },
+        "completed_by": {
+          "type": "text"
+        },
+        "sort_order": {
+          "type": "integer",
+          "default": "0"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "wo_comments": {
+      "_migration": "014_cmms_enhancement",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "work_order_id": {
+          "type": "uuid",
+          "references": "work_orders.id",
+          "required": true
+        },
+        "author_name": {
+          "type": "text",
+          "required": true,
+          "default": "Russel"
+        },
+        "author_initials": {
+          "type": "text",
+          "required": true,
+          "default": "RF"
+        },
+        "content": {
+          "type": "text",
+          "required": true
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "parts_inventory": {
+      "_migration": "014_cmms_enhancement",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "part_number": {
+          "type": "text"
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "description": {
+          "type": "text"
+        },
+        "quantity_on_hand": {
+          "type": "integer",
+          "required": true,
+          "default": "0"
+        },
+        "min_stock_level": {
+          "type": "integer",
+          "default": "0"
+        },
+        "unit_cost": {
+          "type": "numeric"
+        },
+        "part_type": {
+          "type": "text",
+          "default": "Standard"
+        },
+        "location": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "wo_parts_used": {
+      "_migration": "014_cmms_enhancement",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "work_order_id": {
+          "type": "uuid",
+          "references": "work_orders.id",
+          "required": true
+        },
+        "part_id": {
+          "type": "uuid",
+          "references": "parts_inventory.id"
+        },
+        "part_name": {
+          "type": "text",
+          "required": true
+        },
+        "part_number": {
+          "type": "text"
+        },
+        "quantity": {
+          "type": "integer",
+          "required": true,
+          "default": "1"
+        },
+        "unit_cost": {
+          "type": "numeric"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "wo_requests": {
+      "_migration": "015_wo_requests",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "site_id": {
+          "type": "uuid",
+          "references": "sites.id"
+        },
+        "title": {
+          "type": "text",
+          "required": true
+        },
+        "description": {
+          "type": "text"
+        },
+        "area": {
+          "type": "text"
+        },
+        "priority_requested": {
+          "type": "text",
+          "default": "normal"
+        },
+        "contact_name": {
+          "type": "text"
+        },
+        "contact_email": {
+          "type": "text"
+        },
+        "contact_phone": {
+          "type": "text"
+        },
+        "status": {
+          "type": "text",
+          "required": true,
+          "default": "new"
+        },
+        "converted_wo_id": {
+          "type": "uuid",
+          "references": "work_orders.id"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "wo_notification_log": {
+      "_migration": "015_wo_requests",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "work_order_id": {
+          "type": "uuid",
+          "references": "work_orders.id",
+          "required": true
+        },
+        "event_type": {
+          "type": "text",
+          "required": true
+        },
+        "recipient_email": {
+          "type": "text",
+          "required": true
+        },
+        "sent_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "pm_schedules": {
+      "_migration": "016_pm_schedules",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "site_id": {
+          "type": "uuid",
+          "references": "sites.id"
+        },
+        "title": {
+          "type": "text",
+          "required": true
+        },
+        "description": {
+          "type": "text"
+        },
+        "interval_days": {
+          "type": "int",
+          "required": true,
+          "default": "90"
+        },
+        "last_generated_at": {
+          "type": "timestamptz"
+        },
+        "next_due_at": {
+          "type": "timestamptz",
+          "required": true
+        },
+        "is_active": {
+          "type": "boolean",
+          "required": true,
+          "default": "true"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "commission_config": {
+      "_migration": "017_dealer_network",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id",
+          "required": true
+        },
+        "master_agent_rate": {
+          "type": "numeric",
+          "required": true,
+          "default": "0.50"
+        },
+        "master_dealer_rate": {
+          "type": "numeric",
+          "required": true,
+          "default": "0.50"
+        },
+        "sales_partner_rate": {
+          "type": "numeric",
+          "required": true,
+          "default": "1.00"
+        },
+        "service_dealer_rate": {
+          "type": "numeric",
+          "required": true,
+          "default": "3.00"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "dealer_add_ons": {
+      "_migration": "017_dealer_network",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "site_id": {
+          "type": "uuid",
+          "references": "sites.id",
+          "required": true
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "add_on_type": {
+          "type": "in"
+        },
+        "unit_count": {
+          "type": "int",
+          "required": true,
+          "default": "0"
+        },
+        "camera_count": {
+          "type": "int",
+          "required": true,
+          "default": "0"
+        },
+        "monthly_retail": {
+          "type": "numeric",
+          "required": true,
+          "default": "0"
+        },
+        "is_active": {
+          "type": "boolean",
+          "required": true,
+          "default": "true"
+        },
+        "activated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "sales_reps": {
+      "_migration": "018_reps_permits",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id",
+          "required": true
+        },
+        "parent_rep_id": {
+          "type": "uuid",
+          "references": "sales_reps.id"
+        },
+        "first_name": {
+          "type": "text",
+          "required": true
+        },
+        "last_name": {
+          "type": "text",
+          "required": true
+        },
+        "email": {
+          "type": "text"
+        },
+        "phone": {
+          "type": "text"
+        },
+        "tier": {
+          "type": "rep_tier",
+          "required": true,
+          "default": "rep"
+        },
+        "commission_rate": {
+          "type": "numeric",
+          "required": true,
+          "default": "0.05"
+        },
+        "pipeline_value": {
+          "type": "numeric",
+          "required": true,
+          "default": "0"
+        },
+        "active_sites": {
+          "type": "int",
+          "required": true,
+          "default": "0"
+        },
+        "is_active": {
+          "type": "boolean",
+          "required": true,
+          "default": "true"
+        },
+        "joined_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "rep_commissions": {
+      "_migration": "018_reps_permits",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "rep_id": {
+          "type": "uuid",
+          "references": "sales_reps.id",
+          "required": true
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "pay_period": {
+          "type": "char",
+          "required": true
+        },
+        "amount_cents": {
+          "type": "int",
+          "required": true,
+          "default": "0"
+        },
+        "status": {
+          "type": "commission_status",
+          "required": true,
+          "default": "pending"
+        },
+        "source_type": {
+          "type": "text"
+        },
+        "source_id": {
+          "type": "uuid"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "approved_by": {
+          "type": "text"
+        },
+        "approved_at": {
+          "type": "timestamptz"
+        },
+        "paid_at": {
+          "type": "timestamptz"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "permits": {
+      "_migration": "018_reps_permits",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id",
+          "required": true
+        },
+        "site_id": {
+          "type": "uuid",
+          "references": "sites.id"
+        },
+        "type": {
+          "type": "permit_type",
+          "required": true
+        },
+        "label": {
+          "type": "text"
+        },
+        "permit_number": {
+          "type": "text"
+        },
+        "issued_by": {
+          "type": "text"
+        },
+        "issue_date": {
+          "type": "date"
+        },
+        "expiry_date": {
+          "type": "date"
+        },
+        "document_url": {
+          "type": "text"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "is_active": {
+          "type": "boolean",
+          "required": true,
+          "default": "true"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "crm_inbound_emails": {
+      "_migration": "020_email_tracking",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "received_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "from_email": {
+          "type": "text",
+          "required": true
+        },
+        "from_name": {
+          "type": "text"
+        },
+        "to_email": {
+          "type": "text"
+        },
+        "subject": {
+          "type": "text"
+        },
+        "body_text": {
+          "type": "text"
+        },
+        "body_html": {
+          "type": "text"
+        },
+        "message_id": {
+          "type": "text"
+        },
+        "in_reply_to": {
+          "type": "text"
+        },
+        "matched_opp_id": {
+          "type": "uuid",
+          "references": "opportunities.id"
+        },
+        "matched_lead_id": {
+          "type": "uuid"
+        },
+        "activity_id": {
+          "type": "uuid",
+          "references": "crm_activities.id"
+        },
+        "raw_payload": {
+          "type": "jsonb"
+        }
+      }
+    },
+    "training_progress": {
+      "_migration": "021_training_scorecard",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "type": "text",
+          "required": true
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "user_name": {
+          "type": "text"
+        },
+        "user_email": {
+          "type": "text"
+        },
+        "course_id": {
+          "type": "text",
+          "required": true
+        },
+        "chapter_id": {
+          "type": "text",
+          "required": true
+        },
+        "completed_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "dealer_scorecards": {
+      "_migration": "021_training_scorecard",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id",
+          "required": true
+        },
+        "period": {
+          "type": "char",
+          "required": true
+        },
+        "score": {
+          "type": "int",
+          "required": true,
+          "default": "0"
+        },
+        "response_time_hrs": {
+          "type": "numeric"
+        },
+        "fcr_pct": {
+          "type": "int"
+        },
+        "compliance_pct": {
+          "type": "int"
+        },
+        "uptime_pct": {
+          "type": "int"
+        },
+        "nps_proxy": {
+          "type": "int"
+        },
+        "total_wos": {
+          "type": "int",
+          "default": "0"
+        },
+        "certified": {
+          "type": "boolean",
+          "required": true,
+          "default": "false"
+        },
+        "computed_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "todos": {
+      "_migration": "023_todos",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "title": {
+          "type": "text",
+          "required": true
+        },
+        "body": {
+          "type": "text"
+        },
+        "priority": {
+          "type": "text",
+          "required": true,
+          "default": "normal"
+        },
+        "status": {
+          "type": "text",
+          "required": true,
+          "default": "open"
+        },
+        "due_date": {
+          "type": "date"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "created_by": {
+          "type": "text",
+          "required": true
+        },
+        "created_by_name": {
+          "type": "text"
+        },
+        "assigned_to": {
+          "type": "text"
+        },
+        "assigned_to_name": {
+          "type": "text"
+        },
+        "linked_type": {
+          "type": "text"
+        },
+        "linked_id": {
+          "type": "uuid"
+        },
+        "linked_label": {
+          "type": "text"
+        },
+        "completed_at": {
+          "type": "timestamptz"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "todo_attachments": {
+      "_migration": "024_todo_enhancements",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "todo_id": {
+          "type": "uuid",
+          "references": "todos.id",
+          "required": true
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "url": {
+          "type": "text",
+          "required": true
+        },
+        "storage_path": {
+          "type": "text"
+        },
+        "size_bytes": {
+          "type": "int"
+        },
+        "mime_type": {
+          "type": "text"
+        },
+        "uploaded_by": {
+          "type": "text",
+          "required": true
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "document_signatures": {
+      "_migration": "025_document_signatures",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "token": {
+          "type": "text",
+          "required": true
+        },
+        "document_type": {
+          "type": "text",
+          "required": true
+        },
+        "document_version": {
+          "type": "text"
+        },
+        "document_url": {
+          "type": "text"
+        },
+        "opportunity_id": {
+          "type": "uuid",
+          "references": "opportunities.id"
+        },
+        "lead_id": {
+          "type": "text"
+        },
+        "signer_name": {
+          "type": "text"
+        },
+        "signer_email": {
+          "type": "text",
+          "required": true
+        },
+        "signer_title": {
+          "type": "text"
+        },
+        "signer_company": {
+          "type": "text"
+        },
+        "signed_name": {
+          "type": "text"
+        },
+        "signed_title": {
+          "type": "text"
+        },
+        "signed_ip": {
+          "type": "text"
+        },
+        "signed_at": {
+          "type": "timestamptz"
+        },
+        "signed_user_agent": {
+          "type": "text"
+        },
+        "status": {
+          "type": "text",
+          "required": true,
+          "default": "pending"
+        },
+        "sent_by": {
+          "type": "text",
+          "required": true
+        },
+        "sent_by_name": {
+          "type": "text"
+        },
+        "sent_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "expires_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "(now()"
+        },
+        "advance_stage": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "document_templates": {
+      "_migration": "026_document_templates",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "document_type": {
+          "type": "text",
+          "required": true
+        },
+        "applies_to": {
+          "type": "text[]",
+          "required": true
+        },
+        "version": {
+          "type": "text",
+          "required": true,
+          "default": "v1.0"
+        },
+        "storage_path": {
+          "type": "text",
+          "required": true
+        },
+        "public_url": {
+          "type": "text",
+          "required": true
+        },
+        "is_active": {
+          "type": "boolean",
+          "required": true,
+          "default": "true"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "created_by": {
+          "type": "text"
+        }
+      }
+    },
+    "campaign_sends": {
+      "_migration": "029_campaign_sends",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "show_lead_id": {
+          "type": "uuid",
+          "references": "show_leads.id"
+        },
+        "lead_email": {
+          "type": "text",
+          "required": true
+        },
+        "lead_name": {
+          "type": "text"
+        },
+        "campaign_name": {
+          "type": "text",
+          "required": true,
+          "default": "show_follow_up"
+        },
+        "status": {
+          "type": "text",
+          "required": true,
+          "default": "sent"
+        },
+        "resend_message_id": {
+          "type": "text"
+        },
+        "error_message": {
+          "type": "text"
+        },
+        "sent_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "delivered_at": {
+          "type": "timestamptz"
+        },
+        "opened_at": {
+          "type": "timestamptz"
+        },
+        "open_count": {
+          "type": "int",
+          "required": true,
+          "default": "0"
+        },
+        "clicked_at": {
+          "type": "timestamptz"
+        },
+        "bounced_at": {
+          "type": "timestamptz"
+        },
+        "complained_at": {
+          "type": "timestamptz"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "field_tickets": {
+      "_migration": "032_field_tickets_time_tracking",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "work_order_id": {
+          "type": "uuid",
+          "references": "work_orders.id",
+          "required": true
+        },
+        "site_id": {
+          "type": "uuid",
+          "references": "sites.id"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "technician_id": {
+          "type": "text"
+        },
+        "technician_name": {
+          "type": "text",
+          "required": true,
+          "default": ""
+        },
+        "title": {
+          "type": "text",
+          "required": true,
+          "default": ""
+        },
+        "findings": {
+          "type": "text"
+        },
+        "work_performed": {
+          "type": "text"
+        },
+        "materials_used": {
+          "type": "text"
+        },
+        "labor_hours": {
+          "type": "numeric"
+        },
+        "recommendations": {
+          "type": "text"
+        },
+        "photos": {
+          "type": "jsonb",
+          "default": "[]'::jsonb"
+        },
+        "signature_url": {
+          "type": "text"
+        },
+        "status": {
+          "type": "text",
+          "required": true,
+          "default": "draft"
+        },
+        "submitted_at": {
+          "type": "timestamptz"
+        },
+        "approved_at": {
+          "type": "timestamptz"
+        },
+        "approved_by": {
+          "type": "text"
+        },
+        "rejection_reason": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "work_order_time_entries": {
+      "_migration": "032_field_tickets_time_tracking",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "work_order_id": {
+          "type": "uuid",
+          "references": "work_orders.id",
+          "required": true
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "technician_id": {
+          "type": "text"
+        },
+        "technician_name": {
+          "type": "text",
+          "required": true,
+          "default": ""
+        },
+        "clock_in": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "clock_out": {
+          "type": "timestamptz"
+        },
+        "duration_mins": {
+          "type": "integer"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "inventory_items": {
+      "_migration": "035_inventory_and_quotes_enrich",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "sku": {
+          "type": "text"
+        },
+        "category": {
+          "type": "text",
+          "required": true,
+          "default": "Other"
+        },
+        "description": {
+          "type": "text"
+        },
+        "unit_cost": {
+          "type": "numeric",
+          "default": "0"
+        },
+        "unit_price": {
+          "type": "numeric",
+          "default": "0"
+        },
+        "on_hand": {
+          "type": "integer",
+          "required": true,
+          "default": "0"
+        },
+        "on_truck": {
+          "type": "integer",
+          "required": true,
+          "default": "0"
+        },
+        "min_stock": {
+          "type": "integer",
+          "required": true,
+          "default": "0"
+        },
+        "reorder_qty": {
+          "type": "integer",
+          "required": true,
+          "default": "1"
+        },
+        "location": {
+          "type": "text"
+        },
+        "supplier": {
+          "type": "text"
+        },
+        "supplier_sku": {
+          "type": "text"
+        },
+        "product_id": {
+          "type": "uuid",
+          "references": "products.id"
+        },
+        "is_active": {
+          "type": "boolean",
+          "required": true,
+          "default": "true"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "work_order_parts": {
+      "_migration": "035_inventory_and_quotes_enrich",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "work_order_id": {
+          "type": "uuid",
+          "references": "work_orders.id",
+          "required": true
+        },
+        "inventory_item_id": {
+          "type": "uuid",
+          "references": "inventory_items.id"
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "sku": {
+          "type": "text"
+        },
+        "qty": {
+          "type": "integer",
+          "required": true,
+          "default": "1"
+        },
+        "unit_cost": {
+          "type": "numeric",
+          "default": "0"
+        },
+        "action": {
+          "type": "text",
+          "required": true,
+          "default": "used"
+        },
+        "site_asset_id": {
+          "type": "uuid",
+          "references": "site_assets.id"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "added_by": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "purchase_orders": {
+      "_migration": "035_inventory_and_quotes_enrich",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "po_number": {
+          "type": "text"
+        },
+        "supplier": {
+          "type": "text"
+        },
+        "status": {
+          "type": "text",
+          "required": true,
+          "default": "draft"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "subtotal": {
+          "type": "numeric",
+          "default": "0"
+        },
+        "tax": {
+          "type": "numeric",
+          "default": "0"
+        },
+        "total": {
+          "type": "numeric",
+          "default": "0"
+        },
+        "ordered_at": {
+          "type": "timestamptz"
+        },
+        "expected_at": {
+          "type": "date"
+        },
+        "received_at": {
+          "type": "timestamptz"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "purchase_order_items": {
+      "_migration": "035_inventory_and_quotes_enrich",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "po_id": {
+          "type": "uuid",
+          "references": "purchase_orders.id",
+          "required": true
+        },
+        "inventory_item_id": {
+          "type": "uuid",
+          "references": "inventory_items.id"
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "sku": {
+          "type": "text"
+        },
+        "qty": {
+          "type": "integer",
+          "required": true,
+          "default": "1"
+        },
+        "unit_cost": {
+          "type": "numeric",
+          "default": "0"
+        },
+        "received_qty": {
+          "type": "integer",
+          "required": true,
+          "default": "0"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "work_order_crew": {
+      "_migration": "037_work_order_crew_phases",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "work_order_id": {
+          "type": "uuid",
+          "references": "work_orders.id",
+          "required": true
+        },
+        "technician_id": {
+          "type": "uuid",
+          "references": "technicians.id",
+          "required": true
+        },
+        "role": {
+          "type": "text",
+          "required": true,
+          "default": "crew"
+        },
+        "sort_order": {
+          "type": "integer",
+          "required": true,
+          "default": "0"
+        },
+        "added_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "work_order_phases": {
+      "_migration": "037_work_order_crew_phases",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "work_order_id": {
+          "type": "uuid",
+          "references": "work_orders.id",
+          "required": true
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "scheduled_date": {
+          "type": "date"
+        },
+        "end_date": {
+          "type": "date"
+        },
+        "status": {
+          "type": "text",
+          "required": true,
+          "default": "pending"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "sort_order": {
+          "type": "integer",
+          "required": true,
+          "default": "0"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "surveys": {
+      "_migration": "041_surveys",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "survey_number": {
+          "type": "text"
+        },
+        "property_name": {
+          "type": "text",
+          "required": true,
+          "default": ""
+        },
+        "property_address": {
+          "type": "text"
+        },
+        "site_id": {
+          "type": "uuid",
+          "references": "sites.id"
+        },
+        "opportunity_id": {
+          "type": "uuid",
+          "references": "opportunities.id"
+        },
+        "surveyor_name": {
+          "type": "text"
+        },
+        "surveyor_type": {
+          "type": "text",
+          "required": true,
+          "default": "sales"
+        },
+        "survey_date": {
+          "type": "date",
+          "default": "CURRENT_DATE"
+        },
+        "voice_transcript": {
+          "type": "text"
+        },
+        "notes_raw": {
+          "type": "text"
+        },
+        "devices": {
+          "type": "jsonb",
+          "required": true,
+          "default": "[]"
+        },
+        "ai_summary": {
+          "type": "text"
+        },
+        "ai_sow": {
+          "type": "text"
+        },
+        "ai_bom": {
+          "type": "jsonb",
+          "required": true,
+          "default": "[]"
+        },
+        "ai_recommendations": {
+          "type": "jsonb",
+          "required": true,
+          "default": "[]"
+        },
+        "ai_urgent_items": {
+          "type": "jsonb",
+          "required": true,
+          "default": "[]"
+        },
+        "ai_install_notes": {
+          "type": "jsonb",
+          "required": true,
+          "default": "[]"
+        },
+        "ai_timeline": {
+          "type": "text"
+        },
+        "photos": {
+          "type": "jsonb",
+          "required": true,
+          "default": "[]"
+        },
+        "status": {
+          "type": "text",
+          "required": true,
+          "default": "draft"
+        },
+        "quote_id": {
+          "type": "uuid"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "wo_installed_equipment": {
+      "_migration": "044_field_ticket_structured",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "work_order_id": {
+          "type": "uuid",
+          "references": "work_orders.id",
+          "required": true
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "make": {
+          "type": "text"
+        },
+        "model": {
+          "type": "text"
+        },
+        "sku": {
+          "type": "text"
+        },
+        "serial_number": {
+          "type": "text"
+        },
+        "location": {
+          "type": "text"
+        },
+        "qty": {
+          "type": "integer",
+          "required": true,
+          "default": "1"
+        },
+        "condition": {
+          "type": "text"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "added_by": {
+          "type": "text",
+          "required": true,
+          "default": "management"
+        },
+        "confirmed": {
+          "type": "boolean",
+          "required": true,
+          "default": "false"
+        },
+        "confirmed_by": {
+          "type": "text"
+        },
+        "confirmed_at": {
+          "type": "timestamptz"
+        },
+        "sort_order": {
+          "type": "integer",
+          "required": true,
+          "default": "0"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "wo_call_logs": {
+      "_migration": "045_wo_call_logs",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "work_order_id": {
+          "type": "uuid",
+          "references": "work_orders.id",
+          "required": true
+        },
+        "direction": {
+          "type": "text",
+          "required": true,
+          "default": "outbound"
+        },
+        "contact_name": {
+          "type": "text"
+        },
+        "phone": {
+          "type": "text"
+        },
+        "duration_mins": {
+          "type": "integer"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "ai_summary": {
+          "type": "text"
+        },
+        "outcome": {
+          "type": "text"
+        },
+        "made_by": {
+          "type": "text"
+        },
+        "called_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "org_contacts": {
+      "_migration": "046_quote_opportunity_contacts_attachments",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id",
+          "required": true
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "title": {
+          "type": "text"
+        },
+        "email": {
+          "type": "text"
+        },
+        "phone": {
+          "type": "text"
+        },
+        "is_primary": {
+          "type": "boolean",
+          "required": true,
+          "default": "false"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "org_attachments": {
+      "_migration": "046_quote_opportunity_contacts_attachments",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id",
+          "required": true
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "file_url": {
+          "type": "text",
+          "required": true
+        },
+        "file_size": {
+          "type": "bigint"
+        },
+        "mime_type": {
+          "type": "text"
+        },
+        "category": {
+          "type": "text",
+          "default": "general"
+        },
+        "uploaded_by": {
+          "type": "text"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "invoice_line_items": {
+      "_migration": "050_billing",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "invoice_id": {
+          "type": "uuid",
+          "references": "invoices.id"
+        },
+        "service_type": {
+          "type": "text",
+          "required": true
+        },
+        "description": {
+          "type": "text",
+          "required": true
+        },
+        "qty": {
+          "type": "numeric",
+          "required": true,
+          "default": "1"
+        },
+        "unit_price": {
+          "type": "numeric",
+          "required": true,
+          "default": "0"
+        },
+        "amount": {
+          "type": "numeric"
+        },
+        "is_recurring": {
+          "type": "boolean",
+          "default": "true"
+        },
+        "sort_order": {
+          "type": "int",
+          "default": "0"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "commission_payouts": {
+      "_migration": "050_billing",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "rep_id": {
+          "type": "uuid"
+        },
+        "invoice_id": {
+          "type": "uuid",
+          "references": "invoices.id"
+        },
+        "site_id": {
+          "type": "uuid"
+        },
+        "payout_type": {
+          "type": "text",
+          "required": true
+        },
+        "amount": {
+          "type": "numeric",
+          "required": true,
+          "default": "0"
+        },
+        "rate_percent": {
+          "type": "numeric"
+        },
+        "status": {
+          "type": "text",
+          "required": true,
+          "default": "pending"
+        },
+        "pay_period": {
+          "type": "text"
+        },
+        "approved_at": {
+          "type": "timestamptz"
+        },
+        "approved_by": {
+          "type": "text"
+        },
+        "paid_at": {
+          "type": "timestamptz"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "user_settings": {
+      "_migration": "053_calendar",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "type": "text",
+          "required": true
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "gcal_refresh_token": {
+          "type": "text"
+        },
+        "gcal_access_token": {
+          "type": "text"
+        },
+        "gcal_token_expiry": {
+          "type": "timestamptz"
+        },
+        "gcal_connected_at": {
+          "type": "timestamptz"
+        },
+        "gcal_last_synced_at": {
+          "type": "timestamptz"
+        },
+        "gcal_calendar_id": {
+          "type": "text",
+          "default": "primary"
+        },
+        "calendar_default_view": {
+          "type": "text",
+          "default": "week"
+        },
+        "timezone": {
+          "type": "text",
+          "default": "America/New_York"
+        },
+        "notifications_enabled": {
+          "type": "boolean",
+          "default": "true"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "gcal_events": {
+      "_migration": "053_calendar",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "type": "text",
+          "required": true
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "gcal_event_id": {
+          "type": "text",
+          "required": true
+        },
+        "gcal_calendar_id": {
+          "type": "text",
+          "required": true,
+          "default": "primary"
+        },
+        "title": {
+          "type": "text",
+          "required": true
+        },
+        "description": {
+          "type": "text"
+        },
+        "location": {
+          "type": "text"
+        },
+        "start_time": {
+          "type": "timestamptz",
+          "required": true
+        },
+        "end_time": {
+          "type": "timestamptz",
+          "required": true
+        },
+        "is_all_day": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "status": {
+          "type": "text",
+          "default": "confirmed"
+        },
+        "html_link": {
+          "type": "text"
+        },
+        "organizer_email": {
+          "type": "text"
+        },
+        "attendees": {
+          "type": "jsonb"
+        },
+        "source_type": {
+          "type": "text"
+        },
+        "source_id": {
+          "type": "uuid"
+        },
+        "synced_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "trinity_calls": {
+      "_migration": "062_trinity",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "direction": {
+          "type": "text",
+          "required": true,
+          "default": "outbound"
+        },
+        "phone_number": {
+          "type": "text",
+          "required": true
+        },
+        "contact_name": {
+          "type": "text"
+        },
+        "duration_seconds": {
+          "type": "integer",
+          "default": "0"
+        },
+        "transcript": {
+          "type": "text"
+        },
+        "sentiment": {
+          "type": "text"
+        },
+        "outcome": {
+          "type": "text"
+        },
+        "lead_id": {
+          "type": "uuid",
+          "references": "leads.id"
+        },
+        "opportunity_id": {
+          "type": "uuid",
+          "references": "opportunities.id"
+        },
+        "dealer_org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "ai_summary": {
+          "type": "text"
+        },
+        "recording_url": {
+          "type": "text"
+        },
+        "twilio_call_sid": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "aria_searches": {
+      "_migration": "065_aria_searches",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "query": {
+          "type": "text",
+          "required": true
+        },
+        "query_interpretation": {
+          "type": "text"
+        },
+        "results": {
+          "type": "jsonb",
+          "required": true
+        },
+        "imported_count": {
+          "type": "integer",
+          "default": "0"
+        },
+        "imported_at": {
+          "type": "timestamptz"
+        },
+        "expires_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "(now()"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "service_catalog": {
+      "_migration": "070_service_catalog",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "provider": {
+          "type": "text",
+          "required": true
+        },
+        "category": {
+          "type": "text",
+          "required": true
+        },
+        "description": {
+          "type": "text"
+        },
+        "logo_emoji": {
+          "type": "text",
+          "default": "\ud83d\udce6"
+        },
+        "provider_color": {
+          "type": "text",
+          "default": "#6B7EFF"
+        },
+        "billing_type": {
+          "type": "text",
+          "required": true,
+          "default": "per_unit"
+        },
+        "base_price": {
+          "type": "numeric",
+          "required": true
+        },
+        "unit_label": {
+          "type": "text",
+          "default": "unit"
+        },
+        "min_units": {
+          "type": "integer",
+          "default": "1"
+        },
+        "contract_months": {
+          "type": "integer",
+          "default": "12"
+        },
+        "dealer_commission_pct": {
+          "type": "numeric",
+          "default": "10.00"
+        },
+        "gg_commission_pct": {
+          "type": "numeric",
+          "default": "5.00"
+        },
+        "is_active": {
+          "type": "boolean",
+          "default": "true"
+        },
+        "is_featured": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "requires_enrollment": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "enrollment_url": {
+          "type": "text"
+        },
+        "learn_more_url": {
+          "type": "text"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "sort_order": {
+          "type": "integer",
+          "default": "100"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "dealer_service_enrollments": {
+      "_migration": "070_service_catalog",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "service_id": {
+          "type": "uuid",
+          "references": "service_catalog.id"
+        },
+        "status": {
+          "type": "text",
+          "default": "pending"
+        },
+        "enrolled_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "activated_at": {
+          "type": "timestamptz"
+        },
+        "dealer_code": {
+          "type": "text"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "site_service_subscriptions": {
+      "_migration": "070_service_catalog",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "site_id": {
+          "type": "uuid",
+          "references": "sites.id"
+        },
+        "service_id": {
+          "type": "uuid",
+          "references": "service_catalog.id"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "units": {
+          "type": "integer",
+          "default": "1"
+        },
+        "monthly_amount": {
+          "type": "numeric"
+        },
+        "status": {
+          "type": "text",
+          "default": "active"
+        },
+        "start_date": {
+          "type": "date"
+        },
+        "end_date": {
+          "type": "date"
+        },
+        "contract_months": {
+          "type": "integer",
+          "default": "12"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "mdu_providers": {
+      "_migration": "071_aria_providers",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "slug": {
+          "type": "text",
+          "required": true
+        },
+        "provider_type": {
+          "type": "text",
+          "required": true
+        },
+        "tier": {
+          "type": "text",
+          "required": true
+        },
+        "mdu_program": {
+          "type": "text"
+        },
+        "coverage": {
+          "type": "text"
+        },
+        "property_page_pattern": {
+          "type": "text"
+        },
+        "operator_page_pattern": {
+          "type": "text"
+        },
+        "partner_logo_url": {
+          "type": "text"
+        },
+        "dealer_phone": {
+          "type": "text"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "active": {
+          "type": "boolean",
+          "required": true,
+          "default": "true"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "mdu_provider_detections": {
+      "_migration": "071_aria_providers",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "provider_id": {
+          "type": "uuid",
+          "references": "mdu_providers.id",
+          "required": true
+        },
+        "opportunity_id": {
+          "type": "uuid",
+          "references": "opportunities.id"
+        },
+        "site_id": {
+          "type": "uuid",
+          "references": "sites.id"
+        },
+        "property_name": {
+          "type": "text"
+        },
+        "property_address": {
+          "type": "text"
+        },
+        "confidence": {
+          "type": "text",
+          "required": true
+        },
+        "source_type": {
+          "type": "text",
+          "required": true
+        },
+        "source_url": {
+          "type": "text"
+        },
+        "source_snippet": {
+          "type": "text"
+        },
+        "contract_start_year": {
+          "type": "int"
+        },
+        "contract_end_year": {
+          "type": "int"
+        },
+        "contract_notes": {
+          "type": "text"
+        },
+        "verified_by": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "floor_plans": {
+      "_migration": "071_design",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid"
+        },
+        "site_id": {
+          "type": "uuid"
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "level": {
+          "type": "text"
+        },
+        "file_url": {
+          "type": "text"
+        },
+        "file_type": {
+          "type": "text",
+          "default": "blank"
+        },
+        "status": {
+          "type": "text",
+          "default": "draft"
+        },
+        "created_by": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "floor_plan_devices": {
+      "_migration": "071_design",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "floor_plan_id": {
+          "type": "uuid",
+          "references": "floor_plans.id"
+        },
+        "product_id": {
+          "type": "uuid"
+        },
+        "device_type": {
+          "type": "text"
+        },
+        "label": {
+          "type": "text",
+          "required": true
+        },
+        "icon_key": {
+          "type": "text"
+        },
+        "x_pct": {
+          "type": "numeric",
+          "required": true
+        },
+        "y_pct": {
+          "type": "numeric",
+          "required": true
+        },
+        "condition": {
+          "type": "text",
+          "default": "good"
+        },
+        "action": {
+          "type": "text",
+          "default": "keep"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "photo_urls": {
+          "type": "text[]"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "floor_plan_connections": {
+      "_migration": "071_design",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "floor_plan_id": {
+          "type": "uuid",
+          "references": "floor_plans.id"
+        },
+        "from_device_id": {
+          "type": "uuid",
+          "references": "floor_plan_devices.id"
+        },
+        "to_device_id": {
+          "type": "uuid",
+          "references": "floor_plan_devices.id"
+        },
+        "cable_type": {
+          "type": "text",
+          "default": "cat6"
+        },
+        "estimated_length_ft": {
+          "type": "integer"
+        },
+        "from_terminal": {
+          "type": "text"
+        },
+        "to_terminal": {
+          "type": "text"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "floor_plan_annotations": {
+      "_migration": "071_design",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "floor_plan_id": {
+          "type": "uuid",
+          "references": "floor_plans.id"
+        },
+        "annotation_type": {
+          "type": "text"
+        },
+        "x_pct": {
+          "type": "numeric"
+        },
+        "x2_pct": {
+          "type": "numeric"
+        },
+        "text_content": {
+          "type": "text"
+        },
+        "color": {
+          "type": "text",
+          "default": "#EF4444"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "esign_documents": {
+      "_migration": "071_design",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid"
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "document_type": {
+          "type": "text"
+        },
+        "status": {
+          "type": "text",
+          "default": "pending"
+        },
+        "signer_name": {
+          "type": "text"
+        },
+        "signer_email": {
+          "type": "text"
+        },
+        "sent_at": {
+          "type": "timestamptz"
+        },
+        "signed_at": {
+          "type": "timestamptz"
+        },
+        "signature_data": {
+          "type": "text"
+        },
+        "related_quote_id": {
+          "type": "uuid"
+        },
+        "token": {
+          "type": "text",
+          "default": "encode(gen_random_bytes(32)"
+        },
+        "expires_at": {
+          "type": "timestamptz"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "aria_contract_findings": {
+      "_migration": "074_aria_contract_findings",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "property_name": {
+          "type": "text"
+        },
+        "property_address": {
+          "type": "text"
+        },
+        "property_city": {
+          "type": "text"
+        },
+        "property_state": {
+          "type": "char"
+        },
+        "management_company": {
+          "type": "text"
+        },
+        "owner_entity": {
+          "type": "text"
+        },
+        "provider_name": {
+          "type": "text",
+          "required": true
+        },
+        "provider_type": {
+          "type": "text",
+          "required": true,
+          "default": "isp"
+        },
+        "agreement_type": {
+          "type": "text",
+          "required": true,
+          "default": "unknown"
+        },
+        "service_type": {
+          "type": "text",
+          "required": true,
+          "default": "internet"
+        },
+        "effective_date": {
+          "type": "date"
+        },
+        "expiry_date": {
+          "type": "date"
+        },
+        "expiry_year": {
+          "type": "smallint"
+        },
+        "term_years": {
+          "type": "numeric"
+        },
+        "auto_renewal_years": {
+          "type": "numeric"
+        },
+        "source_type": {
+          "type": "text",
+          "required": true
+        },
+        "source_url": {
+          "type": "text"
+        },
+        "source_snippet": {
+          "type": "text"
+        },
+        "confidence": {
+          "type": "text",
+          "required": true,
+          "default": "medium"
+        },
+        "dnb_duns": {
+          "type": "text"
+        },
+        "wayback_first_seen": {
+          "type": "date"
+        },
+        "ucc_filing_date": {
+          "type": "date"
+        },
+        "ucc_filing_state": {
+          "type": "char"
+        },
+        "county_recording_id": {
+          "type": "text"
+        },
+        "found_by_search_id": {
+          "type": "uuid",
+          "references": "aria_searches.id"
+        },
+        "verified": {
+          "type": "boolean",
+          "default": "FALSE"
+        },
+        "verified_at": {
+          "type": "timestamptz"
+        },
+        "verified_by": {
+          "type": "text"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "NOW()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "NOW()"
+        }
+      }
+    },
+    "job_costs": {
+      "_migration": "075_job_costing",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "work_order_id": {
+          "type": "uuid",
+          "references": "work_orders.id",
+          "required": true
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "cost_type": {
+          "type": "text",
+          "required": true
+        },
+        "description": {
+          "type": "text"
+        },
+        "quantity": {
+          "type": "numeric",
+          "required": true,
+          "default": "1"
+        },
+        "unit_cost": {
+          "type": "numeric",
+          "required": true,
+          "default": "0"
+        },
+        "total_cost": {
+          "type": "numeric"
+        },
+        "source": {
+          "type": "text",
+          "default": "manual"
+        },
+        "source_id": {
+          "type": "uuid"
+        },
+        "burdened_rate": {
+          "type": "numeric"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "rma_records": {
+      "_migration": "075_job_costing",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "site_asset_id": {
+          "type": "uuid",
+          "references": "site_assets.id"
+        },
+        "work_order_id": {
+          "type": "uuid",
+          "references": "work_orders.id"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "status": {
+          "type": "text",
+          "required": true,
+          "default": "pending"
+        },
+        "ticket_number": {
+          "type": "text"
+        },
+        "reason": {
+          "type": "text"
+        },
+        "resolution": {
+          "type": "text"
+        },
+        "initiated_at": {
+          "type": "date",
+          "default": "CURRENT_DATE"
+        },
+        "shipped_at": {
+          "type": "date"
+        },
+        "received_at": {
+          "type": "date"
+        },
+        "resolved_at": {
+          "type": "date"
+        },
+        "replacement_asset_id": {
+          "type": "uuid",
+          "references": "site_assets.id"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "tech_location_pings": {
+      "_migration": "076_fleet_reviews",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "technician_id": {
+          "type": "uuid",
+          "references": "technicians.id"
+        },
+        "work_order_id": {
+          "type": "uuid",
+          "references": "work_orders.id"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "lat": {
+          "type": "numeric",
+          "required": true
+        },
+        "lng": {
+          "type": "numeric",
+          "required": true
+        },
+        "accuracy_m": {
+          "type": "numeric"
+        },
+        "event_type": {
+          "type": "text",
+          "default": "ping"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "coi_records": {
+      "_migration": "076_fleet_reviews",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "policy_number": {
+          "type": "text"
+        },
+        "insurer_name": {
+          "type": "text"
+        },
+        "coverage_type": {
+          "type": "text"
+        },
+        "coverage_amount": {
+          "type": "numeric"
+        },
+        "effective_date": {
+          "type": "date"
+        },
+        "expiry_date": {
+          "type": "date",
+          "required": true
+        },
+        "document_url": {
+          "type": "text"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "work_order_reviews": {
+      "_migration": "076_fleet_reviews",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "work_order_id": {
+          "type": "uuid",
+          "references": "work_orders.id"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "technician_id": {
+          "type": "uuid",
+          "references": "technicians.id"
+        },
+        "reviewer_name": {
+          "type": "text"
+        },
+        "reviewer_email": {
+          "type": "text"
+        },
+        "reviewer_phone": {
+          "type": "text"
+        },
+        "rating": {
+          "type": "integer"
+        },
+        "review_text": {
+          "type": "text"
+        },
+        "sms_sent_at": {
+          "type": "timestamptz"
+        },
+        "sms_sid": {
+          "type": "text"
+        },
+        "response_at": {
+          "type": "timestamptz"
+        },
+        "google_posted": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "incidents": {
+      "_migration": "077_operational",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "site_id": {
+          "type": "uuid",
+          "references": "sites.id"
+        },
+        "title": {
+          "type": "text",
+          "required": true
+        },
+        "description": {
+          "type": "text"
+        },
+        "severity": {
+          "type": "text",
+          "default": "medium"
+        },
+        "status": {
+          "type": "text",
+          "default": "open"
+        },
+        "reported_by": {
+          "type": "text"
+        },
+        "resolved_at": {
+          "type": "timestamptz"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "org_documents": {
+      "_migration": "077_operational",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "site_id": {
+          "type": "uuid",
+          "references": "sites.id"
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "category": {
+          "type": "text",
+          "default": "other"
+        },
+        "file_url": {
+          "type": "text"
+        },
+        "file_size_kb": {
+          "type": "integer"
+        },
+        "uploaded_by": {
+          "type": "text"
+        },
+        "expires_at": {
+          "type": "date"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "work_order_photos": {
+      "_migration": "077_operational",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "work_order_id": {
+          "type": "uuid",
+          "references": "work_orders.id"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "file_url": {
+          "type": "text",
+          "required": true
+        },
+        "file_name": {
+          "type": "text"
+        },
+        "uploaded_by": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "tech_achievements": {
+      "_migration": "078_gamification",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "technician_id": {
+          "type": "uuid",
+          "references": "technicians.id"
+        },
+        "achievement_id": {
+          "type": "text",
+          "required": true
+        },
+        "achievement_name": {
+          "type": "text",
+          "required": true
+        },
+        "description": {
+          "type": "text"
+        },
+        "earned_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "dealer_tier_points": {
+      "_migration": "078_gamification",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "total_points": {
+          "type": "integer",
+          "default": "0"
+        },
+        "tier": {
+          "type": "text",
+          "default": "bronze"
+        },
+        "tier_updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "points_breakdown": {
+          "type": "jsonb",
+          "default": "{}"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "quests": {
+      "_migration": "078_gamification",
+      "columns": {
+        "id": {
+          "type": "text"
+        },
+        "title": {
+          "type": "text",
+          "required": true
+        },
+        "description": {
+          "type": "text"
+        },
+        "target_metric": {
+          "type": "text",
+          "required": true
+        },
+        "target_value": {
+          "type": "integer",
+          "required": true
+        },
+        "reward_points": {
+          "type": "integer",
+          "default": "50"
+        },
+        "duration_days": {
+          "type": "integer",
+          "default": "30"
+        },
+        "is_active": {
+          "type": "boolean",
+          "default": "true"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "quest_progress": {
+      "_migration": "078_gamification",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "quest_id": {
+          "type": "text",
+          "references": "quests.id"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "current_value": {
+          "type": "integer",
+          "default": "0"
+        },
+        "completed_at": {
+          "type": "timestamptz"
+        },
+        "started_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "expires_at": {
+          "type": "timestamptz"
+        }
+      }
+    },
+    "nexus_wins": {
+      "_migration": "078_gamification",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "win_type": {
+          "type": "text",
+          "required": true
+        },
+        "title": {
+          "type": "text",
+          "required": true
+        },
+        "description": {
+          "type": "text"
+        },
+        "meta": {
+          "type": "jsonb",
+          "default": "{}"
+        },
+        "shown_at": {
+          "type": "timestamptz"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "subcontractors": {
+      "_migration": "080_subcontractors",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "company": {
+          "type": "text"
+        },
+        "email": {
+          "type": "text"
+        },
+        "phone": {
+          "type": "text"
+        },
+        "trade": {
+          "type": "text"
+        },
+        "license_number": {
+          "type": "text"
+        },
+        "license_expiry": {
+          "type": "date"
+        },
+        "insurance_expiry": {
+          "type": "date"
+        },
+        "status": {
+          "type": "text",
+          "default": "active"
+        },
+        "access_code": {
+          "type": "text",
+          "default": "upper(left(replace(gen_random_uuid()::text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "work_order_subcontractors": {
+      "_migration": "080_subcontractors",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "work_order_id": {
+          "type": "uuid",
+          "references": "work_orders.id"
+        },
+        "subcontractor_id": {
+          "type": "uuid",
+          "references": "subcontractors.id"
+        },
+        "assigned_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "notes": {
+          "type": "text"
+        }
+      }
+    },
+    "feature_catalog": {
+      "_migration": "095_feature_flags",
+      "columns": {
+        "key": {
+          "type": "text"
+        },
+        "label": {
+          "type": "text",
+          "required": true
+        },
+        "section": {
+          "type": "text",
+          "required": true
+        },
+        "section_label": {
+          "type": "text",
+          "required": true
+        },
+        "href": {
+          "type": "text"
+        },
+        "description": {
+          "type": "text"
+        },
+        "sort_order": {
+          "type": "int",
+          "default": "0"
+        },
+        "is_paid": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "is_beta": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "is_active": {
+          "type": "boolean",
+          "default": "true"
+        },
+        "tier_defaults": {
+          "type": "jsonb",
+          "default": "{}"
+        },
+        "stripe_product_id": {
+          "type": "text"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "org_feature_flags": {
+      "_migration": "095_feature_flags",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "required": true
+        },
+        "feature_key": {
+          "type": "text",
+          "required": true
+        },
+        "access_level": {
+          "type": "text",
+          "required": true,
+          "default": "none"
+        },
+        "is_promo": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "promo_reason": {
+          "type": "text"
+        },
+        "expires_at": {
+          "type": "timestamptz"
+        },
+        "stripe_subscription_id": {
+          "type": "text"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "updated_by": {
+          "type": "text"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "user_feature_access": {
+      "_migration": "095_feature_flags",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "clerk_user_id": {
+          "type": "text",
+          "required": true
+        },
+        "org_id": {
+          "type": "uuid",
+          "required": true
+        },
+        "feature_key": {
+          "type": "text",
+          "required": true
+        },
+        "access_level": {
+          "type": "text",
+          "required": true,
+          "default": "none"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "message_channels": {
+      "_migration": "095_message_center",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "type": "text",
+          "required": true
+        },
+        "org_id": {
+          "type": "text"
+        },
+        "channel_type": {
+          "type": "channel_type",
+          "required": true
+        },
+        "display_name": {
+          "type": "text",
+          "required": true
+        },
+        "is_active": {
+          "type": "boolean",
+          "required": true,
+          "default": "true"
+        },
+        "oauth_access_token": {
+          "type": "text"
+        },
+        "oauth_refresh_token": {
+          "type": "text"
+        },
+        "oauth_expiry": {
+          "type": "timestamptz"
+        },
+        "oauth_scope": {
+          "type": "text"
+        },
+        "config": {
+          "type": "jsonb",
+          "required": true,
+          "default": "{}'::jsonb"
+        },
+        "last_synced_at": {
+          "type": "timestamptz"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "message_threads": {
+      "_migration": "095_message_center",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "text"
+        },
+        "user_id": {
+          "type": "text",
+          "required": true
+        },
+        "channel_id": {
+          "type": "uuid"
+        },
+        "external_thread_id": {
+          "type": "text"
+        },
+        "subject": {
+          "type": "text"
+        },
+        "participants": {
+          "type": "jsonb",
+          "required": true,
+          "default": "[]'::jsonb"
+        },
+        "linked_wo_id": {
+          "type": "uuid"
+        },
+        "linked_quote_id": {
+          "type": "uuid"
+        },
+        "linked_site_id": {
+          "type": "uuid"
+        },
+        "linked_calendar_event_id": {
+          "type": "text"
+        },
+        "last_message_at": {
+          "type": "timestamptz"
+        },
+        "unread_count": {
+          "type": "int",
+          "required": true,
+          "default": "0"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "messages": {
+      "_migration": "095_message_center",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "thread_id": {
+          "type": "uuid",
+          "required": true
+        },
+        "channel_id": {
+          "type": "uuid"
+        },
+        "external_message_id": {
+          "type": "text"
+        },
+        "direction": {
+          "type": "message_direction",
+          "required": true
+        },
+        "source_type": {
+          "type": "message_source",
+          "required": true
+        },
+        "from_address": {
+          "type": "text",
+          "required": true
+        },
+        "from_name": {
+          "type": "text"
+        },
+        "to_addresses": {
+          "type": "jsonb",
+          "required": true,
+          "default": "[]'::jsonb"
+        },
+        "subject": {
+          "type": "text"
+        },
+        "body": {
+          "type": "text",
+          "required": true,
+          "default": ""
+        },
+        "body_html": {
+          "type": "text"
+        },
+        "attachments": {
+          "type": "jsonb",
+          "required": true,
+          "default": "[]'::jsonb"
+        },
+        "status": {
+          "type": "message_status",
+          "required": true,
+          "default": "pending"
+        },
+        "sent_at": {
+          "type": "timestamptz"
+        },
+        "read_at": {
+          "type": "timestamptz"
+        },
+        "error_message": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "aria_properties": {
+      "_migration": "098_aria_intelligence_db",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "property_name": {
+          "type": "text",
+          "required": true
+        },
+        "address": {
+          "type": "text",
+          "required": true
+        },
+        "units": {
+          "type": "int"
+        },
+        "property_type": {
+          "type": "text"
+        },
+        "class": {
+          "type": "text"
+        },
+        "year_built": {
+          "type": "int"
+        },
+        "occupancy": {
+          "type": "text"
+        },
+        "management_company": {
+          "type": "text"
+        },
+        "owner_entity": {
+          "type": "text"
+        },
+        "owner_type": {
+          "type": "text"
+        },
+        "portfolio_size": {
+          "type": "text"
+        },
+        "acquisition_year": {
+          "type": "int"
+        },
+        "hold_period": {
+          "type": "text"
+        },
+        "capex_signal": {
+          "type": "text"
+        },
+        "dnb_duns": {
+          "type": "text"
+        },
+        "isp_providers": {
+          "type": "text[]"
+        },
+        "video_providers": {
+          "type": "text[]"
+        },
+        "bulk_agreements": {
+          "type": "jsonb"
+        },
+        "fcc_verified": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "gate_operators": {
+          "type": "text[]"
+        },
+        "access_control": {
+          "type": "text[]"
+        },
+        "intercoms": {
+          "type": "text[]"
+        },
+        "cameras": {
+          "type": "text[]"
+        },
+        "smart_locks": {
+          "type": "text[]"
+        },
+        "resident_apps": {
+          "type": "text[]"
+        },
+        "package_solutions": {
+          "type": "text[]"
+        },
+        "tech_generation": {
+          "type": "text"
+        },
+        "sara_signals": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "replacement_window": {
+          "type": "text"
+        },
+        "displacement_targets": {
+          "type": "text[]"
+        },
+        "buy_score": {
+          "type": "int"
+        },
+        "urgency": {
+          "type": "text"
+        },
+        "primary_concern": {
+          "type": "text"
+        },
+        "current_vendor": {
+          "type": "text"
+        },
+        "contract_window": {
+          "type": "text"
+        },
+        "contract_expiry_year": {
+          "type": "int"
+        },
+        "communication_style": {
+          "type": "text"
+        },
+        "pain_signals": {
+          "type": "jsonb"
+        },
+        "behavioral_profile": {
+          "type": "jsonb"
+        },
+        "pitch_strategy": {
+          "type": "jsonb"
+        },
+        "freshness_score": {
+          "type": "int"
+        },
+        "dm_name": {
+          "type": "text"
+        },
+        "dm_title": {
+          "type": "text"
+        },
+        "dm_company": {
+          "type": "text"
+        },
+        "dm_email": {
+          "type": "text"
+        },
+        "dm_phone": {
+          "type": "text"
+        },
+        "dm_linkedin_slug": {
+          "type": "text"
+        },
+        "dm_chain": {
+          "type": "jsonb"
+        },
+        "dm_verified_at": {
+          "type": "timestamptz"
+        },
+        "scout_brief": {
+          "type": "jsonb"
+        },
+        "times_researched": {
+          "type": "int",
+          "required": true,
+          "default": "1"
+        },
+        "first_seen_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "last_researched_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "aria_confidence": {
+          "type": "text",
+          "default": "medium"
+        },
+        "crm_opportunity_id": {
+          "type": "uuid",
+          "references": "opportunities.id"
+        },
+        "crm_lead_id": {
+          "type": "uuid",
+          "references": "show_leads.id"
+        },
+        "sales_stage": {
+          "type": "text",
+          "default": "prospect"
+        },
+        "sales_notes": {
+          "type": "text"
+        },
+        "last_contacted_at": {
+          "type": "timestamptz"
+        },
+        "assigned_rep": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "aria_tech_providers": {
+      "_migration": "098_aria_intelligence_db",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "slug": {
+          "type": "text",
+          "required": true
+        },
+        "category": {
+          "type": "text",
+          "required": true
+        },
+        "aliases": {
+          "type": "text[]"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "displacement_target": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "times_detected": {
+          "type": "int",
+          "required": true,
+          "default": "1"
+        },
+        "first_seen_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "last_seen_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "mgmt_isp_portfolio": {
+      "_migration": "099_mgmt_isp_portfolio",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "management_company": {
+          "type": "text",
+          "required": true
+        },
+        "management_company_display": {
+          "type": "text",
+          "required": true
+        },
+        "isp_name": {
+          "type": "text",
+          "required": true
+        },
+        "agreement_type": {
+          "type": "text",
+          "required": true,
+          "default": "bulk"
+        },
+        "coverage_states": {
+          "type": "text[]",
+          "default": "{}"
+        },
+        "coverage_notes": {
+          "type": "text"
+        },
+        "confidence": {
+          "type": "text",
+          "required": true,
+          "default": "reported"
+        },
+        "source": {
+          "type": "text"
+        },
+        "source_url": {
+          "type": "text"
+        },
+        "active": {
+          "type": "boolean",
+          "required": true,
+          "default": "true"
+        },
+        "times_confirmed": {
+          "type": "integer",
+          "required": true,
+          "default": "1"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "tracker_groups": {
+      "_migration": "102_nexus_tracker",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "color": {
+          "type": "text",
+          "required": true,
+          "default": "#6B7EFF"
+        },
+        "position": {
+          "type": "integer",
+          "required": true,
+          "default": "0"
+        },
+        "org_id": {
+          "type": "uuid"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "tracker_items": {
+      "_migration": "102_nexus_tracker",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "group_id": {
+          "type": "uuid",
+          "required": true
+        },
+        "title": {
+          "type": "text",
+          "required": true
+        },
+        "type": {
+          "type": "text",
+          "required": true,
+          "default": "bug"
+        },
+        "module": {
+          "type": "text"
+        },
+        "severity": {
+          "type": "text"
+        },
+        "priority": {
+          "type": "text"
+        },
+        "status": {
+          "type": "text",
+          "required": true,
+          "default": "new"
+        },
+        "owner_user_id": {
+          "type": "text"
+        },
+        "owner_name": {
+          "type": "text"
+        },
+        "reporter_user_id": {
+          "type": "text"
+        },
+        "reporter_name": {
+          "type": "text"
+        },
+        "date_reported": {
+          "type": "date",
+          "default": "CURRENT_DATE"
+        },
+        "target_release": {
+          "type": "text"
+        },
+        "affected_site_id": {
+          "type": "uuid"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "position": {
+          "type": "integer",
+          "required": true,
+          "default": "0"
+        },
+        "parent_item_id": {
+          "type": "uuid"
+        },
+        "org_id": {
+          "type": "uuid"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "tracker_comments": {
+      "_migration": "102_nexus_tracker",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "item_id": {
+          "type": "uuid",
+          "required": true
+        },
+        "author_user_id": {
+          "type": "text"
+        },
+        "author_name": {
+          "type": "text",
+          "required": true
+        },
+        "author_initials": {
+          "type": "text",
+          "required": true,
+          "default": "?"
+        },
+        "body": {
+          "type": "text",
+          "required": true
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "jobs": {
+      "_migration": "105_jobs",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "title": {
+          "type": "text",
+          "required": true
+        },
+        "job_type": {
+          "type": "text",
+          "required": true,
+          "default": "new_install"
+        },
+        "status": {
+          "type": "text",
+          "required": true,
+          "default": "active"
+        },
+        "opportunity_id": {
+          "type": "uuid"
+        },
+        "site_id": {
+          "type": "uuid"
+        },
+        "org_id": {
+          "type": "uuid",
+          "required": true
+        },
+        "assigned_tech_id": {
+          "type": "uuid"
+        },
+        "assigned_tech_name": {
+          "type": "text"
+        },
+        "total_value": {
+          "type": "numeric"
+        },
+        "start_date": {
+          "type": "date"
+        },
+        "target_completion_date": {
+          "type": "date"
+        },
+        "completed_at": {
+          "type": "timestamptz"
+        },
+        "notes": {
+          "type": "text"
+        },
+        "site_name": {
+          "type": "text"
+        },
+        "opportunity_name": {
+          "type": "text"
+        },
+        "created_by_user_id": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "tracker_dependencies": {
+      "_migration": "106_tracker_pm_os",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "from_item_id": {
+          "type": "uuid",
+          "references": "tracker_items.id",
+          "required": true
+        },
+        "to_item_id": {
+          "type": "uuid",
+          "references": "tracker_items.id",
+          "required": true
+        },
+        "dep_type": {
+          "type": "text",
+          "default": "finish_to_start"
+        },
+        "lag_days": {
+          "type": "integer",
+          "default": "0"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "tracker_automations": {
+      "_migration": "106_tracker_pm_os",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "board_id": {
+          "type": "uuid"
+        },
+        "name": {
+          "type": "text",
+          "required": true
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": "true"
+        },
+        "trigger_type": {
+          "type": "text",
+          "required": true
+        },
+        "trigger_config": {
+          "type": "jsonb",
+          "default": "{}"
+        },
+        "action_type": {
+          "type": "text",
+          "required": true
+        },
+        "action_config": {
+          "type": "jsonb",
+          "default": "{}"
+        },
+        "run_count": {
+          "type": "integer",
+          "default": "0"
+        },
+        "last_run_at": {
+          "type": "timestamptz"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "tracker_activity": {
+      "_migration": "106_tracker_pm_os",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "item_id": {
+          "type": "uuid",
+          "references": "tracker_items.id"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "user_id": {
+          "type": "text"
+        },
+        "user_name": {
+          "type": "text"
+        },
+        "action": {
+          "type": "text",
+          "required": true
+        },
+        "old_value": {
+          "type": "text"
+        },
+        "new_value": {
+          "type": "text"
+        },
+        "field_name": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "tracker_dashboards": {
+      "_migration": "106_tracker_pm_os",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "uuid",
+          "references": "organizations.id"
+        },
+        "name": {
+          "type": "text",
+          "required": true,
+          "default": "My"
+        },
+        "widgets": {
+          "type": "jsonb",
+          "default": "[]"
+        },
+        "created_by": {
+          "type": "text"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "aria_search_runs": {
+      "_migration": "107_aria_v8_case_file",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "org_id": {
+          "type": "text"
+        },
+        "user_id": {
+          "type": "text"
+        },
+        "raw_query": {
+          "type": "text",
+          "required": true
+        },
+        "intent_type": {
+          "type": "text"
+        },
+        "rewritten_query": {
+          "type": "jsonb"
+        },
+        "status": {
+          "type": "text",
+          "required": true,
+          "default": "running"
+        },
+        "candidate_count": {
+          "type": "int",
+          "required": true,
+          "default": "0"
+        },
+        "selected_candidate_id": {
+          "type": "uuid"
+        },
+        "evidence_count": {
+          "type": "int",
+          "required": true,
+          "default": "0"
+        },
+        "quality_gates_passed": {
+          "type": "jsonb"
+        },
+        "total_cost_cents": {
+          "type": "int"
+        },
+        "duration_ms": {
+          "type": "int"
+        },
+        "engine_version": {
+          "type": "text",
+          "default": "v8.0"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "completed_at": {
+          "type": "timestamptz"
+        }
+      }
+    },
+    "aria_candidates": {
+      "_migration": "107_aria_v8_case_file",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "search_run_id": {
+          "type": "uuid",
+          "required": true
+        },
+        "rank_position": {
+          "type": "int"
+        },
+        "confidence_score": {
+          "type": "numeric"
+        },
+        "property_name": {
+          "type": "text"
+        },
+        "address": {
+          "type": "text"
+        },
+        "city": {
+          "type": "text"
+        },
+        "state": {
+          "type": "text"
+        },
+        "zip": {
+          "type": "text"
+        },
+        "units": {
+          "type": "int"
+        },
+        "year_built": {
+          "type": "int"
+        },
+        "property_type": {
+          "type": "text"
+        },
+        "management_company": {
+          "type": "text"
+        },
+        "owner_entity": {
+          "type": "text"
+        },
+        "phone": {
+          "type": "text"
+        },
+        "website": {
+          "type": "text"
+        },
+        "isp_providers": {
+          "type": "text[]"
+        },
+        "bulk_agreement_hint": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "gate_issue_detected": {
+          "type": "boolean",
+          "default": "false"
+        },
+        "pain_signals": {
+          "type": "text[]"
+        },
+        "status": {
+          "type": "text",
+          "required": true,
+          "default": "pending"
+        },
+        "rejection_reason": {
+          "type": "text"
+        },
+        "selected_at": {
+          "type": "timestamptz"
+        },
+        "selected_by": {
+          "type": "text"
+        },
+        "evidence_count": {
+          "type": "int",
+          "required": true,
+          "default": "0"
+        },
+        "top_evidence_snippet": {
+          "type": "text"
+        },
+        "aria_property_id": {
+          "type": "uuid"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    },
+    "aria_evidence_packets": {
+      "_migration": "107_aria_v8_case_file",
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "default": "gen_random_uuid()"
+        },
+        "search_run_id": {
+          "type": "uuid",
+          "required": true
+        },
+        "candidate_id": {
+          "type": "uuid"
+        },
+        "source_url": {
+          "type": "text"
+        },
+        "source_type": {
+          "type": "text"
+        },
+        "source_authority": {
+          "type": "int",
+          "default": "5"
+        },
+        "fact_type": {
+          "type": "text"
+        },
+        "extracted_value": {
+          "type": "text"
+        },
+        "confidence": {
+          "type": "numeric",
+          "default": "50"
+        },
+        "raw_snippet": {
+          "type": "text"
+        },
+        "phase_found": {
+          "type": "int",
+          "default": "0"
+        },
+        "arrival_order": {
+          "type": "int"
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "required": true,
+          "default": "now()"
+        }
+      }
+    }
+  },
+  "relationships": {
+    "organizations": [
+      {
+        "column": "parent_id",
+        "references": "organizations.id"
+      }
+    ],
+    "profiles": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "properties": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "devices": [
+      {
+        "column": "property_id",
+        "references": "properties.id"
+      },
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "contacts": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "quotes": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "client_org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "created_by",
+        "references": "profiles.id"
+      }
+    ],
+    "quote_line_items": [
+      {
+        "column": "quote_id",
+        "references": "quotes.id"
+      }
+    ],
+    "work_orders": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "client_org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "property_id",
+        "references": "properties.id"
+      },
+      {
+        "column": "device_id",
+        "references": "devices.id"
+      },
+      {
+        "column": "created_by",
+        "references": "profiles.id"
+      },
+      {
+        "column": "assigned_to",
+        "references": "profiles.id"
+      }
+    ],
+    "invoices": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "client_org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "created_by",
+        "references": "profiles.id"
+      }
+    ],
+    "leads": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "assigned_to",
+        "references": "profiles.id"
+      },
+      {
+        "column": "partner_org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "activity_log": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "actor_id",
+        "references": "profiles.id"
+      }
+    ],
+    "companies": [
+      {
+        "column": "dealer_org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "contact_properties": [
+      {
+        "column": "contact_id",
+        "references": "contacts.id"
+      },
+      {
+        "column": "property_id",
+        "references": "properties.id"
+      }
+    ],
+    "company_properties": [
+      {
+        "column": "company_id",
+        "references": "companies.id"
+      },
+      {
+        "column": "property_id",
+        "references": "properties.id"
+      }
+    ],
+    "opportunities": [
+      {
+        "column": "dealer_org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "lead_id",
+        "references": "leads.id"
+      },
+      {
+        "column": "contact_id",
+        "references": "contacts.id"
+      },
+      {
+        "column": "company_id",
+        "references": "companies.id"
+      },
+      {
+        "column": "property_id",
+        "references": "properties.id"
+      },
+      {
+        "column": "rep_id",
+        "references": "profiles.id"
+      },
+      {
+        "column": "quote_id",
+        "references": "quotes.id"
+      }
+    ],
+    "customers": [
+      {
+        "column": "dealer_org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "opportunity_id",
+        "references": "opportunities.id"
+      },
+      {
+        "column": "company_id",
+        "references": "companies.id"
+      },
+      {
+        "column": "property_id",
+        "references": "properties.id"
+      },
+      {
+        "column": "primary_contact_id",
+        "references": "contacts.id"
+      }
+    ],
+    "activities": [
+      {
+        "column": "dealer_org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "created_by",
+        "references": "profiles.id"
+      },
+      {
+        "column": "lead_id",
+        "references": "leads.id"
+      },
+      {
+        "column": "opportunity_id",
+        "references": "opportunities.id"
+      },
+      {
+        "column": "contact_id",
+        "references": "contacts.id"
+      },
+      {
+        "column": "company_id",
+        "references": "companies.id"
+      },
+      {
+        "column": "customer_id",
+        "references": "customers.id"
+      }
+    ],
+    "attachments": [
+      {
+        "column": "dealer_org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "uploaded_by",
+        "references": "profiles.id"
+      },
+      {
+        "column": "opportunity_id",
+        "references": "opportunities.id"
+      },
+      {
+        "column": "lead_id",
+        "references": "leads.id"
+      },
+      {
+        "column": "quote_id",
+        "references": "quotes.id"
+      },
+      {
+        "column": "activity_id",
+        "references": "activities.id"
+      },
+      {
+        "column": "customer_id",
+        "references": "customers.id"
+      }
+    ],
+    "residents": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "sync_log": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "device_suggestions": [
+      {
+        "column": "product_id",
+        "references": "products.id"
+      }
+    ],
+    "opportunity_stage_history": [
+      {
+        "column": "opportunity_id",
+        "references": "opportunities.id"
+      }
+    ],
+    "opportunity_contacts": [
+      {
+        "column": "opportunity_id",
+        "references": "opportunities.id"
+      }
+    ],
+    "crm_activities": [
+      {
+        "column": "opportunity_id",
+        "references": "opportunities.id"
+      }
+    ],
+    "show_lead_assignments": [
+      {
+        "column": "show_lead_id",
+        "references": "show_leads.id"
+      },
+      {
+        "column": "converted_opp_id",
+        "references": "opportunities.id"
+      }
+    ],
+    "eos_vto": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "eos_rocks": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "eos_scorecard": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "eos_scorecard_entries": [
+      {
+        "column": "scorecard_id",
+        "references": "eos_scorecard.id"
+      }
+    ],
+    "eos_issues": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "eos_todos": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "technicians": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "sites": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "master_dealer_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "install_dealer_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "service_dealer_id",
+        "references": "organizations.id"
+      }
+    ],
+    "site_assets": [
+      {
+        "column": "site_id",
+        "references": "sites.id"
+      },
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "product_id",
+        "references": "products.id"
+      },
+      {
+        "column": "work_order_id",
+        "references": "work_orders.id"
+      }
+    ],
+    "site_asset_terminals": [
+      {
+        "column": "site_asset_id",
+        "references": "site_assets.id"
+      },
+      {
+        "column": "connected_to_asset_id",
+        "references": "site_assets.id"
+      }
+    ],
+    "site_events": [
+      {
+        "column": "site_id",
+        "references": "sites.id"
+      },
+      {
+        "column": "asset_id",
+        "references": "site_assets.id"
+      }
+    ],
+    "wo_checklist_items": [
+      {
+        "column": "work_order_id",
+        "references": "work_orders.id"
+      }
+    ],
+    "wo_comments": [
+      {
+        "column": "work_order_id",
+        "references": "work_orders.id"
+      }
+    ],
+    "parts_inventory": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "wo_parts_used": [
+      {
+        "column": "work_order_id",
+        "references": "work_orders.id"
+      },
+      {
+        "column": "part_id",
+        "references": "parts_inventory.id"
+      }
+    ],
+    "wo_requests": [
+      {
+        "column": "site_id",
+        "references": "sites.id"
+      },
+      {
+        "column": "converted_wo_id",
+        "references": "work_orders.id"
+      }
+    ],
+    "wo_notification_log": [
+      {
+        "column": "work_order_id",
+        "references": "work_orders.id"
+      }
+    ],
+    "pm_schedules": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "site_id",
+        "references": "sites.id"
+      }
+    ],
+    "commission_config": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "dealer_add_ons": [
+      {
+        "column": "site_id",
+        "references": "sites.id"
+      },
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "sales_reps": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "parent_rep_id",
+        "references": "sales_reps.id"
+      }
+    ],
+    "rep_commissions": [
+      {
+        "column": "rep_id",
+        "references": "sales_reps.id"
+      },
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "permits": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "site_id",
+        "references": "sites.id"
+      }
+    ],
+    "crm_inbound_emails": [
+      {
+        "column": "matched_opp_id",
+        "references": "opportunities.id"
+      },
+      {
+        "column": "activity_id",
+        "references": "crm_activities.id"
+      }
+    ],
+    "training_progress": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "dealer_scorecards": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "todos": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "todo_attachments": [
+      {
+        "column": "todo_id",
+        "references": "todos.id"
+      }
+    ],
+    "document_signatures": [
+      {
+        "column": "opportunity_id",
+        "references": "opportunities.id"
+      }
+    ],
+    "campaign_sends": [
+      {
+        "column": "show_lead_id",
+        "references": "show_leads.id"
+      }
+    ],
+    "field_tickets": [
+      {
+        "column": "work_order_id",
+        "references": "work_orders.id"
+      },
+      {
+        "column": "site_id",
+        "references": "sites.id"
+      },
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "work_order_time_entries": [
+      {
+        "column": "work_order_id",
+        "references": "work_orders.id"
+      },
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "inventory_items": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "product_id",
+        "references": "products.id"
+      }
+    ],
+    "work_order_parts": [
+      {
+        "column": "work_order_id",
+        "references": "work_orders.id"
+      },
+      {
+        "column": "inventory_item_id",
+        "references": "inventory_items.id"
+      },
+      {
+        "column": "site_asset_id",
+        "references": "site_assets.id"
+      }
+    ],
+    "purchase_orders": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "purchase_order_items": [
+      {
+        "column": "po_id",
+        "references": "purchase_orders.id"
+      },
+      {
+        "column": "inventory_item_id",
+        "references": "inventory_items.id"
+      }
+    ],
+    "work_order_crew": [
+      {
+        "column": "work_order_id",
+        "references": "work_orders.id"
+      },
+      {
+        "column": "technician_id",
+        "references": "technicians.id"
+      }
+    ],
+    "work_order_phases": [
+      {
+        "column": "work_order_id",
+        "references": "work_orders.id"
+      }
+    ],
+    "surveys": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "site_id",
+        "references": "sites.id"
+      },
+      {
+        "column": "opportunity_id",
+        "references": "opportunities.id"
+      }
+    ],
+    "wo_installed_equipment": [
+      {
+        "column": "work_order_id",
+        "references": "work_orders.id"
+      }
+    ],
+    "wo_call_logs": [
+      {
+        "column": "work_order_id",
+        "references": "work_orders.id"
+      }
+    ],
+    "org_contacts": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "org_attachments": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "invoice_line_items": [
+      {
+        "column": "invoice_id",
+        "references": "invoices.id"
+      }
+    ],
+    "commission_payouts": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "invoice_id",
+        "references": "invoices.id"
+      }
+    ],
+    "user_settings": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "gcal_events": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "trinity_calls": [
+      {
+        "column": "lead_id",
+        "references": "leads.id"
+      },
+      {
+        "column": "opportunity_id",
+        "references": "opportunities.id"
+      },
+      {
+        "column": "dealer_org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "aria_searches": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "dealer_service_enrollments": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "service_id",
+        "references": "service_catalog.id"
+      }
+    ],
+    "site_service_subscriptions": [
+      {
+        "column": "site_id",
+        "references": "sites.id"
+      },
+      {
+        "column": "service_id",
+        "references": "service_catalog.id"
+      },
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "mdu_provider_detections": [
+      {
+        "column": "provider_id",
+        "references": "mdu_providers.id"
+      },
+      {
+        "column": "opportunity_id",
+        "references": "opportunities.id"
+      },
+      {
+        "column": "site_id",
+        "references": "sites.id"
+      }
+    ],
+    "floor_plan_devices": [
+      {
+        "column": "floor_plan_id",
+        "references": "floor_plans.id"
+      }
+    ],
+    "floor_plan_connections": [
+      {
+        "column": "floor_plan_id",
+        "references": "floor_plans.id"
+      },
+      {
+        "column": "from_device_id",
+        "references": "floor_plan_devices.id"
+      },
+      {
+        "column": "to_device_id",
+        "references": "floor_plan_devices.id"
+      }
+    ],
+    "floor_plan_annotations": [
+      {
+        "column": "floor_plan_id",
+        "references": "floor_plans.id"
+      }
+    ],
+    "aria_contract_findings": [
+      {
+        "column": "found_by_search_id",
+        "references": "aria_searches.id"
+      }
+    ],
+    "job_costs": [
+      {
+        "column": "work_order_id",
+        "references": "work_orders.id"
+      },
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "rma_records": [
+      {
+        "column": "site_asset_id",
+        "references": "site_assets.id"
+      },
+      {
+        "column": "work_order_id",
+        "references": "work_orders.id"
+      },
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "replacement_asset_id",
+        "references": "site_assets.id"
+      }
+    ],
+    "tech_location_pings": [
+      {
+        "column": "technician_id",
+        "references": "technicians.id"
+      },
+      {
+        "column": "work_order_id",
+        "references": "work_orders.id"
+      },
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "coi_records": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "work_order_reviews": [
+      {
+        "column": "work_order_id",
+        "references": "work_orders.id"
+      },
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "technician_id",
+        "references": "technicians.id"
+      }
+    ],
+    "incidents": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "site_id",
+        "references": "sites.id"
+      }
+    ],
+    "org_documents": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      },
+      {
+        "column": "site_id",
+        "references": "sites.id"
+      }
+    ],
+    "work_order_photos": [
+      {
+        "column": "work_order_id",
+        "references": "work_orders.id"
+      },
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "tech_achievements": [
+      {
+        "column": "technician_id",
+        "references": "technicians.id"
+      }
+    ],
+    "dealer_tier_points": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "quest_progress": [
+      {
+        "column": "quest_id",
+        "references": "quests.id"
+      },
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "nexus_wins": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "subcontractors": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "work_order_subcontractors": [
+      {
+        "column": "work_order_id",
+        "references": "work_orders.id"
+      },
+      {
+        "column": "subcontractor_id",
+        "references": "subcontractors.id"
+      }
+    ],
+    "aria_properties": [
+      {
+        "column": "crm_opportunity_id",
+        "references": "opportunities.id"
+      },
+      {
+        "column": "crm_lead_id",
+        "references": "show_leads.id"
+      }
+    ],
+    "tracker_dependencies": [
+      {
+        "column": "from_item_id",
+        "references": "tracker_items.id"
+      },
+      {
+        "column": "to_item_id",
+        "references": "tracker_items.id"
+      },
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "tracker_automations": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "tracker_activity": [
+      {
+        "column": "item_id",
+        "references": "tracker_items.id"
+      },
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ],
+    "tracker_dashboards": [
+      {
+        "column": "org_id",
+        "references": "organizations.id"
+      }
+    ]
+  }
+}

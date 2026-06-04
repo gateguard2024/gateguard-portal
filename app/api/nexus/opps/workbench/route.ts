@@ -31,6 +31,23 @@ async function safe<T>(
   }
 }
 
+// Resolve the internal profiles.id (UUID) from a Clerk user ID.
+// leads.assigned_to → profiles.id — NOT the Clerk user ID directly.
+async function resolveProfileId(clerkUserId: string): Promise<string | null> {
+  if (!clerkUserId || clerkUserId === 'system') return null
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('clerk_user_id', clerkUserId)
+      .single()
+    if (error || !data) return null
+    return (data as { id: string }).id
+  } catch {
+    return null
+  }
+}
+
 export async function GET(req: NextRequest) {
   // ── Auth + CRM access gate ──────────────────────────────────────────────────
   // canViewCRM: corporate | master_dealer | full_dealer | sales_partner | service_dealer
@@ -44,14 +61,17 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  // ── Resolve org scope once ──────────────────────────────────────────────────
+  // ── Resolve org scope + current user's profile ID in parallel ───────────────
   // corporate       → scope.all = true  (no filter, sees everything)
   // master_agent    → subtree via get_org_subtree RPC
   // master_dealer   → subtree via get_org_subtree RPC
   // full_dealer     → self + descendants
   // service_dealer  → self only  (ids = [user.org_id])
   // sales_partner   → self only  (ids = [user.org_id])
-  const scope = await resolveOrgScope(user)
+  const [scope, profileId] = await Promise.all([
+    resolveOrgScope(user),
+    resolveProfileId(user.id),  // profiles.id UUID — used for leads.assigned_to
+  ])
 
   const { searchParams } = new URL(req.url)
   const q = clean(searchParams.get('q'))
@@ -90,6 +110,23 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Default workbench load ───────────────────────────────────────────────────
+
+  // My Leads: assigned to current user, scoped to their org
+  // applyOrgScope first (security), then narrow by assigned_to
+  let myLeadsQ = supabase
+    .from('leads')
+    .select('id, contact_name, company_name, stage, source, notes, created_at, updated_at, email, phone, location, opportunity_id')
+  myLeadsQ = applyOrgScope(myLeadsQ, scope)
+  const myLeads = profileId
+    ? await safe(
+        myLeadsQ
+          .eq('assigned_to', profileId)
+          .is('lost_at', null)
+          .order('updated_at', { ascending: false })
+          .limit(20),
+        []
+      )
+    : []
 
   let openLeadsQ = supabase
     .from('leads')
@@ -130,11 +167,13 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     success: true,
     stats: {
+      myLeads:           (myLeads           as unknown[]).length,
       openLeads:         (openLeads         as unknown[]).length,
       needsAttention:    (needsAttention    as unknown[]).length,
       openOpportunities: (openOpportunities as unknown[]).length,
       proposalFollowUps: (proposalFollowUps as unknown[]).length,
     },
+    myLeads,
     openLeads,
     needsAttention,
     openOpportunities,

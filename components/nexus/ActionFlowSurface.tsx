@@ -51,10 +51,11 @@ type WorkbenchRecord = {
   created_at?: string | null
 }
 
-type WorkbenchFocus = 'openLeads' | 'needsAttention' | 'openOpportunities' | 'proposalFollowUps' | 'search'
+type WorkbenchFocus = 'myLeads' | 'openLeads' | 'needsAttention' | 'openOpportunities' | 'proposalFollowUps' | 'search'
 
 type WorkbenchData = {
   stats?: Record<string, number>
+  myLeads?: WorkbenchRecord[]
   openLeads?: WorkbenchRecord[]
   needsAttention?: WorkbenchRecord[]
   openOpportunities?: WorkbenchRecord[]
@@ -77,7 +78,7 @@ const STEPS: Record<Exclude<StepId, 'call-name' | 'call-property' | 'call-need' 
     subtitle: 'Create something new or work what is already open.',
     cards: [
       { title: 'Someone Called', subtitle: 'Capture a phone lead step by step.', hex: '#34d399', action: { kind: 'next', stepId: 'call-name' } },
-      { title: 'Work Existing Leads', subtitle: 'Open leads, opportunities, follow-ups, and search.', hex: '#6B7EFF', action: { kind: 'workbench', focus: 'openLeads' } },
+      { title: 'Work Existing Leads', subtitle: 'Open leads, opportunities, follow-ups, and search.', hex: '#6B7EFF', action: { kind: 'workbench', focus: 'myLeads' } },
       { title: 'Create Opportunity', subtitle: 'There is a real deal to work.', hex: '#fbbf24', action: { kind: 'next', stepId: 'opportunity' } },
     ],
   },
@@ -104,6 +105,7 @@ const STEPS: Record<Exclude<StepId, 'call-name' | 'call-property' | 'call-need' 
 }
 
 const WORKBENCH_LABELS: Record<WorkbenchFocus, string> = {
+  myLeads: 'My Leads',
   openLeads: 'Open Leads',
   needsAttention: 'Needs Attention Today',
   openOpportunities: 'Open Opportunities',
@@ -373,6 +375,12 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
     ? [...(workbench?.leads ?? []), ...(workbench?.opportunities ?? [])]
     : workbench?.[workbenchFocus] ?? []
 
+  const focusedEmptyText = workbenchFocus === 'myLeads'
+    ? 'No leads assigned to you yet.'
+    : workbenchFocus === 'needsAttention'
+    ? 'All leads have been touched recently.'
+    : 'Nothing found here yet.'
+
   return (
     <section className="mt-9 w-full max-w-4xl">
       <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.022))', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 24px 80px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.06)', backdropFilter: 'blur(24px)' }}>
@@ -407,8 +415,8 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
 
             {stepId === 'workbench' && (
               <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
-                  {(['openLeads', 'needsAttention', 'openOpportunities', 'proposalFollowUps', 'search'] as WorkbenchFocus[]).map(focus => (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
+                  {(['myLeads', 'openLeads', 'needsAttention', 'openOpportunities', 'proposalFollowUps', 'search'] as WorkbenchFocus[]).map(focus => (
                     <button key={focus} type="button" onClick={() => void openWorkbench(focus)} className="rounded-2xl p-3 text-left text-xs transition-all" style={{ background: workbenchFocus === focus ? 'rgba(107,126,255,0.16)' : 'rgba(255,255,255,0.035)', border: workbenchFocus === focus ? '1px solid rgba(107,126,255,0.32)' : '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.78)' }}>
                       <div className="font-semibold">{WORKBENCH_LABELS[focus]}</div>
                       {focus !== 'search' && <div className="mt-1 opacity-50">{workbench?.stats?.[focus] ?? 0} items</div>}
@@ -425,7 +433,7 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
 
                 <RecordList
                   records={focusedRecords}
-                  emptyText="Nothing found here yet."
+                  emptyText={focusedEmptyText}
                   onLeadClick={openLead}
                   leadWindowBusy={leadWindowBusy}
                   loadingLeadId={loadingLeadId}
