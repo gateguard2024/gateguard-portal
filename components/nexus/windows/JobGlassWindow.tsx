@@ -1,6 +1,9 @@
 'use client'
 
+import { useState } from 'react'
+
 type AnyRecord = Record<string, any>
+type JobAction = 'add_note' | 'create_task' | 'schedule_visit' | 'mark_complete'
 
 type JobGlassData = {
   job?: AnyRecord | null
@@ -84,7 +87,34 @@ function priorityColor(priority: string): string {
   return '#6B7EFF'
 }
 
-export function JobGlassWindow({ data, onBack }: { data: JobGlassData; onBack: () => void }) {
+function ActionButton({ title, subtitle, active, disabled, onClick }: { title: string; subtitle: string; active?: boolean; disabled?: boolean; onClick?: () => void }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="w-full rounded-2xl p-3 text-left transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-55"
+      style={{
+        background: active ? 'rgba(52,211,153,0.14)' : 'rgba(52,211,153,0.07)',
+        border: active ? '1px solid rgba(52,211,153,0.32)' : '1px solid rgba(52,211,153,0.16)',
+        color: 'rgba(255,255,255,0.86)',
+      }}
+    >
+      <div className="text-xs font-semibold">{title}</div>
+      <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.42)' }}>{subtitle}</div>
+    </button>
+  )
+}
+
+export function JobGlassWindow({
+  data,
+  onBack,
+  onRefresh,
+}: {
+  data: JobGlassData
+  onBack: () => void
+  onRefresh?: () => Promise<void> | void
+}) {
   const job = data.job ?? {}
   const site = data.site
   const customer = data.customer
@@ -95,10 +125,58 @@ export function JobGlassWindow({ data, onBack }: { data: JobGlassData; onBack: (
   const parts = data.parts ?? []
   const files = data.files ?? []
   const subWorkOrders = data.subWorkOrders ?? []
-  const nextBestActions = data.nextBestActions ?? []
   const allTasks = [...tasks, ...checklist]
   const status = val(job.status, 'open')
   const priority = val(job.priority, 'normal')
+
+  const [activeAction, setActiveAction] = useState<JobAction | null>(null)
+  const [actionBusy, setActionBusy] = useState(false)
+  const [actionMessage, setActionMessage] = useState<string | null>(null)
+  const [noteText, setNoteText] = useState('')
+  const [taskTitle, setTaskTitle] = useState('')
+  const [taskDueDate, setTaskDueDate] = useState('')
+  const [taskNotes, setTaskNotes] = useState('')
+  const [taskPriority, setTaskPriority] = useState('normal')
+  const [visitDate, setVisitDate] = useState('')
+  const [visitNote, setVisitNote] = useState('')
+  const [completeNote, setCompleteNote] = useState('')
+
+  async function submitJobAction(payload: Record<string, unknown>) {
+    const jobId = job.id
+    if (!jobId) {
+      setActionMessage('Job is missing an ID.')
+      return
+    }
+
+    setActionBusy(true)
+    setActionMessage(null)
+
+    try {
+      const res = await fetch(`/api/nexus/jobs/job-window/${jobId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const result = await res.json().catch(() => ({}))
+      if (!res.ok || result.success === false) throw new Error(result?.message ?? 'Nexus could not complete that action.')
+
+      setActionMessage(result?.message ?? 'Done.')
+      setActiveAction(null)
+      setNoteText('')
+      setTaskTitle('')
+      setTaskDueDate('')
+      setTaskNotes('')
+      setTaskPriority('normal')
+      setVisitDate('')
+      setVisitNote('')
+      setCompleteNote('')
+      await onRefresh?.()
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : 'That did not work. Try again.')
+    } finally {
+      setActionBusy(false)
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -178,13 +256,63 @@ export function JobGlassWindow({ data, onBack }: { data: JobGlassData; onBack: (
         <div className="space-y-4">
           <Section title="Next Best Actions">
             <div className="space-y-2">
-              {nextBestActions.map(action => (
-                <button key={action.action} type="button" disabled title="Coming next" className="w-full rounded-2xl p-3 text-left opacity-60" style={{ background: 'rgba(52,211,153,0.07)', border: '1px solid rgba(52,211,153,0.16)', color: 'rgba(255,255,255,0.86)' }}>
-                  <div className="text-xs font-semibold">{action.title}</div>
-                  <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.42)' }}>{action.subtitle}</div>
-                </button>
-              ))}
-              <p className="mt-1 text-center text-[10px]" style={{ color: 'rgba(255,255,255,0.28)' }}>Actions coming in Stage 2</p>
+              <ActionButton title="Add Note" subtitle="Capture what happened or what is next." active={activeAction === 'add_note'} onClick={() => { setActiveAction(activeAction === 'add_note' ? null : 'add_note'); setActionMessage(null) }} />
+              <ActionButton title="Create Task" subtitle="Add something that needs to get done." active={activeAction === 'create_task'} onClick={() => { setActiveAction(activeAction === 'create_task' ? null : 'create_task'); setActionMessage(null) }} />
+              <ActionButton title="Schedule Visit" subtitle="Put the next site visit on the calendar." active={activeAction === 'schedule_visit'} onClick={() => { setActiveAction(activeAction === 'schedule_visit' ? null : 'schedule_visit'); setActionMessage(null) }} />
+              <ActionButton title="Mark Complete" subtitle="Close this job when work is done." active={activeAction === 'mark_complete'} onClick={() => { setActiveAction(activeAction === 'mark_complete' ? null : 'mark_complete'); setActionMessage(null) }} />
+              <ActionButton title="Assign Team" subtitle="Coming in a future stage." disabled />
+              <ActionButton title="Upload File" subtitle="Coming in a future stage." disabled />
+
+              {activeAction === 'add_note' && (
+                <div className="space-y-2 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(52,211,153,0.22)' }}>
+                  <textarea value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="What should Nexus remember about this job?" rows={3} className="w-full resize-none rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(52,211,153,0.2)', color: 'rgba(255,255,255,0.88)' }} />
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setActiveAction(null)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.045)', color: 'rgba(255,255,255,0.5)' }}>Cancel</button>
+                    <button type="button" disabled={actionBusy || !noteText.trim()} onClick={() => submitJobAction({ action: 'add_note', note: noteText })} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: '#34d399', color: '#06120c' }}>{actionBusy ? 'Saving...' : 'Save Note'}</button>
+                  </div>
+                </div>
+              )}
+
+              {activeAction === 'create_task' && (
+                <div className="space-y-2 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(52,211,153,0.22)' }}>
+                  <input value={taskTitle} onChange={e => setTaskTitle(e.target.value)} placeholder="What needs to get done?" className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(52,211,153,0.2)', color: 'rgba(255,255,255,0.88)' }} />
+                  <input type="date" value={taskDueDate} onChange={e => setTaskDueDate(e.target.value)} className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.88)' }} />
+                  <select value={taskPriority} onChange={e => setTaskPriority(e.target.value)} className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.88)' }}>
+                    <option value="normal">Normal</option>
+                    <option value="high">High</option>
+                    <option value="low">Low</option>
+                  </select>
+                  <textarea value={taskNotes} onChange={e => setTaskNotes(e.target.value)} placeholder="Anything to remember?" rows={2} className="w-full resize-none rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.88)' }} />
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setActiveAction(null)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.045)', color: 'rgba(255,255,255,0.5)' }}>Cancel</button>
+                    <button type="button" disabled={actionBusy || !taskTitle.trim()} onClick={() => submitJobAction({ action: 'create_task', title: taskTitle, due_date: taskDueDate, notes: taskNotes, priority: taskPriority })} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: '#34d399', color: '#06120c' }}>{actionBusy ? 'Creating...' : 'Create Task'}</button>
+                  </div>
+                </div>
+              )}
+
+              {activeAction === 'schedule_visit' && (
+                <div className="space-y-2 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(52,211,153,0.22)' }}>
+                  <input type="date" value={visitDate} onChange={e => setVisitDate(e.target.value)} className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(52,211,153,0.2)', color: 'rgba(255,255,255,0.88)' }} />
+                  <textarea value={visitNote} onChange={e => setVisitNote(e.target.value)} placeholder="Anything the team should know?" rows={2} className="w-full resize-none rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.88)' }} />
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setActiveAction(null)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.045)', color: 'rgba(255,255,255,0.5)' }}>Cancel</button>
+                    <button type="button" disabled={actionBusy || !visitDate} onClick={() => submitJobAction({ action: 'schedule_visit', scheduled_date: visitDate, note: visitNote })} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: '#34d399', color: '#06120c' }}>{actionBusy ? 'Scheduling...' : 'Schedule Visit'}</button>
+                  </div>
+                </div>
+              )}
+
+              {activeAction === 'mark_complete' && (
+                <div className="space-y-2 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(52,211,153,0.22)' }}>
+                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.66)' }}>This will mark the job complete.</p>
+                  <textarea value={completeNote} onChange={e => setCompleteNote(e.target.value)} placeholder="Anything to note before closing this job?" rows={2} className="w-full resize-none rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.88)' }} />
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setActiveAction(null)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.045)', color: 'rgba(255,255,255,0.5)' }}>Cancel</button>
+                    <button type="button" disabled={actionBusy} onClick={() => submitJobAction({ action: 'mark_complete', note: completeNote })} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: '#34d399', color: '#06120c' }}>{actionBusy ? 'Closing...' : 'Mark Complete'}</button>
+                  </div>
+                </div>
+              )}
+
+              {actionMessage && <div className="rounded-2xl px-3 py-2 text-[11px]" style={{ background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.18)', color: 'rgba(255,255,255,0.72)' }}>{actionMessage}</div>}
             </div>
           </Section>
 
