@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarDays, Clock, RefreshCw, Plus, Search } from "lucide-react";
+import { Calendar, Clock, RefreshCw, Plus, Search } from "lucide-react";
 
 type MyDayEvent = {
   id: string;
@@ -82,7 +82,7 @@ export function MyDayTopBarActions() {
           color: "#e5e7eb",
         }}
       >
-        <CalendarDays size={13} style={{ color: "#93c5fd" }} />
+        <Calendar size={13} style={{ color: "#93c5fd" }} />
         <span className="font-bold">My Day</span>
         <span style={{ color: "#a8a29e" }}>{loading ? "…" : `${todayTotal} today`}</span>
         <span style={{ color: "#57534e" }}>·</span>
