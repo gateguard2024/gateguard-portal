@@ -19,6 +19,12 @@ type InboundLeadPayload = {
   forceCreate?: boolean
 }
 
+type PermissionRow = Record<string, unknown> & {
+  email?: string | null
+  profile_id?: string | null
+  user_id?: string | null
+}
+
 function clean(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -40,16 +46,70 @@ function sourceLabel(source: string): string {
   return 'Phone Call'
 }
 
-async function getProfileId(clerkUserId: string): Promise<string | null> {
+/**
+ * Resolve the internal portal user UUID used by leads.assigned_to.
+ *
+ * Source of truth:
+ * - Clerk gives us user.id and email.
+ * - profiles.id is the internal UUID that leads.assigned_to stores.
+ * - Some live data has clerk_user_id on user_permissions instead of profiles.
+ *
+ * Stable path:
+ * 1. Try profiles.clerk_user_id.
+ * 2. Try user_permissions.clerk_user_id for a direct profile_id/user_id if present.
+ * 3. Use user_permissions.email or Clerk email to find profiles.email.
+ */
+async function resolveProfileId(clerkUserId: string, email?: string): Promise<string | null> {
   if (!clerkUserId || clerkUserId === 'system') return null
 
-  const { data } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('clerk_user_id', clerkUserId)
-    .maybeSingle()
+  try {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('clerk_user_id', clerkUserId)
+      .maybeSingle()
 
-  return (data as { id: string } | null)?.id ?? null
+    const profileId = (data as { id: string } | null)?.id
+    if (profileId) return profileId
+  } catch {
+    // Some live schemas/data do not have profiles.clerk_user_id filled.
+  }
+
+  let permissionEmail = clean(email)
+
+  try {
+    const { data } = await supabase
+      .from('user_permissions')
+      .select('*')
+      .eq('clerk_user_id', clerkUserId)
+      .maybeSingle()
+
+    const permission = data as PermissionRow | null
+
+    const directProfileId = clean(permission?.profile_id ?? permission?.user_id)
+    if (directProfileId) return directProfileId
+
+    permissionEmail = clean(permission?.email) || permissionEmail
+  } catch {
+    // Fall through to email lookup.
+  }
+
+  if (permissionEmail) {
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id')
+        .ilike('email', permissionEmail)
+        .maybeSingle()
+
+      const profileId = (data as { id: string } | null)?.id
+      if (profileId) return profileId
+    } catch {
+      return null
+    }
+  }
+
+  return null
 }
 
 export async function POST(req: NextRequest) {
@@ -63,7 +123,7 @@ export async function POST(req: NextRequest) {
     const source = normalizeSource(clean(body.source))
     const forceCreate = body.forceCreate === true
     const orgId = user.org_id || GATEGUARD_ORG_ID
-    const profileId = await getProfileId(user.id)
+    const profileId = await resolveProfileId(user.id, user.email)
 
     if (!contactName) {
       return NextResponse.json({ success: false, message: 'Contact name is required.' }, { status: 400 })
@@ -73,6 +133,7 @@ export async function POST(req: NextRequest) {
       const nameTerm = escapeLike(contactName)
       const companyTerm = escapeLike(propertyName)
       const orFilters = [`contact_name.ilike.%${nameTerm}%`]
+
       if (companyTerm) {
         orFilters.push(`company_name.ilike.%${companyTerm}%`)
         orFilters.push(`location.ilike.%${companyTerm}%`)
