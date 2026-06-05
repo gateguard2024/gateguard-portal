@@ -7,7 +7,16 @@ import { OpportunityGlassWindow } from '@/components/nexus/windows/OpportunityGl
 
 export type NexusTabId = 'my-day' | 'recent' | 'opps' | 'jobs' | 'field' | 'people'
 
-type StepId = 'start' | 'research' | 'opportunity' | 'call-name' | 'call-property' | 'call-need' | 'call-review' | 'workbench'
+type StepId =
+  | 'start'
+  | 'research'
+  | 'opportunity'
+  | 'call-source'
+  | 'call-name'
+  | 'call-property'
+  | 'call-need'
+  | 'call-review'
+  | 'workbench'
 
 type FlowAction =
   | { kind: 'next'; stepId: StepId }
@@ -28,8 +37,10 @@ type NextCard = {
   action: string
 }
 
+type LeadSource = 'phone' | 'walk_in' | 'outbound' | 'website'
+
 type InboundLeadDraft = {
-  source: 'phone' | 'website' | 'unknown'
+  source: LeadSource
   contactName: string
   propertyName: string
   need: string
@@ -66,19 +77,19 @@ type WorkbenchData = {
 }
 
 const EMPTY_DRAFT: InboundLeadDraft = {
-  source: 'unknown',
+  source: 'phone',
   contactName: '',
   propertyName: '',
   need: '',
 }
 
-const STEPS: Record<Exclude<StepId, 'call-name' | 'call-property' | 'call-need' | 'call-review' | 'workbench'>, { eyebrow: string; title: string; subtitle: string; cards: FlowCard[] }> = {
+const STEPS: Record<Exclude<StepId, 'call-source' | 'call-name' | 'call-property' | 'call-need' | 'call-review' | 'workbench'>, { eyebrow: string; title: string; subtitle: string; cards: FlowCard[] }> = {
   start: {
-    eyebrow: 'Revenue flow',
-    title: 'What are we doing with revenue today?',
+    eyebrow: 'Growth Workflow',
+    title: 'What growth work are we doing today?',
     subtitle: 'Create something new or work what is already open.',
     cards: [
-      { title: 'Someone Called', subtitle: 'Capture a phone lead step by step.', hex: '#34d399', action: { kind: 'next', stepId: 'call-name' } },
+      { title: 'Capture Lead', subtitle: 'Phone call, walk-in, outbound, website, or other source.', hex: '#34d399', action: { kind: 'next', stepId: 'call-source' } },
       { title: 'Work Existing Leads', subtitle: 'Open leads, opportunities, follow-ups, and search.', hex: '#6B7EFF', action: { kind: 'workbench', focus: 'myLeads' } },
       { title: 'Create Opportunity', subtitle: 'There is a real deal to work.', hex: '#fbbf24', action: { kind: 'next', stepId: 'opportunity' } },
     ],
@@ -90,7 +101,7 @@ const STEPS: Record<Exclude<StepId, 'call-name' | 'call-property' | 'call-need' 
     cards: [
       { title: 'Run ARIA', subtitle: 'Research a property or management company.', hex: '#a855f7', action: { kind: 'route', href: '/aria' } },
       { title: 'Pitch Brief', subtitle: 'Generate simple outreach notes.', hex: '#6B7EFF', action: { kind: 'assistant', prompt: 'Generate a pitch brief for the last ARIA search', scope: 'opps_leads' } },
-      { title: 'Back', subtitle: 'Return to revenue choices.', hex: '#34d399', action: { kind: 'next', stepId: 'start' } },
+      { title: 'Back', subtitle: 'Return to growth choices.', hex: '#34d399', action: { kind: 'next', stepId: 'start' } },
     ],
   },
   opportunity: {
@@ -149,7 +160,7 @@ async function createInboundLead(
   const res = await fetch('/api/nexus/flows/inbound-lead', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...draft, source: 'phone' }),
+    body: JSON.stringify(draft),
   })
 
   const data = await res.json().catch(() => ({}))
@@ -217,6 +228,52 @@ function CaptureStep({ label, help, value, onChange, onNext, onBack }: { label: 
         <button type="button" onClick={onBack} className="rounded-full px-4 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.52)' }}>Back</button>
         <button type="button" disabled={!value.trim()} onClick={onNext} className="rounded-full px-4 py-2 text-xs disabled:opacity-40" style={{ background: '#6B7EFF', color: 'white' }}>Next</button>
       </div>
+    </div>
+  )
+}
+
+function sourceLabel(source: LeadSource): string {
+  if (source === 'walk_in') return 'Walk-In'
+  if (source === 'outbound') return 'Outbound Cold Call'
+  if (source === 'website') return 'Website / Other'
+  return 'Phone Call'
+}
+
+function SourceStep({
+  onChoose,
+  onBack,
+}: {
+  onChoose: (source: LeadSource) => void
+  onBack: () => void
+}) {
+  const options: Array<{ source: LeadSource; title: string; subtitle: string; hex: string }> = [
+    { source: 'phone', title: 'Phone Call', subtitle: 'Someone called in and needs help.', hex: '#34d399' },
+    { source: 'walk_in', title: 'Walk-In', subtitle: 'Someone came in or asked in person.', hex: '#fbbf24' },
+    { source: 'outbound', title: 'Outbound Cold Call', subtitle: 'You found or called a new lead.', hex: '#6B7EFF' },
+    { source: 'website', title: 'Website / Other', subtitle: 'Website, referral, email, or another source.', hex: '#a855f7' },
+  ]
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {options.map(option => {
+          const color = rgb(option.hex)
+          return (
+            <button
+              key={option.source}
+              type="button"
+              onClick={() => onChoose(option.source)}
+              className="group relative min-h-[112px] rounded-3xl p-4 text-left transition-all duration-200 hover:-translate-y-0.5"
+              style={{ background: `linear-gradient(145deg, rgba(${color},0.14), rgba(255,255,255,0.035))`, border: `1px solid rgba(${color},0.24)`, boxShadow: '0 18px 50px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.06)' }}
+            >
+              <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>{option.title}</div>
+              <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.42)' }}>{option.subtitle}</div>
+              <div className="absolute bottom-4 right-4 text-xs opacity-45 transition-opacity group-hover:opacity-90" style={{ color: option.hex }}>Choose</div>
+            </button>
+          )
+        })}
+      </div>
+      <button type="button" onClick={onBack} className="rounded-full px-4 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.52)' }}>Back</button>
     </div>
   )
 }
@@ -306,7 +363,7 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
   const [opportunityWindowBusy, setOpportunityWindowBusy] = useState(false)
   const [loadingOpportunityId, setLoadingOpportunityId] = useState<string | null>(null)
 
-  const simpleStep = stepId === 'call-name' || stepId === 'call-property' || stepId === 'call-need' || stepId === 'call-review' || stepId === 'workbench' ? null : STEPS[stepId]
+  const simpleStep = stepId === 'call-source' || stepId === 'call-name' || stepId === 'call-property' || stepId === 'call-need' || stepId === 'call-review' || stepId === 'workbench' ? null : STEPS[stepId]
 
   function resetFlow() {
     setStepId('start')
@@ -419,7 +476,7 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
       return
     }
     if (action.kind === 'next') {
-      if (action.stepId === 'call-name') setDraft({ ...EMPTY_DRAFT, source: 'phone' })
+      if (action.stepId === 'call-source') setDraft(EMPTY_DRAFT)
       setStepId(action.stepId)
       return
     }
@@ -477,9 +534,9 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
           <>
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(107,126,255,0.62)' }}>{stepId === 'workbench' ? 'Opps / Leads Workbench' : simpleStep?.eyebrow ?? 'Someone Called'}</div>
-                <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.94)' }}>{stepId === 'workbench' ? 'Work what is already open.' : simpleStep?.title ?? 'Capture the lead one step at a time.'}</h2>
-                <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.42)' }}>{stepId === 'workbench' ? 'Open leads, attention items, opportunities, proposal follow-ups, or search by person/property.' : simpleStep?.subtitle ?? 'No CRM training needed. Answer the simple question, then press Next.'}</p>
+                <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(107,126,255,0.62)' }}>{stepId === 'workbench' ? 'Opps / Leads Workbench' : stepId === 'call-source' ? 'Capture Lead' : simpleStep?.eyebrow ?? 'Capture Lead'}</div>
+                <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.94)' }}>{stepId === 'workbench' ? 'Work what is already open.' : stepId === 'call-source' ? 'Where did this lead come from?' : simpleStep?.title ?? 'Capture the lead one step at a time.'}</h2>
+                <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.42)' }}>{stepId === 'workbench' ? 'Open leads, attention items, opportunities, proposal follow-ups, or search by person/property.' : stepId === 'call-source' ? 'Pick the source so the lead is tracked correctly.' : simpleStep?.subtitle ?? `Source: ${sourceLabel(draft.source)}. No CRM training needed. Answer the simple question, then press Next.`}</p>
               </div>
               <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(107,126,255,0.1)', color: 'rgba(165,180,255,0.9)', border: '1px solid rgba(107,126,255,0.18)' }}>
                 {activeTab === 'opps' || !activeTab ? 'New Opps / Leads' : 'Guided Flow'}
@@ -490,6 +547,16 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {simpleStep.cards.map(card => <FlowCardButton key={card.title} card={card} disabled={busy} onAction={handleAction} />)}
               </div>
+            )}
+
+            {stepId === 'call-source' && (
+              <SourceStep
+                onChoose={source => {
+                  setDraft({ ...EMPTY_DRAFT, source })
+                  setStepId('call-name')
+                }}
+                onBack={resetFlow}
+              />
             )}
 
             {stepId === 'workbench' && (
@@ -523,7 +590,7 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
               </div>
             )}
 
-            {stepId === 'call-name' && <CaptureStep label="Who called?" help="Type the person name. If you only know the company, enter that." value={draft.contactName} onChange={contactName => setDraft(prev => ({ ...prev, contactName }))} onNext={() => setStepId('call-property')} onBack={resetFlow} />}
+            {stepId === 'call-name' && <CaptureStep label="Who is the contact?" help="Type the person name. If you only know the company, enter that." value={draft.contactName} onChange={contactName => setDraft(prev => ({ ...prev, contactName }))} onNext={() => setStepId('call-property')} onBack={() => setStepId('call-source')} />}
             {stepId === 'call-property' && <CaptureStep label="What property or company?" help="Enter the property, management company, or account name." value={draft.propertyName} onChange={propertyName => setDraft(prev => ({ ...prev, propertyName }))} onNext={() => setStepId('call-need')} onBack={() => setStepId('call-name')} />}
             {stepId === 'call-need' && <CaptureStep label="What do they need?" help="Example: gate guard, camera monitoring, quote, service, or site walk." value={draft.need} onChange={need => setDraft(prev => ({ ...prev, need }))} onNext={() => setStepId('call-review')} onBack={() => setStepId('call-property')} />}
 
@@ -531,6 +598,7 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
               <div className="rounded-3xl p-4" style={{ background: 'rgba(52,211,153,0.055)', border: '1px solid rgba(52,211,153,0.18)' }}>
                 <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>Ready to create the lead?</div>
                 <div className="mt-3 grid gap-2 text-xs" style={{ color: 'rgba(255,255,255,0.66)' }}>
+                  <div>Source: {sourceLabel(draft.source)}</div>
                   <div>Contact: {draft.contactName}</div>
                   <div>Property: {draft.propertyName}</div>
                   <div>Need: {draft.need}</div>
