@@ -30,6 +30,16 @@ function val(value: unknown, fallback = 'Not added yet') {
   return String(value)
 }
 
+function leadSourceLabel(source: unknown): string {
+  const raw = String(source ?? '').trim().toLowerCase()
+  const clean = raw.startsWith('nexus_') ? raw.replace('nexus_', '') : raw
+  if (clean === 'outbound') return 'Outbound Cold Call'
+  if (clean === 'walk_in' || clean === 'walk-in') return 'Walk-In'
+  if (clean === 'website') return 'Website / Other'
+  if (clean === 'phone') return 'Phone Call'
+  return source ? String(source) : 'Unknown'
+}
+
 function personName(person?: AnyRecord | null) {
   if (!person) return 'No contact linked yet'
   return [person.first_name, person.last_name].filter(Boolean).join(' ') || person.contact_name || person.name || 'Unnamed contact'
@@ -271,6 +281,37 @@ export function LeadGlassWindow({
 
   return (
     <div className="space-y-4">
+      {activeAction === 'edit_details' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6" style={{ background: 'rgba(0,0,0,0.68)', backdropFilter: 'blur(10px)' }}>
+          <div className="max-h-[88vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] p-5" style={{ background: 'linear-gradient(180deg, rgba(14,22,44,0.98), rgba(6,10,24,0.98))', border: '1px solid rgba(107,126,255,0.28)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.22em]" style={{ color: 'rgba(165,180,255,0.85)' }}>Edit Lead Details</div>
+                <h3 className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Fill in the basics</h3>
+                <p className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.42)' }}>Add the contact, phone, email, property basics, and notes.</p>
+              </div>
+              <button type="button" onClick={() => setActiveAction(null)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.62)' }}>Close</button>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <input value={detailContactName} onChange={e => setDetailContactName(e.target.value)} placeholder="Contact name" className="rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.24)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} />
+              <input value={detailPhone} onChange={e => setDetailPhone(e.target.value)} placeholder="Phone" className="rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.24)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} />
+              <input value={detailEmail} onChange={e => setDetailEmail(e.target.value)} placeholder="Email" className="rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.24)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} />
+              <input value={detailCompanyName} onChange={e => setDetailCompanyName(e.target.value)} placeholder="Property / company" className="rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.24)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} />
+              <input value={detailLocation} onChange={e => setDetailLocation(e.target.value)} placeholder="Address / location" className="rounded-xl px-3 py-2 text-sm outline-none sm:col-span-2" style={{ background: 'rgba(0,0,0,0.24)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} />
+              <input value={detailUnitCount} onChange={e => setDetailUnitCount(e.target.value)} placeholder="Units" className="rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.24)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} />
+              <input value={detailPropertyType} onChange={e => setDetailPropertyType(e.target.value)} placeholder="Property type" className="rounded-xl px-3 py-2 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.24)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} />
+              <textarea value={detailNotes} onChange={e => setDetailNotes(e.target.value)} placeholder="Need / notes" rows={4} className="rounded-xl px-3 py-2 text-sm outline-none resize-none sm:col-span-2" style={{ background: 'rgba(0,0,0,0.24)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} />
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setActiveAction(null)} className="rounded-full px-4 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.58)' }}>Cancel</button>
+              <button type="button" disabled={actionBusy || !detailContactName.trim()} onClick={submitLeadDetails} className="rounded-full px-4 py-2 text-xs disabled:opacity-40" style={{ background: '#6B7EFF', color: 'white' }}>{actionBusy ? 'Saving...' : 'Save Details'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="rounded-[2rem] p-5" style={{ background: 'linear-gradient(145deg, rgba(107,126,255,0.16), rgba(255,255,255,0.035))', border: '1px solid rgba(107,126,255,0.24)', boxShadow: '0 20px 70px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -285,7 +326,7 @@ export function LeadGlassWindow({
           </div>
         </div>
         <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <MiniStat label="Source" value={val(lead.source, 'Unknown')} />
+          <MiniStat label="Source" value={leadSourceLabel(lead.source)} />
           <MiniStat label="Units" value={val(lead.unit_count, 'Unknown')} />
           <MiniStat label="Property" value={val(lead.location, 'Not attached')} />
           <MiniStat label="Updated" value={val(lead.updated_at ?? lead.created_at, 'Unknown')} />
@@ -334,50 +375,18 @@ export function LeadGlassWindow({
               <ActionButton title="Create Task / Follow-Up" subtitle="Put the next touch on your list." active={activeAction === 'schedule_followup'} onClick={() => chooseAction('schedule_followup')} />
               <ActionButton title="Update Status" subtitle="Move the lead forward." active={activeAction === 'update_status'} onClick={() => chooseAction('update_status')} />
 
-              {activeAction === 'edit_details' && (
-                <div className="rounded-2xl p-3 space-y-2" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(107,126,255,0.22)' }}>
-                  <input value={detailContactName} onChange={e => setDetailContactName(e.target.value)} placeholder="Contact name" className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} />
-                  <input value={detailPhone} onChange={e => setDetailPhone(e.target.value)} placeholder="Phone" className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} />
-                  <input value={detailEmail} onChange={e => setDetailEmail(e.target.value)} placeholder="Email" className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} />
-                  <input value={detailCompanyName} onChange={e => setDetailCompanyName(e.target.value)} placeholder="Property / company" className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} />
-                  <input value={detailLocation} onChange={e => setDetailLocation(e.target.value)} placeholder="Address / location" className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} />
-                  <div className="grid grid-cols-2 gap-2">
-                    <input value={detailUnitCount} onChange={e => setDetailUnitCount(e.target.value)} placeholder="Units" className="rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} />
-                    <input value={detailPropertyType} onChange={e => setDetailPropertyType(e.target.value)} placeholder="Property type" className="rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} />
-                  </div>
-                  <textarea value={detailNotes} onChange={e => setDetailNotes(e.target.value)} placeholder="Need / notes" rows={3} className="w-full rounded-xl px-3 py-2 text-xs outline-none resize-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} />
-                  <div className="flex gap-2">
-                    <button type="button" onClick={() => setActiveAction(null)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.045)', color: 'rgba(255,255,255,0.5)' }}>Cancel</button>
-                    <button type="button" disabled={actionBusy || !detailContactName.trim()} onClick={submitLeadDetails} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: '#6B7EFF', color: 'white' }}>{actionBusy ? 'Saving...' : 'Save Details'}</button>
-                  </div>
-                </div>
-              )}
-
               {activeAction === 'create_opportunity' && <div className="rounded-2xl p-3 space-y-2" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(107,126,255,0.22)' }}><p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.72)' }}>Nexus will create an opportunity and carry forward this lead data. No duplicate will be created if one already exists.</p><div className="flex gap-2"><button type="button" onClick={() => setActiveAction(null)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.045)', color: 'rgba(255,255,255,0.5)' }}>Cancel</button><button type="button" disabled={actionBusy} onClick={() => submitLeadAction({ action: 'create_opportunity' })} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: '#6B7EFF', color: 'white' }}>{actionBusy ? 'Creating...' : 'Create Opportunity'}</button></div></div>}
-
               {activeAction === 'add_note' && <div className="rounded-2xl p-3 space-y-2" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)' }}><textarea value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="What should Nexus remember?" rows={3} className="w-full rounded-xl px-3 py-2 text-xs outline-none resize-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} /><div className="flex gap-2"><button type="button" onClick={() => setActiveAction(null)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.045)', color: 'rgba(255,255,255,0.5)' }}>Cancel</button><button type="button" disabled={actionBusy || !noteText.trim()} onClick={() => submitLeadAction({ action: 'add_note', note: noteText })} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: '#6B7EFF', color: 'white' }}>{actionBusy ? 'Saving...' : 'Save Note'}</button></div></div>}
-
               {activeAction === 'log_call' && <div className="rounded-2xl p-3 space-y-2" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)' }}><textarea value={callSummary} onChange={e => setCallSummary(e.target.value)} placeholder="What happened on the call?" rows={3} className="w-full rounded-xl px-3 py-2 text-xs outline-none resize-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} /><input value={callOutcome} onChange={e => setCallOutcome(e.target.value)} placeholder="Outcome, if any" className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} /><input value={callDuration} onChange={e => setCallDuration(e.target.value)} placeholder="Duration, if any" className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} /><div className="flex gap-2"><button type="button" onClick={() => setActiveAction(null)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.045)', color: 'rgba(255,255,255,0.5)' }}>Cancel</button><button type="button" disabled={actionBusy || !callSummary.trim()} onClick={() => submitLeadAction({ action: 'log_call', summary: callSummary, outcome: callOutcome, duration: callDuration })} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: '#6B7EFF', color: 'white' }}>{actionBusy ? 'Logging...' : 'Log Call'}</button></div></div>}
-
               {activeAction === 'schedule_followup' && <div className="rounded-2xl p-3 space-y-2" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)' }}><input value={followupTitle} onChange={e => setFollowupTitle(e.target.value)} placeholder="Task title" className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} /><input type="date" value={followupDate} onChange={e => setFollowupDate(e.target.value)} className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} /><textarea value={followupNotes} onChange={e => setFollowupNotes(e.target.value)} placeholder="Anything to remember?" rows={2} className="w-full rounded-xl px-3 py-2 text-xs outline-none resize-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }} /><div className="flex gap-2"><button type="button" onClick={() => setActiveAction(null)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.045)', color: 'rgba(255,255,255,0.5)' }}>Cancel</button><button type="button" disabled={actionBusy || !followupTitle.trim()} onClick={() => submitLeadAction({ action: 'schedule_followup', title: followupTitle, due_date: followupDate, notes: followupNotes })} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: '#6B7EFF', color: 'white' }}>{actionBusy ? 'Creating...' : 'Create Task'}</button></div></div>}
-
               {activeAction === 'update_status' && <div className="rounded-2xl p-3 space-y-2" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)' }}><select value={statusStage} onChange={e => setStatusStage(e.target.value)} className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(107,126,255,0.2)', color: 'rgba(255,255,255,0.88)' }}><option value="prospect">Prospect</option><option value="contacted">Contacted</option><option value="qualified">Qualified</option><option value="proposal">Proposal</option><option value="lost">Lost</option></select><div className="flex gap-2"><button type="button" onClick={() => setActiveAction(null)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.045)', color: 'rgba(255,255,255,0.5)' }}>Cancel</button><button type="button" disabled={actionBusy} onClick={() => submitLeadAction({ action: 'update_status', stage: statusStage })} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: '#6B7EFF', color: 'white' }}>{actionBusy ? 'Updating...' : 'Update Status'}</button></div></div>}
-
               {actionMessage && <div className="rounded-2xl px-3 py-2 text-[11px]" style={{ background: 'rgba(107,126,255,0.08)', border: '1px solid rgba(107,126,255,0.18)', color: 'rgba(255,255,255,0.72)' }}>{actionMessage}</div>}
             </div>
           </Section>
 
-          <Section title="Files" count={attachments.length}>
-            <ListBlock records={attachments} emptyText="No files attached yet." render={file => <MiniRow title={val(file.file_name, 'File')} subtitle={val(file.file_type ?? file.type, '')} />} />
-          </Section>
-
-          <Section title="Surveys" count={surveys.length}>
-            <ListBlock records={surveys} emptyText="No surveys found yet." render={survey => <MiniRow title={val(survey.property_name, 'Survey')} subtitle={val(survey.ai_summary, '')} meta={val(survey.status, '')} />} />
-          </Section>
-
-          <Section title="Related Opportunities" count={opportunities.length}>
-            <ListBlock records={opportunities} emptyText="No related opportunities yet." render={opp => <MiniRow title={val(opp.name, 'Opportunity')} subtitle={[opp.stage, opp.next_step].filter(Boolean).join(' • ')} meta={opp.amount ? `$${opp.amount}` : undefined} />} />
-          </Section>
+          <Section title="Files" count={attachments.length}><ListBlock records={attachments} emptyText="No files attached yet." render={file => <MiniRow title={val(file.file_name, 'File')} subtitle={val(file.file_type ?? file.type, '')} />} /></Section>
+          <Section title="Surveys" count={surveys.length}><ListBlock records={surveys} emptyText="No surveys found yet." render={survey => <MiniRow title={val(survey.property_name, 'Survey')} subtitle={val(survey.ai_summary, '')} meta={val(survey.status, '')} />} /></Section>
+          <Section title="Related Opportunities" count={opportunities.length}><ListBlock records={opportunities} emptyText="No related opportunities yet." render={opp => <MiniRow title={val(opp.name, 'Opportunity')} subtitle={[opp.stage, opp.next_step].filter(Boolean).join(' • ')} meta={opp.amount ? `$${opp.amount}` : undefined} />} /></Section>
         </div>
       </div>
     </div>
