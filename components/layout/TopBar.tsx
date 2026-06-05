@@ -141,6 +141,20 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
         </div>
       )}
 
+      {title === "ARIA" && !searchOpen && (
+        <Link
+          href="/"
+          className="hidden lg:flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-bold border transition-all shadow-sm"
+          style={{
+            background: 'rgba(255,255,255,0.06)',
+            borderColor: 'rgba(255,255,255,0.12)',
+            color: '#dbeafe',
+          }}
+        >
+          ← Back to Nexus
+        </Link>
+      )}
+
       {actions && !searchOpen && <div className="flex items-center gap-2">{actions}</div>}
 
       <div className="flex items-center gap-1">
