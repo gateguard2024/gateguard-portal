@@ -11,7 +11,7 @@ const supabase = createClient(
 
 export interface CalendarEvent {
   id: string
-  type: 'todo' | 'work_order' | 'work_order_phase' | 'pm_schedule' | 'gcal' | 'crm_activity' | 'tracker_task'
+  type: 'nexus_event' | 'todo' | 'work_order' | 'work_order_phase' | 'pm_schedule' | 'gcal' | 'crm_activity' | 'tracker_task'
   title: string
   date: string       // YYYY-MM-DD
   time?: string      // HH:MM if has time
@@ -37,6 +37,40 @@ export async function GET(req: NextRequest) {
     const endDate   = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
     const events: CalendarEvent[] = []
+
+    // ── Hosted Nexus Calendar Events ──────────────────────────────────────────
+    // These are the source-of-truth events created directly in Nexus.
+    // If the migration has not been run yet, this block fails softly.
+    try {
+      let nexusQ = supabase
+        .from('calendar_events')
+        .select('id, title, start_time, end_time, status, location, org_id')
+        .gte('start_time', `${startDate}T00:00:00`)
+        .lte('start_time', `${endDate}T23:59:59`)
+        .neq('status', 'cancelled')
+        .order('start_time', { ascending: true })
+
+      if (!user.isCorporate && user.org_id) {
+        nexusQ = nexusQ.eq('org_id', user.org_id)
+      }
+
+      const { data: nexusRows } = await nexusQ
+
+      for (const ev of nexusRows ?? []) {
+        const startIso = ev.start_time as string
+        events.push({
+          id:     ev.id,
+          type:   'nexus_event',
+          title:  ev.title ?? 'Nexus Event',
+          date:   startIso.split('T')[0],
+          time:   startIso.includes('T') ? startIso.split('T')[1]?.substring(0, 5) : undefined,
+          status: ev.status ?? 'confirmed',
+          color:  '#007CFF',
+        })
+      }
+    } catch {
+      // Hosted calendar table may not exist until migration 096 is applied.
+    }
 
     // ── To-Dos ────────────────────────────────────────────────────────────────
     const { data: todos } = await supabase
@@ -105,7 +139,7 @@ export async function GET(req: NextRequest) {
         title:  phase.name ?? 'Work Order Phase',
         date:   phase.scheduled_date,
         status: 'scheduled',
-        color:  '#C2410C',   // orange-700 — distinct from WO orange-600
+        color:  '#C2410C',
         link:   phase.work_order_id ? `/maintenance/${phase.work_order_id}` : '/maintenance',
       })
     }
@@ -131,23 +165,21 @@ export async function GET(req: NextRequest) {
         title:  siteName ? `PM: ${siteName}` : `PM: ${pm.schedule_type ?? 'Maintenance'}`,
         date:   dateStr,
         status: 'scheduled',
-        color:  '#0B7285',   // teal
+        color:  '#0B7285',
         link:   pm.site_id ? `/sites/${pm.site_id}` : '/dispatch',
       })
     }
 
     // ── CRM Activities ────────────────────────────────────────────────────────
-    // due_at is a timestamptz — filter by the month range
     const { data: activities } = await supabase
       .from('crm_activities')
       .select('id, type, subject, due_at, completed_at, opportunity_id, opportunities(name)')
       .not('due_at', 'is', null)
       .gte('due_at', `${startDate}T00:00:00`)
       .lte('due_at', `${endDate}T23:59:59`)
-      .is('completed_at', null)          // only incomplete activities
+      .is('completed_at', null)
       .order('due_at', { ascending: true })
 
-    // Activity type → colour mapping
     const ACTIVITY_COLORS: Record<string, string> = {
       call:    '#0B7285',
       email:   '#6B7EFF',
@@ -175,8 +207,7 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // ── Tracker Tasks (items with due dates) ─────────────────────────────────
-    // Pull tracker items assigned to the current user OR in their org
+    // ── Tracker Tasks ─────────────────────────────────────────────────────────
     const trackerQuery = supabase
       .from('tracker_items')
       .select('id, title, type, status, priority, due_date, owner_user_id, owner_name, group_id, org_id')
@@ -190,7 +221,6 @@ export async function GET(req: NextRequest) {
     const { data: trackerItems } = await trackerQuery
 
     for (const task of trackerItems ?? []) {
-      // Show if assigned to current user OR if org_id matches (for org-scoped boards)
       const isAssignedToMe = task.owner_user_id === user.id
       const isInMyOrg      = !user.isCorporate ? task.org_id === user.org_id : true
 
@@ -202,13 +232,12 @@ export async function GET(req: NextRequest) {
         title:  task.title ?? 'Tracker Task',
         date:   task.due_date,
         status: task.status ?? 'new',
-        color:  '#8B5CF6',   // violet — distinct from other event types
+        color:  '#8B5CF6',
         link:   '/tracker',
       })
     }
 
     // ── Google Calendar events (pulled from gcal_events cache) ───────────────
-    // Check connection via the structured user_settings row (not KV)
     const { data: settingsRow } = await supabase
       .from('user_settings')
       .select('gcal_refresh_token')
@@ -216,7 +245,6 @@ export async function GET(req: NextRequest) {
       .maybeSingle()
 
     if (settingsRow?.gcal_refresh_token) {
-      // gcal_events uses start_time as a timestamptz column — filter by day range
       const { data: gcalRows } = await supabase
         .from('gcal_events')
         .select('gcal_event_id, title, start_time, end_time, is_all_day, status')
@@ -226,7 +254,6 @@ export async function GET(req: NextRequest) {
         .order('start_time', { ascending: true })
 
       for (const ge of gcalRows ?? []) {
-        // Extract YYYY-MM-DD and HH:MM from the timestamptz
         const startIso  = ge.start_time as string
         const dateStr   = startIso.split('T')[0]
         const timePart  = ge.is_all_day ? undefined : startIso.split('T')[1]?.substring(0, 5)
@@ -244,7 +271,6 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Sort all events by date then time
     events.sort((a, b) => {
       const dateCompare = a.date.localeCompare(b.date)
       if (dateCompare !== 0) return dateCompare
