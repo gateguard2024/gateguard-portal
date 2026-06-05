@@ -31,6 +31,8 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     return (
       <div style={{
         minHeight: '100dvh',
+        height: isAria ? '100dvh' : undefined,
+        overflow: isAria ? 'hidden' : undefined,
         background: isTech ? '#F1F5F9' : isNexus || isAria ? 'transparent' : '#ffffff',
         overscrollBehavior: 'none',
       }}>
