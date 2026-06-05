@@ -38,6 +38,17 @@ function startOfDayIso(date: Date): string {
   return d.toISOString()
 }
 
+function eventSortKey(event: CalendarSummaryEvent): string {
+  return event.starts_at ?? `${event.date ?? ''}T${event.time ?? '00:00'}`
+}
+
+function eventStartTime(event: CalendarSummaryEvent): number | null {
+  const value = event.starts_at ?? (event.date ? `${event.date}T${event.time ?? '00:00'}` : null)
+  if (!value) return null
+  const time = new Date(value).getTime()
+  return Number.isFinite(time) ? time : null
+}
+
 function minutesBetween(start?: string | null, end?: string | null): number | null {
   if (!start || !end) return null
   const diff = new Date(end).getTime() - new Date(start).getTime()
@@ -60,6 +71,7 @@ export async function GET() {
     const user = await getCurrentUser()
     const now = new Date()
     const today = ymd(now)
+    const todayStartMs = new Date(startOfDayIso(now)).getTime()
     const weekEnd = new Date(now)
     weekEnd.setDate(weekEnd.getDate() + 7)
     const weekEndDate = ymd(weekEnd)
@@ -204,10 +216,10 @@ export async function GET() {
     const todayGoogle = googleEvents.filter(event => event.date === today)
     const upcoming = [...googleEvents, ...portalEvents]
       .filter(event => {
-        const eventDate = event.starts_at ? new Date(event.starts_at) : event.date ? new Date(`${event.date}T00:00:00`) : null
-        return eventDate ? eventDate.getTime() >= startOfDayIso(now) as unknown as number : false
+        const startTime = eventStartTime(event)
+        return startTime !== null && startTime >= todayStartMs
       })
-      .sort((a, b) => (a.starts_at ?? `${a.date ?? ''}T${a.time ?? '00:00'}`).localeCompare(b.starts_at ?? `${b.date ?? ''}T${b.time ?? '00:00'}`))
+      .sort((a, b) => eventSortKey(a).localeCompare(eventSortKey(b)))
       .slice(0, 12)
 
     const nextFourHourAppointment = googleEvents.find(event => {
@@ -243,7 +255,7 @@ export async function GET() {
       },
       today: {
         events: [...todayGoogle, ...portalEvents]
-          .sort((a, b) => (a.starts_at ?? `${a.date ?? ''}T${a.time ?? '00:00'}`).localeCompare(b.starts_at ?? `${b.date ?? ''}T${b.time ?? '00:00'}`)),
+          .sort((a, b) => eventSortKey(a).localeCompare(eventSortKey(b))),
       },
       upcoming,
       next_four_hour_appointment: nextFourHourAppointment,
