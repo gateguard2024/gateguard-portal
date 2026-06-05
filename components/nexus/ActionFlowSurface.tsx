@@ -234,7 +234,7 @@ function FlowCardButton({
       className="group relative min-h-[132px] overflow-hidden rounded-3xl p-4 text-left transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-60"
       style={{
         background: isAria
-          ? `radial-gradient(circle at 25% 20%, rgba(168,85,247,0.34), rgba(107,126,255,0.12) 38%, rgba(255,255,255,0.035) 100%)`
+          ? 'radial-gradient(circle at 25% 20%, rgba(168,85,247,0.34), rgba(107,126,255,0.12) 38%, rgba(255,255,255,0.035) 100%)'
           : `linear-gradient(145deg, rgba(${color},0.14), rgba(255,255,255,0.035))`,
         border: isAria ? '1px solid rgba(168,85,247,0.42)' : `1px solid rgba(${color},0.24)`,
         boxShadow: isAria
@@ -291,19 +291,6 @@ function FlowCardButton({
       >
         {isAria ? 'Launch →' : 'Next'}
       </div>
-    </button>
-  )
-}
-      type="button"
-      disabled={disabled}
-      onClick={() => onAction(card.action)}
-      className="group relative min-h-[132px] rounded-3xl p-4 text-left transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-60"
-      style={{ background: `linear-gradient(145deg, rgba(${color},0.14), rgba(255,255,255,0.035))`, border: `1px solid rgba(${color},0.24)`, boxShadow: '0 18px 50px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.06)', backdropFilter: 'blur(18px)' }}
-    >
-      <div className="mb-4 h-8 w-8 rounded-2xl" style={{ background: `rgba(${color},0.28)`, border: `1px solid rgba(${color},0.34)` }} />
-      <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>{card.title}</div>
-      <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.42)' }}>{card.subtitle}</div>
-      <div className="absolute bottom-4 right-4 text-xs opacity-45 transition-opacity group-hover:opacity-90" style={{ color: card.hex }}>Next</div>
     </button>
   )
 }
