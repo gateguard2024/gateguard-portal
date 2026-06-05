@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import { Bell, Search, ChevronDown, X, Settings, User } from "lucide-react";
+import { MyDayTopBarActions } from "@/components/calendar/MyDayTopBarActions";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { HelpCircle, LogOut, CalendarDays } = require("lucide-react") as any;
 
@@ -154,6 +155,8 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
           ← Back to Nexus
         </Link>
       )}
+
+      {title === "Calendar" && !searchOpen && <MyDayTopBarActions />}
 
       {actions && !searchOpen && <div className="flex items-center gap-2">{actions}</div>}
 
