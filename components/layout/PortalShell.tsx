@@ -3,8 +3,8 @@
 /**
  * PortalShell — conditionally renders the dealer portal sidebar + chrome.
  *
- * Routes that start with /tech get a clean full-screen shell (no sidebar,
- * no ThemeProvider, no portal nav). Everything else gets the full portal layout.
+ * Routes that start with /tech, /aria, or Nexus get a clean full-screen shell
+ * with no sidebar and no portal nav. Everything else gets the full portal layout.
  *
  * This lives in the root layout so Next.js only has one <html>/<body> pair,
  * which is required by the App Router.
@@ -20,9 +20,10 @@ import { MobileNav }        from '@/components/layout/MobileNav'
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isTech       = pathname.startsWith('/tech')
+  const isAria       = pathname.startsWith('/aria')
   const isNexus      = pathname === '/' || pathname.startsWith('/opps')
   // Proposal + approve pages are customer-facing — no sidebar, no portal chrome, no auth wall
-  const isStandalone = isTech || isNexus
+  const isStandalone = isTech || isAria || isNexus
     || /^\/quotes\/[^/]+(\/proposal|\/approve)(\/|$)/.test(pathname)
 
   // Standalone: full-screen, no portal chrome
@@ -30,7 +31,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     return (
       <div style={{
         minHeight: '100dvh',
-        background: isTech ? '#F1F5F9' : isNexus ? 'transparent' : '#ffffff',
+        background: isTech ? '#F1F5F9' : isNexus || isAria ? 'transparent' : '#ffffff',
         overscrollBehavior: 'none',
       }}>
         {children}
