@@ -89,10 +89,31 @@ const STEPS: Record<Exclude<StepId, 'call-source' | 'call-name' | 'call-property
     title: 'What growth work are we doing today?',
     subtitle: 'Create something new or work what is already open.',
     cards: [
-      { title: 'Capture Lead', subtitle: 'Phone call, walk-in, outbound, website, or other source.', hex: '#34d399', action: { kind: 'next', stepId: 'call-source' } },
-      { title: 'Work Existing Leads', subtitle: 'Open leads, opportunities, follow-ups, and search.', hex: '#6B7EFF', action: { kind: 'workbench', focus: 'myLeads' } },
-      { title: 'Create Opportunity', subtitle: 'There is a real deal to work.', hex: '#fbbf24', action: { kind: 'next', stepId: 'opportunity' } },
-    ],
+  {
+    title: 'Capture Lead',
+    subtitle: 'Phone call, walk-in, outbound, website, or other source.',
+    hex: '#34d399',
+    action: { kind: 'next', stepId: 'call-source' },
+  },
+  {
+    title: 'Work Existing Leads',
+    subtitle: 'Open leads, opportunities, follow-ups, and search.',
+    hex: '#6B7EFF',
+    action: { kind: 'workbench', focus: 'myLeads' },
+  },
+  {
+    title: 'Create Opportunity',
+    subtitle: 'There is a real deal to work.',
+    hex: '#fbbf24',
+    action: { kind: 'next', stepId: 'opportunity' },
+  },
+  {
+    title: 'Run ARIA Live',
+    subtitle: 'AI property research before you call, quote, or pitch.',
+    hex: '#a855f7',
+    action: { kind: 'route', href: '/aria' },
+  },
+],
   },
   research: {
     eyebrow: 'Create Lead / Research',
@@ -193,10 +214,86 @@ async function fetchLeadWindow(id: string): Promise<Record<string, unknown>> {
   return data
 }
 
-function FlowCardButton({ card, disabled, onAction }: { card: FlowCard; disabled: boolean; onAction: (action: FlowAction) => void }) {
+function FlowCardButton({
+  card,
+  disabled,
+  onAction,
+}: {
+  card: FlowCard
+  disabled: boolean
+  onAction: (action: FlowAction) => void
+}) {
   const color = rgb(card.hex)
+  const isAria = card.title === 'Run ARIA Live'
+
   return (
     <button
+      type="button"
+      disabled={disabled}
+      onClick={() => onAction(card.action)}
+      className="group relative min-h-[132px] overflow-hidden rounded-3xl p-4 text-left transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-60"
+      style={{
+        background: isAria
+          ? `radial-gradient(circle at 25% 20%, rgba(168,85,247,0.34), rgba(107,126,255,0.12) 38%, rgba(255,255,255,0.035) 100%)`
+          : `linear-gradient(145deg, rgba(${color},0.14), rgba(255,255,255,0.035))`,
+        border: isAria ? '1px solid rgba(168,85,247,0.42)' : `1px solid rgba(${color},0.24)`,
+        boxShadow: isAria
+          ? '0 0 26px rgba(168,85,247,0.24), 0 18px 50px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.08)'
+          : '0 18px 50px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.06)',
+        backdropFilter: 'blur(18px)',
+      }}
+    >
+      {isAria && (
+        <>
+          <div
+            className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full"
+            style={{ background: 'rgba(168,85,247,0.18)', filter: 'blur(18px)' }}
+          />
+          <div
+            className="absolute right-4 top-4 flex items-center gap-1 rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.16em]"
+            style={{
+              background: 'rgba(168,85,247,0.16)',
+              border: '1px solid rgba(216,180,254,0.32)',
+              color: 'rgba(233,213,255,0.95)',
+            }}
+          >
+            <span
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ background: '#c084fc', boxShadow: '0 0 10px rgba(192,132,252,0.9)' }}
+            />
+            Live
+          </div>
+        </>
+      )}
+
+      <div
+        className="mb-4 flex h-8 w-8 items-center justify-center rounded-2xl text-sm"
+        style={{
+          background: isAria ? 'rgba(168,85,247,0.28)' : `rgba(${color},0.28)`,
+          border: isAria ? '1px solid rgba(216,180,254,0.38)' : `1px solid rgba(${color},0.34)`,
+          color: 'rgba(255,255,255,0.9)',
+        }}
+      >
+        {isAria ? '✦' : ''}
+      </div>
+
+      <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>
+        {card.title}
+      </div>
+
+      <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.42)' }}>
+        {card.subtitle}
+      </div>
+
+      <div
+        className="absolute bottom-4 right-4 text-xs opacity-60 transition-opacity group-hover:opacity-100"
+        style={{ color: isAria ? '#d8b4fe' : card.hex }}
+      >
+        {isAria ? 'Launch →' : 'Next'}
+      </div>
+    </button>
+  )
+}
       type="button"
       disabled={disabled}
       onClick={() => onAction(card.action)}
