@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { JobGlassWindow } from '@/components/nexus/windows/JobGlassWindow'
 
 type JobsFocus = 'myJobs' | 'needsAttention' | 'scheduledToday' | 'openJobs' | 'recentlyUpdated' | 'search'
+type BoardAction = 'add_note' | 'create_task' | 'schedule_visit' | 'mark_complete' | null
 
 type JobRecord = {
   id: string
@@ -51,38 +52,10 @@ const JOBS_LABELS: Record<JobsFocus, string> = {
 }
 
 const JOB_CARDS: JobCard[] = [
-  {
-    focus: 'needsAttention',
-    title: 'Needs Attention',
-    subtitle: 'Jobs that need a note, schedule, update, or next action.',
-    hex: '#f97316',
-    actionLabel: 'Open →',
-    badgeKey: 'needsAttention',
-  },
-  {
-    focus: 'scheduledToday',
-    title: 'Scheduled Today',
-    subtitle: 'Visits, work, and service items planned for today.',
-    hex: '#00C8FF',
-    actionLabel: 'Open →',
-    badgeKey: 'scheduledToday',
-  },
-  {
-    focus: 'openJobs',
-    title: 'Open Jobs',
-    subtitle: 'Active jobs that are not finished yet.',
-    hex: '#34d399',
-    actionLabel: 'Open →',
-    badgeKey: 'openJobs',
-  },
-  {
-    focus: 'recentlyUpdated',
-    title: 'Recently Updated',
-    subtitle: 'Jobs with the newest activity or movement.',
-    hex: '#a855f7',
-    actionLabel: 'Open →',
-    badgeKey: 'recentlyUpdated',
-  },
+  { focus: 'needsAttention', title: 'Needs Attention', subtitle: 'Jobs that need a note, schedule, update, or next action.', hex: '#f97316', actionLabel: 'Open →', badgeKey: 'needsAttention' },
+  { focus: 'scheduledToday', title: 'Scheduled Today', subtitle: 'Visits, work, and service items planned for today.', hex: '#00C8FF', actionLabel: 'Open →', badgeKey: 'scheduledToday' },
+  { focus: 'openJobs', title: 'Open Jobs', subtitle: 'Active jobs that are not finished yet.', hex: '#34d399', actionLabel: 'Open →', badgeKey: 'openJobs' },
+  { focus: 'recentlyUpdated', title: 'Recently Updated', subtitle: 'Jobs with the newest activity or movement.', hex: '#a855f7', actionLabel: 'Open →', badgeKey: 'recentlyUpdated' },
 ]
 
 function rgb(hex: string): string {
@@ -131,26 +104,8 @@ function JobCardButton({ card, count, onClick }: { card: JobCard; count: number;
         backdropFilter: 'blur(18px)',
       }}
     >
-      <div
-        className="absolute right-4 top-4 rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em]"
-        style={{
-          background: `rgba(${color},0.14)`,
-          border: `1px solid rgba(${color},0.28)`,
-          color: 'rgba(255,255,255,0.82)',
-        }}
-      >
-        {count} items
-      </div>
-
-      <div
-        className="mb-4 flex h-8 w-8 items-center justify-center rounded-2xl text-sm"
-        style={{
-          background: `rgba(${color},0.28)`,
-          border: `1px solid rgba(${color},0.38)`,
-          color: 'rgba(255,255,255,0.9)',
-        }}
-      />
-
+      <div className="absolute right-4 top-4 rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em]" style={{ background: `rgba(${color},0.14)`, border: `1px solid rgba(${color},0.28)`, color: 'rgba(255,255,255,0.82)' }}>{count} items</div>
+      <div className="mb-4 flex h-8 w-8 items-center justify-center rounded-2xl text-sm" style={{ background: `rgba(${color},0.28)`, border: `1px solid rgba(${color},0.38)`, color: 'rgba(255,255,255,0.9)' }} />
       <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>{card.title}</div>
       <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.48)' }}>{card.subtitle}</div>
       <div className="absolute bottom-4 right-4 text-xs opacity-70 transition-opacity group-hover:opacity-100" style={{ color: card.hex }}>{card.actionLabel}</div>
@@ -158,10 +113,12 @@ function JobCardButton({ card, count, onClick }: { card: JobCard; count: number;
   )
 }
 
-function JobRecordList({ records, emptyText, onJobClick, jobWindowBusy, loadingJobId }: {
+function JobRecordList({ records, emptyText, onJobSelect, onJobOpen, selectedJobId, jobWindowBusy, loadingJobId }: {
   records: JobRecord[]
   emptyText: string
-  onJobClick: (id: string) => void
+  onJobSelect: (id: string) => void
+  onJobOpen: (id: string) => void
+  selectedJobId?: string | null
   jobWindowBusy?: boolean
   loadingJobId?: string | null
 }) {
@@ -173,21 +130,25 @@ function JobRecordList({ records, emptyText, onJobClick, jobWindowBusy, loadingJ
     <div className="space-y-2">
       {records.map(job => {
         const isLoading = jobWindowBusy && loadingJobId === job.id
+        const selected = selectedJobId === job.id
         return (
           <div
             key={job.id}
-            onClick={() => onJobClick(job.id)}
+            onClick={() => onJobSelect(job.id)}
             role="button"
             tabIndex={0}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onJobClick(job.id) }}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onJobSelect(job.id) }}
             className="cursor-pointer rounded-2xl p-4 transition-all hover:-translate-y-0.5"
-            style={{ background: isLoading ? 'rgba(52,211,153,0.12)' : 'rgba(255,255,255,0.035)', border: isLoading ? '1px solid rgba(52,211,153,0.28)' : '1px solid rgba(255,255,255,0.08)' }}
+            style={{
+              background: selected ? 'rgba(52,211,153,0.12)' : isLoading ? 'rgba(52,211,153,0.10)' : 'rgba(255,255,255,0.035)',
+              border: selected ? '1px solid rgba(52,211,153,0.34)' : isLoading ? '1px solid rgba(52,211,153,0.28)' : '1px solid rgba(255,255,255,0.08)',
+            }}
           >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <div className="flex items-center gap-2">
                   <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{isLoading ? 'Opening...' : jobDisplayName(job)}</div>
-                  {!isLoading && <span className="text-[10px] opacity-40" style={{ color: 'rgba(52,211,153,0.9)' }}>Open →</span>}
+                  {selected && <span className="text-[10px] opacity-70" style={{ color: 'rgba(52,211,153,0.95)' }}>Selected</span>}
                 </div>
                 <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.45)' }}>{jobDisplaySubtitle(job)}</div>
                 {(job.due_date || job.scheduled_date || job.assignee_name) && (
@@ -195,14 +156,15 @@ function JobRecordList({ records, emptyText, onJobClick, jobWindowBusy, loadingJ
                     {[
                       job.scheduled_date ? `Scheduled: ${job.scheduled_date}` : null,
                       job.due_date ? `Due: ${job.due_date}` : null,
-                      job.assignee_name ? `Assigned: ${job.assignee_name}` : null
+                      job.assignee_name ? `Assigned: ${job.assignee_name}` : null,
                     ].filter(Boolean).join(' • ')}
                   </div>
                 )}
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-start gap-2">
                 <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.14em]" style={{ background: 'rgba(52,211,153,0.1)', color: 'rgba(110,231,183,0.9)', border: '1px solid rgba(52,211,153,0.18)', whiteSpace: 'nowrap' }}>{job.status ?? 'open'}</div>
                 {job.priority && <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.14em]" style={{ background: 'rgba(107,126,255,0.1)', color: 'rgba(165,180,255,0.9)', border: '1px solid rgba(107,126,255,0.18)', whiteSpace: 'nowrap' }}>{job.priority}</div>}
+                <button type="button" onClick={e => { e.stopPropagation(); onJobOpen(job.id) }} className="rounded-full px-3 py-1 text-[10px] font-semibold" style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.62)', border: '1px solid rgba(255,255,255,0.08)' }}>Open</button>
               </div>
             </div>
             {job.notes && <div className="mt-3 line-clamp-2 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.38)' }}>{job.notes}</div>}
@@ -213,13 +175,14 @@ function JobRecordList({ records, emptyText, onJobClick, jobWindowBusy, loadingJ
   )
 }
 
-function ActionButton({ label, onClick, muted }: { label: string; onClick?: () => void; muted?: boolean }) {
+function ActionButton({ label, onClick, muted, disabled }: { label: string; onClick?: () => void; muted?: boolean; disabled?: boolean }) {
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={onClick}
-      className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-opacity hover:opacity-85"
-      style={muted
+      className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-45"
+      style={muted || disabled
         ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.48)' }
         : { background: 'rgba(52,211,153,0.10)', border: '1px solid rgba(52,211,153,0.22)', color: '#86efac' }}
     >
@@ -231,10 +194,7 @@ function ActionButton({ label, onClick, muted }: { label: string; onClick?: () =
 function JobsDetailShell({ title, subtitle, onClose, children, actions }: { title: string; subtitle: string; onClose: () => void; children: React.ReactNode; actions: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 px-4 py-6">
-      <div
-        className="grid max-h-[86vh] w-full max-w-5xl grid-cols-1 gap-4 overflow-hidden rounded-[2rem] p-5 shadow-2xl lg:grid-cols-[1fr_260px]"
-        style={{ background: 'linear-gradient(180deg, rgba(8,24,20,0.96), rgba(5,12,18,0.96))', border: '1px solid rgba(52,211,153,0.16)', boxShadow: '0 30px 100px rgba(0,0,0,0.55), 0 0 48px rgba(52,211,153,0.10), inset 0 1px 0 rgba(255,255,255,0.06)', backdropFilter: 'blur(26px)' }}
-      >
+      <div className="grid max-h-[86vh] w-full max-w-5xl grid-cols-1 gap-4 overflow-hidden rounded-[2rem] p-5 shadow-2xl lg:grid-cols-[1fr_260px]" style={{ background: 'linear-gradient(180deg, rgba(8,24,20,0.96), rgba(5,12,18,0.96))', border: '1px solid rgba(52,211,153,0.16)', boxShadow: '0 30px 100px rgba(0,0,0,0.55), 0 0 48px rgba(52,211,153,0.10), inset 0 1px 0 rgba(255,255,255,0.06)', backdropFilter: 'blur(26px)' }}>
         <div className="min-h-0 overflow-y-auto pr-1">
           <button type="button" onClick={onClose} className="mb-4 rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.58)' }}>← Back to Jobs</button>
           <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(52,211,153,0.78)' }}>Jobs</div>
@@ -242,7 +202,6 @@ function JobsDetailShell({ title, subtitle, onClose, children, actions }: { titl
           <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.48)' }}>{subtitle}</p>
           <div className="mt-5 space-y-2">{children}</div>
         </div>
-
         <aside className="rounded-3xl p-4" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)' }}>
           <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>Actions</div>
           <div className="mt-4 space-y-2">{actions}</div>
@@ -260,6 +219,15 @@ export function JobsSurface() {
   const [activePanel, setActivePanel] = useState<JobsFocus | null>(null)
   const [jobsSearchTerm, setJobsSearchTerm] = useState('')
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
+  const [selectedBoardJobId, setSelectedBoardJobId] = useState<string | null>(null)
+  const [boardAction, setBoardAction] = useState<BoardAction>(null)
+  const [boardBusy, setBoardBusy] = useState(false)
+  const [boardMessage, setBoardMessage] = useState<string | null>(null)
+  const [boardNote, setBoardNote] = useState('')
+  const [boardTaskTitle, setBoardTaskTitle] = useState('')
+  const [boardTaskDueDate, setBoardTaskDueDate] = useState('')
+  const [boardVisitDate, setBoardVisitDate] = useState('')
+  const [boardCompleteNote, setBoardCompleteNote] = useState('')
   const [jobWindowData, setJobWindowData] = useState<Record<string, unknown> | null>(null)
   const [jobWindowBusy, setJobWindowBusy] = useState(false)
   const [loadingJobId, setLoadingJobId] = useState<string | null>(null)
@@ -267,6 +235,9 @@ export function JobsSurface() {
   async function openJobsWorkbench(focus: JobsFocus = 'needsAttention') {
     setBusy(true)
     setStatus(null)
+    setSelectedBoardJobId(null)
+    setBoardAction(null)
+    setBoardMessage(null)
     try {
       const data = await loadJobsWorkbench(focus === 'search' ? jobsSearchTerm : undefined)
       setJobsWorkbench(data)
@@ -276,6 +247,15 @@ export function JobsSurface() {
       setStatus(error instanceof Error ? error.message : 'Could not load jobs.')
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function refreshBoard() {
+    try {
+      const data = await loadJobsWorkbench(jobsFocus === 'search' ? jobsSearchTerm : undefined)
+      setJobsWorkbench(data)
+    } catch (error) {
+      setBoardMessage(error instanceof Error ? error.message : 'Could not refresh jobs.')
     }
   }
 
@@ -312,12 +292,41 @@ export function JobsSurface() {
     try {
       const data = await fetchJobWindow(selectedJobId)
       setJobWindowData(data)
+      await refreshBoard()
     } catch {
       // Keep current job visible if refresh fails.
     }
   }
 
+  async function submitBoardAction(payload: Record<string, unknown>) {
+    if (!selectedBoardJobId) return
+    setBoardBusy(true)
+    setBoardMessage(null)
+    try {
+      const res = await fetch(`/api/nexus/jobs/job-window/${selectedBoardJobId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const result = await res.json().catch(() => ({}))
+      if (!res.ok || result.success === false) throw new Error(result?.message ?? 'Could not complete that action.')
+      setBoardMessage(result?.message ?? 'Done.')
+      setBoardAction(null)
+      setBoardNote('')
+      setBoardTaskTitle('')
+      setBoardTaskDueDate('')
+      setBoardVisitDate('')
+      setBoardCompleteNote('')
+      await refreshBoard()
+    } catch (error) {
+      setBoardMessage(error instanceof Error ? error.message : 'That did not work. Try again.')
+    } finally {
+      setBoardBusy(false)
+    }
+  }
+
   const focusedJobs = jobsFocus === 'search' ? jobsWorkbench?.jobs ?? [] : jobsWorkbench?.[jobsFocus] ?? []
+  const selectedBoardJob = focusedJobs.find(job => job.id === selectedBoardJobId) ?? null
   const focusedJobsEmptyText = jobsFocus === 'needsAttention'
     ? 'No jobs need attention right now.'
     : jobsFocus === 'scheduledToday'
@@ -350,19 +359,14 @@ export function JobsSurface() {
               <div>
                 <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(52,211,153,0.62)' }}>Jobs</div>
                 <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.94)' }}>What jobs need work?</h2>
-                <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.42)' }}>Pick one simple board. Open a job only when you are ready for details.</p>
+                <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.42)' }}>Pick a board, select a job, then choose a simple action.</p>
               </div>
               <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(52,211,153,0.1)', color: 'rgba(110,231,183,0.9)', border: '1px solid rgba(52,211,153,0.18)' }}>{busy ? 'Loading…' : 'Jobs'}</div>
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {JOB_CARDS.map(card => (
-                <JobCardButton
-                  key={card.focus}
-                  card={card}
-                  count={card.badgeKey ? jobsWorkbench?.stats?.[card.badgeKey] ?? 0 : 0}
-                  onClick={() => void openJobsWorkbench(card.focus)}
-                />
+                <JobCardButton key={card.focus} card={card} count={card.badgeKey ? jobsWorkbench?.stats?.[card.badgeKey] ?? 0 : 0} onClick={() => void openJobsWorkbench(card.focus)} />
               ))}
             </div>
 
@@ -374,7 +378,7 @@ export function JobsSurface() {
             {status && <div className="mt-4 rounded-2xl p-3 text-xs" style={{ background: 'rgba(107,126,255,0.08)', border: '1px solid rgba(107,126,255,0.18)', color: 'rgba(255,255,255,0.72)' }}>{status}</div>}
 
             <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.32)' }}>
-              Jobs stays action-first: pick a board, then drill into a job glass window.
+              Jobs stays action-first: board, selected job, action rail, then full Job Glass only when needed.
             </div>
           </>
         )}
@@ -384,13 +388,54 @@ export function JobsSurface() {
         <JobsDetailShell
           title={activeTitle}
           subtitle={activeSubtitle}
-          onClose={() => setActivePanel(null)}
+          onClose={() => { setActivePanel(null); setSelectedBoardJobId(null); setBoardAction(null); setBoardMessage(null) }}
           actions={
             <>
-              <ActionButton label="Create Job" muted />
-              <ActionButton label="Schedule Visit" muted />
-              <ActionButton label="Add Note" muted />
-              <ActionButton label="Mark Complete" muted />
+              {selectedBoardJob ? (
+                <div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.16)', color: 'rgba(255,255,255,0.72)' }}>
+                  Selected:<br /> <span style={{ color: 'rgba(255,255,255,0.9)' }}>{jobDisplayName(selectedBoardJob)}</span>
+                </div>
+              ) : (
+                <div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.42)' }}>Select a job first.</div>
+              )}
+
+              <ActionButton label="Open Job Glass" disabled={!selectedBoardJobId} onClick={() => selectedBoardJobId ? void openJob(selectedBoardJobId) : undefined} />
+              <ActionButton label="Add Note" disabled={!selectedBoardJobId} onClick={() => { setBoardAction(boardAction === 'add_note' ? null : 'add_note'); setBoardMessage(null) }} />
+              <ActionButton label="Schedule Visit" disabled={!selectedBoardJobId} onClick={() => { setBoardAction(boardAction === 'schedule_visit' ? null : 'schedule_visit'); setBoardMessage(null) }} />
+              <ActionButton label="Create Task" disabled={!selectedBoardJobId} onClick={() => { setBoardAction(boardAction === 'create_task' ? null : 'create_task'); setBoardMessage(null) }} />
+              <ActionButton label="Mark Complete" disabled={!selectedBoardJobId} onClick={() => { setBoardAction(boardAction === 'mark_complete' ? null : 'mark_complete'); setBoardMessage(null) }} />
+
+              {boardAction === 'add_note' && (
+                <div className="space-y-2 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(52,211,153,0.22)' }}>
+                  <textarea value={boardNote} onChange={e => setBoardNote(e.target.value)} placeholder="What should Nexus remember?" rows={3} className="w-full resize-none rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(52,211,153,0.2)', color: 'rgba(255,255,255,0.88)' }} />
+                  <button type="button" disabled={boardBusy || !boardNote.trim()} onClick={() => void submitBoardAction({ action: 'add_note', note: boardNote })} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: '#34d399', color: '#06120c' }}>{boardBusy ? 'Saving...' : 'Save Note'}</button>
+                </div>
+              )}
+
+              {boardAction === 'schedule_visit' && (
+                <div className="space-y-2 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(52,211,153,0.22)' }}>
+                  <input type="date" value={boardVisitDate} onChange={e => setBoardVisitDate(e.target.value)} className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(52,211,153,0.2)', color: 'rgba(255,255,255,0.88)' }} />
+                  <textarea value={boardNote} onChange={e => setBoardNote(e.target.value)} placeholder="Optional note" rows={2} className="w-full resize-none rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.88)' }} />
+                  <button type="button" disabled={boardBusy || !boardVisitDate} onClick={() => void submitBoardAction({ action: 'schedule_visit', scheduled_date: boardVisitDate, note: boardNote })} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: '#34d399', color: '#06120c' }}>{boardBusy ? 'Scheduling...' : 'Schedule Visit'}</button>
+                </div>
+              )}
+
+              {boardAction === 'create_task' && (
+                <div className="space-y-2 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(52,211,153,0.22)' }}>
+                  <input value={boardTaskTitle} onChange={e => setBoardTaskTitle(e.target.value)} placeholder="What needs to get done?" className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(52,211,153,0.2)', color: 'rgba(255,255,255,0.88)' }} />
+                  <input type="date" value={boardTaskDueDate} onChange={e => setBoardTaskDueDate(e.target.value)} className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.88)' }} />
+                  <button type="button" disabled={boardBusy || !boardTaskTitle.trim()} onClick={() => void submitBoardAction({ action: 'create_task', title: boardTaskTitle, due_date: boardTaskDueDate })} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: '#34d399', color: '#06120c' }}>{boardBusy ? 'Creating...' : 'Create Task'}</button>
+                </div>
+              )}
+
+              {boardAction === 'mark_complete' && (
+                <div className="space-y-2 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(52,211,153,0.22)' }}>
+                  <textarea value={boardCompleteNote} onChange={e => setBoardCompleteNote(e.target.value)} placeholder="Optional completion note" rows={2} className="w-full resize-none rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.88)' }} />
+                  <button type="button" disabled={boardBusy} onClick={() => void submitBoardAction({ action: 'mark_complete', note: boardCompleteNote })} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: '#34d399', color: '#06120c' }}>{boardBusy ? 'Closing...' : 'Mark Complete'}</button>
+                </div>
+              )}
+
+              {boardMessage && <div className="rounded-2xl px-3 py-2 text-[11px]" style={{ background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.18)', color: 'rgba(255,255,255,0.72)' }}>{boardMessage}</div>}
             </>
           }
         >
@@ -400,7 +445,7 @@ export function JobsSurface() {
               <button type="button" onClick={() => void openJobsWorkbench('search')} className="rounded-2xl px-4 py-3 text-sm" style={{ background: '#34d399', color: '#06120c' }}>Search</button>
             </div>
           )}
-          <JobRecordList records={focusedJobs} emptyText={focusedJobsEmptyText} onJobClick={openJob} jobWindowBusy={jobWindowBusy} loadingJobId={loadingJobId} />
+          <JobRecordList records={focusedJobs} emptyText={focusedJobsEmptyText} onJobSelect={id => { setSelectedBoardJobId(id); setBoardAction(null); setBoardMessage(null) }} onJobOpen={openJob} selectedJobId={selectedBoardJobId} jobWindowBusy={jobWindowBusy} loadingJobId={loadingJobId} />
         </JobsDetailShell>
       )}
     </section>
