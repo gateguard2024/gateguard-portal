@@ -6,6 +6,7 @@ import { ActionCommandBar } from '@/components/nexus/ActionCommandBar'
 import { ActionFlowSurface, type NexusTabId } from '@/components/nexus/ActionFlowSurface'
 import { JobsSurface } from '@/components/nexus/JobsSurface'
 import { MyDaySurface } from '@/components/nexus/MyDaySurface'
+import { SalesSurface } from '@/components/nexus/SalesSurface'
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -111,7 +112,7 @@ export default function NexusHomeClient() {
           </div>
         )}
 
-        {activeTab === 'my-day' ? <MyDaySurface /> : activeTab === 'jobs' ? <JobsSurface /> : <ActionFlowSurface activeTab={activeTab} />}
+        {activeTab === 'my-day' ? <MyDaySurface /> : activeTab === 'jobs' ? <JobsSurface /> : activeTab === 'opps' ? <SalesSurface /> : <ActionFlowSurface activeTab={activeTab} />}
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 z-20 flex justify-center gap-2 overflow-x-auto border-t border-white/5 bg-black/55 px-4 py-4 backdrop-blur-xl">
