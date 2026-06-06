@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AddEventModal } from '@/components/calendar/AddEventModal'
 import { MyDayRelatedJobGlass } from '@/components/nexus/MyDayRelatedJobGlass'
+import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 
 type MyDayPanel = 'schedule' | 'top10' | 'todos' | 'email' | null
 
@@ -51,6 +52,7 @@ type MyDayCard = {
   title: string
   subtitle: string
   hex: string
+  glyph: NexusGlyphKind
   actionLabel: string
   badge?: string
 }
@@ -76,21 +78,22 @@ function MyDayCardButton({ card, onClick }: { card: MyDayCard; onClick: () => vo
       onClick={onClick}
       className="group relative min-h-[132px] overflow-hidden rounded-3xl p-4 text-left transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-60"
       style={{
-        background: `linear-gradient(145deg, rgba(${color},0.18), rgba(255,255,255,0.035))`,
-        border: `1px solid rgba(${color},0.30)`,
-        boxShadow: `0 0 22px rgba(${color},0.12), 0 18px 50px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.06)`,
+        background: `radial-gradient(circle at 18% 8%, rgba(${color},0.22), transparent 32%), linear-gradient(145deg, rgba(${color},0.13), rgba(8,18,34,0.68))`,
+        border: `1px solid rgba(${color},0.34)`,
+        boxShadow: `0 0 24px rgba(${color},0.16), 0 18px 50px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.07)`,
         backdropFilter: 'blur(18px)',
       }}
     >
+      <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full" style={{ background: `rgba(${color},0.13)`, filter: 'blur(18px)' }} />
       {card.badge && (
-        <div className="absolute right-4 top-4 rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em]" style={{ background: `rgba(${color},0.14)`, border: `1px solid rgba(${color},0.28)`, color: 'rgba(255,255,255,0.82)' }}>
+        <div className="absolute right-4 top-4 rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em]" style={{ background: `rgba(${color},0.14)`, border: `1px solid rgba(${color},0.28)`, color: 'rgba(255,255,255,0.86)' }}>
           {card.badge}
         </div>
       )}
-      <div className="mb-4 flex h-8 w-8 items-center justify-center rounded-2xl text-sm" style={{ background: `rgba(${color},0.28)`, border: `1px solid rgba(${color},0.38)`, color: 'rgba(255,255,255,0.9)' }} />
-      <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>{card.title}</div>
-      <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.48)' }}>{card.subtitle}</div>
-      <div className="absolute bottom-4 right-4 text-xs opacity-70 transition-opacity group-hover:opacity-100" style={{ color: card.hex }}>{card.actionLabel}</div>
+      <NexusGlyphTile kind={card.glyph} color={card.hex} />
+      <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>{card.title}</div>
+      <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>{card.subtitle}</div>
+      <div className="absolute bottom-4 right-4 text-xs opacity-75 transition-opacity group-hover:opacity-100" style={{ color: card.hex, textShadow: `0 0 14px rgba(${color},0.38)` }}>{card.actionLabel}</div>
     </button>
   )
 }
@@ -204,10 +207,10 @@ export function MyDaySurface() {
   }
 
   const cards: MyDayCard[] = [
-    { id: 'schedule', title: 'Today’s Schedule', subtitle: nextEvent ? `Next: ${formatEventTime(nextEvent)} ${nextEvent.title}`.trim() : 'Calendar, events, jobs, site visits, and appointments for today.', hex: '#00C8FF', badge: `${todayCount} today`, actionLabel: 'Open →' },
-    { id: 'top10', title: 'Top 10 Things', subtitle: workSignalCount > 0 ? `${workSignalCount} priority item${workSignalCount === 1 ? '' : 's'} ready to handle today.` : 'The most important work to handle today will rank here.', hex: '#007CFF', badge: workSignalCount > 0 ? `${workSignalCount}` : 'Next', actionLabel: 'Open →' },
-    { id: 'todos', title: 'To-Dos', subtitle: `${todoCount} due today. Overdue, unscheduled, and done actions come next.`, hex: '#a855f7', actionLabel: 'Open →' },
-    { id: 'email', title: 'Email', subtitle: connected ? 'Calendar is connected. Important email will roll in once mailbox connectors are added.' : 'Important customer messages will show here once mailbox connectors are added.', hex: '#64748b', actionLabel: 'Coming soon →' },
+    { id: 'schedule', title: 'Today’s Schedule', subtitle: nextEvent ? `Next: ${formatEventTime(nextEvent)} ${nextEvent.title}`.trim() : 'Calendar, events, jobs, site visits, and appointments for today.', hex: '#00C8FF', glyph: 'schedule', badge: `${todayCount} today`, actionLabel: 'Open →' },
+    { id: 'top10', title: 'Top 10 Things', subtitle: workSignalCount > 0 ? `${workSignalCount} priority item${workSignalCount === 1 ? '' : 's'} ready to handle today.` : 'The most important work to handle today will rank here.', hex: '#007CFF', glyph: 'priority', badge: workSignalCount > 0 ? `${workSignalCount}` : 'Next', actionLabel: 'Open →' },
+    { id: 'todos', title: 'To-Dos', subtitle: `${todoCount} due today. Overdue, unscheduled, and done actions come next.`, hex: '#8B5CF6', glyph: 'todo', actionLabel: 'Open →' },
+    { id: 'email', title: 'Email', subtitle: connected ? 'Calendar is connected. Important email will roll in once mailbox connectors are added.' : 'Important customer messages will show here once mailbox connectors are added.', hex: '#64748b', glyph: 'email', actionLabel: 'Coming soon →' },
   ]
 
   if (relatedJobId) {
