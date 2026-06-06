@@ -26,23 +26,24 @@ function SalesCardButton({ card, onClick }: { card: SalesCard; onClick: () => vo
     <button
       type="button"
       onClick={onClick}
-      className="group relative min-h-[132px] overflow-hidden rounded-3xl p-4 text-left transition-all duration-200 hover:-translate-y-0.5"
+      className="group relative min-h-[138px] overflow-hidden rounded-3xl p-4 text-left transition-all duration-200 hover:-translate-y-1"
       style={{
-        background: `linear-gradient(145deg, rgba(${color},0.18), rgba(255,255,255,0.035))`,
-        border: `1px solid rgba(${color},0.30)`,
-        boxShadow: `0 0 22px rgba(${color},0.12), 0 18px 50px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.06)`,
-        backdropFilter: 'blur(18px)',
+        background: `radial-gradient(circle at 18% 8%, rgba(${color},0.26), transparent 32%), linear-gradient(145deg, rgba(8,18,34,0.88), rgba(3,9,22,0.78))`,
+        border: `1px solid rgba(${color},0.34)`,
+        boxShadow: `0 0 26px rgba(${color},0.16), 0 22px 58px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.08)`,
+        backdropFilter: 'blur(20px)',
       }}
     >
+      <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full" style={{ background: `rgba(${color},0.14)`, filter: 'blur(18px)' }} />
       {card.badge && (
-        <div className="absolute right-4 top-4 rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em]" style={{ background: `rgba(${color},0.14)`, border: `1px solid rgba(${color},0.28)`, color: 'rgba(255,255,255,0.82)' }}>
+        <div className="absolute right-4 top-4 rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em]" style={{ background: `rgba(${color},0.16)`, border: `1px solid rgba(${color},0.34)`, color: 'rgba(255,255,255,0.86)' }}>
           {card.badge}
         </div>
       )}
-      <div className="mb-4 flex h-8 w-8 items-center justify-center rounded-2xl text-sm" style={{ background: `rgba(${color},0.28)`, border: `1px solid rgba(${color},0.38)`, color: 'rgba(255,255,255,0.9)' }} />
-      <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>{card.title}</div>
-      <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.48)' }}>{card.subtitle}</div>
-      <div className="absolute bottom-4 right-4 text-xs opacity-70 transition-opacity group-hover:opacity-100" style={{ color: card.hex }}>Open →</div>
+      <div className="mb-4 flex h-8 w-8 items-center justify-center rounded-2xl text-sm" style={{ background: `rgba(${color},0.28)`, border: `1px solid rgba(${color},0.44)`, boxShadow: `0 0 18px rgba(${color},0.24)`, color: 'rgba(255,255,255,0.9)' }} />
+      <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>{card.title}</div>
+      <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.56)' }}>{card.subtitle}</div>
+      <div className="absolute bottom-4 right-4 text-xs opacity-75 transition-opacity group-hover:opacity-100" style={{ color: card.hex, textShadow: `0 0 14px rgba(${color},0.40)` }}>Open →</div>
     </button>
   )
 }
@@ -54,8 +55,8 @@ function ActionButton({ label, onClick, muted }: { label: string; onClick?: () =
       onClick={onClick}
       className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-opacity hover:opacity-85"
       style={muted
-        ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.48)' }
-        : { background: 'rgba(0,200,255,0.10)', border: '1px solid rgba(0,200,255,0.22)', color: '#7dd3fc' }}
+        ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.50)' }
+        : { background: 'linear-gradient(135deg, rgba(0,124,255,0.22), rgba(0,200,255,0.10))', border: '1px solid rgba(0,200,255,0.26)', color: '#7dd3fc', boxShadow: '0 0 18px rgba(0,124,255,0.12)' }}
     >
       {label}
     </button>
@@ -64,25 +65,25 @@ function ActionButton({ label, onClick, muted }: { label: string; onClick?: () =
 
 function SalesDetailShell({ title, subtitle, onClose, children, actions }: { title: string; subtitle: string; onClose: () => void; children: React.ReactNode; actions?: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 px-4 py-6">
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/68 px-4 py-6 backdrop-blur-sm">
       <div
         className="grid max-h-[86vh] w-full max-w-6xl grid-cols-1 gap-4 overflow-hidden rounded-[2rem] p-5 shadow-2xl lg:grid-cols-[1fr_260px]"
         style={{
-          background: 'linear-gradient(180deg, rgba(8,18,34,0.96), rgba(5,10,22,0.96))',
-          border: '1px solid rgba(0,200,255,0.16)',
-          boxShadow: '0 30px 100px rgba(0,0,0,0.55), 0 0 48px rgba(0,200,255,0.10), inset 0 1px 0 rgba(255,255,255,0.06)',
-          backdropFilter: 'blur(26px)',
+          background: 'radial-gradient(circle at 18% 0%, rgba(0,124,255,0.16), transparent 32%), linear-gradient(180deg, rgba(8,18,34,0.97), rgba(3,9,22,0.97))',
+          border: '1px solid rgba(0,200,255,0.20)',
+          boxShadow: '0 30px 100px rgba(0,0,0,0.60), 0 0 58px rgba(0,124,255,0.13), inset 0 1px 0 rgba(255,255,255,0.07)',
+          backdropFilter: 'blur(28px)',
         }}
       >
         <div className="min-h-0 overflow-y-auto pr-1">
-          <button type="button" onClick={onClose} className="mb-4 rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.58)' }}>← Back to Sales</button>
-          <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.78)' }}>Sales</div>
-          <h2 className="mt-1 text-2xl font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>{title}</h2>
-          <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.48)' }}>{subtitle}</p>
+          <button type="button" onClick={onClose} className="mb-4 rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(0,200,255,0.14)', color: 'rgba(255,255,255,0.62)' }}>← Back to Sales</button>
+          <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.82)' }}>Sales</div>
+          <h2 className="mt-1 text-2xl font-semibold" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(0,124,255,0.20)' }}>{title}</h2>
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>{subtitle}</p>
           <div className="mt-5">{children}</div>
         </div>
-        <aside className="rounded-3xl p-4" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)' }}>
-          <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>Actions</div>
+        <aside className="rounded-3xl p-4" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.68), rgba(3,9,22,0.52))', border: '1px solid rgba(59,130,246,0.15)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)' }}>
+          <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Actions</div>
           <div className="mt-4 space-y-2">{actions}</div>
         </aside>
       </div>
@@ -111,13 +112,13 @@ export function SalesSurface() {
       id: 'quotes',
       title: 'Create / Work Quotes',
       subtitle: 'Start a quote, keep working a draft, or review a sent proposal.',
-      hex: '#fbbf24',
+      hex: '#FBBF24',
     },
     {
       id: 'aria',
       title: 'Research Property',
       subtitle: 'Use ARIA to learn about a property before calling, pitching, or quoting.',
-      hex: '#a855f7',
+      hex: '#8B5CF6',
       badge: 'ARIA',
     },
   ]
@@ -127,28 +128,28 @@ export function SalesSurface() {
       <div
         className="rounded-[2rem] p-5 sm:p-6"
         style={{
-          background: 'linear-gradient(180deg, rgba(0,200,255,0.07), rgba(255,255,255,0.022))',
-          border: '1px solid rgba(0,200,255,0.14)',
-          boxShadow: '0 24px 80px rgba(0,0,0,0.32), 0 0 38px rgba(0,200,255,0.07), inset 0 1px 0 rgba(255,255,255,0.06)',
-          backdropFilter: 'blur(24px)',
+          background: 'radial-gradient(circle at 12% 0%, rgba(0,124,255,0.18), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.78), rgba(3,9,22,0.72))',
+          border: '1px solid rgba(0,200,255,0.18)',
+          boxShadow: '0 28px 90px rgba(0,0,0,0.38), 0 0 46px rgba(0,124,255,0.12), inset 0 1px 0 rgba(255,255,255,0.07)',
+          backdropFilter: 'blur(26px)',
         }}
       >
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.78)' }}>Sales</div>
-            <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.96)' }}>What sales work are we doing?</h2>
-            <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.48)' }}>
+            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.82)' }}>Sales</div>
+            <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(0,124,255,0.22)' }}>What sales work are we doing?</h2>
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>
               Add leads, work follow-ups, build quotes, or research a property.
             </p>
           </div>
-          <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(0,200,255,0.10)', color: 'rgba(125,229,255,0.95)', border: '1px solid rgba(0,200,255,0.24)' }}>Sales OS</div>
+          <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(0,124,255,0.14)', color: 'rgba(125,229,255,0.96)', border: '1px solid rgba(0,200,255,0.28)', boxShadow: '0 0 18px rgba(0,124,255,0.12)' }}>Sales OS</div>
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {cards.map(card => <SalesCardButton key={card.id} card={card} onClick={() => setActivePanel(card.id)} />)}
         </div>
 
-        <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.32)' }}>
+        <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
           Sales stays simple: add a lead, work my leads, create or work quotes, or research a property.
         </div>
       </div>
@@ -200,9 +201,9 @@ export function SalesSurface() {
             </>
           }
         >
-          <div className="rounded-3xl p-4" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)' }}>
-            <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>Quote workflow</div>
-            <p className="mt-2 text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.48)' }}>
+          <div className="rounded-3xl p-4" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.70), rgba(3,9,22,0.48))', border: '1px solid rgba(59,130,246,0.16)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)' }}>
+            <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Quote workflow</div>
+            <p className="mt-2 text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>
               The quote builder already exists. This board is the simple sales doorway into proposals, survey imports, and approvals.
             </p>
           </div>
@@ -222,9 +223,9 @@ export function SalesSurface() {
             </>
           }
         >
-          <div className="rounded-3xl p-4" style={{ background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.20)' }}>
-            <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>ARIA powers property research</div>
-            <p className="mt-2 text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.50)' }}>
+          <div className="rounded-3xl p-4" style={{ background: 'radial-gradient(circle at 12% 0%, rgba(139,92,246,0.18), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.70), rgba(3,9,22,0.48))', border: '1px solid rgba(139,92,246,0.24)', boxShadow: '0 0 28px rgba(139,92,246,0.10), inset 0 1px 0 rgba(255,255,255,0.05)' }}>
+            <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>ARIA powers property research</div>
+            <p className="mt-2 text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.56)' }}>
               ARIA is the paid research engine. For now it opens the ARIA workspace; next we will bring recent searches and create-lead handoff into this glass board.
             </p>
           </div>
