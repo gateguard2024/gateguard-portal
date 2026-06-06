@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { ActionFlowSurface } from '@/components/nexus/ActionFlowSurface'
+import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 
 type SalesPanel = 'new-lead' | 'work-leads' | 'quotes' | 'aria' | null
 
@@ -11,6 +12,7 @@ type SalesCard = {
   title: string
   subtitle: string
   hex: string
+  glyph: NexusGlyphKind
   badge?: string
 }
 
@@ -40,7 +42,7 @@ function SalesCardButton({ card, onClick }: { card: SalesCard; onClick: () => vo
           {card.badge}
         </div>
       )}
-      <div className="mb-4 flex h-8 w-8 items-center justify-center rounded-2xl text-sm" style={{ background: `rgba(${color},0.28)`, border: `1px solid rgba(${color},0.44)`, boxShadow: `0 0 18px rgba(${color},0.24)`, color: 'rgba(255,255,255,0.9)' }} />
+      <NexusGlyphTile kind={card.glyph} color={card.hex} />
       <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>{card.title}</div>
       <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.56)' }}>{card.subtitle}</div>
       <div className="absolute bottom-4 right-4 text-xs opacity-75 transition-opacity group-hover:opacity-100" style={{ color: card.hex, textShadow: `0 0 14px rgba(${color},0.40)` }}>Open →</div>
@@ -101,24 +103,28 @@ export function SalesSurface() {
       title: 'Add New Lead',
       subtitle: 'Add someone who called, walked in, came from outbound, or came from the website.',
       hex: '#00C8FF',
+      glyph: 'lead',
     },
     {
       id: 'work-leads',
       title: 'Work My Leads',
       subtitle: 'See leads, follow-ups, opportunities, and sales work that need action.',
       hex: '#007CFF',
+      glyph: 'pipeline',
     },
     {
       id: 'quotes',
       title: 'Create / Work Quotes',
       subtitle: 'Start a quote, keep working a draft, or review a sent proposal.',
       hex: '#FBBF24',
+      glyph: 'quote',
     },
     {
       id: 'aria',
       title: 'Research Property',
       subtitle: 'Use ARIA to learn about a property before calling, pitching, or quoting.',
       hex: '#8B5CF6',
+      glyph: 'research',
       badge: 'ARIA',
     },
   ]
