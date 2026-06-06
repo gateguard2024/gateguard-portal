@@ -97,28 +97,28 @@ export function SalesSurface() {
   const cards: SalesCard[] = [
     {
       id: 'new-lead',
-      title: 'New Lead',
-      subtitle: 'Capture a call, walk-in, outbound lead, or website lead.',
+      title: 'Add New Lead',
+      subtitle: 'Add someone who called, walked in, came from outbound, or came from the website.',
       hex: '#00C8FF',
     },
     {
       id: 'work-leads',
-      title: 'Work Leads',
-      subtitle: 'Open leads, follow-ups, opportunities, and sales search.',
+      title: 'Work My Leads',
+      subtitle: 'See leads, follow-ups, opportunities, and sales work that need action.',
       hex: '#007CFF',
     },
     {
       id: 'quotes',
-      title: 'Quotes',
-      subtitle: 'Start a proposal, continue drafts, or review sent quotes.',
+      title: 'Create / Work Quotes',
+      subtitle: 'Start a quote, keep working a draft, or review a sent proposal.',
       hex: '#fbbf24',
     },
     {
       id: 'aria',
-      title: 'ARIA Research',
-      subtitle: 'Run property intel before calling, pitching, or quoting.',
+      title: 'Research Property',
+      subtitle: 'Use ARIA to learn about a property before calling, pitching, or quoting.',
       hex: '#a855f7',
-      badge: 'AI',
+      badge: 'ARIA',
     },
   ]
 
@@ -138,7 +138,7 @@ export function SalesSurface() {
             <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.78)' }}>Sales</div>
             <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.96)' }}>What sales work are we doing?</h2>
             <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.48)' }}>
-              Leads, opportunities, quotes, surveys, and ARIA research all start here.
+              Add leads, work follow-ups, build quotes, or research a property.
             </p>
           </div>
           <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(0,200,255,0.10)', color: 'rgba(125,229,255,0.95)', border: '1px solid rgba(0,200,255,0.24)' }}>Sales OS</div>
@@ -149,18 +149,18 @@ export function SalesSurface() {
         </div>
 
         <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.32)' }}>
-          Sales stays simple: create a lead, work existing pipeline, quote it, or research with ARIA.
+          Sales stays simple: add a lead, work my leads, create or work quotes, or research a property.
         </div>
       </div>
 
       {activePanel === 'new-lead' && (
         <SalesDetailShell
-          title="New Lead"
-          subtitle="Capture the lead first. Details, ARIA, quote, and follow-up come after."
+          title="Add New Lead"
+          subtitle="Add the lead first. Details, ARIA, quote, and follow-up come after."
           onClose={() => setActivePanel(null)}
           actions={
             <>
-              <ActionButton label="Run ARIA First" onClick={() => router.push('/aria')} />
+              <ActionButton label="Research Property First" onClick={() => router.push('/aria')} />
               <ActionButton label="Start Quote" onClick={() => router.push('/quotes/new')} />
               <ActionButton label="Open CRM" onClick={() => router.push('/crm')} muted />
             </>
@@ -172,13 +172,13 @@ export function SalesSurface() {
 
       {activePanel === 'work-leads' && (
         <SalesDetailShell
-          title="Work Leads"
+          title="Work My Leads"
           subtitle="Find open leads, opportunities, and follow-ups that need action."
           onClose={() => setActivePanel(null)}
           actions={
             <>
               <ActionButton label="Search Pipeline" muted />
-              <ActionButton label="Run ARIA" onClick={() => router.push('/aria')} />
+              <ActionButton label="Research Property" onClick={() => router.push('/aria')} />
               <ActionButton label="Open CRM" onClick={() => router.push('/crm')} muted />
             </>
           }
@@ -189,7 +189,7 @@ export function SalesSurface() {
 
       {activePanel === 'quotes' && (
         <SalesDetailShell
-          title="Quotes"
+          title="Create / Work Quotes"
           subtitle="Start or continue the proposal path without making users hunt through CRM."
           onClose={() => setActivePanel(null)}
           actions={
@@ -211,8 +211,8 @@ export function SalesSurface() {
 
       {activePanel === 'aria' && (
         <SalesDetailShell
-          title="ARIA Research"
-          subtitle="Research the property, management company, contacts, and proptech before outreach."
+          title="Research Property"
+          subtitle="Use ARIA to research the property, management company, contacts, and proptech before outreach."
           onClose={() => setActivePanel(null)}
           actions={
             <>
@@ -223,7 +223,7 @@ export function SalesSurface() {
           }
         >
           <div className="rounded-3xl p-4" style={{ background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.20)' }}>
-            <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>ARIA lives inside Sales</div>
+            <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>ARIA powers property research</div>
             <p className="mt-2 text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.50)' }}>
               ARIA is the paid research engine. For now it opens the ARIA workspace; next we will bring recent searches and create-lead handoff into this glass board.
             </p>
