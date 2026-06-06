@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { AddEventModal } from '@/components/calendar/AddEventModal'
 
 type MyDaySummary = {
   success?: boolean
@@ -112,20 +113,21 @@ function MyDayCardButton({ card }: { card: MyDayCard }) {
 export function MyDaySurface() {
   const router = useRouter()
   const [summary, setSummary] = useState<MyDaySummary | null>(null)
+  const [addEventOpen, setAddEventOpen] = useState(false)
+
+  const loadSummary = useCallback(async () => {
+    try {
+      const res = await fetch('/api/calendar/my-day')
+      const data = await res.json().catch(() => null) as MyDaySummary | null
+      if (res.ok && data?.success) setSummary(data)
+    } catch {
+      // My Day still renders useful entry points when summary loading fails.
+    }
+  }, [])
 
   useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      try {
-        const res = await fetch('/api/calendar/my-day')
-        const data = await res.json().catch(() => null) as MyDaySummary | null
-        if (!cancelled && res.ok && data?.success) setSummary(data)
-      } catch {
-        // My Day still renders useful entry points when summary loading fails.
-      }
-    })()
-    return () => { cancelled = true }
-  }, [])
+    void loadSummary()
+  }, [loadSummary])
 
   const todayCount = summary?.counts?.today_total ?? 0
   const weekCount = summary?.counts?.week_total ?? 0
@@ -157,7 +159,7 @@ export function MyDaySurface() {
       subtitle: 'Put something on your day. Nexus saves it first; Google sync is optional.',
       hex: '#34d399',
       actionLabel: 'Add →',
-      onClick: () => router.push('/calendar'),
+      onClick: () => setAddEventOpen(true),
     },
     {
       title: 'Find Time',
@@ -240,10 +242,52 @@ export function MyDaySurface() {
           {cards.map(card => <MyDayCardButton key={card.title} card={card} />)}
         </div>
 
+        <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <div className="rounded-3xl p-4" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>Today’s Schedule</div>
+                <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.42)' }}>Events, appointments, site visits, and scheduled work.</div>
+              </div>
+              <button type="button" onClick={() => setAddEventOpen(true)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(0,200,255,0.12)', border: '1px solid rgba(0,200,255,0.24)', color: '#7dd3fc' }}>Add Event</button>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {todayEvents.length > 0 ? todayEvents.slice(0, 5).map(event => (
+                <div key={`${event.type}-${event.id}`} className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.88)' }}>{event.title}</div>
+                    <div className="text-[10px]" style={{ color: '#7dd3fc' }}>{formatEventTime(event) || 'Today'}</div>
+                  </div>
+                  <div className="mt-1 text-[10px] capitalize" style={{ color: 'rgba(255,255,255,0.34)' }}>{event.type.replace(/_/g, ' ')}</div>
+                </div>
+              )) : (
+                <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)' }}>
+                  Nothing scheduled yet. Add an event to start planning your day.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-3xl p-4" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>Top 10 Things</div>
+            <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.42)' }}>Next phase will rank tasks, jobs, leads, opportunities, billing, and emails by urgency.</div>
+            <div className="mt-4 rounded-2xl px-3 py-3 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)' }}>
+              Ranking engine coming next. For now, use Today’s Schedule and Add Event.
+            </div>
+          </div>
+        </div>
+
         <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.32)' }}>
           My Day is the customer-facing command center. The backend can be calendar, CRM, jobs, billing, and email — the user just works the day.
         </div>
       </div>
+
+      <AddEventModal
+        open={addEventOpen}
+        onClose={() => setAddEventOpen(false)}
+        onSaved={loadSummary}
+      />
     </section>
   )
 }
