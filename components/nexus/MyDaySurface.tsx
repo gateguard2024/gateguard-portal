@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { AddEventModal } from '@/components/calendar/AddEventModal'
+import { MyDayRelatedJobGlass } from '@/components/nexus/MyDayRelatedJobGlass'
 
 type MyDayPanel = 'schedule' | 'top10' | 'todos' | 'email' | null
 
@@ -137,6 +138,7 @@ export function MyDaySurface() {
   const [topActionMessage, setTopActionMessage] = useState<string | null>(null)
   const [topNote, setTopNote] = useState('')
   const [showTopNoteBox, setShowTopNoteBox] = useState(false)
+  const [relatedJobId, setRelatedJobId] = useState<string | null>(null)
 
   const loadSummary = useCallback(async () => {
     try {
@@ -151,6 +153,16 @@ export function MyDaySurface() {
   useEffect(() => {
     void loadSummary()
   }, [loadSummary])
+
+  const todayCount = summary?.counts?.today_total ?? 0
+  const weekCount = summary?.counts?.week_total ?? 0
+  const todayEvents = summary?.today?.events ?? []
+  const top10 = summary?.top_10 ?? []
+  const selectedTopItem = top10.find(item => item.id === selectedTopItemId) ?? null
+  const nextEvent = todayEvents[0]
+  const connected = summary?.google_calendar?.connected === true
+  const todoCount = summary?.counts?.today_todos ?? 0
+  const workSignalCount = top10.length
 
   async function submitTopAction(action: 'mark_done' | 'add_note') {
     const item = top10.find(topItem => topItem.id === selectedTopItemId)
@@ -178,15 +190,18 @@ export function MyDaySurface() {
     }
   }
 
-  const todayCount = summary?.counts?.today_total ?? 0
-  const weekCount = summary?.counts?.week_total ?? 0
-  const todayEvents = summary?.today?.events ?? []
-  const top10 = summary?.top_10 ?? []
-  const selectedTopItem = top10.find(item => item.id === selectedTopItemId) ?? null
-  const nextEvent = todayEvents[0]
-  const connected = summary?.google_calendar?.connected === true
-  const todoCount = summary?.counts?.today_todos ?? 0
-  const workSignalCount = top10.length
+  function openSelectedRelated() {
+    if (!selectedTopItem) {
+      setTopActionMessage('Select an item first.')
+      return
+    }
+    if (selectedTopItem.type !== 'work_order') {
+      setTopActionMessage('This type stays in My Day for now. Full related glass is coming next.')
+      return
+    }
+    setRelatedJobId(selectedTopItem.id)
+    setActivePanel(null)
+  }
 
   const cards: MyDayCard[] = [
     { id: 'schedule', title: 'Today’s Schedule', subtitle: nextEvent ? `Next: ${formatEventTime(nextEvent)} ${nextEvent.title}`.trim() : 'Calendar, events, jobs, site visits, and appointments for today.', hex: '#00C8FF', badge: `${todayCount} today`, actionLabel: 'Open →' },
@@ -194,6 +209,16 @@ export function MyDaySurface() {
     { id: 'todos', title: 'To-Dos', subtitle: `${todoCount} due today. Overdue, unscheduled, and done actions come next.`, hex: '#a855f7', actionLabel: 'Open →' },
     { id: 'email', title: 'Email', subtitle: connected ? 'Calendar is connected. Important email will roll in once mailbox connectors are added.' : 'Important customer messages will show here once mailbox connectors are added.', hex: '#64748b', actionLabel: 'Coming soon →' },
   ]
+
+  if (relatedJobId) {
+    return (
+      <MyDayRelatedJobGlass
+        jobId={relatedJobId}
+        onBack={() => { setRelatedJobId(null); setActivePanel('top10') }}
+        onRefreshMyDay={loadSummary}
+      />
+    )
+  }
 
   return (
     <section className="mt-9 w-full max-w-5xl">
@@ -233,7 +258,7 @@ export function MyDaySurface() {
           actions={
             <>
               {selectedTopItem ? <div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(0,200,255,0.08)', border: '1px solid rgba(0,200,255,0.16)', color: 'rgba(255,255,255,0.72)' }}>Selected:<br /><span style={{ color: 'rgba(255,255,255,0.9)' }}>{selectedTopItem.title}</span></div> : <div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.42)' }}>Select an item first.</div>}
-              <ActionButton label="Open Related" muted />
+              <ActionButton label="Open Related" disabled={!selectedTopItem || topActionBusy} onClick={openSelectedRelated} />
               <ActionButton label="Mark Done" disabled={!selectedTopItem || topActionBusy} onClick={() => void submitTopAction('mark_done')} />
               <ActionButton label="Add Note" disabled={!selectedTopItem || topActionBusy} onClick={() => { setShowTopNoteBox(!showTopNoteBox); setTopActionMessage(null) }} />
               <ActionButton label="Snooze" muted />
