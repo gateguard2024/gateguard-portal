@@ -133,78 +133,39 @@ export function MyDaySurface() {
   const weekCount = summary?.counts?.week_total ?? 0
   const todayEvents = summary?.today?.events ?? []
   const nextEvent = todayEvents[0]
-  const nextFourHour = summary?.next_four_hour_appointment
   const connected = summary?.google_calendar?.connected === true
+  const todoCount = summary?.counts?.today_todos ?? 0
+  const workSignalCount = (summary?.counts?.today_work_orders ?? 0) + (summary?.counts?.today_crm_activities ?? 0) + (summary?.counts?.today_tracker_tasks ?? 0)
 
   const cards: MyDayCard[] = [
     {
       title: 'Today’s Schedule',
       subtitle: nextEvent
         ? `Next: ${formatEventTime(nextEvent)} ${nextEvent.title}`.trim()
-        : 'See calendar, events, jobs, and appointments for today.',
+        : 'Calendar, events, jobs, site visits, and appointments for today.',
       hex: '#00C8FF',
       badge: `${todayCount} today`,
-      actionLabel: 'View Week →',
+      actionLabel: 'Open →',
       onClick: () => router.push('/calendar'),
     },
     {
       title: 'Top 10 Things',
-      subtitle: 'The most important things to handle today across tasks, jobs, leads, opportunities, and billing.',
+      subtitle: workSignalCount > 0
+        ? `${workSignalCount} work signals are ready to rank across jobs, follow-ups, tasks, leads, opportunities, and billing.`
+        : 'The most important work to handle today will rank here.',
       hex: '#007CFF',
       badge: 'Next',
       actionLabel: 'Open →',
     },
     {
-      title: 'Add Event',
-      subtitle: 'Put something on your day. Nexus saves it first; Google sync is optional.',
-      hex: '#34d399',
-      actionLabel: 'Add →',
-      onClick: () => setAddEventOpen(true),
-    },
-    {
-      title: 'Find Time',
-      subtitle: nextFourHour
-        ? `Next 4-hour block found: ${nextFourHour.title}`
-        : 'Find open time for a call, site walk, install, or long appointment.',
-      hex: '#fbbf24',
-      actionLabel: 'Soon →',
-    },
-    {
       title: 'To-Dos',
-      subtitle: `${summary?.counts?.today_todos ?? 0} due today. Overdue, unscheduled, and done actions come next.`,
+      subtitle: `${todoCount} due today. Overdue, unscheduled, and done actions come next.`,
       hex: '#a855f7',
       actionLabel: 'Open →',
     },
     {
-      title: 'Jobs / Site Visits',
-      subtitle: `${summary?.counts?.today_work_orders ?? 0} scheduled today. Job visits and work orders roll into My Day.`,
-      hex: '#f97316',
-      actionLabel: 'Open Jobs →',
-      onClick: () => router.push('/?tab=jobs'),
-    },
-    {
-      title: 'Leads & Follow-Ups',
-      subtitle: 'People and properties that need a touch today.',
-      hex: '#38bdf8',
-      actionLabel: 'Open →',
-      onClick: () => router.push('/?tab=opps'),
-    },
-    {
-      title: 'Opportunities',
-      subtitle: 'Deals waiting on proposal, quote, next step, or follow-up.',
-      hex: '#22c55e',
-      actionLabel: 'Open →',
-      onClick: () => router.push('/?tab=opps'),
-    },
-    {
-      title: 'Billing',
-      subtitle: 'Invoices, collections, renewals, and money items will roll into My Day here.',
-      hex: '#eab308',
-      actionLabel: 'Soon →',
-    },
-    {
       title: 'Email',
-      subtitle: connected ? 'Calendar is connected. Email inbox connector comes later.' : 'Email will show important customer messages once mailbox connectors are added.',
+      subtitle: connected ? 'Calendar is connected. Important email will roll in once mailbox connectors are added.' : 'Important customer messages will show here once mailbox connectors are added.',
       hex: '#64748b',
       actionLabel: 'Coming soon →',
     },
@@ -230,7 +191,7 @@ export function MyDaySurface() {
               What needs your attention today?
             </h2>
             <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.48)' }}>
-              Calendar, events, to-dos, jobs, leads, opportunities, billing, and email all roll up here.
+              Schedule, top priorities, to-dos, and email. Jobs, leads, opportunities, billing, and field work roll into those four places.
             </p>
           </div>
           <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(0,200,255,0.10)', color: 'rgba(125,229,255,0.95)', border: '1px solid rgba(0,200,255,0.24)' }}>
@@ -238,7 +199,7 @@ export function MyDaySurface() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {cards.map(card => <MyDayCardButton key={card.title} card={card} />)}
         </div>
 
@@ -249,7 +210,10 @@ export function MyDaySurface() {
                 <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>Today’s Schedule</div>
                 <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.42)' }}>Events, appointments, site visits, and scheduled work.</div>
               </div>
-              <button type="button" onClick={() => setAddEventOpen(true)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(0,200,255,0.12)', border: '1px solid rgba(0,200,255,0.24)', color: '#7dd3fc' }}>Add Event</button>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setAddEventOpen(true)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(0,200,255,0.12)', border: '1px solid rgba(0,200,255,0.24)', color: '#7dd3fc' }}>Add Event</button>
+                <button type="button" onClick={() => router.push('/calendar')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.58)' }}>Week</button>
+              </div>
             </div>
 
             <div className="mt-4 space-y-2">
@@ -271,7 +235,7 @@ export function MyDaySurface() {
 
           <div className="rounded-3xl p-4" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)' }}>
             <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>Top 10 Things</div>
-            <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.42)' }}>Next phase will rank tasks, jobs, leads, opportunities, billing, and emails by urgency.</div>
+            <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.42)' }}>Jobs, leads, opportunities, billing, tasks, and follow-ups will rank here by urgency.</div>
             <div className="mt-4 rounded-2xl px-3 py-3 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)' }}>
               Ranking engine coming next. For now, use Today’s Schedule and Add Event.
             </div>
@@ -279,7 +243,7 @@ export function MyDaySurface() {
         </div>
 
         <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.32)' }}>
-          My Day is the customer-facing command center. The backend can be calendar, CRM, jobs, billing, and email — the user just works the day.
+          My Day stays simple: schedule, top priorities, to-dos, and email. Everything else rolls up into one of those.
         </div>
       </div>
 
