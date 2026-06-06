@@ -14,11 +14,11 @@ type ChatMessage = {
 
 const NAV_ITEMS: { label: string; id: NexusTabId }[] = [
   { label: 'My Day', id: 'my-day' },
-  { label: 'Recent Work', id: 'recent' },
-  { label: 'New Opps/Leads', id: 'opps' },
+  { label: 'Sales', id: 'opps' },
   { label: 'Jobs', id: 'jobs' },
-  { label: 'Field', id: 'field' },
-  { label: 'People', id: 'people' },
+  { label: 'Customers/Sites', id: 'recent' },
+  { label: 'Money/Docs', id: 'field' },
+  { label: 'Internal', id: 'people' },
 ]
 
 function NexusMark() {
