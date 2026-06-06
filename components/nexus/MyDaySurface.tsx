@@ -4,6 +4,18 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AddEventModal } from '@/components/calendar/AddEventModal'
 
+type MyDayTopItem = {
+  id: string
+  type: string
+  title: string
+  reason: string
+  urgency: 'high' | 'medium' | 'low'
+  score: number
+  date?: string | null
+  time?: string | null
+  link?: string | null
+}
+
 type MyDaySummary = {
   success?: boolean
   counts?: {
@@ -24,11 +36,7 @@ type MyDaySummary = {
       starts_at?: string | null
     }>
   }
-  next_four_hour_appointment?: {
-    title: string
-    time?: string | null
-    starts_at?: string | null
-  } | null
+  top_10?: MyDayTopItem[]
   google_calendar?: {
     connected?: boolean
   }
@@ -117,7 +125,7 @@ export function MyDaySurface() {
 
   const loadSummary = useCallback(async () => {
     try {
-      const res = await fetch('/api/calendar/my-day')
+      const res = await fetch('/api/nexus/my-day')
       const data = await res.json().catch(() => null) as MyDaySummary | null
       if (res.ok && data?.success) setSummary(data)
     } catch {
@@ -132,10 +140,11 @@ export function MyDaySurface() {
   const todayCount = summary?.counts?.today_total ?? 0
   const weekCount = summary?.counts?.week_total ?? 0
   const todayEvents = summary?.today?.events ?? []
+  const top10 = summary?.top_10 ?? []
   const nextEvent = todayEvents[0]
   const connected = summary?.google_calendar?.connected === true
   const todoCount = summary?.counts?.today_todos ?? 0
-  const workSignalCount = (summary?.counts?.today_work_orders ?? 0) + (summary?.counts?.today_crm_activities ?? 0) + (summary?.counts?.today_tracker_tasks ?? 0)
+  const workSignalCount = top10.length
 
   const cards: MyDayCard[] = [
     {
@@ -151,10 +160,10 @@ export function MyDaySurface() {
     {
       title: 'Top 10 Things',
       subtitle: workSignalCount > 0
-        ? `${workSignalCount} work signals are ready to rank across jobs, follow-ups, tasks, leads, opportunities, and billing.`
+        ? `${workSignalCount} priority item${workSignalCount === 1 ? '' : 's'} ready to handle today.`
         : 'The most important work to handle today will rank here.',
       hex: '#007CFF',
-      badge: 'Next',
+      badge: workSignalCount > 0 ? `${workSignalCount}` : 'Next',
       actionLabel: 'Open →',
     },
     {
@@ -235,9 +244,23 @@ export function MyDaySurface() {
 
           <div className="rounded-3xl p-4" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)' }}>
             <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>Top 10 Things</div>
-            <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.42)' }}>Jobs, leads, opportunities, billing, tasks, and follow-ups will rank here by urgency.</div>
-            <div className="mt-4 rounded-2xl px-3 py-3 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)' }}>
-              Ranking engine coming next. For now, use Today’s Schedule and Add Event.
+            <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.42)' }}>Ranked from overdue, due today, scheduled today, and follow-ups.</div>
+            <div className="mt-4 space-y-2">
+              {top10.length > 0 ? top10.map((item, index) => (
+                <div key={`${item.type}-${item.id}`} className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.88)' }}>{index + 1}. {item.title}</div>
+                      <div className="mt-1 text-[10px] capitalize" style={{ color: 'rgba(255,255,255,0.34)' }}>{item.reason} · {item.type.replace(/_/g, ' ')}</div>
+                    </div>
+                    <div className="rounded-full px-2 py-1 text-[9px] font-semibold uppercase" style={{ background: item.urgency === 'high' ? 'rgba(248,113,113,0.16)' : item.urgency === 'medium' ? 'rgba(251,191,36,0.16)' : 'rgba(148,163,184,0.14)', color: item.urgency === 'high' ? '#fca5a5' : item.urgency === 'medium' ? '#fde68a' : '#cbd5e1', border: '1px solid rgba(255,255,255,0.08)' }}>{item.urgency}</div>
+                  </div>
+                </div>
+              )) : (
+                <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)' }}>
+                  No priority items yet. Add an event or to-do to start building the day.
+                </div>
+              )}
             </div>
           </div>
         </div>
