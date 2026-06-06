@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { JobGlassWindow } from '@/components/nexus/windows/JobGlassWindow'
+import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 
 type JobsFocus = 'myJobs' | 'needsAttention' | 'scheduledToday' | 'openJobs' | 'recentlyUpdated' | 'search'
 type BoardAction = 'add_note' | 'create_task' | 'schedule_visit' | 'mark_complete' | null
@@ -38,24 +39,26 @@ type JobCard = {
   title: string
   subtitle: string
   hex: string
+  glyph: NexusGlyphKind
   actionLabel: string
   badgeKey?: keyof NonNullable<JobsWorkbenchData['stats']>
+  badgeLabel?: string
 }
 
 const JOBS_LABELS: Record<JobsFocus, string> = {
   myJobs: 'My Jobs',
   needsAttention: 'Needs Attention',
-  scheduledToday: 'Scheduled Today',
+  scheduledToday: 'Today’s Jobs',
   openJobs: 'Open Jobs',
   recentlyUpdated: 'Recently Updated',
   search: 'Search Job / Site',
 }
 
 const JOB_CARDS: JobCard[] = [
-  { focus: 'needsAttention', title: 'Needs Attention', subtitle: 'Jobs that need a note, schedule, update, or next action.', hex: '#f97316', actionLabel: 'Open →', badgeKey: 'needsAttention' },
-  { focus: 'scheduledToday', title: 'Scheduled Today', subtitle: 'Visits, work, and service items planned for today.', hex: '#00C8FF', actionLabel: 'Open →', badgeKey: 'scheduledToday' },
-  { focus: 'openJobs', title: 'Open Jobs', subtitle: 'Active jobs that are not finished yet.', hex: '#34d399', actionLabel: 'Open →', badgeKey: 'openJobs' },
-  { focus: 'recentlyUpdated', title: 'Recently Updated', subtitle: 'Jobs with the newest activity or movement.', hex: '#a855f7', actionLabel: 'Open →', badgeKey: 'recentlyUpdated' },
+  { focus: 'scheduledToday', title: 'Today’s Jobs', subtitle: 'See site visits, scheduled work, and appointments for today.', hex: '#00C8FF', glyph: 'job-calendar', actionLabel: 'Open →', badgeKey: 'scheduledToday', badgeLabel: 'Today' },
+  { focus: 'needsAttention', title: 'Needs Attention', subtitle: 'Jobs that are overdue, blocked, or waiting on a next step.', hex: '#007CFF', glyph: 'job-alert', actionLabel: 'Open →', badgeKey: 'needsAttention' },
+  { focus: 'recentlyUpdated', title: 'Schedule Visit', subtitle: 'Plan a site visit, assign a time, and keep the job moving.', hex: '#34D399', glyph: 'job-calendar', actionLabel: 'Open →', badgeKey: 'recentlyUpdated', badgeLabel: 'Field' },
+  { focus: 'openJobs', title: 'Open Jobs', subtitle: 'Review active jobs, recent updates, files, tasks, and work orders.', hex: '#FBBF24', glyph: 'job-open', actionLabel: 'Open →', badgeKey: 'openJobs', badgeLabel: 'Active' },
 ]
 
 function rgb(hex: string): string {
@@ -91,24 +94,26 @@ function jobDisplaySubtitle(job: JobRecord): string {
 
 function JobCardButton({ card, count, onClick }: { card: JobCard; count: number; onClick: () => void }) {
   const color = rgb(card.hex)
+  const badgeText = card.badgeLabel ?? `${count} items`
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className="group relative min-h-[132px] overflow-hidden rounded-3xl p-4 text-left transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-60"
+      className="group relative min-h-[138px] overflow-hidden rounded-3xl p-4 text-left transition-all duration-200 hover:-translate-y-1 disabled:opacity-60"
       style={{
-        background: `linear-gradient(145deg, rgba(${color},0.18), rgba(255,255,255,0.035))`,
-        border: `1px solid rgba(${color},0.30)`,
-        boxShadow: `0 0 22px rgba(${color},0.12), 0 18px 50px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.06)`,
-        backdropFilter: 'blur(18px)',
+        background: `radial-gradient(circle at 18% 8%, rgba(${color},0.26), transparent 32%), linear-gradient(145deg, rgba(8,18,34,0.88), rgba(3,9,22,0.78))`,
+        border: `1px solid rgba(${color},0.34)`,
+        boxShadow: `0 0 26px rgba(${color},0.16), 0 22px 58px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.08)`,
+        backdropFilter: 'blur(20px)',
       }}
     >
-      <div className="absolute right-4 top-4 rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em]" style={{ background: `rgba(${color},0.14)`, border: `1px solid rgba(${color},0.28)`, color: 'rgba(255,255,255,0.82)' }}>{count} items</div>
-      <div className="mb-4 flex h-8 w-8 items-center justify-center rounded-2xl text-sm" style={{ background: `rgba(${color},0.28)`, border: `1px solid rgba(${color},0.38)`, color: 'rgba(255,255,255,0.9)' }} />
-      <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>{card.title}</div>
-      <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.48)' }}>{card.subtitle}</div>
-      <div className="absolute bottom-4 right-4 text-xs opacity-70 transition-opacity group-hover:opacity-100" style={{ color: card.hex }}>{card.actionLabel}</div>
+      <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full" style={{ background: `rgba(${color},0.14)`, filter: 'blur(18px)' }} />
+      <div className="absolute right-4 top-4 rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em]" style={{ background: `rgba(${color},0.16)`, border: `1px solid rgba(${color},0.34)`, color: 'rgba(255,255,255,0.86)' }}>{badgeText}</div>
+      <NexusGlyphTile kind={card.glyph} color={card.hex} />
+      <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>{card.title}</div>
+      <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.56)' }}>{card.subtitle}</div>
+      <div className="absolute bottom-4 right-4 text-xs opacity-75 transition-opacity group-hover:opacity-100" style={{ color: card.hex, textShadow: `0 0 14px rgba(${color},0.40)` }}>{card.actionLabel}</div>
     </button>
   )
 }
@@ -183,8 +188,8 @@ function ActionButton({ label, onClick, muted, disabled }: { label: string; onCl
       onClick={onClick}
       className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-45"
       style={muted || disabled
-        ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.48)' }
-        : { background: 'rgba(52,211,153,0.10)', border: '1px solid rgba(52,211,153,0.22)', color: '#86efac' }}
+        ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.50)' }
+        : { background: 'linear-gradient(135deg, rgba(0,124,255,0.20), rgba(52,211,153,0.10))', border: '1px solid rgba(52,211,153,0.24)', color: '#86efac', boxShadow: '0 0 18px rgba(52,211,153,0.12)' }}
     >
       {label}
     </button>
@@ -193,17 +198,17 @@ function ActionButton({ label, onClick, muted, disabled }: { label: string; onCl
 
 function JobsDetailShell({ title, subtitle, onClose, children, actions }: { title: string; subtitle: string; onClose: () => void; children: React.ReactNode; actions: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 px-4 py-6">
-      <div className="grid max-h-[86vh] w-full max-w-5xl grid-cols-1 gap-4 overflow-hidden rounded-[2rem] p-5 shadow-2xl lg:grid-cols-[1fr_260px]" style={{ background: 'linear-gradient(180deg, rgba(8,24,20,0.96), rgba(5,12,18,0.96))', border: '1px solid rgba(52,211,153,0.16)', boxShadow: '0 30px 100px rgba(0,0,0,0.55), 0 0 48px rgba(52,211,153,0.10), inset 0 1px 0 rgba(255,255,255,0.06)', backdropFilter: 'blur(26px)' }}>
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/68 px-4 py-6 backdrop-blur-sm">
+      <div className="grid max-h-[86vh] w-full max-w-5xl grid-cols-1 gap-4 overflow-hidden rounded-[2rem] p-5 shadow-2xl lg:grid-cols-[1fr_260px]" style={{ background: 'radial-gradient(circle at 18% 0%, rgba(52,211,153,0.14), transparent 32%), linear-gradient(180deg, rgba(8,18,34,0.97), rgba(3,9,22,0.97))', border: '1px solid rgba(52,211,153,0.20)', boxShadow: '0 30px 100px rgba(0,0,0,0.60), 0 0 58px rgba(52,211,153,0.12), inset 0 1px 0 rgba(255,255,255,0.07)', backdropFilter: 'blur(28px)' }}>
         <div className="min-h-0 overflow-y-auto pr-1">
-          <button type="button" onClick={onClose} className="mb-4 rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.58)' }}>← Back to Jobs</button>
-          <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(52,211,153,0.78)' }}>Jobs</div>
-          <h2 className="mt-1 text-2xl font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>{title}</h2>
-          <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.48)' }}>{subtitle}</p>
+          <button type="button" onClick={onClose} className="mb-4 rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(52,211,153,0.14)', color: 'rgba(255,255,255,0.62)' }}>← Back to Jobs</button>
+          <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(52,211,153,0.82)' }}>Jobs</div>
+          <h2 className="mt-1 text-2xl font-semibold" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(52,211,153,0.18)' }}>{title}</h2>
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>{subtitle}</p>
           <div className="mt-5 space-y-2">{children}</div>
         </div>
-        <aside className="rounded-3xl p-4" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)' }}>
-          <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>Actions</div>
+        <aside className="rounded-3xl p-4" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.68), rgba(3,9,22,0.52))', border: '1px solid rgba(52,211,153,0.15)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)' }}>
+          <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Actions</div>
           <div className="mt-4 space-y-2">{actions}</div>
         </aside>
       </div>
@@ -350,18 +355,18 @@ export function JobsSurface() {
 
   return (
     <section className="mt-9 w-full max-w-5xl">
-      <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.022))', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 24px 80px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.06)', backdropFilter: 'blur(24px)' }}>
+      <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'radial-gradient(circle at 12% 0%, rgba(52,211,153,0.14), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.78), rgba(3,9,22,0.72))', border: '1px solid rgba(52,211,153,0.18)', boxShadow: '0 28px 90px rgba(0,0,0,0.38), 0 0 46px rgba(52,211,153,0.10), inset 0 1px 0 rgba(255,255,255,0.07)', backdropFilter: 'blur(26px)' }}>
         {selectedJobId && jobWindowData ? (
           <JobGlassWindow data={jobWindowData as Parameters<typeof JobGlassWindow>[0]['data']} onBack={closeJobWindow} onRefresh={refreshOpenJob} />
         ) : (
           <>
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(52,211,153,0.62)' }}>Jobs</div>
-                <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.94)' }}>What jobs need work?</h2>
-                <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.42)' }}>Pick a board, select a job, then choose a simple action.</p>
+                <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(52,211,153,0.82)' }}>Jobs</div>
+                <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(52,211,153,0.18)' }}>What job work needs attention right now?</h2>
+                <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>Open today’s jobs, handle what needs attention, schedule site work, or review active work.</p>
               </div>
-              <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(52,211,153,0.1)', color: 'rgba(110,231,183,0.9)', border: '1px solid rgba(52,211,153,0.18)' }}>{busy ? 'Loading…' : 'Jobs'}</div>
+              <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(52,211,153,0.12)', color: 'rgba(134,239,172,0.96)', border: '1px solid rgba(52,211,153,0.28)', boxShadow: '0 0 18px rgba(52,211,153,0.10)' }}>{busy ? 'Loading…' : 'Field Ops'}</div>
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -377,8 +382,8 @@ export function JobsSurface() {
 
             {status && <div className="mt-4 rounded-2xl p-3 text-xs" style={{ background: 'rgba(107,126,255,0.08)', border: '1px solid rgba(107,126,255,0.18)', color: 'rgba(255,255,255,0.72)' }}>{status}</div>}
 
-            <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.32)' }}>
-              Jobs stays action-first: board, selected job, action rail, then full Job Glass only when needed.
+            <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
+              Jobs stays simple: open today’s work, handle what needs attention, schedule visits, or work all open jobs.
             </div>
           </>
         )}
