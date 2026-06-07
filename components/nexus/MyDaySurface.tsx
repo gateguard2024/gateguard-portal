@@ -76,24 +76,24 @@ function MyDayCardButton({ card, onClick }: { card: MyDayCard; onClick: () => vo
     <button
       type="button"
       onClick={onClick}
-      className="group relative min-h-[132px] overflow-hidden rounded-3xl p-4 text-left transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-60"
+      className="group relative min-h-[138px] overflow-hidden rounded-3xl p-4 text-left transition-all duration-200 hover:-translate-y-1 disabled:opacity-60"
       style={{
-        background: `radial-gradient(circle at 18% 8%, rgba(${color},0.22), transparent 32%), linear-gradient(145deg, rgba(${color},0.13), rgba(8,18,34,0.68))`,
+        background: `radial-gradient(circle at 18% 8%, rgba(${color},0.26), transparent 32%), linear-gradient(145deg, rgba(8,18,34,0.88), rgba(3,9,22,0.78))`,
         border: `1px solid rgba(${color},0.34)`,
-        boxShadow: `0 0 24px rgba(${color},0.16), 0 18px 50px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.07)`,
-        backdropFilter: 'blur(18px)',
+        boxShadow: `0 0 26px rgba(${color},0.16), 0 22px 58px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.08)`,
+        backdropFilter: 'blur(20px)',
       }}
     >
-      <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full" style={{ background: `rgba(${color},0.13)`, filter: 'blur(18px)' }} />
+      <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full" style={{ background: `rgba(${color},0.14)`, filter: 'blur(18px)' }} />
       {card.badge && (
-        <div className="absolute right-4 top-4 rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em]" style={{ background: `rgba(${color},0.14)`, border: `1px solid rgba(${color},0.28)`, color: 'rgba(255,255,255,0.86)' }}>
+        <div className="absolute right-4 top-4 rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em]" style={{ background: `rgba(${color},0.16)`, border: `1px solid rgba(${color},0.34)`, color: 'rgba(255,255,255,0.86)' }}>
           {card.badge}
         </div>
       )}
       <NexusGlyphTile kind={card.glyph} color={card.hex} />
       <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>{card.title}</div>
-      <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>{card.subtitle}</div>
-      <div className="absolute bottom-4 right-4 text-xs opacity-75 transition-opacity group-hover:opacity-100" style={{ color: card.hex, textShadow: `0 0 14px rgba(${color},0.38)` }}>{card.actionLabel}</div>
+      <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.56)' }}>{card.subtitle}</div>
+      <div className="absolute bottom-4 right-4 text-xs opacity-75 transition-opacity group-hover:opacity-100" style={{ color: card.hex, textShadow: `0 0 14px rgba(${color},0.40)` }}>{card.actionLabel}</div>
     </button>
   )
 }
@@ -225,21 +225,21 @@ export function MyDaySurface() {
 
   return (
     <section className="mt-9 w-full max-w-5xl">
-      <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'linear-gradient(180deg, rgba(0,200,255,0.07), rgba(255,255,255,0.022))', border: '1px solid rgba(0,200,255,0.14)', boxShadow: '0 24px 80px rgba(0,0,0,0.32), 0 0 38px rgba(0,200,255,0.07), inset 0 1px 0 rgba(255,255,255,0.06)', backdropFilter: 'blur(24px)' }}>
+      <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'radial-gradient(circle at 12% 0%, rgba(0,124,255,0.16), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.78), rgba(3,9,22,0.72))', border: '1px solid rgba(0,200,255,0.18)', boxShadow: '0 28px 90px rgba(0,0,0,0.38), 0 0 46px rgba(0,124,255,0.12), inset 0 1px 0 rgba(255,255,255,0.07)', backdropFilter: 'blur(26px)' }}>
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.78)' }}>My Day</div>
-            <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.96)' }}>What needs your attention today?</h2>
-            <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.48)' }}>Schedule, top priorities, to-dos, and email. Open one card, work that board, then come back.</p>
+            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.82)' }}>My Day</div>
+            <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(0,124,255,0.22)' }}>What needs your attention today?</h2>
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>Schedule, top priorities, to-dos, and email. Open one card, work that board, then come back.</p>
           </div>
-          <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(0,200,255,0.10)', color: 'rgba(125,229,255,0.95)', border: '1px solid rgba(0,200,255,0.24)' }}>{weekCount} this week</div>
+          <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(0,124,255,0.14)', color: 'rgba(125,229,255,0.96)', border: '1px solid rgba(0,200,255,0.28)', boxShadow: '0 0 18px rgba(0,124,255,0.12)' }}>{weekCount} this week</div>
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {cards.map(card => <MyDayCardButton key={card.title} card={card} onClick={() => { setActivePanel(card.id); setSelectedTopItemId(null); setTopActionMessage(null); setShowTopNoteBox(false) }} />)}
         </div>
 
-        <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.32)' }}>My Day stays simple: four doors, then a glass detail board. Jobs, leads, opportunities, billing, and field work roll into one of those boards.</div>
+        <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>My Day stays simple: four doors, then a glass detail board. Jobs, leads, opportunities, billing, and field work roll into one of those boards.</div>
       </div>
 
       {activePanel === 'schedule' && (
