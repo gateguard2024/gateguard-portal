@@ -7,7 +7,7 @@ import { ActionFlowSurface, type NexusTabId } from '@/components/nexus/ActionFlo
 import { CustomersSitesSurface } from '@/components/nexus/CustomersSitesSurface'
 import { InternalSurface } from '@/components/nexus/InternalSurface'
 import { JobsSurface } from '@/components/nexus/JobsSurface'
-import { MoneyDocsSurface } from '@/components/nexus/MoneyDocsSurface'
+import { MoneyDocsSurfaceNext } from '@/components/nexus/MoneyDocsSurfaceNext'
 import { MyDaySurface } from '@/components/nexus/MyDaySurface'
 import { SalesSurface } from '@/components/nexus/SalesSurface'
 
@@ -28,16 +28,7 @@ const NAV_ITEMS: { label: string; id: NexusTabId }[] = [
 function NexusMark() {
   return (
     <div className="mb-6 flex flex-col items-center gap-3">
-      <div
-        style={{
-          width: 72,
-          height: 72,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          filter: 'drop-shadow(0 0 26px rgba(0,124,255,0.62))',
-        }}
-      >
+      <div style={{ width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: 'drop-shadow(0 0 26px rgba(0,124,255,0.62))' }}>
         <svg width="68" height="68" viewBox="0 0 68 68" fill="none" aria-hidden="true">
           <polygon points="34,4 52,12 64,28 64,40 52,56 34,64 16,56 4,40 4,28 16,12" stroke="rgba(255,255,255,0.92)" strokeWidth="1.4" fill="rgba(0,124,255,0.08)" />
           <polygon points="34,14 47,20 56,32 56,36 47,48 34,54 21,48 12,36 12,32 21,20" stroke="rgba(0,200,255,0.72)" strokeWidth="1" fill="none" />
@@ -58,12 +49,7 @@ function NexusMark() {
 }
 
 async function postAssistant(messages: ChatMessage[]) {
-  const res = await fetch('/api/assistant/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages }),
-  })
-
+  const res = await fetch('/api/assistant/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages }) })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data?.message ?? 'Something went wrong. Please try again.')
   if (data.type === 'action_cards') return data.title ?? 'Nexus found action cards for that request.'
@@ -100,9 +86,7 @@ export default function NexusHomeClient() {
 
       <main className="relative z-10 flex flex-1 flex-col items-center px-6 pb-36 pt-16">
         <NexusMark />
-        <p className="mb-7 text-center text-lg" style={{ color: 'rgba(255,255,255,0.48)' }}>
-          Hi {firstName}, <span style={{ color: 'rgba(255,255,255,0.88)' }}>what are we working on today?</span>
-        </p>
+        <p className="mb-7 text-center text-lg" style={{ color: 'rgba(255,255,255,0.48)' }}>Hi {firstName}, <span style={{ color: 'rgba(255,255,255,0.88)' }}>what are we working on today?</span></p>
         <div className="w-full max-w-3xl rounded-[1.35rem]" style={{ boxShadow: '0 0 34px rgba(0,124,255,0.16), 0 0 1px rgba(0,200,255,0.5)' }}>
           <ActionCommandBar onSubmit={handleQuery} isLoading={isLoading} />
         </div>
@@ -111,37 +95,19 @@ export default function NexusHomeClient() {
           <div className="mt-6 w-full max-w-2xl space-y-3">
             <button type="button" onClick={() => setMessages([])} className="text-xs transition-colors" style={{ color: 'rgba(255,255,255,0.28)' }}>Clear conversation</button>
             {messages.slice(-4).map((message, index) => (
-              <div key={`${message.role}-${index}-${message.content.slice(0, 12)}`} className={message.role === 'user' ? 'ml-12 rounded-xl px-4 py-3 text-right text-sm leading-relaxed' : 'mr-12 rounded-xl px-4 py-3 text-sm leading-relaxed'} style={message.role === 'user' ? { background: 'linear-gradient(135deg, rgba(0,124,255,0.20), rgba(79,70,229,0.14))', border: '0.5px solid rgba(0,200,255,0.32)', color: 'rgba(255,255,255,0.9)' } : { background: 'rgba(8,18,34,0.68)', border: '0.5px solid rgba(59,130,246,0.16)', color: 'rgba(255,255,255,0.74)' }}>
-                {message.content}
-              </div>
+              <div key={`${message.role}-${index}-${message.content.slice(0, 12)}`} className={message.role === 'user' ? 'ml-12 rounded-xl px-4 py-3 text-right text-sm leading-relaxed' : 'mr-12 rounded-xl px-4 py-3 text-sm leading-relaxed'} style={message.role === 'user' ? { background: 'linear-gradient(135deg, rgba(0,124,255,0.20), rgba(79,70,229,0.14))', border: '0.5px solid rgba(0,200,255,0.32)', color: 'rgba(255,255,255,0.9)' } : { background: 'rgba(8,18,34,0.68)', border: '0.5px solid rgba(59,130,246,0.16)', color: 'rgba(255,255,255,0.74)' }}>{message.content}</div>
             ))}
           </div>
         )}
 
-        {activeTab === 'my-day'
-          ? <MyDaySurface />
-          : activeTab === 'jobs'
-            ? <JobsSurface />
-            : activeTab === 'opps'
-              ? <SalesSurface />
-              : activeTab === 'recent'
-                ? <CustomersSitesSurface />
-                : activeTab === 'field'
-                  ? <MoneyDocsSurface />
-                  : activeTab === 'people'
-                    ? <InternalSurface />
-                    : <ActionFlowSurface activeTab={activeTab} />}
+        {activeTab === 'my-day' ? <MyDaySurface /> : activeTab === 'jobs' ? <JobsSurface /> : activeTab === 'opps' ? <SalesSurface /> : activeTab === 'recent' ? <CustomersSitesSurface /> : activeTab === 'field' ? <MoneyDocsSurfaceNext /> : activeTab === 'people' ? <InternalSurface /> : <ActionFlowSurface activeTab={activeTab} />}
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 z-20 flex justify-center overflow-x-auto px-4 pb-4 pt-3 backdrop-blur-xl" style={{ background: 'linear-gradient(180deg, rgba(1,4,13,0.12), rgba(1,4,13,0.86))', borderTop: '1px solid rgba(59,130,246,0.12)' }}>
         <div className="flex gap-1 rounded-[1.75rem] border px-2 py-2" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.86), rgba(3,9,22,0.92))', borderColor: 'rgba(59,130,246,0.22)', boxShadow: '0 0 44px rgba(0,124,255,0.18), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
           {NAV_ITEMS.map(({ label, id }) => {
             const active = activeTab === id
-            return (
-              <button key={id} type="button" onClick={() => setActiveTab(id)} className="whitespace-nowrap rounded-2xl border px-5 py-2 text-sm transition-all duration-200" style={active ? { background: 'linear-gradient(135deg, rgba(0,124,255,0.42) 0%, rgba(0,200,255,0.16) 100%)', border: '1px solid rgba(0,200,255,0.42)', color: 'rgba(255,255,255,0.94)', boxShadow: '0 0 22px rgba(0,124,255,0.34), inset 0 1px 0 rgba(255,255,255,0.12)' } : { background: 'rgba(255,255,255,0.018)', border: '0.5px solid rgba(255,255,255,0.055)', color: 'rgba(255,255,255,0.42)' }}>
-                {label}
-              </button>
-            )
+            return <button key={id} type="button" onClick={() => setActiveTab(id)} className="whitespace-nowrap rounded-2xl border px-5 py-2 text-sm transition-all duration-200" style={active ? { background: 'linear-gradient(135deg, rgba(0,124,255,0.42) 0%, rgba(0,200,255,0.16) 100%)', border: '1px solid rgba(0,200,255,0.42)', color: 'rgba(255,255,255,0.94)', boxShadow: '0 0 22px rgba(0,124,255,0.34), inset 0 1px 0 rgba(255,255,255,0.12)' } : { background: 'rgba(255,255,255,0.018)', border: '0.5px solid rgba(255,255,255,0.055)', color: 'rgba(255,255,255,0.42)' }}>{label}</button>
           })}
         </div>
       </nav>
