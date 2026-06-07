@@ -3234,11 +3234,11 @@ export default function ARIAPage() {
         <div className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: 'rgba(248, 250, 252, 0.95)' }}>
           {dbView ? (
             <IntelDBPanel />
-          ) : isRunning ? (
-            <PipelinePanel phase={phase} synthStep={synthStep} />
-          ) : viewMode === 'candidates' ? (
-            <CandidateGrid />
-          ) : error ? (
+) : isRunning ? (
+  <PipelinePanel phase={phase} synthStep={synthStep} />
+) : viewMode === 'candidates' ? (
+  <CandidateGrid />
+) : error ? (
             <div className="flex items-center justify-center h-full">
               <div className="max-w-md bg-white border border-rose-200/60 rounded-2xl p-6 flex items-start gap-4 shadow-sm">
                 <div className="p-2 bg-rose-50 rounded-lg">
