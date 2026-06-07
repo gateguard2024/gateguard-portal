@@ -5,7 +5,9 @@ import { useUser } from '@clerk/nextjs'
 import { ActionCommandBar } from '@/components/nexus/ActionCommandBar'
 import { ActionFlowSurface, type NexusTabId } from '@/components/nexus/ActionFlowSurface'
 import { CustomersSitesSurface } from '@/components/nexus/CustomersSitesSurface'
+import { InternalSurface } from '@/components/nexus/InternalSurface'
 import { JobsSurface } from '@/components/nexus/JobsSurface'
+import { MoneyDocsSurface } from '@/components/nexus/MoneyDocsSurface'
 import { MyDaySurface } from '@/components/nexus/MyDaySurface'
 import { SalesSurface } from '@/components/nexus/SalesSurface'
 
@@ -124,7 +126,11 @@ export default function NexusHomeClient() {
               ? <SalesSurface />
               : activeTab === 'recent'
                 ? <CustomersSitesSurface />
-                : <ActionFlowSurface activeTab={activeTab} />}
+                : activeTab === 'field'
+                  ? <MoneyDocsSurface />
+                  : activeTab === 'people'
+                    ? <InternalSurface />
+                    : <ActionFlowSurface activeTab={activeTab} />}
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 z-20 flex justify-center overflow-x-auto px-4 pb-4 pt-3 backdrop-blur-xl" style={{ background: 'linear-gradient(180deg, rgba(1,4,13,0.12), rgba(1,4,13,0.86))', borderTop: '1px solid rgba(59,130,246,0.12)' }}>
