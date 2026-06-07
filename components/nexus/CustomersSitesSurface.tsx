@@ -24,6 +24,16 @@ type SearchResult = {
   href?: string
 }
 
+type SimpleDetail = {
+  id: string
+  type: SearchResult['type']
+  title: string
+  subtitle: string
+  status?: string | null
+  details: Array<{ label: string; value: string }>
+  actions: Array<{ label: string; href: string }>
+}
+
 function rgb(hex: string): string {
   const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
   return r ? `${parseInt(r[1], 16)},${parseInt(r[2], 16)},${parseInt(r[3], 16)}` : '0,200,255'
@@ -81,12 +91,50 @@ function typeLabel(type: SearchResult['type']): string {
   return 'Site'
 }
 
+function SimpleOverview({ detail, onOpen }: { detail: SimpleDetail; onOpen: (href: string) => void }) {
+  return (
+    <div className="mt-4 rounded-3xl p-4" style={{ background: 'rgba(0,200,255,0.075)', border: '1px solid rgba(0,200,255,0.20)', boxShadow: '0 0 28px rgba(0,124,255,0.10)' }}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.18em]" style={{ color: '#7dd3fc' }}>Simple Overview</div>
+          <div className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>{detail.title}</div>
+          <div className="mt-1 text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.56)' }}>{detail.subtitle}</div>
+        </div>
+        <div className="rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ background: 'rgba(0,200,255,0.10)', border: '1px solid rgba(0,200,255,0.20)', color: '#7dd3fc', whiteSpace: 'nowrap' }}>
+          {detail.status || typeLabel(detail.type)}
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {detail.details.length > 0 ? detail.details.map(item => (
+          <div key={`${item.label}-${item.value}`} className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>{item.label}</div>
+            <div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{item.value}</div>
+          </div>
+        )) : (
+          <div className="rounded-2xl px-3 py-2 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.46)' }}>No extra details yet.</div>
+        )}
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {detail.actions.map(action => (
+          <button key={`${action.label}-${action.href}`} type="button" onClick={() => onOpen(action.href)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: action.label.startsWith('Open') ? 'linear-gradient(135deg, #00C8FF, #007CFF)' : 'rgba(255,255,255,0.05)', border: action.label.startsWith('Open') ? '1px solid rgba(0,200,255,0.35)' : '1px solid rgba(255,255,255,0.08)', color: 'white' }}>
+            {action.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function SimpleSearchBox({ placeholder, mode }: { placeholder: string; mode: 'customer' | 'property' | 'all' }) {
   const router = useRouter()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [selected, setSelected] = useState<SearchResult | null>(null)
+  const [detail, setDetail] = useState<SimpleDetail | null>(null)
   const [loading, setLoading] = useState(false)
+  const [detailLoading, setDetailLoading] = useState(false)
   const [message, setMessage] = useState<string | null>('Type at least 2 characters, then search.')
 
   async function runSearch() {
@@ -94,6 +142,7 @@ function SimpleSearchBox({ placeholder, mode }: { placeholder: string; mode: 'cu
     if (q.length < 2) {
       setResults([])
       setSelected(null)
+      setDetail(null)
       setMessage('Type at least 2 characters, then search.')
       return
     }
@@ -101,6 +150,7 @@ function SimpleSearchBox({ placeholder, mode }: { placeholder: string; mode: 'cu
     setLoading(true)
     setMessage(null)
     setSelected(null)
+    setDetail(null)
 
     try {
       const res = await fetch(`/api/nexus/customers-sites/search?mode=${mode}&q=${encodeURIComponent(q)}`)
@@ -117,8 +167,29 @@ function SimpleSearchBox({ placeholder, mode }: { placeholder: string; mode: 'cu
     }
   }
 
-  function openResult(result: SearchResult) {
-    if (result.href) router.push(result.href)
+  async function loadDetail(result: SearchResult) {
+    setDetailLoading(true)
+    setMessage(null)
+    try {
+      const res = await fetch(`/api/nexus/customers-sites/detail?type=${result.type}&id=${result.id}`)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.success === false) throw new Error(data?.message ?? 'Could not load overview.')
+      setDetail(data.detail as SimpleDetail)
+    } catch (error) {
+      setDetail(null)
+      setMessage(error instanceof Error ? error.message : 'Could not load overview.')
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  function selectResult(result: SearchResult) {
+    setSelected(result)
+    setDetail(null)
+  }
+
+  function openHref(href?: string) {
+    if (href) router.push(href)
   }
 
   return (
@@ -151,7 +222,7 @@ function SimpleSearchBox({ placeholder, mode }: { placeholder: string; mode: 'cu
               <button
                 key={`${result.type}-${result.id}`}
                 type="button"
-                onClick={() => setSelected(result)}
+                onClick={() => selectResult(result)}
                 className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5"
                 style={{
                   background: isSelected ? 'rgba(0,200,255,0.12)' : 'rgba(0,0,0,0.18)',
@@ -178,12 +249,14 @@ function SimpleSearchBox({ placeholder, mode }: { placeholder: string; mode: 'cu
           <div className="mt-1 text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>{selected.title}</div>
           <div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.52)' }}>{selected.subtitle}</div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" onClick={() => openResult(selected)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40" disabled={!selected.href} style={{ background: 'linear-gradient(135deg, #00C8FF, #007CFF)', color: 'white' }}>Open</button>
+            <button type="button" onClick={() => openHref(selected.href)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40" disabled={!selected.href} style={{ background: 'linear-gradient(135deg, #00C8FF, #007CFF)', color: 'white' }}>Open</button>
             <button type="button" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.62)' }}>Add Note</button>
-            <button type="button" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.62)' }}>See Related</button>
+            <button type="button" onClick={() => void loadDetail(selected)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.62)' }}>{detailLoading ? 'Loading…' : 'See Overview'}</button>
           </div>
         </div>
       )}
+
+      {detail && <SimpleOverview detail={detail} onOpen={openHref} />}
     </div>
   )
 }
