@@ -15,6 +15,15 @@ type CustomersSitesCard = {
   badge?: string
 }
 
+type SearchResult = {
+  id: string
+  type: 'company' | 'contact' | 'customer' | 'property' | 'site'
+  title: string
+  subtitle: string
+  meta?: string
+  href?: string
+}
+
 function rgb(hex: string): string {
   const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
   return r ? `${parseInt(r[1], 16)},${parseInt(r[2], 16)},${parseInt(r[3], 16)}` : '0,200,255'
@@ -64,23 +73,117 @@ function ActionButton({ label, onClick, muted }: { label: string; onClick?: () =
   )
 }
 
-function SimpleSearchBox({ placeholder }: { placeholder: string }) {
+function typeLabel(type: SearchResult['type']): string {
+  if (type === 'company') return 'Customer / Company'
+  if (type === 'contact') return 'Contact'
+  if (type === 'customer') return 'Customer Account'
+  if (type === 'property') return 'Property'
+  return 'Site'
+}
+
+function SimpleSearchBox({ placeholder, mode }: { placeholder: string; mode: 'customer' | 'property' | 'all' }) {
+  const router = useRouter()
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<SearchResult[]>([])
+  const [selected, setSelected] = useState<SearchResult | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState<string | null>('Type at least 2 characters, then search.')
+
+  async function runSearch() {
+    const q = query.trim()
+    if (q.length < 2) {
+      setResults([])
+      setSelected(null)
+      setMessage('Type at least 2 characters, then search.')
+      return
+    }
+
+    setLoading(true)
+    setMessage(null)
+    setSelected(null)
+
+    try {
+      const res = await fetch(`/api/nexus/customers-sites/search?mode=${mode}&q=${encodeURIComponent(q)}`)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.success === false) throw new Error(data?.message ?? 'Search failed.')
+      const nextResults = Array.isArray(data.results) ? data.results as SearchResult[] : []
+      setResults(nextResults)
+      setMessage(nextResults.length === 0 ? 'No matches yet. Try a customer name, property name, address, email, or phone.' : null)
+    } catch (error) {
+      setResults([])
+      setMessage(error instanceof Error ? error.message : 'Could not search right now.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function openResult(result: SearchResult) {
+    if (result.href) router.push(result.href)
+  }
+
   return (
     <div className="rounded-3xl p-4" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.70), rgba(3,9,22,0.48))', border: '1px solid rgba(59,130,246,0.16)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)' }}>
       <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Start here</div>
       <p className="mt-2 text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>
-        Type what you know. Nexus will help find the right customer, property, site, or system.
+        Type what you know. Nexus will search the real customer, contact, property, and site records.
       </p>
       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
         <input
+          value={query}
+          onChange={event => setQuery(event.target.value)}
+          onKeyDown={event => { if (event.key === 'Enter') void runSearch() }}
           placeholder={placeholder}
           className="flex-1 rounded-2xl px-4 py-3 text-sm outline-none"
           style={{ background: 'rgba(0,0,0,0.24)', border: '1px solid rgba(0,200,255,0.18)', color: 'rgba(255,255,255,0.88)' }}
         />
-        <button type="button" className="rounded-2xl px-4 py-3 text-sm font-semibold" style={{ background: 'linear-gradient(135deg, #00C8FF, #007CFF)', color: 'white', boxShadow: '0 0 20px rgba(0,124,255,0.18)' }}>
-          Search
+        <button type="button" onClick={() => void runSearch()} disabled={loading} className="rounded-2xl px-4 py-3 text-sm font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #00C8FF, #007CFF)', color: 'white', boxShadow: '0 0 20px rgba(0,124,255,0.18)' }}>
+          {loading ? 'Searching…' : 'Search'}
         </button>
       </div>
+
+      {message && <div className="mt-3 rounded-2xl px-3 py-2 text-[11px]" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.48)' }}>{message}</div>}
+
+      {results.length > 0 && (
+        <div className="mt-4 space-y-2">
+          {results.map(result => {
+            const isSelected = selected?.id === result.id && selected.type === result.type
+            return (
+              <button
+                key={`${result.type}-${result.id}`}
+                type="button"
+                onClick={() => setSelected(result)}
+                className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5"
+                style={{
+                  background: isSelected ? 'rgba(0,200,255,0.12)' : 'rgba(0,0,0,0.18)',
+                  border: isSelected ? '1px solid rgba(0,200,255,0.34)' : '1px solid rgba(255,255,255,0.06)',
+                }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{result.title}</div>
+                    <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.48)' }}>{result.subtitle}</div>
+                    {result.meta && <div className="mt-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.34)' }}>{result.meta}</div>}
+                  </div>
+                  <div className="rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em]" style={{ background: 'rgba(0,200,255,0.10)', border: '1px solid rgba(0,200,255,0.18)', color: '#7dd3fc', whiteSpace: 'nowrap' }}>{typeLabel(result.type)}</div>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {selected && (
+        <div className="mt-4 rounded-3xl p-4" style={{ background: 'rgba(0,200,255,0.07)', border: '1px solid rgba(0,200,255,0.18)' }}>
+          <div className="text-[10px] uppercase tracking-[0.18em]" style={{ color: '#7dd3fc' }}>Selected</div>
+          <div className="mt-1 text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>{selected.title}</div>
+          <div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.52)' }}>{selected.subtitle}</div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" onClick={() => openResult(selected)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40" disabled={!selected.href} style={{ background: 'linear-gradient(135deg, #00C8FF, #007CFF)', color: 'white' }}>Open</button>
+            <button type="button" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.62)' }}>Add Note</button>
+            <button type="button" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.62)' }}>See Related</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -194,7 +297,7 @@ export function CustomersSitesSurface() {
             </>
           }
         >
-          <SimpleSearchBox placeholder="Search customer, contact, email, company, or phone" />
+          <SimpleSearchBox mode="customer" placeholder="Search customer, contact, email, company, or phone" />
         </CustomersSitesDetailShell>
       )}
 
@@ -211,7 +314,7 @@ export function CustomersSitesSurface() {
             </>
           }
         >
-          <SimpleSearchBox placeholder="Search property, site, address, management company, or gate" />
+          <SimpleSearchBox mode="property" placeholder="Search property, site, address, management company, or gate" />
         </CustomersSitesDetailShell>
       )}
 
@@ -251,7 +354,7 @@ export function CustomersSitesSurface() {
             </>
           }
         >
-          <SimpleSearchBox placeholder="Search property system, camera, gate, access panel, network, or floor plan" />
+          <SimpleSearchBox mode="property" placeholder="Search property system, camera, gate, access panel, network, or floor plan" />
         </CustomersSitesDetailShell>
       )}
     </section>
