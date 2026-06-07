@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { MoneyDocsInvoicesBoard } from '@/components/nexus/MoneyDocsInvoicesBoard'
+import { MoneyDocsRenewalsBoard } from '@/components/nexus/MoneyDocsRenewalsBoard'
 import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 
 type MoneyDocsPanel = 'invoices' | 'renewals' | 'documents' | 'compliance' | null
@@ -152,7 +153,7 @@ export function MoneyDocsSurface() {
 
       {activePanel === 'renewals' && (
         <MoneyDocsDetailShell title="Renewals" subtitle="Contracts, agreements, subscriptions, and services that are coming due." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Renewals" onClick={() => router.push('/renewals')} /><ActionButton label="Open Documents" onClick={() => router.push('/documents')} muted /></>}>
-          <ComingSoonPanel copy="This board will show expiring contracts, upcoming renewal dates, agreements, and action-needed renewal tasks." />
+          <MoneyDocsRenewalsBoard />
         </MoneyDocsDetailShell>
       )}
 
