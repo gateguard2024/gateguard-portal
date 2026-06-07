@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { MoneyDocsInvoicesBoard } from '@/components/nexus/MoneyDocsInvoicesBoard'
 import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 
 type MoneyDocsPanel = 'invoices' | 'renewals' | 'documents' | 'compliance' | null
@@ -145,7 +146,7 @@ export function MoneyDocsSurface() {
 
       {activePanel === 'invoices' && (
         <MoneyDocsDetailShell title="Invoices" subtitle="Money that is due, past due, recently paid, or needs follow-up." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Billing" onClick={() => router.push('/billing')} /><ActionButton label="Open Revenue" onClick={() => router.push('/revenue')} muted /><ActionButton label="Open Expenses" onClick={() => router.push('/expenses')} muted /></>}>
-          <ComingSoonPanel copy="This board will show invoices, past-due items, customer balances, and billing follow-ups." />
+          <MoneyDocsInvoicesBoard />
         </MoneyDocsDetailShell>
       )}
 
