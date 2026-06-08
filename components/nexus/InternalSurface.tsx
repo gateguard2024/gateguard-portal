@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { InternalTrackerBoard } from '@/components/nexus/InternalTrackerBoard'
 import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 
 type InternalPanel = 'tracker' | 'users-features' | 'playbooks' | 'training' | null
@@ -145,7 +146,7 @@ export function InternalSurface() {
 
       {activePanel === 'tracker' && (
         <InternalDetailShell title="Tracker" subtitle="Product work, build issues, bugs, and Nexus roadmap tasks." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Nexus Tracker" onClick={() => router.push('/tracker')} /><ActionButton label="Open Playbook" onClick={() => router.push('/playbook')} muted /></>}>
-          <InternalInfoPanel copy="This board should become the main internal product tracker view. For now, it opens the existing tracker path when needed." />
+          <InternalTrackerBoard />
         </InternalDetailShell>
       )}
 
