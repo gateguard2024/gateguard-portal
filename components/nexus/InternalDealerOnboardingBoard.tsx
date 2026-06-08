@@ -3,16 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-type Bucket =
-  | 'draft'
-  | 'needs_nda'
-  | 'nda_sent'
-  | 'nda_signed'
-  | 'needs_agreement'
-  | 'agreement_signed'
-  | 'needs_compliance'
-  | 'ready_to_approve'
-  | 'live'
+type Bucket = 'draft' | 'needs_nda' | 'nda_sent' | 'nda_signed' | 'needs_agreement' | 'agreement_signed' | 'needs_compliance' | 'ready_to_approve' | 'live'
 
 type DealerItem = {
   id: string
@@ -36,16 +27,16 @@ type DealerItem = {
   open_href: string
 }
 
-const buckets: Bucket[] = [
-  'draft',
-  'needs_nda',
-  'nda_sent',
-  'needs_agreement',
-  'agreement_signed',
-  'needs_compliance',
-  'ready_to_approve',
-  'live',
-]
+const buckets: Bucket[] = ['draft', 'needs_nda', 'nda_sent', 'needs_agreement', 'agreement_signed', 'needs_compliance', 'ready_to_approve', 'live']
+
+const agreementByTier: Record<string, string> = {
+  master_agent: 'master_agent_agreement',
+  master_dealer: 'dealer_agreement',
+  full_dealer: 'dealer_agreement',
+  service_dealer: 'service_agreement',
+  install_contractor: 'install_partner_agreement',
+  sales_partner: 'sales_partner_agreement',
+}
 
 function label(bucket: Bucket) {
   if (bucket === 'draft') return 'Draft'
@@ -73,6 +64,10 @@ function tierText(item: DealerItem) {
   return item.tier_label || item.org_tier || 'Partner'
 }
 
+function agreementType(item: DealerItem) {
+  return agreementByTier[item.org_tier ?? ''] ?? 'dealer_agreement'
+}
+
 export function InternalDealerOnboardingBoard() {
   const router = useRouter()
   const [items, setItems] = useState<DealerItem[]>([])
@@ -80,26 +75,52 @@ export function InternalDealerOnboardingBoard() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState<string | null>(null)
+  const [actionMessage, setActionMessage] = useState<string | null>(null)
+  const [sending, setSending] = useState<'nda' | 'agreement' | null>(null)
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true)
-      setMessage(null)
-      try {
-        const res = await fetch('/api/nexus/internal/dealer-onboarding')
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok || data.success === false) throw new Error(data?.message ?? 'Could not load dealer onboarding.')
-        const next = Array.isArray(data.items) ? data.items as DealerItem[] : []
-        setItems(next)
-        if (next.length === 0) setMessage('No dealer onboarding records found yet.')
-      } catch (error) {
-        setMessage(error instanceof Error ? error.message : 'Could not load dealer onboarding.')
-      } finally {
-        setLoading(false)
-      }
+  async function load() {
+    setLoading(true)
+    setMessage(null)
+    try {
+      const res = await fetch('/api/nexus/internal/dealer-onboarding')
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.success === false) throw new Error(data?.message ?? 'Could not load dealer onboarding.')
+      const next = Array.isArray(data.items) ? data.items as DealerItem[] : []
+      setItems(next)
+      if (next.length === 0) setMessage('No dealer onboarding records found yet.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not load dealer onboarding.')
+    } finally {
+      setLoading(false)
     }
-    void load()
-  }, [])
+  }
+
+  useEffect(() => { void load() }, [])
+
+  async function sendDoc(item: DealerItem, kind: 'nda' | 'agreement') {
+    setSending(kind)
+    setActionMessage(null)
+    try {
+      if (!item.contact_email) throw new Error('This dealer needs a contact email before sending.')
+      const payload: Record<string, string | null> = {
+        document_type: kind === 'nda' ? 'nda' : agreementType(item),
+        org_id: item.id,
+        signer_name: item.contact_name || item.title,
+        signer_email: item.contact_email,
+        signer_company: item.title,
+      }
+      const endpoint = ['/api', 'signatures', 'send'].join('/')
+      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.ok === false) throw new Error(data?.error ?? data?.message ?? 'Document email failed.')
+      setActionMessage(kind === 'nda' ? 'NDA sent from this glass board.' : 'Agreement sent from this glass board.')
+      await load()
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : 'Could not send document.')
+    } finally {
+      setSending(null)
+    }
+  }
 
   const shown = items.filter(item => item.bucket === bucket)
   const selected = items.find(item => item.id === selectedId) ?? null
@@ -112,7 +133,7 @@ export function InternalDealerOnboardingBoard() {
           const count = items.filter(item => item.bucket === nextBucket).length
           const active = bucket === nextBucket
           return (
-            <button key={nextBucket} type="button" onClick={() => { setBucket(nextBucket); setSelectedId(null) }} className="rounded-2xl px-3 py-3 text-left" style={{ background: active ? `${c}1f` : 'rgba(0,0,0,0.18)', border: active ? `1px solid ${c}66` : '1px solid rgba(255,255,255,0.06)' }}>
+            <button key={nextBucket} type="button" onClick={() => { setBucket(nextBucket); setSelectedId(null); setActionMessage(null) }} className="rounded-2xl px-3 py-3 text-left" style={{ background: active ? `${c}1f` : 'rgba(0,0,0,0.18)', border: active ? `1px solid ${c}66` : '1px solid rgba(255,255,255,0.06)' }}>
               <div className="text-[9px] uppercase tracking-[0.12em]" style={{ color: c }}>{label(nextBucket)}</div>
               <div className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>{count}</div>
             </button>
@@ -122,6 +143,7 @@ export function InternalDealerOnboardingBoard() {
 
       {loading && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.48)' }}>Loading dealer onboarding…</div>}
       {message && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.48)' }}>{message}</div>}
+      {actionMessage && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(251,191,36,0.10)', border: '1px solid rgba(251,191,36,0.24)', color: '#FBBF24' }}>{actionMessage}</div>}
       {!loading && shown.length === 0 && !message && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.48)' }}>No {label(bucket).toLowerCase()} records right now.</div>}
 
       <div className="space-y-2">
@@ -129,7 +151,7 @@ export function InternalDealerOnboardingBoard() {
           const c = color(item.bucket)
           const active = selectedId === item.id
           return (
-            <button key={item.id} type="button" onClick={() => setSelectedId(item.id)} className="w-full rounded-2xl px-3 py-3 text-left" style={{ background: active ? `${c}1f` : 'rgba(0,0,0,0.18)', border: active ? `1px solid ${c}66` : '1px solid rgba(255,255,255,0.06)' }}>
+            <button key={item.id} type="button" onClick={() => { setSelectedId(item.id); setActionMessage(null) }} className="w-full rounded-2xl px-3 py-3 text-left" style={{ background: active ? `${c}1f` : 'rgba(0,0,0,0.18)', border: active ? `1px solid ${c}66` : '1px solid rgba(255,255,255,0.06)' }}>
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{item.title}</div>
@@ -161,11 +183,10 @@ export function InternalDealerOnboardingBoard() {
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            <button type="button" onClick={() => router.push(selected.resume_href)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'linear-gradient(135deg, #8B5CF6, #007CFF)', color: 'white' }}>Resume Onboarding</button>
+            {(selected.bucket === 'needs_nda' || selected.bucket === 'nda_sent') && <button type="button" disabled={!!sending} onClick={() => sendDoc(selected, 'nda')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #FBBF24, #F97316)', color: '#111827' }}>{sending === 'nda' ? 'Sending…' : selected.bucket === 'nda_sent' ? 'Resend NDA' : 'Send NDA'}</button>}
+            {selected.bucket === 'needs_agreement' && <button type="button" disabled={!!sending} onClick={() => sendDoc(selected, 'agreement')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #8B5CF6, #007CFF)', color: 'white' }}>{sending === 'agreement' ? 'Sending…' : 'Send Agreement'}</button>}
+            {selected.executed_cert_url && <a href={selected.executed_cert_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.24)', color: '#34D399' }}>Open Final Copy</a>}
             <button type="button" onClick={() => router.push(selected.open_href)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.62)' }}>Open Dealer</button>
-            {selected.executed_cert_url && (
-              <a href={selected.executed_cert_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.24)', color: '#34D399' }}>Open Final Copy</a>
-            )}
           </div>
         </div>
       )}
