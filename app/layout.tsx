@@ -21,11 +21,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#1c1917',
+  themeColor: '#020713',
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: 'cover',
 };
 
@@ -34,9 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <ClerkProvider>
-          {/* Client-side SW registration — no render output */}
           <ServiceWorkerRegistration />
-          {/* Offline status banner — fixed top, only shown when offline */}
           <OfflineBanner />
           <PortalShell>{children}</PortalShell>
         </ClerkProvider>
