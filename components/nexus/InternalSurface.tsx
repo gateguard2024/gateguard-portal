@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { InternalTrackerBoard } from '@/components/nexus/InternalTrackerBoard'
+import { InternalUsersFeaturesBoard } from '@/components/nexus/InternalUsersFeaturesBoard'
 import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 
 type InternalPanel = 'tracker' | 'users-features' | 'playbooks' | 'training' | null
@@ -152,7 +153,7 @@ export function InternalSurface() {
 
       {activePanel === 'users-features' && (
         <InternalDetailShell title="Users & Features" subtitle="Users, roles, feature flags, permissions, and platform setup." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Platform Users" onClick={() => router.push('/platform-users')} /><ActionButton label="Open Feature Settings" onClick={() => router.push('/feature-settings')} /><ActionButton label="Open Dealers" onClick={() => router.push('/dealer')} muted /></>}>
-          <InternalInfoPanel copy="This board should be permission-gated. It is where platform users, dealers, feature access, and admin controls belong." />
+          <InternalUsersFeaturesBoard />
         </InternalDetailShell>
       )}
 
