@@ -4,12 +4,6 @@
  * that the counterparty has already signed (status: 'counterparty_signed').
  *
  * Body: { signature_id, countersigned_name, countersigned_title? }
- *
- * On success:
- *   1. Sets status → 'fully_executed', records countersig fields
- *   2. Stores an executed HTML certificate/document in Supabase Storage
- *   3. Optionally advances opportunity stage
- *   4. Sends "Fully Executed" confirmation email to both parties
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -21,18 +15,19 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 const resend = new Resend(process.env.RESEND_API_KEY)
+const DOCUMENTS_FROM_EMAIL = process.env.RESEND_DOCUMENTS_FROM_EMAIL ?? 'GateGuard <documents@gateguard.co>'
 export const dynamic = 'force-dynamic'
 
 const BUCKET = 'document-templates'
 
 const DOC_LABELS: Record<string, string> = {
-  nda:                        'Mutual Non-Disclosure Agreement',
-  master_agent_agreement:     'Master Agent Agreement',
-  master_dealer_agreement:    'MSO Agreement',
-  dealer_agreement:           'Authorized Dealer Agreement',
-  service_agreement:          'Service Agreement',
-  install_partner_agreement:  'Installation Partner Agreement',
-  sales_partner_agreement:    'Sales Partner Agreement',
+  nda: 'Mutual Non-Disclosure Agreement',
+  master_agent_agreement: 'Master Agent Agreement',
+  master_dealer_agreement: 'MSO Agreement',
+  dealer_agreement: 'Authorized Dealer Agreement',
+  service_agreement: 'Service Agreement',
+  install_partner_agreement: 'Installation Partner Agreement',
+  sales_partner_agreement: 'Sales Partner Agreement',
 }
 
 function escapeHtml(value: unknown) {
@@ -71,11 +66,7 @@ function buildExecutedHtml({ sig, docLabel, countersignedName, countersignedTitl
   </style>
 </head>
 <body>
-  <div class="header">
-    <div class="kicker">GateGuard Nexus — Fully Executed Document</div>
-    <h1>${escapeHtml(docLabel)}</h1>
-  </div>
-
+  <div class="header"><div class="kicker">GateGuard Nexus — Fully Executed Document</div><h1>${escapeHtml(docLabel)}</h1></div>
   <div class="box">
     <div class="row"><div class="label">Status</div><div class="value">Fully Executed</div></div>
     <div class="row"><div class="label">Executed At</div><div class="value">${escapeHtml(new Date(executedAt).toLocaleString('en-US'))}</div></div>
@@ -83,20 +74,11 @@ function buildExecutedHtml({ sig, docLabel, countersignedName, countersignedTitl
     <div class="row"><div class="label">Signer Email</div><div class="value">${escapeHtml(sig.signer_email)}</div></div>
     <div class="row"><div class="label">Countersigned By</div><div class="value">${escapeHtml(countersignedName)}${countersignedTitle ? `, ${escapeHtml(countersignedTitle)}` : ''}</div></div>
   </div>
-
   <div class="doc">${escapeHtml(body)}</div>
-
   <div class="siggrid">
-    <div class="sig">
-      <div class="value">${escapeHtml(counterpartyName)}</div>
-      <div class="small">Counterparty signature • ${escapeHtml(new Date(signedAt).toLocaleString('en-US'))}</div>
-    </div>
-    <div class="sig">
-      <div class="value">${escapeHtml(countersignedName)}</div>
-      <div class="small">GateGuard countersignature • ${escapeHtml(new Date(executedAt).toLocaleString('en-US'))}</div>
-    </div>
+    <div class="sig"><div class="value">${escapeHtml(counterpartyName)}</div><div class="small">Counterparty signature • ${escapeHtml(new Date(signedAt).toLocaleString('en-US'))}</div></div>
+    <div class="sig"><div class="value">${escapeHtml(countersignedName)}</div><div class="small">GateGuard countersignature • ${escapeHtml(new Date(executedAt).toLocaleString('en-US'))}</div></div>
   </div>
-
   <p class="small" style="margin-top:32px;">This electronic record is intended to be retained as the fully executed signing certificate and document copy.</p>
 </body>
 </html>`
@@ -137,15 +119,11 @@ export async function POST(req: NextRequest) {
       .eq('id', signature_id)
       .single()
 
-    if (fetchErr || !sig) {
-      return NextResponse.json({ error: 'Document not found' }, { status: 404 })
-    }
+    if (fetchErr || !sig) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
 
     if (sig.status !== 'counterparty_signed') {
       return NextResponse.json({
-        error: sig.status === 'fully_executed'
-          ? 'This document has already been fully executed.'
-          : `Cannot countersign — document status is '${sig.status}'.`
+        error: sig.status === 'fully_executed' ? 'This document has already been fully executed.' : `Cannot countersign — document status is '${sig.status}'.`,
       }, { status: 409 })
     }
 
@@ -199,10 +177,7 @@ export async function POST(req: NextRequest) {
       <p style="margin:6px 0 0;color:#94A3B8;font-size:13px;">${docLabel}</p>
     </div>
     <div style="padding:28px 32px;">
-      <p style="margin:0 0 20px;color:#CBD5E1;font-size:14px;line-height:1.6;">
-        Hi ${signerFirst}, this confirms that the <strong style="color:#F8FAFC;">${docLabel}</strong>
-        between you and GateGuard is now fully executed. Both parties have signed.
-      </p>
+      <p style="margin:0 0 20px;color:#CBD5E1;font-size:14px;line-height:1.6;">Hi ${signerFirst}, this confirms that the <strong style="color:#F8FAFC;">${docLabel}</strong> between you and GateGuard is now fully executed. Both parties have signed.</p>
       <div style="background:#0C111D;border:1px solid #1E2A45;border-radius:10px;padding:16px;margin-bottom:24px;">
         <table style="width:100%;border-collapse:collapse;">
           <tr><td style="color:#64748B;font-size:11px;padding:6px 0;">Party 1</td><td style="color:#CBD5E1;font-size:12px;padding:6px 0;">${sig.signed_name ?? sig.signer_name} · ${sig.signer_email}</td></tr>
@@ -218,7 +193,7 @@ export async function POST(req: NextRequest) {
 </html>`
 
           await resend.emails.send({
-            from: 'GateGuard <documents@mail.gateguard.co>',
+            from: DOCUMENTS_FROM_EMAIL,
             to: sig.signer_email,
             replyTo: 'rfeldman@gateguard.co',
             subject: `Fully Executed: ${docLabel}`,
@@ -226,7 +201,7 @@ export async function POST(req: NextRequest) {
           })
 
           await resend.emails.send({
-            from: 'GateGuard Nexus <documents@mail.gateguard.co>',
+            from: DOCUMENTS_FROM_EMAIL,
             to: 'rfeldman@gateguard.co',
             replyTo: 'rfeldman@gateguard.co',
             subject: `Fully Executed Copy: ${docLabel} — ${sig.signer_company ?? sig.signer_email}`,
