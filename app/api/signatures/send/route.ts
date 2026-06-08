@@ -20,6 +20,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 const resend = new Resend(process.env.RESEND_API_KEY)
+const DOCUMENTS_FROM_EMAIL = process.env.RESEND_DOCUMENTS_FROM_EMAIL ?? 'GateGuard <documents@gateguard.co>'
 export const dynamic = 'force-dynamic'
 
 const DOC_LABELS: Record<string, string> = {
@@ -118,7 +119,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { error: emailError } = await resend.emails.send({
-      from: 'GateGuard <documents@mail.gateguard.co>',
+      from: DOCUMENTS_FROM_EMAIL,
       to: signer_email,
       replyTo: 'rfeldman@gateguard.co',
       subject: `Action Required: Please sign your ${docLabel}`,
