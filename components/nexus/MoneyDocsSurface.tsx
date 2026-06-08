@@ -158,13 +158,13 @@ export function MoneyDocsSurface() {
       )}
 
       {activePanel === 'documents' && (
-        <MoneyDocsDetailShell title="Documents to Sign" subtitle="Paperwork that needs signature, review, or customer approval." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Documents" onClick={() => router.push('/documents')} /><ActionButton label="Open Agreements" onClick={() => router.push('/dealer-agreements')} muted /><ActionButton label="Open NDAs" onClick={() => router.push('/nda')} muted /></>}>
+        <MoneyDocsDetailShell title="Documents to Sign" subtitle="Paperwork that needs signature, review, or customer approval." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Documents" onClick={() => router.push('/documents')} /><ActionButton label="Open Agreements" onClick={() => router.push('/documents')} /><ActionButton label="Open NDAs" onClick={() => router.push('/documents')} /></>}>
           <ComingSoonPanel copy="This board will show pending signatures, unsigned agreements, NDAs, customer docs, and missing paperwork." />
         </MoneyDocsDetailShell>
       )}
 
       {activePanel === 'compliance' && (
-        <MoneyDocsDetailShell title="Compliance" subtitle="Missing, expired, or required paperwork that needs review." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Compliance" onClick={() => router.push('/compliance')} /><ActionButton label="Open Vendor Compliance" onClick={() => router.push('/vendor-compliance')} muted /></>}>
+        <MoneyDocsDetailShell title="Compliance" subtitle="Missing, expired, or required paperwork that needs review." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Compliance" onClick={() => router.push('/compliance')} /><ActionButton label="Open Vendor Compliance" onClick={() => router.push('/vendor-compliance')} /></>}>
           <ComingSoonPanel copy="This board will show missing certificates, expired insurance, compliance gaps, and paperwork that must be fixed." />
         </MoneyDocsDetailShell>
       )}
