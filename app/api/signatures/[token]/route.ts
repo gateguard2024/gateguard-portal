@@ -19,7 +19,7 @@ export async function GET(
   const { data: sig, error } = await supabase
     .from('document_signatures')
     .select(
-      'id, document_type, document_version, document_url, document_html, signer_name, signer_email, signer_title, signer_company, status, expires_at, sent_by_name'
+      'id, document_type, document_version, document_url, document_html, signer_name, signer_email, signer_title, signer_company, signed_name, signed_title, signed_at, countersigned_name, countersigned_title, countersigned_at, executed_at, executed_cert_url, status, expires_at, sent_by_name'
     )
     .eq('token', params.token)
     .single()
@@ -28,9 +28,7 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  // Check expiry
   if (new Date(sig.expires_at) < new Date()) {
-    // Mark as expired if still pending
     if (sig.status === 'pending') {
       await supabase
         .from('document_signatures')
@@ -40,12 +38,16 @@ export async function GET(
     return NextResponse.json({ error: 'This signing link has expired.' }, { status: 410 })
   }
 
-  if (sig.status === 'signed') {
+  if (['signed', 'counterparty_signed', 'fully_executed'].includes(sig.status)) {
     return NextResponse.json({ error: 'already_signed', sig }, { status: 409 })
   }
 
   if (sig.status === 'declined') {
     return NextResponse.json({ error: 'This document was declined.' }, { status: 410 })
+  }
+
+  if (sig.status === 'cancelled') {
+    return NextResponse.json({ error: 'This document was cancelled.' }, { status: 410 })
   }
 
   return NextResponse.json({ sig })
