@@ -2,11 +2,12 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { InternalDealerOnboardingBoard } from '@/components/nexus/InternalDealerOnboardingBoard'
 import { InternalTrackerBoard } from '@/components/nexus/InternalTrackerBoard'
 import { InternalUsersFeaturesBoard } from '@/components/nexus/InternalUsersFeaturesBoard'
 import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 
-type InternalPanel = 'tracker' | 'users-features' | 'playbooks' | 'training' | null
+type InternalPanel = 'tracker' | 'dealer-onboarding' | 'users-features' | 'playbooks' | 'training' | null
 
 type InternalCard = {
   id: Exclude<InternalPanel, null>
@@ -109,6 +110,7 @@ export function InternalSurface() {
 
   const cards: InternalCard[] = [
     { id: 'tracker', title: 'Tracker', subtitle: 'Open Nexus Tracker work, bugs, build notes, and product tasks.', hex: '#00C8FF', glyph: 'activity', badge: 'Build' },
+    { id: 'dealer-onboarding', title: 'Dealer Onboarding', subtitle: 'Track NDA, agreements, compliance, approval, and live dealer status.', hex: '#FBBF24', glyph: 'priority', badge: 'Corporate' },
     { id: 'users-features', title: 'Users & Features', subtitle: 'Manage platform users, roles, feature access, and settings.', hex: '#8B5CF6', glyph: 'pipeline', badge: 'Admin' },
     { id: 'playbooks', title: 'Playbooks', subtitle: 'Find internal process, scripts, SOPs, and operating instructions.', hex: '#007CFF', glyph: 'research' },
     { id: 'training', title: 'Training', subtitle: 'Open training, quests, scorecards, and team enablement.', hex: '#34D399', glyph: 'todo' },
@@ -130,24 +132,30 @@ export function InternalSurface() {
             <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(196,181,253,0.86)' }}>Internal</div>
             <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(139,92,246,0.18)' }}>What internal work are we managing?</h2>
             <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>
-              Product tracking, platform settings, playbooks, and team training live here.
+              Product tracking, platform settings, playbooks, dealer onboarding, and team training live here.
             </p>
           </div>
           <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(139,92,246,0.14)', color: 'rgba(221,214,254,0.96)', border: '1px solid rgba(139,92,246,0.28)', boxShadow: '0 0 18px rgba(139,92,246,0.10)' }}>Admin OS</div>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {cards.map(card => <InternalCardButton key={card.id} card={card} onClick={() => setActivePanel(card.id)} />)}
         </div>
 
         <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
-          Internal stays simple: track product work, manage users and features, find playbooks, or train the team.
+          Internal stays simple: track product work, onboard dealers, manage users and features, find playbooks, or train the team.
         </div>
       </div>
 
       {activePanel === 'tracker' && (
         <InternalDetailShell title="Tracker" subtitle="Product work, build issues, bugs, and Nexus roadmap tasks." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Nexus Tracker" onClick={() => router.push('/tracker')} /><ActionButton label="Open Playbook" onClick={() => router.push('/playbook')} muted /></>}>
           <InternalTrackerBoard />
+        </InternalDetailShell>
+      )}
+
+      {activePanel === 'dealer-onboarding' && (
+        <InternalDetailShell title="Dealer Onboarding" subtitle="See what each partner needs before access goes live." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Add Dealer" onClick={() => router.push('/admin/dealers/new')} /><ActionButton label="View All Dealers" onClick={() => router.push('/admin/dealers')} /><ActionButton label="Feature Settings" onClick={() => router.push('/admin/settings/features')} muted /></>}>
+          <InternalDealerOnboardingBoard />
         </InternalDetailShell>
       )}
 
