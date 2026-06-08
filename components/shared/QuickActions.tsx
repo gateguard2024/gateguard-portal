@@ -57,6 +57,16 @@ export function QuickActions({
   const [actStatus,    setActStatus]    = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [actError,     setActError]     = useState('')
 
+  // Prevent background scroll while any modal is open
+  useEffect(() => {
+    if (modal) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [modal])
+
   function openModal(type: ModalType) {
     // Reset per-modal state when opening
     if (type === 'email') {

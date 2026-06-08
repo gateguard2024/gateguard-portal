@@ -37,6 +37,12 @@ export function DynamicModal({ type, label, onClose }: Props) {
     return () => document.removeEventListener('keydown', handler)
   }, [onClose])
 
+  // Prevent background scroll while open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
   return (
     <>
       {/* Dimmed backdrop — click to close */}
@@ -54,7 +60,7 @@ export function DynamicModal({ type, label, onClose }: Props) {
         aria-label={label}
       >
         <div
-          className="w-full max-w-2xl rounded-2xl p-5"
+          className="w-full max-w-2xl rounded-2xl p-5 max-h-[calc(100vh-76px-24px)] overflow-y-auto overscroll-contain"
           style={{
             background:    'rgba(6, 12, 32, 0.94)',
             border:        '1px solid rgba(107,126,255,0.22)',

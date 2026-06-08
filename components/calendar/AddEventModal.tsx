@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 
 type EventDraft = {
@@ -41,6 +41,16 @@ export function AddEventModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Prevent background scroll while open
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [open])
+
   if (!open) return null
 
   async function saveEvent() {
@@ -67,8 +77,9 @@ export function AddEventModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 px-4">
-      <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-[#0C111D] p-5 shadow-2xl">
+    <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/60 px-4">
+      <div className="flex min-h-full items-center justify-center py-4">
+      <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-[#0C111D] p-5 shadow-2xl max-h-[85vh] overflow-y-auto overscroll-contain">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-sky-300">Nexus Calendar</div>
@@ -168,6 +179,7 @@ export function AddEventModal({
             {saving ? 'Saving...' : 'Save Event'}
           </button>
         </div>
+      </div>
       </div>
     </div>
   )
