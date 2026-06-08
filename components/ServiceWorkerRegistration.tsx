@@ -4,12 +4,13 @@ import { useEffect } from 'react';
 
 /**
  * Registers the GateGuard service worker.
- * Runs once on mount, client-side only.
- * Sends SKIP_WAITING when a new SW is waiting to activate.
+ * Keep registration conservative so the PWA does not force-reload while users work.
  */
 export function ServiceWorkerRegistration() {
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+
+    let mounted = true;
 
     const register = async () => {
       try {
@@ -18,34 +19,11 @@ export function ServiceWorkerRegistration() {
           updateViaCache: 'none',
         });
 
-        // When a new service worker is waiting, tell it to activate immediately
-        const activateWaiting = (sw: ServiceWorker | null) => {
-          if (sw?.state === 'installed') {
-            sw.postMessage({ type: 'SKIP_WAITING' });
-          }
-        };
+        if (!mounted) return;
 
-        if (registration.waiting) {
-          activateWaiting(registration.waiting);
-        }
-
-        registration.addEventListener('updatefound', () => {
-          const newSW = registration.installing;
-          newSW?.addEventListener('statechange', () => {
-            if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
-              newSW.postMessage({ type: 'SKIP_WAITING' });
-            }
-          });
-        });
-
-        // Reload on controller change (new SW activated)
-        let refreshing = false;
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-          if (!refreshing) {
-            refreshing = true;
-            window.location.reload();
-          }
-        });
+        // Check for updates, but do not force a page reload.
+        // The new service worker will take over naturally on the next launch/navigation.
+        void registration.update().catch(() => undefined);
 
         if (process.env.NODE_ENV === 'development') {
           console.log('[GG SW] Registered, scope:', registration.scope);
@@ -55,12 +33,16 @@ export function ServiceWorkerRegistration() {
       }
     };
 
-    // Register after page load to not block initial render
     if (document.readyState === 'complete') {
-      register();
+      void register();
     } else {
       window.addEventListener('load', register, { once: true });
     }
+
+    return () => {
+      mounted = false;
+      window.removeEventListener('load', register);
+    };
   }, []);
 
   return null;
