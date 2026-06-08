@@ -16,10 +16,13 @@ type SignatureRow = {
   document_type?: string | null
   document_version?: string | null
   document_url?: string | null
+  executed_cert_url?: string | null
   signer_name?: string | null
   signer_email?: string | null
   signer_company?: string | null
   signed_at?: string | null
+  countersigned_at?: string | null
+  executed_at?: string | null
   status?: string | null
   sent_by_name?: string | null
   sent_at?: string | null
@@ -28,7 +31,8 @@ type SignatureRow = {
 
 function bucketFor(row: SignatureRow): DocumentBucket {
   const status = String(row.status ?? '').toLowerCase()
-  if (row.signed_at || status === 'signed' || status === 'completed') return 'recently_signed'
+  if (row.executed_at || status === 'fully_executed') return 'recently_signed'
+  if (row.signed_at || status === 'signed' || status === 'counterparty_signed' || status === 'completed') return 'recently_signed'
   if (!row.sent_at || status === 'draft') return 'draft_not_sent'
   if (status === 'pending' || status === 'sent') return 'waiting_on_customer'
   return 'needs_signature'
@@ -39,7 +43,7 @@ export async function GET() {
     await getCurrentUser()
     const { data, error } = await supabase
       .from('document_signatures')
-      .select('id,document_type,document_version,document_url,signer_name,signer_email,signer_company,signed_at,status,sent_by_name,sent_at,expires_at')
+      .select('id,document_type,document_version,document_url,executed_cert_url,signer_name,signer_email,signer_company,signed_at,countersigned_at,executed_at,status,sent_by_name,sent_at,expires_at')
       .order('sent_at', { ascending: false, nullsFirst: false })
       .limit(80)
 
@@ -47,6 +51,7 @@ export async function GET() {
 
     const documents = ((data ?? []) as SignatureRow[]).map(row => {
       const bucket = bucketFor(row)
+      const finalUrl = row.executed_cert_url || row.document_url || null
       return {
         id: row.id,
         title: row.document_type || 'Document',
@@ -58,8 +63,12 @@ export async function GET() {
         sent_by_name: row.sent_by_name || null,
         sent_at: row.sent_at || null,
         signed_at: row.signed_at || null,
+        countersigned_at: row.countersigned_at || null,
+        executed_at: row.executed_at || null,
         expires_at: row.expires_at || null,
         document_url: row.document_url || null,
+        executed_cert_url: row.executed_cert_url || null,
+        final_url: finalUrl,
         bucket,
         urgency: bucket === 'needs_signature' ? 'high' : bucket === 'waiting_on_customer' ? 'medium' : 'low',
       }
