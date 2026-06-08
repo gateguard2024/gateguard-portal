@@ -1,35 +1,13 @@
 /**
  * POST /api/admin/onboard-dealer
  *
- * Full dealer onboarding orchestration — one call does everything:
- *   1. Create the org record in Supabase organizations table
- *   2. Send a Clerk invitation to the primary admin email
- *   3. Set org_id + org_tier + role on the invited user's Clerk publicMetadata
- *      (done via a post-signup webhook OR pre-set on the invitation metadata)
+ * Creates a dealer org, sends or updates the primary Clerk user, and sends
+ * NDA + agreement signing links.
  *
- * Auth: GateGuard corporate admin only.
+ * GET /api/admin/onboard-dealer
  *
- * Request body:
- *   org_name           string   required
- *   org_tier           OrgTier  required  (master_agent | master_dealer | full_dealer | service_dealer | install_contractor | sales_partner)
- *   parent_org_id      string?  UUID of parent org (master_agent or master_dealer above them)
- *   license_number     string?
- *   service_area_states string[] e.g. ['GA','FL']
- *   tech_count         number?
- *   address            string?
- *   city               string?
- *   state              string?
- *   zip                string?
- *   phone              string?
- *   email              string?  org email
- *   website            string?
- *   admin_first_name   string   required  — primary user
- *   admin_last_name    string   required
- *   admin_email        string   required
- *   admin_role         PortalRole required (default 'admin')
- *   send_invite        boolean  default true — send Clerk email invite
+ * Lists dealer orgs scoped to the caller's hierarchy.
  */
-
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { clerkClient } from '@clerk/nextjs/server'
@@ -42,240 +20,122 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 const resend = new Resend(process.env.RESEND_API_KEY)
+const DOCUMENTS_FROM_EMAIL = process.env.RESEND_DOCUMENTS_FROM_EMAIL ?? 'GateGuard <documents@gateguard.co>'
 export const dynamic = 'force-dynamic'
 
-/** Document type for each tier */
 const TIER_DOC_TYPES: Record<string, string> = {
-  master_agent:       'master_agent_agreement',
-  master_dealer:      'dealer_agreement',
-  full_dealer:        'dealer_agreement',
-  service_dealer:     'service_agreement',
+  master_agent: 'master_agent_agreement',
+  master_dealer: 'dealer_agreement',
+  full_dealer: 'dealer_agreement',
+  service_dealer: 'service_agreement',
   install_contractor: 'install_partner_agreement',
-  sales_partner:      'sales_partner_agreement',
+  sales_partner: 'sales_partner_agreement',
 }
 
 const DOC_LABELS: Record<string, string> = {
-  nda:                        'Mutual Non-Disclosure Agreement',
-  master_agent_agreement:     'Master Agent Agreement',
-  dealer_agreement:           'Authorized Dealer & Reseller Agreement',
-  service_agreement:          'Service Partner Agreement',
-  install_partner_agreement:  'Installation Partner Agreement',
-  sales_partner_agreement:    'Sales Partner Agreement',
+  nda: 'Mutual Non-Disclosure Agreement',
+  master_agent_agreement: 'Master Agent Agreement',
+  dealer_agreement: 'Authorized Dealer & Reseller Agreement',
+  service_agreement: 'Service Partner Agreement',
+  install_partner_agreement: 'Installation Partner Agreement',
+  sales_partner_agreement: 'Sales Partner Agreement',
 }
 
 const VALID_DEALER_TIERS: OrgTier[] = [
-  'master_agent', 'master_dealer', 'full_dealer',
-  'service_dealer', 'install_contractor', 'sales_partner',
+  'master_agent',
+  'master_dealer',
+  'full_dealer',
+  'service_dealer',
+  'install_contractor',
+  'sales_partner',
 ]
 
 const TIER_LABELS: Record<string, string> = {
-  master_agent:       'Master Agent',
-  master_dealer:      'MSO',
-  full_dealer:        'Full Dealership',
-  service_dealer:     'Service Dealer',
+  master_agent: 'Master Agent',
+  master_dealer: 'MSO',
+  full_dealer: 'Full Dealership',
+  service_dealer: 'Service Dealer',
   install_contractor: 'Install Contractor',
-  sales_partner:      'Sales Partner',
+  sales_partner: 'Sales Partner',
 }
 
-/** Maps org_tier → { ndaType, agreementType } for automatic document dispatch */
-const TIER_DOC_MAP: Record<string, { ndaType: 'A' | 'B' | 'C'; agreementType: string }> = {
-  master_agent:       { ndaType: 'A', agreementType: 'Master Agent Agreement'    },
-  master_dealer:      { ndaType: 'A', agreementType: 'MSO Agreement'             },
-  full_dealer:        { ndaType: 'B', agreementType: 'Dealer Agreement'          },
-  service_dealer:     { ndaType: 'B', agreementType: 'Service Partner Agreement' },
-  install_contractor: { ndaType: 'B', agreementType: 'Install Partner Agreement' },
-  sales_partner:      { ndaType: 'C', agreementType: 'Sales Partner Agreement'   },
+const TIER_RANK: Record<string, number> = {
+  corporate: 0,
+  master_agent: 1,
+  master_dealer: 2,
+  full_dealer: 3,
+  service_dealer: 4,
+  install_contractor: 4,
+  sales_partner: 4,
+  client: 5,
 }
 
-export async function POST(req: NextRequest) {
-  // Gate: corporate admins only
-  const caller = await getCurrentUser()
-  if (!caller.isCorporate || caller.role !== 'admin') {
-    return NextResponse.json({ error: 'Forbidden — GateGuard admin only' }, { status: 403 })
-  }
+function clean(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
 
-  const body = await req.json()
-  const {
-    org_name,
-    org_tier,
-    parent_org_id,
-    license_number,
-    service_area_states,
-    tech_count,
-    address, city, state, zip,
-    phone, email: org_email, website,
-    entity_type,
-    admin_first_name,
-    admin_last_name,
-    admin_email,
-    admin_role = 'admin',
-    send_invite = true,
-    sales_partner_rate,
-    service_dealer_rate,
-    commission_notes,
-  } = body
+async function sendSigningDocument({
+  documentType,
+  orgId,
+  orgName,
+  adminEmail,
+  signerName,
+  callerId,
+  callerName,
+  expiresAt,
+  baseUrl,
+}: {
+  documentType: string
+  orgId: string
+  orgName: string
+  adminEmail: string
+  signerName: string
+  callerId: string
+  callerName: string
+  expiresAt: string
+  baseUrl: string
+}) {
+  const token = crypto.randomBytes(32).toString('hex')
+  const docLabel = DOC_LABELS[documentType] ?? documentType
 
-  // ── Validation ──────────────────────────────────────────────────────
-  if (!org_name?.trim()) {
-    return NextResponse.json({ error: 'org_name is required' }, { status: 400 })
-  }
-  if (!VALID_DEALER_TIERS.includes(org_tier)) {
-    return NextResponse.json({ error: `Invalid org_tier: ${org_tier}` }, { status: 400 })
-  }
-  if (!admin_first_name?.trim() || !admin_last_name?.trim()) {
-    return NextResponse.json({ error: 'admin_first_name and admin_last_name are required' }, { status: 400 })
-  }
-  if (!admin_email?.includes('@')) {
-    return NextResponse.json({ error: 'valid admin_email is required' }, { status: 400 })
-  }
+  const { data: tpl } = await supabase
+    .from('document_templates')
+    .select('public_url, version')
+    .eq('document_type', documentType)
+    .eq('is_active', true)
+    .neq('public_url', 'PLACEHOLDER_UPDATE_AFTER_UPLOAD')
+    .maybeSingle()
 
-  // ── Step 1: Create org in Supabase ──────────────────────────────────
-  const { data: org, error: orgErr } = await supabase
-    .from('organizations')
-    .insert({
-      name:                org_name.trim(),
-      org_tier:            org_tier,
-      tier_label:          TIER_LABELS[org_tier] ?? org_tier,
-      parent_org_id:       parent_org_id ?? null,
-      license_number:      license_number ?? null,
-      service_area_states: service_area_states ?? [],
-      tech_count:          tech_count ?? 0,
-      onboarded_at:        new Date().toISOString(),
-      // Store contact info if provided
-      ...(phone     && { phone }),
-      ...(org_email && { email: org_email }),
-      ...(website   && { website }),
-      ...(address   && { address }),
-      ...(city      && { city }),
-      ...(state     && { state }),
-      ...(zip       && { zip }),
-    })
-    .select()
-    .single()
-
-  if (orgErr || !org) {
-    return NextResponse.json(
-      { error: `Failed to create org: ${orgErr?.message}` },
-      { status: 500 }
-    )
-  }
-
-  // ── Step 2: Send Clerk invitation (or find existing user) ───────────
-  let clerk_user_id: string | null = null
-  let invite_status: string = 'pending'
-
-  if (send_invite) {
-    try {
-      const clerk = await clerkClient()
-
-      // Check if a user with this email already exists in Clerk
-      const existing = await clerk.users.getUserList({ emailAddress: [admin_email] })
-
-      if (existing.totalCount > 0) {
-        // User already exists — just assign the org context
-        clerk_user_id = existing.data[0].id
-        invite_status = 'existing_user'
-      } else {
-        // Create an invitation — Clerk sends the email
-        const invitation = await clerk.invitations.createInvitation({
-          emailAddress: admin_email,
-          publicMetadata: {
-            // Pre-set org context so it's applied as soon as they sign up
-            org_id:      org.id,
-            org_tier,
-            role:        admin_role,
-            org_name:    org_name.trim(),
-            assigned_at: new Date().toISOString(),
-            assigned_by: caller.id,
-          },
-          redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://portal.gateguard.co'}/onboarding`,
-        })
-        clerk_user_id = null  // Not a user yet — they need to accept the invite
-        invite_status = 'invited'
-      }
-
-      // If user already exists, wire the org context now
-      if (clerk_user_id) {
-        await clerk.users.updateUserMetadata(clerk_user_id, {
-          publicMetadata: {
-            org_id:      org.id,
-            org_tier,
-            role:        admin_role,
-            org_name:    org_name.trim(),
-            assigned_at: new Date().toISOString(),
-            assigned_by: caller.id,
-          },
-        })
-      }
-    } catch (err: any) {
-      // Don't roll back the org — return partial success so admin can retry
-      return NextResponse.json({
-        ok: false,
-        org,
-        clerk_error: err.message,
-        message: 'Org created in Supabase but Clerk invite failed. Retry the invite from the dealer detail page.',
-      }, { status: 207 })
-    }
-  }
-
-  // ── Step 3: Log the onboarding event ───────────────────────────────
-  await supabase.from('sensitive_field_access_log').insert({
-    user_id:    caller.id,
-    org_id:     org.id,
-    table_name: 'organizations',
-    record_id:  org.id,
-    fields:     ['onboarded'],
-    ip_address: req.headers.get('x-forwarded-for') ?? null,
+  const { error: sigError } = await supabase.from('document_signatures').insert({
+    token,
+    org_id: orgId,
+    document_type: documentType,
+    document_version: tpl?.version ?? 'v1.0',
+    document_url: tpl?.public_url ?? null,
+    signer_name: signerName,
+    signer_email: adminEmail,
+    signer_company: orgName,
+    sent_by: callerId,
+    sent_by_name: callerName,
+    expires_at: expiresAt,
+    status: 'pending',
   })
 
-  // ── Step 4: Send NDA + Agreement via token-based e-sign system ────────
-  // Awaited so errors surface in the response — org creation already succeeded.
-  const agreementDocType = TIER_DOC_TYPES[org_tier] ?? 'dealer_agreement'
-  const signerName       = `${admin_first_name.trim()} ${admin_last_name.trim()}`
-  const baseUrl          = process.env.NEXT_PUBLIC_APP_URL ?? 'https://portal.gateguard.co'
-  const expiresAt        = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-  let docs_sent = false
-  let docs_error: string | null = null
+  if (sigError) throw new Error(sigError.message)
 
-  try {
-      // Helper: create document_signature record + send signing email
-      const sendDoc = async (documentType: string) => {
-        const token = crypto.randomBytes(32).toString('hex')
-        const docLabel = DOC_LABELS[documentType] ?? documentType
+  if (!process.env.RESEND_API_KEY) {
+    throw new Error('Email service not configured — RESEND_API_KEY is missing. The signing record was created but the email was not sent.')
+  }
 
-        // Auto-lookup template URL from document_templates table
-        const { data: tpl } = await supabase
-          .from('document_templates')
-          .select('public_url, version')
-          .eq('document_type', documentType)
-          .eq('is_active', true)
-          .neq('public_url', 'PLACEHOLDER_UPDATE_AFTER_UPLOAD')
-          .maybeSingle()
+  const signUrl = `${baseUrl}/sign/${token}`
+  const signerFirst = signerName.split(' ')[0]
 
-        await supabase.from('document_signatures').insert({
-          token,
-          org_id:          org.id,
-          document_type:   documentType,
-          document_version: tpl?.version ?? 'v1.0',
-          document_url:    tpl?.public_url ?? null,
-          signer_name:     signerName,
-          signer_email:    admin_email,
-          signer_company:  org_name.trim(),
-          sent_by:         caller.id,
-          sent_by_name:    caller.name,
-          expires_at:      expiresAt,
-          status:          'pending',
-        })
-
-        const signUrl    = `${baseUrl}/sign/${token}`
-        const signerFirst = admin_first_name.trim()
-
-        await resend.emails.send({
-          from:    'GateGuard <documents@mail.gateguard.co>',
-          to:      admin_email,
-          replyTo: 'rfeldman@gateguard.co',
-          subject: `Action Required: Please sign your ${docLabel}`,
-          html: `
+  await resend.emails.send({
+    from: DOCUMENTS_FROM_EMAIL,
+    to: adminEmail,
+    replyTo: 'rfeldman@gateguard.co',
+    subject: `Action Required: Please sign your ${docLabel}`,
+    html: `
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -294,7 +154,7 @@ export async function POST(req: NextRequest) {
     <div style="padding:32px;">
       <p style="margin:0 0 16px;color:#CBD5E1;font-size:15px;">Hi ${signerFirst},</p>
       <p style="margin:0 0 24px;color:#94A3B8;font-size:14px;line-height:1.6;">
-        ${caller.name} at GateGuard has sent you a <strong style="color:#CBD5E1;">${docLabel}</strong> for ${org_name.trim()}.
+        ${callerName} at GateGuard has sent you a <strong style="color:#CBD5E1;">${docLabel}</strong> for ${orgName}.
         Please click below to review and add your electronic signature.
       </p>
       <div style="text-align:center;margin:32px 0;">
@@ -305,8 +165,8 @@ export async function POST(req: NextRequest) {
       <div style="background:#0C111D;border:1px solid #1E2A45;border-radius:10px;padding:16px;margin-bottom:24px;">
         <table style="width:100%;border-collapse:collapse;">
           <tr><td style="color:#64748B;font-size:12px;padding:4px 0;width:40%;">Document</td><td style="color:#CBD5E1;font-size:12px;">${docLabel}</td></tr>
-          <tr><td style="color:#64748B;font-size:12px;padding:4px 0;">Organization</td><td style="color:#CBD5E1;font-size:12px;">${org_name.trim()}</td></tr>
-          <tr><td style="color:#64748B;font-size:12px;padding:4px 0;">Sent by</td><td style="color:#CBD5E1;font-size:12px;">${caller.name} · GateGuard</td></tr>
+          <tr><td style="color:#64748B;font-size:12px;padding:4px 0;">Organization</td><td style="color:#CBD5E1;font-size:12px;">${orgName}</td></tr>
+          <tr><td style="color:#64748B;font-size:12px;padding:4px 0;">Sent by</td><td style="color:#CBD5E1;font-size:12px;">${callerName} · GateGuard</td></tr>
           <tr><td style="color:#64748B;font-size:12px;padding:4px 0;">Expires</td><td style="color:#CBD5E1;font-size:12px;">${new Date(expiresAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</td></tr>
         </table>
       </div>
@@ -320,19 +180,138 @@ export async function POST(req: NextRequest) {
   </div>
 </body>
 </html>`,
+  })
+}
+
+export async function POST(req: NextRequest) {
+  const caller = await getCurrentUser()
+  if (!caller.isCorporate || caller.role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden — GateGuard admin only' }, { status: 403 })
+  }
+
+  const body = await req.json()
+  const {
+    org_name,
+    org_tier,
+    parent_org_id,
+    license_number,
+    service_area_states,
+    tech_count,
+    address, city, state, zip,
+    phone, email: org_email, website,
+    admin_first_name,
+    admin_last_name,
+    admin_email,
+    admin_role = 'admin',
+    send_invite = true,
+  } = body
+
+  if (!clean(org_name)) return NextResponse.json({ error: 'org_name is required' }, { status: 400 })
+  if (!VALID_DEALER_TIERS.includes(org_tier)) return NextResponse.json({ error: `Invalid org_tier: ${org_tier}` }, { status: 400 })
+  if (!clean(admin_first_name) || !clean(admin_last_name)) return NextResponse.json({ error: 'admin_first_name and admin_last_name are required' }, { status: 400 })
+  if (!String(admin_email ?? '').includes('@')) return NextResponse.json({ error: 'valid admin_email is required' }, { status: 400 })
+
+  const { data: org, error: orgErr } = await supabase
+    .from('organizations')
+    .insert({
+      name: clean(org_name),
+      org_tier,
+      tier_label: TIER_LABELS[org_tier] ?? org_tier,
+      parent_org_id: parent_org_id ?? null,
+      license_number: license_number ?? null,
+      service_area_states: service_area_states ?? [],
+      tech_count: tech_count ?? 0,
+      onboarded_at: new Date().toISOString(),
+      ...(phone && { phone }),
+      ...(org_email && { email: org_email }),
+      ...(website && { website }),
+      ...(address && { address }),
+      ...(city && { city }),
+      ...(state && { state }),
+      ...(zip && { zip }),
+    })
+    .select()
+    .single()
+
+  if (orgErr || !org) {
+    return NextResponse.json({ error: `Failed to create org: ${orgErr?.message}` }, { status: 500 })
+  }
+
+  let clerk_user_id: string | null = null
+  let invite_status = 'pending'
+
+  if (send_invite) {
+    try {
+      const clerk = await clerkClient()
+      const existing = await clerk.users.getUserList({ emailAddress: [admin_email] })
+      if (existing.totalCount > 0) {
+        clerk_user_id = existing.data[0].id
+        invite_status = 'existing_user'
+      } else {
+        await clerk.invitations.createInvitation({
+          emailAddress: admin_email,
+          publicMetadata: {
+            org_id: org.id,
+            org_tier,
+            role: admin_role as PortalRole,
+            org_name: clean(org_name),
+            assigned_at: new Date().toISOString(),
+            assigned_by: caller.id,
+          },
+          redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://portal.gateguard.co'}/onboarding`,
         })
+        invite_status = 'invited'
       }
 
-      await sendDoc('nda')
-      await sendDoc(agreementDocType)
-      docs_sent = true
+      if (clerk_user_id) {
+        await clerk.users.updateUserMetadata(clerk_user_id, {
+          publicMetadata: {
+            org_id: org.id,
+            org_tier,
+            role: admin_role as PortalRole,
+            org_name: clean(org_name),
+            assigned_at: new Date().toISOString(),
+            assigned_by: caller.id,
+          },
+        })
+      }
+    } catch (err: any) {
+      return NextResponse.json({
+        ok: false,
+        org,
+        clerk_error: err.message,
+        message: 'Org created in Supabase but Clerk invite failed. Retry the invite from the dealer detail page.',
+      }, { status: 207 })
+    }
+  }
+
+  await supabase.from('sensitive_field_access_log').insert({
+    user_id: caller.id,
+    org_id: org.id,
+    table_name: 'organizations',
+    record_id: org.id,
+    fields: ['onboarded'],
+    ip_address: req.headers.get('x-forwarded-for') ?? null,
+  })
+
+  const agreementDocType = TIER_DOC_TYPES[org_tier] ?? 'dealer_agreement'
+  const signerName = `${clean(admin_first_name)} ${clean(admin_last_name)}`
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://portal.gateguard.co'
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+  let docs_sent = false
+  let docs_error: string | null = null
+
+  try {
+    await sendSigningDocument({ documentType: 'nda', orgId: org.id, orgName: clean(org_name), adminEmail: admin_email, signerName, callerId: caller.id, callerName: caller.name, expiresAt, baseUrl })
+    await sendSigningDocument({ documentType: agreementDocType, orgId: org.id, orgName: clean(org_name), adminEmail: admin_email, signerName, callerId: caller.id, callerName: caller.name, expiresAt, baseUrl })
+    docs_sent = true
   } catch (emailErr: any) {
-      console.error('[onboard-dealer] Doc e-sign send error:', emailErr)
-      docs_error = emailErr?.message ?? String(emailErr)
+    console.error('[onboard-dealer] Doc e-sign send error:', emailErr)
+    docs_error = emailErr?.message ?? String(emailErr)
   }
 
   return NextResponse.json({
-    ok:            true,
+    ok: true,
     org,
     clerk_user_id,
     invite_status,
@@ -350,32 +329,21 @@ export async function POST(req: NextRequest) {
   }, { status: 201 })
 }
 
-// Tier rank — lower number = higher in hierarchy
-const TIER_RANK: Record<string, number> = {
-  corporate: 0, master_agent: 1, master_dealer: 2,
-  full_dealer: 3, service_dealer: 4, install_contractor: 4, sales_partner: 4, client: 5,
-}
-
-// GET /api/admin/onboard-dealer — list dealer orgs scoped to caller's hierarchy
 export async function GET(req: NextRequest) {
   const caller = await getCurrentUser()
 
-  // Corporate, master_agent, and master_dealer can list dealers
   if (!caller.isCorporate && !caller.isMasterAgent && !caller.isMasterDealer) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const { searchParams } = new URL(req.url)
-  const tier   = searchParams.get('tier')
-  const q      = searchParams.get('q')
+  const tier = searchParams.get('tier')
+  const q = searchParams.get('q')
   const parent = searchParams.get('parent_org_id')
 
-  // Callers can only see tiers strictly below their own rank
-  const callerRank  = TIER_RANK[caller.org_tier ?? 'corporate'] ?? 0
+  const callerRank = TIER_RANK[caller.org_tier ?? 'corporate'] ?? 0
   const ALL_DEALER_TIERS = ['master_agent', 'master_dealer', 'full_dealer', 'service_dealer', 'install_contractor', 'sales_partner']
-  const visibleTiers = caller.isCorporate
-    ? ALL_DEALER_TIERS
-    : ALL_DEALER_TIERS.filter(t => (TIER_RANK[t] ?? 99) > callerRank)
+  const visibleTiers = caller.isCorporate ? ALL_DEALER_TIERS : ALL_DEALER_TIERS.filter(t => (TIER_RANK[t] ?? 99) > callerRank)
 
   let query = supabase
     .from('organizations')
@@ -383,13 +351,12 @@ export async function GET(req: NextRequest) {
     .in('org_tier', visibleTiers)
     .order('onboarded_at', { ascending: false, nullsFirst: false })
 
-  if (tier)   query = query.eq('org_tier', tier)
-  if (parent) query = query.eq('parent_org_id', parent)  // fix: was parent_id
-  if (q)      query = query.ilike('name', `%${q}%`)
+  if (tier) query = query.eq('org_tier', tier)
+  if (parent) query = query.eq('parent_org_id', parent)
+  if (q) query = query.ilike('name', `%${q}%`)
 
-  // Non-corporate users only see orgs where they are the direct parent
   if (!caller.isCorporate && caller.org_id) {
-    query = query.eq('parent_org_id', caller.org_id)  // fix: was parent_id
+    query = query.eq('parent_org_id', caller.org_id)
   }
 
   const { data, error } = await query
