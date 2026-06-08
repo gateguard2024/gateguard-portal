@@ -137,6 +137,7 @@ export function MyDaySurface() {
   const [addEventOpen, setAddEventOpen] = useState(false)
   const [activePanel, setActivePanel] = useState<MyDayPanel>(null)
   const [selectedTopItemId, setSelectedTopItemId] = useState<string | null>(null)
+  const [selectedTodoItemId, setSelectedTodoItemId] = useState<string | null>(null)
   const [topActionBusy, setTopActionBusy] = useState(false)
   const [topActionMessage, setTopActionMessage] = useState<string | null>(null)
   const [topNote, setTopNote] = useState('')
@@ -161,7 +162,9 @@ export function MyDaySurface() {
   const weekCount = summary?.counts?.week_total ?? 0
   const todayEvents = summary?.today?.events ?? []
   const top10 = summary?.top_10 ?? []
+  const todoItems = top10.filter(item => item.type === 'todo' || item.type === 'tracker_task')
   const selectedTopItem = top10.find(item => item.id === selectedTopItemId) ?? null
+  const selectedTodoItem = todoItems.find(item => item.id === selectedTodoItemId) ?? null
   const nextEvent = todayEvents[0]
   const connected = summary?.google_calendar?.connected === true
   const todoCount = summary?.counts?.today_todos ?? 0
@@ -185,6 +188,31 @@ export function MyDaySurface() {
       setTopActionMessage(data?.message ?? 'Done.')
       setTopNote('')
       setShowTopNoteBox(false)
+      await loadSummary()
+    } catch (error) {
+      setTopActionMessage(error instanceof Error ? error.message : 'That did not work. Try again.')
+    } finally {
+      setTopActionBusy(false)
+    }
+  }
+
+  async function submitTodoAction(action: 'mark_done') {
+    const item = todoItems.find(todoItem => todoItem.id === selectedTodoItemId)
+    if (!item) return
+
+    setTopActionBusy(true)
+    setTopActionMessage(null)
+
+    try {
+      const res = await fetch('/api/nexus/my-day/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, item_type: item.type, item_id: item.id }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.success === false) throw new Error(data?.message ?? 'Could not complete that action.')
+      setTopActionMessage(data?.message ?? 'Done.')
+      setSelectedTodoItemId(null)
       await loadSummary()
     } catch (error) {
       setTopActionMessage(error instanceof Error ? error.message : 'That did not work. Try again.')
@@ -236,7 +264,7 @@ export function MyDaySurface() {
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {cards.map(card => <MyDayCardButton key={card.title} card={card} onClick={() => { setActivePanel(card.id); setSelectedTopItemId(null); setTopActionMessage(null); setShowTopNoteBox(false) }} />)}
+          {cards.map(card => <MyDayCardButton key={card.title} card={card} onClick={() => { setActivePanel(card.id); setSelectedTopItemId(null); setSelectedTodoItemId(null); setTopActionMessage(null); setShowTopNoteBox(false) }} />)}
         </div>
 
         <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>My Day stays simple: four doors, then a glass detail board. Jobs, leads, opportunities, billing, and field work roll into one of those boards.</div>
@@ -290,8 +318,34 @@ export function MyDaySurface() {
       )}
 
       {activePanel === 'todos' && (
-        <DetailShell title="To-Dos" subtitle="Tasks due today, overdue, and unscheduled work will live here." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Add To-Do" muted /><ActionButton label="Schedule" muted /><ActionButton label="Mark Done" muted /></>}>
-          {top10.filter(item => item.type === 'todo' || item.type === 'tracker_task').length > 0 ? top10.filter(item => item.type === 'todo' || item.type === 'tracker_task').map(item => <div key={`${item.type}-${item.id}`} className="rounded-2xl px-3 py-3" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.88)' }}>{item.title}</div><div className="mt-1 text-[10px] capitalize" style={{ color: 'rgba(255,255,255,0.34)' }}>{item.reason}</div></div>) : <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)' }}>No to-dos due today.</div>}
+        <DetailShell
+          title="To-Dos"
+          subtitle="Select a task, then use the action rail."
+          onClose={() => setActivePanel(null)}
+          actions={
+            <>
+              {selectedTodoItem ? <div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(139,92,246,0.10)', border: '1px solid rgba(139,92,246,0.24)', color: 'rgba(255,255,255,0.72)' }}>Selected:<br /><span style={{ color: 'rgba(255,255,255,0.9)' }}>{selectedTodoItem.title}</span></div> : <div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.42)' }}>Select a to-do first.</div>}
+              <ActionButton label="Add To-Do" muted />
+              <ActionButton label="Schedule" muted />
+              <ActionButton label="Mark Done" disabled={!selectedTodoItem || topActionBusy} onClick={() => void submitTodoAction('mark_done')} />
+              {topActionMessage && <div className="rounded-2xl px-3 py-2 text-[11px]" style={{ background: 'rgba(139,92,246,0.10)', border: '1px solid rgba(139,92,246,0.22)', color: 'rgba(255,255,255,0.72)' }}>{topActionMessage}</div>}
+            </>
+          }
+        >
+          {todoItems.length > 0 ? todoItems.map(item => {
+            const selected = selectedTodoItemId === item.id
+            return (
+              <button key={`${item.type}-${item.id}`} type="button" onClick={() => { setSelectedTodoItemId(item.id); setTopActionMessage(null) }} className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: selected ? 'rgba(139,92,246,0.14)' : 'rgba(0,0,0,0.18)', border: selected ? '1px solid rgba(139,92,246,0.42)' : '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.88)' }}>{item.title}</div>
+                    <div className="mt-1 text-[10px] capitalize" style={{ color: 'rgba(255,255,255,0.34)' }}>{item.reason} · {item.type.replace(/_/g, ' ')}</div>
+                  </div>
+                  <div className="rounded-full px-2 py-1 text-[9px] font-semibold uppercase" style={{ background: selected ? 'rgba(139,92,246,0.22)' : 'rgba(148,163,184,0.14)', color: selected ? '#ddd6fe' : '#cbd5e1', border: '1px solid rgba(255,255,255,0.08)' }}>{selected ? 'selected' : item.urgency}</div>
+                </div>
+              </button>
+            )
+          }) : <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)' }}>No to-dos due today.</div>}
         </DetailShell>
       )}
 
