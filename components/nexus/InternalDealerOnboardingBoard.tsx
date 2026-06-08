@@ -27,7 +27,10 @@ type DealerItem = {
   contact_phone: string | null
   nda_status: string
   agreement_status: string
+  agreement_signature_id?: string | null
+  executed_cert_url?: string | null
   compliance_needed: boolean
+  next_action?: string | null
   bucket: Bucket
   resume_href: string
   open_href: string
@@ -38,6 +41,7 @@ const buckets: Bucket[] = [
   'needs_nda',
   'nda_sent',
   'needs_agreement',
+  'agreement_signed',
   'needs_compliance',
   'ready_to_approve',
   'live',
@@ -58,6 +62,7 @@ function label(bucket: Bucket) {
 function color(bucket: Bucket) {
   if (bucket === 'ready_to_approve') return '#34D399'
   if (bucket === 'live') return '#00C8FF'
+  if (bucket === 'agreement_signed') return '#34D399'
   if (bucket === 'needs_compliance') return '#F87171'
   if (bucket === 'needs_nda' || bucket === 'needs_agreement') return '#FBBF24'
   if (bucket === 'nda_sent') return '#8B5CF6'
@@ -101,7 +106,7 @@ export function InternalDealerOnboardingBoard() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
         {buckets.map(nextBucket => {
           const c = color(nextBucket)
           const count = items.filter(item => item.bucket === nextBucket).length
@@ -129,7 +134,7 @@ export function InternalDealerOnboardingBoard() {
                 <div>
                   <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{item.title}</div>
                   <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.48)' }}>{tierText(item)} • {item.contact_email || item.subtitle}</div>
-                  <div className="mt-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.34)' }}>NDA: {item.nda_status} • Agreement: {item.agreement_status}</div>
+                  <div className="mt-2 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold" style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.22)', color: '#FBBF24' }}>Next: {item.next_action || label(item.bucket)}</div>
                 </div>
                 <div className="rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em]" style={{ background: `${c}1f`, border: `1px solid ${c}44`, color: c }}>{label(item.bucket)}</div>
               </div>
@@ -144,6 +149,11 @@ export function InternalDealerOnboardingBoard() {
           <div className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>{selected.title}</div>
           <div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.54)' }}>{tierText(selected)} • {selected.contact_email || 'No contact email'}</div>
 
+          <div className="mt-4 rounded-2xl p-3" style={{ background: 'rgba(251,191,36,0.10)', border: '1px solid rgba(251,191,36,0.20)' }}>
+            <div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: '#FBBF24' }}>Next Action</div>
+            <div className="mt-1 text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{selected.next_action || label(selected.bucket)}</div>
+          </div>
+
           <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
             <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>NDA</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.nda_status}</div></div>
             <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>Agreement</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.agreement_status}</div></div>
@@ -153,6 +163,9 @@ export function InternalDealerOnboardingBoard() {
           <div className="mt-4 flex flex-wrap gap-2">
             <button type="button" onClick={() => router.push(selected.resume_href)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'linear-gradient(135deg, #8B5CF6, #007CFF)', color: 'white' }}>Resume Onboarding</button>
             <button type="button" onClick={() => router.push(selected.open_href)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.62)' }}>Open Dealer</button>
+            {selected.executed_cert_url && (
+              <a href={selected.executed_cert_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.24)', color: '#34D399' }}>Open Final Copy</a>
+            )}
           </div>
         </div>
       )}
