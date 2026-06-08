@@ -86,13 +86,7 @@ export async function GET(req: NextRequest) {
     resolveProfileId(user.id, user.email),
   ])
 
-  const ownershipIds = uniqueIds([
-    profileId,
-    user.profile_id,
-    user.user_id,
-    user.id,
-    'cf8dede1-d0a4-40a2-82d2-cadeed620919',
-  ])
+  const ownershipIds = uniqueIds([profileId, user.id, user.email])
 
   const { searchParams } = new URL(req.url)
   const q = clean(searchParams.get('q'))
