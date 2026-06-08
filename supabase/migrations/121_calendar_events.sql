@@ -39,31 +39,55 @@ on calendar_events(status);
 alter table calendar_events enable row level security;
 
 -- Service-role API routes bypass RLS, but these policies keep direct client access safe.
-create policy if not exists "calendar_events_select"
-on calendar_events for select
-using (
-  org_id is null
-  or org_id = auth_org_id()
-  or org_id in (select id from organizations where parent_id = auth_org_id())
-);
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'calendar_events'
+      and policyname = 'calendar_events_select'
+  ) then
+    create policy "calendar_events_select"
+    on calendar_events for select
+    using (
+      org_id is null
+      or org_id = auth_org_id()
+      or org_id in (select id from organizations where parent_id = auth_org_id())
+    );
+  end if;
 
-create policy if not exists "calendar_events_insert"
-on calendar_events for insert
-with check (
-  org_id is null
-  or org_id = auth_org_id()
-);
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'calendar_events'
+      and policyname = 'calendar_events_insert'
+  ) then
+    create policy "calendar_events_insert"
+    on calendar_events for insert
+    with check (
+      org_id is null
+      or org_id = auth_org_id()
+    );
+  end if;
 
-create policy if not exists "calendar_events_update"
-on calendar_events for update
-using (
-  org_id is null
-  or org_id = auth_org_id()
-)
-with check (
-  org_id is null
-  or org_id = auth_org_id()
-);
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'calendar_events'
+      and policyname = 'calendar_events_update'
+  ) then
+    create policy "calendar_events_update"
+    on calendar_events for update
+    using (
+      org_id is null
+      or org_id = auth_org_id()
+    )
+    with check (
+      org_id is null
+      or org_id = auth_org_id()
+    );
+  end if;
+end $$;
 
 do $$
 begin
