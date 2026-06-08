@@ -3,9 +3,10 @@
   "short_name": "Nexus",
   "description": "The operating system for multifamily access and channel dealer networks.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#F8FAFC",
-  "theme_color": "#1c1917",
+  "background_color": "#020713",
+  "theme_color": "#020713",
   "orientation": "any",
   "icons": [
     {
