@@ -18,6 +18,7 @@ import { auth } from '@clerk/nextjs/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { spendCredits } from '@/lib/credits'
 
 const supabaseDeep = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -2033,6 +2034,35 @@ export async function POST(req: NextRequest) {
     const raw = await req.json()
     const rawQuery: string = raw.property_name || raw.query || ''
     if (!rawQuery) return NextResponse.json({ error: 'property_name or query required' }, { status: 400 })
+
+    // ── Credit accounting ─────────────────────────────────────────────────────
+    // Non-blocking: logs errors but never gates a search (wallets provisioned incrementally)
+    // Skipped for internal Inngest service calls
+    if (userId !== 'inngest-service') {
+      void (async () => {
+        try {
+          const portalUser = await getCurrentUser()
+          if (portalUser.org_id) {
+            const { data: profile } = await supabaseDeep
+              .from('profiles')
+              .select('id')
+              .eq('clerk_user_id', userId)
+              .maybeSingle()
+            await spendCredits({
+              profileId: (profile as { id: string } | null)?.id ?? null,
+              clerkUserId: userId,
+              orgId: portalUser.org_id,
+              featureKey: 'sales.aria_deep',
+              actionType: 'aria_search',
+              credits: 150,
+              metadata: { query: rawQuery },
+            })
+          }
+        } catch (err) {
+          console.warn('[aria] credit spend skipped:', (err as Error)?.message)
+        }
+      })()
+    }
 
     // ── PHASE 0: Classification ───────────────────────────────────────────────
     const classification = await classifyQuery(rawQuery, anthropic)
