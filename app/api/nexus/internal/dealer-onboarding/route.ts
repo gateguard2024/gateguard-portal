@@ -47,6 +47,9 @@ type SigRow = {
   status: string | null
   sent_at: string | null
   signed_at: string | null
+  countersigned_at?: string | null
+  executed_at?: string | null
+  executed_cert_url?: string | null
 }
 
 const PARTNER_TIERS = new Set([
@@ -61,6 +64,11 @@ const PARTNER_TIERS = new Set([
 function signed(sig?: SigRow) {
   const status = String(sig?.status ?? '').toLowerCase()
   return !!sig?.signed_at || status === 'counterparty_signed' || status === 'fully_executed' || status === 'signed' || status === 'completed'
+}
+
+function executed(sig?: SigRow) {
+  const status = String(sig?.status ?? '').toLowerCase()
+  return !!sig?.executed_at || status === 'fully_executed'
 }
 
 function sent(sig?: SigRow) {
@@ -86,10 +94,24 @@ function bucketFor(org: OrgRow, nda?: SigRow, agreement?: SigRow): Bucket {
   if (!nda) return 'needs_nda'
   if (!signed(nda)) return sent(nda) ? 'nda_sent' : 'needs_nda'
   if (!agreement) return 'needs_agreement'
-  if (!signed(agreement)) return sent(agreement) ? 'needs_agreement' : 'needs_agreement'
+  if (!executed(agreement)) return signed(agreement) ? 'agreement_signed' : 'needs_agreement'
   if (needsCompliance(org)) return 'needs_compliance'
   if (!org.is_active || !org.onboarding_complete) return 'ready_to_approve'
   return 'live'
+}
+
+function nextActionFor(org: OrgRow, bucket: Bucket, nda?: SigRow, agreement?: SigRow) {
+  if (bucket === 'draft') return 'Finish company info'
+  if (bucket === 'needs_nda') return nda ? 'Resend NDA' : 'Send NDA'
+  if (bucket === 'nda_sent') return 'Check NDA status'
+  if (bucket === 'needs_agreement') return agreement ? 'Resend Agreement' : 'Send Agreement'
+  if (bucket === 'agreement_signed') return 'Countersign Agreement'
+  if (bucket === 'needs_compliance') {
+    if (org.org_tier === 'master_agent') return 'Collect W9'
+    return 'Collect W9 / COI'
+  }
+  if (bucket === 'ready_to_approve') return 'Approve Dealer'
+  return 'View final documents'
 }
 
 function agreementTypes() {
@@ -130,7 +152,7 @@ export async function GET() {
     const { data: signatures } = ids.length > 0
       ? await supabase
           .from('document_signatures')
-          .select('id,org_id,document_type,status,sent_at,signed_at')
+          .select('id,org_id,document_type,status,sent_at,signed_at,countersigned_at,executed_at,executed_cert_url')
           .in('org_id', ids)
       : { data: [] }
 
@@ -164,9 +186,12 @@ export async function GET() {
         contact_phone: org.contact_phone || org.phone || null,
         nda_status: nda?.status ?? 'missing',
         agreement_status: agreement?.status ?? 'missing',
+        agreement_signature_id: agreement?.id ?? null,
+        executed_cert_url: agreement?.executed_cert_url ?? null,
         compliance_needed: needsCompliance(org),
         partner_docs: org.partner_docs ?? [],
         bucket,
+        next_action: nextActionFor(org, bucket, nda, agreement),
         resume_href: `/admin/dealers/new?resume=${org.id}`,
         open_href: `/admin/dealers/${org.id}`,
       }
