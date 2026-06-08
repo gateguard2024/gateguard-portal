@@ -74,26 +74,56 @@ function uniqueIds(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.map(cleanUnknown).filter(Boolean)))
 }
 
+function emptyWorkbench(myLeads: unknown[] = []) {
+  return {
+    success: true,
+    stats: {
+      myLeads: myLeads.length,
+      openLeads: 0,
+      needsAttention: 0,
+      openOpportunities: 0,
+      proposalFollowUps: 0,
+    },
+    myLeads,
+    openLeads: [],
+    needsAttention: [],
+    openOpportunities: [],
+    proposalFollowUps: [],
+  }
+}
+
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser()
-
-  if (!user.canViewCRM) {
-    return NextResponse.json({ success: false, message: 'CRM access denied.' }, { status: 403 })
-  }
-
   const [scope, profileId] = await Promise.all([
     resolveOrgScope(user),
     resolveProfileId(user.id, user.email),
   ])
 
   const ownershipIds = uniqueIds([profileId, user.id, user.email])
-
   const { searchParams } = new URL(req.url)
   const q = clean(searchParams.get('q'))
 
-  if (q) {
-    const term = escapeLike(q)
+  if (!user.canViewCRM && ownershipIds.length === 0) {
+    return NextResponse.json(emptyWorkbench())
+  }
 
+  if (q) {
+    if (!user.canViewCRM) {
+      const term = escapeLike(q)
+      let ownSearchQ = supabase.from('leads').select('id, contact_name, company_name, stage, source, notes, created_at, updated_at, email, phone, location, opportunity_id')
+      ownSearchQ = applyOrgScope(ownSearchQ, scope)
+      const leads = await safe(
+        ownSearchQ
+          .in('assigned_to', ownershipIds)
+          .or(`contact_name.ilike.%${term}%,company_name.ilike.%${term}%,location.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%,notes.ilike.%${term}%`)
+          .order('updated_at', { ascending: false })
+          .limit(10),
+        []
+      )
+      return NextResponse.json({ success: true, q, leads, opportunities: [] })
+    }
+
+    const term = escapeLike(q)
     let leadsQ = supabase.from('leads').select('id, contact_name, company_name, stage, source, notes, created_at, updated_at, email, phone, location, opportunity_id')
     leadsQ = applyOrgScope(leadsQ, scope)
     const leads = await safe(leadsQ.or(`contact_name.ilike.%${term}%,company_name.ilike.%${term}%,location.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%,notes.ilike.%${term}%`).order('updated_at', { ascending: false }).limit(10), [])
@@ -111,6 +141,10 @@ export async function GET(req: NextRequest) {
   const myLeads = ownershipIds.length > 0
     ? await safe(myLeadsQ.in('assigned_to', ownershipIds).is('lost_at', null).order('updated_at', { ascending: false }).limit(20), [])
     : []
+
+  if (!user.canViewCRM) {
+    return NextResponse.json(emptyWorkbench(myLeads as unknown[]))
+  }
 
   let openLeadsQ = supabase.from('leads').select('id, contact_name, company_name, stage, source, notes, created_at, updated_at, email, phone, location, opportunity_id')
   openLeadsQ = applyOrgScope(openLeadsQ, scope)
