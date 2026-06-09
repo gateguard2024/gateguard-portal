@@ -21,7 +21,8 @@ const supabase = createClient(
 )
 
 const resend = new Resend(process.env.RESEND_API_KEY)
-const FROM = 'GateGuard <noreply@gateguard.co>'
+const FROM =
+  process.env.RESEND_DOCUMENTS_FROM_EMAIL ?? 'GateGuard <documents@gateguard.co>'
 
 const AGREEMENT_BY_TIER: Record<string, string> = {
   master_agent:       'master_agent_agreement',
