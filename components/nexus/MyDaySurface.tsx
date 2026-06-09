@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { AddEventModal } from '@/components/calendar/AddEventModal'
+import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { MyDayRelatedJobGlass } from '@/components/nexus/MyDayRelatedJobGlass'
 import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 
@@ -103,7 +104,7 @@ function DetailShell({ title, subtitle, onClose, children, actions }: { title: s
     <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 px-4 py-6">
       <div className="grid max-h-[86vh] w-full max-w-5xl grid-cols-1 gap-4 overflow-hidden rounded-[2rem] p-5 shadow-2xl lg:grid-cols-[1fr_260px]" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.96), rgba(5,10,22,0.96))', border: '1px solid rgba(0,200,255,0.16)', boxShadow: '0 30px 100px rgba(0,0,0,0.55), 0 0 48px rgba(0,200,255,0.10), inset 0 1px 0 rgba(255,255,255,0.06)', backdropFilter: 'blur(26px)' }}>
         <div className="min-h-0 overflow-y-auto pr-1">
-          <button type="button" onClick={onClose} className="mb-4 rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.58)' }}>← Back to My Day</button>
+          <NexusGlassBackButton label="Back to My Day" onClick={onClose} />
           <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.78)' }}>My Day</div>
           <h2 className="mt-1 text-2xl font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>{title}</h2>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.48)' }}>{subtitle}</p>
