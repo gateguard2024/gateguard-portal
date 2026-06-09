@@ -199,16 +199,16 @@ function ActionButton({ label, onClick, muted, disabled }: { label: string; onCl
 
 function JobsDetailShell({ title, subtitle, onClose, children, actions }: { title: string; subtitle: string; onClose: () => void; children: React.ReactNode; actions: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/68 px-4 py-6 backdrop-blur-sm">
-      <div className="grid max-h-[86vh] w-full max-w-5xl grid-cols-1 gap-4 overflow-hidden rounded-[2rem] p-5 shadow-2xl lg:grid-cols-[1fr_260px]" style={{ background: 'radial-gradient(circle at 18% 0%, rgba(52,211,153,0.14), transparent 32%), linear-gradient(180deg, rgba(8,18,34,0.97), rgba(3,9,22,0.97))', border: '1px solid rgba(52,211,153,0.20)', boxShadow: '0 30px 100px rgba(0,0,0,0.60), 0 0 58px rgba(52,211,153,0.12), inset 0 1px 0 rgba(255,255,255,0.07)', backdropFilter: 'blur(28px)' }}>
-        <div className="min-h-0 overflow-y-auto pr-1">
+    <div className="fixed inset-0 z-[90] overflow-hidden bg-black/68 px-4 py-4 backdrop-blur-sm sm:py-6">
+      <div className="mx-auto grid h-[calc(100dvh-2rem)] w-full max-w-5xl grid-cols-1 gap-4 overflow-hidden rounded-[2rem] p-5 shadow-2xl sm:h-[calc(100dvh-3rem)] lg:grid-cols-[1fr_260px]" style={{ background: 'radial-gradient(circle at 18% 0%, rgba(52,211,153,0.14), transparent 32%), linear-gradient(180deg, rgba(8,18,34,0.97), rgba(3,9,22,0.97))', border: '1px solid rgba(52,211,153,0.20)', boxShadow: '0 30px 100px rgba(0,0,0,0.60), 0 0 58px rgba(52,211,153,0.12), inset 0 1px 0 rgba(255,255,255,0.07)', backdropFilter: 'blur(28px)' }}>
+        <div className="min-h-0 overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           <NexusGlassBackButton label="Back to Jobs" onClick={onClose} />
           <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(52,211,153,0.82)' }}>Jobs</div>
           <h2 className="mt-1 text-2xl font-semibold" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(52,211,153,0.18)' }}>{title}</h2>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>{subtitle}</p>
           <div className="mt-5 space-y-2">{children}</div>
         </div>
-        <aside className="rounded-3xl p-4" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.68), rgba(3,9,22,0.52))', border: '1px solid rgba(52,211,153,0.15)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)' }}>
+        <aside className="min-h-0 overflow-y-auto rounded-3xl p-4" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.68), rgba(3,9,22,0.52))', border: '1px solid rgba(52,211,153,0.15)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Actions</div>
           <div className="mt-4 space-y-2">{actions}</div>
         </aside>
@@ -233,6 +233,7 @@ export function JobsSurface() {
   const [boardTaskTitle, setBoardTaskTitle] = useState('')
   const [boardTaskDueDate, setBoardTaskDueDate] = useState('')
   const [boardVisitDate, setBoardVisitDate] = useState('')
+  const [boardVisitTime, setBoardVisitTime] = useState('')
   const [boardCompleteNote, setBoardCompleteNote] = useState('')
   const [jobWindowData, setJobWindowData] = useState<Record<string, unknown> | null>(null)
   const [jobWindowBusy, setJobWindowBusy] = useState(false)
@@ -322,6 +323,7 @@ export function JobsSurface() {
       setBoardTaskTitle('')
       setBoardTaskDueDate('')
       setBoardVisitDate('')
+      setBoardVisitTime('')
       setBoardCompleteNote('')
       await refreshBoard()
     } catch (error) {
@@ -420,9 +422,12 @@ export function JobsSurface() {
 
               {boardAction === 'schedule_visit' && (
                 <div className="space-y-2 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(52,211,153,0.22)' }}>
-                  <input type="date" value={boardVisitDate} onChange={e => setBoardVisitDate(e.target.value)} className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(52,211,153,0.2)', color: 'rgba(255,255,255,0.88)' }} />
+                  <div className="flex gap-2">
+                    <input type="date" value={boardVisitDate} onChange={e => setBoardVisitDate(e.target.value)} className="flex-1 rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(52,211,153,0.2)', color: 'rgba(255,255,255,0.88)' }} />
+                    <input type="time" value={boardVisitTime} onChange={e => setBoardVisitTime(e.target.value)} className="w-24 rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(52,211,153,0.2)', color: 'rgba(255,255,255,0.88)' }} />
+                  </div>
                   <textarea value={boardNote} onChange={e => setBoardNote(e.target.value)} placeholder="Optional note" rows={2} className="w-full resize-none rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.88)' }} />
-                  <button type="button" disabled={boardBusy || !boardVisitDate} onClick={() => void submitBoardAction({ action: 'schedule_visit', scheduled_date: boardVisitDate, note: boardNote })} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: '#34d399', color: '#06120c' }}>{boardBusy ? 'Scheduling...' : 'Schedule Visit'}</button>
+                  <button type="button" disabled={boardBusy || !boardVisitDate} onClick={() => void submitBoardAction({ action: 'schedule_visit', scheduled_date: boardVisitDate && boardVisitTime ? `${boardVisitDate}T${boardVisitTime}` : boardVisitDate, note: boardNote })} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: '#34d399', color: '#06120c' }}>{boardBusy ? 'Scheduling...' : 'Schedule Visit'}</button>
                 </div>
               )}
 

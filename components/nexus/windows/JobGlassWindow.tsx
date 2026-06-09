@@ -147,6 +147,7 @@ export function JobGlassWindow({
   const [taskNotes, setTaskNotes] = useState('')
   const [taskPriority, setTaskPriority] = useState('normal')
   const [visitDate, setVisitDate] = useState('')
+  const [visitTime, setVisitTime] = useState('')
   const [visitNote, setVisitNote] = useState('')
   const [completeNote, setCompleteNote] = useState('')
 
@@ -303,12 +304,15 @@ export function JobGlassWindow({
 
               {activeAction === 'schedule_visit' && (
                 <div className="space-y-2 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(52,211,153,0.22)' }}>
-                  <FieldLabel label="Visit Date" helper="Pick when the team should go." />
-                  <input type="date" value={visitDate} onChange={e => setVisitDate(e.target.value)} className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(52,211,153,0.2)', color: 'rgba(255,255,255,0.88)' }} />
+                  <FieldLabel label="Visit Date & Time" helper="Pick when the team should go." />
+                  <div className="flex gap-2">
+                    <input type="date" value={visitDate} onChange={e => setVisitDate(e.target.value)} className="flex-1 rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(52,211,153,0.2)', color: 'rgba(255,255,255,0.88)' }} />
+                    <input type="time" value={visitTime} onChange={e => setVisitTime(e.target.value)} className="w-28 rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(52,211,153,0.2)', color: 'rgba(255,255,255,0.88)' }} />
+                  </div>
                   <textarea value={visitNote} onChange={e => setVisitNote(e.target.value)} placeholder="Optional note for the team, like gate code or best arrival time." rows={2} className="w-full resize-none rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.88)' }} />
                   <div className="flex gap-2">
                     <button type="button" onClick={() => setActiveAction(null)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.045)', color: 'rgba(255,255,255,0.5)' }}>Cancel</button>
-                    <button type="button" disabled={actionBusy || !visitDate} onClick={() => submitJobAction({ action: 'schedule_visit', scheduled_date: visitDate, note: visitNote })} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: '#34d399', color: '#06120c' }}>{actionBusy ? 'Scheduling...' : 'Schedule Visit'}</button>
+                    <button type="button" disabled={actionBusy || !visitDate} onClick={() => submitJobAction({ action: 'schedule_visit', scheduled_date: visitDate && visitTime ? `${visitDate}T${visitTime}` : visitDate, note: visitNote })} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: '#34d399', color: '#06120c' }}>{actionBusy ? 'Scheduling...' : 'Schedule Visit'}</button>
                   </div>
                 </div>
               )}
