@@ -76,7 +76,7 @@ export function InternalDealerOnboardingBoard() {
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState<string | null>(null)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
-  const [sending, setSending] = useState<'nda' | 'agreement' | null>(null)
+  const [busy, setBusy] = useState<'nda' | 'agreement' | 'countersign' | null>(null)
 
   async function load() {
     setLoading(true)
@@ -98,7 +98,7 @@ export function InternalDealerOnboardingBoard() {
   useEffect(() => { void load() }, [])
 
   async function sendDoc(item: DealerItem, kind: 'nda' | 'agreement') {
-    setSending(kind)
+    setBusy(kind)
     setActionMessage(null)
     try {
       if (!item.contact_email) throw new Error('This dealer needs a contact email before sending.')
@@ -118,7 +118,32 @@ export function InternalDealerOnboardingBoard() {
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : 'Could not send document.')
     } finally {
-      setSending(null)
+      setBusy(null)
+    }
+  }
+
+  async function countersignAgreement(item: DealerItem) {
+    setBusy('countersign')
+    setActionMessage(null)
+    try {
+      if (!item.agreement_signature_id) throw new Error('No signed agreement record was found to countersign.')
+      const res = await fetch('/api/signatures/countersign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          signature_id: item.agreement_signature_id,
+          countersigned_name: 'Russel Feldman',
+          countersigned_title: 'CEO',
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.ok === false) throw new Error(data?.error ?? data?.message ?? 'Countersign failed.')
+      setActionMessage('Agreement countersigned. Final copy is being stored and confirmation emails are being sent.')
+      await load()
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : 'Could not countersign agreement.')
+    } finally {
+      setBusy(null)
     }
   }
 
@@ -183,8 +208,9 @@ export function InternalDealerOnboardingBoard() {
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            {(selected.bucket === 'needs_nda' || selected.bucket === 'nda_sent') && <button type="button" disabled={!!sending} onClick={() => sendDoc(selected, 'nda')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #FBBF24, #F97316)', color: '#111827' }}>{sending === 'nda' ? 'Sending…' : selected.bucket === 'nda_sent' ? 'Resend NDA' : 'Send NDA'}</button>}
-            {selected.bucket === 'needs_agreement' && <button type="button" disabled={!!sending} onClick={() => sendDoc(selected, 'agreement')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #8B5CF6, #007CFF)', color: 'white' }}>{sending === 'agreement' ? 'Sending…' : 'Send Agreement'}</button>}
+            {(selected.bucket === 'needs_nda' || selected.bucket === 'nda_sent') && <button type="button" disabled={!!busy} onClick={() => sendDoc(selected, 'nda')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #FBBF24, #F97316)', color: '#111827' }}>{busy === 'nda' ? 'Sending…' : selected.bucket === 'nda_sent' ? 'Resend NDA' : 'Send NDA'}</button>}
+            {selected.bucket === 'needs_agreement' && <button type="button" disabled={!!busy} onClick={() => sendDoc(selected, 'agreement')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #8B5CF6, #007CFF)', color: 'white' }}>{busy === 'agreement' ? 'Sending…' : 'Send Agreement'}</button>}
+            {selected.bucket === 'agreement_signed' && <button type="button" disabled={!!busy} onClick={() => countersignAgreement(selected)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #34D399, #00C8FF)', color: '#02111d' }}>{busy === 'countersign' ? 'Countersigning…' : 'Countersign Agreement'}</button>}
             {selected.executed_cert_url && <a href={selected.executed_cert_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.24)', color: '#34D399' }}>Open Final Copy</a>}
             <button type="button" onClick={() => router.push(selected.open_href)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.62)' }}>Open Dealer</button>
           </div>
