@@ -37,6 +37,11 @@ type NextCard = {
   action: string
 }
 
+type DuplicateState = {
+  message: string
+  matches: WorkbenchRecord[]
+}
+
 type LeadSource = 'phone' | 'walk_in' | 'outbound' | 'website'
 
 type InboundLeadDraft = {
@@ -174,15 +179,28 @@ async function askNexus(prompt: string, scope: string, contextData?: Record<stri
 }
 
 async function createInboundLead(
-  draft: InboundLeadDraft
-): Promise<{ message: string; nextCards: NextCard[]; leadId?: string }> {
+  draft: InboundLeadDraft,
+  forceCreate = false
+): Promise<{ message: string; nextCards: NextCard[]; leadId?: string; duplicate?: DuplicateState }> {
   const res = await fetch('/api/nexus/flows/inbound-lead', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(draft),
+    body: JSON.stringify(forceCreate ? { ...draft, forceCreate: true } : draft),
   })
 
   const data = await res.json().catch(() => ({}))
+
+  // Gracefully surface duplicate detection rather than throwing
+  if (res.status === 409 && data.duplicateCheck) {
+    return {
+      message: data.message ?? 'Possible duplicate found.',
+      nextCards: [],
+      duplicate: {
+        message: data.message ?? 'A similar lead already exists.',
+        matches: Array.isArray(data.matches) ? data.matches : [],
+      },
+    }
+  }
 
   if (!res.ok || data.success === false) {
     throw new Error(data?.message ?? 'Could not create lead.')
@@ -409,6 +427,11 @@ function RecordList({ records, emptyText, onLeadClick, onOpportunityClick, leadW
                 <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.45)' }}>
                   {recordDisplayCompany(record)}
                 </div>
+                {isLead && record.location && (
+                  <div className="mt-0.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.28)' }}>
+                    {String(record.location)}
+                  </div>
+                )}
               </div>
               <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.14em]" style={{ background: 'rgba(0,200,255,0.1)', color: 'rgba(125,229,255,0.95)', border: '1px solid rgba(0,200,255,0.18)', whiteSpace: 'nowrap' }}>
                 {record.stage ?? 'open'}
@@ -442,6 +465,7 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
   const [opportunityWindowData, setOpportunityWindowData] = useState<Record<string, unknown> | null>(null)
   const [opportunityWindowBusy, setOpportunityWindowBusy] = useState(false)
   const [loadingOpportunityId, setLoadingOpportunityId] = useState<string | null>(null)
+  const [duplicateState, setDuplicateState] = useState<DuplicateState | null>(null)
 
   const simpleStep = stepId === 'call-source' || stepId === 'call-name' || stepId === 'call-property' || stepId === 'call-need' || stepId === 'call-review' || stepId === 'workbench' ? null : STEPS[stepId]
 
@@ -450,6 +474,7 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
     setDraft(EMPTY_DRAFT)
     setStatus(null)
     setNextCards([])
+    setDuplicateState(null)
   }
 
   function closeLeadWindow() {
@@ -520,13 +545,20 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
     }
   }
 
-  async function submitInboundLead() {
+  async function submitInboundLead(forceCreate = false) {
     setBusy(true)
     setStatus(null)
     setNextCards([])
+    setDuplicateState(null)
 
     try {
-      const result = await createInboundLead(draft)
+      const result = await createInboundLead(draft, forceCreate)
+
+      if (result.duplicate) {
+        setDuplicateState(result.duplicate)
+        setBusy(false)
+        return
+      }
 
       setStatus(result.message)
       setNextCards(result.nextCards)
@@ -675,10 +707,26 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
                   <div>Property: {draft.propertyName}</div>
                   <div>Need: {draft.need}</div>
                 </div>
-                <div className="mt-4 flex justify-between gap-3">
-                  <button type="button" onClick={() => setStepId('call-need')} className="rounded-full px-4 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.52)' }}>Back</button>
-                  <button type="button" disabled={busy} onClick={submitInboundLead} className="rounded-full px-4 py-2 text-xs disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #00C8FF, #007CFF)', color: 'white' }}>{busy ? 'Creating...' : 'Create Lead'}</button>
-                </div>
+                {duplicateState ? (
+                  <div className="mt-4 rounded-2xl p-3 space-y-3" style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.28)' }}>
+                    <div className="text-xs font-semibold" style={{ color: 'rgba(251,191,36,0.95)' }}>Possible duplicate detected</div>
+                    <div className="text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.6)' }}>{duplicateState.message}</div>
+                    {duplicateState.matches.slice(0, 2).map(match => (
+                      <div key={match.id} className="rounded-xl px-3 py-2 text-[11px]" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.72)' }}>
+                        <span className="font-semibold">{recordDisplayName(match)}</span>{' — '}{recordDisplayCompany(match)}
+                      </div>
+                    ))}
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <button type="button" disabled={leadWindowBusy} onClick={() => { const m = duplicateState.matches[0]; if (m) void openLead(m.id) }} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40" style={{ background: 'rgba(0,200,255,0.16)', border: '1px solid rgba(0,200,255,0.32)', color: 'rgba(255,255,255,0.92)' }}>{leadWindowBusy ? 'Opening...' : 'Use Existing Lead'}</button>
+                      <button type="button" disabled={busy} onClick={() => void submitInboundLead(true)} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.68)' }}>{busy ? 'Creating...' : 'Create New Anyway'}</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 flex justify-between gap-3">
+                    <button type="button" onClick={() => setStepId('call-need')} className="rounded-full px-4 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.52)' }}>Back</button>
+                    <button type="button" disabled={busy} onClick={() => void submitInboundLead()} className="rounded-full px-4 py-2 text-xs disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #00C8FF, #007CFF)', color: 'white' }}>{busy ? 'Creating...' : 'Create Lead'}</button>
+                  </div>
+                )}
               </div>
             )}
 

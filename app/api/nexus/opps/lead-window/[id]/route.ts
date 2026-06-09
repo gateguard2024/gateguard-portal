@@ -399,6 +399,62 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ success: true, message: 'Follow-up scheduled.', todo: data })
   }
 
+  // ── update_details ─────────────────────────────────────────────────────────
+  if (action === 'update_details') {
+    const fieldsMap: Record<string, unknown> = {}
+    const contactName    = clean(body.contact_name)
+    const companyName    = clean(body.company_name)
+    const email          = clean(body.email)
+    const phone          = clean(body.phone)
+    const location       = clean(body.location)
+    const propertyType   = clean(body.property_type)
+    const notes          = clean(body.notes)
+    const source         = clean(body.source)
+
+    if (contactName)   fieldsMap.contact_name  = contactName
+    if (companyName)   fieldsMap.company_name   = companyName
+    if (email)         fieldsMap.email          = email
+    if (phone)         fieldsMap.phone          = phone
+    if (location)      fieldsMap.location       = location
+    if (propertyType)  fieldsMap.property_type  = propertyType
+    if (notes)         fieldsMap.notes          = notes
+    if (source)        fieldsMap.source         = source
+
+    const unitCountRaw = clean(body.unit_count)
+    if (unitCountRaw) {
+      const parsed = parseInt(unitCountRaw, 10)
+      if (!isNaN(parsed)) fieldsMap.unit_count = parsed
+    }
+
+    if (Object.keys(fieldsMap).length === 0) {
+      return NextResponse.json({ success: false, message: 'No fields provided to update.' }, { status: 400 })
+    }
+
+    fieldsMap.updated_at = new Date().toISOString()
+
+    const { data: updatedLead, error: updateError } = await supabase
+      .from('leads')
+      .update(fieldsMap)
+      .eq('id', lead.id)
+      .select('id, contact_name, company_name, email, phone, location, property_type, unit_count, notes, source, stage, updated_at')
+      .single()
+
+    if (updateError) {
+      return NextResponse.json({ success: false, message: updateError.message }, { status: 500 })
+    }
+
+    void supabase.from('activities').insert({
+      dealer_org_id: lead.org_id,
+      created_by:    profileId,
+      type:          'note',
+      subject:       'Lead details updated',
+      body:          `Details updated by ${user.name}: ${Object.keys(fieldsMap).filter(k => k !== 'updated_at').join(', ')}.`,
+      lead_id:       lead.id,
+    })
+
+    return NextResponse.json({ success: true, message: 'Lead details saved.', lead: updatedLead })
+  }
+
   // ── update_status ───────────────────────────────────────────────────────────
   if (action === 'update_status') {
     const stage = clean(body.stage)
