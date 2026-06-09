@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 
 type CustomersSitesPanel = 'find-customer' | 'find-property' | 'attention' | 'systems' | null
@@ -274,7 +275,7 @@ function CustomersSitesDetailShell({ title, subtitle, onClose, children, actions
         }}
       >
         <div className="min-h-0 overflow-y-auto pr-1">
-          <button type="button" onClick={onClose} className="mb-4 rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(0,200,255,0.14)', color: 'rgba(255,255,255,0.62)' }}>← Back to Customers/Sites</button>
+          <NexusGlassBackButton label="Back to Customers/Sites" onClick={onClose} />
           <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.82)' }}>Customers/Sites</div>
           <h2 className="mt-1 text-2xl font-semibold" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(0,124,255,0.20)' }}>{title}</h2>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>{subtitle}</p>
