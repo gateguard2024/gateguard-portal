@@ -236,34 +236,34 @@ export function MyDaySurface() {
 
   const cards: MyDayCard[] = [
     {
-      id: ‘schedule’,
-      title: "Today’s Schedule",
+      id: 'schedule',
+      title: "Today's Schedule",
       subtitle: nextEvent
         ? `Next: ${formatEventTime(nextEvent)} ${nextEvent.title}`.trim()
-        : "See today’s calendar, site visits, jobs, and appointments.",
-      hex: ‘#00C8FF’,
-      glyph: ‘schedule’,
+        : "See today's calendar, site visits, jobs, and appointments.",
+      hex: '#00C8FF',
+      glyph: 'schedule',
       badge: `${todayCount} today`,
-      actionLabel: ‘Open →’,
+      actionLabel: 'Open →',
     },
     {
-      id: ‘top10’,
-      title: "Today’s Priorities",
+      id: 'top10',
+      title: "Today's Priorities",
       subtitle: workSignalCount > 0
-        ? `${workSignalCount} item${workSignalCount === 1 ? ‘’ : ‘s’} need attention today.`
-        : ‘Important work will appear here when Nexus finds it.’,
-      hex: ‘#007CFF’,
-      glyph: ‘priority’,
+        ? `${workSignalCount} item${workSignalCount === 1 ? '' : 's'} need attention today.`
+        : 'Important work will appear here when Nexus finds it.',
+      hex: '#007CFF',
+      glyph: 'priority',
       badge: workSignalCount > 0 ? `${workSignalCount}` : undefined,
-      actionLabel: ‘Open →’,
+      actionLabel: 'Open →',
     },
     {
-      id: ‘todos’,
-      title: ‘To-Dos’,
+      id: 'todos',
+      title: 'To-Dos',
       subtitle: `${todoCount} due today. Open this list to review and finish tasks.`,
-      hex: ‘#8B5CF6’,
-      glyph: ‘todo’,
-      actionLabel: ‘Open →’,
+      hex: '#8B5CF6',
+      glyph: 'todo',
+      actionLabel: 'Open →',
     },
   ]
 
@@ -297,7 +297,7 @@ export function MyDaySurface() {
       </div>
 
       {activePanel === 'schedule' && (
-        <DetailShell title="Today’s Schedule" subtitle="Events, appointments, site visits, and scheduled work for today." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Add Event" onClick={() => setAddEventOpen(true)} /></>}>
+        <DetailShell title="Today's Schedule" subtitle="Events, appointments, site visits, and scheduled work for today." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Add Event" onClick={() => setAddEventOpen(true)} /></>}>
           {todayEvents.length > 0 ? todayEvents.map(event => (
             <div key={`${event.type}-${event.id}`} className="rounded-2xl px-3 py-3" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}>
               <div className="flex items-center justify-between gap-3"><div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.88)' }}>{event.title}</div><div className="text-[11px]" style={{ color: '#7dd3fc' }}>{formatEventTime(event) || 'Today'}</div></div>
