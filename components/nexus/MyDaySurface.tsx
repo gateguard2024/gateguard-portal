@@ -93,8 +93,8 @@ function MyDayCardButton({ card, onClick }: { card: MyDayCard; onClick: () => vo
       )}
       <NexusGlyphTile kind={card.glyph} color={card.hex} />
       <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>{card.title}</div>
-      <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.56)' }}>{card.subtitle}</div>
-      <div className="absolute bottom-4 right-4 text-xs opacity-75 transition-opacity group-hover:opacity-100" style={{ color: card.hex, textShadow: `0 0 14px rgba(${color},0.40)` }}>{card.actionLabel}</div>
+      <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.68)' }}>{card.subtitle}</div>
+      <div className="absolute bottom-4 right-4 rounded-full px-3 py-1 text-xs font-semibold opacity-90 transition-opacity group-hover:opacity-100" style={{ background: `rgba(${color},0.14)`, border: `1px solid rgba(${color},0.32)`, color: card.hex, boxShadow: `0 0 14px rgba(${color},0.18)` }}>{card.actionLabel}</div>
     </button>
   )
 }
@@ -167,7 +167,6 @@ export function MyDaySurface() {
   const selectedTopItem = top10.find(item => item.id === selectedTopItemId) ?? null
   const selectedTodoItem = todoItems.find(item => item.id === selectedTodoItemId) ?? null
   const nextEvent = todayEvents[0]
-  const connected = summary?.google_calendar?.connected === true
   const todoCount = summary?.counts?.today_todos ?? 0
   const workSignalCount = top10.length
 
@@ -236,10 +235,36 @@ export function MyDaySurface() {
   }
 
   const cards: MyDayCard[] = [
-    { id: 'schedule', title: 'Today’s Schedule', subtitle: nextEvent ? `Next: ${formatEventTime(nextEvent)} ${nextEvent.title}`.trim() : 'Calendar, events, jobs, site visits, and appointments for today.', hex: '#00C8FF', glyph: 'schedule', badge: `${todayCount} today`, actionLabel: 'Open →' },
-    { id: 'top10', title: 'Top 10 Things', subtitle: workSignalCount > 0 ? `${workSignalCount} priority item${workSignalCount === 1 ? '' : 's'} ready to handle today.` : 'The most important work to handle today will rank here.', hex: '#007CFF', glyph: 'priority', badge: workSignalCount > 0 ? `${workSignalCount}` : 'Next', actionLabel: 'Open →' },
-    { id: 'todos', title: 'To-Dos', subtitle: `${todoCount} due today. Overdue, unscheduled, and done actions come next.`, hex: '#8B5CF6', glyph: 'todo', actionLabel: 'Open →' },
-    { id: 'email', title: 'Email', subtitle: connected ? 'Calendar is connected. Important email will roll in once mailbox connectors are added.' : 'Important customer messages will show here once mailbox connectors are added.', hex: '#64748b', glyph: 'email', actionLabel: 'Coming soon →' },
+    {
+      id: ‘schedule’,
+      title: "Today’s Schedule",
+      subtitle: nextEvent
+        ? `Next: ${formatEventTime(nextEvent)} ${nextEvent.title}`.trim()
+        : "See today’s calendar, site visits, jobs, and appointments.",
+      hex: ‘#00C8FF’,
+      glyph: ‘schedule’,
+      badge: `${todayCount} today`,
+      actionLabel: ‘Open →’,
+    },
+    {
+      id: ‘top10’,
+      title: "Today’s Priorities",
+      subtitle: workSignalCount > 0
+        ? `${workSignalCount} item${workSignalCount === 1 ? ‘’ : ‘s’} need attention today.`
+        : ‘Important work will appear here when Nexus finds it.’,
+      hex: ‘#007CFF’,
+      glyph: ‘priority’,
+      badge: workSignalCount > 0 ? `${workSignalCount}` : undefined,
+      actionLabel: ‘Open →’,
+    },
+    {
+      id: ‘todos’,
+      title: ‘To-Dos’,
+      subtitle: `${todoCount} due today. Open this list to review and finish tasks.`,
+      hex: ‘#8B5CF6’,
+      glyph: ‘todo’,
+      actionLabel: ‘Open →’,
+    },
   ]
 
   if (relatedJobId) {
@@ -259,20 +284,20 @@ export function MyDaySurface() {
           <div>
             <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.82)' }}>My Day</div>
             <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(0,124,255,0.22)' }}>What needs your attention today?</h2>
-            <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>Schedule, top priorities, to-dos, and email. Open one card, work that board, then come back.</p>
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.68)' }}>Choose a category below to view your schedule, priorities, or tasks.</p>
           </div>
           <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(0,124,255,0.14)', color: 'rgba(125,229,255,0.96)', border: '1px solid rgba(0,200,255,0.28)', boxShadow: '0 0 18px rgba(0,124,255,0.12)' }}>{weekCount} this week</div>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {cards.map(card => <MyDayCardButton key={card.title} card={card} onClick={() => { setActivePanel(card.id); setSelectedTopItemId(null); setSelectedTodoItemId(null); setTopActionMessage(null); setShowTopNoteBox(false) }} />)}
         </div>
 
-        <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>My Day stays simple: four doors, then a glass detail board. Jobs, leads, opportunities, billing, and field work roll into one of those boards.</div>
+        <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.58)' }}>Pick one card above. Nexus will open the right work board.</div>
       </div>
 
       {activePanel === 'schedule' && (
-        <DetailShell title="Today’s Schedule" subtitle="Events, appointments, site visits, and scheduled work for today." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Add Event" onClick={() => setAddEventOpen(true)} /><ActionButton label="Find Time" muted /><ActionButton label="View Week" muted /><ActionButton label="Sync Calendar" muted /></>}>
+        <DetailShell title="Today’s Schedule" subtitle="Events, appointments, site visits, and scheduled work for today." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Add Event" onClick={() => setAddEventOpen(true)} /></>}>
           {todayEvents.length > 0 ? todayEvents.map(event => (
             <div key={`${event.type}-${event.id}`} className="rounded-2xl px-3 py-3" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}>
               <div className="flex items-center justify-between gap-3"><div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.88)' }}>{event.title}</div><div className="text-[11px]" style={{ color: '#7dd3fc' }}>{formatEventTime(event) || 'Today'}</div></div>
@@ -284,8 +309,8 @@ export function MyDaySurface() {
 
       {activePanel === 'top10' && (
         <DetailShell
-          title="Top 10 Things"
-          subtitle="Select an item, then use the action rail."
+          title="Today's Priorities"
+          subtitle="Select one item, then choose an action."
           onClose={() => setActivePanel(null)}
           actions={
             <>
@@ -293,7 +318,6 @@ export function MyDaySurface() {
               <ActionButton label="Open Related" disabled={!selectedTopItem || topActionBusy} onClick={openSelectedRelated} />
               <ActionButton label="Mark Done" disabled={!selectedTopItem || topActionBusy} onClick={() => void submitTopAction('mark_done')} />
               <ActionButton label="Add Note" disabled={!selectedTopItem || topActionBusy} onClick={() => { setShowTopNoteBox(!showTopNoteBox); setTopActionMessage(null) }} />
-              <ActionButton label="Snooze" muted />
               {showTopNoteBox && (
                 <div className="space-y-2 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(0,200,255,0.22)' }}>
                   <textarea value={topNote} onChange={e => setTopNote(e.target.value)} placeholder="What should Nexus remember?" rows={3} className="w-full resize-none rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(0,200,255,0.2)', color: 'rgba(255,255,255,0.88)' }} />
@@ -321,13 +345,11 @@ export function MyDaySurface() {
       {activePanel === 'todos' && (
         <DetailShell
           title="To-Dos"
-          subtitle="Select a task, then use the action rail."
+          subtitle="Select one task, then choose an action."
           onClose={() => setActivePanel(null)}
           actions={
             <>
               {selectedTodoItem ? <div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(139,92,246,0.10)', border: '1px solid rgba(139,92,246,0.24)', color: 'rgba(255,255,255,0.72)' }}>Selected:<br /><span style={{ color: 'rgba(255,255,255,0.9)' }}>{selectedTodoItem.title}</span></div> : <div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.42)' }}>Select a to-do first.</div>}
-              <ActionButton label="Add To-Do" muted />
-              <ActionButton label="Schedule" muted />
               <ActionButton label="Mark Done" disabled={!selectedTodoItem || topActionBusy} onClick={() => void submitTodoAction('mark_done')} />
               {topActionMessage && <div className="rounded-2xl px-3 py-2 text-[11px]" style={{ background: 'rgba(139,92,246,0.10)', border: '1px solid rgba(139,92,246,0.22)', color: 'rgba(255,255,255,0.72)' }}>{topActionMessage}</div>}
             </>
@@ -347,12 +369,6 @@ export function MyDaySurface() {
               </button>
             )
           }) : <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)' }}>No to-dos due today.</div>}
-        </DetailShell>
-      )}
-
-      {activePanel === 'email' && (
-        <DetailShell title="Email" subtitle="Important customer messages will roll into My Day once mailbox connectors are added." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Connect Gmail" muted /><ActionButton label="Connect Microsoft" muted /></>}>
-          <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)' }}>Email is coming soon. Calendar is already connected to My Day; mailbox connectors come later.</div>
         </DetailShell>
       )}
 

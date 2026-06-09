@@ -25,6 +25,14 @@ const NAV_ITEMS: { label: string; id: NexusTabId }[] = [
   { label: 'Internal', id: 'people' },
 ]
 
+const COMMAND_SUGGESTIONS = [
+  "What's my next job?",
+  'Show overdue tasks',
+  'Create a new lead',
+  'Find a customer',
+  'Send dealer NDA',
+]
+
 function NexusMark() {
   return (
     <div className="mb-6 flex flex-col items-center gap-3">
@@ -89,6 +97,25 @@ export default function NexusHomeClient() {
         <p className="mb-7 text-center text-lg" style={{ color: 'rgba(255,255,255,0.48)' }}>Hi {firstName}, <span style={{ color: 'rgba(255,255,255,0.88)' }}>what are we working on today?</span></p>
         <div className="w-full max-w-3xl rounded-[1.35rem]" style={{ boxShadow: '0 0 34px rgba(0,124,255,0.16), 0 0 1px rgba(0,200,255,0.5)' }}>
           <ActionCommandBar onSubmit={handleQuery} isLoading={isLoading} />
+        </div>
+        <div className="mt-3 flex w-full max-w-3xl flex-wrap justify-center gap-2">
+          {COMMAND_SUGGESTIONS.map(suggestion => (
+            <button
+              key={suggestion}
+              type="button"
+              disabled={isLoading}
+              onClick={() => void handleQuery(suggestion)}
+              className="rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all hover:-translate-y-0.5 disabled:opacity-40"
+              style={{
+                background: 'rgba(0,200,255,0.08)',
+                border: '1px solid rgba(0,200,255,0.18)',
+                color: 'rgba(210,245,255,0.86)',
+                boxShadow: '0 0 14px rgba(0,124,255,0.08)',
+              }}
+            >
+              {suggestion}
+            </button>
+          ))}
         </div>
 
         {messages.length > 0 && (
