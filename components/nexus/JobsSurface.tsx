@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { JobGlassWindow } from '@/components/nexus/windows/JobGlassWindow'
 import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
+import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 
 type JobsFocus = 'myJobs' | 'needsAttention' | 'scheduledToday' | 'openJobs' | 'recentlyUpdated' | 'search'
 type BoardAction = 'add_note' | 'create_task' | 'schedule_visit' | 'mark_complete' | null
