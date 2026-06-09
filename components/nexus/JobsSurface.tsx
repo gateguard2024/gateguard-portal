@@ -201,7 +201,7 @@ function JobsDetailShell({ title, subtitle, onClose, children, actions }: { titl
     <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/68 px-4 py-6 backdrop-blur-sm">
       <div className="grid max-h-[86vh] w-full max-w-5xl grid-cols-1 gap-4 overflow-hidden rounded-[2rem] p-5 shadow-2xl lg:grid-cols-[1fr_260px]" style={{ background: 'radial-gradient(circle at 18% 0%, rgba(52,211,153,0.14), transparent 32%), linear-gradient(180deg, rgba(8,18,34,0.97), rgba(3,9,22,0.97))', border: '1px solid rgba(52,211,153,0.20)', boxShadow: '0 30px 100px rgba(0,0,0,0.60), 0 0 58px rgba(52,211,153,0.12), inset 0 1px 0 rgba(255,255,255,0.07)', backdropFilter: 'blur(28px)' }}>
         <div className="min-h-0 overflow-y-auto pr-1">
-          <button type="button" onClick={onClose} className="mb-4 rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(52,211,153,0.14)', color: 'rgba(255,255,255,0.62)' }}>← Back to Jobs</button>
+          <NexusGlassBackButton label="Back to Jobs" onClick={onClose} />
           <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(52,211,153,0.82)' }}>Jobs</div>
           <h2 className="mt-1 text-2xl font-semibold" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(52,211,153,0.18)' }}>{title}</h2>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>{subtitle}</p>
