@@ -54,16 +54,20 @@ function InternalCardButton({ card, onClick }: { card: InternalCard; onClick: ()
 }
 
 function ActionButton({ label, onClick, muted }: { label: string; onClick?: () => void; muted?: boolean }) {
+  const displayLabel = muted ? `${label} — Coming Soon` : label
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-opacity hover:opacity-85"
+      className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-all hover:-translate-y-0.5 hover:opacity-95 active:translate-y-0"
       style={muted
-        ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.50)' }
+        ? { background: 'linear-gradient(135deg, rgba(255,255,255,0.08), rgba(139,92,246,0.07))', border: '1px solid rgba(255,255,255,0.22)', color: 'rgba(255,255,255,0.92)', boxShadow: '0 0 16px rgba(139,92,246,0.10), inset 0 1px 0 rgba(255,255,255,0.08)' }
         : { background: 'linear-gradient(135deg, rgba(139,92,246,0.22), rgba(0,200,255,0.08))', border: '1px solid rgba(139,92,246,0.26)', color: '#ddd6fe', boxShadow: '0 0 18px rgba(139,92,246,0.12)' }}
+      aria-label={displayLabel}
+      title={displayLabel}
     >
-      {label}
+      {displayLabel}
     </button>
   )
 }
