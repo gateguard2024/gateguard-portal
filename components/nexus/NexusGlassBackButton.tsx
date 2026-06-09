@@ -1,5 +1,7 @@
 'use client'
 
+import React from 'react'
+
 export function NexusGlassBackButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
