@@ -47,7 +47,7 @@ export default function AdminCreditsPage() {
     const t = setTimeout(async () => {
       setSearching(true)
       try {
-        const res = await fetch(`/api/admin/orgs?q=${encodeURIComponent(query)}&limit=10`)
+        const res = await fetch(`/api/admin/orgs?q=${encodeURIComponent(query)}&limit=10&include_corporate=true`)
         if (res.ok) {
           const d = await res.json()
           setOrgs(d.orgs ?? [])

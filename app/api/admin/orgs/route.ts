@@ -25,16 +25,22 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url)
-  const q     = searchParams.get('q')
-  const tiers = searchParams.getAll('tier')
-  const limit = Math.min(parseInt(searchParams.get('limit') ?? '20', 10), 100)
+  const q                = searchParams.get('q')
+  const tiers            = searchParams.getAll('tier')
+  const limit            = Math.min(parseInt(searchParams.get('limit') ?? '20', 10), 100)
+  const includeCorporate = searchParams.get('include_corporate') === 'true'
 
   let query = supabase
     .from('organizations')
     .select('id, name, org_tier, tier_label, is_active')
-    .not('org_tier', 'eq', 'corporate')
     .order('name', { ascending: true })
     .limit(limit)
+
+  // Exclude corporate by default — wizard pickers should never assign to corporate.
+  // Pass ?include_corporate=true to include it (e.g. credits admin page).
+  if (!includeCorporate) {
+    query = query.not('org_tier', 'eq', 'corporate')
+  }
 
   if (q) {
     query = query.ilike('name', `%${q}%`)
