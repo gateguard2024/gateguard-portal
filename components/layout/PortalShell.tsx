@@ -3,7 +3,7 @@
 /**
  * PortalShell — conditionally renders the dealer portal sidebar + chrome.
  *
- * Routes that start with /tech, /aria, or Nexus get a clean full-screen shell
+ * Routes that start with /tech, /aria, /sign, or Nexus get a clean full-screen shell
  * with no sidebar and no portal nav. Everything else gets the full portal layout.
  *
  * This lives in the root layout so Next.js only has one <html>/<body> pair,
@@ -21,9 +21,10 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isTech       = pathname.startsWith('/tech')
   const isAria       = pathname.startsWith('/aria')
+  const isSign       = pathname.startsWith('/sign')
   const isNexus      = pathname === '/' || pathname.startsWith('/opps')
-  // Proposal + approve pages are customer-facing — no sidebar, no portal chrome, no auth wall
-  const isStandalone = isTech || isAria || isNexus
+  // Proposal + approve pages and signing links are customer-facing — no sidebar, no portal chrome, no auth wall
+  const isStandalone = isTech || isAria || isSign || isNexus
     || /^\/quotes\/[^/]+(\/proposal|\/approve)(\/|$)/.test(pathname)
 
   // Standalone: full-screen, no portal chrome
@@ -35,7 +36,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         display: isAria ? 'flex' : undefined,
         flexDirection: isAria ? 'column' : undefined,
         overflow: isAria ? 'hidden' : undefined,
-        background: isTech ? '#F1F5F9' : isNexus || isAria ? 'transparent' : '#ffffff',
+        background: isTech ? '#F1F5F9' : isNexus || isAria || isSign ? 'transparent' : '#ffffff',
         overscrollBehavior: 'none',
       }}>
         {children}
