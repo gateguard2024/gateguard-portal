@@ -22,9 +22,13 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2026-04-22.dahlia' as const,
-})
+// Stripe initialized inside handler — avoids Next.js build-time module evaluation
+// when STRIPE_SECRET_KEY is not set in the build environment.
+function getStripe() {
+  return new Stripe(process.env.STRIPE_SECRET_KEY!, {
+    apiVersion: '2026-04-22.dahlia' as const,
+  })
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -81,7 +85,7 @@ export async function POST(req: NextRequest) {
           quantity: 1,
         }
 
-    const session = await stripe.checkout.sessions.create({
+    const session = await getStripe().checkout.sessions.create({
       mode: 'payment',
       payment_method_types: ['card'],
       line_items: [lineItem],

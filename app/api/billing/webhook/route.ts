@@ -23,9 +23,13 @@ export const dynamic = 'force-dynamic'
 // Must read raw body for Stripe signature verification
 export const runtime = 'nodejs'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2026-04-22.dahlia' as const,
-})
+// Stripe initialized inside handler — avoids Next.js build-time module evaluation
+// when STRIPE_SECRET_KEY is not set in the build environment.
+function getStripe() {
+  return new Stripe(process.env.STRIPE_SECRET_KEY!, {
+    apiVersion: '2026-04-22.dahlia' as const,
+  })
+}
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -57,7 +61,7 @@ export async function POST(req: NextRequest) {
   // Verify Stripe signature
   let event: Stripe.Event
   try {
-    event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret)
+    event = getStripe().webhooks.constructEvent(rawBody, sig, webhookSecret)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Signature verification failed'
     console.error('[billing/webhook] Signature error:', msg)
