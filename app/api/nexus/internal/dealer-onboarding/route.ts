@@ -93,6 +93,7 @@ function bucketFor(org: OrgRow, nda?: SigRow, agreement?: SigRow): Bucket {
   if (!org.name || !org.org_tier) return 'draft'
   if (!nda) return 'needs_nda'
   if (!signed(nda)) return sent(nda) ? 'nda_sent' : 'needs_nda'
+  if (!executed(nda)) return 'nda_signed'
   if (!agreement) return 'needs_agreement'
   if (!executed(agreement)) return signed(agreement) ? 'agreement_signed' : 'needs_agreement'
   if (needsCompliance(org)) return 'needs_compliance'
@@ -103,7 +104,8 @@ function bucketFor(org: OrgRow, nda?: SigRow, agreement?: SigRow): Bucket {
 function nextActionFor(org: OrgRow, bucket: Bucket, nda?: SigRow, agreement?: SigRow) {
   if (bucket === 'draft') return 'Finish company info'
   if (bucket === 'needs_nda') return nda ? 'Resend NDA' : 'Send NDA'
-  if (bucket === 'nda_sent') return 'Check NDA status'
+  if (bucket === 'nda_sent') return 'Waiting on NDA signature'
+  if (bucket === 'nda_signed') return 'Countersign NDA'
   if (bucket === 'needs_agreement') return agreement ? 'Resend Agreement' : 'Send Agreement'
   if (bucket === 'agreement_signed') return 'Countersign Agreement'
   if (bucket === 'needs_compliance') {
@@ -185,9 +187,12 @@ export async function GET() {
         contact_email: org.contact_email || org.email || null,
         contact_phone: org.contact_phone || org.phone || null,
         nda_status: nda?.status ?? 'missing',
+        nda_signature_id: nda?.id ?? null,
+        nda_executed_cert_url: nda?.executed_cert_url ?? null,
         agreement_status: agreement?.status ?? 'missing',
         agreement_signature_id: agreement?.id ?? null,
-        executed_cert_url: agreement?.executed_cert_url ?? null,
+        agreement_executed_cert_url: agreement?.executed_cert_url ?? null,
+        executed_cert_url: agreement?.executed_cert_url ?? nda?.executed_cert_url ?? null,
         compliance_needed: needsCompliance(org),
         partner_docs: org.partner_docs ?? [],
         bucket,

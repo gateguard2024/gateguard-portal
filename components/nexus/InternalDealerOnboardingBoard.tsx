@@ -17,8 +17,11 @@ type DealerItem = {
   contact_email: string | null
   contact_phone: string | null
   nda_status: string
+  nda_signature_id?: string | null
+  nda_executed_cert_url?: string | null
   agreement_status: string
   agreement_signature_id?: string | null
+  agreement_executed_cert_url?: string | null
   executed_cert_url?: string | null
   compliance_needed: boolean
   next_action?: string | null
@@ -27,7 +30,7 @@ type DealerItem = {
   open_href: string
 }
 
-const buckets: Bucket[] = ['draft', 'needs_nda', 'nda_sent', 'needs_agreement', 'agreement_signed', 'needs_compliance', 'ready_to_approve', 'live']
+const buckets: Bucket[] = ['draft', 'needs_nda', 'nda_sent', 'nda_signed', 'needs_agreement', 'agreement_signed', 'needs_compliance', 'ready_to_approve', 'live']
 
 const agreementByTier: Record<string, string> = {
   master_agent: 'master_agent_agreement',
@@ -57,6 +60,7 @@ function color(bucket: Bucket) {
   if (bucket === 'needs_compliance') return '#F87171'
   if (bucket === 'needs_nda' || bucket === 'needs_agreement') return '#FBBF24'
   if (bucket === 'nda_sent') return '#8B5CF6'
+  if (bucket === 'nda_signed') return '#C4B5FD'
   return '#64748B'
 }
 
@@ -122,26 +126,30 @@ export function InternalDealerOnboardingBoard() {
     }
   }
 
-  async function countersignAgreement(item: DealerItem) {
+  async function countersignDocument(
+    item: DealerItem,
+    signatureId: string | null | undefined,
+    docLabel: 'NDA' | 'Agreement'
+  ) {
     setBusy('countersign')
     setActionMessage(null)
     try {
-      if (!item.agreement_signature_id) throw new Error('No signed agreement record was found to countersign.')
+      if (!signatureId) throw new Error(`No signed ${docLabel} record was found to countersign.`)
       const res = await fetch('/api/signatures/countersign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          signature_id: item.agreement_signature_id,
+          signature_id: signatureId,
           countersigned_name: 'Russel Feldman',
           countersigned_title: 'CEO',
         }),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok || data.ok === false) throw new Error(data?.error ?? data?.message ?? 'Countersign failed.')
-      setActionMessage('Agreement countersigned. Final copy is being stored and confirmation emails are being sent.')
+      if (!res.ok || data.ok === false) throw new Error(data?.error ?? data?.message ?? `${docLabel} countersign failed.`)
+      setActionMessage(`${docLabel} countersigned. Final copy is being stored and confirmation emails are being sent.`)
       await load()
     } catch (error) {
-      setActionMessage(error instanceof Error ? error.message : 'Could not countersign agreement.')
+      setActionMessage(error instanceof Error ? error.message : `Could not countersign ${docLabel}.`)
     } finally {
       setBusy(null)
     }
@@ -209,9 +217,11 @@ export function InternalDealerOnboardingBoard() {
 
           <div className="mt-4 flex flex-wrap gap-2">
             {(selected.bucket === 'draft' || selected.bucket === 'needs_nda' || selected.bucket === 'nda_sent') && <button type="button" disabled={!!busy} onClick={() => sendDoc(selected, 'nda')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #FBBF24, #F97316)', color: '#111827' }}>{busy === 'nda' ? 'Sending…' : selected.bucket === 'nda_sent' ? 'Resend NDA' : 'Send NDA'}</button>}
+            {selected.bucket === 'nda_signed' && <button type="button" disabled={!!busy} onClick={() => countersignDocument(selected, selected.nda_signature_id, 'NDA')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #34D399, #00C8FF)', color: '#02111d' }}>{busy === 'countersign' ? 'Countersigning…' : 'Countersign NDA'}</button>}
             {selected.bucket === 'needs_agreement' && <button type="button" disabled={!!busy} onClick={() => sendDoc(selected, 'agreement')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #8B5CF6, #007CFF)', color: 'white' }}>{busy === 'agreement' ? 'Sending…' : 'Send Agreement'}</button>}
-            {selected.bucket === 'agreement_signed' && <button type="button" disabled={!!busy} onClick={() => countersignAgreement(selected)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #34D399, #00C8FF)', color: '#02111d' }}>{busy === 'countersign' ? 'Countersigning…' : 'Countersign Agreement'}</button>}
-            {selected.executed_cert_url && <a href={selected.executed_cert_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.24)', color: '#34D399' }}>Open Final Copy</a>}
+            {selected.bucket === 'agreement_signed' && <button type="button" disabled={!!busy} onClick={() => countersignDocument(selected, selected.agreement_signature_id, 'Agreement')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #34D399, #00C8FF)', color: '#02111d' }}>{busy === 'countersign' ? 'Countersigning…' : 'Countersign Agreement'}</button>}
+            {selected.nda_executed_cert_url && <a href={selected.nda_executed_cert_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.24)', color: '#34D399' }}>Open Final NDA</a>}
+            {selected.agreement_executed_cert_url && <a href={selected.agreement_executed_cert_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.24)', color: '#34D399' }}>Open Final Agreement</a>}
             <button type="button" onClick={() => router.push(selected.open_href)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.62)' }}>Open Dealer</button>
           </div>
         </div>
