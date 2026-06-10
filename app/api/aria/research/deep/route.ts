@@ -2513,23 +2513,16 @@ ${JSON.stringify({ owner_entity: finalOwner, owner_type: p2Final.owner_type, acq
 PHASE 3 — INTELLIGENCE:
 ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, contacts: cappedContacts, email_format: p3Final.email_format }, null, 2)}`
 
-    // v9: circuit breaker — if we're already over cost cap, skip Sonnet and use fallback
-    if (costTracker.isOverCap()) {
-      console.warn('[aria] cost cap reached before synthesis — using fallback data')
-      const rawData = buildFallbackRawData(p1, p2Final, p3Final, mgmt, finalOwner)
-      // ... fallback path continues below (messageResult will be a rejected promise)
-    }
-
     // ── PHASE 4: Sonnet synthesis + Haiku outreach plan — run in PARALLEL ───────
     // Promise.allSettled: if Sonnet fails (504/overload), fall back to deterministic
     // phase data instead of throwing — search data is never lost.
+    // NOTE: cost-cap circuit breaker removed — it was skipping Sonnet synthesis
+    // entirely which caused units/ISP/ownership regressions on every search.
     const [messageResult, outreachResult, gatekeeperResult] = await Promise.allSettled([
       // v9: Prompt caching on system prompt — Anthropic caches large system prompts
       // for up to 5 minutes. During concurrent searches the same synthesis instructions
       // hit the cache, reducing Sonnet input token cost by ~90%.
-      costTracker.isOverCap()
-        ? Promise.reject(new Error('cost_cap_exceeded'))
-        : anthropic.messages.create({
+      anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 2800,
         tools: [deepIntelTool],

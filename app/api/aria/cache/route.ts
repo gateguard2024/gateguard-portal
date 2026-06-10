@@ -31,7 +31,7 @@ const supabase = createClient(
 )
 
 const FRESHNESS_DAYS = 14
-const VECTOR_SIMILARITY_THRESHOLD = 0.88
+const VECTOR_SIMILARITY_THRESHOLD = 0.92
 const VECTOR_TIMEOUT_MS = 1500
 
 // ─── Prospecting query guard ──────────────────────────────────────────────────
