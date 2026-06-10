@@ -70,16 +70,19 @@ function CustomerSiteCardButton({ card, onClick }: { card: CustomersSitesCard; o
 }
 
 function ActionButton({ label, onClick, muted }: { label: string; onClick?: () => void; muted?: boolean }) {
+  const displayLabel = muted ? `${label} — Coming Soon` : label
   return (
     <button
       type="button"
       onClick={onClick}
-      className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-opacity hover:opacity-85"
+      className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-all hover:-translate-y-0.5 hover:opacity-95 active:translate-y-0"
       style={muted
-        ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.50)' }
+        ? { background: 'linear-gradient(135deg, rgba(255,255,255,0.08), rgba(0,200,255,0.055))', border: '1px solid rgba(255,255,255,0.22)', color: 'rgba(255,255,255,0.92)', boxShadow: '0 0 16px rgba(0,200,255,0.08), inset 0 1px 0 rgba(255,255,255,0.08)' }
         : { background: 'linear-gradient(135deg, rgba(0,124,255,0.22), rgba(0,200,255,0.10))', border: '1px solid rgba(0,200,255,0.26)', color: '#7dd3fc', boxShadow: '0 0 18px rgba(0,124,255,0.12)' }}
+      aria-label={displayLabel}
+      title={displayLabel}
     >
-      {label}
+      {displayLabel}
     </button>
   )
 }
@@ -251,7 +254,7 @@ function SimpleSearchBox({ placeholder, mode }: { placeholder: string; mode: 'cu
           <div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.52)' }}>{selected.subtitle}</div>
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" onClick={() => openHref(selected.href)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40" disabled={!selected.href} style={{ background: 'linear-gradient(135deg, #00C8FF, #007CFF)', color: 'white' }}>Open</button>
-            <button type="button" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.62)' }}>Add Note</button>
+            <button type="button" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.92)' }}>Add Note — Coming Soon</button>
             <button type="button" onClick={() => void loadDetail(selected)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.62)' }}>{detailLoading ? 'Loading…' : 'See Overview'}</button>
           </div>
         </div>
@@ -295,142 +298,24 @@ export function CustomersSitesSurface() {
   const [activePanel, setActivePanel] = useState<CustomersSitesPanel>(null)
 
   const cards: CustomersSitesCard[] = [
-    {
-      id: 'find-customer',
-      title: 'Find Customer',
-      subtitle: 'Look up a customer account, contact, billing relationship, or recent work.',
-      hex: '#00C8FF',
-      glyph: 'lead',
-    },
-    {
-      id: 'find-property',
-      title: 'Find Property',
-      subtitle: 'Search by property name, address, site, gate, or management company.',
-      hex: '#007CFF',
-      glyph: 'research',
-    },
-    {
-      id: 'attention',
-      title: 'Properties Needing Attention',
-      subtitle: 'See properties with open jobs, missing info, billing issues, or follow-ups.',
-      hex: '#FBBF24',
-      glyph: 'activity',
-      badge: 'Review',
-    },
-    {
-      id: 'systems',
-      title: 'Property Systems',
-      subtitle: 'Find cameras, access control, network, gates, and site technology.',
-      hex: '#34D399',
-      glyph: 'job-open',
-      badge: 'Systems',
-    },
+    { id: 'find-customer', title: 'Find Customer', subtitle: 'Look up a customer account, contact, billing relationship, or recent work.', hex: '#00C8FF', glyph: 'lead' },
+    { id: 'find-property', title: 'Find Property', subtitle: 'Search by property name, address, site, gate, or management company.', hex: '#007CFF', glyph: 'research' },
+    { id: 'attention', title: 'Properties Needing Attention', subtitle: 'See properties with open jobs, missing info, billing issues, or follow-ups.', hex: '#FBBF24', glyph: 'activity', badge: 'Review' },
+    { id: 'systems', title: 'Property Systems', subtitle: 'Find cameras, access control, network, gates, and site technology.', hex: '#34D399', glyph: 'job-open', badge: 'Systems' },
   ]
 
   return (
     <section className="mt-9 w-full max-w-5xl">
-      <div
-        className="rounded-[2rem] p-5 sm:p-6"
-        style={{
-          background: 'radial-gradient(circle at 12% 0%, rgba(0,124,255,0.16), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.78), rgba(3,9,22,0.72))',
-          border: '1px solid rgba(0,200,255,0.18)',
-          boxShadow: '0 28px 90px rgba(0,0,0,0.38), 0 0 46px rgba(0,124,255,0.12), inset 0 1px 0 rgba(255,255,255,0.07)',
-          backdropFilter: 'blur(26px)',
-        }}
-      >
-        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.82)' }}>Customers/Sites</div>
-            <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(0,124,255,0.22)' }}>Who or what property are we working on?</h2>
-            <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>
-              Find the customer, property, site systems, or anything that needs attention.
-            </p>
-          </div>
-          <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(0,124,255,0.14)', color: 'rgba(125,229,255,0.96)', border: '1px solid rgba(0,200,255,0.28)', boxShadow: '0 0 18px rgba(0,124,255,0.12)' }}>Site OS</div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {cards.map(card => <CustomerSiteCardButton key={card.id} card={card} onClick={() => setActivePanel(card.id)} />)}
-        </div>
-
-        <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
-          Customers/Sites stays simple: find the person, find the property, review what needs attention, or open the site systems.
-        </div>
+      <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'radial-gradient(circle at 12% 0%, rgba(0,124,255,0.16), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.78), rgba(3,9,22,0.72))', border: '1px solid rgba(0,200,255,0.18)', boxShadow: '0 28px 90px rgba(0,0,0,0.38), 0 0 46px rgba(0,124,255,0.12), inset 0 1px 0 rgba(255,255,255,0.07)', backdropFilter: 'blur(26px)' }}>
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.82)' }}>Customers/Sites</div><h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(0,124,255,0.22)' }}>Who or what property are we working on?</h2><p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>Find the customer, property, site systems, or anything that needs attention.</p></div><div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(0,124,255,0.14)', color: 'rgba(125,229,255,0.96)', border: '1px solid rgba(0,200,255,0.28)', boxShadow: '0 0 18px rgba(0,124,255,0.12)' }}>Site OS</div></div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">{cards.map(card => <CustomerSiteCardButton key={card.id} card={card} onClick={() => setActivePanel(card.id)} />)}</div>
+        <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>Customers/Sites stays simple: find the person, find the property, review what needs attention, or open the site systems.</div>
       </div>
 
-      {activePanel === 'find-customer' && (
-        <CustomersSitesDetailShell
-          title="Find Customer"
-          subtitle="Search for the customer first. From there, Nexus can show properties, jobs, billing, documents, and contacts."
-          onClose={() => setActivePanel(null)}
-          actions={
-            <>
-              <ActionButton label="Open Customers" onClick={() => router.push('/customers')} />
-              <ActionButton label="Open Billing" onClick={() => router.push('/billing')} muted />
-              <ActionButton label="Open CRM" onClick={() => router.push('/crm')} muted />
-            </>
-          }
-        >
-          <SimpleSearchBox mode="customer" placeholder="Search customer, contact, email, company, or phone" />
-        </CustomersSitesDetailShell>
-      )}
-
-      {activePanel === 'find-property' && (
-        <CustomersSitesDetailShell
-          title="Find Property"
-          subtitle="Search for the property, site, address, management company, or installed location."
-          onClose={() => setActivePanel(null)}
-          actions={
-            <>
-              <ActionButton label="Open Properties" onClick={() => router.push('/sites')} />
-              <ActionButton label="Run ARIA Research" onClick={() => router.push('/aria')} />
-              <ActionButton label="Open Map" onClick={() => router.push('/map')} muted />
-            </>
-          }
-        >
-          <SimpleSearchBox mode="property" placeholder="Search property, site, address, management company, or gate" />
-        </CustomersSitesDetailShell>
-      )}
-
-      {activePanel === 'attention' && (
-        <CustomersSitesDetailShell
-          title="Properties Needing Attention"
-          subtitle="A simple board for properties with open work, missing details, follow-ups, or issues."
-          onClose={() => setActivePanel(null)}
-          actions={
-            <>
-              <ActionButton label="Open Jobs" onClick={() => router.push('/maintenance')} />
-              <ActionButton label="Open Renewals" onClick={() => router.push('/renewals')} muted />
-              <ActionButton label="Open Documents" onClick={() => router.push('/documents')} muted />
-            </>
-          }
-        >
-          <div className="rounded-3xl p-4" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.70), rgba(3,9,22,0.48))', border: '1px solid rgba(251,191,36,0.18)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)' }}>
-            <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Attention board coming next</div>
-            <p className="mt-2 text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>
-              This will pull together open jobs, missing contacts, ARIA gaps, billing issues, document expirations, and property follow-ups.
-            </p>
-          </div>
-        </CustomersSitesDetailShell>
-      )}
-
-      {activePanel === 'systems' && (
-        <CustomersSitesDetailShell
-          title="Property Systems"
-          subtitle="Find the technology tied to a property: gates, cameras, access control, network, and design files."
-          onClose={() => setActivePanel(null)}
-          actions={
-            <>
-              <ActionButton label="Open Access" onClick={() => router.push('/access')} />
-              <ActionButton label="Open Cameras" onClick={() => router.push('/cameras')} />
-              <ActionButton label="Open Network" onClick={() => router.push('/network')} muted />
-              <ActionButton label="Open Floor Plans" onClick={() => router.push('/design/floor-plans')} muted />
-            </>
-          }
-        >
-          <SimpleSearchBox mode="property" placeholder="Search property system, camera, gate, access panel, network, or floor plan" />
-        </CustomersSitesDetailShell>
-      )}
+      {activePanel === 'find-customer' && <CustomersSitesDetailShell title="Find Customer" subtitle="Search for the customer first. From there, Nexus can show properties, jobs, billing, documents, and contacts." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Customers" onClick={() => router.push('/customers')} /><ActionButton label="Open Billing" onClick={() => router.push('/billing')} muted /><ActionButton label="Open CRM" onClick={() => router.push('/crm')} muted /></>}><SimpleSearchBox mode="customer" placeholder="Search customer, contact, email, company, or phone" /></CustomersSitesDetailShell>}
+      {activePanel === 'find-property' && <CustomersSitesDetailShell title="Find Property" subtitle="Search for the property, site, address, management company, or installed location." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Properties" onClick={() => router.push('/sites')} /><ActionButton label="Run ARIA Research" onClick={() => router.push('/aria')} /><ActionButton label="Open Map" onClick={() => router.push('/map')} muted /></>}><SimpleSearchBox mode="property" placeholder="Search property, site, address, management company, or gate" /></CustomersSitesDetailShell>}
+      {activePanel === 'attention' && <CustomersSitesDetailShell title="Properties Needing Attention" subtitle="A simple board for properties with open work, missing details, follow-ups, or issues." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Jobs" onClick={() => router.push('/maintenance')} /><ActionButton label="Open Renewals" onClick={() => router.push('/renewals')} muted /><ActionButton label="Open Documents" onClick={() => router.push('/documents')} muted /></>}><div className="rounded-3xl p-4" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.70), rgba(3,9,22,0.48))', border: '1px solid rgba(251,191,36,0.18)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)' }}><div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Attention board coming next</div><p className="mt-2 text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>This will pull together open jobs, missing contacts, ARIA gaps, billing issues, document expirations, and property follow-ups.</p></div></CustomersSitesDetailShell>}
+      {activePanel === 'systems' && <CustomersSitesDetailShell title="Property Systems" subtitle="Find the technology tied to a property: gates, cameras, access control, network, and design files." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Access" onClick={() => router.push('/access')} /><ActionButton label="Open Cameras" onClick={() => router.push('/cameras')} /><ActionButton label="Open Network" onClick={() => router.push('/network')} muted /><ActionButton label="Open Floor Plans" onClick={() => router.push('/design/floor-plans')} muted /></>}><SimpleSearchBox mode="property" placeholder="Search property system, camera, gate, access panel, network, or floor plan" /></CustomersSitesDetailShell>}
     </section>
   )
 }
