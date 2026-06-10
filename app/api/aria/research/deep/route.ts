@@ -1432,9 +1432,9 @@ RULES:
 - owner_entity: investor/REIT/PE firm/LLC that owns the property
 - owner_type: "private_equity","reit","family_office","institutional","local" or ""
 - acquisition_year: 4-digit year of last sale/acquisition, or ""
-- isp_providers: COMPANY NAMES ONLY of actual ISPs serving this property (e.g. GIGstreem, Hotwire, Comcast, AT&T Fiber, Spectrum, Cox, Ziply Fiber, Pavlov Media). NEVER include management company names. NEVER include service descriptions — "Wireless High Speed Internet", "High-speed internet", "Fiber internet", "Gigabit internet", "Internet included", "Broadband", "Internet access", "Wi-Fi", "High Speed Internet Service" are what the service IS, not WHO provides it. If you only see service descriptions with no company name, leave this array empty. Cross-reference the known provider list.
-- video_providers: COMPANY NAMES ONLY of cable/satellite/IPTV providers (e.g. DirecTV, Dish Network, Xfinity, Spectrum TV, Cox TV, Optimum, Mediacom). Look in [video] source snippets especially. NEVER include service descriptions — "Cable TV", "Cable included", "Satellite TV", "TV service", "Streaming", "Cable service" are service descriptions, not company names. Empty array if only service descriptions found. Cross-reference the known provider list.
-- bulk_detected: true if internet is included in rent, OR bulk/exclusive deal exists, OR "technology fee" / "tech fee" mentioned, OR MDU-only ISP present, OR any telecom agreement found
+- isp_providers: COMPANY NAMES ONLY of actual ISPs serving this property (e.g. GIGstreem, Hotwire, Comcast, AT&T Fiber, Spectrum, Cox, Ziply Fiber, Pavlov Media). NEVER include management company names. NEVER include service descriptions — "Wireless High Speed Internet", "High-speed internet", "Fiber internet", "Gigabit internet", "Internet included", "Broadband", "Internet access", "Wi-Fi", "High Speed Internet Service" are what the service IS, not WHO provides it. If you only see service descriptions with no company name, leave this array empty. Cross-reference the known provider list. DEDUCTIVE INFERENCE: resident/review language like "only one internet option", "no choice for internet", "forced to use [Company]", "stuck with [Company]", "[Company] has a monopoly here", "only internet is [Company]", "[Company] is included with rent" — extract the company name. Exclusivity language is strong evidence of a bulk/MDU deal even without a contract document.
+- video_providers: COMPANY NAMES ONLY of cable/satellite/IPTV providers (e.g. DirecTV, Dish Network, Xfinity, Spectrum TV, Cox TV, Optimum, Mediacom). Look in [video] source snippets especially. NEVER include service descriptions — "Cable TV", "Cable included", "Satellite TV", "TV service", "Streaming", "Cable service" are service descriptions, not company names. Empty array if only service descriptions found. Cross-reference the known provider list. DEDUCTIVE INFERENCE: "DirecTV is our only choice for TV", "forced to use Dish", "only cable option is [Company]", "satellite TV included ([Company])", "stuck with Spectrum for cable" — extract the company name. Resident exclusivity complaints are strong evidence of a bulk cable/satellite agreement.
+- bulk_detected: true if internet is included in rent, OR bulk/exclusive deal exists, OR "technology fee" / "tech fee" mentioned, OR MDU-only ISP present, OR any telecom agreement found, OR residents report having no choice / only one option for internet or cable — exclusivity language in reviews is a bulk deal indicator
 - bulk_agreements: MAXIMUM 2 total — at most 1 with service_type "internet" AND at most 1 with service_type "video". ONLY include a provider if there is DIRECT EVIDENCE it has an exclusive/bulk/ROE agreement with THIS SPECIFIC PROPERTY (not just the city). Do NOT add providers just because they operate in the metro area or appear in FCC coverage data. The bulk internet provider is typically a single MDU-specialist ISP (e.g. GIGstreem, Hotwire, Pavlov, Bsquared). Return [] if no direct property-level evidence exists. Format:
   [{"provider":"GIGstreem","service_type":"internet","agreement_type":"bulk","confidence":"high","evidence":"internet included in rent","expiry_estimate":"Est. 2027-2029"}]
   service_type: "internet","video","bundled"
@@ -2416,8 +2416,58 @@ export async function POST(req: NextRequest) {
       property_name, city, state, p2, p3, costTracker, runStart, anthropic
     )
     // Use supervisor-enriched data for synthesis
-    const p2Final = p2Supervised
     const p3Final = p3Supervised
+
+    // ── Post-supervisor: deductive connectivity inference from pain signals ─────
+    // Resident quotes like "only one internet option" or "forced to use DirecTV"
+    // are strong evidence of bulk/exclusive arrangements. Phase 2 and Phase 3 ran
+    // in parallel so Phase 2 couldn't see these signals. Fix that now deterministically
+    // before sending to Sonnet.
+    const EXCLUSIVITY_RE = /only\s+(?:option|choice|provider|internet|isp|cable|one)\b|(?:no|zero)\s+(?:choice|option|alternative)\b|forced\s+to\s+use\b|stuck\s+with\b|no\s+other\s+(?:choice|option|internet|cable)\b|(?:monopoly|exclusive)\s+(?:on|for|with)\b|only\s+(?:internet|cable|tv|isp)\b|required\s+to\s+use\b|only\s+one\s+(?:internet|cable|isp|option|provider)\b/i
+    const p2FinalConnectivity = { ...p2Supervised }
+    for (const signal of p3Final.pain_signals) {
+      const text = (signal.quote + ' ' + (signal.source ?? '')).toLowerCase()
+      const hasExclusivity = EXCLUSIVITY_RE.test(text)
+      // Scan for known ISP names
+      for (const ispName of KNOWN_MDU_BULK_ISPS) {
+        if (!text.includes(ispName.toLowerCase())) continue
+        if (!p2FinalConnectivity.isp_providers.some(p => p.toLowerCase().includes(ispName))) {
+          p2FinalConnectivity.isp_providers = [...p2FinalConnectivity.isp_providers, ispName]
+        }
+        if (hasExclusivity) {
+          p2FinalConnectivity.bulk_detected = true
+          if (!p2FinalConnectivity.bulk_agreements.some(a => a.service_type === 'internet')) {
+            p2FinalConnectivity.bulk_agreements = [...p2FinalConnectivity.bulk_agreements, {
+              provider: ispName,
+              service_type: 'internet',
+              agreement_type: 'exclusive',
+              confidence: 'medium',
+              evidence: `Resident review exclusivity signal: "${signal.quote.slice(0, 150)}"`,
+            }]
+          }
+        }
+      }
+      // Scan for known video provider names
+      for (const vidName of KNOWN_VIDEO_PROVIDERS) {
+        if (!text.includes(vidName.toLowerCase())) continue
+        if (!p2FinalConnectivity.video_providers.some(p => p.toLowerCase().includes(vidName))) {
+          p2FinalConnectivity.video_providers = [...p2FinalConnectivity.video_providers, vidName]
+        }
+        if (hasExclusivity) {
+          p2FinalConnectivity.bulk_detected = true
+          if (!p2FinalConnectivity.bulk_agreements.some(a => a.service_type === 'video')) {
+            p2FinalConnectivity.bulk_agreements = [...p2FinalConnectivity.bulk_agreements, {
+              provider: vidName,
+              service_type: 'video',
+              agreement_type: 'exclusive',
+              confidence: 'medium',
+              evidence: `Resident review exclusivity signal: "${signal.quote.slice(0, 150)}"`,
+            }]
+          }
+        }
+      }
+    }
+    const p2Final = p2FinalConnectivity
 
     // v9: Check quality gates — required field checklist before synthesis
     const qualityGates = checkQualityGates(p1, p2Final, p3Final)
@@ -2546,7 +2596,9 @@ ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, 
    - Else if year_built known: MDU fiber = year_built+7 to year_built+10; cable bulk = year_built+5 to year_built+8
    - Set expiry_estimate = "Est. [year]-[year+2]" or specific year if known
 6. proptech: copy from Phase 3
-7. extracted_contacts: copy from Phase 3 contacts. STRICT SCHEMA — every item must have: name (string), title (string), company (string), email (string or ""), phone (raw number OR "Apollo Missing – Defaulting to Office: {leasing_number}" OR ""), phone_source ("direct"|"office_main"|null), linkedin_slug (path after /in/ or ""). Never omit fields, never use null for string fields.`,
+7. extracted_contacts: copy from Phase 3 contacts. STRICT SCHEMA — every item must have: name (string), title (string), company (string), email (string or ""), phone (raw number OR "Apollo Missing – Defaulting to Office: {leasing_number}" OR ""), phone_source ("direct"|"office_main"|null), linkedin_slug (path after /in/ or ""). Never omit fields, never use null for string fields.
+8. isp_providers enrichment from pain_signals: scan Phase 3 pain_signals for any known ISP name (Spectrum, Comcast, AT&T, GIGstreem, Hotwire, Cox, Verizon Fios, Google Fiber, Frontier, Optimum, Ziply, Pavlov Media, Starry, DojoNetworks, Smartaira, Boingo, Midco, Nextlink, MDU Communications, Single Digits, etc.) used alongside exclusivity language: "only option", "only internet", "no choice", "no other choice", "forced to use", "stuck with", "only one provider", "monopoly", "required to use", "only ISP", "no alternative". If found and NOT already in isp_providers[] from Phase 2 → ADD that company name. Example: "GIGstreem is our only internet option and it's terrible" → add GIGstreem to isp_providers.
+9. video_providers enrichment from pain_signals: same rule for cable/satellite/IPTV. Scan pain_signals for DirecTV, Dish Network, Xfinity, Spectrum TV, Cox TV, Optimum, Mediacom, Sling, FuboTV with exclusivity language. "DirecTV is our only choice for cable" → add DirecTV. "forced to use Dish" → add Dish. "only cable company here is Spectrum" → add Spectrum TV. Also set bulk_detected = true in your output when exclusivity language appears in pain_signals for either internet or video.`,
           },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ] as any),
