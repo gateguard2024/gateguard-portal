@@ -1,7 +1,8 @@
 /**
- * GET /api/signatures/[id]/cert
+ * GET /api/signatures/[token]/cert
  * Public (no auth). Serves the fully executed signing certificate HTML
- * for a document_signatures record.
+ * for a document_signatures record. The dynamic segment [token] carries
+ * the signature UUID (matches the [token] segment used by existing sign routes).
  *
  * document_html is overwritten with the full executed certificate after countersigning,
  * so this route always returns the final copy.
@@ -17,13 +18,13 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { token: string } }
 ) {
   try {
     const { data: sig, error } = await supabase
       .from('document_signatures')
       .select('id,status,document_html,document_type,executed_at,signer_name,signer_email,signer_company')
-      .eq('id', params.id)
+      .eq('id', params.token)
       .maybeSingle()
 
     if (error || !sig) {
