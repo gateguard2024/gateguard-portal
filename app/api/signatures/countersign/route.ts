@@ -134,11 +134,15 @@ export async function POST(req: NextRequest) {
     const executedHtml = buildExecutedHtml({ sig, docLabel, countersignedName, countersignedTitle, executedAt: now })
     const stored = await storeExecutedCertificate(sig, executedHtml)
 
-    // executed_cert_url points to the Next.js cert route — serves HTML with proper Content-Type
-    // document_html is overwritten with the full executed certificate so the cert route can read it
+    // executed_cert_url: relative path for internal links (dealer detail, onboarding board)
+    // certAbsoluteUrl: absolute URL for the email — points to the PUBLIC /sign/[token] page
+    // so the client is never sent to a portal.gateguard.co/api/ path
     const baseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://portal.gateguard.co').replace(/\/$/, '')
     const certUrl = `/api/signatures/${signature_id}/cert`
-    const certAbsoluteUrl = `${baseUrl}${certUrl}`
+    // The signer already has access to /sign/[token] — after countersigning it shows the
+    // executed certificate inline. Use that as the public "final copy" link in emails.
+    const signerCertUrl = sig.token ? `${baseUrl}/sign/${sig.token}` : `${baseUrl}${certUrl}`
+    const certAbsoluteUrl = signerCertUrl
 
     const { error: updateErr } = await supabase
       .from('document_signatures')

@@ -145,7 +145,18 @@ export default function SignPage() {
             {sig?.signed_name && <Row label="Signed by" value={sig.signed_name} />}
             {sig?.countersigned_name && <Row label="GateGuard" value={sig.countersigned_name} />}
           </div>
-          {sig?.executed_cert_url && <FinalCopyLink href={sig.executed_cert_url} />}
+          {/* When fully executed, render the certificate inline — no portal login needed */}
+          {isFullyExecuted && sig?.document_html && (
+            <div style={{ marginTop: 28, textAlign: 'left' }}>
+              <p style={{ margin: '0 0 10px', color: 'rgba(255,255,255,0.42)', fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase' }}>Executed Certificate</p>
+              <iframe
+                srcDoc={sig.document_html}
+                style={{ width: '100%', minHeight: 640, border: '1px solid rgba(255,255,255,0.10)', borderRadius: 12, background: '#fff' }}
+                title="Executed Certificate"
+                sandbox="allow-same-origin"
+              />
+            </div>
+          )}
           <SupportLine />
         </div>
       </Screen>
