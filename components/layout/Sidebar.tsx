@@ -140,6 +140,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Dealers",         href: "/admin/dealers",          icon: Users,         description: "Onboard and manage dealer orgs", badge: "Admin" },
       { label: "Platform Users",  href: "/admin/users",            icon: Shield,        description: "Set module permissions per user", badge: "Admin" },
       { label: "Feature Settings",href: "/admin/settings/features",icon: Settings,      description: "Global tier defaults + Stripe hooks", badge: "Admin" },
+      { label: "ARIA Credits",    href: "/admin/credits",          icon: DollarSign,    description: "Grant and manage ARIA search credits", badge: "Admin" },
       { label: "Compliance",    href: "/compliance",        icon: ShieldCheck,   description: "Permits, certs, expiry alerts" },
       { label: "Territory Map", href: "/map",               icon: Map,           description: "Property pins by health status" },
       { label: "Scorecard",     href: "/scorecard",         icon: Star,          description: "Dealer performance metrics" },
@@ -699,6 +700,7 @@ export function Sidebar() {
                     if (item.href === "/admin/users"      && !showAdmin)      return null;
                     if (item.href === "/playbooks"        && !isCorporate)    return null;
                     if (item.href === "/admin/settings/features" && !showAdmin) return null;
+                    if (item.href === "/admin/credits"           && !showAdmin) return null;
                     // Feature flag gate: hide items the org/user has no access to
                     if (!isFeatureVisible(item.href)) return null;
 
