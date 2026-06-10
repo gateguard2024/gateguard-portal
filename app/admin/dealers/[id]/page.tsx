@@ -10,7 +10,7 @@ import {
   AlertTriangle, X, Upload, ExternalLink,
 } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { DollarSign, Calendar, Edit2, ToggleLeft, ToggleRight, Activity, Save } = require('lucide-react') as any
+const { DollarSign, Calendar, Edit2, ToggleLeft, ToggleRight, Activity, Save, RefreshCw } = require('lucide-react') as any
 
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -839,8 +839,297 @@ function FeaturesTab({ org }: { org: Org }) {
   )
 }
 
+/* ─── Credits Tab ────────────────────────────────────────── */
+const GRANT_TYPES = [
+  { value: 'trial',        label: 'Trial',         description: '30-day welcome credits' },
+  { value: 'demo',         label: 'Demo',          description: 'For a specific demo call' },
+  { value: 'bonus',        label: 'Bonus',         description: 'No expiry' },
+  { value: 'plan_included',label: 'Plan Included', description: 'Bundled with their plan' },
+  { value: 'adjustment',   label: 'Adjustment',    description: 'Manual correction' },
+]
+
+interface CreditBalance {
+  balance: number
+  reserved: number
+  lifetime_spent: number
+  lifetime_earned: number
+  has_balance: boolean
+  last_updated: string | null
+}
+
+interface CreditTx {
+  id: string
+  transaction_type: string
+  amount: number
+  balance_after: number
+  note: string | null
+  granted_by_name: string | null
+  expires_at: string | null
+  created_at: string
+  stripe_session_id: string | null
+}
+
+function CreditsTab({ org }: { org: Org }) {
+  const [balance, setBalance]       = useState<CreditBalance | null>(null)
+  const [txns, setTxns]             = useState<CreditTx[]>([])
+  const [loadingData, setLoadingData] = useState(true)
+  // Grant form
+  const [amount, setAmount]         = useState('200')
+  const [grantType, setGrantType]   = useState('trial')
+  const [note, setNote]             = useState('')
+  const [useExpiry, setUseExpiry]   = useState(true)
+  const [expiryDays, setExpiryDays] = useState('30')
+  const [submitting, setSubmitting] = useState(false)
+  const [result, setResult]         = useState<{ ok: boolean; msg: string } | null>(null)
+
+  const load = useCallback(async () => {
+    setLoadingData(true)
+    try {
+      const [balRes, txRes] = await Promise.all([
+        fetch(`/api/aria/credits/balance?org_id=${org.id}`),
+        fetch(`/api/aria/credits/transactions?org_id=${org.id}&limit=15`),
+      ])
+      if (balRes.ok) setBalance(await balRes.json())
+      if (txRes.ok) {
+        const d = await txRes.json()
+        setTxns(d.transactions ?? [])
+      }
+    } finally {
+      setLoadingData(false)
+    }
+  }, [org.id])
+
+  useEffect(() => { void load() }, [load])
+
+  async function handleGrant() {
+    const amt = parseInt(amount, 10)
+    if (!amt || amt <= 0) { setResult({ ok: false, msg: 'Enter a valid amount' }); return }
+    setSubmitting(true)
+    setResult(null)
+    try {
+      const expiresAt = useExpiry
+        ? new Date(Date.now() + parseInt(expiryDays, 10) * 24 * 60 * 60 * 1000).toISOString()
+        : null
+      const res = await fetch('/api/billing/credits/grant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          org_id: org.id,
+          amount: amt,
+          transaction_type: grantType,
+          note: note.trim() || undefined,
+          expires_at: expiresAt,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setResult({ ok: false, msg: data.error ?? 'Failed to grant credits' })
+      } else {
+        setResult({ ok: true, msg: `✓ Granted ${amt} credits — new balance: ${data.balance_after}` })
+        setNote('')
+        void load()
+      }
+    } catch {
+      setResult({ ok: false, msg: 'Network error' })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const fmtTxType = (t: string) => ({
+    purchase: 'Purchase', spend: 'Search', bonus: 'Bonus',
+    trial: 'Trial', demo: 'Demo', plan_included: 'Plan', refund: 'Refund', adjustment: 'Adjustment',
+  }[t] ?? t)
+
+  const txTypeColor = (t: string) => ({
+    purchase: 'text-emerald-600 bg-emerald-50',
+    spend: 'text-red-600 bg-red-50',
+    bonus: 'text-purple-600 bg-purple-50',
+    trial: 'text-blue-600 bg-blue-50',
+    demo: 'text-indigo-600 bg-indigo-50',
+    plan_included: 'text-teal-600 bg-teal-50',
+    refund: 'text-orange-600 bg-orange-50',
+    adjustment: 'text-slate-600 bg-slate-100',
+  }[t] ?? 'text-slate-600 bg-slate-100')
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      {/* ─ Balance card ─ */}
+      <div className="space-y-4">
+        <div className="bg-card border border-border rounded-xl p-5">
+          <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+            <DollarSign size={14} className="text-brand-400" />
+            ARIA Credit Balance
+          </h3>
+          {loadingData ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 size={14} className="animate-spin" /> Loading…
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-end gap-2">
+                <span className={`text-4xl font-bold ${balance?.has_balance ? 'text-foreground' : 'text-muted-foreground'}`}>
+                  {balance?.balance ?? 0}
+                </span>
+                <span className="text-sm text-muted-foreground mb-1">credits available</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border">
+                <div>
+                  <div className="text-xs text-muted-foreground">Lifetime earned</div>
+                  <div className="text-sm font-semibold text-foreground">{balance?.lifetime_earned ?? 0}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Lifetime spent</div>
+                  <div className="text-sm font-semibold text-foreground">{balance?.lifetime_spent ?? 0}</div>
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground">100 credits = 1 ARIA deep search</div>
+            </div>
+          )}
+        </div>
+
+        {/* ─ Grant form ─ */}
+        <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <Plus size={14} className="text-brand-400" />
+            Grant Credits
+          </h3>
+
+          <div className="space-y-3">
+            {/* Amount */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Amount</label>
+              <input
+                type="number"
+                min="1"
+                value={amount}
+                onChange={e => setAmount(e.target.value)}
+                className="mt-1 w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400/40 bg-background"
+                placeholder="200"
+              />
+              <p className="text-xs text-muted-foreground mt-1">{parseInt(amount || '0', 10) / 100} searches</p>
+            </div>
+
+            {/* Type */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Type</label>
+              <select
+                value={grantType}
+                onChange={e => setGrantType(e.target.value)}
+                className="mt-1 w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400/40 bg-background"
+              >
+                {GRANT_TYPES.map(g => (
+                  <option key={g.value} value={g.value}>{g.label} — {g.description}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Note */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Note <span className="text-muted-foreground font-normal">(optional)</span></label>
+              <input
+                type="text"
+                value={note}
+                onChange={e => setNote(e.target.value)}
+                className="mt-1 w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400/40 bg-background"
+                placeholder="Demo call on June 10…"
+              />
+            </div>
+
+            {/* Expiry toggle */}
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-muted-foreground">Expires</label>
+                <button
+                  onClick={() => setUseExpiry(v => !v)}
+                  className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
+                    useExpiry ? 'bg-brand-400/10 text-brand-400' : 'bg-slate-100 text-slate-500'
+                  }`}
+                >
+                  {useExpiry ? 'Yes' : 'Never'}
+                </button>
+              </div>
+              {useExpiry && (
+                <div className="flex items-center gap-2 mt-2">
+                  <input
+                    type="number"
+                    min="1"
+                    value={expiryDays}
+                    onChange={e => setExpiryDays(e.target.value)}
+                    className="w-20 text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400/40 bg-background"
+                  />
+                  <span className="text-sm text-muted-foreground">days from now</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {result && (
+            <div className={`text-xs px-3 py-2 rounded-lg ${result.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+              {result.msg}
+            </div>
+          )}
+
+          <button
+            onClick={() => { void handleGrant() }}
+            disabled={submitting}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-400 text-white rounded-lg text-sm font-medium hover:bg-brand-400/90 disabled:opacity-50 transition-colors"
+          >
+            {submitting ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+            Grant {amount || '0'} Credits
+          </button>
+        </div>
+      </div>
+
+      {/* ─ Transaction history ─ */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-foreground">Transaction History</h3>
+          <button onClick={() => { void load() }} className="text-muted-foreground hover:text-foreground transition-colors">
+            <RefreshCw size={13} />
+          </button>
+        </div>
+        {loadingData ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground p-5">
+            <Loader2 size={14} className="animate-spin" /> Loading…
+          </div>
+        ) : txns.length === 0 ? (
+          <div className="p-8 text-center text-sm text-muted-foreground">No transactions yet</div>
+        ) : (
+          <div className="divide-y divide-border">
+            {txns.map(tx => (
+              <div key={tx.id} className="px-5 py-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${txTypeColor(tx.transaction_type)}`}>
+                      {fmtTxType(tx.transaction_type)}
+                    </span>
+                    {tx.note && <span className="text-xs text-muted-foreground truncate">{tx.note}</span>}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
+                    <span>{new Date(tx.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                    {tx.granted_by_name && <span>· by {tx.granted_by_name}</span>}
+                    {tx.expires_at && <span>· expires {new Date(tx.expires_at).toLocaleDateString()}</span>}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className={`text-sm font-bold ${tx.amount > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {tx.amount > 0 ? '+' : ''}{tx.amount}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">{tx.balance_after} after</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 /* ─── Main page ──────────────────────────────────────────── */
-type TabKey = 'overview' | 'properties' | 'work_orders' | 'commissions' | 'compliance' | 'features' | 'reps' | 'activity'
+type TabKey = 'overview' | 'properties' | 'work_orders' | 'commissions' | 'compliance' | 'features' | 'credits' | 'reps' | 'activity'
 
 const TAB_LABELS: Record<TabKey, string> = {
   overview:     'Overview',
@@ -849,6 +1138,7 @@ const TAB_LABELS: Record<TabKey, string> = {
   commissions:  'Commissions',
   compliance:   'Compliance',
   features:     'Features',
+  credits:      'ARIA Credits',
   reps:         'Reps',
   activity:     'Activity Log',
 }
@@ -1492,6 +1782,11 @@ export default function DealerDetailPage() {
         {/* ── Features ────────────────────────────────────────── */}
         {tab === 'features' && (
           <FeaturesTab org={org} />
+        )}
+
+        {/* ── ARIA Credits ─────────────────────────────────────── */}
+        {tab === 'credits' && (
+          <CreditsTab org={org} />
         )}
 
         {/* ── Reps ────────────────────────────────────────────── */}

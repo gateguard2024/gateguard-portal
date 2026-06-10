@@ -20,14 +20,28 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const orgId = user.org_id
+    // Corporate admins can pass ?org_id= to view another org's balance
+    const url = new URL(req.url)
+    const queryOrgId = url.searchParams.get('org_id')
+    let orgId: string | null
+
+    if (queryOrgId && queryOrgId !== user.org_id) {
+      // Only corporate users can view other orgs' balances
+      if (!user.isCorporate) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+      orgId = queryOrgId
+    } else {
+      orgId = user.org_id
+    }
+
     if (!orgId) {
       return NextResponse.json({ balance: 0, has_balance: false, lifetime_spent: 0, lifetime_earned: 0 })
     }
