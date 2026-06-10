@@ -39,9 +39,10 @@ function isBypassPath(pathname: string): boolean {
     // E-sign pages — public signing UI, token IS the auth
     pathname.startsWith('/sign/') ||
     // Public signature token endpoints — GET doc info + POST sign (token-based, no Clerk)
-    // /send, /countersign, /by-record all require Clerk — only the hex-token sub-paths are public
+    // /send, /countersign, /by-record, /upload all require Clerk
+    // /[token]/sign, /[id]/cert are public (token/ID-based access)
     (pathname.startsWith('/api/signatures/') &&
-      !['send', 'countersign', 'by-record'].some(
+      !['send', 'countersign', 'by-record', 'upload'].some(
         p => pathname.slice('/api/signatures/'.length).startsWith(p)
       )
     ) ||

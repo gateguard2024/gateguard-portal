@@ -134,6 +134,12 @@ export async function POST(req: NextRequest) {
     const executedHtml = buildExecutedHtml({ sig, docLabel, countersignedName, countersignedTitle, executedAt: now })
     const stored = await storeExecutedCertificate(sig, executedHtml)
 
+    // executed_cert_url points to the Next.js cert route — serves HTML with proper Content-Type
+    // document_html is overwritten with the full executed certificate so the cert route can read it
+    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://portal.gateguard.co').replace(/\/$/, '')
+    const certUrl = `/api/signatures/${signature_id}/cert`
+    const certAbsoluteUrl = `${baseUrl}${certUrl}`
+
     const { error: updateErr } = await supabase
       .from('document_signatures')
       .update({
@@ -143,7 +149,8 @@ export async function POST(req: NextRequest) {
         countersigned_title: countersignedTitle,
         countersigned_at: now,
         executed_at: now,
-        executed_cert_url: stored.url,
+        executed_cert_url: certUrl,
+        document_html: executedHtml,   // overwrite with full certificate — original no longer needed
         updated_at: now,
       })
       .eq('id', signature_id)
@@ -160,7 +167,7 @@ export async function POST(req: NextRequest) {
 
     const execDate = new Date(now).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
     const signerFirst = (sig.signed_name ?? sig.signer_name ?? 'there').split(' ')[0]
-    const executedLink = stored.url ? `<p style="margin:18px 0 0;color:#94A3B8;font-size:13px;line-height:1.6;">Executed document: <a href="${stored.url}" style="color:#6B7EFF;">Open final copy</a></p>` : ''
+    const executedLink = `<p style="margin:18px 0 0;color:#94A3B8;font-size:13px;line-height:1.6;">Executed document: <a href="${certAbsoluteUrl}" style="color:#6B7EFF;">Open final copy</a></p>`
 
     if (process.env.RESEND_API_KEY) {
       void (async () => {
@@ -211,7 +218,7 @@ export async function POST(req: NextRequest) {
       })()
     }
 
-    return NextResponse.json({ ok: true, executed_at: now, executed_cert_url: stored.url, storage_warning: stored.warning })
+    return NextResponse.json({ ok: true, executed_at: now, executed_cert_url: certUrl, cert_url: certAbsoluteUrl, storage_warning: stored.warning })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error: msg }, { status: 500 })

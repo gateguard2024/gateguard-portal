@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 type Bucket = 'draft' | 'needs_nda' | 'nda_sent' | 'nda_signed' | 'needs_agreement' | 'agreement_signed' | 'needs_compliance' | 'ready_to_approve' | 'live'
@@ -81,6 +81,9 @@ export function InternalDealerOnboardingBoard() {
   const [message, setMessage] = useState<string | null>(null)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState<'nda' | 'agreement' | 'countersign' | null>(null)
+  const [uploadingDoc, setUploadingDoc] = useState<'nda' | 'agreement' | null>(null)
+  const ndaFileRef = useRef<HTMLInputElement>(null)
+  const agreementFileRef = useRef<HTMLInputElement>(null)
 
   async function load() {
     setLoading(true)
@@ -155,6 +158,31 @@ export function InternalDealerOnboardingBoard() {
     }
   }
 
+  async function handleUpload(item: DealerItem, kind: 'nda' | 'agreement', file: File) {
+    setUploadingDoc(kind)
+    setActionMessage(null)
+    try {
+      const docType = kind === 'nda' ? 'nda' : agreementType(item)
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('org_id', item.id)
+      fd.append('document_type', docType)
+      if (item.contact_name) fd.append('signer_name', item.contact_name)
+      if (item.contact_email) fd.append('signer_email', item.contact_email)
+      fd.append('signer_company', item.title)
+
+      const res = await fetch('/api/signatures/upload', { method: 'POST', body: fd })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.ok === false) throw new Error(data?.error ?? `${kind === 'nda' ? 'NDA' : 'Agreement'} upload failed.`)
+      setActionMessage(`${kind === 'nda' ? 'NDA' : 'Agreement'} uploaded and marked as fully executed.`)
+      await load()
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : 'Upload failed.')
+    } finally {
+      setUploadingDoc(null)
+    }
+  }
+
   const shown = items.filter(item => item.bucket === bucket)
   const selected = items.find(item => item.id === selectedId) ?? null
 
@@ -198,6 +226,30 @@ export function InternalDealerOnboardingBoard() {
         })}
       </div>
 
+      {/* Hidden file inputs — triggered by upload buttons below */}
+      <input
+        ref={ndaFileRef}
+        type="file"
+        accept=".pdf,.html,.doc,.docx,.jpg,.jpeg,.png"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file && selected) void handleUpload(selected, 'nda', file)
+          e.target.value = ''
+        }}
+      />
+      <input
+        ref={agreementFileRef}
+        type="file"
+        accept=".pdf,.html,.doc,.docx,.jpg,.jpeg,.png"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file && selected) void handleUpload(selected, 'agreement', file)
+          e.target.value = ''
+        }}
+      />
+
       {selected && (
         <div className="rounded-3xl p-4" style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.18)' }}>
           <div className="text-[10px] uppercase tracking-[0.18em]" style={{ color: '#ddd6fe' }}>Selected Dealer Onboarding</div>
@@ -220,6 +272,13 @@ export function InternalDealerOnboardingBoard() {
             {selected.bucket === 'nda_signed' && <button type="button" disabled={!!busy} onClick={() => countersignDocument(selected, selected.nda_signature_id, 'NDA')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #34D399, #00C8FF)', color: '#02111d' }}>{busy === 'countersign' ? 'Countersigning…' : 'Countersign NDA'}</button>}
             {selected.bucket === 'needs_agreement' && <button type="button" disabled={!!busy} onClick={() => sendDoc(selected, 'agreement')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #8B5CF6, #007CFF)', color: 'white' }}>{busy === 'agreement' ? 'Sending…' : 'Send Agreement'}</button>}
             {selected.bucket === 'agreement_signed' && <button type="button" disabled={!!busy} onClick={() => countersignDocument(selected, selected.agreement_signature_id, 'Agreement')} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #34D399, #00C8FF)', color: '#02111d' }}>{busy === 'countersign' ? 'Countersigning…' : 'Countersign Agreement'}</button>}
+            {/* Upload buttons — for offline/pre-signed docs */}
+            {(selected.bucket === 'draft' || selected.bucket === 'needs_nda' || selected.bucket === 'nda_sent' || selected.bucket === 'nda_signed') && !selected.nda_executed_cert_url && (
+              <button type="button" disabled={!!uploadingDoc} onClick={() => ndaFileRef.current?.click()} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'rgba(196,181,253,0.12)', border: '1px solid rgba(196,181,253,0.28)', color: '#C4B5FD' }}>{uploadingDoc === 'nda' ? 'Uploading…' : 'Upload Signed NDA ↑'}</button>
+            )}
+            {(selected.bucket === 'needs_agreement' || selected.bucket === 'agreement_signed') && !selected.agreement_executed_cert_url && (
+              <button type="button" disabled={!!uploadingDoc} onClick={() => agreementFileRef.current?.click()} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'rgba(196,181,253,0.12)', border: '1px solid rgba(196,181,253,0.28)', color: '#C4B5FD' }}>{uploadingDoc === 'agreement' ? 'Uploading…' : 'Upload Executed Agreement ↑'}</button>
+            )}
             {selected.nda_executed_cert_url && <a href={selected.nda_executed_cert_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.24)', color: '#34D399' }}>Open Final NDA</a>}
             {selected.agreement_executed_cert_url && <a href={selected.agreement_executed_cert_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.24)', color: '#34D399' }}>Open Final Agreement</a>}
             <button type="button" onClick={() => router.push(selected.open_href)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.62)' }}>Open Dealer</button>

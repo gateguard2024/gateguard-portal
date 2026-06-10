@@ -114,17 +114,5 @@ Each Party acknowledges that a breach or threatened breach of this Agreement may
 
 IN WITNESS WHEREOF, the Parties, through their duly authorized representatives, have executed this Mutual Non-Disclosure Agreement as of the Effective Date.
 
-Gate Guard, LLC
-
-Signature: ___________________________
-Name: Russel Feldman
-Title: ___________________________
-Date: ___________________________
-
-{{DEALER_LEGAL_NAME}}
-
-Signature: ___________________________
-Name: ___________________________
-Title: ___________________________
-Date: ___________________________
+Executed by electronic signature pursuant to §9.5. Each Party's digital signature, captured through the GateGuard signing portal, constitutes a valid and binding signature with the same legal effect as an original ink signature.
 `
