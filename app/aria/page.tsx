@@ -7,6 +7,7 @@ import {
   ExternalLink, Star, Copy, Send, Phone, MessageSquare,
   Loader2, Shield, Package, Wifi, AlertCircle, Key, Activity,
   ChevronRight, TrendingUp, Globe, Clock, Download, Trash2, Check, Search, RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { LayoutList, ArrowLeft, BarChart3, Edit2, Camera } = require("lucide-react") as any;
@@ -506,6 +507,21 @@ const SOURCE_DISPLAY: Record<string, string> = {
 function displaySource(raw: string | undefined): string {
   if (!raw) return 'ARIA Verified';
   return SOURCE_DISPLAY[raw] ?? 'ARIA Verified';
+}
+
+// ── Expiry urgency helper ─────────────────────────────────────────────────────
+// Parses expiry_estimate (e.g. "Est. 2027-2029", "2026", "Est. 2028") and
+// returns urgency tier based on how many years out the first year is.
+function getExpiryUrgency(expiryEstimate?: string | null): 'critical' | 'soon' | 'future' | null {
+  if (!expiryEstimate || expiryEstimate.toLowerCase() === 'unknown') return null;
+  const match = expiryEstimate.match(/20(\d{2})/);
+  if (!match) return null;
+  const year = parseInt('20' + match[1], 10);
+  const currentYear = new Date().getFullYear();
+  const yearsOut = year - currentYear;
+  if (yearsOut <= 1) return 'critical';   // Expiring this year or next — act now
+  if (yearsOut <= 2) return 'soon';       // Within 2 years — start conversation
+  return 'future';                         // 3+ years out — note for later
 }
 
 const SIGNAL_ICONS: Record<string, React.ElementType> = {
@@ -1371,11 +1387,13 @@ export default function ARIAPage() {
                 ? <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 border border-emerald-100 text-emerald-600">FCC Verified</span>
                 : <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-amber-50 border border-amber-100 text-amber-600">AI Estimated</span>}
             </div>
-            {p.property?.isp_providers?.length ? (
-              <div className="mb-3">
-                <p className="text-[9px] font-mono text-slate-400 mb-1.5">ISP</p>
+
+            {/* ISP — always visible */}
+            <div className="mb-3">
+              <p className="text-[9px] font-mono text-slate-400 mb-1.5">Internet / ISP</p>
+              {(p.property?.isp_providers ?? []).length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
-                  {(p.property.isp_providers || []).map((isp: string) => (
+                  {(p.property!.isp_providers!).map((isp: string) => (
                     <span key={isp} className={cn("text-[10px] px-2 py-1 rounded-md font-bold border",
                       p.property?._fcc_verified
                         ? "bg-emerald-50/50 text-emerald-700 border-emerald-200/60"
@@ -1383,44 +1401,75 @@ export default function ARIAPage() {
                     )}>{isp}</span>
                   ))}
                 </div>
-              </div>
-            ) : null}
-            {p.property?.video_providers?.length ? (
-              <div className="mb-3">
-                <p className="text-[9px] font-mono text-slate-400 mb-1.5">Video</p>
+              ) : (
+                <span className="text-[10px] text-slate-400 italic font-medium">No provider data found</span>
+              )}
+            </div>
+
+            {/* Video — always visible */}
+            <div className="mb-3">
+              <p className="text-[9px] font-mono text-slate-400 mb-1.5">Cable / Video</p>
+              {(p.property?.video_providers ?? []).length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
-                  {(p.property.video_providers || []).map((vid: string) => (
+                  {(p.property!.video_providers!).map((vid: string) => (
                     <span key={vid} className="text-[10px] bg-violet-50/50 text-violet-700 border border-violet-200/60 px-2 py-1 rounded-md font-bold">{vid}</span>
                   ))}
                 </div>
-              </div>
-            ) : null}
-            {p.property?.bulk_agreements?.length ? (
-              <div className="space-y-2 mt-2">
-                {(p.property.bulk_agreements || []).map((a: BulkAgreement & { evidence?: string }, i: number) => (
-                  <div key={i} className={cn("rounded-xl px-3 py-2 border shadow-sm",
-                    a.agreement_type === 'exclusive' ? 'bg-amber-50/30 border-amber-200/60' :
-                    a.agreement_type === 'bulk'      ? 'bg-emerald-50/30 border-emerald-200/60' :
-                                                       'bg-slate-50/50 border-slate-200/60'
-                  )}>
-                    <div className="flex items-center justify-between gap-1 mb-1">
-                      <span className="text-xs font-bold text-slate-800">{a.provider}</span>
-                      <span className={cn("text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-md",
-                        a.agreement_type === 'exclusive' ? 'bg-amber-100 text-amber-700' :
-                        a.agreement_type === 'bulk'      ? 'bg-emerald-100 text-emerald-700' :
-                                                           'bg-slate-200 text-slate-600'
-                      )}>{a.agreement_type}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-medium">
-                      <span className="capitalize">{a.service_type}</span>
-                      {a.expiry_estimate && a.expiry_estimate !== 'unknown' && (
-                        <><span>·</span><span className="text-amber-600 font-bold bg-amber-50 px-1 rounded">Exp: {a.expiry_estimate}</span></>
+              ) : (
+                <span className="text-[10px] text-slate-400 italic font-medium">No provider data found</span>
+              )}
+            </div>
+
+            {/* Bulk agreements — prominent when present, with expiry urgency */}
+            {(p.property?.bulk_agreements ?? []).length > 0 && (
+              <div className="space-y-2 mt-1">
+                <p className="text-[9px] font-mono text-slate-400 mb-1.5">Bulk / Exclusive Agreements</p>
+                {(p.property!.bulk_agreements!).map((a: BulkAgreement & { evidence?: string }, i: number) => {
+                  const urgency = getExpiryUrgency(a.expiry_estimate);
+                  return (
+                    <div key={i} className={cn("rounded-xl px-3 py-2 border shadow-sm",
+                      urgency === 'critical' ? 'bg-red-50/50 border-red-300' :
+                      urgency === 'soon'     ? 'bg-amber-50/40 border-amber-300' :
+                      a.agreement_type === 'exclusive' ? 'bg-amber-50/30 border-amber-200/60' :
+                      a.agreement_type === 'bulk'      ? 'bg-emerald-50/30 border-emerald-200/60' :
+                                                         'bg-slate-50/50 border-slate-200/60'
+                    )}>
+                      {urgency === 'critical' && (
+                        <div className="flex items-center gap-1.5 text-[9px] font-bold text-red-600 mb-1.5">
+                          <AlertTriangle size={10} className="shrink-0" />
+                          EXPIRING SOON — SALES WINDOW OPEN
+                        </div>
                       )}
+                      {urgency === 'soon' && (
+                        <div className="flex items-center gap-1.5 text-[9px] font-bold text-amber-600 mb-1.5">
+                          <Clock size={10} className="shrink-0" />
+                          EXPIRING WITHIN 2 YEARS
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <span className="text-xs font-bold text-slate-800">{a.provider}</span>
+                        <span className={cn("text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-md",
+                          a.agreement_type === 'exclusive' ? 'bg-amber-100 text-amber-700' :
+                          a.agreement_type === 'bulk'      ? 'bg-emerald-100 text-emerald-700' :
+                                                             'bg-slate-200 text-slate-600'
+                        )}>{a.agreement_type}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-medium">
+                        <span className="capitalize">{a.service_type}</span>
+                        {a.expiry_estimate && a.expiry_estimate !== 'unknown' && (
+                          <><span>·</span>
+                          <span className={cn("font-bold px-1 rounded",
+                            urgency === 'critical' ? 'text-red-600 bg-red-50' :
+                            urgency === 'soon'     ? 'text-amber-600 bg-amber-50' :
+                                                     'text-slate-500 bg-slate-100'
+                          )}>Exp: {a.expiry_estimate}</span></>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-            ) : null}
+            )}
           </div>
         </div>
 
@@ -1736,35 +1785,58 @@ export default function ARIAPage() {
     const videoAgreements = agreements.filter((a: BulkAgreement) => a.service_type === 'video' || a.service_type === 'bundled');
     const internetAgreements = agreements.filter((a: BulkAgreement) => a.service_type === 'internet' || a.service_type === 'bundled');
 
-    const AgreementCard = ({ a }: { a: BulkAgreement }) => (
-      <div className={cn("rounded-xl border p-4 shadow-sm",
-        a.agreement_type === 'exclusive' ? 'bg-amber-50/30 border-amber-200/60' :
-        a.agreement_type === 'bulk' ? 'bg-emerald-50/30 border-emerald-200/60' : 'bg-slate-50 border-slate-200/60'
-      )}>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-bold text-slate-900">{a.provider}</span>
-          <div className="flex items-center gap-2">
-            <span className={cn("text-[9px] font-bold uppercase px-2 py-0.5 rounded-md",
-              a.confidence === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
-              a.confidence === 'high' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-600'
-            )}>{a.confidence}</span>
-            <span className={cn("text-[9px] font-bold uppercase px-2 py-0.5 rounded-md",
-              a.agreement_type === 'exclusive' ? 'bg-amber-100 text-amber-700' :
-              a.agreement_type === 'bulk' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
-            )}>{a.agreement_type}</span>
+    const AgreementCard = ({ a }: { a: BulkAgreement }) => {
+      const urgency = getExpiryUrgency(a.expiry_estimate);
+      return (
+        <div className={cn("rounded-xl border p-4 shadow-sm",
+          urgency === 'critical' ? 'bg-red-50/40 border-red-300 ring-1 ring-red-200' :
+          urgency === 'soon'     ? 'bg-amber-50/40 border-amber-300' :
+          a.agreement_type === 'exclusive' ? 'bg-amber-50/30 border-amber-200/60' :
+          a.agreement_type === 'bulk' ? 'bg-emerald-50/30 border-emerald-200/60' : 'bg-slate-50 border-slate-200/60'
+        )}>
+          {/* Urgency banner — shown only when expiry is actionable */}
+          {urgency === 'critical' && (
+            <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-red-100 border border-red-200">
+              <AlertTriangle size={13} className="text-red-600 shrink-0" />
+              <div>
+                <p className="text-[10px] font-bold text-red-700 uppercase tracking-wide">Sales Window Open — Expiring Soon</p>
+                <p className="text-[9px] text-red-600 mt-0.5">Start conversation 90 days before renewal. Do not wait.</p>
+              </div>
+            </div>
+          )}
+          {urgency === 'soon' && (
+            <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200">
+              <Clock size={12} className="text-amber-600 shrink-0" />
+              <p className="text-[10px] font-bold text-amber-700">Agreement expiring within 2 years — begin outreach</p>
+            </div>
+          )}
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-bold text-slate-900">{a.provider}</span>
+            <div className="flex items-center gap-2">
+              <span className={cn("text-[9px] font-bold uppercase px-2 py-0.5 rounded-md",
+                a.confidence === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
+                a.confidence === 'high' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-600'
+              )}>{a.confidence}</span>
+              <span className={cn("text-[9px] font-bold uppercase px-2 py-0.5 rounded-md",
+                a.agreement_type === 'exclusive' ? 'bg-amber-100 text-amber-700' :
+                a.agreement_type === 'bulk' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+              )}>{a.agreement_type}</span>
+            </div>
           </div>
+          {a.expiry_estimate && a.expiry_estimate !== 'unknown' && (
+            <div className="flex items-center gap-1.5 mt-1">
+              <Clock size={12} className={urgency === 'critical' ? 'text-red-500' : urgency === 'soon' ? 'text-amber-500' : 'text-slate-400'} />
+              <span className={cn("text-xs font-bold",
+                urgency === 'critical' ? 'text-red-700' : urgency === 'soon' ? 'text-amber-700' : 'text-slate-600'
+              )}>Est. expiry: {a.expiry_estimate}</span>
+            </div>
+          )}
+          {a.source_snippet && (
+            <p className="text-[10px] text-slate-500 mt-2 leading-relaxed italic border-t border-slate-100 pt-2">&ldquo;{a.source_snippet.slice(0, 120)}...&rdquo;</p>
+          )}
         </div>
-        {a.expiry_estimate && a.expiry_estimate !== 'unknown' && (
-          <div className="flex items-center gap-1.5 mt-1">
-            <Clock size={12} className="text-amber-500" />
-            <span className="text-xs font-bold text-amber-700">Est. expiry: {a.expiry_estimate}</span>
-          </div>
-        )}
-        {a.source_snippet && (
-          <p className="text-[10px] text-slate-500 mt-2 leading-relaxed italic border-t border-slate-100 pt-2">&ldquo;{a.source_snippet.slice(0, 120)}...&rdquo;</p>
-        )}
-      </div>
-    );
+      );
+    };
 
     const TechCategory = ({ label, emoji, items, chipClass }: { label: string; emoji: string; items?: string[]; chipClass: string }) => {
       if (!items?.length) return null;
@@ -1784,69 +1856,97 @@ export default function ARIAPage() {
     const hasInternetAgreements = internetAgreements.length > 0;
     const hasTechStack = [pt.gate_operators, pt.access_control, pt.intercoms, pt.cameras, pt.smart_locks, pt.resident_apps, pt.package_solutions].some(a => a?.length);
     const hasDisplacementTargets = (pt.displacement_targets?.length ?? 0) > 0;
-    const noData = !hasVideoAgreements && !hasInternetAgreements && !hasTechStack;
-
-    if (noData) return (
-      <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
-        <Package size={32} className="opacity-20" />
-        <p className="text-sm font-medium">No PropTech data found for this property</p>
-        <p className="text-xs text-slate-400">Run a deeper search or check Intel tab for signals</p>
-      </div>
-    );
+    // Internet and Video sections always render now (with empty states), so only
+    // gate on tech stack data for the "no data at all" fallback
+    const noData = !hasTechStack && !hasVideoAgreements && !hasInternetAgreements
+      && !(p.property?.isp_providers?.length) && !(p.property?.video_providers?.length);
 
     return (
       <div className="space-y-6 max-w-5xl animate-in fade-in slide-in-from-bottom-2 duration-500">
 
-        {/* Video Agreements */}
-        {(hasVideoAgreements || p.property?.video_providers?.length) && (
-          <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <Globe size={15} className="text-violet-500" />
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-700">Video Agreements</p>
-              {hasVideoAgreements && <span className="ml-auto text-[10px] font-mono bg-violet-50 text-violet-600 border border-violet-100 px-2 py-0.5 rounded-md">{videoAgreements.length} detected</span>}
-            </div>
-            {hasVideoAgreements ? (
-              <div className="space-y-3">
-                {videoAgreements.map((a, i) => <AgreementCard key={i} a={a} />)}
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {(p.property?.video_providers || []).map(v => (
-                  <span key={v} className="text-[11px] px-3 py-1.5 rounded-lg font-bold border bg-violet-50/80 text-violet-700 border-violet-200/60 shadow-sm">{v}</span>
-                ))}
-              </div>
-            )}
+        {/* Video / Cable — always shown */}
+        <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <Globe size={15} className="text-violet-500" />
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-700">Cable / Video</p>
+            {hasVideoAgreements
+              ? <span className="ml-auto text-[10px] font-mono bg-violet-50 text-violet-600 border border-violet-100 px-2 py-0.5 rounded-md">{videoAgreements.length} agreement{videoAgreements.length !== 1 ? 's' : ''} detected</span>
+              : (p.property?.video_providers?.length
+                  ? <span className="ml-auto text-[10px] font-mono bg-violet-50/60 text-violet-500 border border-violet-100 px-2 py-0.5 rounded-md">{p.property.video_providers.length} provider{p.property.video_providers.length !== 1 ? 's' : ''}</span>
+                  : <span className="ml-auto text-[10px] font-mono text-slate-400 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md">No data found</span>)
+            }
           </div>
-        )}
+          {hasVideoAgreements ? (
+            <div className="space-y-3">
+              {videoAgreements.map((a, i) => <AgreementCard key={i} a={a} />)}
+              {/* Also show raw video providers beneath agreements if any */}
+              {(p.property?.video_providers ?? []).length > 0 && (
+                <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+                  {(p.property!.video_providers!).map(v => (
+                    <span key={v} className="text-[11px] px-3 py-1.5 rounded-lg font-bold border bg-violet-50/80 text-violet-700 border-violet-200/60 shadow-sm">{v}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (p.property?.video_providers?.length) ? (
+            <div className="flex flex-wrap gap-2">
+              {(p.property.video_providers).map(v => (
+                <span key={v} className="text-[11px] px-3 py-1.5 rounded-lg font-bold border bg-violet-50/80 text-violet-700 border-violet-200/60 shadow-sm">{v}</span>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2.5 py-3 px-4 rounded-xl bg-slate-50 border border-slate-200/80">
+              <Globe size={14} className="text-slate-300 shrink-0" />
+              <p className="text-xs text-slate-400 italic">No cable or video provider data found for this property</p>
+            </div>
+          )}
+        </div>
 
-        {/* Internet Agreements */}
-        {(hasInternetAgreements || p.property?.isp_providers?.length) && (
-          <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <Wifi size={15} className="text-emerald-500" />
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-700">Internet Agreements</p>
-              <div className="flex items-center gap-2 ml-auto">
-                {p.property?._fcc_verified
-                  ? <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-100 text-emerald-600">FCC Verified</span>
-                  : <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-amber-50 border border-amber-100 text-amber-600">AI Estimated</span>}
-                {hasInternetAgreements && <span className="text-[10px] font-mono bg-emerald-50 text-emerald-600 border border-emerald-100 px-2 py-0.5 rounded-md">{internetAgreements.length} detected</span>}
-              </div>
+        {/* Internet / ISP — always shown */}
+        <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <Wifi size={15} className="text-emerald-500" />
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-700">Internet / ISP</p>
+            <div className="flex items-center gap-2 ml-auto">
+              {p.property?._fcc_verified
+                ? <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-100 text-emerald-600">FCC Verified</span>
+                : <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-amber-50 border border-amber-100 text-amber-600">AI Estimated</span>}
+              {hasInternetAgreements
+                ? <span className="text-[10px] font-mono bg-emerald-50 text-emerald-600 border border-emerald-100 px-2 py-0.5 rounded-md">{internetAgreements.length} agreement{internetAgreements.length !== 1 ? 's' : ''} detected</span>
+                : (!p.property?.isp_providers?.length &&
+                    <span className="text-[10px] font-mono text-slate-400 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md">No data found</span>)
+              }
             </div>
-            {hasInternetAgreements ? (
-              <div className="space-y-3">
-                {internetAgreements.map((a, i) => <AgreementCard key={i} a={a} />)}
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {(p.property?.isp_providers || []).map(v => (
-                  <span key={v} className={cn("text-[11px] px-3 py-1.5 rounded-lg font-bold border shadow-sm",
-                    p.property?._fcc_verified ? "bg-emerald-50/80 text-emerald-700 border-emerald-200/60" : "bg-blue-50/80 text-blue-700 border-blue-200/60"
-                  )}>{v}</span>
-                ))}
-              </div>
-            )}
           </div>
-        )}
+          {hasInternetAgreements ? (
+            <div className="space-y-3">
+              {internetAgreements.map((a, i) => <AgreementCard key={i} a={a} />)}
+              {/* Also show raw ISP providers beneath agreements */}
+              {(p.property?.isp_providers ?? []).length > 0 && (
+                <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+                  {(p.property!.isp_providers!).map(v => (
+                    <span key={v} className={cn("text-[11px] px-3 py-1.5 rounded-lg font-bold border shadow-sm",
+                      p.property?._fcc_verified ? "bg-emerald-50/80 text-emerald-700 border-emerald-200/60" : "bg-blue-50/80 text-blue-700 border-blue-200/60"
+                    )}>{v}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (p.property?.isp_providers?.length) ? (
+            <div className="flex flex-wrap gap-2">
+              {(p.property.isp_providers).map(v => (
+                <span key={v} className={cn("text-[11px] px-3 py-1.5 rounded-lg font-bold border shadow-sm",
+                  p.property?._fcc_verified ? "bg-emerald-50/80 text-emerald-700 border-emerald-200/60" : "bg-blue-50/80 text-blue-700 border-blue-200/60"
+                )}>{v}</span>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2.5 py-3 px-4 rounded-xl bg-slate-50 border border-slate-200/80">
+              <Wifi size={14} className="text-slate-300 shrink-0" />
+              <p className="text-xs text-slate-400 italic">No internet provider data found for this property</p>
+            </div>
+          )}
+        </div>
 
         {/* Gates & Access Control */}
         {(pt.gate_operators?.length || pt.access_control?.length || pt.intercoms?.length) && (
