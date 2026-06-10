@@ -18,7 +18,6 @@ import { auth } from '@clerk/nextjs/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { spendCredits } from '@/lib/credits'
 
 const supabaseDeep = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,7 +27,29 @@ const supabaseDeep = createClient(
 export const maxDuration = 120
 export const dynamic = 'force-dynamic'
 
-const ARIA_ENGINE_VERSION = 'v8.0'
+const ARIA_ENGINE_VERSION = 'v9.0'
+
+// ─── v9: CostTracker ──────────────────────────────────────────────────────────
+// Tracks API spend in-pipeline. Gates supervisor loop and Sonnet call.
+// Hard cap: ARIA_COST_CAP_CENTS env var (default 50 = $0.50)
+const COST_CAP_CENTS = parseInt(process.env.ARIA_COST_CAP_CENTS ?? '50', 10)
+const CREDITS_PER_SEARCH = 100  // atomic deduction from credit_balances
+
+class CostTracker {
+  private items: { label: string; cents: number }[] = []
+  get totalCents() { return this.items.reduce((s, i) => s + i.cents, 0) }
+  add(label: string, cents: number) { this.items.push({ label, cents }) }
+  isOverCap() { return this.totalCents >= COST_CAP_CENTS }
+  // ~$0.001 per Haiku output token; Serper = 0.1¢ per call; Tavily = ~0.3¢
+  addHaiku(outputTokens: number) { this.add('haiku', Math.ceil(outputTokens * 0.001)) }
+  addSerper() { this.add('serper', 1) }
+  addTavily() { this.add('tavily', 3) }
+  addSonnet(inputTokens: number, outputTokens: number) {
+    this.add('sonnet_in', Math.ceil(inputTokens * 0.003))
+    this.add('sonnet_out', Math.ceil(outputTokens * 0.015))
+  }
+  summary() { return `$${(this.totalCents / 100).toFixed(3)} (${this.items.map(i => i.label).join('+')})` }
+}
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -154,6 +175,148 @@ function saveEvidencePackets(
       )
     } catch { /* non-blocking */ }
   })()
+}
+
+// ─── v9: Supervisor loop ─────────────────────────────────────────────────────
+// Runs after Phase 3 when: time budget remains + cost budget remains.
+// Finds gaps in Phase 2/3 data and fires 2-3 targeted Serper searches.
+// Returns THREE-TUPLE: [p2Updated, p3Updated, supervisorEvidence[]]
+// CRITICAL (Catch 3): supervisor-discovered facts get full evidence packets
+// with calculated provenance scores — they MUST NOT be orphaned at score=0.
+
+type SupervisorEvidence = {
+  fact_type: string
+  extracted_value: string
+  source_url?: string
+  source_type: string
+  source_authority: number
+  confidence: number
+  raw_snippet?: string
+  phase_found: number
+}
+
+async function runSupervisorCheck(
+  property_name: string,
+  city: string,
+  state: string,
+  p2: Phase2Result,
+  p3: Phase3Result,
+  costTracker: CostTracker,
+  runStart: number,
+  anthr: Anthropic
+): Promise<[Phase2Result, Phase3Result, SupervisorEvidence[]]> {
+  const evidence: SupervisorEvidence[] = []
+  const elapsed = Date.now() - runStart
+  // Safety gates: only run if < 55s elapsed AND under cost cap
+  if (elapsed > 55000 || costTracker.isOverCap()) {
+    console.log(`[aria] supervisor skipped: elapsed=${elapsed}ms overCap=${costTracker.isOverCap()}`)
+    return [p2, p3, evidence]
+  }
+
+  const gaps: string[] = []
+  if (!p2.isp_providers.length) gaps.push('isp')
+  if (!p2.owner_entity) gaps.push('owner')
+  if (!p3.contacts.length) gaps.push('contact')
+  if (p3.pain_signals.length < 2) gaps.push('pain')
+
+  if (!gaps.length) return [p2, p3, evidence]
+  console.log(`[aria] supervisor running for gaps: ${gaps.join(', ')}`)
+
+  const searches: Promise<void>[] = []
+  let p2copy = { ...p2 }
+  let p3copy = { ...p3 }
+
+  if (gaps.includes('isp') && !costTracker.isOverCap()) {
+    searches.push((async () => {
+      costTracker.addSerper()
+      const results = await serperSearch(
+        `"${property_name}" ${city} internet provider bulk agreement MDU`,
+        4, 'supervisor_isp'
+      )
+      for (const r of results) {
+        const snippet = (r.content ?? '').toLowerCase()
+        for (const isp of ['spectrum', 'att', 'comcast', 'verizon', 'xfinity', 'gigsstreem', 'hotwire', 'smartaira', 'dojonetworks', 'frontier', 'google fiber']) {
+          if (snippet.includes(isp)) {
+            const provenance = sourceAuthority(r.url ?? '')
+            p2copy = { ...p2copy, isp_providers: [...new Set([...p2copy.isp_providers, isp])] }
+            evidence.push({
+              fact_type: 'isp',
+              extracted_value: isp,
+              source_url: r.url || undefined,
+              source_type: 'supervisor',
+              source_authority: provenance,
+              confidence: Math.round((provenance / 10) * 70),
+              raw_snippet: (r.content ?? '').slice(0, 600),
+              phase_found: 3,
+            })
+          }
+        }
+      }
+    })())
+  }
+
+  if (gaps.includes('owner') && !costTracker.isOverCap()) {
+    searches.push((async () => {
+      costTracker.addSerper()
+      const results = await serperSearch(
+        `"${property_name}" ${city} ${state} owner LLC management company`,
+        3, 'supervisor_owner'
+      )
+      for (const r of results) {
+        const auth = sourceAuthority(r.url ?? '')
+        evidence.push({
+          fact_type: 'owner',
+          extracted_value: (r.title ?? '').slice(0, 120),
+          source_url: r.url || undefined,
+          source_type: 'supervisor',
+          source_authority: auth,
+          confidence: Math.round((auth / 10) * 60),
+          raw_snippet: (r.content ?? '').slice(0, 600),
+          phase_found: 3,
+        })
+      }
+    })())
+  }
+
+  if (gaps.includes('pain') && !costTracker.isOverCap()) {
+    searches.push((async () => {
+      costTracker.addSerper()
+      const results = await serperSearch(
+        `"${property_name}" ${city} reviews gate internet complaints`,
+        4, 'supervisor_pain'
+      )
+      const newSignals: typeof p3.pain_signals = []
+      for (const r of results) {
+        const content = (r.content ?? '').toLowerCase()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let type: any = null
+        if (content.includes('gate') || content.includes('entry')) type = 'gate'
+        else if (content.includes('internet') || content.includes('wifi') || content.includes('slow')) type = 'internet'
+        else if (content.includes('security') || content.includes('camera')) type = 'camera'
+        if (type) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          newSignals.push({ type: type as any, quote: (r.content ?? '').slice(0, 200), source: 'reviews', date: '', severity: 'medium' as any })
+          const auth = sourceAuthority(r.url ?? '')
+          evidence.push({
+            fact_type: 'pain_signal',
+            extracted_value: type,
+            source_url: r.url || undefined,
+            source_type: 'supervisor',
+            source_authority: auth,
+            confidence: Math.round((auth / 10) * 55),
+            raw_snippet: (r.content ?? '').slice(0, 600),
+            phase_found: 3,
+          })
+        }
+      }
+      if (newSignals.length) {
+        p3copy = { ...p3copy, pain_signals: [...p3copy.pain_signals, ...newSignals] }
+      }
+    })())
+  }
+
+  await Promise.allSettled(searches)
+  return [p2copy, p3copy, evidence]
 }
 
 function checkQualityGates(
@@ -2035,33 +2198,41 @@ export async function POST(req: NextRequest) {
     const rawQuery: string = raw.property_name || raw.query || ''
     if (!rawQuery) return NextResponse.json({ error: 'property_name or query required' }, { status: 400 })
 
-    // ── Credit accounting ─────────────────────────────────────────────────────
-    // Non-blocking: logs errors but never gates a search (wallets provisioned incrementally)
-    // Skipped for internal Inngest service calls
+    // v9 — initialize in-pipeline cost tracker
+    const costTracker = new CostTracker()
+
+    // ── v9: Credit pre-gate (blocking, atomic) ───────────────────────────────
+    // Deducts CREDITS_PER_SEARCH before any work begins. Returns 402 if insufficient.
+    // Skipped for internal Inngest service calls.
+    let userOrgId: string | null = null
     if (userId !== 'inngest-service') {
-      void (async () => {
-        try {
-          const portalUser = await getCurrentUser()
-          if (portalUser.org_id) {
-            const { data: profile } = await supabaseDeep
-              .from('profiles')
-              .select('id')
-              .eq('clerk_user_id', userId)
-              .maybeSingle()
-            await spendCredits({
-              profileId: (profile as { id: string } | null)?.id ?? null,
-              clerkUserId: userId,
-              orgId: portalUser.org_id,
-              featureKey: 'sales.aria_deep',
-              actionType: 'aria_search',
-              credits: 150,
-              metadata: { query: rawQuery },
+      try {
+        const portalUser = await getCurrentUser()
+        userOrgId = portalUser?.org_id ?? null
+        if (userOrgId) {
+          const { data: spendResult, error: spendError } = await supabaseDeep
+            .rpc('spend_aria_credits', {
+              p_org_id: userOrgId,
+              p_user_id: userId,
+              p_amount: CREDITS_PER_SEARCH,
+              p_search_run_id: null,  // search_run_id not yet created — will link in completeSearchRun
             })
+          if (spendError) {
+            // RPC error (not insufficient) — allow search to proceed, log for audit
+            console.warn('[aria] credit RPC error (proceeding anyway):', spendError.message)
+          } else if (spendResult && !spendResult.success) {
+            return NextResponse.json({
+              error: 'Insufficient credits',
+              reason: spendResult.reason,
+              balance: spendResult.balance ?? 0,
+              credits_required: CREDITS_PER_SEARCH,
+            }, { status: 402 })
           }
-        } catch (err) {
-          console.warn('[aria] credit spend skipped:', (err as Error)?.message)
         }
-      })()
+        // No org_id (personal account / dev) — skip credit gate
+      } catch (err) {
+        console.warn('[aria] credit check failed (proceeding):', (err as Error)?.message)
+      }
     }
 
     // ── PHASE 0: Classification ───────────────────────────────────────────────
@@ -2136,9 +2307,9 @@ export async function POST(req: NextRequest) {
       rewriteQuery(rawQuery, anthropic),
     ])
 
-    // v8: Create search run for specific_property branch (rewritten query now available)
+    // v9: Create search run for specific_property branch (rewritten query now available)
     searchRunId = await createSearchRun(
-      userId, null, rawQuery, 'specific_property',
+      userId, userOrgId, rawQuery, 'specific_property',
       rewritten as unknown as Record<string, unknown>
     )
 
@@ -2239,10 +2410,19 @@ export async function POST(req: NextRequest) {
 
     const finalOwner = p2.owner_entity || owner || ''
 
-    // v8: Check quality gates — required field checklist before synthesis
-    const qualityGates = checkQualityGates(p1, p2, p3)
+    // v9: Supervisor loop — fills gaps with targeted searches, returns evidence packets
+    // Catch 3: supervisor evidence gets full provenance scores (not orphaned at 0)
+    const [p2Supervised, p3Supervised, supervisorEvidence] = await runSupervisorCheck(
+      property_name, city, state, p2, p3, costTracker, runStart, anthropic
+    )
+    // Use supervisor-enriched data for synthesis
+    const p2Final = p2Supervised
+    const p3Final = p3Supervised
 
-    // v8: Save Phase 1A + Phase 2 + Phase 3 key evidence (non-blocking, best-effort)
+    // v9: Check quality gates — required field checklist before synthesis
+    const qualityGates = checkQualityGates(p1, p2Final, p3Final)
+
+    // v9: Save Phase 1A + Phase 2 + Phase 3 key evidence (non-blocking, best-effort)
     if (searchRunId) {
       const evidenceFacts: Parameters<typeof saveEvidencePackets>[2] = []
       // Phase 1A facts — include listing page URL as source
@@ -2253,24 +2433,29 @@ export async function POST(req: NextRequest) {
       if (p1.listing_isp)          evidenceFacts.push({ fact_type: 'isp',     extracted_value: p1.listing_isp,                 source_url: listingUrl, source_type: 'listing', confidence: 95, phase_found: 1 })
       if (p1.confirmed_management) evidenceFacts.push({ fact_type: 'owner',   extracted_value: p1.confirmed_management,        source_url: listingUrl, source_type: 'listing', confidence: 80, phase_found: 1 })
       // Phase 2 facts
-      if (p2.owner_entity)    evidenceFacts.push({ fact_type: 'owner', extracted_value: p2.owner_entity,              source_type: 'owner', confidence: 75, phase_found: 2 })
-      if (p2.roe_expiry_year) evidenceFacts.push({ fact_type: 'roe',   extracted_value: String(p2.roe_expiry_year),   source_type: 'roe',   confidence: 80, phase_found: 2 })
-      p2.isp_providers.slice(0, 3).forEach(isp =>
+      if (p2Final.owner_entity)    evidenceFacts.push({ fact_type: 'owner', extracted_value: p2Final.owner_entity,              source_type: 'owner', confidence: 75, phase_found: 2 })
+      if (p2Final.roe_expiry_year) evidenceFacts.push({ fact_type: 'roe',   extracted_value: String(p2Final.roe_expiry_year),   source_type: 'roe',   confidence: 80, phase_found: 2 })
+      p2Final.isp_providers.slice(0, 3).forEach(isp =>
         evidenceFacts.push({ fact_type: 'isp', extracted_value: isp, source_type: 'bulk', confidence: 70, phase_found: 2 })
       )
       // Phase 3 contacts — include LinkedIn URL as source
-      p3.contacts.slice(0, 3).forEach(c =>
+      p3Final.contacts.slice(0, 3).forEach(c =>
         evidenceFacts.push({ fact_type: 'contact', extracted_value: `${c.name} (${c.title})`, source_url: c.linkedin || undefined, source_type: 'contacts', confidence: 75, phase_found: 3 })
       )
       // Pain signals
-      p3.pain_signals.slice(0, 5).forEach(s =>
+      p3Final.pain_signals.slice(0, 5).forEach(s =>
         evidenceFacts.push({ fact_type: 'pain_signal', extracted_value: s.quote.slice(0, 200), source_type: s.source, confidence: 65, phase_found: 3 })
       )
       if (evidenceFacts.length > 0) saveEvidencePackets(searchRunId, null, evidenceFacts)
 
-      // v8: Save Phase 3 raw source excerpts as bulk evidence — each result gets source_url + raw_snippet
-      if (p3.raw_excerpts.length > 0) {
-        const p3BulkEvidence = p3.raw_excerpts.slice(0, 15).map(r => ({
+      // v9 Catch 3: Save supervisor evidence packets — these have provenance scores, not orphaned at 0
+      if (supervisorEvidence.length > 0) {
+        saveEvidencePackets(searchRunId, null, supervisorEvidence)
+      }
+
+      // v9: Save Phase 3 raw source excerpts as bulk evidence — each result gets source_url + raw_snippet
+      if (p3Final.raw_excerpts.length > 0) {
+        const p3BulkEvidence = p3Final.raw_excerpts.slice(0, 15).map(r => ({
           fact_type: 'source_excerpt',
           extracted_value: (r.title ?? '').slice(0, 200),
           source_url: r.url || undefined,
@@ -2283,9 +2468,9 @@ export async function POST(req: NextRequest) {
         saveEvidencePackets(searchRunId, null, p3BulkEvidence)
       }
 
-      // v8 Ticket 5: Save PropTech Scout findings as proptech evidence packets
-      if (p3.proptech_findings.length > 0) {
-        const proptechEvidence = p3.proptech_findings.map(f => ({
+      // v9: Save PropTech Scout findings as proptech evidence packets
+      if (p3Final.proptech_findings.length > 0) {
+        const proptechEvidence = p3Final.proptech_findings.map(f => ({
           fact_type: 'proptech',
           extracted_value: `${f.brand} (${f.category})`,
           source_url: f.source_url || undefined,
@@ -2300,40 +2485,65 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Determine best contact early — needed for gatekeeper tip ─────────────
-    const earlyBestContact = p3.contacts.find(c => c.role_type === 'property_manager')
-      || p3.contacts.find(c => c.role_type === 'regional_manager')
-      || p3.contacts.find(c => c.role_type === 'asset_manager')
-      || p3.contacts[0]
+    const earlyBestContact = p3Final.contacts.find(c => c.role_type === 'property_manager')
+      || p3Final.contacts.find(c => c.role_type === 'regional_manager')
+      || p3Final.contacts.find(c => c.role_type === 'asset_manager')
+      || p3Final.contacts[0]
 
     // Leasing office phone (Phase 1A — confirmed from listing page)
     const officePhone = normStr(p1.confirmed_phone)
 
     // ── PHASE 4: Synthesis ────────────────────────────────────────────────────
+    // v9: Synthesis data caps — prevents Sonnet token overflow + keeps cost under cap
+    // Pain signals: 12 max, each capped at 180 chars (was uncapped → could hit 4k+ tokens)
+    // Contacts: 8 max, stripped to name/title/company/role_type for synthesis prompt
+    const cappedPainSignals = p3Final.pain_signals
+      .slice(0, 12)
+      .map(s => ({ ...s, quote: s.quote.slice(0, 180) }))
+    const cappedContacts = p3Final.contacts
+      .slice(0, 8)
+      .map(c => ({ name: c.name, title: c.title, company: c.company, role_type: c.role_type }))
+
     const synthesisData = `PHASE 1 — VERIFIED IDENTITY:
 ${JSON.stringify({ name: property_name, address, city, state, units: p1.confirmed_units, year_built: p1.confirmed_year_built, management_company: mgmt, website, phone: p1.confirmed_phone }, null, 2)}
 
 PHASE 2 — ENRICHMENT:
-${JSON.stringify({ owner_entity: finalOwner, owner_type: p2.owner_type, acquisition_year: p2.acquisition_year, fcc_providers: p2.fcc_providers, isp_providers: p2.isp_providers, video_providers: p2.video_providers, bulk_detected: p2.bulk_detected, bulk_agreements: p2.bulk_agreements, roe_detected: p2.roe_detected, roe_providers: p2.roe_providers, roe_expiry_year: p2.roe_expiry_year, edgar_signal: p2.edgar_signal, last_sale_price: p2.last_sale_price, last_sale_date: p2.last_sale_date }, null, 2)}
+${JSON.stringify({ owner_entity: finalOwner, owner_type: p2Final.owner_type, acquisition_year: p2Final.acquisition_year, fcc_providers: p2Final.fcc_providers, isp_providers: p2Final.isp_providers, video_providers: p2Final.video_providers, bulk_detected: p2Final.bulk_detected, bulk_agreements: p2Final.bulk_agreements, roe_detected: p2Final.roe_detected, roe_providers: p2Final.roe_providers, roe_expiry_year: p2Final.roe_expiry_year, edgar_signal: p2Final.edgar_signal, last_sale_price: p2Final.last_sale_price, last_sale_date: p2Final.last_sale_date }, null, 2)}
 
 PHASE 3 — INTELLIGENCE:
-${JSON.stringify({ pain_signals: p3.pain_signals.slice(0, 12), proptech: p3.proptech, contacts: p3.contacts.slice(0, 8).map(c => ({ name: c.name, title: c.title, company: c.company, role_type: c.role_type })), email_format: p3.email_format }, null, 2)}`
+${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, contacts: cappedContacts, email_format: p3Final.email_format }, null, 2)}`
 
-    // ── PHASE 4: Sonnet synthesis + Haiku outreach plan — run in PARALLEL ───────
-    // Haiku is ~5x faster than Sonnet; both kick off at the same time so the
-    // outreach plan is ready by the time Sonnet finishes. This prevents the
-    // outreach plan from adding any latency to the critical path.
+    // v9: circuit breaker — if we're already over cost cap, skip Sonnet and use fallback
+    if (costTracker.isOverCap()) {
+      console.warn('[aria] cost cap reached before synthesis — using fallback data')
+      const rawData = buildFallbackRawData(p1, p2Final, p3Final, mgmt, finalOwner)
+      // ... fallback path continues below (messageResult will be a rejected promise)
+    }
+
     // ── PHASE 4: Sonnet synthesis + Haiku outreach plan — run in PARALLEL ───────
     // Promise.allSettled: if Sonnet fails (504/overload), fall back to deterministic
     // phase data instead of throwing — search data is never lost.
     const [messageResult, outreachResult, gatekeeperResult] = await Promise.allSettled([
-      anthropic.messages.create({
+      // v9: Prompt caching on system prompt — Anthropic caches large system prompts
+      // for up to 5 minutes. During concurrent searches the same synthesis instructions
+      // hit the cache, reducing Sonnet input token cost by ~90%.
+      costTracker.isOverCap()
+        ? Promise.reject(new Error('cost_cap_exceeded'))
+        : anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 2800,
         tools: [deepIntelTool],
         tool_choice: { type: 'tool', name: 'aria_deep_intel_result' },
-        system: `You assemble step-verified data into a final property intelligence report. Phases 1-3 are ground truth — copy directly. Use synthesis only to fill gaps and write the sales brief.
-
-CRITICAL RULES:
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        system: ([
+          {
+            type: 'text',
+            text: `You assemble step-verified data into a final property intelligence report. Phases 1-3 are ground truth — copy directly. Use synthesis only to fill gaps and write the sales brief.`,
+            cache_control: { type: 'ephemeral' },
+          },
+          {
+            type: 'text',
+            text: `CRITICAL RULES:
 1. property_details.units: copy from Phase 1
 2. property_details.management_company: copy from Phase 1 — NEVER overwrite with a person's name
 3. isp_providers: copy from Phase 2 isp_providers. If fcc_providers has names not in isp_providers, add them.
@@ -2343,50 +2553,24 @@ CRITICAL RULES:
    - Else if year_built known: MDU fiber = year_built+7 to year_built+10; cable bulk = year_built+5 to year_built+8
    - Set expiry_estimate = "Est. [year]-[year+2]" or specific year if known
 6. proptech: copy from Phase 3
-7. extracted_contacts: copy from Phase 3 contacts. STRICT SCHEMA — every item must have: name (string), title (string), company (string), email (string or ""), phone (raw number OR "Apollo Missing – Defaulting to Office: {leasing_number}" OR ""), phone_source ("direct"|"office_main"|null), linkedin_slug (path after /in/ or ""). Never omit fields, never use null for string fields.
-8. pain_signals: copy from Phase 3 — up to 20. Map Phase 3 type → signal_type: gate→gate_access, internet→internet, video_service→video_service, access_control→access_control, camera→camera_security, security→crime, package_locker→package_theft, smart_lock→smart_lock, automation→automation, water_sensor→water_sensor, intercom→intercom, crime→crime, management→management, general→general
-9. ownership: build from Phase 2 owner_entity + owner_type + acquisition_year
-10. If management_company blank: first check contacts[].company for a recurring company name among property_manager/regional_manager contacts — use that. Else if owner is a known RE firm → set management_company = owner_entity
-11. proptech.replacement_window: based on tech_generation + year_built (pre-2015=Immediate, 2015-19=1-3yr, 2020+=3-5yr)
+7. extracted_contacts: copy from Phase 3 contacts. STRICT SCHEMA — every item must have: name (string), title (string), company (string), email (string or ""), phone (raw number OR "Apollo Missing – Defaulting to Office: {leasing_number}" OR ""), phone_source ("direct"|"office_main"|null), linkedin_slug (path after /in/ or ""). Never omit fields, never use null for string fields.`,
+          },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ] as any),
 
-12. property_phone: MANDATORY — copy from Phase 1 confirmed_phone. If Phase 1 has no phone, set to "No data found". NEVER leave blank or null.
-13. property_details.units: if not found in Phase 1, set to "No data found". NEVER leave blank.
-14. property_details.year_built: if not found, set to "No data found". NEVER leave blank.
-15. property_details.occupancy: look in Phase 2/3 data. If not found, set to "No data found".
-16. property_details.last_sale_date: extract from Phase 2 last_sale_date field (IMP-6 EDGAR/transaction search). Format as "Month YYYY" or "YYYY". If not found, set to "No data found".
-17. property_details.last_sale_price: extract from Phase 2 last_sale_price field (IMP-6). Format as "$XM" or "$X,XXX,XXX". If not found, set to "No data found".
-17b. edgar_signal: set to true if Phase 2 edgar_signal=true — indicates REIT/fund ownership with SEC filings.
-18. property_details.assessed_value: look in Phase 2 permit/county data. If not found, set to "No data found".
-19. inferred_proptech: REQUIRED even if empty []. For each proptech CATEGORY where pain signals or reviews suggest a system exists but NO specific brand was found, add one inference entry. Example: reviews mention gate malfunctions, gate_operators[] is empty → add {category:"gate_operator", name:"Unknown brand", confidence_pct:65, reason:"Reviews mention gate access issues; no brand confirmed; LiftMaster ~60% MDU market share"}. Only infer if category arrays are empty AND evidence exists.
-
-ROE / CONTRACT DATA:
-- Phase 2 includes roe_detected, roe_providers, roe_expiry_year — use these to populate bulk_agreements
-- If roe_expiry_year is present: set capex_signal = "ROE expires [year] — contract window open"
-- If roe_detected and no year: set capex_signal = "ROE/bulk agreement detected — verify expiry"
-
-CONTRACT WINDOW:
-- If acquisition_year is last 2 years: add "New ownership — capex window open" to capex_signal
-
-CONTACT PRIORITY: Property Manager > Regional > Asset Manager > CEO
-
-key_finding: "[WHO] at [company] controls this. [WHY NOW: specific pain/contract/acquisition/ROE signal]"
-pitch_strategy.primary_hook: 1 sentence using THIS property's pain + contract/ROE window
-behavioral_profile: decision_style, communication_pref, risk_tolerance, budget_orientation
-freshness_score (1-10): 10=ROE expiry known + recent acquisition; 8=contract expiry/bulk detected; 6=pain signals; 4=basic intel; 2=inference only
-buying_trends: 1-sentence sales trend insight for this property type`,
         messages: [{ role: 'user', content: `Property: ${property_name}\nLocation: ${city}, ${state}\n\n${synthesisData}` }],
       }),
       // Haiku generates the 6-month outreach plan in parallel — adds zero latency
       generateOutreachPlan(
         property_name, city,
         p1.confirmed_units,
-        p2.isp_providers,
-        p2.roe_expiry_year,
-        p2.bulk_detected,
-        p3.pain_signals,
+        p2Final.isp_providers,
+        p2Final.roe_expiry_year,
+        p2Final.bulk_detected,
+        p3Final.pain_signals,
         null, // behavioral_profile not yet available (Sonnet hasn't finished)
         null, // pitch_strategy not yet available
-        p2.acquisition_year,
+        p2Final.acquisition_year,
         anthropic
       ),
       // Haiku generates a gatekeeper navigation script in parallel (fast, ~0.5s)
@@ -2396,7 +2580,7 @@ buying_trends: 1-sentence sales trend insight for this property type`,
         property_name,
         mgmt,
         officePhone,
-        p2.isp_providers[0] || '',
+        p2Final.isp_providers[0] || '',
         anthropic
       ),
     ])
@@ -2404,33 +2588,39 @@ buying_trends: 1-sentence sales trend insight for this property type`,
     // Build rawData from Sonnet result — or fall back to deterministic phase data if Sonnet failed
     let rawData: Record<string, any>
     if (messageResult.status === 'fulfilled') {
-      const toolBlock = messageResult.value.content.find(b => b.type === 'tool_use') as Anthropic.ToolUseBlock | undefined
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const msg = messageResult.value as any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const toolBlock = (msg.content as any[])?.find((b: any) => b.type === 'tool_use') as Anthropic.ToolUseBlock | undefined
       if (toolBlock) {
         rawData = toolBlock.input as Record<string, any>
+        costTracker.addSonnet(msg.usage?.input_tokens ?? 0, msg.usage?.output_tokens ?? 0)
       } else {
         // Sonnet responded but returned no tool_use block — treat as synthesis failure
         console.error('[aria] Phase 4 Sonnet returned no tool_use block')
-        rawData = buildFallbackRawData(p1, p2, p3, mgmt, finalOwner)
+        rawData = buildFallbackRawData(p1, p2Final, p3Final, mgmt, finalOwner)
       }
     } else {
       console.error('[aria] Phase 4 synthesis failed:', (messageResult as PromiseRejectedResult).reason)
-      rawData = buildFallbackRawData(p1, p2, p3, mgmt, finalOwner)
+      rawData = buildFallbackRawData(p1, p2Final, p3Final, mgmt, finalOwner)
     }
+
+    console.log(`[aria] v9 cost: ${costTracker.summary()}`)
 
     // outreachPlan + gatekeeper ready — Haiku finished while Sonnet was synthesising
     const outreachPlan = outreachResult.status === 'fulfilled' ? outreachResult.value : null
     const gatekeeperTipResult = gatekeeperResult.status === 'fulfilled' ? gatekeeperResult.value : null
 
     // ── Build final payload ───────────────────────────────────────────────────
-    const cleanIspProviders = normStrArr(p2.isp_providers.length ? p2.isp_providers : (rawData.isp_providers ?? []))
-    const cleanVideoProviders = normStrArr(p2.video_providers.length ? p2.video_providers : (rawData.video_providers ?? []))
-    const cleanBulkAgreements = p2.bulk_agreements.length ? p2.bulk_agreements : (rawData.bulk_agreements ?? [])
+    const cleanIspProviders = normStrArr(p2Final.isp_providers.length ? p2Final.isp_providers : (rawData.isp_providers ?? []))
+    const cleanVideoProviders = normStrArr(p2Final.video_providers.length ? p2Final.video_providers : (rawData.video_providers ?? []))
+    const cleanBulkAgreements = p2Final.bulk_agreements.length ? p2Final.bulk_agreements : (rawData.bulk_agreements ?? [])
 
-    const mergedDMChain = p3.contacts.filter(c => c.name).map(c => {
+    const mergedDMChain = p3Final.contacts.filter(c => c.name).map(c => {
       const directPhone = normStr(c.phone)
       return {
         name: c.name, title: c.title, company: c.company || mgmt || finalOwner,
-        role_type: c.role_type, email: c.email, top_email_format: p3.email_format,
+        role_type: c.role_type, email: c.email, top_email_format: p3Final.email_format,
         // Phone hierarchy: direct line first, then leasing office, then empty
         phone: directPhone ?? (officePhone ?? ''),
         phone_source: (directPhone ? 'direct' : (officePhone ? 'office_main' : null)) as 'direct' | 'office_main' | null,
@@ -2467,48 +2657,48 @@ buying_trends: 1-sentence sales trend insight for this property type`,
       market_context: {
         property_class: rawData.property_class || null,
         year_built: p1.confirmed_year_built || null,
-        tech_generation: p3.proptech.tech_generation,
+        tech_generation: p3Final.proptech.tech_generation,
         replacement_window: normStr(rawData.proptech?.replacement_window) || null,
-        acquisition_year: normStr(p2.acquisition_year) || null,
-        owner_type: normStr(p2.owner_type) || null,
+        acquisition_year: normStr(p2Final.acquisition_year) || null,
+        owner_type: normStr(p2Final.owner_type) || null,
         sara_signals: rawData.proptech?.sara_signals ?? false,
         buying_trends: normStr(rawData.buying_trends) || null,
       },
-      pain_angles: p3.pain_signals.slice(0, 8).map(s => ({ type: s.type, quote: s.quote, severity: s.severity })),
+      pain_angles: p3Final.pain_signals.slice(0, 8).map(s => ({ type: s.type, quote: s.quote, severity: s.severity })),
       connectivity: {
         isp_providers: cleanIspProviders,
         video_providers: cleanVideoProviders,
-        bulk_detected: p2.bulk_detected,
+        bulk_detected: p2Final.bulk_detected,
         provider_confirmed: cleanIspProviders.length > 0,
         bulk_agreements: cleanBulkAgreements,
-        roe_detected: p2.roe_detected,
-        roe_providers: p2.roe_providers,
-        roe_expiry_year: p2.roe_expiry_year,
-        contract_urgency: (p2.roe_detected || p2.bulk_detected) ? 'high' : 'medium',
-        contract_window: p2.roe_expiry_year
-          ? `ROE expires ${p2.roe_expiry_year}`
+        roe_detected: p2Final.roe_detected,
+        roe_providers: p2Final.roe_providers,
+        roe_expiry_year: p2Final.roe_expiry_year,
+        contract_urgency: (p2Final.roe_detected || p2Final.bulk_detected) ? 'high' : 'medium',
+        contract_window: p2Final.roe_expiry_year
+          ? `ROE expires ${p2Final.roe_expiry_year}`
           : normStr((cleanBulkAgreements[0] as any)?.expiry_estimate) || null,
       },
       proptech: {
-        gate_operators: p3.proptech.gate_operators,
-        access_control: p3.proptech.access_control,
-        intercoms: p3.proptech.intercoms,
-        cameras: p3.proptech.cameras,
-        smart_locks: p3.proptech.smart_locks,
-        tech_generation: p3.proptech.tech_generation,
+        gate_operators: p3Final.proptech.gate_operators,
+        access_control: p3Final.proptech.access_control,
+        intercoms: p3Final.proptech.intercoms,
+        cameras: p3Final.proptech.cameras,
+        smart_locks: p3Final.proptech.smart_locks,
+        tech_generation: p3Final.proptech.tech_generation,
         displacement_targets: normStrArr(rawData.proptech?.displacement_targets),
         sara_signals: rawData.proptech?.sara_signals ?? false,
       },
       contact_chain: mergedDMChain.slice(0, 5),
-      email_format: p3.email_format,
+      email_format: p3Final.email_format,
       behavioral_profile: rawData.behavioral_profile ?? null,
       pitch_strategy: rawData.pitch_strategy ?? null,
       key_finding: normStr(rawData.key_finding) ?? null,
       objection_flags: [
-        ...(p2.bulk_detected && cleanIspProviders.length > 0 ? [`Existing bulk deal with ${cleanIspProviders[0]} — needs contract expiry`] : []),
-        ...(p2.roe_detected && !p2.roe_expiry_year ? ['ROE detected — expiry date unknown, verify with property'] : []),
-        ...(p2.roe_expiry_year ? [`ROE expires ${p2.roe_expiry_year} — contract window opens soon`] : []),
-        ...(p2.acquisition_year && parseInt(p2.acquisition_year) >= new Date().getFullYear() - 1 ? ['Recent acquisition — capex window open'] : []),
+        ...(p2Final.bulk_detected && cleanIspProviders.length > 0 ? [`Existing bulk deal with ${cleanIspProviders[0]} — needs contract expiry`] : []),
+        ...(p2Final.roe_detected && !p2Final.roe_expiry_year ? ['ROE detected — expiry date unknown, verify with property'] : []),
+        ...(p2Final.roe_expiry_year ? [`ROE expires ${p2Final.roe_expiry_year} — contract window opens soon`] : []),
+        ...(p2Final.acquisition_year && parseInt(p2Final.acquisition_year) >= new Date().getFullYear() - 1 ? ['Recent acquisition — capex window open'] : []),
       ],
       outreach_plan: outreachPlan,
       outreach_sequence: ['email_1', 'call_1', 'linkedin_touch', 'email_2', 'call_2', 'email_3'],
@@ -2533,22 +2723,22 @@ buying_trends: 1-sentence sales trend insight for this property type`,
         isp_providers: cleanIspProviders,
         video_providers: cleanVideoProviders,
         bulk_agreements: cleanBulkAgreements,
-        roe_detected: p2.roe_detected,
-        roe_providers: p2.roe_providers,
-        roe_expiry_year: p2.roe_expiry_year,
+        roe_detected: p2Final.roe_detected,
+        roe_providers: p2Final.roe_providers,
+        roe_expiry_year: p2Final.roe_expiry_year,
         lat: coords?.lat ?? null,
         lng: coords?.lng ?? null,
-        _fcc_verified: p2.fcc_providers.length > 0,
-        _fcc_providers: p2.fcc_providers,
+        _fcc_verified: p2Final.fcc_providers.length > 0,
+        _fcc_providers: p2Final.fcc_providers,
         proptech: {
-          gate_operators: normStrArr(p3.proptech.gate_operators.length ? p3.proptech.gate_operators : rawData.proptech?.gate_operators),
-          access_control: normStrArr(p3.proptech.access_control.length ? p3.proptech.access_control : rawData.proptech?.access_control),
-          intercoms: normStrArr(p3.proptech.intercoms.length ? p3.proptech.intercoms : rawData.proptech?.intercoms),
-          cameras: normStrArr(p3.proptech.cameras.length ? p3.proptech.cameras : rawData.proptech?.cameras),
-          smart_locks: normStrArr(p3.proptech.smart_locks.length ? p3.proptech.smart_locks : rawData.proptech?.smart_locks),
-          resident_apps: normStrArr(p3.proptech.resident_apps.length ? p3.proptech.resident_apps : rawData.proptech?.resident_apps),
-          package_solutions: normStrArr(p3.proptech.package_solutions.length ? p3.proptech.package_solutions : rawData.proptech?.package_solutions),
-          tech_generation: normStr(p3.proptech.tech_generation ?? rawData.proptech?.tech_generation) ?? 'legacy',
+          gate_operators: normStrArr(p3Final.proptech.gate_operators.length ? p3Final.proptech.gate_operators : rawData.proptech?.gate_operators),
+          access_control: normStrArr(p3Final.proptech.access_control.length ? p3Final.proptech.access_control : rawData.proptech?.access_control),
+          intercoms: normStrArr(p3Final.proptech.intercoms.length ? p3Final.proptech.intercoms : rawData.proptech?.intercoms),
+          cameras: normStrArr(p3Final.proptech.cameras.length ? p3Final.proptech.cameras : rawData.proptech?.cameras),
+          smart_locks: normStrArr(p3Final.proptech.smart_locks.length ? p3Final.proptech.smart_locks : rawData.proptech?.smart_locks),
+          resident_apps: normStrArr(p3Final.proptech.resident_apps.length ? p3Final.proptech.resident_apps : rawData.proptech?.resident_apps),
+          package_solutions: normStrArr(p3Final.proptech.package_solutions.length ? p3Final.proptech.package_solutions : rawData.proptech?.package_solutions),
+          tech_generation: normStr(p3Final.proptech.tech_generation ?? rawData.proptech?.tech_generation) ?? 'legacy',
           sara_signals: rawData.proptech?.sara_signals ?? false,
           replacement_window: normStr(rawData.proptech?.replacement_window),
           displacement_targets: normStrArr(rawData.proptech?.displacement_targets),
@@ -2565,7 +2755,7 @@ buying_trends: 1-sentence sales trend insight for this property type`,
         phone_source: (normStr(bestContact?.phone) ? 'direct' : (officePhone ? 'office_main' : null)) as 'direct' | 'office_main' | null,
         gatekeeper_tip: gatekeeperTipResult ?? null,
         tenure_years: 0,
-        top_email_format: p3.email_format || '',
+        top_email_format: p3Final.email_format || '',
         linkedin_slug: normStr(bestContact?.linkedin?.split('/in/')?.[1] || fallback.linkedin_slug) ?? '',
       },
       decision_maker_chain: mergedDMChain.length > 0 ? mergedDMChain
@@ -2582,20 +2772,20 @@ buying_trends: 1-sentence sales trend insight for this property type`,
           }),
       ownership: {
         owner_entity: normStr(finalOwner || rawData.ownership?.owner_entity),
-        owner_type: normStr(p2.owner_type || rawData.ownership?.owner_type),
+        owner_type: normStr(p2Final.owner_type || rawData.ownership?.owner_type),
         portfolio_size: normStr(rawData.ownership?.portfolio_size),
-        acquisition_year: normStr(p2.acquisition_year || rawData.ownership?.acquisition_year),
+        acquisition_year: normStr(p2Final.acquisition_year || rawData.ownership?.acquisition_year),
         sale_price: null,
         capex_signal: normStr(rawData.ownership?.capex_signal),
       },
-      pain_signals: p3.pain_signals.length > 0 ? p3.pain_signals : (rawData.pain_signals ?? []),
+      pain_signals: p3Final.pain_signals.length > 0 ? p3Final.pain_signals : (rawData.pain_signals ?? []),
       profile: {
         buy_score: rawData.freshness_score ? Math.round(rawData.freshness_score * 1.0 + 0) : 5,
-        urgency: p3.pain_signals.filter(s => s.type === 'gate').length > 2 || p2.bulk_detected ? 'high' : 'medium',
+        urgency: p3Final.pain_signals.filter(s => s.type === 'gate').length > 2 || p2Final.bulk_detected ? 'high' : 'medium',
         primary_concern: normStr(rawData.key_finding?.slice(0, 300)) ?? 'No critical vulnerabilities detected',
-        current_vendor: normStr((cleanBulkAgreements[0] as any)?.provider ?? cleanIspProviders[0] ?? p2.roe_providers[0]),
-        contract_window: p2.roe_expiry_year
-          ? `ROE expires ${p2.roe_expiry_year}`
+        current_vendor: normStr((cleanBulkAgreements[0] as any)?.provider ?? cleanIspProviders[0] ?? p2Final.roe_providers[0]),
+        contract_window: p2Final.roe_expiry_year
+          ? `ROE expires ${p2Final.roe_expiry_year}`
           : normStr((cleanBulkAgreements[0] as any)?.expiry_estimate),
         communication_style: normStr(rawData.behavioral_profile?.communication_pref) ?? 'Email',
       },
@@ -2605,8 +2795,8 @@ buying_trends: 1-sentence sales trend insight for this property type`,
       buying_trends: normStr(rawData.buying_trends),
       scout_brief: {
         primary_contact: normStr(bestContact?.name) ?? mgmt ?? property_name,
-        outreach_angle: p2.bulk_detected ? 'contract_window' : 'tech_displacement',
-        contract_window_urgency: p2.bulk_detected ? 'high' : 'medium',
+        outreach_angle: p2Final.bulk_detected ? 'contract_window' : 'tech_displacement',
+        contract_window_urgency: p2Final.bulk_detected ? 'high' : 'medium',
         key_data_points: rawData.key_finding ? [rawData.key_finding] : [],
       },
       scout_queue: scoutQueue,
@@ -2620,7 +2810,7 @@ buying_trends: 1-sentence sales trend insight for this property type`,
       const { data: searchRow } = await supabaseDeep.from('aria_searches').insert({
         query: originalQuery,
         query_interpretation: `ARIA ${ARIA_ENGINE_VERSION} — ${property_name}`,
-        results: { mode: 'deep', engine_version: ARIA_ENGINE_VERSION, prospects: [prospectPayload], fccVerified: p2.fcc_providers.length > 0, webIntelligence: true },
+        results: { mode: 'deep', engine_version: ARIA_ENGINE_VERSION, prospects: [prospectPayload], fccVerified: p2Final.fcc_providers.length > 0, webIntelligence: true },
         search_type: 'deep', user_id: userId,
         user_name: portalUser.name, user_email: portalUser.email,
         org_id: portalUser.org_id ?? null,
@@ -2708,18 +2898,18 @@ buying_trends: 1-sentence sales trend insight for this property type`,
       search_run_id: searchRunId,
       quality_gates: qualityGates,
       // v8 Ticket 5: PropTech Scout findings with confidence scores + source URLs
-      proptech_findings: p3.proptech_findings,
-      sources: p3.raw_excerpts.filter(r => r.url && r.score > 0.3).slice(0, 8).map(r => ({
+      proptech_findings: p3Final.proptech_findings,
+      sources: p3Final.raw_excerpts.filter(r => r.url && r.score > 0.3).slice(0, 8).map(r => ({
         title: r.title, url: r.url, excerpt: r.content.slice(0, 200), score: r.score, type: r.source ?? 'web',
       })),
       intelligence_sources: {
-        fcc: p2.fcc_providers.length > 0,
-        resident_reviews: p3.raw_excerpts.length > 0,
-        apollo: p3.contacts.length > 0,
-        ninjapear_verified: p3.contacts.some(c => c.verified),
+        fcc: p2Final.fcc_providers.length > 0,
+        resident_reviews: p3Final.raw_excerpts.length > 0,
+        apollo: p3Final.contacts.length > 0,
+        ninjapear_verified: p3Final.contacts.some(c => c.verified),
         serper_active: !!process.env.SERPER_API_KEY,
       },
-      fccVerified: p2.fcc_providers.length > 0,
+      fccVerified: p2Final.fcc_providers.length > 0,
       webIntelligence: true,
     })
 

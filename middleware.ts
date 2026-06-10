@@ -47,6 +47,8 @@ function isBypassPath(pathname: string): boolean {
     ) ||
     // Inngest webhook — event routing; platform authenticates via signing key
     pathname.startsWith('/api/inngest') ||
+    // Stripe webhook — raw HTTP POST with Stripe-Signature header, no Clerk session
+    pathname.startsWith('/api/billing/webhook') ||
     // Auth flows
     pathname.startsWith('/sign-in') ||
     pathname.startsWith('/sign-up') ||

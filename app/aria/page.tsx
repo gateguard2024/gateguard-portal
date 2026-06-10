@@ -624,9 +624,20 @@ export default function ARIAPage() {
   const [cacheStatus, setCacheStatus]       = useState<'fresh' | 'stale' | 're-enriching' | null>(null);
   const [cacheAgeHours, setCacheAgeHours]   = useState<number | null>(null);
   const [propertyId, setPropertyId]         = useState<string | null>(null);
+  // v9: Credit system
+  const [creditBalance, setCreditBalance]   = useState<number | null>(null);
+  const [creditLoading, setCreditLoading]   = useState(false);
+  const [purchaseLoading, setPurchaseLoading] = useState(false);
+  // v9: 72-hour memory
+  const [recentRuns, setRecentRuns]         = useState<Array<{
+    id: string; query: string; created_at: string;
+    primary_property: { name: string; city: string; state: string } | null;
+    has_intel_cache: boolean;
+  }>>([]);
   const inputRef = useRef<HTMLInputElement>(null);
-  // Suppress unused warning — viewMode reserved for richer state tracking
+  // Suppress unused warnings — reserved for richer state tracking
   void viewMode;
+  void creditLoading;
 
   useEffect(() => {
     fetch('/api/aria/searches')
@@ -640,6 +651,16 @@ export default function ARIAPage() {
     fetch('/api/aria/properties?limit=1')
       .then(r => r.ok ? r.json() : { total: 0 })
       .then(d => setDbTotal(d.total ?? 0))
+      .catch(() => {});
+    // v9: Fetch credit balance
+    fetch('/api/aria/credits/balance')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d != null) setCreditBalance(d.balance ?? 0); })
+      .catch(() => {});
+    // v9: Fetch 72-hour search memory
+    fetch('/api/aria/search-runs?limit=10')
+      .then(r => r.ok ? r.json() : { runs: [] })
+      .then(d => setRecentRuns(d.runs ?? []))
       .catch(() => {});
   }, []);
 
@@ -721,7 +742,7 @@ export default function ARIAPage() {
             fetch('/api/aria/enrich', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ query: query.trim() }),
+              body: JSON.stringify({ query: query.trim(), propertyId: cacheData.property_id ?? undefined }),
             }).then(r => { if (r.ok) setCacheStatus('re-enriching'); }).catch(() => {});
           }
           if (cacheData.savedSearchId) setSavedSearchId(cacheData.savedSearchId);
@@ -757,6 +778,11 @@ export default function ARIAPage() {
     try {
       const data = await apiPromise;
       clearInterval(synthInterval);
+      // v9: Handle 402 insufficient credits — surface buy flow
+      if (data.error && data.credits_required) {
+        setCreditBalance(data.balance ?? 0);
+        throw new Error(`Insufficient credits — ${data.balance ?? 0} available, ${data.credits_required} required. Purchase credits to continue.`);
+      }
       if (data.error) throw new Error(data.error);
 
       // Candidate response — show grid of properties to research
@@ -963,6 +989,26 @@ export default function ARIAPage() {
   const isDone    = phase === 6;
   const prospect  = results?.prospects?.[selectedProspect];
 
+  // v9: Credit purchase helper
+  async function handleBuyCredits(packageId?: string) {
+    setPurchaseLoading(true)
+    try {
+      // If no package ID, open a simple tier chooser by defaulting to Standard (2000 credits)
+      // For now: fetch packages and pick Standard as default, or pass through
+      const res = await fetch('/api/billing/credits/purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ package_id: packageId ?? '__standard__' }),
+      })
+      const d = await res.json()
+      if (d.checkout_url) window.location.href = d.checkout_url
+    } catch {
+      // fail silently — user will see button re-enable
+    } finally {
+      setPurchaseLoading(false)
+    }
+  }
+
   // ── TopBar actions ─────────────────────────────────────────────────────────
   const topbarActions = (
     <div className="flex items-center gap-2">
@@ -1047,6 +1093,27 @@ export default function ARIAPage() {
           )}
         </>
       )}
+      {/* v9 Credit balance chip */}
+      <div className="hidden lg:flex items-center gap-2 pl-2 border-l border-slate-200/60">
+        {creditBalance === null ? (
+          <div className="h-7 w-20 bg-slate-100 rounded-lg animate-pulse" />
+        ) : creditBalance >= 100 ? (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold border"
+            style={{ background: 'rgba(107,126,255,0.06)', borderColor: 'rgba(107,126,255,0.2)', color: '#5B6EE8' }}>
+            <Zap size={10} />
+            {creditBalance.toLocaleString()} credits
+          </div>
+        ) : (
+          <button
+            onClick={() => handleBuyCredits()}
+            disabled={purchaseLoading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold border text-amber-700 hover:bg-amber-50 transition-colors disabled:opacity-60"
+            style={{ borderColor: 'rgba(245,158,11,0.4)', background: 'rgba(251,191,36,0.06)' }}
+          >
+            {purchaseLoading ? <Loader2 size={10} className="animate-spin" /> : <><AlertCircle size={10} /> {creditBalance === 0 ? 'Buy Credits' : `${creditBalance} left`}</>}
+          </button>
+        )}
+      </div>
     </div>
   );
 
@@ -1227,7 +1294,7 @@ export default function ARIAPage() {
   function PropertyTab({ p }: { p: Prospect }) {
     return (
       <div className="grid grid-cols-2 gap-5 max-w-5xl animate-in fade-in slide-in-from-bottom-2 duration-500">
-        <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+        <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
           <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Property Telemetry</p>
           <div className="space-y-3">
             {[
@@ -1278,7 +1345,7 @@ export default function ARIAPage() {
           </div>
         </div>
 
-        <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+        <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
           <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Financial &amp; Connectivity</p>
           {p.ownership && (
             <div className="space-y-3 mb-4">
@@ -1540,7 +1607,7 @@ export default function ARIAPage() {
           })()}
 
         {/* Primary contact card + CRM import */}
-        <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+        <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
           <div className="flex items-center justify-between mb-4">
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Primary Contact</p>
             {savedSearchId && !crmImported && !importResult[savedSearchId] && (
@@ -1614,7 +1681,7 @@ export default function ARIAPage() {
 
         {/* Property-Level Contacts */}
         {propertyContacts.length > 0 && (
-          <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+          <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-2 h-2 rounded-full bg-emerald-400" />
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Property Level</p>
@@ -1629,7 +1696,7 @@ export default function ARIAPage() {
 
         {/* Ownership-Level Contacts */}
         {ownershipContacts.length > 0 && (
-          <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+          <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-2 h-2 rounded-full bg-purple-400" />
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Ownership Level</p>
@@ -1648,7 +1715,7 @@ export default function ARIAPage() {
 
         {/* Fallback: show all if not separated */}
         {propertyContacts.length === 0 && ownershipContacts.length === 0 && chain.length > 0 && (
-          <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+          <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
             <div className="flex items-center gap-2 mb-4">
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Corporate Hierarchy</p>
               <span className="ml-auto text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">{chain.length} Nodes</span>
@@ -1732,7 +1799,7 @@ export default function ARIAPage() {
 
         {/* Video Agreements */}
         {(hasVideoAgreements || p.property?.video_providers?.length) && (
-          <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+          <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
             <div className="flex items-center gap-2 mb-4">
               <Globe size={15} className="text-violet-500" />
               <p className="text-xs font-bold uppercase tracking-widest text-slate-700">Video Agreements</p>
@@ -1754,7 +1821,7 @@ export default function ARIAPage() {
 
         {/* Internet Agreements */}
         {(hasInternetAgreements || p.property?.isp_providers?.length) && (
-          <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+          <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
             <div className="flex items-center gap-2 mb-4">
               <Wifi size={15} className="text-emerald-500" />
               <p className="text-xs font-bold uppercase tracking-widest text-slate-700">Internet Agreements</p>
@@ -1783,7 +1850,7 @@ export default function ARIAPage() {
 
         {/* Gates & Access Control */}
         {(pt.gate_operators?.length || pt.access_control?.length || pt.intercoms?.length) && (
-          <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+          <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
             <div className="flex items-center gap-2 mb-4">
               <Shield size={15} className="text-orange-500" />
               <p className="text-xs font-bold uppercase tracking-widest text-slate-700">Gates &amp; Access Control</p>
@@ -1814,7 +1881,7 @@ export default function ARIAPage() {
 
         {/* Cameras & Security */}
         {pt.cameras?.length && (
-          <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+          <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
             <div className="flex items-center gap-2 mb-4">
               <Radio size={15} className="text-slate-500" />
               <p className="text-xs font-bold uppercase tracking-widest text-slate-700">Cameras &amp; Security</p>
@@ -1825,7 +1892,7 @@ export default function ARIAPage() {
 
         {/* SmartRent & other tech */}
         {(pt.smart_locks?.length || pt.resident_apps?.length || pt.package_solutions?.length) && (
-          <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+          <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
             <div className="flex items-center gap-2 mb-4">
               <Package size={15} className="text-indigo-500" />
               <p className="text-xs font-bold uppercase tracking-widest text-slate-700">SmartRent &amp; Other Tech</p>
@@ -1918,7 +1985,7 @@ export default function ARIAPage() {
 
           {/* ── Cold Call Script ──────────────────────────── */}
           {(p as Prospect | undefined)?.pitch_strategy?.primary_hook && (
-            <div className="bg-white/80 rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+            <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
               <div className="flex items-center gap-2 mb-4">
                 <span className="text-base">📞</span>
                 <p className="text-xs font-bold uppercase tracking-widest text-slate-700">Cold Call Script</p>
@@ -3139,10 +3206,16 @@ export default function ARIAPage() {
       {/* ── Desktop split layout ────────────────────────────────────────── */}
       <div className="hidden lg:flex flex-1 overflow-hidden" style={{ height: 'calc(100vh - 57px)' }}>
 
-        {/* Left panel */}
-        <div className="flex flex-col border-r border-slate-200/60 bg-slate-50/30 shrink-0" style={{ width: 280 }}>
-          <div className="p-4 border-b border-slate-200/60 bg-white/50 backdrop-blur-sm">
-            <div className="flex items-center gap-2 bg-white border border-slate-200/60 rounded-xl px-3 py-2.5 mb-3 shadow-inner focus-within:border-[#6B7EFF]/50 focus-within:ring-2 focus-within:ring-[#6B7EFF]/10 transition-all">
+        {/* Left panel — v9 glassmorphism */}
+        <div className="flex flex-col shrink-0" style={{
+          width: 280,
+          background: 'rgba(248,250,252,0.85)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderRight: '1px solid rgba(107,126,255,0.1)',
+        }}>
+          <div className="p-4 border-b" style={{ borderColor: 'rgba(107,126,255,0.08)', background: 'rgba(255,255,255,0.6)', backdropFilter: 'blur(16px)' }}>
+            <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 mb-3 transition-all focus-within:ring-2 focus-within:ring-[#6B7EFF]/15" style={{ background: 'rgba(255,255,255,0.85)', border: '1px solid rgba(107,126,255,0.15)', backdropFilter: 'blur(8px)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.04)' }}>
               <Search size={14} className="text-slate-400 shrink-0" />
               <input
                 ref={inputRef}
@@ -3177,14 +3250,31 @@ export default function ARIAPage() {
               </button>
             ))}
           </div>
-            <button
-              onClick={runARIA}
-              disabled={isRunning || !query.trim()}
-              className="w-full py-2.5 rounded-xl text-white text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-sm hover:opacity-90"
-              style={{ background: isRunning ? "#94a3b8" : "linear-gradient(135deg, #0d2150 0%, #1a3a7c 45%, #6B7EFF 100%)" }}
-            >
-              {isRunning ? <><Loader2 size={12} className="animate-spin" /> Synchronizing...</> : <><Zap size={12} /> Launch ARIA</>}
-            </button>
+            {/* v9 Credit gate — buy if balance=0, else show cost */}
+            {creditBalance === 0 ? (
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => handleBuyCredits()}
+                  disabled={purchaseLoading}
+                  className="w-full py-2.5 rounded-xl text-white text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-60 transition-all shadow-sm"
+                  style={{ background: 'linear-gradient(135deg, #D97706, #F59E0B)' }}
+                >
+                  {purchaseLoading ? <Loader2 size={12} className="animate-spin" /> : <><AlertCircle size={12} /> Buy Credits to Search</>}
+                </button>
+                <p className="text-[9px] text-center text-slate-400 font-medium">100 credits / search · Starting at $5</p>
+              </div>
+            ) : (
+              <button
+                onClick={runARIA}
+                disabled={isRunning || !query.trim()}
+                className="w-full py-2.5 rounded-xl text-white text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-sm hover:opacity-90"
+                style={{ background: isRunning ? "#94a3b8" : "linear-gradient(135deg, #0d2150 0%, #1a3a7c 45%, #6B7EFF 100%)" }}
+              >
+                {isRunning
+                  ? <><Loader2 size={12} className="animate-spin" /> Synchronizing...</>
+                  : <><Zap size={12} /> Launch ARIA <span className="opacity-60 font-medium text-[10px]">· 100 credits</span></>}
+              </button>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto px-3 py-4">
@@ -3208,6 +3298,37 @@ export default function ARIAPage() {
               </div>
             ) : (
               <div className="animate-in fade-in duration-300">
+                {/* v9: 72-hour run memory */}
+                {!isRunning && recentRuns.length > 0 && (
+                  <div className="mb-5">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-2 mb-2 flex items-center gap-1.5">
+                      <Clock size={9} />
+                      72-Hour Memory
+                    </p>
+                    {recentRuns.slice(0, 6).map(run => (
+                      <button
+                        key={run.id}
+                        onClick={() => { setQuery(run.query); inputRef.current?.focus(); }}
+                        className="block w-full text-left px-3 py-2 rounded-xl mb-1 border border-transparent hover:bg-white hover:border-slate-200/60 hover:shadow-sm transition-all group"
+                      >
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className="text-[11px] font-semibold text-slate-700 truncate flex-1 group-hover:text-[#6B7EFF]">
+                            {run.primary_property?.name ?? run.query}
+                          </span>
+                          {run.has_intel_cache && (
+                            <span className="shrink-0 text-[8px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 border border-emerald-200/60">cached</span>
+                          )}
+                        </div>
+                        {run.primary_property && (
+                          <p className="text-[9px] text-slate-400 truncate">
+                            {run.primary_property.city}, {run.primary_property.state}
+                          </p>
+                        )}
+                        <p className="text-[9px] text-slate-400 mt-0.5">{formatAge(run.created_at)}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {!isRunning && savedSearches.length > 0 && (
                   <div className="mb-6">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-2 mb-3">Recent Memory</p>
@@ -3230,8 +3351,8 @@ export default function ARIAPage() {
           </div>
         </div>
 
-        {/* Right panel */}
-        <div className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: 'rgba(248, 250, 252, 0.95)' }}>
+        {/* Right panel — v9 glass */}
+        <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'linear-gradient(160deg, rgba(248,250,252,0.98) 0%, rgba(243,244,255,0.96) 100%)' }}>
           {dbView ? (
             <IntelDBPanel />
 ) : isRunning ? (

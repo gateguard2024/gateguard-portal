@@ -1,18 +1,27 @@
 /**
  * GET /api/aria/cache?query=...
  *
- * Fast cache lookup against aria_properties (<200ms).
- * Returns an existing Prospect-shaped record if one exists and
- * was last enriched within the 14-day freshness TTL.
+ * ARIA v9 — Fast cache lookup against aria_properties (<200ms target).
  *
- * Used by the ARIA page SWR fast-path:
- *   - Cache hit  → show result instantly, fire background re-enrichment
- *   - Cache miss → fall through to full deep route (normal flow)
+ * Lookup order:
+ *   1. isProspectingQuery() guard — returns {hit:false} immediately for market/criteria queries
+ *      that should never cache-match a specific property.
+ *   2. Vector search (primary) — embeds the query and finds nearest property by cosine
+ *      similarity (threshold 0.88). 1.5s AbortSignal prevents latency spikes.
+ *   3. ILIKE fuzzy match (fallback) — 3-pattern ILIKE across property_name if vector
+ *      search returns no result or embedding fails.
+ *
+ * Returns:
+ *   Cache hit  → { hit: true, is_stale: boolean, prospect, ... }
+ *   Cache miss → { hit: false, reason: '...' }
+ *
+ * Used by the ARIA page SWR fast-path. is_stale=true triggers Inngest re-enrichment.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { createClient } from '@supabase/supabase-js'
+import { embedBatch } from '@/lib/vectorize'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,10 +31,85 @@ const supabase = createClient(
 )
 
 const FRESHNESS_DAYS = 14
+const VECTOR_SIMILARITY_THRESHOLD = 0.88
+const VECTOR_TIMEOUT_MS = 1500
 
-// Same fuzzy-match logic as lookupExistingProperty in the deep route
+// ─── Prospecting query guard ──────────────────────────────────────────────────
+// Returns true for queries that describe a MARKET or CRITERIA, not a specific property.
+// These MUST go through the full pipeline — never cache-match a specific property.
+const PROSPECTING_PATTERNS = [
+  /\bproperties\s+in\b/i,
+  /\bmultifamily\s+in\b/i,
+  /\bapartments?\s+in\b/i,
+  /\bcomplexes?\s+in\b/i,
+  /\bmarket\b.*(in|near|around)\b/i,
+  /\bexpiring\s+(roe|bulk|contract|agreement)/i,
+  /\bROE\s+expir/i,
+  /\bMDU\b.*\b(in|near|with)\b/i,
+  /\bbulk\s+agreement/i,
+  /\b\d{3,}\+?\s+units?\b/i,        // "200+ units"
+  /\bwith\s+(gate|gated|access|internet|wifi|fiber)\b/i,
+  /\b(gate|internet|isp)\s+complaints?\b/i,
+  /\b(city|area|market|region)\s+of\b/i,
+  /\b(find|show|list|search)\b.*(properties|apartments|complexes)/i,
+]
+
+function isProspectingQuery(query: string): boolean {
+  return PROSPECTING_PATTERNS.some(p => p.test(query))
+}
+
+// ─── Column list for cache queries ───────────────────────────────────────────
+const CACHE_COLS = [
+  'id','property_name','address','city','state','units','year_built','property_type','class',
+  'management_company','owner_entity','owner_type','acquisition_year','capex_signal',
+  'isp_providers','video_providers','bulk_agreements','fcc_verified',
+  'gate_operators','access_control','intercoms','cameras','smart_locks',
+  'resident_apps','package_solutions','tech_generation','sara_signals',
+  'replacement_window','displacement_targets',
+  'buy_score','urgency','primary_concern','current_vendor','contract_window',
+  'contract_expiry_year','communication_style','behavioral_profile','pitch_strategy',
+  'pain_signals','dm_name','dm_title','dm_company','dm_email','dm_phone',
+  'dm_linkedin_slug','dm_chain','scout_brief',
+  'roe_detected','roe_providers','roe_expiry_year',
+  'times_researched','last_researched_at','aria_confidence',
+  'sales_stage','sales_notes','assigned_rep',
+].join(',')
+
+// ─── Vector search (primary path) ────────────────────────────────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function findCachedProperty(query: string): Promise<Record<string, any> | null> {
+async function findByVector(query: string): Promise<Record<string, any> | null> {
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), VECTOR_TIMEOUT_MS)
+
+    const embedPromise = embedBatch([query])
+    const embedding = await Promise.race([
+      embedPromise,
+      new Promise<never>((_, reject) =>
+        controller.signal.addEventListener('abort', () => reject(new Error('vector_timeout')))
+      ),
+    ]).finally(() => clearTimeout(timer))
+
+    if (!embedding?.[0]) return null
+
+    const { data, error } = await supabase.rpc('find_aria_property_by_embedding', {
+      p_embedding: embedding[0],
+      p_threshold: VECTOR_SIMILARITY_THRESHOLD,
+    })
+
+    if (error || !data?.length) return null
+    return data[0] as Record<string, any>
+  } catch (err) {
+    // Vector path failed (timeout, embedding error, RPC error) → caller falls back to ILIKE
+    const msg = err instanceof Error ? err.message : 'vector_error'
+    console.warn('[aria/cache] vector search skipped:', msg)
+    return null
+  }
+}
+
+// ─── ILIKE fuzzy match (fallback) ────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function findByIlike(query: string): Promise<Record<string, any> | null> {
   const COMMON_MGMT_WORDS = new Set([
     'investment','corporation','corp','inc','llc','management','property',
     'properties','residential','realty','greystar','northland','cortland',
@@ -37,27 +121,11 @@ async function findCachedProperty(query: string): Promise<Record<string, any> | 
   const fullNorm = query.replace(/,?\s+(atlanta|austin|dallas|houston|chicago|phoenix|denver|nashville|miami|charlotte|raleigh|seattle|boston|NYC|new york|los angeles|san francisco|[A-Z]{2})$/i, '').trim()
   const patterns = [...new Set([lastTwo, skipFirst, fullNorm].filter(p => p.length >= 3))]
 
-  const cols = [
-    'id','property_name','address','units','year_built','property_type','class',
-    'management_company','owner_entity','owner_type','acquisition_year','capex_signal',
-    'isp_providers','video_providers','bulk_agreements','fcc_verified',
-    'gate_operators','access_control','intercoms','cameras','smart_locks',
-    'resident_apps','package_solutions','tech_generation','sara_signals',
-    'replacement_window','displacement_targets',
-    'buy_score','urgency','primary_concern','current_vendor','contract_window',
-    'contract_expiry_year','communication_style','behavioral_profile','pitch_strategy',
-    'pain_signals','dm_name','dm_title','dm_company','dm_email','dm_phone',
-    'dm_linkedin_slug','dm_chain','scout_brief',
-    'roe_detected','roe_providers','roe_expiry_year',
-    'times_researched','last_researched_at','aria_confidence',
-    'sales_stage','sales_notes','assigned_rep',
-  ].join(',')
-
   for (const pattern of patterns) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data } = await supabase
       .from('aria_properties')
-      .select(cols)
+      .select(CACHE_COLS)
       .ilike('property_name', `%${pattern}%`)
       .limit(1)
       .maybeSingle() as { data: Record<string, any> | null; error: unknown }
@@ -66,7 +134,17 @@ async function findCachedProperty(query: string): Promise<Record<string, any> | 
   return null
 }
 
-// Map aria_properties DB row → Prospect shape (mirrors deep route's prospectPayload)
+// ─── Main lookup ─────────────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function findCachedProperty(query: string): Promise<Record<string, any> | null> {
+  // Try vector first, fall back to ILIKE
+  const vectorResult = await findByVector(query)
+  if (vectorResult) return vectorResult
+  return findByIlike(query)
+}
+
+// ─── DB row → Prospect shape ──────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function dbRowToProspect(row: Record<string, any>) {
   const proptech = {
     gate_operators:      row.gate_operators      ?? [],
@@ -82,9 +160,11 @@ function dbRowToProspect(row: Record<string, any>) {
     displacement_targets: row.displacement_targets ?? [],
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const dmChain: any[] = Array.isArray(row.dm_chain) ? row.dm_chain : []
-
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const bestDm = dmChain.find((c: any) => c.role_type === 'property_manager')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     || dmChain.find((c: any) => c.role_type === 'regional_manager')
     || dmChain[0]
 
@@ -92,8 +172,8 @@ function dbRowToProspect(row: Record<string, any>) {
     property: {
       name:               row.property_name,
       address:            row.address,
-      city:               null,   // not stored in top-level columns
-      state:              null,
+      city:               row.city ?? null,
+      state:              row.state ?? null,
       units:              row.units             ?? null,
       year_built:         row.year_built        ?? null,
       property_type:      row.property_type     ?? 'multifamily',
@@ -101,7 +181,7 @@ function dbRowToProspect(row: Record<string, any>) {
       occupancy:          null,
       management_company: row.management_company ?? null,
       owner_entity:       row.owner_entity      ?? null,
-      phone:              row.dm_phone          ?? null,   // best we have in DB
+      phone:              row.dm_phone          ?? null,
       isp_providers:      row.isp_providers     ?? [],
       video_providers:    row.video_providers   ?? [],
       bulk_agreements:    row.bulk_agreements   ?? [],
@@ -146,6 +226,7 @@ function dbRowToProspect(row: Record<string, any>) {
   }
 }
 
+// ─── GET handler ─────────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   try {
     const { userId } = await auth()
@@ -154,17 +235,22 @@ export async function GET(req: NextRequest) {
     const query = req.nextUrl.searchParams.get('query')?.trim()
     if (!query) return NextResponse.json({ hit: false, reason: 'no_query' })
 
+    // ── Catch 1: Prospecting query guard ─────────────────────────────────────
+    // Must run BEFORE any embedding call or DB query.
+    // Prospecting queries describe a market, not a property — never cache-match.
+    if (isProspectingQuery(query)) {
+      return NextResponse.json({ hit: false, reason: 'prospecting_query' })
+    }
+
     const row = await findCachedProperty(query)
     if (!row) return NextResponse.json({ hit: false, reason: 'not_found' })
 
-    // Check freshness TTL
+    // Freshness check
     const lastResearched = row.last_researched_at ? new Date(row.last_researched_at) : null
     const ageMs = lastResearched ? Date.now() - lastResearched.getTime() : Infinity
     const ageHours = Math.floor(ageMs / (1000 * 60 * 60))
     const ageDays = ageHours / 24
 
-    // Always return the data — client decides freshness.
-    // is_stale=true means the client should fire background re-enrichment via Inngest.
     const isStale = ageDays > FRESHNESS_DAYS
     const prospect = dbRowToProspect(row)
 
