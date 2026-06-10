@@ -33,6 +33,57 @@ const DOC_LABELS: Record<string, string> = {
   sales_partner_agreement:     'Sales Partner Agreement',
 }
 
+function escapeHtml(value: unknown) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+function buildNdaHtml({ signerName, signerEmail, signerCompany, sentByName, version }: { signerName?: string | null; signerEmail: string; signerCompany?: string | null; sentByName: string; version?: string | null }) {
+  const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  const partnerName = signerCompany || signerName || signerEmail
+  const senderName = sentByName || 'GateGuard'
+
+  return `Mutual Non-Disclosure Agreement
+Version: ${version || 'v1.0'}
+Effective Date: ${today}
+
+This Mutual Non-Disclosure Agreement (the "Agreement") is entered into by and between GateGuard, LLC ("GateGuard") and ${escapeHtml(partnerName)} ("Partner").
+
+Partner Contact
+Name: ${escapeHtml(signerName || partnerName)}
+Email: ${escapeHtml(signerEmail)}
+Company: ${escapeHtml(partnerName)}
+
+Purpose
+GateGuard and Partner may exchange confidential business, technical, customer, pricing, product, operational, security, dealer-network, and property information while evaluating or performing a potential business relationship.
+
+Confidential Information
+Confidential Information includes non-public information shared by either party, whether written, oral, electronic, visual, or otherwise, including business plans, customer and property data, system designs, access-control information, pricing, proposals, technical documents, software, processes, dealer materials, training materials, and financial information.
+
+Obligations
+Each party agrees to protect the other party's Confidential Information with reasonable care, use it only for the business purpose described above, and not disclose it to third parties except to representatives who need to know and are bound by confidentiality obligations.
+
+Exclusions
+Confidential Information does not include information that is publicly available through no fault of the receiving party, already known without restriction, independently developed without use of the disclosing party's information, or rightfully received from a third party without confidentiality obligations.
+
+Term
+The confidentiality obligations begin on the Effective Date and continue for three (3) years from the date of disclosure, except trade secrets, security-sensitive information, customer information, and access-control information remain protected for as long as permitted by law.
+
+No License or Obligation
+This Agreement does not grant ownership, license, or other rights in Confidential Information and does not require either party to proceed with any transaction or business relationship.
+
+Electronic Signature
+By signing electronically, Partner confirms that the signer has authority to sign for ${escapeHtml(partnerName)} and agrees that the electronic signature is legally binding under applicable electronic-signature laws.
+
+Sent by: ${escapeHtml(senderName)} · GateGuard
+Recipient: ${escapeHtml(signerEmail)}
+`
+}
+
 export async function POST(req: NextRequest) {
   try {
     const caller = await getCurrentUser()
@@ -59,7 +110,9 @@ export async function POST(req: NextRequest) {
 
     let resolvedUrl = document_url ?? null
     let resolvedVersion = document_version ?? null
-    if (!resolvedUrl) {
+    let resolvedHtml = document_html ?? null
+
+    if (!resolvedUrl && document_type !== 'nda') {
       const { data: tpl } = await supabase
         .from('document_templates')
         .select('public_url, version')
@@ -71,6 +124,19 @@ export async function POST(req: NextRequest) {
         resolvedUrl = tpl.public_url
         resolvedVersion = resolvedVersion ?? tpl.version
       }
+    }
+
+    if (document_type === 'nda' && !resolvedHtml) {
+      resolvedVersion = resolvedVersion ?? 'v1.0'
+      resolvedHtml = buildNdaHtml({
+        signerName: signer_name,
+        signerEmail: signer_email,
+        signerCompany: signer_company,
+        sentByName: caller.name,
+        version: resolvedVersion,
+      })
+      // For NDA, the signer should review the populated document, not a raw template PDF.
+      resolvedUrl = null
     }
 
     const token = crypto.randomBytes(32).toString('hex')
@@ -94,7 +160,7 @@ export async function POST(req: NextRequest) {
         sent_by_name: caller.name,
         expires_at: expiresAt,
         advance_stage: advance_stage ?? null,
-        document_html: document_html ?? null,
+        document_html: resolvedHtml ?? null,
         status: 'pending',
       })
       .select()
@@ -152,12 +218,13 @@ export async function POST(req: NextRequest) {
       <div style="background:#0C111D;border:1px solid #1E2A45;border-radius:10px;padding:16px;margin-bottom:24px;">
         <table style="width:100%;border-collapse:collapse;">
           <tr><td style="color:#64748B;font-size:12px;padding:4px 0;width:40%;">Document</td><td style="color:#CBD5E1;font-size:12px;padding:4px 0;">${docLabel}</td></tr>
+          <tr><td style="color:#64748B;font-size:12px;padding:4px 0;">Partner</td><td style="color:#CBD5E1;font-size:12px;padding:4px 0;">${signer_company ?? signer_name ?? signer_email}</td></tr>
           <tr><td style="color:#64748B;font-size:12px;padding:4px 0;">Sent by</td><td style="color:#CBD5E1;font-size:12px;padding:4px 0;">${caller.name} · GateGuard</td></tr>
           <tr><td style="color:#64748B;font-size:12px;padding:4px 0;">Expires</td><td style="color:#CBD5E1;font-size:12px;padding:4px 0;">${new Date(expiresAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</td></tr>
         </table>
       </div>
       <p style="margin:0;color:#64748B;font-size:12px;line-height:1.6;">
-        If you did not expect this document, you can safely ignore this email. This link expires in 30 days. Questions? Reply to this email.
+        This link expires in 30 days. Questions? Reply to this email.
       </p>
     </div>
     <div style="padding:16px 32px;border-top:1px solid #1E2A45;text-align:center;">
