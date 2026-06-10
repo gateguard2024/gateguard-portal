@@ -6,7 +6,7 @@ import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { MyDayRelatedJobGlass } from '@/components/nexus/MyDayRelatedJobGlass'
 import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 
-type MyDayPanel = 'schedule' | 'top10' | 'todos' | 'email' | null
+type MyDayPanel = 'schedule' | 'top10' | 'todos' | 'messages' | null
 
 type MyDayTopItem = {
   id: string
@@ -58,6 +58,14 @@ type MyDayCard = {
   badge?: string
 }
 
+type MessageNote = {
+  id: string
+  text: string
+  createdAt: string
+}
+
+const MESSAGE_NOTE_KEY = 'nexus_my_day_message_notes'
+
 function rgb(hex: string): string {
   const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
   return r ? `${parseInt(r[1], 16)},${parseInt(r[2], 16)},${parseInt(r[3], 16)}` : '0,200,255'
@@ -103,14 +111,14 @@ function DetailShell({ title, subtitle, onClose, children, actions }: { title: s
   return (
     <div className="fixed inset-0 z-[90] overflow-hidden bg-black/68 px-4 py-4 backdrop-blur-sm sm:py-6">
       <div className="mx-auto grid h-[calc(100dvh-2rem)] w-full max-w-5xl grid-cols-1 gap-4 overflow-hidden rounded-[2rem] p-5 shadow-2xl sm:h-[calc(100dvh-3rem)] lg:grid-cols-[1fr_260px]" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.96), rgba(5,10,22,0.96))', border: '1px solid rgba(0,200,255,0.16)', boxShadow: '0 30px 100px rgba(0,0,0,0.55), 0 0 48px rgba(0,200,255,0.10), inset 0 1px 0 rgba(255,255,255,0.06)', backdropFilter: 'blur(26px)' }}>
-        <div className="min-h-0 overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+        <div className="min-h-0 overflow-y-auto pr-1 pb-24" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           <NexusGlassBackButton label="Back to My Day" onClick={onClose} />
           <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.78)' }}>My Day</div>
           <h2 className="mt-1 text-2xl font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>{title}</h2>
-          <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.48)' }}>{subtitle}</p>
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.64)' }}>{subtitle}</p>
           <div className="mt-5 space-y-2">{children}</div>
         </div>
-        <aside className="min-h-0 overflow-y-auto rounded-3xl p-4" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+        <aside className="min-h-0 overflow-y-auto rounded-3xl p-4 pb-24" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>Actions</div>
           <div className="mt-4 space-y-2">{actions}</div>
         </aside>
@@ -120,16 +128,26 @@ function DetailShell({ title, subtitle, onClose, children, actions }: { title: s
 }
 
 function ActionButton({ label, onClick, muted, disabled }: { label: string; onClick?: () => void; muted?: boolean; disabled?: boolean }) {
+  const displayLabel = muted ? `${label} — Coming Soon` : label
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-45"
-      style={muted || disabled ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.48)' } : { background: 'rgba(0,200,255,0.10)', border: '1px solid rgba(0,200,255,0.22)', color: '#7dd3fc' }}
+      className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-all hover:-translate-y-0.5 hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-45 active:translate-y-0"
+      style={muted ? { background: 'linear-gradient(135deg, rgba(255,255,255,0.08), rgba(0,200,255,0.055))', border: '1px solid rgba(255,255,255,0.22)', color: 'rgba(255,255,255,0.92)', boxShadow: '0 0 16px rgba(0,200,255,0.08), inset 0 1px 0 rgba(255,255,255,0.08)' } : disabled ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.48)' } : { background: 'rgba(0,200,255,0.10)', border: '1px solid rgba(0,200,255,0.22)', color: '#7dd3fc' }}
     >
-      {label}
+      {displayLabel}
     </button>
+  )
+}
+
+function MessageChannelCard({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div className="rounded-2xl px-3 py-3" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}>
+      <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.88)' }}>{title}</div>
+      <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.56)' }}>{subtitle}</div>
+    </div>
   )
 }
 
@@ -144,6 +162,12 @@ export function MyDaySurface() {
   const [topNote, setTopNote] = useState('')
   const [showTopNoteBox, setShowTopNoteBox] = useState(false)
   const [relatedJobId, setRelatedJobId] = useState<string | null>(null)
+  const [messageNote, setMessageNote] = useState('')
+  const [messageNotes, setMessageNotes] = useState<MessageNote[]>(() => {
+    if (typeof window === 'undefined') return []
+    try { return JSON.parse(localStorage.getItem(MESSAGE_NOTE_KEY) ?? '[]') as MessageNote[] } catch { return [] }
+  })
+  const [messageStatus, setMessageStatus] = useState<string | null>(null)
 
   const loadSummary = useCallback(async () => {
     try {
@@ -169,20 +193,15 @@ export function MyDaySurface() {
   const nextEvent = todayEvents[0]
   const todoCount = summary?.counts?.today_todos ?? 0
   const workSignalCount = top10.length
+  const messageCount = messageNotes.length
 
   async function submitTopAction(action: 'mark_done' | 'add_note') {
     const item = top10.find(topItem => topItem.id === selectedTopItemId)
     if (!item) return
-
     setTopActionBusy(true)
     setTopActionMessage(null)
-
     try {
-      const res = await fetch('/api/nexus/my-day/action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, item_type: item.type, item_id: item.id, note: topNote }),
-      })
+      const res = await fetch('/api/nexus/my-day/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, item_type: item.type, item_id: item.id, note: topNote }) })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || data.success === false) throw new Error(data?.message ?? 'Could not complete that action.')
       setTopActionMessage(data?.message ?? 'Done.')
@@ -199,16 +218,10 @@ export function MyDaySurface() {
   async function submitTodoAction(action: 'mark_done') {
     const item = todoItems.find(todoItem => todoItem.id === selectedTodoItemId)
     if (!item) return
-
     setTopActionBusy(true)
     setTopActionMessage(null)
-
     try {
-      const res = await fetch('/api/nexus/my-day/action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, item_type: item.type, item_id: item.id }),
-      })
+      const res = await fetch('/api/nexus/my-day/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, item_type: item.type, item_id: item.id }) })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || data.success === false) throw new Error(data?.message ?? 'Could not complete that action.')
       setTopActionMessage(data?.message ?? 'Done.')
@@ -221,156 +234,61 @@ export function MyDaySurface() {
     }
   }
 
+  function saveMessageNote() {
+    const text = messageNote.trim()
+    if (!text) return
+    const nextNotes = [{ id: Date.now().toString(), text, createdAt: new Date().toISOString() }, ...messageNotes].slice(0, 8)
+    setMessageNotes(nextNotes)
+    localStorage.setItem(MESSAGE_NOTE_KEY, JSON.stringify(nextNotes))
+    setMessageNote('')
+    setMessageStatus('Message note saved for today.')
+  }
+
   function openSelectedRelated() {
-    if (!selectedTopItem) {
-      setTopActionMessage('Select an item first.')
-      return
-    }
-    if (selectedTopItem.type !== 'work_order') {
-      setTopActionMessage('This type stays in My Day for now. Full related glass is coming next.')
-      return
-    }
+    if (!selectedTopItem) { setTopActionMessage('Select an item first.'); return }
+    if (selectedTopItem.type !== 'work_order') { setTopActionMessage('This type stays in My Day for now. Full related glass is coming next.'); return }
     setRelatedJobId(selectedTopItem.id)
     setActivePanel(null)
   }
 
   const cards: MyDayCard[] = [
-    {
-      id: 'schedule',
-      title: "Today's Schedule",
-      subtitle: nextEvent
-        ? `Next: ${formatEventTime(nextEvent)} ${nextEvent.title}`.trim()
-        : "See today's calendar, site visits, jobs, and appointments.",
-      hex: '#00C8FF',
-      glyph: 'schedule',
-      badge: `${todayCount} today`,
-      actionLabel: 'Open →',
-    },
-    {
-      id: 'top10',
-      title: "Top 10 Things",
-      subtitle: workSignalCount > 0
-        ? `${workSignalCount} item${workSignalCount === 1 ? '' : 's'} need attention today.`
-        : 'Important work will appear here when Nexus finds it.',
-      hex: '#007CFF',
-      glyph: 'priority',
-      badge: workSignalCount > 0 ? `${workSignalCount}` : undefined,
-      actionLabel: 'Open →',
-    },
-    {
-      id: 'todos',
-      title: 'To-Dos',
-      subtitle: `${todoCount} due today. Open this list to review and finish tasks.`,
-      hex: '#8B5CF6',
-      glyph: 'todo',
-      actionLabel: 'Open →',
-    },
+    { id: 'schedule', title: "Today's Schedule", subtitle: nextEvent ? `Next: ${formatEventTime(nextEvent)} ${nextEvent.title}`.trim() : "See today's calendar, site visits, jobs, and appointments.", hex: '#00C8FF', glyph: 'schedule', badge: `${todayCount} today`, actionLabel: 'Open →' },
+    { id: 'top10', title: "Today's Priorities", subtitle: workSignalCount > 0 ? `${workSignalCount} item${workSignalCount === 1 ? '' : 's'} need attention today.` : 'Important work will appear here when Nexus finds it.', hex: '#007CFF', glyph: 'priority', badge: workSignalCount > 0 ? `${workSignalCount}` : undefined, actionLabel: 'Open →' },
+    { id: 'todos', title: 'To-Dos', subtitle: `${todoCount} due today. Open this list to review and finish tasks.`, hex: '#8B5CF6', glyph: 'todo', actionLabel: 'Open →' },
+    { id: 'messages', title: 'Messages', subtitle: 'Customer calls, emails, texts, and message notes that need attention.', hex: '#34D399', glyph: 'email', badge: messageCount > 0 ? `${messageCount}` : 'New', actionLabel: 'Open →' },
   ]
 
   if (relatedJobId) {
-    return (
-      <MyDayRelatedJobGlass
-        jobId={relatedJobId}
-        onBack={() => { setRelatedJobId(null); setActivePanel('top10') }}
-        onRefreshMyDay={loadSummary}
-      />
-    )
+    return <MyDayRelatedJobGlass jobId={relatedJobId} onBack={() => { setRelatedJobId(null); setActivePanel('top10') }} onRefreshMyDay={loadSummary} />
   }
 
   return (
     <section className="mt-9 w-full max-w-5xl">
       <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'radial-gradient(circle at 12% 0%, rgba(0,124,255,0.16), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.78), rgba(3,9,22,0.72))', border: '1px solid rgba(0,200,255,0.18)', boxShadow: '0 28px 90px rgba(0,0,0,0.38), 0 0 46px rgba(0,124,255,0.12), inset 0 1px 0 rgba(255,255,255,0.07)', backdropFilter: 'blur(26px)' }}>
-        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.82)' }}>My Day</div>
-            <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(0,124,255,0.22)' }}>What needs your attention today?</h2>
-            <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.68)' }}>Choose a category below to view your schedule, priorities, or tasks.</p>
-          </div>
-          <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(0,124,255,0.14)', color: 'rgba(125,229,255,0.96)', border: '1px solid rgba(0,200,255,0.28)', boxShadow: '0 0 18px rgba(0,124,255,0.12)' }}>{weekCount} this week</div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {cards.map(card => <MyDayCardButton key={card.title} card={card} onClick={() => { setActivePanel(card.id); setSelectedTopItemId(null); setSelectedTodoItemId(null); setTopActionMessage(null); setShowTopNoteBox(false) }} />)}
-        </div>
-
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.82)' }}>My Day</div><h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(0,124,255,0.22)' }}>What needs your attention today?</h2><p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.68)' }}>Choose a category below to view your schedule, priorities, tasks, or messages.</p></div><div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(0,124,255,0.14)', color: 'rgba(125,229,255,0.96)', border: '1px solid rgba(0,200,255,0.28)', boxShadow: '0 0 18px rgba(0,124,255,0.12)' }}>{weekCount} this week</div></div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">{cards.map(card => <MyDayCardButton key={card.title} card={card} onClick={() => { setActivePanel(card.id); setSelectedTopItemId(null); setSelectedTodoItemId(null); setTopActionMessage(null); setShowTopNoteBox(false); setMessageStatus(null) }} />)}</div>
         <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.58)' }}>Pick one card above. Nexus will open the right work board.</div>
       </div>
 
-      {activePanel === 'schedule' && (
-        <DetailShell title="Today's Schedule" subtitle="Events, appointments, site visits, and scheduled work for today." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Add Event" onClick={() => setAddEventOpen(true)} /></>}>
-          {todayEvents.length > 0 ? todayEvents.map(event => (
-            <div key={`${event.type}-${event.id}`} className="rounded-2xl px-3 py-3" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <div className="flex items-center justify-between gap-3"><div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.88)' }}>{event.title}</div><div className="text-[11px]" style={{ color: '#7dd3fc' }}>{formatEventTime(event) || 'Today'}</div></div>
-              <div className="mt-1 text-[10px] capitalize" style={{ color: 'rgba(255,255,255,0.34)' }}>{event.type.replace(/_/g, ' ')}</div>
-            </div>
-          )) : <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)' }}>Nothing scheduled yet. Add an event to start planning your day.</div>}
-        </DetailShell>
-      )}
+      {activePanel === 'schedule' && <DetailShell title="Today's Schedule" subtitle="Events, appointments, site visits, and scheduled work for today." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Add Event" onClick={() => setAddEventOpen(true)} /></>}>
+        {todayEvents.length > 0 ? todayEvents.map(event => <div key={`${event.type}-${event.id}`} className="rounded-2xl px-3 py-3" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="flex items-center justify-between gap-3"><div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.88)' }}>{event.title}</div><div className="text-[11px]" style={{ color: '#7dd3fc' }}>{formatEventTime(event) || 'Today'}</div></div><div className="mt-1 text-[10px] capitalize" style={{ color: 'rgba(255,255,255,0.34)' }}>{event.type.replace(/_/g, ' ')}</div></div>) : <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)' }}>Nothing scheduled yet. Add an event to start planning your day.</div>}
+      </DetailShell>}
 
-      {activePanel === 'top10' && (
-        <DetailShell
-          title="Top 10 Things"
-          subtitle="Select one item, then choose an action."
-          onClose={() => setActivePanel(null)}
-          actions={
-            <>
-              {selectedTopItem ? <div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(0,200,255,0.08)', border: '1px solid rgba(0,200,255,0.16)', color: 'rgba(255,255,255,0.72)' }}>Selected:<br /><span style={{ color: 'rgba(255,255,255,0.9)' }}>{selectedTopItem.title}</span></div> : <div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.42)' }}>Select an item first.</div>}
-              <ActionButton label="Open Related" disabled={!selectedTopItem || topActionBusy} onClick={openSelectedRelated} />
-              <ActionButton label="Mark Done" disabled={!selectedTopItem || topActionBusy} onClick={() => void submitTopAction('mark_done')} />
-              <ActionButton label="Add Note" disabled={!selectedTopItem || topActionBusy} onClick={() => { setShowTopNoteBox(!showTopNoteBox); setTopActionMessage(null) }} />
-              {showTopNoteBox && (
-                <div className="space-y-2 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(0,200,255,0.22)' }}>
-                  <textarea value={topNote} onChange={e => setTopNote(e.target.value)} placeholder="What should Nexus remember?" rows={3} className="w-full resize-none rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(0,200,255,0.2)', color: 'rgba(255,255,255,0.88)' }} />
-                  <button type="button" disabled={topActionBusy || !topNote.trim()} onClick={() => void submitTopAction('add_note')} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #00C8FF, #007CFF)', color: 'white' }}>{topActionBusy ? 'Saving...' : 'Save Note'}</button>
-                </div>
-              )}
-              {topActionMessage && <div className="rounded-2xl px-3 py-2 text-[11px]" style={{ background: 'rgba(0,200,255,0.08)', border: '1px solid rgba(0,200,255,0.18)', color: 'rgba(255,255,255,0.72)' }}>{topActionMessage}</div>}
-            </>
-          }
-        >
-          {top10.length > 0 ? top10.map((item, index) => {
-            const selected = selectedTopItemId === item.id
-            return (
-              <button key={`${item.type}-${item.id}`} type="button" onClick={() => { setSelectedTopItemId(item.id); setTopActionMessage(null); setShowTopNoteBox(false) }} className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: selected ? 'rgba(0,200,255,0.12)' : 'rgba(0,0,0,0.18)', border: selected ? '1px solid rgba(0,200,255,0.34)' : '1px solid rgba(255,255,255,0.06)' }}>
-                <div className="flex items-start justify-between gap-3">
-                  <div><div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.88)' }}>{index + 1}. {item.title}</div><div className="mt-1 text-[10px] capitalize" style={{ color: 'rgba(255,255,255,0.34)' }}>{item.reason} · {item.type.replace(/_/g, ' ')}</div></div>
-                  <div className="rounded-full px-2 py-1 text-[9px] font-semibold uppercase" style={{ background: item.urgency === 'high' ? 'rgba(248,113,113,0.16)' : item.urgency === 'medium' ? 'rgba(251,191,36,0.16)' : 'rgba(148,163,184,0.14)', color: item.urgency === 'high' ? '#fca5a5' : item.urgency === 'medium' ? '#fde68a' : '#cbd5e1', border: '1px solid rgba(255,255,255,0.08)' }}>{selected ? 'selected' : item.urgency}</div>
-                </div>
-              </button>
-            )
-          }) : <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)' }}>No priority items yet. Add an event or to-do to start building the day.</div>}
-        </DetailShell>
-      )}
+      {activePanel === 'top10' && <DetailShell title="Today's Priorities" subtitle="Select one item, then choose an action." onClose={() => setActivePanel(null)} actions={<>{selectedTopItem ? <div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(0,200,255,0.08)', border: '1px solid rgba(0,200,255,0.16)', color: 'rgba(255,255,255,0.72)' }}>Selected:<br /><span style={{ color: 'rgba(255,255,255,0.9)' }}>{selectedTopItem.title}</span></div> : <div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.42)' }}>Select an item first.</div>}<ActionButton label="Open Related" disabled={!selectedTopItem || topActionBusy} onClick={openSelectedRelated} /><ActionButton label="Mark Done" disabled={!selectedTopItem || topActionBusy} onClick={() => void submitTopAction('mark_done')} /><ActionButton label="Add Note" disabled={!selectedTopItem || topActionBusy} onClick={() => { setShowTopNoteBox(!showTopNoteBox); setTopActionMessage(null) }} />{showTopNoteBox && <div className="space-y-2 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(0,200,255,0.22)' }}><textarea value={topNote} onChange={e => setTopNote(e.target.value)} placeholder="What should Nexus remember?" rows={3} className="w-full resize-none rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(0,200,255,0.2)', color: 'rgba(255,255,255,0.88)' }} /><button type="button" disabled={topActionBusy || !topNote.trim()} onClick={() => void submitTopAction('add_note')} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #00C8FF, #007CFF)', color: 'white' }}>{topActionBusy ? 'Saving...' : 'Save Note'}</button></div>}{topActionMessage && <div className="rounded-2xl px-3 py-2 text-[11px]" style={{ background: 'rgba(0,200,255,0.08)', border: '1px solid rgba(0,200,255,0.18)', color: 'rgba(255,255,255,0.72)' }}>{topActionMessage}</div>}</>}>
+        {top10.length > 0 ? top10.map((item, index) => { const selected = selectedTopItemId === item.id; return <button key={`${item.type}-${item.id}`} type="button" onClick={() => { setSelectedTopItemId(item.id); setTopActionMessage(null); setShowTopNoteBox(false) }} className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: selected ? 'rgba(0,200,255,0.12)' : 'rgba(0,0,0,0.18)', border: selected ? '1px solid rgba(0,200,255,0.34)' : '1px solid rgba(255,255,255,0.06)' }}><div className="flex items-start justify-between gap-3"><div><div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.88)' }}>{index + 1}. {item.title}</div><div className="mt-1 text-[10px] capitalize" style={{ color: 'rgba(255,255,255,0.34)' }}>{item.reason} · {item.type.replace(/_/g, ' ')}</div></div><div className="rounded-full px-2 py-1 text-[9px] font-semibold uppercase" style={{ background: item.urgency === 'high' ? 'rgba(248,113,113,0.16)' : item.urgency === 'medium' ? 'rgba(251,191,36,0.16)' : 'rgba(148,163,184,0.14)', color: item.urgency === 'high' ? '#fca5a5' : item.urgency === 'medium' ? '#fde68a' : '#cbd5e1', border: '1px solid rgba(255,255,255,0.08)' }}>{selected ? 'selected' : item.urgency}</div></div></button> }) : <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)' }}>No priority items yet. Add an event or to-do to start building the day.</div>}
+      </DetailShell>}
 
-      {activePanel === 'todos' && (
-        <DetailShell
-          title="To-Dos"
-          subtitle="Select one task, then choose an action."
-          onClose={() => setActivePanel(null)}
-          actions={
-            <>
-              {selectedTodoItem ? <div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(139,92,246,0.10)', border: '1px solid rgba(139,92,246,0.24)', color: 'rgba(255,255,255,0.72)' }}>Selected:<br /><span style={{ color: 'rgba(255,255,255,0.9)' }}>{selectedTodoItem.title}</span></div> : <div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.42)' }}>Select a to-do first.</div>}
-              <ActionButton label="Mark Done" disabled={!selectedTodoItem || topActionBusy} onClick={() => void submitTodoAction('mark_done')} />
-              {topActionMessage && <div className="rounded-2xl px-3 py-2 text-[11px]" style={{ background: 'rgba(139,92,246,0.10)', border: '1px solid rgba(139,92,246,0.22)', color: 'rgba(255,255,255,0.72)' }}>{topActionMessage}</div>}
-            </>
-          }
-        >
-          {todoItems.length > 0 ? todoItems.map(item => {
-            const selected = selectedTodoItemId === item.id
-            return (
-              <button key={`${item.type}-${item.id}`} type="button" onClick={() => { setSelectedTodoItemId(item.id); setTopActionMessage(null) }} className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: selected ? 'rgba(139,92,246,0.14)' : 'rgba(0,0,0,0.18)', border: selected ? '1px solid rgba(139,92,246,0.42)' : '1px solid rgba(255,255,255,0.06)' }}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.88)' }}>{item.title}</div>
-                    <div className="mt-1 text-[10px] capitalize" style={{ color: 'rgba(255,255,255,0.34)' }}>{item.reason} · {item.type.replace(/_/g, ' ')}</div>
-                  </div>
-                  <div className="rounded-full px-2 py-1 text-[9px] font-semibold uppercase" style={{ background: selected ? 'rgba(139,92,246,0.22)' : 'rgba(148,163,184,0.14)', color: selected ? '#ddd6fe' : '#cbd5e1', border: '1px solid rgba(255,255,255,0.08)' }}>{selected ? 'selected' : item.urgency}</div>
-                </div>
-              </button>
-            )
-          }) : <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)' }}>No to-dos due today.</div>}
-        </DetailShell>
-      )}
+      {activePanel === 'todos' && <DetailShell title="To-Dos" subtitle="Select one task, then choose an action." onClose={() => setActivePanel(null)} actions={<>{selectedTodoItem ? <div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(139,92,246,0.10)', border: '1px solid rgba(139,92,246,0.24)', color: 'rgba(255,255,255,0.72)' }}>Selected:<br /><span style={{ color: 'rgba(255,255,255,0.9)' }}>{selectedTodoItem.title}</span></div> : <div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.42)' }}>Select a to-do first.</div>}<ActionButton label="Open Related" disabled={!selectedTodoItem || selectedTodoItem.type !== 'work_order'} onClick={() => { if (selectedTodoItem?.type === 'work_order') { setRelatedJobId(selectedTodoItem.id); setActivePanel(null) } }} /><ActionButton label="Mark Done" disabled={!selectedTodoItem || topActionBusy} onClick={() => void submitTodoAction('mark_done')} />{topActionMessage && <div className="rounded-2xl px-3 py-2 text-[11px]" style={{ background: 'rgba(139,92,246,0.10)', border: '1px solid rgba(139,92,246,0.22)', color: 'rgba(255,255,255,0.72)' }}>{topActionMessage}</div>}</>}>
+        {selectedTodoItem && <div className="mb-4 rounded-3xl p-4" style={{ background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.28)' }}><div className="text-[10px] uppercase tracking-[0.18em]" style={{ color: '#ddd6fe' }}>Selected To-Do</div><div className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>{selectedTodoItem.title}</div><div className="mt-2 text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.68)' }}>{selectedTodoItem.reason}</div><div className="mt-3 rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.14em] inline-flex" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.72)' }}>{selectedTodoItem.type.replace(/_/g, ' ')}</div></div>}
+        {todoItems.length > 0 ? todoItems.map(item => { const selected = selectedTodoItemId === item.id; return <button key={`${item.type}-${item.id}`} type="button" onClick={() => { setSelectedTodoItemId(item.id); setTopActionMessage(null) }} className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: selected ? 'rgba(139,92,246,0.14)' : 'rgba(0,0,0,0.18)', border: selected ? '1px solid rgba(139,92,246,0.42)' : '1px solid rgba(255,255,255,0.06)' }}><div className="flex items-start justify-between gap-3"><div><div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.88)' }}>{item.title}</div><div className="mt-1 text-[10px] capitalize" style={{ color: 'rgba(255,255,255,0.34)' }}>{item.reason} · {item.type.replace(/_/g, ' ')}</div></div><div className="rounded-full px-2 py-1 text-[9px] font-semibold uppercase" style={{ background: selected ? 'rgba(139,92,246,0.22)' : 'rgba(148,163,184,0.14)', color: selected ? '#ddd6fe' : '#cbd5e1', border: '1px solid rgba(255,255,255,0.08)' }}>{selected ? 'selected' : item.urgency}</div></div></button> }) : <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)' }}>No to-dos due today.</div>}
+      </DetailShell>}
+
+      {activePanel === 'messages' && <DetailShell title="Messages" subtitle="Customer calls, emails, texts, and message notes that need attention." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Log Message Note" disabled={!messageNote.trim()} onClick={saveMessageNote} /><ActionButton label="Gmail Connector" muted /><ActionButton label="IMAP / SMTP" muted /><ActionButton label="Twilio Calls / Texts" muted />{messageStatus && <div className="rounded-2xl px-3 py-2 text-[11px]" style={{ background: 'rgba(52,211,153,0.10)', border: '1px solid rgba(52,211,153,0.22)', color: 'rgba(255,255,255,0.78)' }}>{messageStatus}</div>}</>}>
+        <div className="rounded-3xl p-4" style={{ background: 'rgba(52,211,153,0.10)', border: '1px solid rgba(52,211,153,0.22)' }}><div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>One place for customer communication</div><p className="mt-2 text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.68)' }}>Messages will combine Gmail, generic IMAP/SMTP email, and Twilio phone/text into one simple inbox. For tonight, use message notes to capture calls, texts, or emails that need follow-up.</p></div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2"><MessageChannelCard title="Email" subtitle="Gmail plus generic IMAP/SMTP will feed the inbox." /><MessageChannelCard title="Phone Calls" subtitle="Log calls now. Twilio call history comes later." /><MessageChannelCard title="Texts" subtitle="Twilio SMS/MMS will be the paid text channel." /><MessageChannelCard title="Message Notes" subtitle="Use this today to capture anything important." /></div>
+        <div className="rounded-3xl p-4" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.08)' }}><div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>Log a message note</div><textarea value={messageNote} onChange={event => setMessageNote(event.target.value)} rows={4} placeholder="Example: Called John James. Left voicemail about Columbia Park Commons gate quote." className="mt-3 w-full resize-none rounded-2xl px-3 py-3 text-sm outline-none" style={{ background: 'rgba(0,0,0,0.24)', border: '1px solid rgba(52,211,153,0.22)', color: 'rgba(255,255,255,0.9)' }} /></div>
+        <div className="space-y-2">{messageNotes.length > 0 ? messageNotes.map(note => <div key={note.id} className="rounded-2xl px-3 py-3" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-sm" style={{ color: 'rgba(255,255,255,0.86)' }}>{note.text}</div><div className="mt-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.44)' }}>{new Date(note.createdAt).toLocaleString()}</div></div>) : <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.52)' }}>No message notes yet.</div>}</div>
+      </DetailShell>}
 
       <AddEventModal open={addEventOpen} onClose={() => setAddEventOpen(false)} onSaved={loadSummary} />
     </section>
