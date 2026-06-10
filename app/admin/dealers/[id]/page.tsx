@@ -256,6 +256,8 @@ interface SigRecord {
   signed_name: string | null
   signed_at: string | null
   countersigned_at: string | null
+  executed_at?: string | null
+  executed_cert_url?: string | null
   expires_at: string
   sent_by_name: string | null
 }
@@ -482,9 +484,21 @@ function ComplianceTab({ org, onSaved }: { org: Org; onSaved: () => void }) {
                     }
                     if (sig?.status === 'fully_executed') {
                       return (
-                        <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
-                          <CheckCircle2 size={10} /> Fully executed
-                        </span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
+                            <CheckCircle2 size={10} /> Fully executed
+                          </span>
+                          {sig.executed_cert_url && (
+                            <a
+                              href={sig.executed_cert_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 px-2 py-1 rounded border border-emerald-200 text-[10px] text-emerald-700 font-medium hover:bg-emerald-50 transition-colors"
+                            >
+                              <ExternalLink size={10} /> Open Final {cfg.type === 'nda' ? 'NDA' : 'Agreement'}
+                            </a>
+                          )}
+                        </div>
                       )
                     }
                     // Not yet sent

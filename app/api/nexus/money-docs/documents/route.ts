@@ -9,6 +9,16 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+const DOC_LABELS: Record<string, string> = {
+  nda: 'Mutual NDA',
+  master_agent_agreement: 'Master Agent Agreement',
+  master_dealer_agreement: 'MSO Agreement',
+  dealer_agreement: 'Authorized Dealer Agreement',
+  service_agreement: 'Service Agreement',
+  install_partner_agreement: 'Installation Partner Agreement',
+  sales_partner_agreement: 'Sales Partner Agreement',
+}
+
 type DocumentBucket = 'needs_signature' | 'waiting_on_customer' | 'recently_signed' | 'draft_not_sent'
 
 type SignatureRow = {
@@ -54,7 +64,7 @@ export async function GET() {
       const finalUrl = row.executed_cert_url || row.document_url || null
       return {
         id: row.id,
-        title: row.document_type || 'Document',
+        title: (row.document_type ? DOC_LABELS[row.document_type] ?? row.document_type : 'Document'),
         version: row.document_version || null,
         status: row.status || 'pending',
         signer_name: row.signer_name || null,

@@ -17,6 +17,8 @@ type DocumentCard = {
   signed_at: string | null
   expires_at: string | null
   document_url: string | null
+  executed_cert_url: string | null
+  final_url: string | null
   bucket: DocumentBucket
   urgency: 'high' | 'medium' | 'low'
 }
@@ -130,7 +132,8 @@ export function MoneyDocsDocumentsBoard() {
             <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>Expires</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{shortDate(selectedDocument.expires_at) || 'No date'}</div></div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            {selectedDocument.document_url && <a href={selectedDocument.document_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'linear-gradient(135deg, #00C8FF, #007CFF)', color: 'white' }}>Open Document</a>}
+            {selectedDocument.final_url && <a href={selectedDocument.final_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.24)', color: '#34D399' }}>Open Final {selectedDocument.title.includes('NDA') ? 'NDA' : selectedDocument.title.includes('Agreement') ? 'Agreement' : 'Copy'}</a>}
+            {!selectedDocument.final_url && selectedDocument.document_url && <a href={selectedDocument.document_url} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'linear-gradient(135deg, #00C8FF, #007CFF)', color: 'white' }}>Open Document</a>}
             <button type="button" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.62)' }}>Send Reminder</button>
           </div>
         </div>
