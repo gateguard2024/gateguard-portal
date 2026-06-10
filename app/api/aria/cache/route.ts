@@ -60,7 +60,7 @@ function isProspectingQuery(query: string): boolean {
 
 // ─── Column list for cache queries ───────────────────────────────────────────
 const CACHE_COLS = [
-  'id','property_name','address','city','state','units','year_built','property_type','class',
+  'id','property_name','address','city','state','zip','units','year_built','property_type','class',
   'management_company','owner_entity','owner_type','acquisition_year','capex_signal',
   'isp_providers','video_providers','bulk_agreements','fcc_verified',
   'gate_operators','access_control','intercoms','cameras','smart_locks',
@@ -172,8 +172,9 @@ function dbRowToProspect(row: Record<string, any>) {
     property: {
       name:               row.property_name,
       address:            row.address,
-      city:               row.city ?? null,
+      city:               row.city  ?? null,
       state:              row.state ?? null,
+      zip:                row.zip   ?? null,
       units:              row.units             ?? null,
       year_built:         row.year_built        ?? null,
       property_type:      row.property_type     ?? 'multifamily',

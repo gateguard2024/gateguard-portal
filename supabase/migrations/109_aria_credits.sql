@@ -21,6 +21,26 @@
 --   credits_transactions.expires_at + granted_by tracks all grants.
 --   grant_aria_credits() with transaction_type = 'trial' | 'demo' | 'plan_included'
 
+-- ─── Defensive cleanup ────────────────────────────────────────────────────────
+-- If credit_transactions was created in a prior partial run with a different schema
+-- (e.g. missing transaction_type), drop it so CREATE TABLE IF NOT EXISTS re-runs correctly.
+-- Safe on beta — no production data in this table yet.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'credit_transactions'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'credit_transactions'
+      AND column_name = 'transaction_type'
+  ) THEN
+    DROP TABLE public.credit_transactions CASCADE;
+    RAISE NOTICE 'Dropped credit_transactions (missing transaction_type column) — will recreate below.';
+  END IF;
+END;
+$$;
+
 -- ─── credit_balances ──────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.credit_balances (
   id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),

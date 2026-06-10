@@ -7,6 +7,17 @@
 -- REQUIRES: pgvector extension (enabled in migration 004)
 -- SAFE TO RUN: All ALTER TABLE statements — no new tables, no GRANT needed.
 
+-- ─── 0. Add missing location columns to aria_properties ──────────────────────
+-- city, state, zip were omitted from migration 098. They are core fields used
+-- by the ARIA page, cache route, search-runs annotation, and every prospect card.
+ALTER TABLE public.aria_properties
+  ADD COLUMN IF NOT EXISTS city  TEXT,
+  ADD COLUMN IF NOT EXISTS state TEXT,
+  ADD COLUMN IF NOT EXISTS zip   TEXT;
+
+-- Index state for common geo filters (e.g. "properties in GA")
+CREATE INDEX IF NOT EXISTS idx_aria_properties_state ON public.aria_properties (state);
+
 -- ─── 1. property_embedding on aria_properties ─────────────────────────────────
 -- Populated after every deep search via the properties POST route.
 -- HNSW index enables sub-5ms <=> cosine similarity queries at scale.
@@ -46,7 +57,10 @@ ALTER TABLE public.aria_evidence_packets
 -- p_embedding      — 1536-dim embedding from text-embedding-3-small
 -- p_threshold      — minimum cosine similarity (0.0–1.0). Default 0.88 is tight
 --                    to prevent false matches on generic queries.
--- Returns: single aria_properties row (all columns) or empty set
+-- Returns: matching aria_properties row columns or empty set
+--
+-- pain_signals, behavioral_profile, pitch_strategy, scout_brief are JSONB.
+-- aria_confidence is TEXT (enum: confirmed/high/medium/low).
 CREATE OR REPLACE FUNCTION public.find_aria_property_by_embedding(
   p_embedding   VECTOR(1536),
   p_threshold   FLOAT DEFAULT 0.88
@@ -57,6 +71,7 @@ RETURNS TABLE (
   address               TEXT,
   city                  TEXT,
   state                 TEXT,
+  zip                   TEXT,
   units                 INT,
   year_built            INT,
   property_type         TEXT,
@@ -88,9 +103,9 @@ RETURNS TABLE (
   contract_window       TEXT,
   contract_expiry_year  INT,
   communication_style   TEXT,
-  behavioral_profile    TEXT,
-  pitch_strategy        TEXT,
-  pain_signals          TEXT[],
+  behavioral_profile    JSONB,
+  pitch_strategy        JSONB,
+  pain_signals          JSONB,
   dm_name               TEXT,
   dm_title              TEXT,
   dm_company            TEXT,
@@ -98,13 +113,13 @@ RETURNS TABLE (
   dm_phone              TEXT,
   dm_linkedin_slug      TEXT,
   dm_chain              JSONB,
-  scout_brief           TEXT,
+  scout_brief           JSONB,
   roe_detected          BOOLEAN,
   roe_providers         TEXT[],
   roe_expiry_year       INT,
   times_researched      INT,
   last_researched_at    TIMESTAMPTZ,
-  aria_confidence       NUMERIC,
+  aria_confidence       TEXT,
   sales_stage           TEXT,
   sales_notes           TEXT,
   assigned_rep          TEXT,
@@ -114,7 +129,8 @@ LANGUAGE sql
 STABLE
 AS $$
   SELECT
-    id, property_name, address, city, state, units, year_built, property_type,
+    id, property_name, address, city, state, zip,
+    units, year_built, property_type,
     class, management_company, owner_entity, owner_type, acquisition_year,
     capex_signal, isp_providers, video_providers, bulk_agreements, fcc_verified,
     gate_operators, access_control, intercoms, cameras, smart_locks,
