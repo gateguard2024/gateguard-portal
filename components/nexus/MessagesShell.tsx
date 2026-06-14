@@ -23,10 +23,26 @@ type Conversation = {
   needs_reply: boolean;
   last_at: string;
   messages: Message[];
+  channel_id?: string | null;     // connector this thread belongs to (for replies)
+  contact_address?: string | null; // recipient email/phone (for replies)
 };
-// --- Mock Data Service (wire to real connectors later) ---
+// --- Real connector data, with a graceful preview fallback ---
+// Pulls the current user's threads from /api/nexus/messages/threads. If the
+// endpoint is unreachable (e.g. migration 115 not yet run), falls back to the
+// preview dataset so the panel still renders.
 const loadConversations = async (): Promise<Conversation[]> => {
-  await new Promise(resolve => setTimeout(resolve, 300));
+  try {
+    const res = await fetch('/api/nexus/messages/threads', { cache: 'no-store' });
+    if (res.ok) {
+      const json = await res.json();
+      if (Array.isArray(json.conversations)) return json.conversations as Conversation[];
+    }
+  } catch {
+    /* fall through to preview data */
+  }
+  return loadPreviewConversations();
+};
+const loadPreviewConversations = async (): Promise<Conversation[]> => {
   return [
     {
       id: 'c1', contact_name: 'Sarah Jenkins', company: 'Property Management Inc.', channel: 'text',
@@ -144,10 +160,40 @@ export default function MessagesShell() {
     });
   }, [conversations, searchQuery, activeFilter]);
   const selectedConversation = conversations.find(c => c.id === selectedId);
-  const handleSend = () => {
-    if (!replyText.trim() || !selectedId) return;
-    console.log(`Sending to ${selectedId}: ${replyText}`);
+  const [sending, setSending] = useState(false);
+  const handleSend = async () => {
+    const conv = selectedConversation;
+    if (!replyText.trim() || !conv) return;
+    const text = replyText.trim();
+
+    // Optimistically append; reconcile from the server on success.
+    const optimistic: Message = {
+      id: `tmp-${Date.now()}`, direction: 'out', channel: conv.channel, body: text,
+      at: new Date().toISOString(),
+    };
+    setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, messages: [...c.messages, optimistic], preview: text, last_at: optimistic.at } : c));
     setReplyText('');
+
+    // Only email connectors can send today (SMTP / Gmail). Calls/texts are read-only.
+    if (conv.channel !== 'email' || !conv.channel_id || !conv.contact_address) return;
+    setSending(true);
+    try {
+      await fetch('/api/nexus/messages/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channel_id: conv.channel_id,
+          to: conv.contact_address,
+          thread_id: conv.id,
+          subject: `Re: ${conv.preview || 'Message'}`,
+          text,
+        }),
+      });
+      loadConversations().then(setConversations);
+    } catch {
+      /* keep optimistic message; server reload will reconcile next open */
+    } finally {
+      setSending(false);
+    }
   };
   const handleAction = (action: string) => { console.log(`Action triggered: ${action} for conversation ${selectedId}`); };
   const glassPanel = { backgroundColor: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)' };
@@ -261,7 +307,7 @@ export default function MessagesShell() {
               </div>
               <div className="flex items-end gap-2 p-2 rounded-3xl" style={glassPanel}>
                 <textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} placeholder={`Reply by ${selectedConversation.channel}...`} className="flex-1 bg-transparent border-none outline-none resize-none px-3 py-2 text-sm max-h-32 min-h-[40px] placeholder:text-white/30" style={textPrimary} rows={1} />
-                <button onClick={handleSend} disabled={!replyText.trim()} className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-opacity disabled:opacity-30" style={{ backgroundColor: brandBlue, color: 'white' }}><Send size={16} className="ml-0.5" /></button>
+                <button onClick={handleSend} disabled={!replyText.trim() || sending} className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-opacity disabled:opacity-30" style={{ backgroundColor: brandBlue, color: 'white' }}><Send size={16} className="ml-0.5" /></button>
               </div>
             </div>
           </>

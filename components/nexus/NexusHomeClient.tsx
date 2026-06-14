@@ -40,17 +40,15 @@ function NexusMark() {
       <style>{`
         @keyframes nxGlow { 0%,100% { filter: drop-shadow(0 0 16px rgba(0,124,255,0.45)); } 50% { filter: drop-shadow(0 0 32px rgba(0,200,255,0.85)); } }
         @keyframes nxSpin { to { transform: rotate(360deg); } }
-        @keyframes nxLine { 0%,100% { opacity: 0.12; } 50% { opacity: 0.95; } }
         @keyframes nxPing { 0% { transform: scale(0.55); opacity: 0.65; } 80%,100% { transform: scale(2.3); opacity: 0; } }
         @keyframes nxDot { 0%,100% { transform: scale(0.85); opacity: 0.8; } 50% { transform: scale(1.35); opacity: 1; } }
         .nx-glow { animation: nxGlow 3.4s ease-in-out infinite; }
         .nx-spin { transform-box: fill-box; transform-origin: center; animation: nxSpin 18s linear infinite; }
-        .nx-line { animation: nxLine 2.6s ease-in-out infinite; }
         .nx-ping, .nx-dot { transform-box: fill-box; transform-origin: center; }
         .nx-ping { animation: nxPing 2.8s ease-out infinite; }
         .nx-dot  { animation: nxDot 1.8s ease-in-out infinite; }
         @media (prefers-reduced-motion: reduce) {
-          .nx-glow, .nx-spin, .nx-line, .nx-ping, .nx-dot { animation: none !important; }
+          .nx-glow, .nx-spin, .nx-ping, .nx-dot { animation: none !important; }
         }
       `}</style>
       <div className="nx-glow" style={{ width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -60,11 +58,11 @@ function NexusMark() {
           {/* radar ping from the core */}
           <circle className="nx-ping" cx="34" cy="34" r="9" stroke="rgba(0,200,255,0.55)" strokeWidth="1.2" fill="none" />
           <circle cx="34" cy="34" r="9" stroke="rgba(255,255,255,0.35)" strokeWidth="1" fill="rgba(0,124,255,0.10)" />
-          {/* signal lines pulsing inward, staggered */}
-          <line className="nx-line" style={{ animationDelay: '0s' }}    x1="34" y1="4"  x2="34" y2="25" stroke="#00C8FF" strokeWidth="1" />
-          <line className="nx-line" style={{ animationDelay: '0.65s' }} x1="34" y1="43" x2="34" y2="64" stroke="#00C8FF" strokeWidth="1" />
-          <line className="nx-line" style={{ animationDelay: '1.3s' }}  x1="4"  y1="34" x2="25" y2="34" stroke="#00C8FF" strokeWidth="1" />
-          <line className="nx-line" style={{ animationDelay: '1.95s' }} x1="43" y1="34" x2="64" y2="34" stroke="#00C8FF" strokeWidth="1" />
+          {/* cross lines — stationary */}
+          <line x1="34" y1="4"  x2="34" y2="25" stroke="rgba(0,200,255,0.28)" strokeWidth="1" />
+          <line x1="34" y1="43" x2="34" y2="64" stroke="rgba(0,200,255,0.28)" strokeWidth="1" />
+          <line x1="4"  y1="34" x2="25" y2="34" stroke="rgba(0,200,255,0.28)" strokeWidth="1" />
+          <line x1="43" y1="34" x2="64" y2="34" stroke="rgba(0,200,255,0.28)" strokeWidth="1" />
           <circle className="nx-dot" cx="34" cy="34" r="2.5" fill="#00C8FF" />
         </svg>
       </div>

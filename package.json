@@ -36,6 +36,7 @@
     "pdf-parse": "^1.1.1",
     "pdfkit": "^0.18.0",
     "postcss": "^8",
+    "nodemailer": "^6.9.14",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "resend": "^6.12.3",
@@ -48,6 +49,7 @@
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/nodemailer": "^6.4.15",
     "@types/pdf-parse": "^1.1.4",
     "@types/react": "^18",
     "@types/react-dom": "^18",

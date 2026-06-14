@@ -3,7 +3,7 @@
 import { useState } from 'react'
 
 type AnyRecord = Record<string, any>
-type JobAction = 'add_note' | 'create_task' | 'schedule_visit' | 'mark_complete'
+type JobAction = 'add_note' | 'create_task' | 'schedule_visit' | 'mark_complete' | 'assign'
 
 type JobGlassData = {
   job?: AnyRecord | null
@@ -140,6 +140,18 @@ export function JobGlassWindow({
 
   const [activeAction, setActiveAction] = useState<JobAction | null>(null)
   const [actionBusy, setActionBusy] = useState(false)
+  const [assignees, setAssignees] = useState<Array<{ id: string; name: string }>>([])
+  const [assigneesLoaded, setAssigneesLoaded] = useState(false)
+
+  async function loadAssignees() {
+    if (assigneesLoaded) return
+    try {
+      const res = await fetch('/api/nexus/jobs/assignable')
+      const data = await res.json().catch(() => ({}))
+      setAssignees(Array.isArray(data.technicians) ? data.technicians : [])
+    } catch { /* ignore */ }
+    finally { setAssigneesLoaded(true) }
+  }
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [noteText, setNoteText] = useState('')
   const [taskTitle, setTaskTitle] = useState('')
@@ -292,7 +304,7 @@ export function JobGlassWindow({
               <ActionButton title="Create Task" subtitle="Add something that needs to get done." active={activeAction === 'create_task'} onClick={() => { setActiveAction(activeAction === 'create_task' ? null : 'create_task'); setActionMessage(null) }} />
               <ActionButton title="Schedule Visit" subtitle="Put the next site visit on the calendar." active={activeAction === 'schedule_visit'} onClick={() => { setActiveAction(activeAction === 'schedule_visit' ? null : 'schedule_visit'); setActionMessage(null) }} />
               <ActionButton title="Mark Complete" subtitle="Close this job when work is done." active={activeAction === 'mark_complete'} onClick={() => { setActiveAction(activeAction === 'mark_complete' ? null : 'mark_complete'); setActionMessage(null) }} />
-              <ActionButton title="Assign Team" subtitle="Coming in a future stage." disabled />
+              <ActionButton title="Assign Tech" subtitle="Put a technician on this job." active={activeAction === 'assign'} onClick={() => { setActiveAction(activeAction === 'assign' ? null : 'assign'); setActionMessage(null); void loadAssignees() }} />
               <label className="block w-full cursor-pointer rounded-2xl p-3 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(52,211,153,0.07)', border: '1px solid rgba(52,211,153,0.16)', color: 'rgba(255,255,255,0.86)', opacity: actionBusy ? 0.6 : 1 }}>
                 <div className="text-xs font-semibold">{actionBusy ? 'Uploading…' : 'Upload File'}</div>
                 <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.42)' }}>Add a photo, doc, or drawing.</div>
@@ -351,6 +363,24 @@ export function JobGlassWindow({
                     <button type="button" onClick={() => setActiveAction(null)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.045)', color: 'rgba(255,255,255,0.5)' }}>Cancel</button>
                     <button type="button" disabled={actionBusy} onClick={() => submitJobAction({ action: 'mark_complete', note: completeNote })} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: '#34d399', color: '#06120c' }}>{actionBusy ? 'Closing...' : 'Mark Complete'}</button>
                   </div>
+                </div>
+              )}
+
+              {activeAction === 'assign' && (
+                <div className="space-y-2 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(52,211,153,0.22)' }}>
+                  <FieldLabel label="Assign to" helper="Pick a technician in your team." />
+                  {!assigneesLoaded ? (
+                    <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Loading technicians…</p>
+                  ) : assignees.length === 0 ? (
+                    <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.4)' }}>No technicians found. Add one in Dispatch or Add Person.</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {assignees.map(t => (
+                        <button key={t.id} type="button" disabled={actionBusy} onClick={() => submitJobAction({ action: 'assign', technician_id: t.id, assignee_name: t.name })} className="w-full rounded-xl px-3 py-2 text-left text-xs disabled:opacity-50" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.85)' }}>{t.name}</button>
+                      ))}
+                      <button type="button" disabled={actionBusy} onClick={() => submitJobAction({ action: 'assign', technician_id: null, assignee_name: null })} className="w-full rounded-xl px-3 py-2 text-left text-xs disabled:opacity-50" style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)' }}>Clear assignment</button>
+                    </div>
+                  )}
                 </div>
               )}
 

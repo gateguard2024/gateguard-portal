@@ -104,7 +104,8 @@
       <li><span class="box prog">!</span><span>Schedule: glass Calendar (Month/Week/Day/List); <b>My calendar / My team</b> (downstream jobs + sales) + <b>show/hide category</b> chips (Jobs/Sales/To-Dos/Google) to declutter. <span class="note">Pending: Google sync surfacing, real add/edit endpoint, per-person mute.</span></span></li>
       <li><span class="box done">✓</span><span>Today's Priorities — each item opens in a glass pane (why it matters + open record / mark done / add note).</span></li>
       <li><span class="box prog">!</span><span>To-Dos — glass board live in My Day: filters (Mine/Team/Overdue/Today/Week), quick-add, complete, inline priority/due/status. <span class="note">Pending: calendar view, teammate-assign picker, subtask UI.</span></span></li>
-      <li><span class="box prog">!</span><span>Messages: glass shell live in My Day (All/Needs Reply/Calls/Texts/Email/Follow-ups, thread + composer) on sample data. <span class="note">Pending: real connectors (Gmail/IMAP/SMTP/Twilio).</span></span></li>
+      <li><span class="box prog">!</span><span>Messages: glass shell live in My Day (All/Needs Reply/Calls/Texts/Email/Follow-ups, thread + composer). <b>Email connectors wired:</b> SMTP + Gmail send live, threads load from real API (preview fallback). <span class="note">Pending: inbound fetch (IMAP/Gmail read poll), connector setup UI, Twilio SMS/voice.</span></span></li>
+      <li><span class="box done">✓</span><span>Email foundation: migration 115 (message_channels/threads/messages + grants), <code>lib/mail-send.ts</code> (SMTP via nodemailer, Gmail via OAuth REST), <code>/api/nexus/messages</code> channels + send + threads, Gmail OAuth connect/callback. <span class="note">Env: nodemailer dep; reuses GOOGLE_CALENDAR_CLIENT_* + GMAIL_REDIRECT_URI.</span></span></li>
     </ul>
   </div>
 
@@ -115,17 +116,17 @@
       <li><span class="box done">✓</span><span>Cards open real glass boards (Today's Jobs · Needs Attention · Schedule Visit · Open Jobs), org-scoped downstream.</span></li>
       <li><span class="box prog">!</span><span>Job board: list view live. <span class="note">Pending: calendar view (outsourceable UI).</span></span></li>
       <li><span class="box done">✓</span><span>Job detail glass: status, notes, tasks, schedule/reschedule, mark complete, <b>photos/file attachments</b>, checklist, site/team.</span></li>
-      <li><span class="box prog">!</span><span>Field notes + photos done. <span class="note">Pending: assignee picker, calendar integration, Dispatch view.</span></span></li>
+      <li><span class="box prog">!</span><span>Field notes + photos + <b>assignee picker</b> (scoped technician list) done. <span class="note">Pending: job calendar view (briefed to LLM), Dispatch view.</span></span></li>
     </ul>
   </div>
 
   <div class="phase">
-    <h2>Phase 4 — Operations / Business <span class="badge b-todo">To do</span></h2>
+    <h2>Phase 4 — Operations / Business <span class="badge b-prog">In progress</span></h2>
     <p class="goal">Replaces Customer Sites tab; customers/properties/sites/systems.</p>
     <ul>
       <li><span class="box">&nbsp;</span><span>Rename Customers/Sites → Operations/Business; Customer Sites becomes its primary board.</span></li>
-      <li><span class="box">&nbsp;</span><span>Find Customer · Find Property · Properties Needing Attention · Property Systems.</span></li>
-      <li><span class="box">&nbsp;</span><span>Customer + site detail glass; customers & installs ready for Week 2.</span></li>
+      <li><span class="box prog">!</span><span>Customer/Property finder + detail glass (one-object format) live in Find Customer. <span class="note">On mock data — wire to real search APIs.</span></span></li>
+      <li><span class="box">&nbsp;</span><span>Properties Needing Attention · Property Systems; customers & installs for Week 2.</span></li>
     </ul>
   </div>
 
@@ -133,7 +134,7 @@
     <h2>Phase 5 — Money / Docs <span class="badge b-todo">To do</span></h2>
     <p class="goal">Invoices, renewals, signing, compliance.</p>
     <ul>
-      <li><span class="box">&nbsp;</span><span>Invoices (open/paid/overdue, send, payment status).</span></li>
+      <li><span class="box prog">!</span><span>Invoices board live (summary tiles, filters, detail + send/mark-paid). <span class="note">On mock data — wire to real billing API.</span></span></li>
       <li><span class="box">&nbsp;</span><span>Renewals (contract/monitoring/dealer/service, reminders, assign owner).</span></li>
       <li><span class="box prog">!</span><span>Documents to Sign — via Public Document Portal (NDA/agreements done; proposals = P3).</span></li>
       <li><span class="box">&nbsp;</span><span>Compliance (W9, COI, license, background check; dealer/vendor/site).</span></li>

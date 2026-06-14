@@ -250,6 +250,17 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ success: true, message: 'Note added.', note: data })
   }
 
+  if (action === 'assign') {
+    const technicianId = clean(body.technician_id) || null
+    const assigneeName = clean(body.assignee_name) || null
+    const { error: assignErr } = await supabase
+      .from('work_orders')
+      .update({ assignee_id: technicianId, assignee_name: assigneeName, updated_at: new Date().toISOString() })
+      .eq('id', job.id)
+    if (assignErr) return NextResponse.json({ success: false, message: assignErr.message }, { status: 500 })
+    return NextResponse.json({ success: true, message: assigneeName ? `Assigned to ${assigneeName}.` : 'Assignment cleared.' })
+  }
+
   if (action === 'add_attachment') {
     const fileName = clean(body.file_name)
     const url = clean(body.url)
