@@ -12,6 +12,32 @@ export function ServiceWorkerRegistration() {
 
     let mounted = true;
 
+    // The public Nexus Document Portal (nexus.gateguard.co/document/[slug]) is a
+    // chrome-free, no-login surface for external recipients. It must NOT run the
+    // portal PWA — a stale service worker there serves offline.html ("you are
+    // offline") when the origin can't be reached. Skip registration on those
+    // pages/host and actively unregister + clear caches to heal stale installs.
+    const isPublicSurface =
+      window.location.pathname.startsWith('/document') ||
+      window.location.pathname.startsWith('/sign') ||
+      /(^|\.)nexus\./i.test(window.location.hostname);
+
+    if (isPublicSurface) {
+      void (async () => {
+        try {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map((r) => r.unregister()));
+          if ('caches' in window) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map((k) => caches.delete(k)));
+          }
+        } catch {
+          /* best effort */
+        }
+      })();
+      return;
+    }
+
     const register = async () => {
       try {
         const registration = await navigator.serviceWorker.register('/sw.js', {

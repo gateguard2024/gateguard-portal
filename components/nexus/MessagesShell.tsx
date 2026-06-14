@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Phone, MessageSquare, Mail, Send, CheckCircle2, User, Clock } from 'lucide-react';
+import { Search, Phone, MessageSquare, Mail, Send, CheckCircle2, User, Clock, Settings } from 'lucide-react';
+import MessagesConnectorPane from '@/components/nexus/MessagesConnectorPane';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { ArrowLeft, CalendarPlus, PhoneForwarded, PhoneMissed } = require('lucide-react') as any;
 // --- Types ---
@@ -140,6 +141,7 @@ export default function MessagesShell() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<FilterType>('All');
   const [replyText, setReplyText] = useState('');
+  const [showSetup, setShowSetup] = useState(false);
   useEffect(() => { loadConversations().then(setConversations); }, []);
   const filteredConversations = useMemo(() => {
     return conversations.filter(c => {
@@ -201,12 +203,25 @@ export default function MessagesShell() {
   const textSecondary = { color: 'rgba(255,255,255,0.5)' };
   const textFaint = { color: 'rgba(255,255,255,0.34)' };
   const brandBlue = '#6B7EFF';
+  if (showSetup) {
+    return (
+      <div className="w-full h-[78dvh] overflow-y-auto rounded-2xl p-4" style={{ ...textPrimary, ...glassPanel }}>
+        <button onClick={() => { setShowSetup(false); loadConversations().then(setConversations); }} className="flex items-center gap-2 mb-4 px-3 py-2 rounded-full text-sm hover:bg-white/10" style={{ color: 'rgba(255,255,255,0.7)' }}>
+          <ArrowLeft size={16} /> Back to messages
+        </button>
+        <MessagesConnectorPane />
+      </div>
+    );
+  }
   return (
     <div className="flex w-full h-[78dvh] pb-4 font-sans overflow-hidden rounded-2xl" style={{ ...textPrimary, ...glassPanel }}>
       {/* LEFT PANE: List */}
       <div className={`w-full md:w-[360px] flex-shrink-0 flex-col border-r ${selectedId ? 'hidden md:flex' : 'flex'}`} style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
         <div className="p-4 flex flex-col gap-4">
-          <h1 className="text-xl font-semibold tracking-tight">Messages</h1>
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-semibold tracking-tight">Messages</h1>
+            <button onClick={() => setShowSetup(true)} title="Connect mailboxes" className="p-2 rounded-full hover:bg-white/10" style={{ color: 'rgba(255,255,255,0.6)' }}><Settings size={18} /></button>
+          </div>
           <div className="flex items-center gap-2 px-3 py-2 rounded-2xl" style={glassPanel}>
             <Search size={16} style={textSecondary} />
             <input type="text" placeholder="Search conversations..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="bg-transparent border-none outline-none text-sm w-full placeholder:text-white/30" style={textPrimary} />
