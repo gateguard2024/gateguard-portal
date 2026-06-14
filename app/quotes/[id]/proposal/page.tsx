@@ -10,6 +10,7 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { Pen, RotateCcw } = require('lucide-react') as any;
 import { formatCurrency, buildRampSchedule, type RampRow } from '@/lib/quote-calculator';
+import { NexusDocShell } from '@/components/public/NexusDocShell';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -556,36 +557,9 @@ function ProposalPage() {
         .agreement-content strong { color: #1e293b; }
       `}</style>
 
-      <div className="min-h-screen bg-white">
+      <NexusDocShell meta={{ number: quoteNumber, validUntil: expiryDate }} onDownload={() => window.print()}>
 
-        {/* Header */}
-        <div className="bg-[#0B1728] border-b border-white/10 print:bg-[#0B1728]">
-          <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-[#6B7EFF]/20 border border-[#6B7EFF]/30 flex items-center justify-center">
-                <Shield className="w-5 h-5 text-[#6B7EFF]" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-white">GateGuard</p>
-                <p className="text-xs text-white/50">Unrivaled Security</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <p className="text-xs text-white/50 font-mono">{quoteNumber}</p>
-                {expiryDate && <p className="text-xs text-white/40">Valid until {expiryDate}</p>}
-              </div>
-              <button
-                onClick={() => window.print()}
-                className="no-print flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white/70 hover:text-white text-xs rounded-lg transition-colors"
-              >
-                <Download className="w-3.5 h-3.5" /> Download PDF
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="max-w-4xl mx-auto px-6 py-10 space-y-8">
+        <div className="px-5 sm:px-8 py-8 space-y-8">
 
           {/* Hero */}
           <div className="space-y-2">
@@ -932,7 +906,7 @@ function ProposalPage() {
           </div>
 
         </div>
-      </div>
+      </NexusDocShell>
     </>
   );
 }
