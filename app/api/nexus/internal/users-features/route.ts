@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { resolveOrgScope } from '@/lib/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,20 +23,23 @@ export async function GET() {
       return NextResponse.json({ success: false, message: 'You do not have access to Internal admin tools.' }, { status: 403 })
     }
 
+    // Downward subtree scope (corporate = all). Replaces the old own-org-only filter.
+    const scope = await resolveOrgScope(user)
+
     let profiles = supabase
       .from('profiles')
       .select('id,first_name,last_name,email,role,org_id,last_login_at,created_at')
       .order('created_at', { ascending: false })
       .limit(80)
-    if (!user.isCorporate && user.org_id) profiles = profiles.eq('org_id', user.org_id)
+    if (!scope.all) profiles = profiles.in('org_id', scope.ids.length ? scope.ids : ['00000000-0000-0000-0000-000000000000'])
     const profileRows = await profiles
 
     let orgs = supabase
       .from('organizations')
-      .select('id,name,tier,status,primary_email,created_at')
+      .select('id,name,org_tier,status,primary_email,created_at')
       .order('created_at', { ascending: false })
       .limit(80)
-    if (!user.isCorporate && user.org_id) orgs = orgs.eq('id', user.org_id)
+    if (!scope.all) orgs = orgs.in('id', scope.ids.length ? scope.ids : ['00000000-0000-0000-0000-000000000000'])
     const orgRows = await orgs
 
     let permissions = supabase
@@ -70,9 +74,9 @@ export async function GET() {
         id: `org-${row.id}`,
         bucket: String(row.status ?? '').toLowerCase() === 'active' ? 'dealer_access' : 'needs_review',
         title: row.name || 'Organization',
-        subtitle: row.primary_email || row.tier || 'Dealer / org access',
+        subtitle: row.primary_email || row.org_tier || 'Dealer / org access',
         status: row.status || 'unknown',
-        meta: row.tier || null,
+        meta: row.org_tier || null,
       })
     }
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { UserGlassWindow, type UserWindowData } from '@/components/nexus/windows/UserGlassWindow'
 
 type Bucket = 'platform_users' | 'feature_settings' | 'dealer_access' | 'needs_review'
 
@@ -35,6 +36,32 @@ export function InternalUsersFeaturesBoard() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState<string | null>(null)
+  const [userWindow, setUserWindow] = useState<UserWindowData | null>(null)
+  const [openUserId, setOpenUserId] = useState<string | null>(null)
+  const [userBusy, setUserBusy] = useState(false)
+
+  async function openUser(profileId: string) {
+    setUserBusy(true); setMessage(null); setOpenUserId(profileId)
+    try {
+      const res = await fetch(`/api/nexus/internal/user-window/${profileId}`)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.success === false) throw new Error(data?.message ?? 'Could not open user.')
+      setUserWindow(data as UserWindowData)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not open user.')
+      setOpenUserId(null)
+    } finally {
+      setUserBusy(false)
+    }
+  }
+
+  function handleRowClick(itemId: string) {
+    if (itemId.startsWith('user-')) {
+      void openUser(itemId.slice('user-'.length))
+    } else {
+      setSelectedId(itemId)
+    }
+  }
 
   useEffect(() => {
     async function load() {
@@ -82,8 +109,10 @@ export function InternalUsersFeaturesBoard() {
         {shown.map(item => {
           const c = color(item.bucket)
           const active = selectedId === item.id
+          const isUser = item.id.startsWith('user-')
+          const opening = isUser && userBusy && openUserId === item.id.slice('user-'.length)
           return (
-            <button key={item.id} type="button" onClick={() => setSelectedId(item.id)} className="w-full rounded-2xl px-3 py-3 text-left" style={{ background: active ? `${c}1f` : 'rgba(0,0,0,0.18)', border: active ? `1px solid ${c}66` : '1px solid rgba(255,255,255,0.06)' }}>
+            <button key={item.id} type="button" onClick={() => handleRowClick(item.id)} className="w-full rounded-2xl px-3 py-3 text-left" style={{ background: active ? `${c}1f` : 'rgba(0,0,0,0.18)', border: active ? `1px solid ${c}66` : '1px solid rgba(255,255,255,0.06)', opacity: opening ? 0.6 : 1 }}>
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{item.title}</div>
@@ -107,6 +136,14 @@ export function InternalUsersFeaturesBoard() {
             <button type="button" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.62)' }}>Open Admin Page</button>
           </div>
         </div>
+      )}
+
+      {userWindow && (
+        <UserGlassWindow
+          data={userWindow}
+          onBack={() => { setUserWindow(null); setOpenUserId(null) }}
+          onRefresh={async () => { if (openUserId) await openUser(openUserId) }}
+        />
       )}
     </div>
   )
