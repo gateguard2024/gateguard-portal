@@ -188,6 +188,28 @@ export function JobGlassWindow({
     }
   }
 
+  async function uploadJobFile(file: File) {
+    const jobId = job.id
+    if (!jobId || !file) return
+    setActionBusy(true); setActionMessage(null)
+    try {
+      const urlRes = await fetch(`/api/nexus/jobs/job-window/${jobId}/attachment-url`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: file.name }) })
+      const urlData = await urlRes.json().catch(() => ({}))
+      if (!urlRes.ok) throw new Error(urlData?.error ?? 'Could not start upload.')
+      const put = await fetch(urlData.signedUrl, { method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file })
+      if (!put.ok) throw new Error('Upload failed.')
+      const rec = await fetch(`/api/nexus/jobs/job-window/${jobId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add_attachment', file_name: file.name, url: urlData.publicUrl, file_type: file.type, size_bytes: file.size }) })
+      const recData = await rec.json().catch(() => ({}))
+      if (!rec.ok || recData.success === false) throw new Error(recData?.message ?? 'Could not save file.')
+      setActionMessage('File added.')
+      await onRefresh?.()
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : 'Upload failed.')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="rounded-[2rem] p-5" style={{ background: 'linear-gradient(145deg, rgba(52,211,153,0.12), rgba(255,255,255,0.035))', border: '1px solid rgba(52,211,153,0.2)', boxShadow: '0 20px 70px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
@@ -271,7 +293,11 @@ export function JobGlassWindow({
               <ActionButton title="Schedule Visit" subtitle="Put the next site visit on the calendar." active={activeAction === 'schedule_visit'} onClick={() => { setActiveAction(activeAction === 'schedule_visit' ? null : 'schedule_visit'); setActionMessage(null) }} />
               <ActionButton title="Mark Complete" subtitle="Close this job when work is done." active={activeAction === 'mark_complete'} onClick={() => { setActiveAction(activeAction === 'mark_complete' ? null : 'mark_complete'); setActionMessage(null) }} />
               <ActionButton title="Assign Team" subtitle="Coming in a future stage." disabled />
-              <ActionButton title="Upload File" subtitle="Coming in a future stage." disabled />
+              <label className="block w-full cursor-pointer rounded-2xl p-3 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(52,211,153,0.07)', border: '1px solid rgba(52,211,153,0.16)', color: 'rgba(255,255,255,0.86)', opacity: actionBusy ? 0.6 : 1 }}>
+                <div className="text-xs font-semibold">{actionBusy ? 'Uploading…' : 'Upload File'}</div>
+                <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.42)' }}>Add a photo, doc, or drawing.</div>
+                <input type="file" className="hidden" disabled={actionBusy} onChange={e => { const f = e.target.files?.[0]; if (f) void uploadJobFile(f); e.currentTarget.value = '' }} />
+              </label>
 
               {activeAction === 'add_note' && (
                 <div className="space-y-2 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(52,211,153,0.22)' }}>
