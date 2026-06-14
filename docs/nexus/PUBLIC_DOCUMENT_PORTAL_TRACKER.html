@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Public Document Portal — Build Tracker</title>
+<style>
+  :root { --ink:#0f172a; --muted:#64748b; --line:#e2e8f0; --brand:#6B7EFF;
+          --done:#059669; --prog:#d97706; --todo:#94a3b8; }
+  * { box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+         color:var(--ink); margin:0; padding:32px; max-width:900px; margin:0 auto; line-height:1.45; }
+  h1 { font-size:22px; margin:0 0 2px; }
+  .sub { color:var(--muted); font-size:13px; margin:0 0 18px; }
+  .legend { display:flex; gap:16px; font-size:12px; color:var(--muted); margin:0 0 22px; flex-wrap:wrap; }
+  .legend span { display:inline-flex; align-items:center; gap:6px; }
+  .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+  .d-done{ background:var(--done);} .d-prog{ background:var(--prog);} .d-todo{ background:var(--todo);}
+  .phase { border:1px solid var(--line); border-radius:12px; padding:14px 18px; margin:0 0 14px; page-break-inside:avoid; }
+  .phase h2 { font-size:15px; margin:0 0 2px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .phase .goal { color:var(--muted); font-size:12px; margin:0 0 10px; }
+  .badge { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em;
+           padding:3px 9px; border-radius:999px; white-space:nowrap; }
+  .b-done{ background:#ecfdf5; color:var(--done); border:1px solid #a7f3d0;}
+  .b-prog{ background:#fffbeb; color:var(--prog); border:1px solid #fcd34d;}
+  .b-todo{ background:#f8fafc; color:var(--todo); border:1px solid var(--line);}
+  ul { list-style:none; padding:0; margin:0; }
+  li { display:flex; gap:9px; padding:5px 0; font-size:13px; border-top:1px dashed #eef2f7; }
+  li:first-child { border-top:none; }
+  .box { width:15px; height:15px; border:1.5px solid var(--todo); border-radius:4px; flex-shrink:0; margin-top:2px; text-align:center; font-size:11px; line-height:13px; }
+  .box.done { background:var(--done); border-color:var(--done); color:#fff; }
+  .box.prog { border-color:var(--prog); color:var(--prog); }
+  .step b { font-family:ui-monospace,monospace; font-size:12px; color:var(--brand); }
+  .note { color:var(--muted); font-size:11px; }
+  .accept { margin-top:6px; }
+  .accept li { color:var(--muted); }
+  @media print {
+    body { padding:0; }
+    .phase { border-color:#ccc; }
+    a { color:inherit; text-decoration:none; }
+  }
+</style>
+</head>
+<body>
+  <h1>Public Document Portal — Build Tracker</h1>
+  <p class="sub">Branch: beta · Goal: every external doc (NDA / agreements / contracts / proposals) opens a no-login, no-chrome Nexus glass page at <b>nexus.gateguard.co/document/[slug]</b>. Updated as we go.</p>
+  <div class="legend">
+    <span><i class="dot d-done"></i> Done</span>
+    <span><i class="dot d-prog"></i> In progress</span>
+    <span><i class="dot d-todo"></i> To do</span>
+    <span>· Last updated by build session</span>
+  </div>
+
+  <!-- PHASE 0 -->
+  <div class="phase">
+    <h2>Phase 0 — Foundation <span class="badge b-done">Done</span></h2>
+    <p class="goal">Shared glass shell, data model, slug/token generators.</p>
+    <ul>
+      <li><span class="box done">✓</span><span class="step"><b>NexusDocShell</b> — universal glass portal frame (chrome + white sheet + print-safe).</span></li>
+      <li><span class="box done">✓</span><span class="step">Migration <b>112</b> — public_slug, customer_id, property_id; document_type +customer_contract/+proposal. <span class="note">→ run on beta + prod.</span></span></li>
+      <li><span class="box done">✓</span><span class="step"><b>lib/doc-slug.ts</b> — readable slug + 64-char token + nexus URL builder.</span></li>
+      <li><span class="box done">✓</span><span class="step">Interim: proposal page reframed into the glass shell.</span></li>
+      <li><span class="box prog">!</span><span class="step">Set <b>NEXT_PUBLIC_NEXUS_URL</b> + add nexus.gateguard.co domain alias in Vercel. <span class="note">(your action)</span></span></li>
+    </ul>
+  </div>
+
+  <!-- PHASE 1 -->
+  <div class="phase">
+    <h2>Phase 1 — Universal page /document/[slug] <span class="badge b-done">Done</span></h2>
+    <p class="goal">The keystone — one state-driven glass page everything plugs into.</p>
+    <ul>
+      <li><span class="box done">✓</span><span class="step">1.1 middleware — bypass /document/ + /api/document/.</span></li>
+      <li><span class="box done">✓</span><span class="step">1.2 PortalShell — /document is standalone (no chrome).</span></li>
+      <li><span class="box done">✓</span><span class="step">1.3 GET resolver — slug → record, public-safe fields, token never exposed.</span></li>
+      <li><span class="box done">✓</span><span class="step">1.4 POST actions — sign / approve / decline / request_changes / ask_question.</span></li>
+      <li><span class="box done">✓</span><span class="step">1.5 Universal glass page — review / sign / approve / final / expired / unavailable.</span></li>
+      <li><span class="box done">✓</span><span class="step">1.6 doc-status map — labels + 3-step flows per type.</span></li>
+    </ul>
+    <p class="goal accept"><b>Accept:</b> set a public_slug on a row → open /document/[slug] incognito → no chrome, correct state.</p>
+  </div>
+
+  <!-- PHASE 2 -->
+  <div class="phase">
+    <h2>Phase 2 — NDA + agreements + contracts onto the portal <span class="badge b-todo">To do</span></h2>
+    <p class="goal">Route signature documents through the universal page.</p>
+    <ul>
+      <li><span class="box">&nbsp;</span><span class="step">2.1 signatures/send — generate + store public_slug; email uses nexus.gateguard.co/document/[slug].</span></li>
+      <li><span class="box">&nbsp;</span><span class="step">2.2 /sign/[token] → redirect to /document/[slug] (back-compat for sent links).</span></li>
+      <li><span class="box">&nbsp;</span><span class="step">2.3 customer_contract — contract send creates a record + slug like NDA.</span></li>
+      <li><span class="box">&nbsp;</span><span class="step">2.4 Countersign + final copy shown on the universal page; "Open Final" emails the slug URL.</span></li>
+      <li><span class="box">&nbsp;</span><span class="step">2.5 Confirm populated document_html renders for NDA + each agreement type.</span></li>
+    </ul>
+    <p class="goal accept"><b>Accept:</b> send NDA/contract → incognito → no chrome → populated → sign → countersign → Open Final works.</p>
+  </div>
+
+  <!-- PHASE 3 -->
+  <div class="phase">
+    <h2>Phase 3 — Proposals onto the portal <span class="badge b-todo">To do</span></h2>
+    <p class="goal">Route quotes/proposals through the universal page.</p>
+    <ul>
+      <li><span class="box">&nbsp;</span><span class="step">3.1 Quote send creates a document_signatures row (type=proposal) + slug; sets document_html/url + links.</span></li>
+      <li><span class="box">&nbsp;</span><span class="step">3.2 Email links to nexus.gateguard.co/document/[slug] (not /quotes/[id]/approve).</span></li>
+      <li><span class="box">&nbsp;</span><span class="step">3.3 Proposal mode: Review → Approve / Request Changes / Ask a Question / Download PDF.</span></li>
+      <li><span class="box">&nbsp;</span><span class="step">3.4 Approve updates the quote + doc; approved → sales/contract path.</span></li>
+    </ul>
+    <p class="goal accept"><b>Accept:</b> send proposal → incognito → no chrome → readable → approve / request-changes clear.</p>
+  </div>
+
+  <!-- PHASE 4 -->
+  <div class="phase">
+    <h2>Phase 4 — Retire legacy external links <span class="badge b-todo">To do</span></h2>
+    <p class="goal">Every outbound link goes through the portal.</p>
+    <ul>
+      <li><span class="box">&nbsp;</span><span class="step">4.1 Audit all email sends — every external URL uses publicDocUrl(slug).</span></li>
+      <li><span class="box">&nbsp;</span><span class="step">4.2 /quotes/[id]/approve + /proposal redirect to the universal page when a slug exists (keep internal preview).</span></li>
+      <li><span class="box">&nbsp;</span><span class="step">4.3 Remove/redirect any remaining external entry point that shows chrome.</span></li>
+    </ul>
+  </div>
+
+  <!-- PHASE 5 -->
+  <div class="phase">
+    <h2>Phase 5 — Security, expiry, polish <span class="badge b-todo">To do</span></h2>
+    <p class="goal">Lock it down and finish the domain.</p>
+    <ul>
+      <li><span class="box">&nbsp;</span><span class="step">5.1 Token is the credential; slug/8-digit alone never grants another doc.</span></li>
+      <li><span class="box">&nbsp;</span><span class="step">5.2 Expired → "link expired" glass page; invalid slug → "unavailable" glass page. <span class="note">(built into Phase 1 page; verify)</span></span></li>
+      <li><span class="box">&nbsp;</span><span class="step">5.3 Mobile pass on the universal page.</span></li>
+      <li><span class="box">&nbsp;</span><span class="step">5.4 nexus.gateguard.co live (Vercel domain + env); HTTPS verified.</span></li>
+      <li><span class="box">&nbsp;</span><span class="step">5.5 Rate-limit the resolver to deter slug enumeration.</span></li>
+    </ul>
+    <p class="goal accept"><b>Accept (security):</b> expired → expired page; invalid → unavailable page; can't guess another doc from the 8-digit alone.</p>
+  </div>
+
+  <p class="sub" style="margin-top:18px;">Full detail: docs/nexus/PUBLIC_DOCUMENT_PORTAL_PLAN.md · Each phase ends green-build + its acceptance test before the next.</p>
+</body>
+</html>
