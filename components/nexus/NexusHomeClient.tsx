@@ -1,7 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useUser } from '@clerk/nextjs'
+import { routeCommand } from '@/lib/command-router'
 import { ActionCommandBar } from '@/components/nexus/ActionCommandBar'
 import { ActionFlowSurface, type NexusTabId } from '@/components/nexus/ActionFlowSurface'
 import { CustomersSitesSurface } from '@/components/nexus/CustomersSitesSurface'
@@ -100,6 +102,7 @@ export default function NexusHomeClient() {
     meta.org_tier === 'master_dealer' ||
     meta.role === 'admin' ||
     meta.role === 'supervisor'
+  const router = useRouter()
   const [activeTab, setActiveTab] = useState<NexusTabId>('my-day')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -126,6 +129,12 @@ export default function NexusHomeClient() {
   }, [isAdmin])
 
   const handleQuery = useCallback(async (query: string) => {
+    // Fast path: plain navigation commands ("dispatch", "go to money") jump
+    // straight to the screen with no AI call. Anything else falls through.
+    const cmd = routeCommand(query, isAdmin)
+    if (cmd.kind === 'tab') { setActiveTab(cmd.tab); return }
+    if (cmd.kind === 'route') { router.push(cmd.href); return }
+
     const nextMessages = [...messages, { role: 'user' as const, content: query }]
     setMessages(nextMessages)
     setIsLoading(true)
@@ -137,7 +146,7 @@ export default function NexusHomeClient() {
     } finally {
       setIsLoading(false)
     }
-  }, [messages])
+  }, [messages, isAdmin, router])
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden" style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(0,124,255,0.22) 0%, transparent 42%), radial-gradient(ellipse at 12% 32%, rgba(0,200,255,0.12) 0%, transparent 32%), radial-gradient(ellipse at 84% 18%, rgba(79,70,229,0.18) 0%, transparent 34%), linear-gradient(180deg, #020713 0%, #061426 48%, #01040d 100%)' }}>
