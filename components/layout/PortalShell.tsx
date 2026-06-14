@@ -22,9 +22,11 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const isTech       = pathname.startsWith('/tech')
   const isAria       = pathname.startsWith('/aria')
   const isSign       = pathname.startsWith('/sign')
+  const isDocument   = pathname.startsWith('/document/')
   const isNexus      = pathname === '/' || pathname.startsWith('/opps')
-  // Proposal + approve pages and signing links are customer-facing — no sidebar, no portal chrome, no auth wall
-  const isStandalone = isTech || isAria || isSign || isNexus
+  // Proposal + approve pages, signing links, and the public document portal are
+  // customer-facing — no sidebar, no portal chrome, no auth wall
+  const isStandalone = isTech || isAria || isSign || isDocument || isNexus
     || /^\/quotes\/[^/]+(\/proposal|\/approve)(\/|$)/.test(pathname)
 
   // Standalone: full-screen, no portal chrome
@@ -36,7 +38,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         display: isAria ? 'flex' : undefined,
         flexDirection: isAria ? 'column' : undefined,
         overflow: isAria ? 'hidden' : undefined,
-        background: isTech ? '#F1F5F9' : isNexus || isAria || isSign ? 'transparent' : '#ffffff',
+        background: isTech ? '#F1F5F9' : isNexus || isAria || isSign || isDocument ? 'transparent' : '#ffffff',
         overscrollBehavior: 'none',
       }}>
         {children}
