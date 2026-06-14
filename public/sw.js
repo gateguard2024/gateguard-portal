@@ -1,7 +1,7 @@
 // GateGuard Portal — conservative service worker
 // Phase 1 stabilization: cache static assets only, keep APIs network-only.
 
-const STATIC_CACHE = 'gg-static-v2';
+const STATIC_CACHE = 'gg-static-v3';
 
 const PRECACHE_URLS = [
   '/offline.html',

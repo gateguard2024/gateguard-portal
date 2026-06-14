@@ -355,7 +355,7 @@ export default function DesignExplorer() {
     );
   };
   return (
-    <div className="flex w-full h-[100dvh] pb-28 font-sans overflow-hidden bg-black/40">
+    <div className="flex w-full max-w-5xl mt-9 h-[78dvh] font-sans overflow-hidden rounded-3xl" style={glassPanel}>
 
       {/* LEFT PANE: Search & List */}
       <div
