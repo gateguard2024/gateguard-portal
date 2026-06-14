@@ -50,6 +50,8 @@ function isBypassPath(pathname: string): boolean {
     pathname.startsWith('/api/inngest') ||
     // Stripe webhook — raw HTTP POST with Stripe-Signature header, no Clerk session
     pathname.startsWith('/api/billing/webhook') ||
+    // Clerk webhook — verified via Svix signature, no Clerk session
+    pathname.startsWith('/api/webhooks/clerk') ||
     // Auth flows
     pathname.startsWith('/sign-in') ||
     pathname.startsWith('/sign-up') ||

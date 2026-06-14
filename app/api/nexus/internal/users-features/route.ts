@@ -1,3 +1,12 @@
+/**
+ * GET /api/nexus/internal/users-features
+ *
+ * Data for the Internal → Users & Features board. Returns three clean groups,
+ * all scoped to the caller's downward org subtree (corporate = all):
+ *   users  — portal logins (profiles). Clickable → glass user editor.
+ *   techs  — technician records (field workers).
+ *   orgs   — organizations, split into dealers vs clients.
+ */
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
@@ -10,7 +19,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-type AdminBucket = 'platform_users' | 'feature_settings' | 'dealer_access' | 'needs_review'
+const NONE = ['00000000-0000-0000-0000-000000000000']
 
 function canViewInternal(user: Awaited<ReturnType<typeof getCurrentUser>>) {
   return user.isCorporate || user.isMasterDealer || user.role === 'admin' || user.role === 'supervisor'
@@ -23,86 +32,74 @@ export async function GET() {
       return NextResponse.json({ success: false, message: 'You do not have access to Internal admin tools.' }, { status: 403 })
     }
 
-    // Downward subtree scope (corporate = all). Replaces the old own-org-only filter.
     const scope = await resolveOrgScope(user)
+    const scoped = <T extends { in: (col: string, vals: string[]) => T }>(q: T, col: string): T =>
+      scope.all ? q : q.in(col, scope.ids.length ? scope.ids : NONE)
 
-    let profiles = supabase
+    // Org name lookup for labeling people.
+    let orgsQ = supabase.from('organizations').select('id,name,org_tier,status,primary_email').order('name')
+    orgsQ = scoped(orgsQ as any, 'id')
+    const { data: orgRows } = await orgsQ
+    const orgName = new Map((orgRows ?? []).map((o: any) => [o.id, o.name]))
+
+    // Portal logins.
+    let profQ = supabase
       .from('profiles')
-      .select('id,first_name,last_name,email,role,org_id,last_login_at,created_at')
+      .select('id,first_name,last_name,email,role,org_id,last_login_at')
       .order('created_at', { ascending: false })
-      .limit(80)
-    if (!scope.all) profiles = profiles.in('org_id', scope.ids.length ? scope.ids : ['00000000-0000-0000-0000-000000000000'])
-    const profileRows = await profiles
+      .limit(200)
+    profQ = scoped(profQ as any, 'org_id')
+    const { data: profRows } = await profQ
 
-    let orgs = supabase
-      .from('organizations')
-      .select('id,name,org_tier,status,primary_email,created_at')
-      .order('created_at', { ascending: false })
-      .limit(80)
-    if (!scope.all) orgs = orgs.in('id', scope.ids.length ? scope.ids : ['00000000-0000-0000-0000-000000000000'])
-    const orgRows = await orgs
+    // Field techs.
+    let techQ = supabase
+      .from('technicians')
+      .select('id,name,email,org_id,employment_type,can_access_portal,clerk_user_id,tech_code')
+      .order('name')
+      .limit(200)
+    techQ = scoped(techQ as any, 'org_id')
+    const { data: techRows } = await techQ
 
-    let permissions = supabase
-      .from('user_permissions')
-      .select('id,user_id,permission,enabled,created_at')
-      .limit(80)
-    const permissionRows = await permissions
+    const users = (profRows ?? []).map((r: any) => ({
+      id: r.id,
+      name: [r.first_name, r.last_name].filter(Boolean).join(' ') || r.email || 'User',
+      email: r.email || null,
+      role: r.role || null,
+      org_name: orgName.get(r.org_id) ?? null,
+      last_login_at: r.last_login_at ?? null,
+    }))
 
-    let addOns = supabase
-      .from('dealer_add_ons')
-      .select('id,dealer_org_id,add_on_key,enabled,created_at')
-      .limit(80)
-    if (!user.isCorporate && user.org_id) addOns = addOns.eq('dealer_org_id', user.org_id)
-    const addOnRows = await addOns
+    const techs = (techRows ?? []).map((r: any) => ({
+      id: r.id,
+      name: r.name,
+      email: r.email || null,
+      employment_type: r.employment_type || 'employee',
+      org_name: orgName.get(r.org_id) ?? null,
+      access: r.can_access_portal ? 'portal' : r.tech_code ? 'field_code' : 'none',
+      linked: !!r.clerk_user_id,
+    }))
 
-    const items: Array<Record<string, unknown> & { bucket: AdminBucket }> = []
+    const orgs = (orgRows ?? []).map((o: any) => ({
+      id: o.id,
+      name: o.name || 'Organization',
+      tier: o.org_tier || null,
+      status: o.status || 'unknown',
+      email: o.primary_email || null,
+      kind: o.org_tier === 'client' ? 'client' : 'dealer',
+    }))
 
-    for (const row of profileRows.data ?? []) {
-      const name = [row.first_name, row.last_name].filter(Boolean).join(' ') || row.email || 'User'
-      items.push({
-        id: `user-${row.id}`,
-        bucket: row.last_login_at ? 'platform_users' : 'needs_review',
-        title: name,
-        subtitle: row.email || 'No email',
-        status: row.role || 'user',
-        meta: row.last_login_at ? `Last login ${String(row.last_login_at).slice(0, 10)}` : 'No recent login found',
-      })
-    }
-
-    for (const row of orgRows.data ?? []) {
-      items.push({
-        id: `org-${row.id}`,
-        bucket: String(row.status ?? '').toLowerCase() === 'active' ? 'dealer_access' : 'needs_review',
-        title: row.name || 'Organization',
-        subtitle: row.primary_email || row.org_tier || 'Dealer / org access',
-        status: row.status || 'unknown',
-        meta: row.org_tier || null,
-      })
-    }
-
-    for (const row of permissionRows.data ?? []) {
-      items.push({
-        id: `permission-${row.id}`,
-        bucket: row.enabled === false ? 'needs_review' : 'feature_settings',
-        title: row.permission || 'Permission',
-        subtitle: `User ${row.user_id}`,
-        status: row.enabled === false ? 'off' : 'on',
-        meta: 'Permission override',
-      })
-    }
-
-    for (const row of addOnRows.data ?? []) {
-      items.push({
-        id: `addon-${row.id}`,
-        bucket: row.enabled === false ? 'needs_review' : 'feature_settings',
-        title: row.add_on_key || 'Add-on',
-        subtitle: `Dealer ${row.dealer_org_id}`,
-        status: row.enabled === false ? 'off' : 'on',
-        meta: 'Dealer add-on',
-      })
-    }
-
-    return NextResponse.json({ success: true, items })
+    return NextResponse.json({
+      success: true,
+      users,
+      techs,
+      orgs,
+      counts: {
+        users: users.length,
+        techs: techs.length,
+        dealers: orgs.filter(o => o.kind === 'dealer').length,
+        clients: orgs.filter(o => o.kind === 'client').length,
+      },
+    })
   } catch (error) {
     return NextResponse.json({ success: false, message: error instanceof Error ? error.message : 'Could not load users/features.' }, { status: 500 })
   }
