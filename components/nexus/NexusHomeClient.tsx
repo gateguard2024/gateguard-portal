@@ -16,13 +16,14 @@ type ChatMessage = {
   content: string
 }
 
+// Internal/Admin is intentionally NOT here — it lives behind a near-hidden admin
+// icon (see below) so dealers and normal users never see it in the main flow.
 const NAV_ITEMS: { label: string; id: NexusTabId }[] = [
   { label: 'My Day', id: 'my-day' },
   { label: 'Sales', id: 'opps' },
   { label: 'Jobs', id: 'jobs' },
   { label: 'Customers/Sites', id: 'recent' },
   { label: 'Money/Docs', id: 'field' },
-  { label: 'Internal', id: 'people' },
 ]
 
 const COMMAND_SUGGESTIONS = [
@@ -68,6 +69,14 @@ async function postAssistant(messages: ChatMessage[]) {
 export default function NexusHomeClient() {
   const { user } = useUser()
   const firstName = user?.firstName ?? 'there'
+  // Admin affordance is visible only to GateGuard staff + dealer admins/supervisors —
+  // never to regular dealer users/techs. Keeps Internal out of the normal flow.
+  const meta = (user?.publicMetadata ?? {}) as Record<string, unknown>
+  const isAdmin =
+    meta.org_tier === 'corporate' ||
+    meta.org_tier === 'master_dealer' ||
+    meta.role === 'admin' ||
+    meta.role === 'supervisor'
   const [activeTab, setActiveTab] = useState<NexusTabId>('my-day')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -93,6 +102,25 @@ export default function NexusHomeClient() {
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px" aria-hidden="true" style={{ background: 'linear-gradient(90deg, transparent, rgba(0,200,255,0.55), transparent)' }} />
 
       <main className="relative z-10 flex flex-1 flex-col items-center px-6 pb-36 pt-16">
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setActiveTab(activeTab === 'people' ? 'my-day' : 'people')}
+            title="Admin"
+            aria-label="Admin"
+            className="absolute right-5 top-5 z-30 flex h-9 w-9 items-center justify-center rounded-full transition-all hover:-translate-y-0.5"
+            style={{
+              background: activeTab === 'people' ? 'rgba(0,200,255,0.18)' : 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(0,200,255,0.28)',
+              color: 'rgba(210,245,255,0.82)',
+              boxShadow: activeTab === 'people' ? '0 0 18px rgba(0,124,255,0.3)' : 'none',
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3z" stroke="currentColor" strokeWidth="1.6" />
+            </svg>
+          </button>
+        )}
         <NexusMark />
         <p className="mb-7 text-center text-lg" style={{ color: 'rgba(255,255,255,0.48)' }}>Hi {firstName}, <span style={{ color: 'rgba(255,255,255,0.88)' }}>what are we working on today?</span></p>
         <div className="w-full max-w-3xl rounded-[1.35rem]" style={{ boxShadow: '0 0 34px rgba(0,124,255,0.16), 0 0 1px rgba(0,200,255,0.5)' }}>
