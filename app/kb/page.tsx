@@ -89,6 +89,7 @@ interface RecentSearch {
 // ─── Category constants ───────────────────────────────────────────────────────
 
 const CATEGORY_OPTIONS = [
+  'Platform How-To',
   'Gate Systems',
   'Camera Systems',
   'Access Control',

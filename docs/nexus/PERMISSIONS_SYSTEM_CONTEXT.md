@@ -50,6 +50,16 @@ Governing invariant everywhere: **nobody can be granted more than their parent.*
   - *Field technician* / *Contractor* → `technicians` row (`employment_type` employee/contractor); login method = field code (`tech_code`), full login (Clerk invite + Tech role), or none.
   - *Subcontractor company* → `subcontractors` row (own `access_code` portal).
 - **Tap a user card** → `UserGlassWindow` (`components/nexus/windows/UserGlassWindow.tsx`) → `GET/POST /api/nexus/internal/user-window/[id]`: pick role (auto access package preview) + Advanced per-feature tuning (locked above the granter's cap). Writes role to Clerk + overrides to `user_feature_access`.
+- **Board groups** (`InternalUsersFeaturesBoard` ← `GET /api/nexus/internal/users-features`): **Platform Users** (clickable), **Field Techs**, **Organizations** (Corporate / Dealers & Partners / Clients / Unclassified). Org class via `orgCategory(org_tier)`; null/legacy tier → Unclassified so gaps are visible. **Sync logins** button runs the backfill.
+
+---
+
+## 3a. Clerk → profiles sync (the identity bridge)
+
+Clerk owns login; `profiles` is the internal mirror everything joins on. Nothing used to populate it (that was the "Platform Users = 0" bug). Now:
+- `lib/profile-sync.ts` — `upsertProfileFromClerk()` maps a Clerk user → `profiles` (role→`user_role` enum, falls back to corporate org when metadata has no `org_id`, links `technicians.clerk_user_id` when `technician_id` is in metadata).
+- `app/api/webhooks/clerk/route.ts` — Svix-verified `user.created`/`user.updated` → keeps `profiles` current on every signup. Middleware-bypassed. Needs `CLERK_WEBHOOK_SECRET` per environment (Preview=beta, Production=main) + an endpoint registered in each Clerk instance.
+- `app/api/admin/sync-profiles/route.ts` — corporate-only backfill of all existing Clerk users (also surfaced as the **Sync logins** button).
 
 ---
 
@@ -73,14 +83,23 @@ Technician scoping fixed: `app/api/dispatch/technicians/route.ts` now scopes GET
 
 ---
 
-## 6. Known follow-ups / not yet done
+## 6. Done in this build cycle (June 14, 2026)
 
-1. **Tech full-login link on signup.** The Add Person "full login" path creates a Clerk invite carrying `technician_id` in metadata, but nothing yet writes `technicians.clerk_user_id` when the invite is accepted — needs a Clerk webhook (or a link step) so WO assigned-only activates automatically. Until then, link manually.
-2. **Internal panel nav buttons.** `InternalSurface` "Users & Features" still has buttons pointing at `/platform-users`, `/feature-settings`, `/dealer` (may 404). Repoint to working routes or remove now that editing is inline.
-3. **Dealers + Feature Settings into glass (task #10).** Dealer onboarding board exists; Feature Settings is still the legacy page. Bring both fully into the glass hub.
-4. **Dual parent columns.** Backfilled to agree (migration 110); consider dropping `parent_id` long-term and standardizing on `parent_org_id`.
-5. **Legacy systems to retire.** `user_permissions.can_see_*` and the DB `user_role` enum values are dead; remove references over time.
-6. **RLS backstop.** App-layer scoping is primary; tighten RLS so a forgotten filter fails closed.
+- Canonical-parent fix (migration 110) + guard helpers + role presets (Phase 1)
+- Assigned-only enforcement on leads/opps/quotes/work-orders + corporate guarantee (Phase 2)
+- Glass Admin hub: Users & Features board (People/Techs/Orgs), user glass editor, Add Person wizard (Phase 3)
+- 4-role model incl. **Tech**; dispatch tech `org_id` + scoping fix
+- Clerk→profiles sync: webhook + backfill + Sync logins button
+- Org classification (corporate/dealer/client/unclassified); Internal nav buttons repointed to `/admin/*`
+
+## 6a. Known follow-ups / not yet done
+
+1. **Dealers + Feature Settings into glass (task #10).** Dealer onboarding board exists; Feature Settings is still the legacy `/admin/settings/features` page. Bring both fully into the glass hub.
+2. **Clean up Unclassified orgs.** Any org showing under "Unclassified — needs a tier" needs its `org_tier` set (null or legacy `mso`/`dealer`/`partner`).
+3. **Dual parent columns.** Backfilled to agree (migration 110); consider dropping `parent_id` long-term and standardizing on `parent_org_id`.
+4. **Legacy systems to retire.** `user_permissions.can_see_*` and unused DB `user_role` enum values are dead; remove references over time.
+5. **RLS backstop.** App-layer scoping is primary; tighten RLS so a forgotten filter fails closed.
+6. **Prod parity.** Merge `beta → main`, run migration 110 on prod Supabase, run Sync logins on prod, register the prod Clerk webhook.
 
 ---
 
