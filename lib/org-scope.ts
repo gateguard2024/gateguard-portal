@@ -35,7 +35,8 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import type { PortalUser } from './current-user'
+import type { PortalUser, PortalRole } from './current-user'
+import { normalizeRole } from './permissions'
 
 // Use service role for the hierarchy lookup — this is a read-only metadata query
 // that resolves permissions, not data; it runs server-side only.
@@ -147,4 +148,74 @@ export function applyOrgScope<T>(
  */
 export function hasOrgContext(user: PortalUser): boolean {
   return user.isCorporate || !!user.org_id
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Axis 2 — in-org record scope: "User = assigned only"
+//
+// Admins and Supervisors see all records in their org scope (Axis 1 only).
+// A plain User additionally sees ONLY records assigned to them, for the
+// entities below. See PERMISSIONS_BUILD_SPEC.md §1.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type AssignedEntity = 'leads' | 'opportunities' | 'work_orders' | 'quotes'
+
+// Per-entity assignment column + which identity that column stores.
+//   'clerk'   → matches PortalUser.id (Clerk user id, TEXT)
+//   'profile' → matches the internal profiles.id (UUID)
+const ASSIGN_CONFIG: Record<AssignedEntity, { column: string; identity: 'clerk' | 'profile' }> = {
+  leads:         { column: 'assigned_to_user_id', identity: 'clerk' },   // show_leads
+  opportunities: { column: 'rep_id',              identity: 'profile' }, // opportunities
+  work_orders:   { column: 'assigned_to',         identity: 'profile' }, // work_orders
+  quotes:        { column: 'created_by',          identity: 'profile' }, // quotes
+}
+
+// A UUID that will never match any row — used to fail closed when a User has
+// no resolvable identity for the column's identity type.
+const NO_MATCH = '00000000-0000-0000-0000-000000000000'
+
+/**
+ * Resolve the internal profiles.id (UUID) for a Clerk user id.
+ * Returns null if no profile row exists. Service-role read, server-side only.
+ */
+export async function getProfileId(clerkUserId: string): Promise<string | null> {
+  if (!clerkUserId || clerkUserId === 'system') return null
+  const { data } = await getSupabase()
+    .from('profiles')
+    .select('id')
+    .eq('clerk_user_id', clerkUserId)
+    .maybeSingle()
+  return data?.id ?? null
+}
+
+/**
+ * Apply the "User = assigned only" filter to a query.
+ *
+ * No-op for admins and supervisors (they see all in-org records — Axis 1 only).
+ * For a User, filters to rows where the entity's assignment column equals the
+ * user's identity. Fails CLOSED (no rows) if the required identity is missing.
+ *
+ * Call this AFTER applyOrgScope on the same query.
+ *
+ *   const profileId = await getProfileId(user.id)
+ *   query = applyOrgScope(query, scope, 'org_id')
+ *   query = applyAssignedScope(query, user.role, { clerkUserId: user.id, profileId }, 'opportunities')
+ */
+export function applyAssignedScope<T>(
+  query: T,
+  role: PortalRole | null,
+  identity: { clerkUserId: string; profileId: string | null },
+  entity: AssignedEntity,
+): T {
+  // Admins and supervisors are not row-restricted.
+  if (normalizeRole(role) !== 'user') return query
+
+  const cfg = ASSIGN_CONFIG[entity]
+  const value = cfg.identity === 'clerk' ? identity.clerkUserId : identity.profileId
+
+  if (!value) {
+    // No resolvable identity → fail closed so a User never sees unassigned data.
+    return (query as any).eq(cfg.column, NO_MATCH) as T
+  }
+  return (query as any).eq(cfg.column, value) as T
 }

@@ -18,18 +18,13 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { normalizeRole, effectiveAccess, type AccessLevel } from '@/lib/permissions'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 export const dynamic = 'force-dynamic'
-
-const ACCESS_RANK: Record<string, number> = { none: 0, view: 1, edit: 2 }
-
-function capLevel(a: string, b: string): string {
-  return ACCESS_RANK[a] <= ACCESS_RANK[b] ? a : b
-}
 
 export async function GET() {
   try {
@@ -79,12 +74,16 @@ export async function GET() {
       .eq('org_id', orgId)
     const userFlagMap = new Map((userFlags ?? []).map((f: any) => [f.feature_key, f.access_level]))
 
+    // 3-role preset drives the default; an advanced per-user override can raise
+    // it back up to (never above) the org level. See lib/permissions.ts.
+    const role = normalizeRole(caller.role)
+
     const features: Record<string, string> = {}
     for (const f of catalog ?? []) {
-      const tierDefault = (f.tier_defaults ?? {})[orgTier] ?? 'none'
-      const orgLevel    = orgFlagMap.has(f.key) ? orgFlagMap.get(f.key)! : tierDefault
-      const userLevel   = userFlagMap.get(f.key) ?? orgLevel
-      features[f.key]   = capLevel(userLevel, orgLevel)
+      const tierDefault  = ((f.tier_defaults ?? {})[orgTier] ?? 'none') as AccessLevel
+      const orgLevel     = (orgFlagMap.has(f.key) ? orgFlagMap.get(f.key)! : tierDefault) as AccessLevel
+      const userOverride = (userFlagMap.get(f.key) ?? null) as AccessLevel | null
+      features[f.key]    = effectiveAccess({ role, featureKey: f.key, orgLevel, userOverride })
     }
 
     return NextResponse.json({ features })
