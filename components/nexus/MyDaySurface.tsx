@@ -8,6 +8,7 @@ import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGly
 import { TodoBoard } from '@/components/nexus/TodoBoard'
 import CalendarViews from '@/components/nexus/CalendarViews'
 import MessagesShell from '@/components/nexus/MessagesShell'
+import { PriorityGlassPane } from '@/components/nexus/PriorityGlassPane'
 
 type MyDayPanel = 'schedule' | 'top10' | 'todos' | 'messages' | null
 
@@ -165,6 +166,7 @@ export function MyDaySurface() {
   const [topNote, setTopNote] = useState('')
   const [showTopNoteBox, setShowTopNoteBox] = useState(false)
   const [relatedJobId, setRelatedJobId] = useState<string | null>(null)
+  const [priorityOpen, setPriorityOpen] = useState(false)
   const [messageNote, setMessageNote] = useState('')
   const [messageNotes, setMessageNotes] = useState<MessageNote[]>(() => {
     if (typeof window === 'undefined') return []
@@ -277,9 +279,18 @@ export function MyDaySurface() {
         <CalendarViews />
       </DetailShell>}
 
-      {activePanel === 'top10' && <DetailShell title="Today's Priorities" subtitle="Select one item, then choose an action." onClose={() => setActivePanel(null)} actions={<>{selectedTopItem ? <div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(0,200,255,0.08)', border: '1px solid rgba(0,200,255,0.16)', color: 'rgba(255,255,255,0.72)' }}>Selected:<br /><span style={{ color: 'rgba(255,255,255,0.9)' }}>{selectedTopItem.title}</span></div> : <div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.42)' }}>Select an item first.</div>}<ActionButton label="Open Related" disabled={!selectedTopItem || topActionBusy} onClick={openSelectedRelated} /><ActionButton label="Mark Done" disabled={!selectedTopItem || topActionBusy} onClick={() => void submitTopAction('mark_done')} /><ActionButton label="Add Note" disabled={!selectedTopItem || topActionBusy} onClick={() => { setShowTopNoteBox(!showTopNoteBox); setTopActionMessage(null) }} />{showTopNoteBox && <div className="space-y-2 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(0,200,255,0.22)' }}><textarea value={topNote} onChange={e => setTopNote(e.target.value)} placeholder="What should Nexus remember?" rows={3} className="w-full resize-none rounded-xl px-3 py-2 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(0,200,255,0.2)', color: 'rgba(255,255,255,0.88)' }} /><button type="button" disabled={topActionBusy || !topNote.trim()} onClick={() => void submitTopAction('add_note')} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #00C8FF, #007CFF)', color: 'white' }}>{topActionBusy ? 'Saving...' : 'Save Note'}</button></div>}{topActionMessage && <div className="rounded-2xl px-3 py-2 text-[11px]" style={{ background: 'rgba(0,200,255,0.08)', border: '1px solid rgba(0,200,255,0.18)', color: 'rgba(255,255,255,0.72)' }}>{topActionMessage}</div>}</>}>
-        {top10.length > 0 ? top10.map((item, index) => { const selected = selectedTopItemId === item.id; return <button key={`${item.type}-${item.id}`} type="button" onClick={() => { setSelectedTopItemId(item.id); setTopActionMessage(null); setShowTopNoteBox(false) }} className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: selected ? 'rgba(0,200,255,0.12)' : 'rgba(0,0,0,0.18)', border: selected ? '1px solid rgba(0,200,255,0.34)' : '1px solid rgba(255,255,255,0.06)' }}><div className="flex items-start justify-between gap-3"><div><div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.88)' }}>{index + 1}. {item.title}</div><div className="mt-1 text-[10px] capitalize" style={{ color: 'rgba(255,255,255,0.34)' }}>{item.reason} · {item.type.replace(/_/g, ' ')}</div></div><div className="rounded-full px-2 py-1 text-[9px] font-semibold uppercase" style={{ background: item.urgency === 'high' ? 'rgba(248,113,113,0.16)' : item.urgency === 'medium' ? 'rgba(251,191,36,0.16)' : 'rgba(148,163,184,0.14)', color: item.urgency === 'high' ? '#fca5a5' : item.urgency === 'medium' ? '#fde68a' : '#cbd5e1', border: '1px solid rgba(255,255,255,0.08)' }}>{selected ? 'selected' : item.urgency}</div></div></button> }) : <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)' }}>No priority items yet. Add an event or to-do to start building the day.</div>}
+      {activePanel === 'top10' && <DetailShell title="Today's Priorities" subtitle="Tap an item to open it and work it." onClose={() => setActivePanel(null)} actions={<div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(0,200,255,0.08)', border: '1px solid rgba(0,200,255,0.16)', color: 'rgba(255,255,255,0.6)' }}>Tap any priority to see why it matters and act — open the record, add a note, or mark it done.</div>}>
+        {top10.length > 0 ? top10.map((item, index) => <button key={`${item.type}-${item.id}`} type="button" onClick={() => { setSelectedTopItemId(item.id); setPriorityOpen(true) }} className="mb-1.5 w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="flex items-start justify-between gap-3"><div><div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.88)' }}>{index + 1}. {item.title}</div><div className="mt-1 text-[10px] capitalize" style={{ color: 'rgba(255,255,255,0.34)' }}>{item.reason} · {item.type.replace(/_/g, ' ')}</div></div><div className="rounded-full px-2 py-1 text-[9px] font-semibold uppercase" style={{ background: item.urgency === 'high' ? 'rgba(248,113,113,0.16)' : item.urgency === 'medium' ? 'rgba(251,191,36,0.16)' : 'rgba(148,163,184,0.14)', color: item.urgency === 'high' ? '#fca5a5' : item.urgency === 'medium' ? '#fde68a' : '#cbd5e1', border: '1px solid rgba(255,255,255,0.08)' }}>{item.urgency}</div></div></button>) : <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)' }}>No priority items yet. Add an event or to-do to start building the day.</div>}
       </DetailShell>}
+
+      {priorityOpen && selectedTopItem && (
+        <PriorityGlassPane
+          item={selectedTopItem}
+          onBack={() => setPriorityOpen(false)}
+          onRefresh={loadSummary}
+          onOpenJob={(id) => { setPriorityOpen(false); setRelatedJobId(id) }}
+        />
+      )}
 
       {activePanel === 'todos' && <DetailShell title="To-Dos" subtitle="Your tasks — add, prioritize, schedule, and complete." onClose={() => setActivePanel(null)} actions={<div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(139,92,246,0.10)', border: '1px solid rgba(139,92,246,0.22)', color: 'rgba(255,255,255,0.62)' }}>Tip: filter by Today, Overdue, or This Week. Tap a task to set its priority, due date, and status.</div>}>
         <TodoBoard />

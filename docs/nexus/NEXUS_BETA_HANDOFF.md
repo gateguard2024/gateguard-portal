@@ -33,6 +33,13 @@ The two streams already in flight feed directly into this: the **Permissions sys
 
 **Intern = the test.** If the intern hesitates, the UI isn't clear enough.
 
+**Hard UX rules (apply to every screen — locked):**
+- **5th-grader simple** — plain words, no jargon, no dead-ends.
+- **Landing is ALWAYS My Day.** Admin is never the landing; it's reachable only via the near-hidden admin icon (top-right, all pages, admins only).
+- **Card grids = 4 columns** (desktop) — `grid-cols-1 sm:grid-cols-2 lg:grid-cols-4`. Cards → glass board → detail pane.
+- **Sub-menus never more than 4 items.** If a surface needs more, group into ≤4 cards.
+- **One object format.** Every object detail — job, work order, parts, customer, lead, opportunity, site, invoice, technician — opens in the SAME glass-pane format (see §15). Same layout, same action-rail pattern, same terminology. A user who learns one learns them all.
+
 ---
 
 ## 3. Target global navigation
