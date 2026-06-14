@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { ActionCommandBar } from '@/components/nexus/ActionCommandBar'
 import { ActionFlowSurface, type NexusTabId } from '@/components/nexus/ActionFlowSurface'
@@ -81,6 +81,13 @@ export default function NexusHomeClient() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
+  // The global Admin launcher (all pages) routes admins here with ?view=admin.
+  useEffect(() => {
+    if (isAdmin && typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('view') === 'admin') {
+      setActiveTab('people')
+    }
+  }, [isAdmin])
+
   const handleQuery = useCallback(async (query: string) => {
     const nextMessages = [...messages, { role: 'user' as const, content: query }]
     setMessages(nextMessages)
@@ -102,25 +109,6 @@ export default function NexusHomeClient() {
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px" aria-hidden="true" style={{ background: 'linear-gradient(90deg, transparent, rgba(0,200,255,0.55), transparent)' }} />
 
       <main className="relative z-10 flex flex-1 flex-col items-center px-6 pb-36 pt-16">
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={() => setActiveTab(activeTab === 'people' ? 'my-day' : 'people')}
-            title="Admin"
-            aria-label="Admin"
-            className="absolute right-5 top-5 z-30 flex h-9 w-9 items-center justify-center rounded-full transition-all hover:-translate-y-0.5"
-            style={{
-              background: activeTab === 'people' ? 'rgba(0,200,255,0.18)' : 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(0,200,255,0.28)',
-              color: 'rgba(210,245,255,0.82)',
-              boxShadow: activeTab === 'people' ? '0 0 18px rgba(0,124,255,0.3)' : 'none',
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3z" stroke="currentColor" strokeWidth="1.6" />
-            </svg>
-          </button>
-        )}
         <NexusMark />
         <p className="mb-7 text-center text-lg" style={{ color: 'rgba(255,255,255,0.48)' }}>Hi {firstName}, <span style={{ color: 'rgba(255,255,255,0.88)' }}>what are we working on today?</span></p>
         <div className="w-full max-w-3xl rounded-[1.35rem]" style={{ boxShadow: '0 0 34px rgba(0,124,255,0.16), 0 0 1px rgba(0,200,255,0.5)' }}>

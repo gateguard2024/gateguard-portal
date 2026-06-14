@@ -16,6 +16,7 @@ import { Sidebar }          from '@/components/layout/Sidebar'
 import { AddToL10Button }   from '@/components/layout/AddToL10Button'
 import { NexusAssistant }   from '@/components/layout/NexusAssistant'
 import { MobileNav }        from '@/components/layout/MobileNav'
+import { AdminLauncher }    from '@/components/layout/AdminLauncher'
 
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -41,6 +42,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         background: isTech ? '#F1F5F9' : isNexus || isAria || isSign || isDocument ? 'transparent' : '#ffffff',
         overscrollBehavior: 'none',
       }}>
+        <AdminLauncher />
         {children}
       </div>
     )
@@ -51,6 +53,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     <ThemeProvider attribute="class" defaultTheme="light" forcedTheme="light" disableTransitionOnChange>
       <div className="flex h-screen overflow-hidden relative">
         <div className="gate-bg-layer" aria-hidden="true" />
+        <AdminLauncher />
 
         {/* Sidebar — hidden on mobile, always visible md+ */}
         <div className="hidden md:block flex-shrink-0">

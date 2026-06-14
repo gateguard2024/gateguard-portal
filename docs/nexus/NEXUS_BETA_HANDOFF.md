@@ -216,7 +216,7 @@ Existing implementations to follow: `components/nexus/windows/LeadGlassWindow.ts
 - Internal still in bottom bar (must move to hidden admin icon).
 - Design, Systems, Operations/Business (rename) tabs not yet top-level.
 - Proposal/approve customer pages were legacy-styled (proposal reframed to glass; approve to be replaced by `/document/[slug]`).
-- Lead attachments missing. Quotes need full (Quiller/Quotient-style) build.
+- ~~Lead attachments missing~~ ✅ done. **Quotes — full overhaul required (logged, not yet scheduled):** the current quote builder + customer view need a ground-up rework modeled on Quiller/Quotient — guided cards (not a spreadsheet), create-from lead/opp/customer/property, packages + optional add-ons + monitoring + access control + install + recurring, generates the customer proposal view (now via the Public Document Portal), trackable status. Treat as its own mini-project after the Phase 1–7 spine; do not patch piecemeal.
 - Messages connectors not built. To-Dos not yet full Monday-simple. Calendar hierarchy visibility not wired.
 - Legacy pages still reachable; legacy-hide pass for dealers not done.
 
