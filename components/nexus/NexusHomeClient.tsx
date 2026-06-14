@@ -85,8 +85,14 @@ export default function NexusHomeClient() {
   //  - from another page → navigates to /?view=admin (read on mount)
   //  - from the home page → fires a 'nexus:open-admin' event (no navigation)
   useEffect(() => {
-    if (isAdmin && typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('view') === 'admin') {
-      setActiveTab('people')
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('view') === 'admin') {
+      if (isAdmin) setActiveTab('people')
+      // Consume the param so a refresh / fresh landing is ALWAYS My Day, never Admin.
+      params.delete('view')
+      const qs = params.toString()
+      window.history.replaceState({}, '', qs ? `/?${qs}` : '/')
     }
   }, [isAdmin])
 

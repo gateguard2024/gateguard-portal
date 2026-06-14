@@ -54,6 +54,20 @@ const TYPE_LABELS: Record<CalEventType, string> = {
   tracker_task: 'Tracker task',
 }
 
+// Friendly categories so a busy calendar (e.g. a CEO viewing the whole group)
+// can show/hide whole streams. Plain labels per the 5th-grader rule.
+const CATEGORIES: { id: string; label: string; color: string; types: CalEventType[] }[] = [
+  { id: 'jobs',   label: 'Jobs',    color: '#F59E0B', types: ['work_order', 'work_order_phase', 'pm_schedule'] },
+  { id: 'sales',  label: 'Sales',   color: '#0EA5E9', types: ['crm_activity'] },
+  { id: 'tasks',  label: 'To-Dos',  color: '#6B7EFF', types: ['todo', 'tracker_task'] },
+  { id: 'google', label: 'Google',  color: '#10B981', types: ['gcal'] },
+]
+const TYPE_CATEGORY: Record<CalEventType, string> = {
+  work_order: 'jobs', work_order_phase: 'jobs', pm_schedule: 'jobs',
+  crm_activity: 'sales', todo: 'tasks', tracker_task: 'tasks',
+  gcal: 'google',
+}
+
 const VIEW_LABELS: { key: CalendarView; label: string }[] = [
   { key: 'month', label: 'Month' },
   { key: 'week', label: 'Week' },
@@ -205,10 +219,10 @@ const KNOWN_TYPES = new Set<CalEventType>(['todo', 'work_order', 'work_order_pha
 
 // Real data: /api/calendar/events returns { events: [{ id, type, title, date 'YYYY-MM-DD', time? 'HH:MM', color, link }] }.
 // We fetch by the month at the middle of the requested range, then map to CalEvent.
-async function loadEvents(rangeStartISO: string, rangeEndISO: string): Promise<CalEvent[]> {
+async function loadEvents(rangeStartISO: string, rangeEndISO: string, scope: 'me' | 'team'): Promise<CalEvent[]> {
   const mid = new Date((new Date(rangeStartISO).getTime() + new Date(rangeEndISO).getTime()) / 2)
   try {
-    const res = await fetch(`/api/calendar/events?year=${mid.getFullYear()}&month=${mid.getMonth() + 1}`)
+    const res = await fetch(`/api/calendar/events?year=${mid.getFullYear()}&month=${mid.getMonth() + 1}&scope=${scope}`)
     if (!res.ok) return []
     const data = await res.json().catch(() => ({}))
     const raw: Array<Record<string, unknown>> = data.events ?? []
@@ -298,6 +312,17 @@ export default function CalendarViews() {
   const [formStartTime, setFormStartTime] = useState('09:00')
   const [formEndTime, setFormEndTime] = useState('10:00')
   const [formType, setFormType] = useState<CalEventType>('todo')
+  const [viewScope, setViewScope] = useState<'me' | 'team'>('me')
+  const [hiddenCats, setHiddenCats] = useState<Set<string>>(new Set())
+
+  function toggleCategory(id: string) {
+    setHiddenCats((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const today = useMemo(() => startOfDay(new Date()), [])
 
@@ -327,14 +352,14 @@ export default function CalendarViews() {
   useEffect(() => {
     let isMounted = true
 
-    loadEvents(range.start.toISOString(), range.end.toISOString()).then((loadedEvents) => {
+    loadEvents(range.start.toISOString(), range.end.toISOString(), viewScope).then((loadedEvents) => {
       if (isMounted) setEvents(sortEvents(loadedEvents))
     })
 
     return () => {
       isMounted = false
     }
-  }, [range.start, range.end])
+  }, [range.start, range.end, viewScope])
 
   const periodLabel = useMemo(() => {
     if (view === 'month') return formatMonthYear(cursorDate)
@@ -360,12 +385,15 @@ export default function CalendarViews() {
     return Array.from({ length: 7 }, (_, index) => addDays(start, index))
   }, [cursorDate])
 
-  const dayEvents = (day: Date) => sortEvents(events.filter((event) => isSameDay(eventDate(event), day)))
+  // Category show/hide filter (declutter a busy team calendar).
+  const visibleEvents = useMemo(() => events.filter((e) => !hiddenCats.has(TYPE_CATEGORY[e.type])), [events, hiddenCats])
+
+  const dayEvents = (day: Date) => sortEvents(visibleEvents.filter((event) => isSameDay(eventDate(event), day)))
 
   const groupedListEvents = useMemo(() => {
     const groups = new Map<string, CalEvent[]>()
 
-    events.forEach((event) => {
+    visibleEvents.forEach((event) => {
       const key = dateKey(eventDate(event))
       groups.set(key, [...(groups.get(key) ?? []), event])
     })
@@ -375,7 +403,7 @@ export default function CalendarViews() {
       day: new Date(`${key}T00:00:00`),
       events: sortEvents(groupEvents),
     }))
-  }, [events])
+  }, [visibleEvents])
 
   function movePrevious() {
     setSelectedEvent(null)
@@ -454,14 +482,14 @@ export default function CalendarViews() {
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <label className="flex items-center gap-2 rounded-2xl px-3 py-2 text-sm" style={glassStyle}>
-                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Whose calendar</span>
+                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Show</span>
                 <select
-                  disabled
-                  className="rounded-xl px-2 py-1 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-70"
+                  className="rounded-xl px-2 py-1 text-sm outline-none"
                   style={inputStyle}
-                  defaultValue="me"
+                  value={viewScope}
+                  onChange={(event) => setViewScope(event.target.value as 'me' | 'team')}
                 >
-                  <option value="me">Me</option>
+                  <option value="me">My calendar</option>
                   <option value="team">My team</option>
                 </select>
               </label>
@@ -653,12 +681,27 @@ export default function CalendarViews() {
 
         <div className="rounded-3xl p-4 sm:p-5" style={glassStyle}>
           <div className="mb-4 flex flex-wrap items-center gap-2">
-            {Object.entries(TYPE_LABELS).map(([key, label]) => (
-              <div key={key} className="flex items-center gap-2 rounded-full px-3 py-1 text-xs" style={glassStyle}>
-                <span className="h-2 w-2 rounded-full" style={{ background: TYPE_COLORS[key as CalEventType] }} />
-                <span style={{ color: 'rgba(255,255,255,0.5)' }}>{label}</span>
-              </div>
-            ))}
+            <span className="mr-1 text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Show:</span>
+            {CATEGORIES.map((cat) => {
+              const on = !hiddenCats.has(cat.id)
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => toggleCategory(cat.id)}
+                  className="flex items-center gap-2 rounded-full px-3 py-1 text-xs transition"
+                  style={{
+                    background: on ? hexToRgba(cat.color, 0.16) : 'rgba(255,255,255,0.03)',
+                    border: `1px solid ${on ? hexToRgba(cat.color, 0.4) : 'rgba(255,255,255,0.08)'}`,
+                    color: on ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.35)',
+                    textDecoration: on ? 'none' : 'line-through',
+                  }}
+                >
+                  <span className="h-2 w-2 rounded-full" style={{ background: on ? cat.color : 'rgba(255,255,255,0.25)' }} />
+                  {cat.label}
+                </button>
+              )
+            })}
           </div>
 
           {view === 'month' && (
