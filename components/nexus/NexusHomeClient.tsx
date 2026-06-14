@@ -27,7 +27,6 @@ const NAV_ITEMS: { label: string; id: NexusTabId }[] = [
   { label: 'My Day', id: 'my-day' },
   { label: 'Sales', id: 'opps' },
   { label: 'Jobs', id: 'jobs' },
-  { label: 'Dispatch', id: 'dispatch' },
   { label: 'Operations', id: 'recent' },
   { label: 'Design', id: 'design' },
   { label: 'Systems', id: 'systems' },
@@ -189,10 +188,10 @@ export default function NexusHomeClient() {
           </div>
         )}
 
-        {activeTab === 'my-day' ? <MyDaySurface /> : activeTab === 'jobs' ? <JobsSurface /> : activeTab === 'opps' ? <SalesSurface /> : activeTab === 'recent' ? <CustomersSitesSurface /> : activeTab === 'dispatch' ? <DispatchConsole /> : activeTab === 'design' ? <DesignExplorer /> : activeTab === 'systems' ? <SystemsExplorer /> : activeTab === 'field' ? <MoneyDocsSurfaceNext /> : activeTab === 'people' ? <InternalSurface /> : <ActionFlowSurface activeTab={activeTab} />}
+        {activeTab === 'my-day' ? <MyDaySurface /> : activeTab === 'jobs' ? <JobsSurface onOpenDispatch={() => setActiveTab('dispatch')} /> : activeTab === 'opps' ? <SalesSurface /> : activeTab === 'recent' ? <CustomersSitesSurface /> : activeTab === 'dispatch' ? <DispatchConsole /> : activeTab === 'design' ? <DesignExplorer /> : activeTab === 'systems' ? <SystemsExplorer /> : activeTab === 'field' ? <MoneyDocsSurfaceNext /> : activeTab === 'people' ? <InternalSurface /> : <ActionFlowSurface activeTab={activeTab} />}
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-20 flex justify-center overflow-x-auto px-4 pb-4 pt-3 backdrop-blur-xl" style={{ background: 'linear-gradient(180deg, rgba(1,4,13,0.12), rgba(1,4,13,0.86))', borderTop: '1px solid rgba(59,130,246,0.12)' }}>
+      <nav className="fixed bottom-0 left-0 right-0 z-20 flex justify-center overflow-x-auto px-4 pt-3 backdrop-blur-xl" style={{ background: 'linear-gradient(180deg, rgba(1,4,13,0.12), rgba(1,4,13,0.86))', borderTop: '1px solid rgba(59,130,246,0.12)', paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
         <div className="flex gap-1 rounded-[1.75rem] border px-2 py-2" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.86), rgba(3,9,22,0.92))', borderColor: 'rgba(59,130,246,0.22)', boxShadow: '0 0 44px rgba(0,124,255,0.18), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
           {NAV_ITEMS.map(({ label, id }) => {
             const active = activeTab === id

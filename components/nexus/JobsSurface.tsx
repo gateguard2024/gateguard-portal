@@ -217,7 +217,7 @@ function JobsDetailShell({ title, subtitle, onClose, children, actions }: { titl
   )
 }
 
-export function JobsSurface() {
+export function JobsSurface({ onOpenDispatch }: { onOpenDispatch?: () => void } = {}) {
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [jobsWorkbench, setJobsWorkbench] = useState<JobsWorkbenchData | null>(null)
@@ -369,7 +369,12 @@ export function JobsSurface() {
                 <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(52,211,153,0.18)' }}>What job work needs attention right now?</h2>
                 <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>Open today’s jobs, handle what needs attention, schedule site work, or review active work.</p>
               </div>
-              <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(52,211,153,0.12)', color: 'rgba(134,239,172,0.96)', border: '1px solid rgba(52,211,153,0.28)', boxShadow: '0 0 18px rgba(52,211,153,0.10)' }}>{busy ? 'Loading…' : 'Field Ops'}</div>
+              <div className="flex items-center gap-2">
+                {onOpenDispatch && (
+                  <button type="button" onClick={onOpenDispatch} className="rounded-full px-4 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(135deg, rgba(0,124,255,0.30), rgba(0,200,255,0.14))', border: '1px solid rgba(0,200,255,0.34)', color: '#bfe9ff', boxShadow: '0 0 18px rgba(0,124,255,0.16)' }}>Open Dispatch board →</button>
+                )}
+                <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(52,211,153,0.12)', color: 'rgba(134,239,172,0.96)', border: '1px solid rgba(52,211,153,0.28)', boxShadow: '0 0 18px rgba(52,211,153,0.10)' }}>{busy ? 'Loading…' : 'Field Ops'}</div>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
