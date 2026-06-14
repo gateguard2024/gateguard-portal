@@ -20,7 +20,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 const resend = new Resend(process.env.RESEND_API_KEY)
-const DOCUMENTS_FROM_EMAIL = process.env.RESEND_DOCUMENTS_FROM_EMAIL ?? 'GateGuard <documents@gateguard.co>'
+const DOCUMENTS_FROM_EMAIL = process.env.RESEND_DOCUMENTS_FROM_EMAIL ?? 'GateGuard Nexus <documents@nexus.gateguard.co>'
 export const dynamic = 'force-dynamic'
 
 const TIER_DOC_TYPES: Record<string, string> = {

@@ -16,7 +16,7 @@ const supabase = createClient(
 )
 import { publicDocUrl } from '@/lib/doc-slug'
 const resend = new Resend(process.env.RESEND_API_KEY)
-const DOCUMENTS_FROM_EMAIL = process.env.RESEND_DOCUMENTS_FROM_EMAIL ?? 'GateGuard <documents@gateguard.co>'
+const DOCUMENTS_FROM_EMAIL = process.env.RESEND_DOCUMENTS_FROM_EMAIL ?? 'GateGuard Nexus <documents@nexus.gateguard.co>'
 export const dynamic = 'force-dynamic'
 
 const BUCKET = 'document-templates'

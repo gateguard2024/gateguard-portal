@@ -223,7 +223,7 @@ export async function POST(
       })
 
       const { error: emailErr } = await resend.emails.send({
-        from:    `${FROM_NAME} <${FROM_EMAIL}>`,
+        from:    process.env.RESEND_DOCUMENTS_FROM_EMAIL ?? 'GateGuard Nexus <documents@nexus.gateguard.co>',
         to:      quote.client_email,
         cc:      CC_EMAIL,                // ← always CC Russel
         replyTo: FROM_EMAIL,

@@ -100,7 +100,7 @@ export async function POST(
     void (async () => {
       try {
         await resend.emails.send({
-          from:    'GateGuard Nexus <documents@gateguard.co>',
+          from:    process.env.RESEND_DOCUMENTS_FROM_EMAIL ?? 'GateGuard Nexus <documents@nexus.gateguard.co>',
           to:      'rfeldman@gateguard.co',
           subject: `✍️ Action Required: Countersign ${docLabel} — ${company}`,
           html: `

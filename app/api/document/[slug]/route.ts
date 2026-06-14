@@ -20,7 +20,7 @@ export const dynamic = 'force-dynamic'
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 const resend = new Resend(process.env.RESEND_API_KEY)
 const NOTIFY_TO = 'rfeldman@gateguard.co'
-const NOTIFY_FROM = process.env.RESEND_DOCUMENTS_FROM_EMAIL ?? 'GateGuard <documents@gateguard.co>'
+const NOTIFY_FROM = process.env.RESEND_DOCUMENTS_FROM_EMAIL ?? 'GateGuard Nexus <documents@nexus.gateguard.co>'
 
 const PUBLIC_FIELDS =
   'id, document_type, status, public_slug, signer_name, signer_company, sent_by_name, ' +
