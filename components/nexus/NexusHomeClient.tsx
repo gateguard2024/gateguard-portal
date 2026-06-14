@@ -5,6 +5,8 @@ import { useUser } from '@clerk/nextjs'
 import { ActionCommandBar } from '@/components/nexus/ActionCommandBar'
 import { ActionFlowSurface, type NexusTabId } from '@/components/nexus/ActionFlowSurface'
 import { CustomersSitesSurface } from '@/components/nexus/CustomersSitesSurface'
+import DesignExplorer from '@/components/nexus/DesignExplorer'
+import SystemsExplorer from '@/components/nexus/SystemsExplorer'
 import { InternalSurface } from '@/components/nexus/InternalSurface'
 import { JobsSurface } from '@/components/nexus/JobsSurface'
 import { MoneyDocsSurfaceNext } from '@/components/nexus/MoneyDocsSurfaceNext'
@@ -22,7 +24,9 @@ const NAV_ITEMS: { label: string; id: NexusTabId }[] = [
   { label: 'My Day', id: 'my-day' },
   { label: 'Sales', id: 'opps' },
   { label: 'Jobs', id: 'jobs' },
-  { label: 'Customers/Sites', id: 'recent' },
+  { label: 'Operations', id: 'recent' },
+  { label: 'Design', id: 'design' },
+  { label: 'Systems', id: 'systems' },
   { label: 'Money/Docs', id: 'field' },
 ]
 
@@ -174,7 +178,7 @@ export default function NexusHomeClient() {
           </div>
         )}
 
-        {activeTab === 'my-day' ? <MyDaySurface /> : activeTab === 'jobs' ? <JobsSurface /> : activeTab === 'opps' ? <SalesSurface /> : activeTab === 'recent' ? <CustomersSitesSurface /> : activeTab === 'field' ? <MoneyDocsSurfaceNext /> : activeTab === 'people' ? <InternalSurface /> : <ActionFlowSurface activeTab={activeTab} />}
+        {activeTab === 'my-day' ? <MyDaySurface /> : activeTab === 'jobs' ? <JobsSurface /> : activeTab === 'opps' ? <SalesSurface /> : activeTab === 'recent' ? <CustomersSitesSurface /> : activeTab === 'design' ? <DesignExplorer /> : activeTab === 'systems' ? <SystemsExplorer /> : activeTab === 'field' ? <MoneyDocsSurfaceNext /> : activeTab === 'people' ? <InternalSurface /> : <ActionFlowSurface activeTab={activeTab} />}
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 z-20 flex justify-center overflow-x-auto px-4 pb-4 pt-3 backdrop-blur-xl" style={{ background: 'linear-gradient(180deg, rgba(1,4,13,0.12), rgba(1,4,13,0.86))', borderTop: '1px solid rgba(59,130,246,0.12)' }}>
