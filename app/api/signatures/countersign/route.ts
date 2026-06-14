@@ -14,6 +14,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+import { publicDocUrl } from '@/lib/doc-slug'
 const resend = new Resend(process.env.RESEND_API_KEY)
 const DOCUMENTS_FROM_EMAIL = process.env.RESEND_DOCUMENTS_FROM_EMAIL ?? 'GateGuard <documents@gateguard.co>'
 export const dynamic = 'force-dynamic'
@@ -141,7 +142,11 @@ export async function POST(req: NextRequest) {
     const certUrl = `/api/signatures/${signature_id}/cert`
     // The signer already has access to /sign/[token] — after countersigning it shows the
     // executed certificate inline. Use that as the public "final copy" link in emails.
-    const signerCertUrl = sig.token ? `${baseUrl}/sign/${sig.token}` : `${baseUrl}${certUrl}`
+    // Final-copy link → public Nexus Document Portal (no chrome). Falls back to
+    // the legacy /sign/[token] page for records sent before slugs existed.
+    const signerCertUrl = sig.public_slug
+      ? publicDocUrl(sig.public_slug)
+      : sig.token ? `${baseUrl}/sign/${sig.token}` : `${baseUrl}${certUrl}`
     const certAbsoluteUrl = signerCertUrl
 
     const { error: updateErr } = await supabase

@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GateGuard Nexus Beta — Master Build Tracker</title>
+<style>
+  :root { --ink:#0f172a; --muted:#64748b; --line:#e2e8f0; --brand:#6B7EFF;
+          --done:#059669; --prog:#d97706; --todo:#94a3b8; }
+  * { box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+         color:var(--ink); margin:0 auto; padding:32px; max-width:940px; line-height:1.45; }
+  h1 { font-size:22px; margin:0 0 2px; }
+  .sub { color:var(--muted); font-size:13px; margin:0 0 16px; }
+  .legend { display:flex; gap:16px; font-size:12px; color:var(--muted); margin:0 0 18px; flex-wrap:wrap; }
+  .legend span { display:inline-flex; align-items:center; gap:6px; }
+  .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+  .d-done{background:var(--done);} .d-prog{background:var(--prog);} .d-todo{background:var(--todo);}
+  .box-callout { border:1px solid var(--line); border-radius:12px; padding:12px 16px; margin:0 0 16px; background:#f8fafc; font-size:12.5px; }
+  .box-callout b { color:var(--ink); }
+  .phase { border:1px solid var(--line); border-radius:12px; padding:14px 18px; margin:0 0 13px; page-break-inside:avoid; }
+  .phase h2 { font-size:15px; margin:0 0 2px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .phase .goal { color:var(--muted); font-size:12px; margin:0 0 9px; }
+  .badge { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; padding:3px 9px; border-radius:999px; white-space:nowrap; }
+  .b-done{background:#ecfdf5;color:var(--done);border:1px solid #a7f3d0;}
+  .b-prog{background:#fffbeb;color:var(--prog);border:1px solid #fcd34d;}
+  .b-todo{background:#f8fafc;color:var(--todo);border:1px solid var(--line);}
+  ul { list-style:none; padding:0; margin:0; }
+  li { display:flex; gap:9px; padding:5px 0; font-size:13px; border-top:1px dashed #eef2f7; }
+  li:first-child { border-top:none; }
+  .box { width:15px; height:15px; border:1.5px solid var(--todo); border-radius:4px; flex-shrink:0; margin-top:2px; text-align:center; font-size:11px; line-height:13px; }
+  .box.done { background:var(--done); border-color:var(--done); color:#fff; }
+  .box.prog { border-color:var(--prog); color:var(--prog); font-weight:700; }
+  .note { color:var(--muted); font-size:11px; }
+  .accept { margin-top:6px; }
+  h3.section { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:22px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px; }
+  @media print { body{padding:0;} .phase,.box-callout{border-color:#ccc;} a{color:inherit;text-decoration:none;} }
+</style>
+</head>
+<body>
+  <h1>GateGuard Nexus Beta — Master Build Tracker</h1>
+  <p class="sub">Branch: beta · Full product direction (see NEXUS_BETA_HANDOFF.md). Glass-only, 5th-grader simple, no legacy for normal users. Updated as we go.</p>
+  <div class="legend">
+    <span><i class="dot d-done"></i> Done</span>
+    <span><i class="dot d-prog"></i> In progress</span>
+    <span><i class="dot d-todo"></i> To do</span>
+  </div>
+
+  <div class="box-callout">
+    <b>Standard:</b> simple card → glass board → detail object. No dead-end buttons, no backend jargon, no legacy chrome for dealers/users. Intern = the 5th-grader test.<br/>
+    <b>Target bottom bar:</b> My Day · Sales · Jobs · Operations/Business · Design · Systems · Money/Docs &nbsp;|&nbsp; <b>Internal → hidden Admin icon.</b>
+  </div>
+
+  <!-- FOUNDATIONS -->
+  <h3 class="section">Foundations (cross-cutting, mostly complete)</h3>
+
+  <div class="phase">
+    <h2>Permissions &amp; Users System <span class="badge b-done">Done</span></h2>
+    <p class="goal">Backbone of the dealer-safe shell + Admin panel.</p>
+    <ul>
+      <li><span class="box done">✓</span><span>4 roles (Admin / Supervisor / User / Tech), downward org scope, assigned-only enforcement, corporate guarantee.</span></li>
+      <li><span class="box done">✓</span><span>Feature flags (none/view/edit) driven by role presets + advanced override, capped to granter.</span></li>
+      <li><span class="box done">✓</span><span>Users &amp; Features glass board + user editor + Add Person wizard; org classification (corporate/dealer/client).</span></li>
+      <li><span class="box done">✓</span><span>Clerk → profiles sync (webhook + backfill / Sync logins). <span class="note">Run migrations 110/112 on prod; register prod webhook.</span></span></li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <h2>Public Document Portal (sub-stream) <span class="badge b-prog">In progress</span></h2>
+    <p class="goal">One glass page for all outbound docs — feeds Dealer Onboarding signing + Money/Docs. Detail: PUBLIC_DOCUMENT_PORTAL_PLAN.md.</p>
+    <ul>
+      <li><span class="box done">✓</span><span>P0 Foundation — NexusDocShell, migration 112, slug/token lib, proposal page reframed.</span></li>
+      <li><span class="box done">✓</span><span>P1 Universal /document/[slug] — resolver, actions, glass page, no-chrome bypass.</span></li>
+      <li><span class="box prog">!</span><span>P2 NDA/agreements/contracts — send generates slug + nexus link; final-copy link via portal. <span class="note">/sign kept working; redirect optional.</span></span></li>
+      <li><span class="box">&nbsp;</span><span>P3 Proposals — quote send creates proposal doc + slug; Approve/Request Changes/Ask/Download.</span></li>
+      <li><span class="box">&nbsp;</span><span>P4 Retire legacy external links (audit all email URLs; redirect /quotes approve/proposal).</span></li>
+      <li><span class="box">&nbsp;</span><span>P5 Security/expiry/domain — rate-limit, expired/invalid pages, nexus.gateguard.co live.</span></li>
+    </ul>
+  </div>
+
+  <!-- PRODUCT PHASES -->
+  <h3 class="section">Product phases (the spine)</h3>
+
+  <div class="phase">
+    <h2>Phase 1 — Dealer-safe launch (THIS WEEK) <span class="badge b-prog">In progress</span></h2>
+    <p class="goal">Dealers log in, see only Nexus, add sub-users + leads, no training, no legacy.</p>
+    <ul>
+      <li><span class="box done">✓</span><span>Dealer user management (Add Person + Users &amp; Features).</span></li>
+      <li><span class="box done">✓</span><span>Admin permissions for dealer onboarding (roles + scope).</span></li>
+      <li><span class="box done">✓</span><span>Sales: Add New Lead (working).</span></li>
+      <li><span class="box prog">!</span><span>Sales: Work My Leads (core works; needs attachments).</span></li>
+      <li><span class="box prog">!</span><span>Dealer Onboarding documents — NDA/agreement signing via document portal (P2 done; confirm full flow).</span></li>
+      <li><span class="box">&nbsp;</span><span>Lead attachments (add/open/link to opp/customer/property).</span></li>
+      <li><span class="box">&nbsp;</span><span>Dealer-safe shell: hide legacy UI from dealers + nav redesign (Internal→Admin icon, rename Operations, add Design/Systems).</span></li>
+    </ul>
+    <p class="goal accept"><b>Accept:</b> dealer logs in (incognito) → only Nexus → add sub-user → add/work lead → move to opportunity → no legacy screen.</p>
+  </div>
+
+  <div class="phase">
+    <h2>Phase 2 — My Day <span class="badge b-todo">To do</span></h2>
+    <p class="goal">Daily command center.</p>
+    <ul>
+      <li><span class="box">&nbsp;</span><span>Schedule: GateGuard calendar + Google sync; day/week/month + list; color-coded; hierarchy visibility; add/edit/assign events.</span></li>
+      <li><span class="box">&nbsp;</span><span>Today's Priorities — actionable items open in glass pane.</span></li>
+      <li><span class="box">&nbsp;</span><span>To-Dos — Monday-power, 5th-grade simple (list+calendar, assign, subtasks, due/priority, links, filters).</span></li>
+      <li><span class="box">&nbsp;</span><span>Messages connector foundation (Gmail/IMAP/SMTP/Twilio voice+SMS). No Slack/WhatsApp.</span></li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <h2>Phase 3 — Jobs / installs <span class="badge b-todo">To do</span></h2>
+    <p class="goal">Field work lifecycle.</p>
+    <ul>
+      <li><span class="box">&nbsp;</span><span>Cards open real glass boards: Today's Jobs · Needs Attention · Schedule Visit · Open Jobs.</span></li>
+      <li><span class="box">&nbsp;</span><span>Job board (Monday-simple): list + calendar.</span></li>
+      <li><span class="box">&nbsp;</span><span>Job detail glass: tech, status, notes, photos, attachments, checklist, site link, schedule, complete.</span></li>
+      <li><span class="box">&nbsp;</span><span>Field notes/photos · assignment · calendar integration · Dispatch view (later).</span></li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <h2>Phase 4 — Operations / Business <span class="badge b-todo">To do</span></h2>
+    <p class="goal">Replaces Customer Sites tab; customers/properties/sites/systems.</p>
+    <ul>
+      <li><span class="box">&nbsp;</span><span>Rename Customers/Sites → Operations/Business; Customer Sites becomes its primary board.</span></li>
+      <li><span class="box">&nbsp;</span><span>Find Customer · Find Property · Properties Needing Attention · Property Systems.</span></li>
+      <li><span class="box">&nbsp;</span><span>Customer + site detail glass; customers & installs ready for Week 2.</span></li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <h2>Phase 5 — Money / Docs <span class="badge b-todo">To do</span></h2>
+    <p class="goal">Invoices, renewals, signing, compliance.</p>
+    <ul>
+      <li><span class="box">&nbsp;</span><span>Invoices (open/paid/overdue, send, payment status).</span></li>
+      <li><span class="box">&nbsp;</span><span>Renewals (contract/monitoring/dealer/service, reminders, assign owner).</span></li>
+      <li><span class="box prog">!</span><span>Documents to Sign — via Public Document Portal (NDA/agreements done; proposals = P3).</span></li>
+      <li><span class="box">&nbsp;</span><span>Compliance (W9, COI, license, background check; dealer/vendor/site).</span></li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <h2>Phase 6 — Design &amp; Systems <span class="badge b-todo">To do</span></h2>
+    <p class="goal">New top-level tabs; map legacy design/system pages into glass.</p>
+    <ul>
+      <li><span class="box">&nbsp;</span><span>Design tab: Site Design · Floor Plans · As-Builts · Proposal Drawings (glass boards).</span></li>
+      <li><span class="box">&nbsp;</span><span>Systems tab: Gates · Cameras · Access Control · Networks; system object (devices, status, service history, warranty, related jobs).</span></li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <h2>Phase 7 — Command router <span class="badge b-todo">To do</span></h2>
+    <p class="goal">Natural language → right tab/board/action.</p>
+    <ul>
+      <li><span class="box">&nbsp;</span><span>"Show my open leads" · "Create a new lead" · "Send NDA to dealer" · "Show today's jobs" · "Add task for technician".</span></li>
+    </ul>
+  </div>
+
+  <h3 class="section">Navigation redesign (cross-cutting — lands in Phase 1/4/6)</h3>
+  <div class="phase">
+    <h2>Bottom bar + Admin relocation <span class="badge b-todo">To do</span></h2>
+    <ul>
+      <li><span class="box">&nbsp;</span><span>Remove Internal from bottom bar; mount behind a near-hidden Admin icon by the Nexus mark.</span></li>
+      <li><span class="box">&nbsp;</span><span>Rename Customers/Sites → Operations/Business.</span></li>
+      <li><span class="box">&nbsp;</span><span>Add Design + Systems top-level tabs.</span></li>
+      <li><span class="box">&nbsp;</span><span>Admin panel: Dealer Onboarding · Users &amp; Features · Tracker · Playbooks · Training · Settings.</span></li>
+    </ul>
+  </div>
+
+  <p class="sub" style="margin-top:16px;">Detail docs: NEXUS_BETA_HANDOFF.md · PUBLIC_DOCUMENT_PORTAL_PLAN.md · PERMISSIONS_SYSTEM_CONTEXT.md. Each phase ends green-build + intern walkthrough before the next.</p>
+</body>
+</html>

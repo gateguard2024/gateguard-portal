@@ -14,6 +14,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { Resend } from 'resend'
 import crypto from 'crypto'
+import { generatePublicSlug, publicDocUrl } from '@/lib/doc-slug'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -142,10 +143,19 @@ export async function POST(req: NextRequest) {
     const token = crypto.randomBytes(32).toString('hex')
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
 
+    // Readable public slug for nexus.gateguard.co/document/[slug] (token stays the real credential).
+    let publicSlug = generatePublicSlug(signer_company || signer_name)
+    for (let i = 0; i < 3; i++) {
+      const { data: clash } = await supabase.from('document_signatures').select('id').eq('public_slug', publicSlug).maybeSingle()
+      if (!clash) break
+      publicSlug = generatePublicSlug(signer_company || signer_name)
+    }
+
     const { data: sig, error } = await supabase
       .from('document_signatures')
       .insert({
         token,
+        public_slug: publicSlug,
         document_type,
         document_version: resolvedVersion ?? null,
         document_url: resolvedUrl ?? null,
@@ -168,8 +178,8 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://portal.gateguard.co'
-    const signUrl = `${baseUrl}/sign/${token}`
+    // Public Nexus Document Portal link (no chrome, no login). Token stays server-side.
+    const signUrl = publicDocUrl(publicSlug)
     const docLabel = DOC_LABELS[document_type] ?? document_type
     const signerFirst = (signer_name ?? 'there').split(' ')[0]
 
