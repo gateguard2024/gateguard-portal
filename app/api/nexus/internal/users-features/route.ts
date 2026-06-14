@@ -25,6 +25,19 @@ function canViewInternal(user: Awaited<ReturnType<typeof getCurrentUser>>) {
   return user.isCorporate || user.isMasterDealer || user.role === 'admin' || user.role === 'supervisor'
 }
 
+// Classify an organization from its org_tier. Handles the current 8 tiers plus
+// legacy values (mso/dealer/partner). A null/unknown tier → 'unclassified' so
+// the board can surface orgs that still need a tier set.
+type OrgCategory = 'corporate' | 'dealer' | 'client' | 'unclassified'
+function orgCategory(tier: string | null | undefined): OrgCategory {
+  if (!tier) return 'unclassified'
+  if (tier === 'corporate') return 'corporate'
+  if (tier === 'client') return 'client'
+  const DEALER_TIERS = ['master_agent', 'master_dealer', 'full_dealer', 'service_dealer', 'install_contractor', 'sales_partner', 'mso', 'dealer', 'partner']
+  if (DEALER_TIERS.includes(tier)) return 'dealer'
+  return 'unclassified'
+}
+
 export async function GET() {
   try {
     const user = await getCurrentUser()
@@ -85,7 +98,7 @@ export async function GET() {
       tier: o.org_tier || null,
       status: o.status || 'unknown',
       email: o.primary_email || null,
-      kind: o.org_tier === 'client' ? 'client' : 'dealer',
+      kind: orgCategory(o.org_tier),
     }))
 
     return NextResponse.json({
@@ -96,8 +109,10 @@ export async function GET() {
       counts: {
         users: users.length,
         techs: techs.length,
+        corporate: orgs.filter(o => o.kind === 'corporate').length,
         dealers: orgs.filter(o => o.kind === 'dealer').length,
         clients: orgs.filter(o => o.kind === 'client').length,
+        unclassified: orgs.filter(o => o.kind === 'unclassified').length,
       },
     })
   } catch (error) {

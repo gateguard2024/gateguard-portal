@@ -8,8 +8,9 @@ type Tab = 'people' | 'techs' | 'orgs'
 
 type UserRow = { id: string; name: string; email: string | null; role: string | null; org_name: string | null; last_login_at: string | null }
 type TechRow = { id: string; name: string; email: string | null; employment_type: string; org_name: string | null; access: string; linked: boolean }
-type OrgRow = { id: string; name: string; tier: string | null; status: string; email: string | null; kind: 'dealer' | 'client' }
-type Counts = { users: number; techs: number; dealers: number; clients: number }
+type OrgCategory = 'corporate' | 'dealer' | 'client' | 'unclassified'
+type OrgRow = { id: string; name: string; tier: string | null; status: string; email: string | null; kind: OrgCategory }
+type Counts = { users: number; techs: number; corporate: number; dealers: number; clients: number; unclassified: number }
 
 const TAB_LABEL: Record<Tab, string> = { people: 'Platform Users', techs: 'Field Techs', orgs: 'Organizations' }
 const TAB_COLOR: Record<Tab, string> = { people: '#00C8FF', techs: '#34D399', orgs: '#8B5CF6' }
@@ -23,7 +24,7 @@ export function InternalUsersFeaturesBoard() {
   const [users, setUsers] = useState<UserRow[]>([])
   const [techs, setTechs] = useState<TechRow[]>([])
   const [orgs, setOrgs] = useState<OrgRow[]>([])
-  const [counts, setCounts] = useState<Counts>({ users: 0, techs: 0, dealers: 0, clients: 0 })
+  const [counts, setCounts] = useState<Counts>({ users: 0, techs: 0, corporate: 0, dealers: 0, clients: 0, unclassified: 0 })
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState<string | null>(null)
   const [userWindow, setUserWindow] = useState<UserWindowData | null>(null)
@@ -41,7 +42,7 @@ export function InternalUsersFeaturesBoard() {
       setUsers(data.users ?? [])
       setTechs(data.techs ?? [])
       setOrgs(data.orgs ?? [])
-      setCounts(data.counts ?? { users: 0, techs: 0, dealers: 0, clients: 0 })
+      setCounts(data.counts ?? { users: 0, techs: 0, corporate: 0, dealers: 0, clients: 0, unclassified: 0 })
       setMessage(null)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not load users.')
@@ -82,13 +83,19 @@ export function InternalUsersFeaturesBoard() {
     }
   }
 
-  const dealers = orgs.filter(o => o.kind === 'dealer')
-  const clients = orgs.filter(o => o.kind === 'client')
-
   const tabs: { id: Tab; count: number }[] = [
     { id: 'people', count: counts.users },
     { id: 'techs', count: counts.techs },
-    { id: 'orgs', count: counts.dealers + counts.clients },
+    { id: 'orgs', count: orgs.length },
+  ]
+
+  // Organization groups, in display order. Unclassified is surfaced (amber) so
+  // orgs missing a proper org_tier can be spotted and fixed.
+  const orgGroups: [string, OrgCategory, string][] = [
+    ['Corporate', 'corporate', '#FBBF24'],
+    ['Dealers & Partners', 'dealer', '#8B5CF6'],
+    ['Clients', 'client', '#00C8FF'],
+    ['Unclassified — needs a tier', 'unclassified', '#F87171'],
   ]
 
   return (
@@ -166,7 +173,10 @@ export function InternalUsersFeaturesBoard() {
       {/* Organizations — dealers + clients */}
       {!loading && tab === 'orgs' && (
         <div className="space-y-4">
-          {([['Dealers', dealers, '#8B5CF6'], ['Clients', clients, '#00C8FF']] as [string, OrgRow[], string][]).map(([label, list, c]) => (
+          {orgGroups.map(([label, kind, c]) => {
+            const list = orgs.filter(o => o.kind === kind)
+            if (list.length === 0) return null
+            return (
             <div key={label}>
               <div className="mb-1.5 text-[10px] uppercase tracking-[0.14em]" style={{ color: c }}>{label} · {list.length}</div>
               {list.length === 0
@@ -185,7 +195,8 @@ export function InternalUsersFeaturesBoard() {
                     ))}
                   </div>}
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
