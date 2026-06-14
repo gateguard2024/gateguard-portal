@@ -132,6 +132,10 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
       signed_ip: ip, signed_user_agent: ua, signed_at: now, executed_at: now, updated_at: now,
     }).eq('id', sig.id)
     if (error) return NextResponse.json({ ok: false, message: error.message }, { status: 500 })
+    // Sync the linked quote into the sales path.
+    if (sig.quote_id) {
+      await supabase.from('quotes').update({ status: 'accepted', accepted_at: now, updated_at: now }).eq('id', sig.quote_id)
+    }
     await notify(`Proposal APPROVED — ${who}`, [`<strong>${who}</strong> approved the proposal.`])
     return NextResponse.json({ ok: true, status: 'fully_executed' })
   }

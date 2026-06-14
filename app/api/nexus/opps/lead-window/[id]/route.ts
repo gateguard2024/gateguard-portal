@@ -317,6 +317,32 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ success: true, message: 'Note added.', activity: data })
   }
 
+  // ── add_attachment ───────────────────────────────────────────────────────────
+  if (action === 'add_attachment') {
+    const fileName = clean(body.file_name)
+    const url = clean(body.url)
+    if (!fileName || !url) {
+      return NextResponse.json({ success: false, message: 'Missing file.' }, { status: 400 })
+    }
+    const { data, error: insErr } = await supabase
+      .from('attachments')
+      .insert({
+        dealer_org_id: lead.org_id,
+        uploaded_by: profileId,
+        file_name: fileName,
+        url,
+        file_type: clean(body.file_type) || null,
+        size_bytes: typeof body.size_bytes === 'number' ? body.size_bytes : null,
+        lead_id: lead.id,
+      })
+      .select('id, file_name, url, file_type, created_at')
+      .single()
+    if (insErr) {
+      return NextResponse.json({ success: false, message: insErr.message }, { status: 500 })
+    }
+    return NextResponse.json({ success: true, message: 'Attachment added.', attachment: data })
+  }
+
   // ── log_call ────────────────────────────────────────────────────────────────
   if (action === 'log_call') {
     const summary = clean(body.summary ?? body.body ?? body.note)

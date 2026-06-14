@@ -298,6 +298,28 @@ export function LeadGlassWindow({ data, onBack, onRefresh, onOpenOpportunity }: 
     } catch (error) { setActionMessage(error instanceof Error ? error.message : 'That did not work. Try again.') } finally { setActionBusy(false) }
   }
 
+  async function uploadAttachment(file: File) {
+    const leadId = lead.id
+    if (!leadId || !file) return
+    setActionBusy(true); setActionMessage(null)
+    try {
+      const urlRes = await fetch(`/api/nexus/opps/lead-window/${leadId}/attachment-url`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: file.name }) })
+      const urlData = await urlRes.json().catch(() => ({}))
+      if (!urlRes.ok) throw new Error(urlData?.error ?? 'Could not start upload.')
+      const put = await fetch(urlData.signedUrl, { method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file })
+      if (!put.ok) throw new Error('Upload failed.')
+      const rec = await fetch(`/api/nexus/opps/lead-window/${leadId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add_attachment', file_name: file.name, url: urlData.publicUrl, file_type: file.type, size_bytes: file.size }) })
+      const recData = await rec.json().catch(() => ({}))
+      if (!rec.ok || recData.success === false) throw new Error(recData?.message ?? 'Could not save attachment.')
+      setActionMessage('Attachment added.')
+      await onRefresh?.()
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : 'Upload failed.')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-4 pb-28">
       {activeAction === 'edit_details' && (
@@ -327,7 +349,16 @@ export function LeadGlassWindow({ data, onBack, onRefresh, onOpenOpportunity }: 
           <DuplicateGuardSection data={data} />
           <Section title="Activity Timeline" count={activities.length}><ListBlock records={activities} emptyText="No activity yet." render={activity => <MiniRow title={val(activity.subject, val(activity.type, 'Activity'))} subtitle={val(activity.body ?? activity.outcome, '')} meta={val(activity.created_at, '')} />} /></Section>
           <Section title="Tasks / To-Dos" count={todos.length}><ListBlock records={todos} emptyText="No tasks attached yet." render={todo => <MiniRow title={val(todo.title, 'Task')} subtitle={val(todo.body, '')} meta={val(todo.status ?? todo.due_date, '')} />} /></Section>
-          <Section title="Attachments" count={attachments.length + surveys.length}><ListBlock records={[...attachments, ...surveys]} emptyText="No attachments yet." render={item => <MiniRow title={val(item.name ?? item.title ?? item.filename, 'Attachment')} subtitle={val(item.status ?? item.type, '')} meta={val(item.created_at, '')} />} /></Section>
+          <Section title="Attachments" count={attachments.length + surveys.length}>
+            <label className="mb-2 inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(0,200,255,0.12)', border: '1px solid rgba(0,200,255,0.28)', color: 'rgba(210,245,255,0.9)' }}>
+              {actionBusy ? 'Uploading…' : '+ Add file'}
+              <input type="file" className="hidden" disabled={actionBusy} onChange={e => { const f = e.target.files?.[0]; if (f) void uploadAttachment(f); e.currentTarget.value = '' }} />
+            </label>
+            <ListBlock records={[...attachments, ...surveys]} emptyText="No attachments yet." render={item => {
+              const row = <MiniRow title={val(item.file_name ?? item.name ?? item.title ?? item.filename, 'Attachment')} subtitle={val(item.file_type ?? item.status ?? item.type, '')} meta={val(item.created_at, '')} />
+              return item.url ? <a href={String(item.url)} target="_blank" rel="noopener noreferrer" className="block">{row}</a> : row
+            }} />
+          </Section>
         </div>
         <div className="space-y-4"><Section title="Actions"><div className="space-y-2"><ActionButton title="Edit Lead Details" subtitle="Add phone, email, address, and notes." active={activeAction === 'edit_details'} onClick={() => chooseAction('edit_details')} /><ActionButton title="Create Opportunity" subtitle="This looks like a real deal." active={activeAction === 'create_opportunity'} onClick={() => chooseAction('create_opportunity')} /><ActionButton title="Add Note" subtitle="Remember something about this lead." active={activeAction === 'add_note'} onClick={() => chooseAction('add_note')} /><ActionButton title="Log Call" subtitle="Capture what happened on a call." active={activeAction === 'log_call'} onClick={() => chooseAction('log_call')} /><ActionButton title="Create Task / Follow-Up" subtitle="Put the next touch on your list." active={activeAction === 'schedule_followup'} onClick={() => chooseAction('schedule_followup')} /><ActionButton title="Change Lead Status" subtitle="Move this lead forward." active={activeAction === 'update_status'} onClick={() => chooseAction('update_status')} /><ActionButton title="Contact Not Found" subtitle="Needs contact research." active={false} tone="danger" onClick={() => submitLeadAction({ action: 'add_note', note: 'Contact not found — needs research.' })} />
           {activeAction === 'create_opportunity' && <div className="rounded-2xl p-3 space-y-2" style={{ background: 'rgba(0,0,0,0.20)', border: '1px solid rgba(107,126,255,0.24)' }}><p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.76)' }}>Nexus will create an opportunity and carry forward this lead data.</p><div className="flex gap-2"><button type="button" onClick={() => setActiveAction(null)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.7)' }}>Cancel</button><button type="button" disabled={actionBusy} onClick={() => submitLeadAction({ action: 'create_opportunity' })} className="rounded-full px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ background: '#6B7EFF', color: 'white' }}>{actionBusy ? 'Creating...' : 'Create Opportunity'}</button></div></div>}

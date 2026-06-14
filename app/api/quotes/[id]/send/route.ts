@@ -12,6 +12,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 import { getCurrentUser } from '@/lib/current-user'
+import { generatePublicSlug, publicDocUrl } from '@/lib/doc-slug'
+import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
@@ -149,8 +151,50 @@ export async function POST(
 
     if (qErr || !quote) return NextResponse.json({ error: 'Quote not found' }, { status: 404 })
 
-    // Build approval URL
-    const approvalUrl = `${APP_URL}/quotes/${params.id}/approve`
+    // ── Proposal document for the public Nexus Document Portal ────────────────
+    // Find-or-create a 'proposal' document_signatures row for this quote so the
+    // client opens a no-login glass page (no portal chrome) with Approve / Request
+    // Changes / Ask. The full proposal is reviewed at the glass proposal view.
+    const proposalReviewUrl = `${APP_URL}/quotes/${params.id}/proposal`
+    let publicSlug: string | null = null
+    const { data: existingDoc } = await supabase
+      .from('document_signatures')
+      .select('id, public_slug')
+      .eq('quote_id', params.id)
+      .eq('document_type', 'proposal')
+      .maybeSingle()
+
+    if (existingDoc?.public_slug) {
+      publicSlug = existingDoc.public_slug
+      await supabase.from('document_signatures').update({
+        status: 'pending', document_url: proposalReviewUrl, updated_at: new Date().toISOString(),
+      }).eq('id', existingDoc.id)
+    } else {
+      publicSlug = generatePublicSlug(quote.property_name || quote.client_name)
+      for (let i = 0; i < 3; i++) {
+        const { data: clash } = await supabase.from('document_signatures').select('id').eq('public_slug', publicSlug).maybeSingle()
+        if (!clash) break
+        publicSlug = generatePublicSlug(quote.property_name || quote.client_name)
+      }
+      await supabase.from('document_signatures').insert({
+        token: crypto.randomBytes(32).toString('hex'),
+        public_slug: publicSlug,
+        document_type: 'proposal',
+        quote_id: params.id,
+        org_id: quote.org_id ?? null,
+        signer_name: quote.client_name ?? null,
+        signer_email: quote.client_email ?? null,
+        signer_company: quote.property_name ?? quote.client_name ?? null,
+        document_url: proposalReviewUrl,
+        sent_by: user.id,
+        sent_by_name: user.name,
+        expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
+        status: 'pending',
+      })
+    }
+
+    // Public portal link (no chrome, no login) — replaces the legacy /approve page.
+    const approvalUrl = publicSlug ? publicDocUrl(publicSlug) : `${APP_URL}/quotes/${params.id}/approve`
 
     // Mark quote as sent + set sent_at
     const { data: updated, error: patchErr } = await supabase
