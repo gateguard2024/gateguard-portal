@@ -16,23 +16,45 @@ type Invoice = {
   sent_at?: string | null;
 };
 
-// Claude wires loadInvoices to the real billing API.
+// Normalize the API's freeform status + bucket into the board's status set.
+const normalizeStatus = (s: string | null | undefined, bucket: string | null | undefined, paidAt: string | null | undefined): InvoiceStatus => {
+  const v = (s ?? '').toLowerCase();
+  if (v === 'paid' || paidAt || bucket === 'recently_paid') return 'paid';
+  if (v === 'void') return 'void';
+  if (v === 'draft') return 'draft';
+  if (v === 'overdue' || bucket === 'past_due') return 'overdue';
+  return 'open';
+};
+// Real billing API (GET /api/nexus/money-docs/invoices → { invoices: InvoiceCard[] }),
+// with a small preview fallback so the panel still renders if the call fails.
 const loadInvoices = async (): Promise<Invoice[]> => {
-  await new Promise(resolve => setTimeout(resolve, 300));
+  try {
+    const res = await fetch('/api/nexus/money-docs/invoices', { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.invoices)) {
+        return data.invoices.map((c: any): Invoice => ({
+          id: c.id,
+          invoice_number: c.invoice_number ?? 'Invoice',
+          customer_name: c.customer_name ?? null,
+          property_name: null,
+          amount: typeof c.amount === 'number' ? c.amount : Number(c.amount) || 0,
+          status: normalizeStatus(c.status, c.bucket, c.paid_at),
+          due_date: c.due_date ? String(c.due_date).slice(0, 10) : null,
+          sent_at: c.paid_at ? String(c.paid_at).slice(0, 10) : null,
+        }));
+      }
+    }
+  } catch {
+    /* fall through to preview */
+  }
   const today = new Date();
   const pastDate = (days: number) => { const d = new Date(); d.setDate(today.getDate() - days); return d.toISOString().split('T')[0]; };
   const futureDate = (days: number) => { const d = new Date(); d.setDate(today.getDate() + days); return d.toISOString().split('T')[0]; };
   return [
-    { id: 'inv-101', invoice_number: 'INV-2026-001', customer_name: 'Sarah Jenkins', property_name: 'Avalon Heights', amount: 1250.00, status: 'paid', due_date: pastDate(5), sent_at: pastDate(20) },
     { id: 'inv-102', invoice_number: 'INV-2026-002', customer_name: 'Michael Chen', property_name: 'The Beacon', amount: 850.50, status: 'overdue', due_date: pastDate(2), sent_at: pastDate(16) },
     { id: 'inv-103', invoice_number: 'INV-2026-003', customer_name: 'Amanda Torres', property_name: 'Sunrise Estates', amount: 3200.00, status: 'open', due_date: futureDate(10), sent_at: pastDate(1) },
-    { id: 'inv-104', invoice_number: 'INV-2026-004', customer_name: 'David Kim', property_name: 'Kim Plaza', amount: 450.00, status: 'open', due_date: futureDate(5), sent_at: pastDate(5) },
     { id: 'inv-105', invoice_number: 'INV-2026-005', customer_name: 'Robert Smith', property_name: null, amount: 150.00, status: 'paid', due_date: pastDate(10), sent_at: pastDate(25) },
-    { id: 'inv-106', invoice_number: 'INV-2026-006', customer_name: 'Elena Rodriguez', property_name: 'Nexus Lofts', amount: 2100.00, status: 'overdue', due_date: pastDate(15), sent_at: pastDate(30) },
-    { id: 'inv-107', invoice_number: 'INV-2026-007', customer_name: 'John Smith', property_name: 'Private Residence', amount: 75.00, status: 'paid', due_date: pastDate(1), sent_at: pastDate(15) },
-    { id: 'inv-108', invoice_number: 'INV-2026-008', customer_name: 'Jessica Lee', property_name: 'Lee Tower', amount: 5400.00, status: 'open', due_date: futureDate(20), sent_at: pastDate(2) },
-    { id: 'inv-109', invoice_number: 'INV-2026-009', customer_name: 'Avalon Management', property_name: 'Avalon West', amount: 890.00, status: 'draft', due_date: futureDate(30), sent_at: null },
-    { id: 'inv-110', invoice_number: 'INV-2026-010', customer_name: 'Chen Real Estate', property_name: 'Harbor Drive', amount: 1100.00, status: 'void', due_date: pastDate(5), sent_at: pastDate(20) },
   ];
 };
 

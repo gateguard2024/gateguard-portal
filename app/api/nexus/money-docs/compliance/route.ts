@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,12 +38,16 @@ function isPast(dateText?: string | null) {
 export async function GET() {
   try {
     const user = await getCurrentUser()
+    const scope = await resolveOrgScope(user)
     const items: ComplianceItem[] = []
 
-    const docs = await supabase
+    // Org isolation — corporate sees all; everyone else only their subtree's docs.
+    let docsQuery = supabase
       .from('document_signatures')
       .select('id,document_type,signer_email,status,expires_at,signed_at')
       .limit(80)
+    docsQuery = applyOrgScope(docsQuery, scope, 'org_id')
+    const docs = await docsQuery
 
     for (const row of docs.data ?? []) {
       const expired = isPast(row.expires_at) && !row.signed_at

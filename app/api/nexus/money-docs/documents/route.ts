@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,12 +51,18 @@ function bucketFor(row: SignatureRow): DocumentBucket {
 
 export async function GET() {
   try {
-    await getCurrentUser()
-    const { data, error } = await supabase
+    const user = await getCurrentUser()
+    const scope = await resolveOrgScope(user)
+
+    // Org isolation — corporate sees all; everyone else only their subtree's docs.
+    let query = supabase
       .from('document_signatures')
       .select('id,document_type,document_version,document_url,executed_cert_url,signer_name,signer_email,signer_company,signed_at,countersigned_at,executed_at,status,sent_by_name,sent_at,expires_at')
       .order('sent_at', { ascending: false, nullsFirst: false })
       .limit(80)
+    query = applyOrgScope(query, scope, 'org_id')
+
+    const { data, error } = await query
 
     if (error) return NextResponse.json({ success: false, message: error.message }, { status: 500 })
 
