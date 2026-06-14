@@ -32,7 +32,11 @@ export function AdminLauncher() {
   return (
     <button
       type="button"
-      onClick={() => router.push('/?view=admin')}
+      onClick={() => {
+        // Already on the Nexus home → tell it to open admin (no navigation needed).
+        if (pathname === '/') window.dispatchEvent(new CustomEvent('nexus:open-admin'))
+        else router.push('/?view=admin')
+      }}
       title="Admin"
       aria-label="Admin"
       className="fixed right-4 top-4 z-[60] flex h-9 w-9 items-center justify-center rounded-full transition-all hover:-translate-y-0.5"

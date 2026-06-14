@@ -81,11 +81,19 @@ export default function NexusHomeClient() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
-  // The global Admin launcher (all pages) routes admins here with ?view=admin.
+  // The global Admin launcher (all pages) opens admin two ways:
+  //  - from another page → navigates to /?view=admin (read on mount)
+  //  - from the home page → fires a 'nexus:open-admin' event (no navigation)
   useEffect(() => {
     if (isAdmin && typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('view') === 'admin') {
       setActiveTab('people')
     }
+  }, [isAdmin])
+
+  useEffect(() => {
+    function openAdmin() { if (isAdmin) setActiveTab('people') }
+    window.addEventListener('nexus:open-admin', openAdmin)
+    return () => window.removeEventListener('nexus:open-admin', openAdmin)
   }, [isAdmin])
 
   const handleQuery = useCallback(async (query: string) => {
