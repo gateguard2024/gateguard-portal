@@ -73,10 +73,24 @@ const SYSTEM_USER: PortalUser = {
   canViewFinancials:     true,
 }
 
+// Fail-CLOSED fallback for production: a powerless anonymous user. If Clerk has
+// no session or currentUser() throws, we must NEVER silently grant corporate
+// admin. SYSTEM_USER (corporate) is only used in local dev for convenience.
+const ANON_USER: PortalUser = {
+  ...SYSTEM_USER,
+  id: 'anonymous', name: 'Unauthenticated', initials: '?', email: '',
+  org_id: null, org_tier: null, role: 'client',
+  isCorporate: false, isMasterAgent: false, isMasterDealer: false, isDealer: false, isClient: true,
+  isFullDealer: false, isServiceDealer: false, isInstallContractor: false, isSalesPartner: false,
+  canViewWOs: false, canViewSites: false, canViewCRM: false, canViewCommissions: false,
+  canViewNetwork: false, canViewDispatch: false, canViewSensitive: false, canViewFinancials: false,
+}
+const FALLBACK_USER = process.env.NODE_ENV === 'development' ? SYSTEM_USER : ANON_USER
+
 export async function getCurrentUser(): Promise<PortalUser> {
   try {
     const user = await currentUser()
-    if (!user) return SYSTEM_USER
+    if (!user) return FALLBACK_USER
 
     const meta      = user.publicMetadata ?? {}
     const id        = user.id
@@ -137,6 +151,6 @@ export async function getCurrentUser(): Promise<PortalUser> {
       canViewSensitive, canViewFinancials,
     }
   } catch {
-    return SYSTEM_USER
+    return FALLBACK_USER
   }
 }

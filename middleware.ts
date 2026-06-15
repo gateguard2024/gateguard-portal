@@ -23,8 +23,9 @@ function isBypassPath(pathname: string): boolean {
     // so it needs Clerk to run. It accepts EITHER x-tech-code OR a Clerk session.
     (pathname.startsWith('/api/kb/') && !pathname.startsWith('/api/kb/parse-survey-transcript')) ||
     pathname.startsWith('/api/plaud/') ||
-    // Client-facing pages — no Clerk session required
-    pathname.startsWith('/quotes/') ||
+    // Client-facing quote pages ONLY — the internal builder (/quotes, /quotes/new,
+    // /quotes/[id]) stays behind Clerk. Public = proposal + approve views only.
+    (/^\/quotes\/[^/]+\/(proposal|approve)(\/|$)/.test(pathname)) ||
     // Conference landing page — public lead capture
     pathname.startsWith('/show') ||
     // Show lead API — called from public page

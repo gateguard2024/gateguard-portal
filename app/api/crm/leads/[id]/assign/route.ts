@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentUser } from '@/lib/current-user'
+import { resolveOrgScope, isInScope } from '@/lib/org-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,12 +13,26 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    // Reassigning/redistributing a lead is an admin action (corporate, or an
+    // admin/supervisor over the target org).
+    const user = await getCurrentUser()
+    const isManager = user.isCorporate || ['admin', 'supervisor'].includes(user.role)
+    if (!isManager) {
+      return NextResponse.json({ error: 'Only admins can reassign leads.' }, { status: 403 })
+    }
+
     const rawId = params.id
     const body = await req.json()
     const { dealer } = body
 
     if (!dealer) {
       return NextResponse.json({ error: 'dealer is required' }, { status: 400 })
+    }
+
+    // The target dealer org must be within the caller's downward subtree.
+    const scope = await resolveOrgScope(user)
+    if (!isInScope(scope, dealer)) {
+      return NextResponse.json({ error: 'Target org is outside your access.' }, { status: 403 })
     }
 
     // show_ prefix → update show_leads table
