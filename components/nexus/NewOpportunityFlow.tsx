@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react'
 type Source = 'lead' | 'customer'
 type Step = 'source' | 'pick' | 'form'
 
-type LeadRow = { id: string; name?: string; company_name?: string; property_name?: string; contact_name?: string; stage?: string }
+type LeadRow = { id: string; name?: string; company?: string; company_name?: string; property_name?: string; contact_name?: string; stage?: string; units?: number; location?: string }
 type SearchResult = { id: string; type: string; title: string; subtitle: string }
 
 type Selected = {
@@ -17,15 +17,22 @@ type Selected = {
   sublabel: string
   account_name: string
   contact_name: string
-  lead_id?: string
+  show_lead_id?: string
 }
 
+// GateGuard sales pipeline. "Deposit collected" is the conversion point —
+// it will trigger Customer + active Job creation (wired in a follow-up).
 const STAGES: { value: string; label: string }[] = [
-  { value: 'meet_present', label: 'Meeting / Present' },
-  { value: 'survey_request', label: 'Survey Requested' },
-  { value: 'propose', label: 'Proposal' },
-  { value: 'negotiate', label: 'Negotiation' },
+  { value: 'info_request', label: 'Request for more information' },
+  { value: 'site_survey', label: 'Site Survey request' },
+  { value: 'pre_approval', label: 'Pre-Approval' },
+  { value: 'proposal', label: 'Proposal' },
+  { value: 'agreement_deposit', label: 'Agreement & Deposit' },
+  { value: 'agreement_signed', label: 'Agreement signed' },
+  { value: 'deposit_collected', label: 'Deposit collected (→ Customer + Job)' },
 ]
+
+const MRR_PER_UNIT = 10  // easy-start formula: $10/month/unit (refine later)
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -51,7 +58,8 @@ export function NewOpportunityFlow({ onClose }: { onClose: () => void }) {
 
   // form
   const [name, setName] = useState('')
-  const [stage, setStage] = useState('meet_present')
+  const [stage, setStage] = useState('info_request')
+  const [units, setUnits] = useState('')
   const [mrr, setMrr] = useState('')
   const [value, setValue] = useState('')
   const [notes, setNotes] = useState('')
@@ -66,8 +74,10 @@ export function NewOpportunityFlow({ onClose }: { onClose: () => void }) {
     void (async () => {
       try {
         const res = await fetch('/api/crm/leads?limit=100')
-        const data = await res.json().catch(() => ({}))
-        if (!cancelled) setLeads(data.records ?? data.leads ?? [])
+        const data = await res.json().catch(() => ([]))
+        // /api/crm/leads returns a bare array of leads.
+        const rows: LeadRow[] = Array.isArray(data) ? data : (data.records ?? data.leads ?? [])
+        if (!cancelled) setLeads(rows)
       } catch { if (!cancelled) setLeads([]) }
       finally { if (!cancelled) setPicking(false) }
     })()
@@ -97,11 +107,28 @@ export function NewOpportunityFlow({ onClose }: { onClose: () => void }) {
   }
 
   function pickLead(l: LeadRow) {
-    const account = l.company_name || l.property_name || ''
-    const label = l.name || account || 'Lead'
-    setSelected({ label, sublabel: account || (l.stage ?? 'lead'), account_name: account, contact_name: l.contact_name || l.name || '', lead_id: l.id })
+    const account = l.property_name || l.company || l.company_name || ''
+    const label = l.property_name || l.name || 'Lead'
+    const rawId = l.id.replace(/^show_/, '')   // leads come from show_leads, id is "show_<uuid>"
+    setSelected({
+      label,
+      sublabel: [l.location, (l.stage ?? '').replace(/_/g, ' ')].filter(Boolean).join(' · ') || account || 'Lead',
+      account_name: account,
+      contact_name: l.contact_name || l.name || '',
+      show_lead_id: rawId,
+    })
+    const u = l.units ? Number(l.units) : 0
+    setUnits(u ? String(u) : '')
+    setMrr(u ? String(u * MRR_PER_UNIT) : '')
     setName(`${account || label} — Opportunity`)
     setStep('form')
+  }
+
+  // Units → MRR auto-calc ($10/unit). User can still edit MRR after.
+  function onUnitsChange(raw: string) {
+    const clean = raw.replace(/[^0-9]/g, '')
+    setUnits(clean)
+    setMrr(clean ? String(Number(clean) * MRR_PER_UNIT) : '')
   }
 
   function pickCustomer(r: SearchResult) {
@@ -123,7 +150,8 @@ export function NewOpportunityFlow({ onClose }: { onClose: () => void }) {
       }
       if (mrr.trim()) body.est_mrr = Number(mrr) || 0
       if (value.trim()) body.value = Number(value) || 0
-      if (selected?.lead_id) body.lead_id = selected.lead_id
+      if (units.trim()) body.description = `${notes.trim() ? notes.trim() + '\n' : ''}Units: ${units} · MRR @ $${MRR_PER_UNIT}/unit`
+      if (selected?.show_lead_id) body.show_lead_id = selected.show_lead_id
 
       const res = await fetch('/api/crm/opportunities', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
@@ -177,8 +205,8 @@ export function NewOpportunityFlow({ onClose }: { onClose: () => void }) {
               <div className="space-y-2">
                 {source === 'lead' && leadList.map(l => (
                   <button key={l.id} type="button" onClick={() => pickLead(l)} className="w-full rounded-2xl px-3 py-3 text-left transition-all hover:-translate-y-0.5" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                    <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{l.name || l.company_name || l.property_name || 'Lead'}</div>
-                    <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.48)' }}>{[l.company_name || l.property_name, (l.stage ?? '').replace(/_/g, ' ')].filter(Boolean).join(' · ') || 'Lead'}</div>
+                    <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{l.property_name || l.name || 'Lead'}</div>
+                    <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.48)' }}>{[l.name, l.location, l.units ? `${l.units} units` : null].filter(Boolean).join(' · ') || 'Lead'}</div>
                   </button>
                 ))}
                 {source === 'lead' && !picking && leadList.length === 0 && <div className="rounded-2xl px-3 py-3 text-xs" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.45)' }}>No leads match. Try a different name.</div>}
@@ -209,9 +237,10 @@ export function NewOpportunityFlow({ onClose }: { onClose: () => void }) {
                 </select>
               </Field>
               <div className="grid grid-cols-2 gap-2">
-                <Field label="Monthly $ (MRR)"><input value={mrr} onChange={e => setMrr(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder="0" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle} /></Field>
-                <Field label="One-time $ (optional)"><input value={value} onChange={e => setValue(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder="0" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle} /></Field>
+                <Field label="Units"><input value={units} onChange={e => onUnitsChange(e.target.value)} inputMode="numeric" placeholder="0" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle} /></Field>
+                <Field label={`Monthly $ (MRR · $${MRR_PER_UNIT}/unit)`}><input value={mrr} onChange={e => setMrr(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder="0" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle} /></Field>
               </div>
+              <Field label="One-time $ (optional)"><input value={value} onChange={e => setValue(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder="0" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle} /></Field>
               <Field label="Notes (optional)"><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle} /></Field>
             </div>
           )}
