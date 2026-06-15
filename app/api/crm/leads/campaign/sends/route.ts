@@ -14,7 +14,9 @@ export const dynamic = 'force-dynamic'
 // sent / opened / bounced / failed badges
 export async function GET(_req: NextRequest) {
   try {
-    await getCurrentUser()
+    const user = await getCurrentUser()
+    // Campaign history over the GLOBAL show-lead pool — corporate only.
+    if (!user.isCorporate) return NextResponse.json({ error: 'Campaigns are run by the corporate marketing team.' }, { status: 403 })
 
     // One row per lead — latest send record
     const { data, error } = await supabase

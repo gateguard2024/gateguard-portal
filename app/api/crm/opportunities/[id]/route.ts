@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentUser } from '@/lib/current-user'
+import { resolveOrgScope, isInScope } from '@/lib/org-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -7,7 +9,18 @@ const supabase = createClient(
 )
 export const dynamic = 'force-dynamic'
 
+// Org-scope guard: confirm an opportunity belongs to the caller's subtree.
+// Returns true if allowed; false if it should 404 (cross-org or missing).
+async function oppInScope(id: string): Promise<boolean> {
+  const user = await getCurrentUser()
+  const scope = await resolveOrgScope(user)
+  if (scope.all) return true
+  const { data } = await supabase.from('opportunities').select('dealer_org_id').eq('id', id).maybeSingle()
+  return isInScope(scope, (data as { dealer_org_id?: string | null } | null)?.dealer_org_id)
+}
+
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await oppInScope(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const [opp, history, contacts, activities] = await Promise.all([
     supabase.from('opportunities').select('*').eq('id', params.id).single(),
     supabase.from('opportunity_stage_history').select('*').eq('opportunity_id', params.id).order('changed_at', { ascending: false }),
@@ -48,6 +61,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await oppInScope(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const body = await req.json()
   // Map UI field names back to DB column names
   const { opportunity_type, directv_package, forecast_category, ...rest } = body as Record<string, unknown>
@@ -70,6 +84,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await oppInScope(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { error } = await supabase
     .from('opportunities')
     .delete()

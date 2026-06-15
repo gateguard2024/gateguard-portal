@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { opportunityInScope } from '@/lib/crm-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,6 +10,7 @@ const supabase = createClient(
 export const dynamic = 'force-dynamic'
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await opportunityInScope(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { data, error } = await supabase
     .from('crm_activities')
     .select('*')
@@ -19,6 +21,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await opportunityInScope(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const body = await req.json()
   const user = await getCurrentUser()
   const { data, error } = await supabase

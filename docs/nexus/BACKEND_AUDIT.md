@@ -31,5 +31,10 @@ Branch: beta. Method: full read-only sweep (mock vs real fetch, org scoping, mig
 - **Onboarding/admin: a few NO-AUTH/unscoped:** `admin/commission-config` (NO-AUTH GET), `admin/users/[id]/permissions` (NO-AUTH; dead permissions system), `admin/setup-corporate` (NO-AUTH bootstrap). Core onboarding (`onboard-dealer`, `dealers/[id]`, `users`, `org-features`, `user-features`) are role/scope-gated.
 - These legacy CRM/admin routes back the *legacy* pages (Nexus glass uses the scoped `/nexus/*` versions). Fix = defense-in-depth + needed before legacy pages are exposed to dealers (ties to dealer-safe part 2).
 
+## Fixed June 14 (session cont.) — legacy CRM scoping
+- Added `isInScope()` (org-scope) + `lib/crm-scope.ts` (`opportunityInScope`, `leadInScope`).
+- Guarded (404 on cross-org): `crm/opportunities/[id]` GET/PATCH/DELETE, `…/[id]/contacts` GET+POST, `…/[id]/activities` GET+POST, `crm/leads/[id]` GET/PATCH/DELETE, `crm/leads/[id]/activities` GET+POST, `crm/activities` list (scoped to in-subtree opportunities). Corporate bypass throughout.
+- **Remaining:** `crm/leads/campaign` + `/sends` operate over the global show_leads pool for marketing — gate to corporate/marketing role (product decision) before exposing to dealers. Tracked in #54-adjacent.
+
 ## Verified clean (no leaks)
 All other `/api/nexus/*`, `/api/dispatch/*`, `/api/calendar/*` list routes apply org scope (`applyOrgScope`), assigned scope (`applyAssignedScope`), or user ownership (`.eq('user_id', …)`). Public `/api/document/[slug]` is token-based and never returns the token.

@@ -136,7 +136,9 @@ P.S. If you have questions about the model or want to see how other properties i
 // GET /api/crm/leads/campaign — preview: returns lead count + sample email
 export async function GET(req: NextRequest) {
   try {
-    await getCurrentUser()
+    const user = await getCurrentUser()
+    // Campaigns run over the GLOBAL show-lead pool — corporate only.
+    if (!user.isCorporate) return NextResponse.json({ error: 'Campaigns are run by the corporate marketing team.' }, { status: 403 })
 
     // Fetch all show leads (no status column — check converted via opportunities)
     const { data: allLeads, error } = await supabase
@@ -182,7 +184,9 @@ export async function GET(req: NextRequest) {
 // POST /api/crm/leads/campaign — send the campaign
 export async function POST(req: NextRequest) {
   try {
-    await getCurrentUser()
+    const user = await getCurrentUser()
+    // Campaigns run over the GLOBAL show-lead pool — corporate only.
+    if (!user.isCorporate) return NextResponse.json({ error: 'Campaigns are run by the corporate marketing team.' }, { status: 403 })
 
     const body = await req.json().catch(() => ({}))
     const dryRun  = body.dry_run  === true

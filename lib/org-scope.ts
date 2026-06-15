@@ -143,6 +143,17 @@ export function applyOrgScope<T>(
 }
 
 /**
+ * Membership check for a single record's org id against a resolved scope.
+ * Corporate (scope.all) always passes; otherwise the org id must be in scope.
+ * Used by detail/by-id routes to fail closed (404) on cross-org access.
+ */
+export function isInScope(scope: OrgScope, orgId: string | null | undefined): boolean {
+  if (scope.all) return true
+  if (!orgId) return false
+  return scope.ids.includes(orgId)
+}
+
+/**
  * Quick guard for routes that should 401 when org context is missing.
  * Returns true if the user has enough context to proceed.
  */

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { resolveOrgScope } from '@/lib/org-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -41,6 +42,20 @@ export async function GET(req: NextRequest) {
       query = query.is('completed_at', null)
     } else if (status === 'completed') {
       query = query.not('completed_at', 'is', null)
+    }
+
+    // Org isolation — non-corporate users only see activities on opportunities
+    // within their downward subtree.
+    const user = await getCurrentUser()
+    const scope = await resolveOrgScope(user)
+    if (!scope.all) {
+      const { data: opps } = await supabase
+        .from('opportunities')
+        .select('id')
+        .in('dealer_org_id', scope.ids.length ? scope.ids : ['00000000-0000-0000-0000-000000000000'])
+      const oppIds = (opps ?? []).map(o => o.id)
+      if (oppIds.length === 0) return NextResponse.json([])
+      query = query.in('opportunity_id', oppIds)
     }
 
     const { data, error } = await query

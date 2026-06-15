@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { opportunityInScope } from '@/lib/crm-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,6 +17,7 @@ export async function GET(
   _: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  if (!(await opportunityInScope(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { data, error } = await supabase
     .from('opportunity_contacts')
     .select('*')
@@ -37,6 +39,7 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    if (!(await opportunityInScope(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     const body = await req.json()
     const { name, title, phone, email, role, is_primary } = body
 

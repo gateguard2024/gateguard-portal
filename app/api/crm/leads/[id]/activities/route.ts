@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { leadInScope } from '@/lib/crm-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,6 +15,7 @@ function parseLeadId(id: string) {
 
 // GET /api/crm/leads/[id]/activities
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await leadInScope(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { isShow, uuid } = parseLeadId(params.id)
 
   // Query by the correct FK column depending on whether it's a show lead
@@ -34,6 +36,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
 // POST /api/crm/leads/[id]/activities — log a call, email, note, task, or meeting
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await leadInScope(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { isShow, uuid } = parseLeadId(params.id)
   const body = await req.json()
   const { type, subject, body: actBody, due_at, outcome, direction, duration_min } = body

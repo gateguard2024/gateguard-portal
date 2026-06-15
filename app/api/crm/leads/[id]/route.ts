@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { leadInScope } from '@/lib/crm-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,6 +23,7 @@ function formatDate(iso: string): string {
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const rawId = params.id
+  if (!(await leadInScope(rawId))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   // show_ prefix = from show_leads table
   if (rawId.startsWith('show_')) {
@@ -81,6 +83,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 // PATCH /api/crm/leads/[id] — update stage, notes, estSetup, estMrr, etc.
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const rawId = params.id
+  if (!(await leadInScope(rawId))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const body  = await req.json()
 
   // show_ prefix = from show_leads table
@@ -132,6 +135,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 // DELETE /api/crm/leads/[id]
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   const rawId = params.id
+  if (!(await leadInScope(rawId))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   if (rawId.startsWith('show_')) {
     const uuid = rawId.replace('show_', '')
