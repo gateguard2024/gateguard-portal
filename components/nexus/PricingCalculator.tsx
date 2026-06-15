@@ -27,11 +27,11 @@ function doorCost(doors: number): number {
 const usd = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 const inputStyle = { background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.92)' } as const
 
-function Num({ label, value, onChange, hint }: { label: string; value: string; onChange: (v: string) => void; hint?: string }) {
+function Num({ label, value, onChange, hint, decimal }: { label: string; value: string; onChange: (v: string) => void; hint?: string; decimal?: boolean }) {
   return (
     <label className="block">
       <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.62)' }}>{label}</div>
-      <input value={value} onChange={e => onChange(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" placeholder="0" className="w-full rounded-xl px-3 py-2.5 text-base outline-none" style={inputStyle} />
+      <input value={value} onChange={e => onChange(decimal ? e.target.value.replace(/[^0-9.]/g, '') : e.target.value.replace(/[^0-9]/g, ''))} inputMode="decimal" placeholder="0" className="w-full rounded-xl px-3 py-2.5 text-base outline-none" style={inputStyle} />
       {hint && <div className="mt-0.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.34)' }}>{hint}</div>}
     </label>
   )
@@ -77,11 +77,11 @@ export function PricingCalculator() {
         <div className="mb-4 text-[12px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Type how many of each. The price updates as you go.</div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <Num label="Gates / common doors" value={doors} onChange={setDoors} />
-          <Num label="Units — phone app" value={unitsApp} onChange={setUnitsApp} />
-          <Num label="Units — gateway" value={unitsGw} onChange={setUnitsGw} />
+          <Num label="Smart-lock units (app)" value={unitsApp} onChange={setUnitsApp} hint="$2.25 cost/unit" />
+          <Num label="Smart-home units (gateway)" value={unitsGw} onChange={setUnitsGw} hint="$4.50 cost/unit" />
           <Num label="Cameras — backup only" value={camAccess} onChange={setCamAccess} hint="$14 cost each" />
           <Num label="Cameras — monitored" value={camMon} onChange={setCamMon} hint="$30 cost each" />
-          <Num label="Passes per unit" value={passesPerUnit} onChange={setPassesPerUnit} hint="500 incl · $30/100 over" />
+          <Num label="Passes per unit" value={passesPerUnit} onChange={setPassesPerUnit} hint="500 incl · $30/100 over" decimal />
         </div>
       </div>
 
