@@ -129,7 +129,7 @@ export function SalesSurface() {
   }
 
   return (
-    <section className="mt-9 w-full max-w-5xl xl:max-w-none">
+    <section className="mt-9 w-full max-w-5xl">
       <div className="rounded-[2rem] p-5 sm:p-6" style={SHELL_STYLE}>
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
