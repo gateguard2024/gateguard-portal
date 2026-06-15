@@ -17,6 +17,7 @@ You are testing the **everyday office/sales experience** in Nexus on **beta**. G
 - "Mark Complete" requiring photos/sign-off (today it just marks done).
 - Automatic **site becomes active** when contract signed + deposit paid.
 - Deposit/balance/monthly-service billing milestones.
+- The **"Timeline & Gantt" planner** (from To-Dos) is the older non-glass screen for now — coming to glass later.
 If you hit any of these, just note "expected — coming soon" and move on.
 
 ---
