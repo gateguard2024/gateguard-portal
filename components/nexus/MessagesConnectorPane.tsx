@@ -265,8 +265,21 @@ export default function MessagesConnectorPane() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const p = new URLSearchParams(window.location.search);
-    if (p.get('gmail_connected')) { setBanner({ ok: true, text: 'Gmail connected ✓' }); reload(); }
-    else if (p.get('gmail_error')) { setBanner({ ok: false, text: `Gmail connection failed: ${p.get('gmail_error')}` }); }
+    if (p.get('gmail_connected')) {
+      setBanner({ ok: true, text: 'Gmail connected ✓ — loading your email…' });
+      reload();
+      // Pull the inbox right after connecting so emails appear immediately.
+      void fetch('/api/nexus/messages/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inline: true }) })
+        .then(r => (r.ok ? r.json() : null))
+        .then(res => {
+          const n = res && typeof res.fetched === 'number' ? res.fetched : null;
+          setBanner({ ok: true, text: n !== null ? `Gmail connected ✓ — pulled ${n} message${n === 1 ? '' : 's'}.` : 'Gmail connected ✓' });
+          reload();
+        })
+        .catch(() => setBanner({ ok: true, text: 'Gmail connected ✓' }));
+    } else if (p.get('gmail_error')) {
+      setBanner({ ok: false, text: `Gmail connection failed: ${p.get('gmail_error')}` });
+    }
   }, []);
 
   const filtered = useMemo(() => {
