@@ -114,7 +114,7 @@ function MyDayCardButton({ card, onClick }: { card: MyDayCard; onClick: () => vo
 function DetailShell({ title, subtitle, onClose, children, actions }: { title: string; subtitle: string; onClose: () => void; children: React.ReactNode; actions?: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-[90] overflow-hidden bg-black/68 px-4 py-4 backdrop-blur-sm sm:py-6">
-      <div className="mx-auto grid h-[calc(100dvh-2rem)] w-full max-w-5xl grid-cols-1 gap-4 overflow-hidden rounded-[2rem] p-5 shadow-2xl sm:h-[calc(100dvh-3rem)] lg:grid-cols-[1fr_260px]" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.96), rgba(5,10,22,0.96))', border: '1px solid rgba(0,200,255,0.16)', boxShadow: '0 30px 100px rgba(0,0,0,0.55), 0 0 48px rgba(0,200,255,0.10), inset 0 1px 0 rgba(255,255,255,0.06)', backdropFilter: 'blur(26px)' }}>
+      <div className={`mx-auto grid h-[calc(100dvh-2rem)] w-full max-w-5xl grid-cols-1 gap-4 overflow-hidden rounded-[2rem] p-5 shadow-2xl sm:h-[calc(100dvh-3rem)] ${actions ? 'lg:grid-cols-[1fr_260px]' : ''}`} style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.96), rgba(5,10,22,0.96))', border: '1px solid rgba(0,200,255,0.16)', boxShadow: '0 30px 100px rgba(0,0,0,0.55), 0 0 48px rgba(0,200,255,0.10), inset 0 1px 0 rgba(255,255,255,0.06)', backdropFilter: 'blur(26px)' }}>
         <div className="min-h-0 overflow-y-auto pr-1 pb-24" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           <NexusGlassBackButton label="Back to My Day" onClick={onClose} />
           <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.78)' }}>My Day</div>
@@ -122,10 +122,12 @@ function DetailShell({ title, subtitle, onClose, children, actions }: { title: s
           <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.64)' }}>{subtitle}</p>
           <div className="mt-5 space-y-2">{children}</div>
         </div>
-        <aside className="min-h-0 overflow-y-auto rounded-3xl p-4 pb-24" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
-          <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>Actions</div>
-          <div className="mt-4 space-y-2">{actions}</div>
-        </aside>
+        {actions && (
+          <aside className="min-h-0 overflow-y-auto rounded-3xl p-4 pb-24" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+            <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>Actions</div>
+            <div className="mt-4 space-y-2">{actions}</div>
+          </aside>
+        )}
       </div>
     </div>
   )
@@ -296,7 +298,7 @@ export function MyDaySurface() {
         <TodoBoard />
       </DetailShell>}
 
-      {activePanel === 'messages' && <DetailShell title="Messages" subtitle="Conversations, calls, texts, and email in one place." onClose={() => setActivePanel(null)} actions={<div className="rounded-2xl p-3 text-[11px]" style={{ background: 'rgba(52,211,153,0.10)', border: '1px solid rgba(52,211,153,0.22)', color: 'rgba(255,255,255,0.62)' }}>Live email, calls, and texts connect in a later step. Sample conversations are shown to preview the workspace.</div>}>
+      {activePanel === 'messages' && <DetailShell title="Messages" subtitle="Conversations, calls, texts, and email in one place." onClose={() => setActivePanel(null)}>
         <MessagesShell />
       </DetailShell>}
 

@@ -470,16 +470,7 @@ export default function CalendarViews() {
     <section className="w-full pb-28 text-white">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-4 sm:px-6">
         <div className="rounded-3xl p-4 sm:p-5" style={glassStyle}>
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                My Day
-              </p>
-              <h1 className="mt-1 text-2xl font-semibold tracking-tight" style={{ color: 'rgba(255,255,255,0.9)' }}>
-                Calendar
-              </h1>
-            </div>
-
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-end">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <label className="flex items-center gap-2 rounded-2xl px-3 py-2 text-sm" style={glassStyle}>
                 <span style={{ color: 'rgba(255,255,255,0.5)' }}>Show</span>

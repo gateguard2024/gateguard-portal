@@ -91,18 +91,26 @@ export function TodoBoard() {
 
   return (
     <div className="space-y-3">
-      {/* Filters */}
-      <div className="flex flex-wrap gap-1.5">
-        {FILTERS.map(f => {
-          const active = filter === f.id
-          return (
-            <button key={f.id} type="button" onClick={() => { setFilter(f.id); setOpenId(null) }}
-              className="rounded-full px-3 py-1.5 text-[11px] font-semibold"
-              style={{ background: active ? `${VIOLET}26` : 'rgba(0,0,0,0.18)', border: `1px solid ${active ? VIOLET : 'rgba(255,255,255,0.08)'}`, color: active ? '#ddd6fe' : 'rgba(255,255,255,0.55)' }}>
-              {f.label}
-            </button>
-          )
-        })}
+      {/* Filters + planner link */}
+      <div className="flex flex-wrap items-center justify-between gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
+          {FILTERS.map(f => {
+            const active = filter === f.id
+            return (
+              <button key={f.id} type="button" onClick={() => { setFilter(f.id); setOpenId(null) }}
+                className="rounded-full px-3 py-1.5 text-[11px] font-semibold"
+                style={{ background: active ? `${VIOLET}26` : 'rgba(0,0,0,0.18)', border: `1px solid ${active ? VIOLET : 'rgba(255,255,255,0.08)'}`, color: active ? '#ddd6fe' : 'rgba(255,255,255,0.55)' }}>
+                {f.label}
+              </button>
+            )
+          })}
+        </div>
+        {/* Power view — opens the full planner (Gantt / timeline / workload) */}
+        <a href="/tracker" title="Open the full planner: timeline, Gantt, and workload views"
+          className="rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all hover:-translate-y-0.5"
+          style={{ background: 'rgba(0,124,255,0.16)', border: '1px solid rgba(0,200,255,0.30)', color: '#bfe9ff' }}>
+          Timeline &amp; Gantt →
+        </a>
       </div>
 
       {/* Quick add */}

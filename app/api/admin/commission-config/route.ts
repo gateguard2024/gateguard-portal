@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentUser } from '@/lib/current-user'
+import { resolveOrgScope, isInScope } from '@/lib/org-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,6 +17,13 @@ export async function GET(req: NextRequest) {
   const orgId = req.nextUrl.searchParams.get('org_id')
   if (!orgId) {
     return NextResponse.json({ error: 'org_id required' }, { status: 400 })
+  }
+
+  // Commission rates are sensitive — caller must be able to see this org.
+  const user = await getCurrentUser()
+  const scope = await resolveOrgScope(user)
+  if (!isInScope(scope, orgId)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const { data, error } = await supabase
@@ -71,6 +80,14 @@ export async function POST(req: NextRequest) {
   // Required field check
   if (!org_id) {
     return NextResponse.json({ error: 'org_id is required' }, { status: 400 })
+  }
+
+  // Writing commission rates — corporate, or an admin/supervisor over this org.
+  const user = await getCurrentUser()
+  const scope = await resolveOrgScope(user)
+  const canManage = user.isCorporate || (['admin', 'supervisor'].includes(user.role) && isInScope(scope, org_id))
+  if (!canManage) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const salesRate   = Number(sales_partner_rate)

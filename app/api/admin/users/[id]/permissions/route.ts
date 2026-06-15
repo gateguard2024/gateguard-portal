@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentUser } from '@/lib/current-user'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,6 +15,12 @@ const supabase = createClient(
 export const dynamic = 'force-dynamic'
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+  // Legacy permissions system — corporate/admin only (current system is feature flags).
+  const me = await getCurrentUser()
+  if (!(me.isCorporate || me.role === 'admin')) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const { data, error } = await supabase
     .from('user_permissions')
     .select('*')
