@@ -101,7 +101,8 @@ export async function GET(req: NextRequest) {
 
   const ownershipIds = uniqueIds([profileId, user.id, user.email])
   const { searchParams } = new URL(req.url)
-  const q = clean(searchParams.get('q'))
+  // Strip PostgREST .or() control chars (, ( )) + ilike wildcards to prevent filter injection.
+  const q = clean(searchParams.get('q')).replace(/[,()%*\\]/g, ' ').replace(/\s+/g, ' ').trim()
 
   if (!user.canViewCRM && ownershipIds.length === 0) {
     return NextResponse.json(emptyWorkbench())

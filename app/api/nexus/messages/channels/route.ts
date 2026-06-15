@@ -18,7 +18,7 @@ function sanitize(row: any) {
     channel_type: row.channel_type,
     display_name: row.display_name,
     is_active: row.is_active,
-    email: cfg.from_address ?? cfg.user ?? null,
+    email: cfg.from_address ?? cfg.email ?? cfg.user ?? null,
     smtp_host: cfg.host ?? null,
     smtp_port: cfg.port ?? null,
     connected: row.channel_type === 'gmail' ? !!row.oauth_refresh_token : !!cfg.host,

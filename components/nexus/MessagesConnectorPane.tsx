@@ -192,7 +192,7 @@ function ConnectorDetail({ connector, onChanged }: { connector: Connector | null
   const doRefresh = async () => {
     setBusy('refresh'); setResult(null);
     const r = await refreshInbox(connector.id); setBusy(null);
-    setResult(r.ok ? { ok: true, text: `Pulled ${r.fetched ?? 0} new message(s)` } : { ok: false, text: 'Could not refresh inbox' });
+    setResult(r.ok ? { ok: true, text: `Pulled ${r.fetched ?? 0} new message(s)` } : { ok: false, text: (r as any).error ? `Couldn't load email: ${(r as any).error}` : 'Could not refresh inbox' });
     onChanged();
   };
   const doRemove = async () => {
@@ -272,8 +272,12 @@ export default function MessagesConnectorPane() {
       void fetch('/api/nexus/messages/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inline: true }) })
         .then(r => (r.ok ? r.json() : null))
         .then(res => {
-          const n = res && typeof res.fetched === 'number' ? res.fetched : null;
-          setBanner({ ok: true, text: n !== null ? `Gmail connected ✓ — pulled ${n} message${n === 1 ? '' : 's'}.` : 'Gmail connected ✓' });
+          if (res && res.error) {
+            setBanner({ ok: false, text: `Gmail connected, but couldn't load email: ${res.error}` });
+          } else {
+            const n = res && typeof res.fetched === 'number' ? res.fetched : null;
+            setBanner({ ok: true, text: n !== null ? `Gmail connected ✓ — pulled ${n} message${n === 1 ? '' : 's'}.` : 'Gmail connected ✓' });
+          }
           reload();
         })
         .catch(() => setBanner({ ok: true, text: 'Gmail connected ✓' }));

@@ -5,6 +5,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { opportunityInScope, leadInScope } from '@/lib/crm-scope'
+
+// An activity is reachable only if its parent opportunity/lead is in the caller's
+// scope (corporate bypasses). Fails closed for orphan activities (non-corporate).
+async function activityInScope(row: { opportunity_id?: string | null; lead_id?: string | null } | null, isCorporate: boolean): Promise<boolean> {
+  if (isCorporate) return true
+  if (!row) return false
+  if (row.opportunity_id) return opportunityInScope(row.opportunity_id)
+  if (row.lead_id) return leadInScope(row.lead_id)
+  return false
+}
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,11 +33,14 @@ export async function PATCH(
 
     const { data: existing } = await supabase
       .from('crm_activities')
-      .select('id, created_by, opportunity_id')
+      .select('id, created_by, opportunity_id, lead_id')
       .eq('id', params.id)
       .single()
 
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (!(await activityInScope(existing, caller.isCorporate))) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
 
     // crm_activities has no updated_at column — never include it
     const updates: Record<string, unknown> = {}
@@ -66,15 +80,18 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    await getCurrentUser()
+    const caller = await getCurrentUser()
 
     const { data: existing } = await supabase
       .from('crm_activities')
-      .select('id')
+      .select('id, opportunity_id, lead_id')
       .eq('id', params.id)
       .single()
 
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (!(await activityInScope(existing, caller.isCorporate))) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
 
     const { error } = await supabase
       .from('crm_activities')

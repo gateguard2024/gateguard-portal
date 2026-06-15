@@ -161,7 +161,8 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       )
     : []
 
-  const propertySearch = leadRecord.location || companyName
+  // Sanitize for the .or() filter (addresses often contain commas, which break it).
+  const propertySearch = String(leadRecord.location || companyName || '').replace(/[,()%*\\]/g, ' ').replace(/\s+/g, ' ').trim()
   const directProperties = propertySearch
     ? await safe(
         supabase

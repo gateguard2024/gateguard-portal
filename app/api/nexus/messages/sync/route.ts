@@ -51,9 +51,17 @@ export async function POST(req: NextRequest) {
   if (!channels?.length) return NextResponse.json({ ok: true, channels: 0, fetched: 0 })
 
   let fetched = 0
+  let firstError: string | null = null
+  const results: { channel_id: string; fetched: number; error?: string }[] = []
   for (const ch of channels) {
     const res = await fetchGmailInbox(supabase, ch)
     fetched += res.fetched
+    results.push({ channel_id: ch.id, fetched: res.fetched, error: res.error })
+    if (res.error && !firstError) firstError = res.error
   }
-  return NextResponse.json({ ok: true, channels: channels.length, fetched })
+  // Surface the real reason a sync pulled 0 (token expired, Gmail API off, etc.)
+  return NextResponse.json(
+    { ok: !firstError, channels: channels.length, fetched, error: firstError, results },
+    { status: firstError ? 502 : 200 },
+  )
 }

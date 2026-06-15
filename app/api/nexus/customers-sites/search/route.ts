@@ -148,7 +148,8 @@ export async function GET(req: NextRequest) {
   try {
     const user = await getCurrentUser()
     const { searchParams } = new URL(req.url)
-    const q = clean(searchParams.get('q'))
+    // Strip PostgREST .or() control chars (, ( )) + ilike wildcards to prevent filter injection.
+    const q = clean(searchParams.get('q')).replace(/[,()%*\\]/g, ' ').replace(/\s+/g, ' ').trim()
     const mode = clean(searchParams.get('mode')) || 'all'
 
     if (q.length < 2) {
