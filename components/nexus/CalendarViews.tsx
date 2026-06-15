@@ -1,953 +1,534 @@
-'use client'
-
-import React, { useEffect, useMemo, useState } from 'react'
-import { Calendar, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react'
-
-type CalEventType =
-  | 'todo'
-  | 'work_order'
-  | 'work_order_phase'
-  | 'pm_schedule'
-  | 'gcal'
-  | 'crm_activity'
-  | 'tracker_task'
-
+'use client';
+import React, { useState, useEffect, useMemo } from 'react';
+import { ChevronLeft, ChevronRight, Plus, Calendar, X, Clock, MapPin } from 'lucide-react';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { ChevronDown } = require('lucide-react') as any;
+// --- Data Contracts & Types ---
+type CalCategory = 'jobs' | 'sales' | 'todos' | 'google';
 type CalEvent = {
-  id: string
-  title: string
-  type: CalEventType
-  start_time: string
-  end_time: string | null
-  is_all_day?: boolean
-  owner_name?: string | null
-  link?: string | null
-}
-
-type CalendarView = 'month' | 'week' | 'day' | 'list'
-
-type CreateEventPayload = {
-  title: string
-  date: string
-  start_time: string | null
-  end_time: string | null
-  type: CalEventType
-  is_all_day: boolean
-}
-
-const TYPE_COLORS: Record<CalEventType, string> = {
-  todo: '#6B7EFF',
-  work_order: '#059669',
-  work_order_phase: '#C2410C',
-  pm_schedule: '#0B7285',
-  gcal: '#7C3AED',
-  crm_activity: '#0EA5E9',
-  tracker_task: '#8B5CF6',
-}
-
-const TYPE_LABELS: Record<CalEventType, string> = {
-  todo: 'To-do',
-  work_order: 'Work order',
-  work_order_phase: 'Work phase',
-  pm_schedule: 'PM schedule',
-  gcal: 'Google Calendar',
-  crm_activity: 'CRM activity',
-  tracker_task: 'Tracker task',
-}
-
-// Friendly categories so a busy calendar (e.g. a CEO viewing the whole group)
-// can show/hide whole streams. Plain labels per the 5th-grader rule.
-const CATEGORIES: { id: string; label: string; color: string; types: CalEventType[] }[] = [
-  { id: 'jobs',   label: 'Jobs',    color: '#F59E0B', types: ['work_order', 'work_order_phase', 'pm_schedule'] },
-  { id: 'sales',  label: 'Sales',   color: '#0EA5E9', types: ['crm_activity'] },
-  { id: 'tasks',  label: 'To-Dos',  color: '#6B7EFF', types: ['todo', 'tracker_task'] },
-  { id: 'google', label: 'Google',  color: '#10B981', types: ['gcal'] },
-]
-const TYPE_CATEGORY: Record<CalEventType, string> = {
-  work_order: 'jobs', work_order_phase: 'jobs', pm_schedule: 'jobs',
-  crm_activity: 'sales', todo: 'tasks', tracker_task: 'tasks',
+  id: string;
+  title: string;
+  start: string;          // ISO
+  end?: string | null;    // ISO
+  all_day?: boolean;
+  category: CalCategory;
+  location?: string | null;
+  href?: string | null;
+};
+// Map the API's event `type` → calendar category.
+const TYPE_TO_CAT: Record<string, CalCategory> = {
+  nexus_event: 'jobs',
+  work_order: 'jobs',
+  work_order_phase: 'jobs',
+  pm_schedule: 'jobs',
+  todo: 'todos',
+  tracker_task: 'todos',
+  crm_activity: 'sales',
   gcal: 'google',
-}
-
-const VIEW_LABELS: { key: CalendarView; label: string }[] = [
-  { key: 'month', label: 'Month' },
-  { key: 'week', label: 'Week' },
-  { key: 'day', label: 'Day' },
-  { key: 'list', label: 'List' },
-]
-
-const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
-const glassStyle: React.CSSProperties = {
-  background: 'rgba(255,255,255,0.035)',
-  border: '1px solid rgba(255,255,255,0.08)',
-  backdropFilter: 'blur(18px)',
-}
-
-const inputStyle: React.CSSProperties = {
-  background: 'rgba(255,255,255,0.055)',
-  border: '1px solid rgba(255,255,255,0.1)',
-  color: 'rgba(255,255,255,0.9)',
-}
-
-function pad(value: number) {
-  return String(value).padStart(2, '0')
-}
-
-function startOfDay(date: Date) {
-  const next = new Date(date)
-  next.setHours(0, 0, 0, 0)
-  return next
-}
-
-function addDays(date: Date, count: number) {
-  const next = new Date(date)
-  next.setDate(next.getDate() + count)
-  return next
-}
-
-function addMonths(date: Date, count: number) {
-  const next = new Date(date)
-  next.setMonth(next.getMonth() + count)
-  return next
-}
-
-function startOfWeek(date: Date) {
-  const next = startOfDay(date)
-  next.setDate(next.getDate() - next.getDay())
-  return next
-}
-
-function startOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1)
-}
-
-function endOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth() + 1, 0)
-}
-
-function dateKey(date: Date) {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-}
-
-function localISO(date: string, time: string) {
-  return new Date(`${date}T${time}:00`).toISOString()
-}
-
-function hexToRgba(hex: string, opacity: number) {
-  const clean = hex.replace('#', '')
-  const bigint = parseInt(clean, 16)
-  const red = (bigint >> 16) & 255
-  const green = (bigint >> 8) & 255
-  const blue = bigint & 255
-  return `rgba(${red}, ${green}, ${blue}, ${opacity})`
-}
-
-function isSameDay(first: Date, second: Date) {
-  return dateKey(first) === dateKey(second)
-}
-
-function formatMonthYear(date: Date) {
-  return new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(date)
-}
-
-function formatShortDate(date: Date) {
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date)
-}
-
-function formatFullDay(date: Date) {
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(date)
-}
-
-function formatTime(date: Date) {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date)
-}
-
-function eventDate(event: CalEvent) {
-  return new Date(event.start_time)
-}
-
-function eventEndDate(event: CalEvent) {
-  if (event.end_time) return new Date(event.end_time)
-  return event.is_all_day ? addDays(startOfDay(eventDate(event)), 1) : eventDate(event)
-}
-
-function eventTimeLabel(event: CalEvent) {
-  if (event.is_all_day || !event.end_time) return 'All day'
-  return `${formatTime(eventDate(event))} – ${formatTime(new Date(event.end_time))}`
-}
-
-function sortEvents(events: CalEvent[]) {
-  return [...events].sort((first, second) => {
-    if (first.is_all_day && !second.is_all_day) return -1
-    if (!first.is_all_day && second.is_all_day) return 1
-    return eventDate(first).getTime() - eventDate(second).getTime()
-  })
-}
-
-function buildEvent(
-  id: string,
-  title: string,
-  type: CalEventType,
-  dayOffset: number,
-  startTime: string | null,
-  endTime: string | null,
-  ownerName: string | null = 'Me'
-): CalEvent {
-  const day = dateKey(addDays(new Date(), dayOffset))
-  const isAllDay = !startTime
-
-  return {
-    id,
-    title,
-    type,
-    start_time: localISO(day, startTime ?? '00:00'),
-    end_time: endTime ? localISO(day, endTime) : null,
-    is_all_day: isAllDay,
-    owner_name: ownerName,
-  }
-}
-
-const KNOWN_TYPES = new Set<CalEventType>(['todo', 'work_order', 'work_order_phase', 'pm_schedule', 'gcal', 'crm_activity', 'tracker_task'])
-
-// Real data: /api/calendar/events returns { events: [{ id, type, title, date 'YYYY-MM-DD', time? 'HH:MM', color, link }] }.
-// We fetch by the month at the middle of the requested range, then map to CalEvent.
-async function loadEvents(rangeStartISO: string, rangeEndISO: string, scope: 'me' | 'team'): Promise<CalEvent[]> {
-  const mid = new Date((new Date(rangeStartISO).getTime() + new Date(rangeEndISO).getTime()) / 2)
+};
+// --- Real API (GET ?year&month&scope → {events:[{id,type,title,date,time,...}]}) ---
+const loadEvents = async (startISO: string, _endISO: string, scope: 'me' | 'team'): Promise<CalEvent[]> => {
   try {
-    const res = await fetch(`/api/calendar/events?year=${mid.getFullYear()}&month=${mid.getMonth() + 1}&scope=${scope}`)
-    if (!res.ok) return []
-    const data = await res.json().catch(() => ({}))
-    const raw: Array<Record<string, unknown>> = data.events ?? []
-    return raw.map((e) => {
-      const rawType = String(e.type ?? 'todo')
-      const type = (KNOWN_TYPES.has(rawType as CalEventType) ? rawType : 'todo') as CalEventType
-      const date = String(e.date ?? '').slice(0, 10)
-      const time = e.time ? String(e.time) : null
-      const startMs = new Date(`${date}T${time ?? '00:00'}:00`).getTime()
-      return {
-        id: String(e.id),
-        title: String(e.title ?? 'Event'),
-        type,
-        start_time: new Date(startMs).toISOString(),
-        end_time: time ? new Date(startMs + 60 * 60 * 1000).toISOString() : null,
-        is_all_day: !time,
-        owner_name: (e.owner_name as string) ?? null,
-        link: (e.link as string) ?? null,
-      }
-    })
+    const d = new Date(startISO);
+    const year = d.getFullYear();
+    const month = d.getMonth() + 1;
+    const res = await fetch(`/api/calendar/events?year=${year}&month=${month}&scope=${scope}`, { cache: 'no-store' });
+    if (res.ok) {
+      const json = await res.json();
+      const list = Array.isArray(json.events) ? json.events : Array.isArray(json) ? json : [];
+      return list.map((ev: any): CalEvent => {
+        const time: string | null = ev.time && ev.time !== '' ? ev.time : null;
+        const date: string = ev.date ?? (ev.start_time ? String(ev.start_time).split('T')[0] : '');
+        return {
+          id: String(ev.id),
+          title: ev.title ?? 'Event',
+          start: ev.start ?? `${date}T${time ?? '00:00'}:00`,
+          end: ev.end ?? ev.end_time ?? null,
+          all_day: ev.all_day ?? !time,
+          category: ev.category ?? TYPE_TO_CAT[ev.type] ?? 'todos',
+          location: ev.location ?? null,
+          href: ev.href ?? null,
+        };
+      });
+    }
   } catch {
-    return []
+    /* fall through to preview */
   }
-}
-
-function onOpen(event: CalEvent) {
-  if (event.link && typeof window !== 'undefined') window.location.href = event.link
-}
-
-async function onCreate(payload: CreateEventPayload) {
-  // No POST on /api/calendar/events yet — persist as a To-Do (shows on the calendar as type 'todo').
+  return mockEvents(startISO);
+};
+const mockEvents = (startISO: string): CalEvent[] => {
+  const b = new Date(startISO); const y = b.getFullYear(); const m = b.getMonth();
+  return [
+    { id: 'e1', title: 'Install at Avalon', start: new Date(y, m, 14, 9, 0).toISOString(), end: new Date(y, m, 14, 11, 0).toISOString(), category: 'jobs', location: '123 Avalon Heights' },
+    { id: 'e3', title: 'Quote Review - Beacon', start: new Date(y, m, 16, 14, 0).toISOString(), category: 'sales' },
+    { id: 'e4', title: 'Order parts for Kim Plaza', start: new Date(y, m, 14, 0, 0).toISOString(), all_day: true, category: 'todos' },
+  ];
+};
+const createEvent = async (form: Partial<CalEvent> & { scope: 'me' | 'team' }): Promise<CalEvent> => {
   try {
-    await fetch('/api/todos', {
+    const res = await fetch('/api/calendar/events', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: payload.title, due_date: payload.date }),
-    })
-  } catch { /* optimistic UI already added it */ }
-}
-
-function EventChip({ event, onClick }: { event: CalEvent; onClick: (event: CalEvent) => void }) {
-  const color = TYPE_COLORS[event.type]
-
-  return (
-    <button
-      type="button"
-      onClick={(clickEvent) => {
-        clickEvent.stopPropagation()
-        onClick(event)
-      }}
-      className="w-full rounded-xl px-2 py-1 text-left text-xs transition hover:opacity-90"
-      style={{
-        background: hexToRgba(color, 0.18),
-        border: `1px solid ${hexToRgba(color, 0.45)}`,
-        color: 'rgba(255,255,255,0.9)',
-      }}
-    >
-      <div className="flex items-center gap-2">
-        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
-        <span className="truncate font-medium">{event.title}</span>
-      </div>
-      {!event.is_all_day && (
-        <div className="mt-0.5 truncate pl-4" style={{ color: 'rgba(255,255,255,0.5)' }}>
-          {eventTimeLabel(event)}
-        </div>
-      )}
-    </button>
-  )
-}
-
-function EmptyState({ label = 'No events' }: { label?: string }) {
-  return (
-    <div className="rounded-2xl px-4 py-8 text-center text-sm" style={glassStyle}>
-      <Calendar className="mx-auto mb-2 h-5 w-5" style={{ color: 'rgba(255,255,255,0.34)' }} />
-      <p style={{ color: 'rgba(255,255,255,0.5)' }}>{label}</p>
-    </div>
-  )
-}
-
+      body: JSON.stringify({ title: form.title, start: form.start, end: form.end, all_day: form.all_day, location: form.location }),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json.event) return json.event as CalEvent;
+    }
+  } catch {
+    /* fall through to local */
+  }
+  return {
+    id: `e-${Date.now()}`,
+    title: form.title || 'New Event',
+    start: form.start || new Date().toISOString(),
+    end: form.end,
+    all_day: form.all_day,
+    category: form.category || 'jobs',
+    location: form.location,
+    href: null,
+  };
+};
+// --- Theme & Styles ---
+const textPrimary = { color: 'rgba(255,255,255,0.9)' };
+const textSecondary = { color: 'rgba(255,255,255,0.5)' };
+const textFaint = { color: 'rgba(255,255,255,0.34)' };
+const glassBg = { backgroundColor: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)' };
+const CATEGORIES: Record<CalCategory, { label: string; color: string }> = {
+  jobs: { label: 'Jobs', color: '#C2410C' },
+  sales: { label: 'Sales', color: '#00C8FF' },
+  todos: { label: 'To-Dos', color: '#8B5CF6' },
+  google: { label: 'Google', color: '#34D399' }
+};
+// --- Helpers ---
+const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
+const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
+const formatTime = (iso?: string | null, allDay?: boolean) => {
+  if (allDay) return 'All day';
+  if (!iso) return '';
+  return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+};
+const INITIAL_DATE = new Date();
 export default function CalendarViews() {
-  const [view, setView] = useState<CalendarView>('month')
-  const [cursorDate, setCursorDate] = useState(() => new Date())
-  const [events, setEvents] = useState<CalEvent[]>([])
-  const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null)
-  const [showCreateForm, setShowCreateForm] = useState(false)
-  const [formTitle, setFormTitle] = useState('')
-  const [formDate, setFormDate] = useState(() => dateKey(new Date()))
-  const [formStartTime, setFormStartTime] = useState('09:00')
-  const [formEndTime, setFormEndTime] = useState('10:00')
-  const [formType, setFormType] = useState<CalEventType>('todo')
-  const [viewScope, setViewScope] = useState<'me' | 'team'>('me')
-  const [hiddenCats, setHiddenCats] = useState<Set<string>>(new Set())
+  const [currentDate, setCurrentDate] = useState(INITIAL_DATE);
+  const [view, setView] = useState<'Month' | 'Week' | 'Day' | 'List'>('Month');
+  const [scope, setScope] = useState<'me' | 'team'>('me');
+  const [activeFilters, setActiveFilters] = useState<Set<CalCategory>>(new Set(['jobs', 'sales', 'todos', 'google']));
 
-  function toggleCategory(id: string) {
-    setHiddenCats((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
+  const [events, setEvents] = useState<CalEvent[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const today = useMemo(() => startOfDay(new Date()), [])
-
-  const range = useMemo(() => {
-    if (view === 'month') {
-      const first = startOfMonth(cursorDate)
-      const last = endOfMonth(cursorDate)
-      const start = startOfWeek(first)
-      const end = addDays(startOfWeek(last), 7)
-      return { start, end }
-    }
-
-    if (view === 'week') {
-      const start = startOfWeek(cursorDate)
-      return { start, end: addDays(start, 7) }
-    }
-
-    if (view === 'day') {
-      const start = startOfDay(cursorDate)
-      return { start, end: addDays(start, 1) }
-    }
-
-    const start = startOfDay(cursorDate)
-    return { start, end: addDays(start, 31) }
-  }, [cursorDate, view])
-
+  const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  // Load events when period/scope changes
   useEffect(() => {
-    let isMounted = true
+    setIsLoading(true);
+    const start = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString();
+    const end = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).toISOString();
+    loadEvents(start, end, scope).then(data => {
+      setEvents(data);
+      setIsLoading(false);
+    });
+  }, [currentDate, scope, view]);
+  const filteredEvents = useMemo(() => {
+    return events.filter(e => activeFilters.has(e.category));
+  }, [events, activeFilters]);
+  // --- Actions ---
+  const handlePrev = () => {
+    const newDate = new Date(currentDate);
+    if (view === 'Month') newDate.setMonth(newDate.getMonth() - 1);
+    if (view === 'Week') newDate.setDate(newDate.getDate() - 7);
+    if (view === 'Day' || view === 'List') newDate.setDate(newDate.getDate() - 1);
+    setCurrentDate(newDate);
+  };
+  const handleNext = () => {
+    const newDate = new Date(currentDate);
+    if (view === 'Month') newDate.setMonth(newDate.getMonth() + 1);
+    if (view === 'Week') newDate.setDate(newDate.getDate() + 7);
+    if (view === 'Day' || view === 'List') newDate.setDate(newDate.getDate() + 1);
+    setCurrentDate(newDate);
+  };
+  const handleToday = () => setCurrentDate(new Date());
+  const toggleFilter = (cat: CalCategory) => {
+    const next = new Set(activeFilters);
+    if (next.has(cat)) next.delete(cat);
+    else next.add(cat);
+    setActiveFilters(next);
+  };
+  // --- Sub-components (Views) ---
+  const renderMonthView = () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const daysInMonth = getDaysInMonth(year, month);
+    const firstDay = getFirstDayOfMonth(year, month);
 
-    loadEvents(range.start.toISOString(), range.end.toISOString(), viewScope).then((loadedEvents) => {
-      if (isMounted) setEvents(sortEvents(loadedEvents))
-    })
-
-    return () => {
-      isMounted = false
-    }
-  }, [range.start, range.end, viewScope])
-
-  const periodLabel = useMemo(() => {
-    if (view === 'month') return formatMonthYear(cursorDate)
-    if (view === 'week') return `${formatShortDate(range.start)} – ${formatShortDate(addDays(range.end, -1))}`
-    if (view === 'day') return formatFullDay(cursorDate)
-    return `${formatShortDate(range.start)} – ${formatShortDate(addDays(range.end, -1))}`
-  }, [cursorDate, range.end, range.start, view])
-
-  const monthDays = useMemo(() => {
-    const days: Date[] = []
-    let day = new Date(range.start)
-
-    while (day < range.end) {
-      days.push(new Date(day))
-      day = addDays(day, 1)
-    }
-
-    return days
-  }, [range.start, range.end])
-
-  const weekDays = useMemo(() => {
-    const start = startOfWeek(cursorDate)
-    return Array.from({ length: 7 }, (_, index) => addDays(start, index))
-  }, [cursorDate])
-
-  // Category show/hide filter (declutter a busy team calendar).
-  const visibleEvents = useMemo(() => events.filter((e) => !hiddenCats.has(TYPE_CATEGORY[e.type])), [events, hiddenCats])
-
-  const dayEvents = (day: Date) => sortEvents(visibleEvents.filter((event) => isSameDay(eventDate(event), day)))
-
-  const groupedListEvents = useMemo(() => {
-    const groups = new Map<string, CalEvent[]>()
-
-    visibleEvents.forEach((event) => {
-      const key = dateKey(eventDate(event))
-      groups.set(key, [...(groups.get(key) ?? []), event])
-    })
-
-    return Array.from(groups.entries()).map(([key, groupEvents]) => ({
-      key,
-      day: new Date(`${key}T00:00:00`),
-      events: sortEvents(groupEvents),
-    }))
-  }, [visibleEvents])
-
-  function movePrevious() {
-    setSelectedEvent(null)
-    setCursorDate((current) => {
-      if (view === 'month') return addMonths(current, -1)
-      if (view === 'week') return addDays(current, -7)
-      if (view === 'day') return addDays(current, -1)
-      return addDays(current, -31)
-    })
-  }
-
-  function moveNext() {
-    setSelectedEvent(null)
-    setCursorDate((current) => {
-      if (view === 'month') return addMonths(current, 1)
-      if (view === 'week') return addDays(current, 7)
-      if (view === 'day') return addDays(current, 1)
-      return addDays(current, 31)
-    })
-  }
-
-  function moveToday() {
-    setSelectedEvent(null)
-    setCursorDate(new Date())
-  }
-
-  function openCreateForm() {
-    setFormDate(dateKey(cursorDate))
-    setShowCreateForm(true)
-    setSelectedEvent(null)
-  }
-
-  function submitCreate(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    const hasTimes = Boolean(formStartTime && formEndTime)
-    const payload: CreateEventPayload = {
-      title: formTitle.trim(),
-      date: formDate,
-      start_time: hasTimes ? localISO(formDate, formStartTime) : null,
-      end_time: hasTimes ? localISO(formDate, formEndTime) : null,
-      type: formType,
-      is_all_day: !hasTimes,
-    }
-
-    onCreate(payload)
-
-    const optimisticEvent: CalEvent = {
-      id: `new-${Date.now()}`,
-      title: payload.title,
-      type: payload.type,
-      start_time: payload.start_time ?? localISO(payload.date, '00:00'),
-      end_time: payload.end_time,
-      is_all_day: payload.is_all_day,
-      owner_name: 'Me',
-    }
-
-    setEvents((currentEvents) => sortEvents([...currentEvents, optimisticEvent]))
-    setFormTitle('')
-    setShowCreateForm(false)
-  }
-
-  return (
-    <section className="w-full pb-28 text-white">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-4 sm:px-6">
-        <div className="rounded-3xl p-4 sm:p-5" style={glassStyle}>
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-end">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <label className="flex items-center gap-2 rounded-2xl px-3 py-2 text-sm" style={glassStyle}>
-                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Show</span>
-                <select
-                  className="rounded-xl px-2 py-1 text-sm outline-none"
-                  style={inputStyle}
-                  value={viewScope}
-                  onChange={(event) => setViewScope(event.target.value as 'me' | 'team')}
-                >
-                  <option value="me">My calendar</option>
-                  <option value="team">My team</option>
-                </select>
-              </label>
-
-              <button
-                type="button"
-                onClick={openCreateForm}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium transition hover:opacity-90"
-                style={{
-                  background: 'linear-gradient(135deg, #6B7EFF, #00C8FF)',
-                  color: 'white',
-                }}
-              >
-                <Plus className="h-4 w-4" />
-                Add event
-              </button>
+    const days = [];
+    for (let i = 0; i < firstDay; i++) days.push(null);
+    for (let i = 1; i <= daysInMonth; i++) days.push(new Date(year, month, i));
+    return (
+      <div className="flex flex-col flex-1 border border-white/5 rounded-2xl overflow-hidden mt-4 bg-black/10">
+        <div className="grid grid-cols-7 border-b border-white/5 bg-white/5">
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+            <div key={d} className="py-2 text-center text-[10px] font-semibold uppercase tracking-wider" style={textSecondary}>
+              {d}
             </div>
-          </div>
-
-          <div className="mt-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex flex-wrap items-center gap-2">
-              {VIEW_LABELS.map((item) => {
-                const isActive = view === item.key
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => {
-                      setView(item.key)
-                      setSelectedEvent(null)
-                    }}
-                    className="rounded-full px-4 py-2 text-sm font-medium transition hover:opacity-90"
-                    style={{
-                      background: isActive ? hexToRgba('#6B7EFF', 0.26) : 'rgba(255,255,255,0.04)',
-                      border: isActive ? `1px solid ${hexToRgba('#6B7EFF', 0.6)}` : '1px solid rgba(255,255,255,0.08)',
-                      color: isActive ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)',
-                    }}
-                  >
-                    {item.label}
-                  </button>
-                )
-              })}
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between xl:justify-end">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={movePrevious}
-                  className="rounded-2xl p-2 transition hover:opacity-90"
-                  style={glassStyle}
-                  aria-label="Previous"
-                >
-                  <ChevronLeft className="h-5 w-5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={moveToday}
-                  className="rounded-2xl px-4 py-2 text-sm font-medium transition hover:opacity-90"
-                  style={glassStyle}
-                >
-                  Today
-                </button>
-                <button
-                  type="button"
-                  onClick={moveNext}
-                  className="rounded-2xl p-2 transition hover:opacity-90"
-                  style={glassStyle}
-                  aria-label="Next"
-                >
-                  <ChevronRight className="h-5 w-5" />
-                </button>
-              </div>
-
-              <div className="min-w-0 rounded-2xl px-4 py-2 text-center text-sm font-semibold" style={glassStyle}>
-                {periodLabel}
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
+        <div className="grid grid-cols-7 flex-1 auto-rows-fr">
+          {days.map((date, idx) => {
+            if (!date) return <div key={`empty-${idx}`} className="border-r border-b border-white/5 p-1" />;
 
-        {showCreateForm && (
-          <form onSubmit={submitCreate} className="rounded-3xl p-4 sm:p-5" style={glassStyle}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>
-                  Add event
-                </h2>
-                <p className="mt-1 text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                  Leave both times blank to make it all day.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowCreateForm(false)}
-                className="rounded-full p-2 transition hover:opacity-90"
-                style={glassStyle}
-                aria-label="Close add event form"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-5">
-              <label className="md:col-span-2">
-                <span className="mb-1 block text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                  Title
-                </span>
-                <input
-                  required
-                  value={formTitle}
-                  onChange={(event) => setFormTitle(event.target.value)}
-                  className="w-full rounded-2xl px-3 py-2 text-sm outline-none"
-                  style={inputStyle}
-                  placeholder="Event name"
-                />
-              </label>
-
-              <label>
-                <span className="mb-1 block text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                  Date
-                </span>
-                <input
-                  required
-                  type="date"
-                  value={formDate}
-                  onChange={(event) => setFormDate(event.target.value)}
-                  className="w-full rounded-2xl px-3 py-2 text-sm outline-none"
-                  style={inputStyle}
-                />
-              </label>
-
-              <label>
-                <span className="mb-1 block text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                  Start time
-                </span>
-                <input
-                  type="time"
-                  value={formStartTime}
-                  onChange={(event) => setFormStartTime(event.target.value)}
-                  className="w-full rounded-2xl px-3 py-2 text-sm outline-none"
-                  style={inputStyle}
-                />
-              </label>
-
-              <label>
-                <span className="mb-1 block text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                  End time
-                </span>
-                <input
-                  type="time"
-                  value={formEndTime}
-                  onChange={(event) => setFormEndTime(event.target.value)}
-                  className="w-full rounded-2xl px-3 py-2 text-sm outline-none"
-                  style={inputStyle}
-                />
-              </label>
-
-              <label className="md:col-span-2">
-                <span className="mb-1 block text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                  Type
-                </span>
-                <select
-                  value={formType}
-                  onChange={(event) => setFormType(event.target.value as CalEventType)}
-                  className="w-full rounded-2xl px-3 py-2 text-sm outline-none"
-                  style={inputStyle}
-                >
-                  {Object.entries(TYPE_LABELS).map(([key, label]) => (
-                    <option key={key} value={key}>
-                      {label}
-                    </option>
+            const isToday = new Date().toDateString() === date.toDateString();
+            const dayEvents = filteredEvents.filter(e => new Date(e.start).toDateString() === date.toDateString());
+            return (
+              <div key={idx} className="border-r border-b border-white/5 p-1.5 min-h-[100px] flex flex-col gap-1">
+                <div className="flex justify-between items-start">
+                  <span className={`text-xs w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-[#6B7EFF] text-white font-bold' : ''}`} style={!isToday ? textSecondary : {}}>
+                    {date.getDate()}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1 overflow-hidden">
+                  {dayEvents.slice(0, 3).map(e => (
+                    <button
+                      key={e.id}
+                      onClick={() => setSelectedEvent(e)}
+                      className="text-left truncate text-[10px] px-1.5 py-0.5 rounded-md hover:bg-white/10 transition-colors flex items-center gap-1.5 w-full"
+                      style={textPrimary}
+                    >
+                      <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: CATEGORIES[e.category].color }} />
+                      <span className="truncate">{e.title}</span>
+                    </button>
                   ))}
-                </select>
-              </label>
-
-              <div className="flex items-end md:col-span-3">
-                <button
-                  type="submit"
-                  className="w-full rounded-2xl px-4 py-2 text-sm font-medium transition hover:opacity-90 md:w-auto"
-                  style={{ background: '#6B7EFF', color: 'white' }}
-                >
-                  Save event
-                </button>
+                  {dayEvents.length > 3 && (
+                    <div className="text-[9px] px-1" style={textFaint}>+ {dayEvents.length - 3} more</div>
+                  )}
+                </div>
               </div>
-            </div>
-          </form>
-        )}
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+  const renderWeekView = () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const date = currentDate.getDate();
+    const dayOfWeek = currentDate.getDay();
 
-        <div className="rounded-3xl p-4 sm:p-5" style={glassStyle}>
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <span className="mr-1 text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Show:</span>
-            {CATEGORIES.map((cat) => {
-              const on = !hiddenCats.has(cat.id)
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => toggleCategory(cat.id)}
-                  className="flex items-center gap-2 rounded-full px-3 py-1 text-xs transition"
-                  style={{
-                    background: on ? hexToRgba(cat.color, 0.16) : 'rgba(255,255,255,0.03)',
-                    border: `1px solid ${on ? hexToRgba(cat.color, 0.4) : 'rgba(255,255,255,0.08)'}`,
-                    color: on ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.35)',
-                    textDecoration: on ? 'none' : 'line-through',
-                  }}
-                >
-                  <span className="h-2 w-2 rounded-full" style={{ background: on ? cat.color : 'rgba(255,255,255,0.25)' }} />
-                  {cat.label}
-                </button>
-              )
-            })}
-          </div>
-
-          {view === 'month' && (
-            <div>
-              <div className="grid grid-cols-7 gap-2 pb-2 text-center text-xs font-medium" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                {DAY_LABELS.map((label) => (
-                  <div key={label}>{label}</div>
+    const startOfWeek = new Date(year, month, date - dayOfWeek);
+    const weekDays = Array.from({ length: 7 }).map((_, i) => new Date(year, month, startOfWeek.getDate() + i));
+    return (
+      <div className="flex flex-1 border border-white/5 rounded-2xl overflow-hidden mt-4 bg-black/10">
+        {weekDays.map((day, idx) => {
+          const isToday = new Date().toDateString() === day.toDateString();
+          const dayEvents = filteredEvents.filter(e => new Date(e.start).toDateString() === day.toDateString());
+          return (
+            <div key={idx} className="flex-1 flex flex-col border-r last:border-r-0 border-white/5">
+              <div className="p-3 border-b border-white/5 flex flex-col items-center bg-white/5">
+                <span className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={textSecondary}>
+                  {day.toLocaleDateString(undefined, { weekday: 'short' })}
+                </span>
+                <span className={`text-sm w-7 h-7 flex items-center justify-center rounded-full ${isToday ? 'bg-[#6B7EFF] text-white font-bold' : ''}`} style={!isToday ? textPrimary : {}}>
+                  {day.getDate()}
+                </span>
+              </div>
+              <div className="flex-1 p-2 flex flex-col gap-2 overflow-y-auto">
+                {dayEvents.map(e => (
+                  <button
+                    key={e.id}
+                    onClick={() => setSelectedEvent(e)}
+                    className="text-left p-2 rounded-xl flex flex-col gap-1 transition-colors hover:bg-white/10"
+                    style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: CATEGORIES[e.category].color }} />
+                      <span className="text-[10px] font-medium" style={textSecondary}>{formatTime(e.start, e.all_day)}</span>
+                    </div>
+                    <span className="text-xs font-medium leading-tight" style={textPrimary}>{e.title}</span>
+                  </button>
                 ))}
               </div>
-
-              <div className="grid grid-cols-7 gap-2">
-                {monthDays.map((day) => {
-                  const eventsForThisDay = dayEvents(day)
-                  const visibleEvents = eventsForThisDay.slice(0, 3)
-                  const extraCount = eventsForThisDay.length - visibleEvents.length
-                  const isToday = isSameDay(day, today)
-                  const isCurrentMonth = day.getMonth() === cursorDate.getMonth()
-
-                  return (
-                    <button
-                      key={dateKey(day)}
-                      type="button"
-                      onClick={() => {
-                        setCursorDate(day)
-                        setView('day')
-                        setSelectedEvent(null)
-                      }}
-                      className="min-h-28 rounded-2xl p-2 text-left transition hover:opacity-90"
-                      style={{
-                        background: isToday ? hexToRgba('#6B7EFF', 0.12) : 'rgba(255,255,255,0.025)',
-                        border: isToday ? `1px solid ${hexToRgba('#6B7EFF', 0.55)}` : '1px solid rgba(255,255,255,0.07)',
-                      }}
-                    >
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <span
-                          className="flex h-7 w-7 items-center justify-center rounded-full text-sm font-medium"
-                          style={{
-                            background: isToday ? '#6B7EFF' : 'transparent',
-                            color: isToday
-                              ? 'white'
-                              : isCurrentMonth
-                                ? 'rgba(255,255,255,0.9)'
-                                : 'rgba(255,255,255,0.34)',
-                          }}
-                        >
-                          {day.getDate()}
-                        </span>
-                      </div>
-
-                      <div className="space-y-1">
-                        {visibleEvents.map((event) => (
-                          <EventChip key={event.id} event={event} onClick={setSelectedEvent} />
-                        ))}
-                        {extraCount > 0 && (
-                          <div className="rounded-xl px-2 py-1 text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                            +{extraCount} more
-                          </div>
-                        )}
-                      </div>
-                    </button>
-                  )
-                })}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+  const renderDayView = () => {
+    const dayEvents = filteredEvents
+      .filter(e => new Date(e.start).toDateString() === currentDate.toDateString())
+      .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+    return (
+      <div className="flex-1 flex flex-col mt-4 max-w-2xl">
+        <h2 className="text-xl font-medium mb-6" style={textPrimary}>
+          {currentDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+        </h2>
+        {dayEvents.length === 0 ? (
+          <div className="p-8 text-center" style={textSecondary}>No events today.</div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {dayEvents.map(e => (
+              <button
+                key={e.id}
+                onClick={() => setSelectedEvent(e)}
+                className="w-full text-left p-4 rounded-2xl flex items-center gap-4 transition-colors hover:bg-white/5"
+                style={glassBg}
+              >
+                <div className="w-24 text-sm font-medium flex-shrink-0" style={textSecondary}>
+                  {formatTime(e.start, e.all_day)}
+                </div>
+                <div className="w-1 h-8 rounded-full" style={{ backgroundColor: CATEGORIES[e.category].color }} />
+                <div className="flex-1">
+                  <div className="text-base font-medium" style={textPrimary}>{e.title}</div>
+                  {e.location && (
+                    <div className="text-xs mt-1 flex items-center gap-1" style={textSecondary}>
+                      <MapPin size={12} /> {e.location}
+                    </div>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+  const renderListView = () => {
+    const sorted = [...filteredEvents].sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+    const grouped = sorted.reduce((acc, e) => {
+      const d = new Date(e.start).toDateString();
+      if (!acc[d]) acc[d] = [];
+      acc[d].push(e);
+      return acc;
+    }, {} as Record<string, CalEvent[]>);
+    return (
+      <div className="flex-1 overflow-y-auto mt-4 max-w-2xl pr-4">
+        {Object.entries(grouped).map(([dateStr, evts]) => {
+          const d = new Date(dateStr);
+          const isToday = new Date().toDateString() === d.toDateString();
+          return (
+            <div key={dateStr} className="mb-8">
+              <div className="text-sm font-semibold mb-3 flex items-center gap-2" style={textPrimary}>
+                {isToday && <span className="px-2 py-0.5 rounded text-[10px] uppercase bg-[#6B7EFF] text-white">Today</span>}
+                {d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+              </div>
+              <div className="flex flex-col gap-2">
+                {evts.map(e => (
+                  <button
+                    key={e.id}
+                    onClick={() => setSelectedEvent(e)}
+                    className="w-full text-left p-3 rounded-2xl flex items-center gap-4 transition-colors hover:bg-white/5"
+                    style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}
+                  >
+                    <div className="w-16 text-xs font-medium text-right flex-shrink-0" style={textSecondary}>
+                      {formatTime(e.start, e.all_day)}
+                    </div>
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: CATEGORIES[e.category].color }} />
+                    <div className="flex-1 text-sm font-medium truncate" style={textPrimary}>{e.title}</div>
+                  </button>
+                ))}
               </div>
             </div>
-          )}
-
-          {view === 'week' && (
-            <div className="grid gap-3 lg:grid-cols-7">
-              {weekDays.map((day) => {
-                const eventsForThisDay = dayEvents(day)
-                const isToday = isSameDay(day, today)
-
-                return (
-                  <div
-                    key={dateKey(day)}
-                    className="min-h-48 rounded-2xl p-3"
-                    style={{
-                      background: isToday ? hexToRgba('#00C8FF', 0.1) : 'rgba(255,255,255,0.025)',
-                      border: isToday ? `1px solid ${hexToRgba('#00C8FF', 0.45)}` : '1px solid rgba(255,255,255,0.07)',
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCursorDate(day)
-                        setView('day')
-                        setSelectedEvent(null)
-                      }}
-                      className="mb-3 w-full rounded-xl px-2 py-2 text-left transition hover:opacity-90"
-                      style={{ background: 'rgba(255,255,255,0.025)' }}
-                    >
-                      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                        {DAY_LABELS[day.getDay()]}
-                      </p>
-                      <p className="text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>
-                        {formatShortDate(day)}
-                      </p>
-                    </button>
-
-                    {eventsForThisDay.length ? (
-                      <div className="space-y-2">
-                        {eventsForThisDay.map((event) => (
-                          <EventChip key={event.id} event={event} onClick={setSelectedEvent} />
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="rounded-xl px-3 py-4 text-center text-sm" style={{ color: 'rgba(255,255,255,0.34)' }}>
-                        No events
-                      </p>
-                    )}
-                  </div>
-                )
-              })}
+          );
+        })}
+        {sorted.length === 0 && <div className="text-sm p-4" style={textSecondary}>No upcoming events found.</div>}
+      </div>
+    );
+  };
+  // --- Render Modals ---
+  const renderEventPopover = () => {
+    if (!selectedEvent) return null;
+    const cat = CATEGORIES[selectedEvent.category];
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <div className="w-full max-w-sm rounded-3xl overflow-hidden flex flex-col relative" style={{ backgroundColor: 'rgba(30,30,30,0.9)', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <div className="p-5 flex flex-col gap-4">
+            <div className="flex justify-between items-start">
+              <div className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider" style={{ backgroundColor: `${cat.color}20`, color: cat.color }}>
+                {cat.label}
+              </div>
+              <button onClick={() => setSelectedEvent(null)} className="p-1 rounded-full hover:bg-white/10" style={textSecondary}><X size={18} /></button>
             </div>
-          )}
 
-          {view === 'day' && (
-            <div className="space-y-3">
-              {dayEvents(cursorDate).length ? (
-                dayEvents(cursorDate).map((event) => (
-                  <button
-                    key={event.id}
-                    type="button"
-                    onClick={() => setSelectedEvent(event)}
-                    className="flex w-full flex-col gap-3 rounded-2xl p-4 text-left transition hover:opacity-90 sm:flex-row sm:items-center sm:justify-between"
-                    style={{
-                      background: hexToRgba(TYPE_COLORS[event.type], event.is_all_day ? 0.2 : 0.12),
-                      border: `1px solid ${hexToRgba(TYPE_COLORS[event.type], 0.45)}`,
-                    }}
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="h-2.5 w-2.5 rounded-full" style={{ background: TYPE_COLORS[event.type] }} />
-                        <p className="truncate font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>
-                          {event.title}
-                        </p>
-                      </div>
-                      <p className="mt-1 text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                        {TYPE_LABELS[event.type]}
-                      </p>
-                    </div>
-                    <div className="shrink-0 rounded-xl px-3 py-1 text-sm" style={glassStyle}>
-                      {eventTimeLabel(event)}
-                    </div>
-                  </button>
-                ))
-              ) : (
-                <EmptyState />
+            <h3 className="text-xl font-semibold leading-tight" style={textPrimary}>{selectedEvent.title}</h3>
+
+            <div className="flex flex-col gap-2.5 text-sm" style={textSecondary}>
+              <div className="flex items-center gap-2">
+                <Clock size={16} />
+                <span>
+                  {new Date(selectedEvent.start).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                  {' • '}
+                  {formatTime(selectedEvent.start, selectedEvent.all_day)}
+                  {selectedEvent.end && ` - ${formatTime(selectedEvent.end)}`}
+                </span>
+              </div>
+              {selectedEvent.location && (
+                <div className="flex items-center gap-2">
+                  <MapPin size={16} />
+                  <span>{selectedEvent.location}</span>
+                </div>
               )}
             </div>
-          )}
+          </div>
 
-          {view === 'list' && (
-            <div className="space-y-5">
-              {groupedListEvents.length ? (
-                groupedListEvents.map((group) => (
-                  <div key={group.key}>
-                    <h3 className="mb-2 text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>
-                      {formatFullDay(group.day)}
-                    </h3>
-                    <div className="space-y-2">
-                      {group.events.map((event) => (
-                        <button
-                          key={event.id}
-                          type="button"
-                          onClick={() => setSelectedEvent(event)}
-                          className="flex w-full flex-col gap-3 rounded-2xl p-4 text-left transition hover:opacity-90 sm:flex-row sm:items-center sm:justify-between"
-                          style={{
-                            background: 'rgba(255,255,255,0.025)',
-                            border: '1px solid rgba(255,255,255,0.07)',
-                          }}
-                        >
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="h-2.5 w-2.5 rounded-full" style={{ background: TYPE_COLORS[event.type] }} />
-                              <p className="truncate font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>
-                                {event.title}
-                              </p>
-                            </div>
-                            <p className="mt-1 text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                              {TYPE_LABELS[event.type]}
-                            </p>
-                          </div>
-                          <div className="shrink-0 rounded-xl px-3 py-1 text-sm" style={glassStyle}>
-                            {eventTimeLabel(event)}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <EmptyState label="No upcoming events" />
-              )}
+          {selectedEvent.href && (
+            <div className="p-4 border-t flex gap-3" style={{ borderColor: 'rgba(255,255,255,0.08)', backgroundColor: 'rgba(0,0,0,0.2)' }}>
+              <a href={selectedEvent.href} className="flex-1 py-2.5 rounded-xl text-sm font-medium text-center transition-colors hover:opacity-90" style={{ backgroundColor: '#6B7EFF', color: 'white' }}>Open</a>
             </div>
           )}
         </div>
       </div>
+    );
+  };
+  const renderAddModal = () => {
+    if (!isAddModalOpen) return null;
+    const handleSave = async (e: React.FormEvent) => {
+      e.preventDefault();
+      const form = e.target as HTMLFormElement;
+      const dateVal = (form.elements.namedItem('dateStr') as HTMLInputElement)?.value;
+      const timeVal = (form.elements.namedItem('timeStr') as HTMLInputElement)?.value;
+      const startIso = dateVal ? new Date(`${dateVal}T${timeVal || '09:00'}:00`).toISOString() : new Date().toISOString();
+      const newEvt = await createEvent({
+        title: (form.elements.namedItem('titleStr') as HTMLInputElement).value,
+        start: startIso,
+        all_day: !timeVal,
+        category: (form.elements.namedItem('category') as HTMLInputElement)?.value as CalCategory,
+        scope: scope,
+      });
+      setEvents([...events, newEvt]);
+      setIsAddModalOpen(false);
+    };
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <div className="w-full max-w-md rounded-3xl flex flex-col relative" style={{ backgroundColor: 'rgba(30,30,30,0.95)', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <div className="p-5 border-b flex justify-between items-center" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+            <h3 className="text-lg font-medium" style={textPrimary}>Add Event</h3>
+            <button onClick={() => setIsAddModalOpen(false)} className="p-1 rounded-full hover:bg-white/10" style={textSecondary}><X size={18} /></button>
+          </div>
 
-      {selectedEvent && (
-        <div className="fixed left-4 right-4 top-24 z-50 mx-auto max-w-sm rounded-3xl p-4 shadow-2xl" style={glassStyle}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-xs uppercase tracking-wide" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                Event
-              </p>
-              <h2 className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>
-                {selectedEvent.title}
-              </h2>
+          <form onSubmit={handleSave} className="p-5 flex flex-col gap-4">
+            <div>
+              <input name="titleStr" type="text" placeholder="Event title" required className="w-full bg-transparent border-b border-white/10 outline-none px-2 py-2 text-lg placeholder:text-white/30" style={textPrimary} />
             </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <input name="dateStr" type="date" required className="w-full bg-black/20 border outline-none px-3 py-2.5 rounded-xl text-sm" style={{ ...textPrimary, borderColor: 'rgba(255,255,255,0.1)' }} />
+              <input name="timeStr" type="time" className="w-full bg-black/20 border outline-none px-3 py-2.5 rounded-xl text-sm" style={{ ...textPrimary, borderColor: 'rgba(255,255,255,0.1)' }} />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(Object.keys(CATEGORIES) as CalCategory[]).map(cat => (
+                <label key={cat} className="flex items-center gap-2 text-sm p-2 rounded-xl cursor-pointer hover:bg-white/5 border border-transparent has-[:checked]:border-white/20">
+                  <input type="radio" name="category" value={cat} defaultChecked={cat === 'jobs'} className="hidden" />
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: CATEGORIES[cat].color }} />
+                  <span style={textPrimary}>{CATEGORIES[cat].label}</span>
+                </label>
+              ))}
+            </div>
+            <div className="flex justify-end gap-3 mt-4">
+              <button type="button" onClick={() => setIsAddModalOpen(false)} className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/5" style={textSecondary}>Cancel</button>
+              <button type="submit" className="px-5 py-2 rounded-xl text-sm font-medium transition-colors hover:opacity-90" style={{ backgroundColor: '#6B7EFF', color: 'white' }}>Save Event</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  };
+  const currentLabel = useMemo(() => {
+    if (view === 'Day') return currentDate.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
+    if (view === 'Month' || view === 'List') return currentDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+
+    const start = new Date(currentDate);
+    start.setDate(start.getDate() - start.getDay());
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    return `${start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  }, [currentDate, view]);
+  return (
+    <div className="w-full flex flex-col font-sans">
+
+      {/* 1. SLIM TOOLBAR */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-3">
+
+        <div className="flex items-center p-1 rounded-xl w-max" style={glassBg}>
+          {(['Month', 'Week', 'Day', 'List'] as const).map(v => (
             <button
-              type="button"
-              onClick={() => setSelectedEvent(null)}
-              className="rounded-full p-2 transition hover:opacity-90"
-              style={glassStyle}
-              aria-label="Close event details"
+              key={v}
+              onClick={() => setView(v)}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+              style={{
+                backgroundColor: view === v ? 'rgba(255,255,255,0.1)' : 'transparent',
+                color: view === v ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)'
+              }}
             >
-              <X className="h-4 w-4" />
+              {v}
             </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1" style={textPrimary}>
+            <button onClick={handlePrev} className="p-1.5 rounded-full hover:bg-white/10 transition-colors"><ChevronLeft size={18} /></button>
+            <button onClick={handleToday} className="px-3 py-1 text-xs font-medium rounded-full hover:bg-white/10 transition-colors">Today</button>
+            <button onClick={handleNext} className="p-1.5 rounded-full hover:bg-white/10 transition-colors"><ChevronRight size={18} /></button>
           </div>
-
-          <div className="mt-4 space-y-3 text-sm">
-            <div className="flex items-center justify-between gap-3 rounded-2xl px-3 py-2" style={glassStyle}>
-              <span style={{ color: 'rgba(255,255,255,0.5)' }}>Type</span>
-              <span className="flex items-center gap-2 font-medium" style={{ color: 'rgba(255,255,255,0.9)' }}>
-                <span className="h-2 w-2 rounded-full" style={{ background: TYPE_COLORS[selectedEvent.type] }} />
-                {TYPE_LABELS[selectedEvent.type]}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between gap-3 rounded-2xl px-3 py-2" style={glassStyle}>
-              <span style={{ color: 'rgba(255,255,255,0.5)' }}>Date</span>
-              <span className="font-medium" style={{ color: 'rgba(255,255,255,0.9)' }}>
-                {formatShortDate(eventDate(selectedEvent))}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between gap-3 rounded-2xl px-3 py-2" style={glassStyle}>
-              <span style={{ color: 'rgba(255,255,255,0.5)' }}>Time</span>
-              <span className="font-medium" style={{ color: 'rgba(255,255,255,0.9)' }}>
-                {eventTimeLabel(selectedEvent)}
-              </span>
-            </div>
+          <span className="text-base font-medium min-w-[140px] text-center" style={textPrimary}>
+            {currentLabel}
+          </span>
+        </div>
+        <div className="flex items-center gap-3 justify-end">
+          <div className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl cursor-pointer hover:bg-white/5 transition-colors text-sm font-medium" style={textSecondary}>
+            <Calendar size={14} />
+            <select
+              value={scope}
+              onChange={(e) => setScope(e.target.value as 'me' | 'team')}
+              className="bg-transparent appearance-none outline-none cursor-pointer pr-4"
+              style={textSecondary}
+            >
+              <option value="me" className="bg-neutral-900">My Calendar</option>
+              <option value="team" className="bg-neutral-900">My Team</option>
+            </select>
+            <ChevronDown size={14} className="absolute right-2 pointer-events-none" />
           </div>
-
           <button
-            type="button"
-            onClick={() => onOpen(selectedEvent)}
-            className="mt-4 w-full rounded-2xl px-4 py-2 text-sm font-medium transition hover:opacity-90"
-            style={{ background: '#6B7EFF', color: 'white' }}
+            onClick={() => setIsAddModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors hover:opacity-90"
+            style={{ backgroundColor: '#6B7EFF', color: 'white' }}
           >
-            Open
+            <Plus size={16} /> Add event
           </button>
         </div>
-      )}
-    </section>
-  )
+      </div>
+      {/* 2. CATEGORY FILTERS */}
+      <div className="flex items-center gap-2 mb-4 overflow-x-auto hide-scrollbar">
+        {(Object.keys(CATEGORIES) as CalCategory[]).map(cat => {
+          const isActive = activeFilters.has(cat);
+          const color = CATEGORIES[cat].color;
+          return (
+            <button
+              key={cat}
+              onClick={() => toggleFilter(cat)}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all"
+              style={{
+                backgroundColor: isActive ? 'rgba(255,255,255,0.06)' : 'transparent',
+                border: isActive ? `1px solid rgba(255,255,255,0.1)` : '1px solid transparent',
+                color: isActive ? textPrimary.color : textSecondary.color,
+                opacity: isActive ? 1 : 0.6
+              }}
+            >
+              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+              {CATEGORIES[cat].label}
+            </button>
+          );
+        })}
+        {isLoading && <span className="text-[10px] ml-2 animate-pulse" style={textFaint}>Updating...</span>}
+      </div>
+      {/* 3. CALENDAR VIEW RENDERER */}
+      {view === 'Month' && renderMonthView()}
+      {view === 'Week' && renderWeekView()}
+      {view === 'Day' && renderDayView()}
+      {view === 'List' && renderListView()}
+      {/* MODALS */}
+      {renderEventPopover()}
+      {renderAddModal()}
+    </div>
+  );
 }

@@ -12,6 +12,55 @@ const supabase = createClient(
 
 const NO_MATCH = '00000000-0000-0000-0000-000000000000'
 
+// POST /api/calendar/events — create a LOCAL Nexus event (source of truth).
+// Body: { title, start, end?, all_day?, location?, related_type?, related_id? }
+// Google/Microsoft push is a follow-up (#58); this persists locally first.
+export async function POST(req: NextRequest) {
+  const user = await getCurrentUser()
+  let body: Record<string, unknown>
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+  }
+  const title = String(body.title ?? '').trim()
+  const start = body.start as string | undefined
+  if (!title || !start) {
+    return NextResponse.json({ error: 'title and start are required' }, { status: 400 })
+  }
+  const { data, error } = await supabase
+    .from('calendar_events')
+    .insert({
+      org_id: user.org_id,
+      user_id: user.id,
+      created_by: user.id,
+      title,
+      start_time: start,
+      end_time: (body.end as string) ?? start,
+      is_all_day: Boolean(body.all_day),
+      location: (body.location as string) ?? null,
+      related_type: (body.related_type as string) ?? null,
+      related_id: (body.related_id as string) ?? null,
+      source: 'nexus',
+      status: 'confirmed',
+      sync_status: 'not_synced',
+    })
+    .select('id, title, start_time, end_time, is_all_day, location')
+    .single()
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({
+    event: {
+      id: data.id,
+      title: data.title,
+      start: data.start_time,
+      end: data.end_time,
+      all_day: data.is_all_day,
+      category: 'jobs',
+      location: data.location,
+    },
+  })
+}
+
 export interface CalendarEvent {
   id: string
   type: 'nexus_event' | 'todo' | 'work_order' | 'work_order_phase' | 'pm_schedule' | 'gcal' | 'crm_activity' | 'tracker_task'
