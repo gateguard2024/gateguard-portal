@@ -7,17 +7,19 @@ import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 import { NexusActionCard } from '@/components/nexus/NexusActionCard'
 import { NewOpportunityFlow } from '@/components/nexus/NewOpportunityFlow'
+import { ExistingOpportunityFlow } from '@/components/nexus/ExistingOpportunityFlow'
 
 type GroupId = 'leads' | 'opportunities' | 'quotes' | 'research'
+type PanelId = 'new-opp' | 'existing-opp' | 'new-lead-flow' | 'leads-workbench'
 
 type SalesItem = {
   title: string
   subtitle: string
   glyph: NexusGlyphKind
   badge?: string
-  href?: string                      // route to an existing page
-  panel?: 'workbench' | 'new-opp'    // open a glass panel in-place
-  soon?: boolean                     // not built yet — show "Coming soon"
+  href?: string   // route to an existing page
+  panel?: PanelId // open a glass panel in-place
+  soon?: boolean  // not built yet — show "Coming soon"
 }
 
 type SalesGroup = {
@@ -34,8 +36,8 @@ const GROUPS: SalesGroup[] = [
   {
     id: 'leads', title: 'Leads', subtitle: 'Add and work the people who might buy.', hex: '#00C8FF', glyph: 'lead',
     items: [
-      { title: 'New Lead', subtitle: 'Add someone who called, walked in, or came from the website.', glyph: 'lead', panel: 'workbench' },
-      { title: 'Existing Leads', subtitle: 'See and work the leads already in your pipeline.', glyph: 'pipeline', panel: 'workbench' },
+      { title: 'New Lead', subtitle: 'Add someone who called, walked in, or came from the website.', glyph: 'lead', panel: 'new-lead-flow' },
+      { title: 'Existing Leads', subtitle: 'See and work the leads already in your pipeline.', glyph: 'pipeline', panel: 'leads-workbench' },
       { title: 'Hot Leads', subtitle: 'The leads most likely to close soon.', glyph: 'activity', soon: true },
       { title: 'Cold Leads', subtitle: 'Leads that have gone quiet — time to re-engage.', glyph: 'todo', soon: true },
     ],
@@ -44,7 +46,7 @@ const GROUPS: SalesGroup[] = [
     id: 'opportunities', title: 'Opportunities', subtitle: 'The deals you are actively working.', hex: '#007CFF', glyph: 'pipeline',
     items: [
       { title: 'New Opportunity', subtitle: 'Start a deal from an existing lead or customer.', glyph: 'pipeline', panel: 'new-opp' },
-      { title: 'Existing Opportunity', subtitle: 'See and advance your open deals.', glyph: 'pipeline', panel: 'workbench' },
+      { title: 'Existing Opportunity', subtitle: 'Pick a deal you own or can see, and work it.', glyph: 'pipeline', panel: 'existing-opp' },
       { title: 'Site Surveys', subtitle: 'Capture the property survey behind a deal.', glyph: 'research', href: '/survey' },
       { title: 'Rough Calculator', subtitle: 'Quick ballpark pricing before a full quote.', glyph: 'quote', soon: true },
     ],
@@ -117,7 +119,7 @@ const SHELL_STYLE = { background: 'radial-gradient(circle at 12% 0%, rgba(0,124,
 export function SalesSurface() {
   const router = useRouter()
   const [activeGroup, setActiveGroup] = useState<GroupId | null>(null)
-  const [activePanel, setActivePanel] = useState<'workbench' | 'new-opp' | null>(null)
+  const [activePanel, setActivePanel] = useState<PanelId | null>(null)
   const [soon, setSoon] = useState<string | null>(null)
 
   const group = GROUPS.find(g => g.id === activeGroup) ?? null
@@ -132,6 +134,11 @@ export function SalesSurface() {
   return (
     <section className="mt-9 w-full max-w-5xl">
       <div className="rounded-[2rem] p-5 sm:p-6" style={SHELL_STYLE}>
+        {group && (
+          <button type="button" onClick={() => { setActiveGroup(null); setSoon(null) }} className="mb-4 inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold transition-all hover:-translate-y-0.5" style={{ background: 'rgba(0,200,255,0.16)', border: '1px solid rgba(0,200,255,0.45)', color: '#7DE5FF', boxShadow: '0 0 18px rgba(0,124,255,0.12)' }}>
+            <span aria-hidden style={{ fontSize: '17px', lineHeight: 1 }}>←</span> Back to all Sales
+          </button>
+        )}
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.82)' }}>Sales</div>
@@ -142,9 +149,7 @@ export function SalesSurface() {
               {group ? group.subtitle : 'Pick a lane: leads, opportunities, quotes & proposals, or research.'}
             </p>
           </div>
-          {group
-            ? <button type="button" onClick={() => { setActiveGroup(null); setSoon(null) }} className="self-start rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.82)' }}>← All sales</button>
-            : <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(0,124,255,0.14)', color: 'rgba(125,229,255,0.96)', border: '1px solid rgba(0,200,255,0.28)', boxShadow: '0 0 18px rgba(0,124,255,0.12)' }}>Sales OS</div>}
+          {!group && <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(0,124,255,0.14)', color: 'rgba(125,229,255,0.96)', border: '1px solid rgba(0,200,255,0.28)', boxShadow: '0 0 18px rgba(0,124,255,0.12)' }}>Sales OS</div>}
         </div>
 
         {soon && (
@@ -177,10 +182,10 @@ export function SalesSurface() {
         )}
       </div>
 
-      {activePanel === 'workbench' && (
+      {(activePanel === 'new-lead-flow' || activePanel === 'leads-workbench') && (
         <SalesDetailShell
-          title="Leads & Opportunities"
-          subtitle="Your sales workbench — add a lead, work follow-ups, and advance open deals."
+          title={activePanel === 'new-lead-flow' ? 'Add New Lead' : 'Your Leads'}
+          subtitle={activePanel === 'new-lead-flow' ? 'Capture a new lead — phone, walk-in, outbound, or website.' : 'Work your open leads and follow-ups.'}
           onClose={() => setActivePanel(null)}
           actions={<>
             <ActionButton label="New Quote" onClick={() => router.push('/quotes/new')} />
@@ -188,11 +193,12 @@ export function SalesSurface() {
             <ActionButton label="Site Survey" onClick={() => router.push('/survey')} />
           </>}
         >
-          <ActionFlowSurface activeTab="opps" />
+          <ActionFlowSurface activeTab="opps" initialView={activePanel === 'new-lead-flow' ? 'capture-lead' : 'leads'} />
         </SalesDetailShell>
       )}
 
       {activePanel === 'new-opp' && <NewOpportunityFlow onClose={() => setActivePanel(null)} />}
+      {activePanel === 'existing-opp' && <ExistingOpportunityFlow onClose={() => setActivePanel(null)} />}
     </section>
   )
 }

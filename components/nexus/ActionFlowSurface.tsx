@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { LeadGlassWindow } from '@/components/nexus/windows/LeadGlassWindow'
 import { OpportunityGlassWindow } from '@/components/nexus/windows/OpportunityGlassWindow'
@@ -445,9 +445,9 @@ function RecordList({ records, emptyText, onLeadClick, onOpportunityClick, leadW
   )
 }
 
-export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null }) {
+export function ActionFlowSurface({ activeTab, initialView }: { activeTab: NexusTabId | null; initialView?: 'capture-lead' | 'leads' | 'opportunities' }) {
   const router = useRouter()
-  const [stepId, setStepId] = useState<StepId>('start')
+  const [stepId, setStepId] = useState<StepId>(initialView === 'capture-lead' ? 'call-source' : 'start')
   const [draft, setDraft] = useState<InboundLeadDraft>(EMPTY_DRAFT)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
@@ -544,6 +544,18 @@ export function ActionFlowSurface({ activeTab }: { activeTab: NexusTabId | null 
       setBusy(false)
     }
   }
+
+  // Open straight into the requested view (so Sales → New Lead lands on the
+  // capture flow, and → Existing Leads lands on the leads workbench).
+  const didInit = useRef(false)
+  useEffect(() => {
+    if (didInit.current) return
+    didInit.current = true
+    if (initialView === 'leads') void openWorkbench('openLeads')
+    else if (initialView === 'opportunities') void openWorkbench('openOpportunities')
+    // 'capture-lead' is handled by the initial stepId.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function submitInboundLead(forceCreate = false) {
     setBusy(true)

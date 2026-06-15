@@ -117,6 +117,32 @@ export async function getOrgBrivoToken(orgId: string): Promise<BrivoToken> {
   return { token: tokens.access_token, apiKey, orgId }
 }
 
+// ─── Master account token (sees all sites) ──────────────────────────────────
+// Corporate access: GateGuard's master Brivo login can see every site. Cached
+// in-process. Set BRIVO_MASTER_USERNAME + BRIVO_MASTER_PASSWORD in env.
+let _masterCache: { token: string; expires: number } | null = null
+
+export async function getMasterBrivoToken(): Promise<{ token: string; apiKey: string }> {
+  const { apiKey, authBasic } = getBrivoAppCreds()
+  if (_masterCache && _masterCache.expires - Date.now() > 60_000) {
+    return { token: _masterCache.token, apiKey }
+  }
+  const username = process.env.BRIVO_MASTER_USERNAME
+  const password = process.env.BRIVO_MASTER_PASSWORD
+  if (!username || !password) {
+    throw new Error('Brivo master account not configured: set BRIVO_MASTER_USERNAME + BRIVO_MASTER_PASSWORD')
+  }
+  const res = await fetch(BRIVO_AUTH_URL, {
+    method: 'POST',
+    headers: { Authorization: `Basic ${authBasic}`, 'api-key': apiKey, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'password', username, password }).toString(),
+  })
+  if (!res.ok) throw new Error(`Brivo master auth failed (${res.status}): ${await res.text()}`)
+  const tokens = await res.json()
+  _masterCache = { token: tokens.access_token, expires: Date.now() + (tokens.expires_in ?? 3600) * 1000 }
+  return { token: tokens.access_token, apiKey }
+}
+
 // ─── HTTP helpers ─────────────────────────────────────────────────────────────
 function brivoHeaders(token: string, apiKey: string): HeadersInit {
   return {
@@ -240,4 +266,53 @@ export async function listBrivoUsers(
   }
 
   return users
+}
+
+/**
+ * Create a Brivo user, optionally adding them to a group (groups carry access).
+ * Phone is a Brivo custom field — handled in a later phase; not written here.
+ */
+export async function createBrivoUser(
+  token: string,
+  apiKey: string,
+  input: { firstName: string; lastName: string; email?: string | null; externalId?: string | null; groupId?: string | null },
+): Promise<{ id: string }> {
+  const body: Record<string, any> = { firstName: input.firstName, lastName: input.lastName }
+  if (input.email) body.email = input.email
+  if (input.externalId) body.externalId = input.externalId  // we use this for unit number
+
+  const created = await brivoPost(token, apiKey, '/users', body)
+  const id = String(created.id ?? created.userId ?? '')
+  if (!id) throw new Error('Brivo did not return a new user id')
+
+  // Adding the user to a group is how Brivo grants access at a site.
+  if (input.groupId) {
+    await brivoPut(token, apiKey, `/groups/${input.groupId}/users/${id}`, {})
+  }
+  return { id }
+}
+
+/**
+ * Suspend or reactivate a Brivo user. Uses Brivo's dedicated endpoints; if your
+ * Brivo instance differs, this is the one call to adjust.
+ */
+export async function setBrivoUserSuspended(
+  token: string,
+  apiKey: string,
+  userId: string,
+  suspended: boolean,
+): Promise<{ success: true }> {
+  const path = suspended ? `/users/${userId}/suspend` : `/users/${userId}/reactivate`
+  await brivoPost(token, apiKey, path, {})
+  return { success: true }
+}
+
+/** List the Brivo groups for a site (used for the Add-User access picker). */
+export async function listBrivoGroups(
+  token: string,
+  apiKey: string,
+  brivoSiteId: string,
+): Promise<{ id: string; name: string }[]> {
+  const data = await brivoGet(token, apiKey, '/groups', { filter: `site eq "${brivoSiteId}"`, pageSize: '100' })
+  return (data.data ?? []).map((g: any) => ({ id: String(g.id), name: g.name ?? 'Group' }))
 }
