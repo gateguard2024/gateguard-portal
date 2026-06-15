@@ -46,7 +46,7 @@ function ActionButton({ label, onClick, muted }: { label: string; onClick?: () =
 function Shell({ title, subtitle, onClose, children, actions }: { title: string; subtitle: string; onClose: () => void; children: React.ReactNode; actions?: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/68 px-4 py-6 backdrop-blur-sm">
-      <div className="grid max-h-[86vh] w-full max-w-6xl grid-cols-1 gap-4 overflow-hidden rounded-[2rem] p-5 shadow-2xl lg:grid-cols-[1fr_260px]" style={{ background: 'radial-gradient(circle at 18% 0%, rgba(251,191,36,0.14), transparent 32%), linear-gradient(180deg, rgba(8,18,34,0.97), rgba(3,9,22,0.97))', border: '1px solid rgba(251,191,36,0.18)', boxShadow: '0 30px 100px rgba(0,0,0,0.60), 0 0 58px rgba(251,191,36,0.10), inset 0 1px 0 rgba(255,255,255,0.07)', backdropFilter: 'blur(28px)' }}>
+      <div className="grid max-h-[86vh] w-full max-w-6xl xl:max-w-none grid-cols-1 gap-4 overflow-hidden rounded-[2rem] p-5 shadow-2xl lg:grid-cols-[1fr_260px]" style={{ background: 'radial-gradient(circle at 18% 0%, rgba(251,191,36,0.14), transparent 32%), linear-gradient(180deg, rgba(8,18,34,0.97), rgba(3,9,22,0.97))', border: '1px solid rgba(251,191,36,0.18)', boxShadow: '0 30px 100px rgba(0,0,0,0.60), 0 0 58px rgba(251,191,36,0.10), inset 0 1px 0 rgba(255,255,255,0.07)', backdropFilter: 'blur(28px)' }}>
         <div className="min-h-0 overflow-y-auto pr-1">
           <NexusGlassBackButton label="Back to Money/Docs" onClick={onClose} />
           <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(251,191,36,0.82)' }}>Money/Docs</div>
