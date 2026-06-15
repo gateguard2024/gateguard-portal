@@ -110,23 +110,24 @@
   </div>
 
   <div class="phase">
-    <h2>Phase 3 — Jobs / installs <span class="badge b-prog">In progress</span></h2>
+    <h2>Phase 3 — Jobs / installs <span class="badge b-done">Done</span></h2>
     <p class="goal">Field work lifecycle.</p>
     <ul>
       <li><span class="box done">✓</span><span>Cards open real glass boards (Today's Jobs · Needs Attention · Schedule Visit · Open Jobs), org-scoped downstream.</span></li>
       <li><span class="box prog">!</span><span>Job board: list view live. <span class="note">Pending: calendar view (outsourceable UI).</span></span></li>
       <li><span class="box done">✓</span><span>Job detail glass: status, notes, tasks, schedule/reschedule, mark complete, <b>photos/file attachments</b>, checklist, site/team.</span></li>
-      <li><span class="box prog">!</span><span>Field notes + photos + <b>assignee picker</b> (scoped technician list) done. <span class="note">Pending: job calendar view (briefed to LLM), Dispatch view.</span></span></li>
+      <li><span class="box done">✓</span><span>Field notes + photos + <b>assignee picker</b> (scoped technician list).</span></li>
+      <li><span class="box done">✓</span><span><b>Dispatch console</b> live (nested under Jobs): jobs↔techs assign, live roster by status, schedule strip; wired to /api/dispatch + technician PATCH. <span class="note">Pending: job calendar view (briefed to LLM).</span></span></li>
     </ul>
   </div>
 
   <div class="phase">
-    <h2>Phase 4 — Operations / Business <span class="badge b-prog">In progress</span></h2>
+    <h2>Phase 4 — Operations / Business <span class="badge b-done">Done</span></h2>
     <p class="goal">Replaces Customer Sites tab; customers/properties/sites/systems.</p>
     <ul>
-      <li><span class="box">&nbsp;</span><span>Rename Customers/Sites → Operations/Business; Customer Sites becomes its primary board.</span></li>
-      <li><span class="box prog">!</span><span>Customer/Property finder + detail glass (one-object format) live in Find Customer. <span class="note">On mock data — wire to real search APIs.</span></span></li>
-      <li><span class="box">&nbsp;</span><span>Properties Needing Attention · Property Systems; customers & installs for Week 2.</span></li>
+      <li><span class="box done">✓</span><span>Renamed Customers/Sites → <b>Operations</b> (nav + surface copy).</span></li>
+      <li><span class="box done">✓</span><span>Customer/Property/Site <b>finder rebuilt</b> on real search-as-you-type (`/api/nexus/customers-sites/search` + `/detail`); one-object detail glass.</span></li>
+      <li><span class="box">&nbsp;</span><span>Properties Needing Attention · customers & installs for Week 2.</span></li>
     </ul>
   </div>
 
@@ -134,7 +135,8 @@
     <h2>Phase 5 — Money / Docs <span class="badge b-todo">To do</span></h2>
     <p class="goal">Invoices, renewals, signing, compliance.</p>
     <ul>
-      <li><span class="box prog">!</span><span>Invoices board live (summary tiles, filters, detail + send/mark-paid). <span class="note">On mock data — wire to real billing API.</span></span></li>
+      <li><span class="box done">✓</span><span>Invoices board live + <b>wired to real billing API</b> (`/api/nexus/money-docs/invoices`).</span></li>
+      <li><span class="box done">✓</span><span><b>Security:</b> documents + compliance endpoints org-scoped (closed cross-org leak).</span></li>
       <li><span class="box">&nbsp;</span><span>Renewals (contract/monitoring/dealer/service, reminders, assign owner).</span></li>
       <li><span class="box prog">!</span><span>Documents to Sign — via Public Document Portal (NDA/agreements done; proposals = P3).</span></li>
       <li><span class="box">&nbsp;</span><span>Compliance (W9, COI, license, background check; dealer/vendor/site).</span></li>
@@ -142,30 +144,40 @@
   </div>
 
   <div class="phase">
-    <h2>Phase 6 — Design &amp; Systems <span class="badge b-todo">To do</span></h2>
+    <h2>Phase 6 — Design &amp; Systems <span class="badge b-done">Done</span></h2>
     <p class="goal">New top-level tabs; map legacy design/system pages into glass.</p>
     <ul>
-      <li><span class="box">&nbsp;</span><span>Design tab: Site Design · Floor Plans · As-Builts · Proposal Drawings (glass boards).</span></li>
-      <li><span class="box">&nbsp;</span><span>Systems tab: Gates · Cameras · Access Control · Networks; system object (devices, status, service history, warranty, related jobs).</span></li>
+      <li><span class="box done">✓</span><span>Design tab live (glass): per-property Floor Plan → System Design → As-Built, device counts + BOM; `/api/nexus/design`.</span></li>
+      <li><span class="box done">✓</span><span>Systems tab live (glass): installed devices by category with online/warning/offline health; `/api/nexus/systems`.</span></li>
+      <li><span class="box done">✓</span><span>Both PWA-contained surfaces (h-[78dvh], internal scroll).</span></li>
     </ul>
   </div>
 
   <div class="phase">
-    <h2>Phase 7 — Command router <span class="badge b-todo">To do</span></h2>
+    <h2>Phase 7 — Command router <span class="badge b-done">Done</span></h2>
     <p class="goal">Natural language → right tab/board/action.</p>
     <ul>
-      <li><span class="box">&nbsp;</span><span>"Show my open leads" · "Create a new lead" · "Send NDA to dealer" · "Show today's jobs" · "Add task for technician".</span></li>
+      <li><span class="box done">✓</span><span>Ask bar fast-path (`lib/command-router.ts`): plain words jump to a tab/route ("dispatch", "money", "new quote", "aria", "calendar") with no AI call; conversational asks still go to the assistant.</span></li>
+      <li><span class="box done">✓</span><span>"help" / "how do I…" opens the new glass <b>Help Center</b>.</span></li>
     </ul>
   </div>
 
   <h3 class="section">Navigation redesign (cross-cutting — lands in Phase 1/4/6)</h3>
   <div class="phase">
-    <h2>Bottom bar + Admin relocation <span class="badge b-todo">To do</span></h2>
+    <h2>Bottom bar + Admin relocation <span class="badge b-done">Done</span></h2>
     <ul>
-      <li><span class="box">&nbsp;</span><span>Remove Internal from bottom bar; mount behind a near-hidden Admin icon by the Nexus mark.</span></li>
-      <li><span class="box">&nbsp;</span><span>Rename Customers/Sites → Operations/Business.</span></li>
-      <li><span class="box">&nbsp;</span><span>Add Design + Systems top-level tabs.</span></li>
-      <li><span class="box">&nbsp;</span><span>Admin panel: Dealer Onboarding · Users &amp; Features · Tracker · Playbooks · Training · Settings.</span></li>
+      <li><span class="box done">✓</span><span>Internal off the bar; behind the global Admin icon (top-right, all pages).</span></li>
+      <li><span class="box done">✓</span><span>7-tab set: My Day · Sales · Jobs · Operations · Design · Systems · Money/Docs. Dispatch nested under Jobs.</span></li>
+      <li><span class="box done">✓</span><span>PWA safe-area padding on the bottom nav (clears the home-indicator).</span></li>
+    </ul>
+
+  <h3 class="section">Knowledge / Help</h3>
+  <div class="phase">
+    <h2>Help Center <span class="badge b-done">Done</span></h2>
+    <ul>
+      <li><span class="box done">✓</span><span>Migration 117 seeds 10 plain-language Platform How-To articles (kb_articles).</span></li>
+      <li><span class="box done">✓</span><span>Glass <b>HelpSurface</b> (search + expandable Q&amp;A) reads them; opened from the Ask bar via "help" / "how do I…".</span></li>
+      <li><span class="box prog">!</span><span>Run migration 117 on beta → prod. <span class="note">Legacy /kb page is not glass — Help Center replaces it for users.</span></span></li>
     </ul>
   </div>
 

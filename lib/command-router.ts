@@ -68,6 +68,17 @@ export function routeCommand(raw: string, isAdmin = false): CommandResult {
   const input = normalize(raw)
   if (!input) return { kind: 'assistant' }
 
+  // Help intent — send "how do i / how to / help / faq" questions to the
+  // knowledge center so users find written answers. Checked before the
+  // length gate so full questions ("how do i add a user") still route to help.
+  if (
+    input === 'help' || input === 'faq' || input === 'how' ||
+    input.startsWith('how do i') || input.startsWith('how to') ||
+    input.startsWith('how can i') || input.startsWith('how do you')
+  ) {
+    return { kind: 'tab', tab: 'help', label: 'Help' }
+  }
+
   const { stripped, hadVerb } = stripNavVerb(input)
   const term = stripped || (hadVerb ? '' : input)
 

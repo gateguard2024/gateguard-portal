@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { LeadGlassWindow } from '@/components/nexus/windows/LeadGlassWindow'
 import { OpportunityGlassWindow } from '@/components/nexus/windows/OpportunityGlassWindow'
 
-export type NexusTabId = 'my-day' | 'recent' | 'opps' | 'jobs' | 'field' | 'people' | 'design' | 'systems' | 'dispatch'
+export type NexusTabId = 'my-day' | 'recent' | 'opps' | 'jobs' | 'field' | 'people' | 'design' | 'systems' | 'dispatch' | 'help'
 
 type StepId =
   | 'start'

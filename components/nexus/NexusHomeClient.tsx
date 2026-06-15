@@ -10,6 +10,7 @@ import { CustomersSitesSurface } from '@/components/nexus/CustomersSitesSurface'
 import DispatchConsole from '@/components/nexus/DispatchConsole'
 import DesignExplorer from '@/components/nexus/DesignExplorer'
 import SystemsExplorer from '@/components/nexus/SystemsExplorer'
+import { HelpSurface } from '@/components/nexus/HelpSurface'
 import { InternalSurface } from '@/components/nexus/InternalSurface'
 import { JobsSurface } from '@/components/nexus/JobsSurface'
 import { MoneyDocsSurfaceNext } from '@/components/nexus/MoneyDocsSurfaceNext'
@@ -188,7 +189,7 @@ export default function NexusHomeClient() {
           </div>
         )}
 
-        {activeTab === 'my-day' ? <MyDaySurface /> : activeTab === 'jobs' ? <JobsSurface onOpenDispatch={() => setActiveTab('dispatch')} /> : activeTab === 'opps' ? <SalesSurface /> : activeTab === 'recent' ? <CustomersSitesSurface /> : activeTab === 'dispatch' ? <DispatchConsole /> : activeTab === 'design' ? <DesignExplorer /> : activeTab === 'systems' ? <SystemsExplorer /> : activeTab === 'field' ? <MoneyDocsSurfaceNext /> : activeTab === 'people' ? <InternalSurface /> : <ActionFlowSurface activeTab={activeTab} />}
+        {activeTab === 'my-day' ? <MyDaySurface /> : activeTab === 'jobs' ? <JobsSurface onOpenDispatch={() => setActiveTab('dispatch')} /> : activeTab === 'opps' ? <SalesSurface /> : activeTab === 'recent' ? <CustomersSitesSurface /> : activeTab === 'dispatch' ? <DispatchConsole /> : activeTab === 'design' ? <DesignExplorer /> : activeTab === 'systems' ? <SystemsExplorer /> : activeTab === 'help' ? <HelpSurface /> : activeTab === 'field' ? <MoneyDocsSurfaceNext /> : activeTab === 'people' ? <InternalSurface /> : <ActionFlowSurface activeTab={activeTab} />}
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 z-20 flex justify-center overflow-x-auto px-4 pt-3 backdrop-blur-xl" style={{ background: 'linear-gradient(180deg, rgba(1,4,13,0.12), rgba(1,4,13,0.86))', borderTop: '1px solid rgba(59,130,246,0.12)', paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>

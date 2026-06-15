@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
       id,
       title,
       description,
+      content,
       category,
       difficulty,
       helpful_count,

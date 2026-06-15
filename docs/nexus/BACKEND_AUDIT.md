@@ -25,5 +25,11 @@ Branch: beta. Method: full read-only sweep (mock vs real fetch, org scoping, mig
 - **CustomerSiteFinder.tsx** — still mock-only. Rebuild brief written: `docs/nexus/handoff/GEMINI_CUSTOMER_FINDER_REBUILD.md` (search-as-you-type → `/customers-sites/search`, detail → `/customers-sites/detail`). Hand to Gemini, then Claude wires.
 - **Migrations 110–116 → run on PROD.** Created on beta June 14; production was just promoted from beta→main, so prod DB needs them (110 canonical parent is foundational for org scoping; 115/116 idempotent & safe). Order: beta confirmed → prod.
 
+## Addendum (June 14) — Sales/CRM, Doc Portal, Onboarding endpoint sweep
+- **Public Document Portal: CLEAN.** `/api/document/[slug]`, `/api/signatures/[token]`, `/cert`, `by-record` are all token-based; slug route never returns the token.
+- **Sales/CRM: new Nexus routes scoped; legacy `/api/crm/*` NOT scoped.** `/api/nexus/opps/*` ✅. Legacy gaps (authed but no org scope → cross-org read by ID): `crm/opportunities/[id]`, `crm/opportunities/[id]/contacts`, `crm/opportunities/[id]/activities`, `crm/leads/[id]`, `crm/leads/[id]/activities`, `crm/activities`, `crm/leads/campaign` + `/sends`.
+- **Onboarding/admin: a few NO-AUTH/unscoped:** `admin/commission-config` (NO-AUTH GET), `admin/users/[id]/permissions` (NO-AUTH; dead permissions system), `admin/setup-corporate` (NO-AUTH bootstrap). Core onboarding (`onboard-dealer`, `dealers/[id]`, `users`, `org-features`, `user-features`) are role/scope-gated.
+- These legacy CRM/admin routes back the *legacy* pages (Nexus glass uses the scoped `/nexus/*` versions). Fix = defense-in-depth + needed before legacy pages are exposed to dealers (ties to dealer-safe part 2).
+
 ## Verified clean (no leaks)
 All other `/api/nexus/*`, `/api/dispatch/*`, `/api/calendar/*` list routes apply org scope (`applyOrgScope`), assigned scope (`applyAssignedScope`), or user ownership (`.eq('user_id', …)`). Public `/api/document/[slug]` is token-based and never returns the token.
