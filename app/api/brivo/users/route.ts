@@ -1,25 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/current-user'
-import { isBrivoSiteAllowed } from '@/lib/brivo-scope'
-import { getMasterBrivoToken, listBrivoUsers, listBrivoGroups, createBrivoUser } from '@/lib/brivo'
+import { getAllowedBrivoSite } from '@/lib/brivo-scope'
+import { getOrgBrivoToken, listBrivoUsers, listBrivoGroups, createBrivoUser } from '@/lib/brivo'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-// GET /api/brivo/users?site_id=<brivo_site_id>&groups=1
-// Returns the live Brivo user list for a site the caller is allowed to see.
+// GET /api/brivo/users?org_id=<org>&groups=1
+// Each site authenticates with its OWN Brivo credentials (per org).
 export async function GET(req: NextRequest) {
   try {
     const user = await getCurrentUser()
-    const siteId = req.nextUrl.searchParams.get('site_id') ?? ''
-    if (!siteId) return NextResponse.json({ error: 'site_id is required' }, { status: 400 })
-    if (!(await isBrivoSiteAllowed(user, siteId))) {
-      return NextResponse.json({ error: 'That site is outside your access.' }, { status: 403 })
-    }
-    const { token, apiKey } = await getMasterBrivoToken()
-    const users = await listBrivoUsers(token, apiKey, siteId)
+    const orgId = req.nextUrl.searchParams.get('org_id') ?? ''
+    if (!orgId) return NextResponse.json({ error: 'org_id is required' }, { status: 400 })
+    const site = await getAllowedBrivoSite(user, orgId)
+    if (!site) return NextResponse.json({ error: 'That site is outside your access.' }, { status: 403 })
+
+    const { token, apiKey } = await getOrgBrivoToken(orgId)
+    const users = await listBrivoUsers(token, apiKey, site.brivo_site_id)
     const groups = req.nextUrl.searchParams.get('groups')
-      ? await listBrivoGroups(token, apiKey, siteId).catch(() => [])
+      ? await listBrivoGroups(token, apiKey, site.brivo_site_id).catch(() => [])
       : undefined
     return NextResponse.json({ users, ...(groups ? { groups } : {}) })
   } catch (e) {
@@ -27,21 +27,21 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/brivo/users  { site_id, firstName, lastName, email?, unit?, groupId? }
+// POST /api/brivo/users  { org_id, firstName, lastName, email?, unit?, groupId? }
 export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser()
     const body = await req.json().catch(() => ({}))
-    const siteId = String(body.site_id ?? '')
-    if (!siteId) return NextResponse.json({ error: 'site_id is required' }, { status: 400 })
-    if (!(await isBrivoSiteAllowed(user, siteId))) {
-      return NextResponse.json({ error: 'That site is outside your access.' }, { status: 403 })
-    }
+    const orgId = String(body.org_id ?? '')
+    if (!orgId) return NextResponse.json({ error: 'org_id is required' }, { status: 400 })
+    const site = await getAllowedBrivoSite(user, orgId)
+    if (!site) return NextResponse.json({ error: 'That site is outside your access.' }, { status: 403 })
+
     const firstName = String(body.firstName ?? '').trim()
     const lastName = String(body.lastName ?? '').trim()
     if (!firstName || !lastName) return NextResponse.json({ error: 'First and last name are required.' }, { status: 400 })
 
-    const { token, apiKey } = await getMasterBrivoToken()
+    const { token, apiKey } = await getOrgBrivoToken(orgId)
     const created = await createBrivoUser(token, apiKey, {
       firstName,
       lastName,

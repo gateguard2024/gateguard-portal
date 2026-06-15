@@ -8,9 +8,10 @@ import { type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 import { NexusActionCard } from '@/components/nexus/NexusActionCard'
 import { NewOpportunityFlow } from '@/components/nexus/NewOpportunityFlow'
 import { ExistingOpportunityFlow } from '@/components/nexus/ExistingOpportunityFlow'
+import { PricingCalculator } from '@/components/nexus/PricingCalculator'
 
 type GroupId = 'leads' | 'opportunities' | 'quotes' | 'research'
-type PanelId = 'new-opp' | 'existing-opp' | 'new-lead-flow' | 'leads-workbench'
+type PanelId = 'new-opp' | 'existing-opp' | 'new-lead-flow' | 'leads-workbench' | 'rough-calc'
 
 type SalesItem = {
   title: string
@@ -48,7 +49,7 @@ const GROUPS: SalesGroup[] = [
       { title: 'New Opportunity', subtitle: 'Start a deal from an existing lead or customer.', glyph: 'pipeline', panel: 'new-opp' },
       { title: 'Existing Opportunity', subtitle: 'Pick a deal you own or can see, and work it.', glyph: 'pipeline', panel: 'existing-opp' },
       { title: 'Site Surveys', subtitle: 'Capture the property survey behind a deal.', glyph: 'research', href: '/survey' },
-      { title: 'Rough Calculator', subtitle: 'Quick ballpark pricing before a full quote.', glyph: 'quote', soon: true },
+      { title: 'Rough Calculator', subtitle: 'Quick monthly pricing from gates, doors, cameras, and units.', glyph: 'quote', panel: 'rough-calc' },
     ],
   },
   {
@@ -199,6 +200,19 @@ export function SalesSurface() {
 
       {activePanel === 'new-opp' && <NewOpportunityFlow onClose={() => setActivePanel(null)} />}
       {activePanel === 'existing-opp' && <ExistingOpportunityFlow onClose={() => setActivePanel(null)} />}
+      {activePanel === 'rough-calc' && (
+        <SalesDetailShell
+          title="Rough Calculator"
+          subtitle="Enter what's on the site — price updates live (50% margin, $150 minimum)."
+          onClose={() => setActivePanel(null)}
+          actions={<>
+            <ActionButton label="Start a Quote" onClick={() => router.push('/quotes/new')} />
+            <ActionButton label="New Opportunity" onClick={() => { setActivePanel('new-opp') }} />
+          </>}
+        >
+          <PricingCalculator />
+        </SalesDetailShell>
+      )}
     </section>
   )
 }

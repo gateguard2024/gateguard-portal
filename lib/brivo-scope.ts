@@ -32,3 +32,11 @@ export async function isBrivoSiteAllowed(user: PortalUser, siteId: string): Prom
   const sites = await allowedBrivoSites(user)
   return sites.some((s) => s.brivo_site_id === String(siteId))
 }
+
+// Each site authenticates with its OWN Brivo credentials, so we work by org_id:
+// returns the site (incl. brivo_site_id) only if the caller may manage that org.
+export async function getAllowedBrivoSite(user: PortalUser, orgId: string): Promise<BrivoSite | null> {
+  if (!orgId) return null
+  const sites = await allowedBrivoSites(user)
+  return sites.find((s) => s.org_id === orgId) ?? null
+}
