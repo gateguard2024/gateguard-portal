@@ -6,7 +6,8 @@ import { InternalDealerOnboardingBoard } from '@/components/nexus/InternalDealer
 import { InternalTrackerBoard } from '@/components/nexus/InternalTrackerBoard'
 import { InternalUsersFeaturesBoard } from '@/components/nexus/InternalUsersFeaturesBoard'
 import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
-import { NexusGlyphTile, type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
+import { type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
+import { NexusActionCard } from '@/components/nexus/NexusActionCard'
 
 type InternalPanel = 'tracker' | 'dealer-onboarding' | 'users-features' | 'playbooks' | 'training' | null
 
@@ -25,31 +26,15 @@ function rgb(hex: string): string {
 }
 
 function InternalCardButton({ card, onClick }: { card: InternalCard; onClick: () => void }) {
-  const color = rgb(card.hex)
-
   return (
-    <button
-      type="button"
+    <NexusActionCard
+      title={card.title}
+      subtitle={card.subtitle}
+      hex={card.hex}
+      glyph={card.glyph}
+      badge={card.badge}
       onClick={onClick}
-      className="group relative min-h-[138px] overflow-hidden rounded-3xl p-4 text-left transition-all duration-200 hover:-translate-y-1"
-      style={{
-        background: `radial-gradient(circle at 18% 8%, rgba(${color},0.26), transparent 32%), linear-gradient(145deg, rgba(8,18,34,0.88), rgba(3,9,22,0.78))`,
-        border: `1px solid rgba(${color},0.34)`,
-        boxShadow: `0 0 26px rgba(${color},0.16), 0 22px 58px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.08)`,
-        backdropFilter: 'blur(20px)',
-      }}
-    >
-      <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full" style={{ background: `rgba(${color},0.14)`, filter: 'blur(18px)' }} />
-      {card.badge && (
-        <div className="absolute right-4 top-4 rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em]" style={{ background: `rgba(${color},0.16)`, border: `1px solid rgba(${color},0.34)`, color: 'rgba(255,255,255,0.86)' }}>
-          {card.badge}
-        </div>
-      )}
-      <NexusGlyphTile kind={card.glyph} color={card.hex} />
-      <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>{card.title}</div>
-      <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.56)' }}>{card.subtitle}</div>
-      <div className="absolute bottom-4 right-4 text-xs opacity-75 transition-opacity group-hover:opacity-100" style={{ color: card.hex, textShadow: `0 0 14px rgba(${color},0.40)` }}>Open →</div>
-    </button>
+    />
   )
 }
 
