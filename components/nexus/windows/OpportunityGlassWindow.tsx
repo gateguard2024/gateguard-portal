@@ -1,5 +1,8 @@
 'use client'
 
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+
 type AnyRecord = Record<string, any>
 
 type OpportunityGlassData = {
@@ -89,6 +92,42 @@ export function OpportunityGlassWindow({
   const attachments = data.attachments ?? []
   const quote = data.quote
   const nextBestActions = data.nextBestActions ?? []
+
+  const router = useRouter()
+  const [busy, setBusy] = useState<string | null>(null)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  async function handleAction(action: string) {
+    const oppId = opp.id as string | undefined
+    if (!oppId) return
+    // Navigation actions — no API call.
+    if (action === 'run_aria') { router.push('/aria'); return }
+    if (action === 'generate_quote') { router.push(`/quotes/new?opportunity=${oppId}`); return }
+
+    setBusy(action); setMsg(null)
+    try {
+      if (action === 'mark_won') {
+        const r = await fetch(`/api/crm/opportunities/${oppId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'won', won_at: new Date().toISOString() }) })
+        setMsg(r.ok ? { ok: true, text: 'Marked won ✓ — now use "Create Project" to start the install job.' } : { ok: false, text: 'Could not update.' })
+      } else if (action === 'mark_lost') {
+        const reason = typeof window !== 'undefined' ? window.prompt('Why was this lost? (optional)') : ''
+        if (reason === null) { setBusy(null); return }
+        const r = await fetch(`/api/crm/opportunities/${oppId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'lost', lost_at: new Date().toISOString(), lost_reason: reason || null }) })
+        setMsg(r.ok ? { ok: true, text: 'Marked lost.' } : { ok: false, text: 'Could not update.' })
+      } else if (action === 'create_project') {
+        const r = await fetch('/api/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: `${opp.name || opp.account_name || 'New deal'} — Install`, job_type: 'new_install', opportunity_id: oppId, site_id: opp.site_id ?? null, opportunity_name: opp.name ?? null }) })
+        const j = await r.json().catch(() => ({}))
+        setMsg(r.ok ? { ok: true, text: 'Install job created ✓ — find it under Jobs.' } : { ok: false, text: j.error || 'Could not create job.' })
+      } else if (action === 'schedule_followup') {
+        const r = await fetch('/api/todos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: `Follow up: ${opp.name || opp.account_name || 'opportunity'}`, linked_type: 'opportunity', linked_id: oppId }) })
+        setMsg(r.ok ? { ok: true, text: 'Follow-up added to your To-Dos ✓' } : { ok: false, text: 'Could not add follow-up.' })
+      }
+    } catch {
+      setMsg({ ok: false, text: 'Something went wrong. Please try again.' })
+    } finally {
+      setBusy(null)
+    }
+  }
 
   // Stage badge color
   const stageMeta = String(opp.stage ?? 'inquiry').toLowerCase()
@@ -228,6 +267,11 @@ export function OpportunityGlassWindow({
         <div className="space-y-4">
           <Section title="Next Best Actions">
             <div className="space-y-2">
+              {msg && (
+                <div className="rounded-2xl p-3 text-[11px] font-medium" style={{ background: msg.ok ? 'rgba(52,211,153,0.10)' : 'rgba(248,113,113,0.10)', border: `1px solid ${msg.ok ? 'rgba(52,211,153,0.30)' : 'rgba(248,113,113,0.30)'}`, color: msg.ok ? '#86efac' : '#fca5a5' }}>
+                  {msg.text}
+                </div>
+              )}
               {nextBestActions.length === 0 ? (
                 <Empty text="No suggested actions." />
               ) : (
@@ -235,10 +279,12 @@ export function OpportunityGlassWindow({
                   <button
                     key={action.action}
                     type="button"
-                    className="w-full rounded-2xl p-3 text-left transition-all hover:-translate-y-0.5"
+                    onClick={() => handleAction(action.action)}
+                    disabled={busy !== null}
+                    className="w-full rounded-2xl p-3 text-left transition-all hover:-translate-y-0.5 disabled:opacity-50"
                     style={{ background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.16)', color: 'rgba(255,255,255,0.86)' }}
                   >
-                    <div className="text-xs font-semibold">{action.title}</div>
+                    <div className="text-xs font-semibold">{busy === action.action ? 'Working…' : action.title}</div>
                     <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.42)' }}>{action.subtitle}</div>
                   </button>
                 ))
