@@ -6,6 +6,7 @@ import { ActionFlowSurface } from '@/components/nexus/ActionFlowSurface'
 import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 import { NexusActionCard } from '@/components/nexus/NexusActionCard'
+import { NewOpportunityFlow } from '@/components/nexus/NewOpportunityFlow'
 
 type GroupId = 'leads' | 'opportunities' | 'quotes' | 'research'
 
@@ -14,9 +15,9 @@ type SalesItem = {
   subtitle: string
   glyph: NexusGlyphKind
   badge?: string
-  href?: string          // route to an existing page
-  panel?: 'workbench'    // open a glass panel in-place
-  soon?: boolean         // not built yet — show "Coming soon"
+  href?: string                      // route to an existing page
+  panel?: 'workbench' | 'new-opp'    // open a glass panel in-place
+  soon?: boolean                     // not built yet — show "Coming soon"
 }
 
 type SalesGroup = {
@@ -42,7 +43,7 @@ const GROUPS: SalesGroup[] = [
   {
     id: 'opportunities', title: 'Opportunities', subtitle: 'The deals you are actively working.', hex: '#007CFF', glyph: 'pipeline',
     items: [
-      { title: 'New Opportunity', subtitle: 'Turn a lead into a deal you are pursuing.', glyph: 'pipeline', panel: 'workbench' },
+      { title: 'New Opportunity', subtitle: 'Start a deal from an existing lead or customer.', glyph: 'pipeline', panel: 'new-opp' },
       { title: 'Existing Opportunity', subtitle: 'See and advance your open deals.', glyph: 'pipeline', panel: 'workbench' },
       { title: 'Site Surveys', subtitle: 'Capture the property survey behind a deal.', glyph: 'research', href: '/survey' },
       { title: 'Rough Calculator', subtitle: 'Quick ballpark pricing before a full quote.', glyph: 'quote', soon: true },
@@ -116,7 +117,7 @@ const SHELL_STYLE = { background: 'radial-gradient(circle at 12% 0%, rgba(0,124,
 export function SalesSurface() {
   const router = useRouter()
   const [activeGroup, setActiveGroup] = useState<GroupId | null>(null)
-  const [activePanel, setActivePanel] = useState<'workbench' | null>(null)
+  const [activePanel, setActivePanel] = useState<'workbench' | 'new-opp' | null>(null)
   const [soon, setSoon] = useState<string | null>(null)
 
   const group = GROUPS.find(g => g.id === activeGroup) ?? null
@@ -125,7 +126,7 @@ export function SalesSurface() {
     setSoon(null)
     if (item.soon) { setSoon(`${item.title} is coming soon.`); return }
     if (item.href) { router.push(item.href); return }
-    if (item.panel === 'workbench') { setActivePanel('workbench') }
+    if (item.panel) { setActivePanel(item.panel) }
   }
 
   return (
@@ -190,6 +191,8 @@ export function SalesSurface() {
           <ActionFlowSurface activeTab="opps" />
         </SalesDetailShell>
       )}
+
+      {activePanel === 'new-opp' && <NewOpportunityFlow onClose={() => setActivePanel(null)} />}
     </section>
   )
 }
