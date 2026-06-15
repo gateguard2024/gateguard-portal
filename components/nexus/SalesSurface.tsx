@@ -7,38 +7,66 @@ import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 import { NexusActionCard } from '@/components/nexus/NexusActionCard'
 
-type SalesPanel = 'new-lead' | 'work-leads' | 'quotes' | 'aria' | null
+type GroupId = 'leads' | 'opportunities' | 'quotes' | 'research'
 
-type SalesCard = {
-  id: Exclude<SalesPanel, null>
+type SalesItem = {
+  title: string
+  subtitle: string
+  glyph: NexusGlyphKind
+  badge?: string
+  href?: string          // route to an existing page
+  panel?: 'workbench'    // open a glass panel in-place
+  soon?: boolean         // not built yet — show "Coming soon"
+}
+
+type SalesGroup = {
+  id: GroupId
   title: string
   subtitle: string
   hex: string
   glyph: NexusGlyphKind
   badge?: string
+  items: SalesItem[]
 }
 
-function rgb(hex: string): string {
-  const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-  return r ? `${parseInt(r[1], 16)},${parseInt(r[2], 16)},${parseInt(r[3], 16)}` : '0,200,255'
-}
-
-function SalesCardButton({ card, onClick }: { card: SalesCard; onClick: () => void }) {
-  return (
-    <NexusActionCard
-      title={card.title}
-      subtitle={card.subtitle}
-      hex={card.hex}
-      glyph={card.glyph}
-      badge={card.badge}
-      onClick={onClick}
-    />
-  )
-}
+const GROUPS: SalesGroup[] = [
+  {
+    id: 'leads', title: 'Leads', subtitle: 'Add and work the people who might buy.', hex: '#00C8FF', glyph: 'lead',
+    items: [
+      { title: 'New Lead', subtitle: 'Add someone who called, walked in, or came from the website.', glyph: 'lead', panel: 'workbench' },
+      { title: 'Existing Leads', subtitle: 'See and work the leads already in your pipeline.', glyph: 'pipeline', panel: 'workbench' },
+      { title: 'Hot Leads', subtitle: 'The leads most likely to close soon.', glyph: 'activity', soon: true },
+      { title: 'Cold Leads', subtitle: 'Leads that have gone quiet — time to re-engage.', glyph: 'todo', soon: true },
+    ],
+  },
+  {
+    id: 'opportunities', title: 'Opportunities', subtitle: 'The deals you are actively working.', hex: '#007CFF', glyph: 'pipeline',
+    items: [
+      { title: 'New Opportunity', subtitle: 'Turn a lead into a deal you are pursuing.', glyph: 'pipeline', panel: 'workbench' },
+      { title: 'Existing Opportunity', subtitle: 'See and advance your open deals.', glyph: 'pipeline', panel: 'workbench' },
+      { title: 'Site Surveys', subtitle: 'Capture the property survey behind a deal.', glyph: 'research', href: '/survey' },
+      { title: 'Rough Calculator', subtitle: 'Quick ballpark pricing before a full quote.', glyph: 'quote', soon: true },
+    ],
+  },
+  {
+    id: 'quotes', title: 'Quotes & Proposals', subtitle: 'Build the numbers and the proposal.', hex: '#FBBF24', glyph: 'quote',
+    items: [
+      { title: 'Bill of Materials', subtitle: 'The equipment and parts list for the job.', glyph: 'quote', href: '/quotes/new' },
+      { title: 'Scope of Work', subtitle: 'What will be installed and done on site.', glyph: 'job-open', href: '/survey' },
+      { title: 'Proposals', subtitle: 'Create, send, and track customer proposals.', glyph: 'quote', href: '/quotes' },
+      { title: 'Closing this Month', subtitle: 'Deals expected to close this month.', glyph: 'activity', soon: true },
+    ],
+  },
+  {
+    id: 'research', title: 'Research', subtitle: 'Know the property before you reach out.', hex: '#8B5CF6', glyph: 'research', badge: 'ARIA',
+    items: [
+      { title: 'ARIA', subtitle: 'Research the property, owner, contacts, and proptech.', glyph: 'research', badge: 'ARIA', href: '/aria' },
+    ],
+  },
+]
 
 function ActionButton({ label, onClick, muted }: { label: string; onClick?: () => void; muted?: boolean }) {
   const displayLabel = muted ? `${label} — Coming Soon` : label
-
   return (
     <button
       type="button"
@@ -83,36 +111,85 @@ function SalesDetailShell({ title, subtitle, onClose, children, actions }: { tit
   )
 }
 
+const SHELL_STYLE = { background: 'radial-gradient(circle at 12% 0%, rgba(0,124,255,0.18), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.78), rgba(3,9,22,0.72))', border: '1px solid rgba(0,200,255,0.18)', boxShadow: '0 28px 90px rgba(0,0,0,0.38), 0 0 46px rgba(0,124,255,0.12), inset 0 1px 0 rgba(255,255,255,0.07)', backdropFilter: 'blur(26px)' } as const
+
 export function SalesSurface() {
   const router = useRouter()
-  const [activePanel, setActivePanel] = useState<SalesPanel>(null)
+  const [activeGroup, setActiveGroup] = useState<GroupId | null>(null)
+  const [activePanel, setActivePanel] = useState<'workbench' | null>(null)
+  const [soon, setSoon] = useState<string | null>(null)
 
-  const cards: SalesCard[] = [
-    { id: 'new-lead', title: 'Add New Lead', subtitle: 'Add someone who called, walked in, came from outbound, or came from the website.', hex: '#00C8FF', glyph: 'lead' },
-    { id: 'work-leads', title: 'Work My Leads', subtitle: 'See leads, follow-ups, opportunities, and sales work that need action.', hex: '#007CFF', glyph: 'pipeline' },
-    { id: 'quotes', title: 'Create / Work Quotes', subtitle: 'Start a quote, keep working a draft, or review a sent proposal.', hex: '#FBBF24', glyph: 'quote' },
-    { id: 'aria', title: 'Research Property', subtitle: 'Use ARIA to learn about a property before calling, pitching, or quoting.', hex: '#8B5CF6', glyph: 'research', badge: 'ARIA' },
-  ]
+  const group = GROUPS.find(g => g.id === activeGroup) ?? null
+
+  function openItem(item: SalesItem) {
+    setSoon(null)
+    if (item.soon) { setSoon(`${item.title} is coming soon.`); return }
+    if (item.href) { router.push(item.href); return }
+    if (item.panel === 'workbench') { setActivePanel('workbench') }
+  }
 
   return (
-    <section className="mt-9 w-full max-w-5xl">
-      <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'radial-gradient(circle at 12% 0%, rgba(0,124,255,0.18), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.78), rgba(3,9,22,0.72))', border: '1px solid rgba(0,200,255,0.18)', boxShadow: '0 28px 90px rgba(0,0,0,0.38), 0 0 46px rgba(0,124,255,0.12), inset 0 1px 0 rgba(255,255,255,0.07)', backdropFilter: 'blur(26px)' }}>
+    <section className="mt-9 w-full max-w-5xl xl:max-w-none">
+      <div className="rounded-[2rem] p-5 sm:p-6" style={SHELL_STYLE}>
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.82)' }}>Sales</div>
-            <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(0,124,255,0.22)' }}>What sales work are we doing?</h2>
-            <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>Add leads, work follow-ups, build quotes, or research a property.</p>
+            <h2 className="mt-1 text-xl font-semibold leading-tight" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(0,124,255,0.22)' }}>
+              {group ? group.title : 'What sales work are we doing?'}
+            </h2>
+            <p className="mt-1 max-w-2xl text-[13px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.82)' }}>
+              {group ? group.subtitle : 'Pick a lane: leads, opportunities, quotes & proposals, or research.'}
+            </p>
           </div>
-          <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(0,124,255,0.14)', color: 'rgba(125,229,255,0.96)', border: '1px solid rgba(0,200,255,0.28)', boxShadow: '0 0 18px rgba(0,124,255,0.12)' }}>Sales OS</div>
+          {group
+            ? <button type="button" onClick={() => { setActiveGroup(null); setSoon(null) }} className="self-start rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.82)' }}>← All sales</button>
+            : <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(0,124,255,0.14)', color: 'rgba(125,229,255,0.96)', border: '1px solid rgba(0,200,255,0.28)', boxShadow: '0 0 18px rgba(0,124,255,0.12)' }}>Sales OS</div>}
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">{cards.map(card => <SalesCardButton key={card.id} card={card} onClick={() => setActivePanel(card.id)} />)}</div>
-        <div className="mt-5 text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>Sales stays simple: add a lead, work my leads, create or work quotes, or research a property.</div>
+
+        {soon && (
+          <div className="mb-4 rounded-2xl px-4 py-3 text-[13px]" style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.4)', color: '#fde68a' }}>{soon} We'll wire this screen in an upcoming build.</div>
+        )}
+
+        {!group && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {GROUPS.map(g => (
+              <NexusActionCard key={g.id} title={g.title} subtitle={g.subtitle} hex={g.hex} glyph={g.glyph} badge={g.badge} actionLabel="Open →" onClick={() => { setActiveGroup(g.id); setSoon(null) }} />
+            ))}
+          </div>
+        )}
+
+        {group && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {group.items.map(item => (
+              <NexusActionCard
+                key={item.title}
+                title={item.title}
+                subtitle={item.subtitle}
+                hex={group.hex}
+                glyph={item.glyph}
+                badge={item.badge ?? (item.soon ? 'Soon' : undefined)}
+                actionLabel={item.soon ? 'Coming soon' : 'Open →'}
+                onClick={() => openItem(item)}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
-      {activePanel === 'new-lead' && <SalesDetailShell title="Add New Lead" subtitle="Add the lead first. Details, ARIA, quote, and follow-up come after." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Research Property First" onClick={() => router.push('/aria')} /><ActionButton label="Start Quote" onClick={() => router.push('/quotes/new')} /><ActionButton label="Open CRM" onClick={() => router.push('/crm')} muted /></>}><ActionFlowSurface activeTab="opps" /></SalesDetailShell>}
-      {activePanel === 'work-leads' && <SalesDetailShell title="Work My Leads" subtitle="Find open leads, opportunities, and follow-ups that need action." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Search Pipeline" muted /><ActionButton label="Research Property" onClick={() => router.push('/aria')} /><ActionButton label="Open CRM" onClick={() => router.push('/crm')} muted /></>}><ActionFlowSurface activeTab="opps" /></SalesDetailShell>}
-      {activePanel === 'quotes' && <SalesDetailShell title="Create / Work Quotes" subtitle="Start or continue the proposal path without making users hunt through CRM." onClose={() => setActivePanel(null)} actions={<><ActionButton label="New Quote" onClick={() => router.push('/quotes/new')} /><ActionButton label="View Quotes" onClick={() => router.push('/quotes')} /><ActionButton label="Import Survey" onClick={() => router.push('/survey')} muted /></>}><div className="rounded-3xl p-4" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.70), rgba(3,9,22,0.48))', border: '1px solid rgba(59,130,246,0.16)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)' }}><div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>Quote workflow</div><p className="mt-2 text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>The quote builder already exists. This board is the simple sales doorway into proposals, survey imports, and approvals.</p></div></SalesDetailShell>}
-      {activePanel === 'aria' && <SalesDetailShell title="Research Property" subtitle="Use ARIA to research the property, management company, contacts, and proptech before outreach." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Launch ARIA" onClick={() => router.push('/aria')} /><ActionButton label="Recent Searches" onClick={() => router.push('/aria')} /><ActionButton label="Create Lead After Research" muted /></>}><div className="rounded-3xl p-4" style={{ background: 'radial-gradient(circle at 12% 0%, rgba(139,92,246,0.18), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.70), rgba(3,9,22,0.48))', border: '1px solid rgba(139,92,246,0.24)', boxShadow: '0 0 28px rgba(139,92,246,0.10), inset 0 1px 0 rgba(255,255,255,0.05)' }}><div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.94)' }}>ARIA powers property research</div><p className="mt-2 text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.56)' }}>ARIA is the paid research engine. For now it opens the ARIA workspace; next we will bring recent searches and create-lead handoff into this glass board.</p></div></SalesDetailShell>}
+      {activePanel === 'workbench' && (
+        <SalesDetailShell
+          title="Leads & Opportunities"
+          subtitle="Your sales workbench — add a lead, work follow-ups, and advance open deals."
+          onClose={() => setActivePanel(null)}
+          actions={<>
+            <ActionButton label="New Quote" onClick={() => router.push('/quotes/new')} />
+            <ActionButton label="Research Property" onClick={() => router.push('/aria')} />
+            <ActionButton label="Site Survey" onClick={() => router.push('/survey')} />
+          </>}
+        >
+          <ActionFlowSurface activeTab="opps" />
+        </SalesDetailShell>
+      )}
     </section>
   )
 }
