@@ -142,7 +142,16 @@ export default function MessagesShell() {
   const [activeFilter, setActiveFilter] = useState<FilterType>('All');
   const [replyText, setReplyText] = useState('');
   const [showSetup, setShowSetup] = useState(false);
-  useEffect(() => { loadConversations().then(setConversations); }, []);
+  useEffect(() => {
+    let cancelled = false;
+    loadConversations().then(c => { if (!cancelled) setConversations(c); });
+    // Pull any connected email inboxes (Gmail) on open, then refresh the list.
+    void fetch('/api/nexus/messages/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inline: true }) })
+      .then(r => (r.ok ? r.json() : null))
+      .then(res => { if (!cancelled && res && res.fetched > 0) loadConversations().then(c => { if (!cancelled) setConversations(c); }); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
   const filteredConversations = useMemo(() => {
     return conversations.filter(c => {
       const matchesSearch =
