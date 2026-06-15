@@ -18,6 +18,9 @@ export const metadata: Metadata = {
     statusBarStyle: 'black-translucent',
     title: 'Nexus',
   },
+  other: {
+    'mobile-web-app-capable': 'yes',
+  },
 };
 
 export const viewport: Viewport = {

@@ -13,9 +13,26 @@
 import { NextRequest, NextFetchEvent, NextResponse } from 'next/server'
 import { clerkMiddleware } from '@clerk/nextjs/server'
 
+// Public files served from /public. These must never redirect to /sign-in,
+// otherwise browsers try to parse the sign-in HTML as JSON/image/script.
+function isPublicAssetPath(pathname: string): boolean {
+  return (
+    pathname === '/manifest.json' ||
+    pathname === '/sw.js' ||
+    pathname === '/favicon.ico' ||
+    pathname === '/icon-192.png' ||
+    pathname === '/icon-512.png' ||
+    pathname === '/logo-sm.png' ||
+    pathname.startsWith('/icons/') ||
+    pathname.startsWith('/images/') ||
+    pathname.startsWith('/fonts/')
+  )
+}
+
 // Paths that bypass Clerk entirely
 function isBypassPath(pathname: string): boolean {
   return (
+    isPublicAssetPath(pathname) ||
     // /tech tool — field techs auth via x-tech-code header, not Clerk
     pathname.startsWith('/tech') ||
     // All /tech API routes — authenticated via x-tech-code only
