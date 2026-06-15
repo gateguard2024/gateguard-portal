@@ -7,11 +7,14 @@ export const dynamic = 'force-dynamic'
 // Starts the Google OAuth flow for a Gmail send/read connector. Reuses the same
 // Google OAuth client as Calendar; a Gmail-specific redirect URI keeps the
 // callbacks separate. Set GMAIL_REDIRECT_URI (or it falls back to the app URL).
-export async function GET() {
+export async function GET(req: Request) {
   const clientId = process.env.GOOGLE_CALENDAR_CLIENT_ID
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://portal.gateguard.co'
-  const redirectUri =
-    process.env.GMAIL_REDIRECT_URI ?? `${appUrl}/api/nexus/messages/google/callback`
+  // Derive the callback from the domain the request actually came in on, so the
+  // OAuth round-trip works on beta (the Vercel URL), prod, or any custom domain
+  // — independent of a possibly-stale GMAIL_REDIRECT_URI / NEXT_PUBLIC_APP_URL.
+  const proto = req.headers.get('x-forwarded-proto') ?? 'https'
+  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? new URL(req.url).host
+  const redirectUri = `${proto}://${host}/api/nexus/messages/google/callback`
 
   if (!clientId) {
     return NextResponse.json(

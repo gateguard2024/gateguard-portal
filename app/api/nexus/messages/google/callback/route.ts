@@ -17,7 +17,11 @@ export async function GET(req: NextRequest) {
   const state = searchParams.get('state')
   const errorParam = searchParams.get('error')
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://portal.gateguard.co'
+  // Same-origin as the connect request, so the round-trip works on whatever
+  // domain the user is on (Vercel beta URL, prod, or a custom domain).
+  const proto = req.headers.get('x-forwarded-proto') ?? 'https'
+  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? new URL(req.url).host
+  const appUrl = `${proto}://${host}`
   const back = (q: string) => NextResponse.redirect(`${appUrl}/?view=messages&${q}`)
 
   if (errorParam) return back('gmail_error=denied')

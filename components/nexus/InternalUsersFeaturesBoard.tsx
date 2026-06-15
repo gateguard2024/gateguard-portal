@@ -32,6 +32,7 @@ export function InternalUsersFeaturesBoard() {
   const [userBusy, setUserBusy] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [activating, setActivating] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -83,6 +84,23 @@ export function InternalUsersFeaturesBoard() {
     }
   }
 
+  // Self-service: stamp the signed-in GateGuard user as a corporate admin.
+  // Idempotent; gated server-side to @gateguard.co emails.
+  async function activateCorporate() {
+    setActivating(true); setMessage(null)
+    try {
+      const res = await fetch('/api/admin/setup-corporate')
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.ok === false) throw new Error(data?.error ?? 'Could not activate corporate access.')
+      setMessage('✅ Corporate admin access activated for your account. Reloading…')
+      setTimeout(() => window.location.reload(), 1200)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not activate corporate access.')
+    } finally {
+      setActivating(false)
+    }
+  }
+
   const tabs: { id: Tab; count: number }[] = [
     { id: 'people', count: counts.users },
     { id: 'techs', count: counts.techs },
@@ -102,7 +120,10 @@ export function InternalUsersFeaturesBoard() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Add a person, then tap a platform user to set role &amp; access.</div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={activateCorporate} disabled={activating} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'rgba(0,200,255,0.12)', border: '1px solid rgba(0,200,255,0.4)', color: 'rgba(125,229,255,0.96)' }} title="GateGuard staff only — sets your account to corporate admin (org_tier=corporate, role=admin). Idempotent.">
+            {activating ? 'Activating…' : 'Activate corporate access'}
+          </button>
           <button type="button" onClick={syncLogins} disabled={syncing} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.8)' }}>
             {syncing ? 'Syncing…' : 'Sync logins'}
           </button>

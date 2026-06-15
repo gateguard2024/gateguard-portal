@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 type Kind = 'office' | 'technician' | 'contractor' | 'subcontractor'
+type AssignableOrg = { id: string; name: string; org_tier: string | null; tier_label: string; is_own: boolean }
 type LoginMethod = 'field_code' | 'full_login' | 'none'
 type Role = 'admin' | 'supervisor' | 'user'
 
@@ -57,6 +58,26 @@ export function AddPersonWizard({ onClose, onDone }: { onClose: () => void; onDo
   const [login, setLogin] = useState<LoginMethod>('field_code')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [orgs, setOrgs] = useState<AssignableOrg[]>([])
+  const [orgId, setOrgId] = useState<string>('')
+
+  // Load the companies this admin may add people into (own org + subtree;
+  // corporate = all). If there's more than one, we show a company picker.
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch('/api/nexus/internal/assignable-orgs')
+        const data = await res.json().catch(() => ({}))
+        if (cancelled) return
+        const list: AssignableOrg[] = data.orgs ?? []
+        setOrgs(list)
+        const own = list.find(o => o.is_own) ?? list[0]
+        setOrgId(data.own_org_id ?? own?.id ?? '')
+      } catch { /* leave empty — route defaults to caller's own org */ }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   const isTech = kind === 'technician' || kind === 'contractor'
   const needsEmail = kind === 'office' || (isTech && login === 'full_login')
@@ -70,6 +91,7 @@ export function AddPersonWizard({ onClose, onDone }: { onClose: () => void; onDo
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           kind, name, email, phone,
+          ...(orgId ? { org_id: orgId } : {}),
           ...(kind === 'office' ? { role } : {}),
           ...(isTech ? { login_method: login } : {}),
           ...(kind === 'subcontractor' ? { company, trade } : {}),
@@ -118,6 +140,21 @@ export function AddPersonWizard({ onClose, onDone }: { onClose: () => void; onDo
 
           {step === 2 && (
             <div className="space-y-3">
+              {orgs.length > 1 && (
+                <label className="block">
+                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.55)' }}>Company / organization</div>
+                  <select value={orgId} onChange={e => setOrgId(e.target.value)}
+                    className="w-full rounded-xl px-3 py-2 text-sm outline-none"
+                    style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.92)' }}>
+                    {orgs.map(o => (
+                      <option key={o.id} value={o.id} style={{ background: '#0b1424' }}>
+                        {o.name}{o.is_own ? ' (your org)' : ''} · {o.tier_label}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="mt-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>This person will belong to the company you pick here.</div>
+                </label>
+              )}
               <Field label="Name" value={name} onChange={setName} placeholder="Full name" />
               <Field label={needsEmail ? 'Email (required)' : 'Email (optional)'} value={email} onChange={setEmail} type="email" placeholder="name@company.com" />
               <Field label="Phone (optional)" value={phone} onChange={setPhone} placeholder="(555) 555-5555" />
@@ -152,6 +189,7 @@ export function AddPersonWizard({ onClose, onDone }: { onClose: () => void; onDo
           {step === 3 && kind && (
             <div className="space-y-2 rounded-2xl p-4" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.07)' }}>
               <Row label="Adding" value={KINDS.find(k => k.id === kind)!.title} />
+              {orgs.length > 1 && orgId && <Row label="Company" value={orgs.find(o => o.id === orgId)?.name ?? '—'} />}
               <Row label="Name" value={name} />
               {email && <Row label="Email" value={email} />}
               {phone && <Row label="Phone" value={phone} />}
