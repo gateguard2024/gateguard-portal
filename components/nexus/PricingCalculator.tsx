@@ -44,13 +44,15 @@ export function PricingCalculator() {
   const [camAccess, setCamAccess] = useState('')
   const [camMon, setCamMon] = useState('')
   const [passesPerUnit, setPassesPerUnit] = useState('2')
+  const [livingUnits, setLivingUnits] = useState('')
 
   const n = (s: string) => Number(s) || 0
 
   const calc = useMemo(() => {
-    const totalUnits = n(unitsApp) + n(unitsGw)
-    const hasAccess = n(doors) > 0 || totalUnits > 0
-    const passes = totalUnits * n(passesPerUnit)
+    const accessUnits = n(unitsApp) + n(unitsGw)         // units that carry per-unit hardware cost
+    const hasAccess = n(doors) > 0 || accessUnits > 0     // Brivo access present?
+    const livingTotal = n(livingUnits) || accessUnits     // property size for $/unit + resident passes
+    const passes = hasAccess ? livingTotal * n(passesPerUnit) : 0
     const passBlocks = Math.ceil(Math.max(0, passes - PASS_INCLUDED) / 100)
     const cost =
       (hasAccess ? COST.base : 0) +
@@ -66,9 +68,9 @@ export function PricingCalculator() {
     const atFloor = price > priceRaw && cost > 0
     const margin = price - cost
     const marginPct = price > 0 ? (margin / price) * 100 : 0
-    const perUnit = totalUnits > 0 ? price / totalUnits : 0
-    return { cost, price, margin, marginPct, perUnit, atFloor, totalUnits, empty: cost === 0 }
-  }, [doors, unitsApp, unitsGw, camAccess, camMon, passesPerUnit])
+    const perUnit = livingTotal > 0 ? price / livingTotal : 0
+    return { cost, price, margin, marginPct, perUnit, atFloor, totalUnits: livingTotal, empty: cost === 0 }
+  }, [doors, unitsApp, unitsGw, camAccess, camMon, passesPerUnit, livingUnits])
 
   return (
     <div className="space-y-5">
@@ -76,6 +78,7 @@ export function PricingCalculator() {
         <div className="mb-1 text-base font-semibold" style={{ color: 'rgba(255,255,255,0.95)' }}>What's on this site?</div>
         <div className="mb-4 text-[12px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Type how many of each. The price updates as you go.</div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <Num label="Total living units" value={livingUnits} onChange={setLivingUnits} hint="property size — for $/unit" />
           <Num label="Gates / common doors" value={doors} onChange={setDoors} />
           <Num label="Smart-lock units (app)" value={unitsApp} onChange={setUnitsApp} hint="$2.25 cost/unit" />
           <Num label="Smart-home units (gateway)" value={unitsGw} onChange={setUnitsGw} hint="$4.50 cost/unit" />
