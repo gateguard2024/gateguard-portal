@@ -168,7 +168,7 @@ export function OpportunityGlassWindow({
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <MiniStat label="Est. MRR"    value={opp.est_mrr ? formatMoney(opp.est_mrr) : 'Not set'} />
+          <MiniStat label="Monthly $"   value={opp.est_mrr ? formatMoney(opp.est_mrr) : 'Not set'} />
           <MiniStat label="Amount"      value={opp.amount  ? formatMoney(opp.amount)  : 'Not set'} />
           <MiniStat label="Close Date"  value={val(opp.close_date, 'Not set')} />
           <MiniStat label="Updated"     value={val(opp.updated_at ?? opp.created_at, 'Unknown')} />
