@@ -229,6 +229,30 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
     } finally { setUploading(false) }
   }
 
+  async function removeAttachment(id: string) {
+    if (!opportunityId || !id) return
+    await fetch(`/api/nexus/opps/opportunity-window/${opportunityId}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'remove_attachment', attachment_id: id }),
+    })
+    onSaved?.()
+  }
+
+  // Quick task → real todo linked to this opportunity (shows in Calendar & tasks).
+  const [taskTitle, setTaskTitle] = useState('')
+  const [taskDue, setTaskDue] = useState('')
+  async function addTask() {
+    if (!opportunityId || !taskTitle.trim()) return
+    setPosting(true)
+    try {
+      await fetch('/api/todos', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: taskTitle.trim(), due_date: taskDue || null, linked_type: 'opportunity', linked_id: opportunityId, linked_label: 'Opportunity' }),
+      })
+      setTaskTitle(''); setTaskDue(''); onSaved?.()
+    } finally { setPosting(false) }
+  }
+
   const field = (label: string, value?: string | number | null) => (
     <div style={{ marginBottom: 10 }}>
       <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</div>
@@ -301,9 +325,24 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
         <Sub>Notes stack in the activity timeline →</Sub>
       </Card>
 
+      {/* Calendar & tasks */}
       <Card>
+        <H>Calendar &amp; tasks</H>
+        {todos.length === 0 ? <Sub>No tasks yet.</Sub> : (
+          <div style={{ display: 'grid', gap: 6, marginBottom: 10 }}>
+            {todos.slice(0, 6).map((t, i) => <div key={t.id || i} style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>📅 {t.title || 'Task'}{t.due_date ? ` · ${String(t.due_date).slice(0, 10)}` : ''}</div>)}
+          </div>
+        )}
+        <input value={taskTitle} onChange={e => setTaskTitle(e.target.value)} placeholder="New task…" style={{ ...inputStyle, marginBottom: 8 }} />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input type="date" value={taskDue} onChange={e => setTaskDue(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+          <button onClick={addTask} disabled={posting || !taskTitle.trim()} style={{ ...btn, opacity: posting || !taskTitle.trim() ? 0.5 : 1 }}>+ Add task</button>
+        </div>
+      </Card>
+
+      {/* Activity timeline — full width, the home for notes/calls/emails/meetings */}
+      <Card style={{ gridColumn: '1 / -1' }}>
         <H>Activity timeline</H>
-        {/* Log a call, email, meeting, or note right here */}
         <div style={{ marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
           <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
             {(['call', 'email', 'meeting', 'note'] as const).map(t => (
@@ -314,12 +353,12 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
           <textarea value={actBody} onChange={e => setActBody(e.target.value)} placeholder="Details (optional)" style={{ ...inputStyle, minHeight: 48 }} />
           <button onClick={postActivity} disabled={posting || !actSubject.trim()} style={{ ...btn, marginTop: 8, opacity: posting || !actSubject.trim() ? 0.5 : 1 }}>Add to timeline</button>
         </div>
-        {activities.length === 0 ? <Sub>No calls, emails, or meetings logged yet.</Sub> : (
+        {activities.length === 0 ? <Sub>No calls, emails, meetings, or notes logged yet.</Sub> : (
           <div style={{ display: 'grid', gap: 8 }}>
-            {activities.slice(0, 8).map((a, i) => (
+            {activities.slice(0, 20).map((a, i) => (
               <div key={a.id || i} style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, textTransform: 'capitalize' }}>{a.type || 'note'} {a.subject ? `· ${a.subject}` : ''}</div>
-                {a.body && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 2 }}>{String(a.body).slice(0, 120)}</div>}
+                <div style={{ fontSize: 12, fontWeight: 600, textTransform: 'capitalize' }}>{a.type || 'note'}{a.subject ? ` · ${a.subject}` : ''}</div>
+                {a.body && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 2 }}>{String(a.body)}</div>}
                 {a.created_at && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>{String(a.created_at).slice(0, 10)}</div>}
               </div>
             ))}
@@ -331,9 +370,14 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
         <H>Attachments &amp; photos</H>
         {attachments.length === 0 ? <Sub>No files yet.</Sub> : (
           <div style={{ display: 'grid', gap: 6 }}>
-            {attachments.map((at, i) => at.url
-              ? <a key={at.id || i} href={at.url} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: '#7de5ff', textDecoration: 'none' }}>📎 {at.name || at.file_name || 'Attachment'}</a>
-              : <div key={at.id || i} style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>📎 {at.name || at.file_name || 'Attachment'}</div>)}
+            {attachments.map((at, i) => (
+              <div key={at.id || i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                {at.url
+                  ? <a href={at.url} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: '#7de5ff', textDecoration: 'none', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📎 {at.name || at.file_name || 'Attachment'}</a>
+                  : <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>📎 {at.name || at.file_name || 'Attachment'}</span>}
+                {at.id && <button onClick={() => removeAttachment(at.id)} title="Remove" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}>✕</button>}
+              </div>
+            ))}
           </div>
         )}
         <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) void uploadFile(f); e.target.value = '' }} />
@@ -342,24 +386,12 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
       </Card>
 
       <Card>
-        <H>Client emails</H>
-        {emails.length === 0 ? <Sub>No emails yet.</Sub> : (
+        <H>Emails</H>
+        {emails.length === 0 ? <Sub>No emails logged yet. Log one from the timeline above (Email).</Sub> : (
           <div style={{ display: 'grid', gap: 6 }}>
-            {emails.slice(0, 6).map((e, i) => <div key={e.id || i} style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>✉️ {e.subject || '(no subject)'}</div>)}
+            {emails.slice(0, 8).map((e, i) => <div key={e.id || i} style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>✉️ {e.subject || '(no subject)'}{e.created_at ? <span style={{ color: 'rgba(255,255,255,0.35)' }}> · {String(e.created_at).slice(0, 10)}</span> : ''}</div>)}
           </div>
         )}
-        <button onClick={() => setActType('email')} style={{ ...btn, marginTop: 12 }}>✉️ New email</button>
-        <Sub>Logs an email on the timeline. Full send/inbox comes with Messages.</Sub>
-      </Card>
-
-      <Card>
-        <H>Calendar &amp; tasks</H>
-        {todos.length === 0 ? <Sub>No upcoming tasks or events.</Sub> : (
-          <div style={{ display: 'grid', gap: 6 }}>
-            {todos.slice(0, 6).map((t, i) => <div key={t.id || i} style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>📅 {t.title || 'Task'}{t.due_date ? ` · ${String(t.due_date).slice(0, 10)}` : ''}</div>)}
-          </div>
-        )}
-        <button style={{ ...btn, marginTop: 12 }}>+ Add task</button>
       </Card>
     </div>
   )
@@ -383,7 +415,10 @@ type SurveyDevice = {
   working?: boolean | null
   action?: 'new' | 'keep' | 'service' | 'replace' | ''
   notes?: string
-  repair_cost?: number | null
+  repair_cost?: number | null   // service: parts/repair $
+  unit_cost?: number | null     // new/replace: equipment cost (auto-fills from catalog later)
+  retail?: number | null        // new/replace: equipment price to client
+  labor_hours?: number | null   // any: hours of labor (covers labor-only)
 }
 
 const ACTION_OPTS: { v: SurveyDevice['action']; label: string; color: string }[] = [
@@ -625,62 +660,87 @@ function Survey({ opportunityId, opp }: { opportunityId?: string; opp?: Record<s
   )
 }
 
-// One device — simple on the surface, full data underneath.
+// One device — a thin one-line row that expands to edit. Stays compact with 30+ items.
 function DeviceRow({ device, index, surveyId, opportunityId, onChange, onDelete }: {
   device: SurveyDevice; index: number; surveyId: string | null; opportunityId?: string
   onChange: (d: SurveyDevice) => void; onDelete: () => void
 }) {
   const [picking, setPicking] = useState(false)
+  // New rows (no name yet) open expanded; filled rows start collapsed.
+  const [open, setOpen] = useState(!device.name)
   const set = (patch: Partial<SurveyDevice>) => onChange({ ...device, ...patch })
+  const num = (v: string) => (v.trim() ? Number(v) : null)
   const label = (t: string) => <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{t}</div>
   const sIn = { ...inputStyle, padding: '8px 10px', fontSize: 13 } as const
+  const isNewOrReplace = device.action === 'new' || device.action === 'replace'
+  const isService = device.action === 'service'
 
   return (
-    <div style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: '#7DE5FF' }}>#{index}{device.source === 'requested' ? '  · 🚩 pending corporate' : device.source === 'one_time' ? '  · custom' : ''}</span>
-        <button onClick={onDelete} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 16 }}>✕</button>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-        <div>
-          {label('Where')}
-          <input value={device.location} onChange={e => set({ location: e.target.value })} placeholder="Main gate, Lobby, Unit 101…" style={sIn} />
-        </div>
-        <div style={{ gridColumn: '1 / -1' }}>
-          {label('What is it?')}
-          <button onClick={() => setPicking(true)} style={{ ...sIn, textAlign: 'left', cursor: 'pointer', color: device.name ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.4)' }}>
-            {device.name ? `${device.name}${device.brand ? ` · ${device.brand}` : ''}` : 'Tap to choose a product…'}
-          </button>
-        </div>
-        <div>
-          {label('Working?')}
-          <div style={{ display: 'flex', gap: 6 }}>
-            {[{ v: true, t: 'Yes' }, { v: false, t: 'No' }].map(o => (
-              <button key={o.t} onClick={() => set({ working: o.v })} style={{
-                flex: 1, padding: '8px 0', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                background: device.working === o.v ? (o.v ? 'rgba(110,231,183,0.2)' : 'rgba(248,113,113,0.2)') : 'rgba(255,255,255,0.05)',
-                border: `1px solid ${device.working === o.v ? (o.v ? 'rgba(110,231,183,0.5)' : 'rgba(248,113,113,0.5)') : 'rgba(255,255,255,0.12)'}`,
-                color: device.working === o.v ? (o.v ? '#6ee7b7' : '#fca5a5') : 'rgba(255,255,255,0.6)',
-              }}>{o.t}</button>
-            ))}
+    <div style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12 }}>
+      {/* Thin summary header — click to expand */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', cursor: 'pointer' }} onClick={() => setOpen(o => !o)}>
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', width: 16 }}>{open ? '▾' : '▸'}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.92)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {index}. {device.name || <span style={{ color: 'rgba(255,255,255,0.4)' }}>New device — tap to fill in</span>}
+            {device.source === 'requested' ? ' · 🚩' : ''}
+          </div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {[device.location, device.action ? ACTION_OPTS.find(a => a.v === device.action)?.label : null].filter(Boolean).join(' · ') || 'No location yet'}
           </div>
         </div>
-        <div>
-          {label('What to do')}
-          <select value={device.action || ''} onChange={e => set({ action: e.target.value as SurveyDevice['action'] })} style={{ ...sIn, cursor: 'pointer' }}>
-            <option value="">Choose…</option>
-            {ACTION_OPTS.map(a => <option key={a.v} value={a.v}>{a.label}</option>)}
-          </select>
-        </div>
-        <div>
-          {label('Repair cost')}
-          <input value={device.repair_cost ?? ''} onChange={e => set({ repair_cost: e.target.value ? Number(e.target.value) : null })} inputMode="decimal" placeholder="$0" style={sIn} />
-        </div>
-        <div style={{ gridColumn: '1 / -1' }}>
-          {label('Notes')}
-          <input value={device.notes || ''} onChange={e => set({ notes: e.target.value })} placeholder="Anything the installer should know…" style={sIn} />
-        </div>
+        {device.working != null && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: device.working ? 'rgba(110,231,183,0.18)' : 'rgba(248,113,113,0.18)', color: device.working ? '#6ee7b7' : '#fca5a5' }}>{device.working ? 'OK' : 'BROKEN'}</span>}
+        <button onClick={e => { e.stopPropagation(); onDelete() }} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 15 }}>✕</button>
       </div>
+
+      {open && (
+        <div style={{ padding: '0 12px 14px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+          <div>
+            {label('Where')}
+            <input value={device.location} onChange={e => set({ location: e.target.value })} placeholder="Main gate, Lobby, Unit 101…" style={sIn} />
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            {label('What is it?')}
+            <button onClick={() => setPicking(true)} style={{ ...sIn, textAlign: 'left', cursor: 'pointer', color: device.name ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.4)' }}>
+              {device.name ? `${device.name}${device.brand ? ` · ${device.brand}` : ''}` : 'Tap to choose a product…'}
+            </button>
+          </div>
+          <div>
+            {label('Working?')}
+            <div style={{ display: 'flex', gap: 6 }}>
+              {[{ v: true, t: 'Yes' }, { v: false, t: 'No' }].map(o => (
+                <button key={o.t} onClick={() => set({ working: o.v })} style={{
+                  flex: 1, padding: '8px 0', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  background: device.working === o.v ? (o.v ? 'rgba(110,231,183,0.2)' : 'rgba(248,113,113,0.2)') : 'rgba(255,255,255,0.05)',
+                  border: `1px solid ${device.working === o.v ? (o.v ? 'rgba(110,231,183,0.5)' : 'rgba(248,113,113,0.5)') : 'rgba(255,255,255,0.12)'}`,
+                  color: device.working === o.v ? (o.v ? '#6ee7b7' : '#fca5a5') : 'rgba(255,255,255,0.6)',
+                }}>{o.t}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            {label('What to do')}
+            <select value={device.action || ''} onChange={e => set({ action: e.target.value as SurveyDevice['action'] })} style={{ ...sIn, cursor: 'pointer' }}>
+              <option value="">Choose…</option>
+              {ACTION_OPTS.map(a => <option key={a.v} value={a.v}>{a.label}</option>)}
+            </select>
+          </div>
+
+          {/* Pricing adapts to the work: equipment for new/replace, parts for service, labor always */}
+          {isNewOrReplace && <>
+            <div>{label('Unit cost')}<input value={device.unit_cost ?? ''} onChange={e => set({ unit_cost: num(e.target.value) })} inputMode="decimal" placeholder="$0" style={sIn} /></div>
+            <div>{label('Retail to client')}<input value={device.retail ?? ''} onChange={e => set({ retail: num(e.target.value) })} inputMode="decimal" placeholder="$0" style={sIn} /></div>
+          </>}
+          {isService && <div>{label('Repair / parts $')}<input value={device.repair_cost ?? ''} onChange={e => set({ repair_cost: num(e.target.value) })} inputMode="decimal" placeholder="$0" style={sIn} /></div>}
+          <div>{label('Labor hours')}<input value={device.labor_hours ?? ''} onChange={e => set({ labor_hours: num(e.target.value) })} inputMode="decimal" placeholder="0" style={sIn} /></div>
+
+          <div style={{ gridColumn: '1 / -1' }}>
+            {label('Notes')}
+            <input value={device.notes || ''} onChange={e => set({ notes: e.target.value })} placeholder="Anything the installer should know…" style={sIn} />
+          </div>
+          {device.product_id == null && device.name && <div style={{ gridColumn: '1 / -1', fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>Tip: pick from the catalog to auto-fill cost &amp; retail once your catalog has pricing.</div>}
+        </div>
+      )}
       {picking && <ProductPicker surveyId={surveyId} opportunityId={opportunityId}
         onClose={() => setPicking(false)}
         onPick={(p) => { set(p); setPicking(false) }} />}

@@ -73,12 +73,21 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (directv_package  !== undefined) dbPayload.dtv_package = directv_package
   if (forecast_category !== undefined) dbPayload.forecast_cat = forecast_category
 
-  const { data, error } = await supabase
-    .from('opportunities')
-    .update(dbPayload)
-    .eq('id', params.id)
-    .select()
-    .single()
+  async function update(payload: Record<string, unknown>) {
+    return supabase.from('opportunities').update(payload).eq('id', params.id).select().single()
+  }
+  let { data, error } = await update(dbPayload)
+  // Drift-resilient: this db's schema may lag the migrations (e.g. site_counts /
+  // contact_email not yet run). Strip any unknown column and retry so the rest saves.
+  let guard = 0
+  while (error && (error as { code?: string }).code === '42703' && guard < 12) {
+    const m = /column "?([a-z_]+)"? of relation/i.exec(error.message) || /'([a-z_]+)' column/i.exec(error.message)
+    const col = m?.[1]
+    if (!col || !(col in dbPayload)) break
+    delete dbPayload[col]
+    guard++
+    ;({ data, error } = await update(dbPayload))
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }

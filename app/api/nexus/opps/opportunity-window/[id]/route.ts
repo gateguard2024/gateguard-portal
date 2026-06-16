@@ -172,6 +172,20 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       : Promise.resolve(null),
   ])
 
+  // The Overview composer writes to crm_activities; merge those in so notes,
+  // calls, emails and meetings logged there show on the timeline.
+  const crmActivities = await safe(
+    supabase
+      .from('crm_activities')
+      .select('id, type, subject, body, outcome, due_at, completed_at, created_at')
+      .eq('opportunity_id', oppId)
+      .order('created_at', { ascending: false })
+      .limit(30),
+    [],
+  )
+  const mergedActivities = [...(activities as any[]), ...(crmActivities as any[])] // eslint-disable-line @typescript-eslint/no-explicit-any
+    .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')))
+
   return NextResponse.json({
     success: true,
     opportunity,
@@ -179,7 +193,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     company,
     contact,
     property,
-    activities,
+    activities: mergedActivities,
     todos,
     attachments,
     quote,
@@ -241,6 +255,19 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       .single()
     if (insErr) return NextResponse.json({ success: false, message: insErr.message }, { status: 500 })
     return NextResponse.json({ success: true, message: 'Attachment added.', attachment: data })
+  }
+
+  // ── remove_attachment ─────────────────────────────────────────────────────
+  if (action === 'remove_attachment') {
+    const attachmentId = clean(body.attachment_id)
+    if (!attachmentId) return NextResponse.json({ success: false, message: 'Missing attachment id.' }, { status: 400 })
+    const { error: delErr } = await supabase
+      .from('attachments')
+      .delete()
+      .eq('id', attachmentId)
+      .eq('opportunity_id', oppId)   // scope: only this opportunity's files
+    if (delErr) return NextResponse.json({ success: false, message: delErr.message }, { status: 500 })
+    return NextResponse.json({ success: true, message: 'Attachment removed.' })
   }
 
   return NextResponse.json({ success: false, message: 'Unknown opportunity action.' }, { status: 400 })
