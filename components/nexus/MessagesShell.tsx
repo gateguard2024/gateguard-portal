@@ -142,16 +142,29 @@ export default function MessagesShell() {
   const [activeFilter, setActiveFilter] = useState<FilterType>('All');
   const [replyText, setReplyText] = useState('');
   const [showSetup, setShowSetup] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  // Run a Gmail sync and surface exactly what happened (count or error) so an
+  // empty inbox is never a silent mystery.
+  const runSync = React.useCallback(async () => {
+    setSyncing(true); setSyncMsg(null);
+    try {
+      const r = await fetch('/api/nexus/messages/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inline: true }) });
+      const res = await r.json().catch(() => ({}));
+      if (!r.ok) { setSyncMsg(res?.error ? `Sync error: ${res.error}` : `Sync failed (${r.status})`); return; }
+      if ((res?.channels ?? 0) === 0) { setSyncMsg('No email account connected yet — tap the ⚙ to connect Gmail.'); return; }
+      const c = await loadConversations(); setConversations(c);
+      setSyncMsg(res?.error ? `Synced with an issue: ${res.error}` : `Synced — ${res?.fetched ?? 0} new email${(res?.fetched ?? 0) === 1 ? '' : 's'}.`);
+    } catch (e) {
+      setSyncMsg(e instanceof Error ? `Sync error: ${e.message}` : 'Sync error.');
+    } finally { setSyncing(false); }
+  }, []);
   useEffect(() => {
     let cancelled = false;
     loadConversations().then(c => { if (!cancelled) setConversations(c); });
-    // Pull any connected email inboxes (Gmail) on open, then refresh the list.
-    void fetch('/api/nexus/messages/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inline: true }) })
-      .then(r => (r.ok ? r.json() : null))
-      .then(res => { if (!cancelled && res && res.fetched > 0) loadConversations().then(c => { if (!cancelled) setConversations(c); }); })
-      .catch(() => {});
+    void runSync();
     return () => { cancelled = true; };
-  }, []);
+  }, [runSync]);
   const filteredConversations = useMemo(() => {
     return conversations.filter(c => {
       const matchesSearch =
@@ -229,12 +242,18 @@ export default function MessagesShell() {
         <div className="p-4 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-semibold tracking-tight">Messages</h1>
-            <button onClick={() => setShowSetup(true)} title="Connect mailboxes" className="p-2 rounded-full hover:bg-white/10" style={{ color: 'rgba(255,255,255,0.6)' }}><Settings size={18} /></button>
+            <div className="flex items-center gap-1">
+              <button onClick={runSync} disabled={syncing} title="Refresh" className="p-2 rounded-full hover:bg-white/10 disabled:opacity-50" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                <span style={{ display: 'inline-block', fontSize: 16, animation: syncing ? 'spin 1s linear infinite' : 'none' }}>↻</span>
+              </button>
+              <button onClick={() => setShowSetup(true)} title="Connect mailboxes" className="p-2 rounded-full hover:bg-white/10" style={{ color: 'rgba(255,255,255,0.6)' }}><Settings size={18} /></button>
+            </div>
           </div>
           <div className="flex items-center gap-2 px-3 py-2 rounded-2xl" style={glassPanel}>
             <Search size={16} style={textSecondary} />
             <input type="text" placeholder="Search conversations..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="bg-transparent border-none outline-none text-sm w-full placeholder:text-white/30" style={textPrimary} />
           </div>
+          {syncMsg && <div className="text-[11px] px-1" style={{ color: syncMsg.toLowerCase().includes('error') || syncMsg.toLowerCase().includes('issue') ? '#fca5a5' : 'rgba(255,255,255,0.5)' }}>{syncMsg}</div>}
         </div>
         <div className="px-4 pb-2 overflow-x-auto flex items-center gap-2">
           {FILTERS.map(filter => (
