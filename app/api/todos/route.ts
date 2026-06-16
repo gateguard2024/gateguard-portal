@@ -89,8 +89,9 @@ export async function POST(req: NextRequest) {
         org_id:             caller.org_id ?? null,
         created_by:         caller.id,
         created_by_name:    caller.name,
-        assigned_to:        assigned_to ?? null,
-        assigned_to_name:   assigned_to_name ?? null,
+        // Default to self-assignment so it lands in the creator's own tasks + calendar.
+        assigned_to:        assigned_to ?? caller.id,
+        assigned_to_name:   assigned_to_name ?? caller.name,
         linked_type:        linked_type ?? null,
         linked_id:          linked_id ?? null,
         linked_label:       linked_label ?? null,

@@ -170,20 +170,46 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
     } finally { setSaving(false) }
   }
 
-  // Activity composer — Log call / email / meeting / note → real crm_activities.
+  // Activity composer — call / email / meeting / note. Each behaves a bit differently.
   const [actType, setActType] = useState<'call' | 'email' | 'meeting' | 'note'>('note')
   const [actSubject, setActSubject] = useState('')
   const [actBody, setActBody] = useState('')
+  const [actTo, setActTo] = useState('')        // email recipient (prefilled from contact)
+  const [actWhen, setActWhen] = useState('')    // meeting date/time
+  const [actMsg, setActMsg] = useState<string | null>(null)
   const [posting, setPosting] = useState(false)
+  // Prefill the email recipient from the deal's contact.
+  useEffect(() => { setActTo(opp.contact_email || contact.email || '') }, [opp.contact_email, contact.email])
+
+  const ACT_PLACEHOLDER: Record<string, string> = {
+    call: 'Call — what was discussed?',
+    email: 'Email — what do they need to know?',
+    meeting: 'Meeting — what happened? (or schedule one below)',
+    note: 'Note — what would you like to update?',
+  }
+
   async function postActivity() {
     if (!opportunityId || !actSubject.trim()) return
-    setPosting(true)
+    setPosting(true); setActMsg(null)
     try {
-      await fetch('/api/crm/activities', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: actType, subject: actSubject.trim(), body: actBody || null, opportunity_id: opportunityId }),
-      })
-      setActSubject(''); setActBody('')
+      if (actType === 'email') {
+        // Actually send the email (and it logs itself to the timeline).
+        const res = await fetch('/api/crm/email/send', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ opportunity_id: opportunityId, to_email: actTo.trim(), to_name: form.contact_name || null, subject: actSubject.trim(), body: actBody || actSubject.trim() }),
+        })
+        const j = await res.json().catch(() => ({}))
+        if (!res.ok) { setActMsg(j?.error || 'Could not send email.'); return }
+        setActMsg(`Email sent to ${actTo.trim()}.`)
+      } else {
+        // call / meeting / note → activity. Meeting carries a due_at so it shows on the calendar.
+        await fetch('/api/crm/activities', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: actType, subject: actSubject.trim(), body: actBody || null, opportunity_id: opportunityId, ...(actType === 'meeting' && actWhen ? { due_at: actWhen } : {}) }),
+        })
+        if (actType === 'meeting' && actWhen) setActMsg('Meeting scheduled — added to the calendar.')
+      }
+      setActSubject(''); setActBody(''); setActWhen('')
       onSaved?.()
     } finally { setPosting(false) }
   }
@@ -238,19 +264,29 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
     onSaved?.()
   }
 
-  // Quick task → real todo linked to this opportunity (shows in Calendar & tasks).
+  // Quick task → real todo linked to this opportunity (self-assigned → my tasks + calendar).
   const [taskTitle, setTaskTitle] = useState('')
+  const [taskBody, setTaskBody] = useState('')
   const [taskDue, setTaskDue] = useState('')
+  const [taskOpen, setTaskOpen] = useState(false)   // expand to add details
   async function addTask() {
     if (!opportunityId || !taskTitle.trim()) return
     setPosting(true)
     try {
       await fetch('/api/todos', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: taskTitle.trim(), due_date: taskDue || null, linked_type: 'opportunity', linked_id: opportunityId, linked_label: 'Opportunity' }),
+        body: JSON.stringify({ title: taskTitle.trim(), body: taskBody || null, due_date: taskDue || null, linked_type: 'opportunity', linked_id: opportunityId, linked_label: 'Opportunity' }),
       })
-      setTaskTitle(''); setTaskDue(''); onSaved?.()
+      setTaskTitle(''); setTaskBody(''); setTaskDue(''); setTaskOpen(false); onSaved?.()
     } finally { setPosting(false) }
+  }
+  async function toggleTask(id: string, done: boolean) {
+    if (!id) return
+    await fetch(`/api/todos/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: done ? 'done' : 'open' }),
+    })
+    onSaved?.()
   }
 
   const field = (label: string, value?: string | number | null) => (
@@ -267,7 +303,7 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
   )
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16, alignItems: 'start' }}>
       {lead && (
         <Card style={{ gridColumn: '1 / -1', background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.3)' }}>
           <Sub>Converted from lead — <b style={{ color: '#c4b5fd' }}>{lead.contact_name || lead.name || 'lead'}</b>. Notes, history &amp; attachments carry over here.</Sub>
@@ -325,19 +361,33 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
         <Sub>Notes stack in the activity timeline →</Sub>
       </Card>
 
-      {/* Calendar & tasks */}
+      {/* Calendar & tasks — self-assigned, with details + check-to-complete */}
       <Card>
         <H>Calendar &amp; tasks</H>
         {todos.length === 0 ? <Sub>No tasks yet.</Sub> : (
-          <div style={{ display: 'grid', gap: 6, marginBottom: 10 }}>
-            {todos.slice(0, 6).map((t, i) => <div key={t.id || i} style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>📅 {t.title || 'Task'}{t.due_date ? ` · ${String(t.due_date).slice(0, 10)}` : ''}</div>)}
+          <div style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
+            {todos.slice(0, 8).map((t, i) => {
+              const done = t.status === 'done'
+              return (
+                <div key={t.id || i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13 }}>
+                  <button onClick={() => t.id && toggleTask(t.id, !done)} title={done ? 'Mark open' : 'Mark done'} style={{ flexShrink: 0, marginTop: 1, width: 18, height: 18, borderRadius: 5, cursor: 'pointer', background: done ? 'rgba(110,231,183,0.25)' : 'rgba(255,255,255,0.05)', border: `1px solid ${done ? 'rgba(110,231,183,0.6)' : 'rgba(255,255,255,0.2)'}`, color: '#6ee7b7', fontSize: 11, lineHeight: '16px' }}>{done ? '✓' : ''}</button>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ color: done ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.85)', textDecoration: done ? 'line-through' : 'none' }}>{t.title || 'Task'}{t.due_date ? ` · ${String(t.due_date).slice(0, 10)}` : ''}</div>
+                    {t.body && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{String(t.body)}</div>}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
         <input value={taskTitle} onChange={e => setTaskTitle(e.target.value)} placeholder="New task…" style={{ ...inputStyle, marginBottom: 8 }} />
-        <div style={{ display: 'flex', gap: 8 }}>
+        {taskOpen && <textarea value={taskBody} onChange={e => setTaskBody(e.target.value)} placeholder="Details (optional)…" style={{ ...inputStyle, minHeight: 56, marginBottom: 8 }} />}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <input type="date" value={taskDue} onChange={e => setTaskDue(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
-          <button onClick={addTask} disabled={posting || !taskTitle.trim()} style={{ ...btn, opacity: posting || !taskTitle.trim() ? 0.5 : 1 }}>+ Add task</button>
+          {!taskOpen && <button onClick={() => setTaskOpen(true)} style={{ ...btn, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.75)' }}>+ Details</button>}
+          <button onClick={addTask} disabled={posting || !taskTitle.trim()} style={{ ...btn, opacity: posting || !taskTitle.trim() ? 0.5 : 1 }}>Add task</button>
         </div>
+        <Sub>Tasks save to your own tasks &amp; calendar.</Sub>
       </Card>
 
       {/* Activity timeline — full width, the home for notes/calls/emails/meetings */}
@@ -349,9 +399,19 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
               <button key={t} onClick={() => setActType(t)} style={{ ...btn, padding: '6px 14px', textTransform: 'capitalize', background: actType === t ? 'rgba(0,200,255,0.2)' : 'rgba(255,255,255,0.05)', border: actType === t ? '1px solid rgba(0,200,255,0.5)' : '1px solid rgba(255,255,255,0.12)', color: actType === t ? '#7DE5FF' : 'rgba(255,255,255,0.7)' }}>{t}</button>
             ))}
           </div>
-          <input value={actSubject} onChange={e => setActSubject(e.target.value)} placeholder={`${actType} — what happened?`} style={{ ...inputStyle, marginBottom: 8 }} />
-          <textarea value={actBody} onChange={e => setActBody(e.target.value)} placeholder="Details (optional)" style={{ ...inputStyle, minHeight: 48 }} />
-          <button onClick={postActivity} disabled={posting || !actSubject.trim()} style={{ ...btn, marginTop: 8, opacity: posting || !actSubject.trim() ? 0.5 : 1 }}>Add to timeline</button>
+          {actType === 'email' && <input value={actTo} onChange={e => setActTo(e.target.value)} placeholder="To (email address)" style={{ ...inputStyle, marginBottom: 8 }} />}
+          <input value={actSubject} onChange={e => setActSubject(e.target.value)} placeholder={ACT_PLACEHOLDER[actType]} style={{ ...inputStyle, marginBottom: 8 }} />
+          <textarea value={actBody} onChange={e => setActBody(e.target.value)} placeholder={actType === 'email' ? 'Message…' : 'Details (optional)'} style={{ ...inputStyle, minHeight: 48 }} />
+          {actType === 'meeting' && (
+            <label style={{ display: 'block', marginTop: 8 }}>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>Schedule it (optional — adds to your calendar)</div>
+              <input type="datetime-local" value={actWhen} onChange={e => setActWhen(e.target.value)} style={{ ...inputStyle }} />
+            </label>
+          )}
+          <button onClick={postActivity} disabled={posting || !actSubject.trim() || (actType === 'email' && !actTo.trim())} style={{ ...btn, marginTop: 8, opacity: posting || !actSubject.trim() || (actType === 'email' && !actTo.trim()) ? 0.5 : 1 }}>
+            {actType === 'email' ? 'Send email' : actType === 'meeting' && actWhen ? 'Schedule + log' : 'Add to timeline'}
+          </button>
+          {actMsg && <Sub><span style={{ color: actMsg.toLowerCase().includes('could not') ? '#fca5a5' : '#6ee7b7' }}>{actMsg}</span></Sub>}
         </div>
         {activities.length === 0 ? <Sub>No calls, emails, meetings, or notes logged yet.</Sub> : (
           <div style={{ display: 'grid', gap: 8 }}>

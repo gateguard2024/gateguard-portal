@@ -129,9 +129,12 @@ export async function POST(req: NextRequest) {
 
   let { data, error } = await insertRow(row)
   // Strip any column the live schema doesn't have and retry (handles drift).
+  // Supabase reports it as Postgres 42703 OR PostgREST PGRST204.
   let guard = 0
-  while (error && error.code === '42703' && guard < 8) {
-    const m = /column "?([a-z_]+)"? of relation/i.exec(error.message) || /'([a-z_]+)' column/i.exec(error.message)
+  while (error && (error.code === '42703' || error.code === 'PGRST204') && guard < 10) {
+    const m = /Could not find the '([a-z_]+)' column/i.exec(error.message)
+      || /column "?([a-z_]+)"? of relation/i.exec(error.message)
+      || /'([a-z_]+)' column/i.exec(error.message)
     const col = m?.[1]
     if (!col || !(col in row)) break
     delete row[col]
