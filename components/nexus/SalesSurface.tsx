@@ -9,6 +9,7 @@ import { NexusActionCard } from '@/components/nexus/NexusActionCard'
 import { NewOpportunityFlow } from '@/components/nexus/NewOpportunityFlow'
 import { ExistingOpportunityFlow } from '@/components/nexus/ExistingOpportunityFlow'
 import { PricingCalculator } from '@/components/nexus/PricingCalculator'
+import { OpportunityLifecycle } from '@/components/nexus/OpportunityLifecycle'
 
 type GroupId = 'leads' | 'opportunities' | 'quotes' | 'research'
 type PanelId = 'new-opp' | 'existing-opp' | 'new-lead-flow' | 'leads-workbench' | 'rough-calc'
@@ -122,6 +123,9 @@ export function SalesSurface() {
   const [activeGroup, setActiveGroup] = useState<GroupId | null>(null)
   const [activePanel, setActivePanel] = useState<PanelId | null>(null)
   const [soon, setSoon] = useState<string | null>(null)
+  const [lifecycleOppId, setLifecycleOppId] = useState<string | null>(null)
+
+  function openLifecycle(id: string) { setActivePanel(null); setLifecycleOppId(id) }
 
   const group = GROUPS.find(g => g.id === activeGroup) ?? null
 
@@ -198,8 +202,14 @@ export function SalesSurface() {
         </SalesDetailShell>
       )}
 
-      {activePanel === 'new-opp' && <NewOpportunityFlow onClose={() => setActivePanel(null)} />}
-      {activePanel === 'existing-opp' && <ExistingOpportunityFlow onClose={() => setActivePanel(null)} />}
+      {activePanel === 'new-opp' && <NewOpportunityFlow onClose={() => setActivePanel(null)} onCreated={openLifecycle} />}
+      {activePanel === 'existing-opp' && <ExistingOpportunityFlow onClose={() => setActivePanel(null)} onOpen={openLifecycle} />}
+
+      {lifecycleOppId && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 95, overflowY: 'auto' }}>
+          <OpportunityLifecycle opportunityId={lifecycleOppId} onClose={() => setLifecycleOppId(null)} />
+        </div>
+      )}
       {activePanel === 'rough-calc' && (
         <SalesDetailShell
           title="Rough Calculator"

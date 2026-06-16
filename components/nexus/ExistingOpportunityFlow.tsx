@@ -9,7 +9,7 @@ type Opp = { id: string; name?: string; account_name?: string; stage?: string; v
 
 const inputStyle = { background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.92)' } as const
 
-export function ExistingOpportunityFlow({ onClose }: { onClose: () => void }) {
+export function ExistingOpportunityFlow({ onClose, onOpen }: { onClose: () => void; onOpen?: (id: string) => void }) {
   const [opps, setOpps] = useState<Opp[]>([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
@@ -31,6 +31,8 @@ export function ExistingOpportunityFlow({ onClose }: { onClose: () => void }) {
   }, [])
 
   async function pick(id: string) {
+    // Seamless hand-off: open the deal's life cycle instead of the read-only window.
+    if (onOpen) { onOpen(id); return }
     setBusyId(id); setError(null)
     try {
       const res = await fetch(`/api/nexus/opps/opportunity-window/${id}`)

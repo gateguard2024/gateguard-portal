@@ -45,7 +45,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 const inputStyle = { background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.92)' } as const
 
-export function NewOpportunityFlow({ onClose }: { onClose: () => void }) {
+export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void; onCreated?: (id: string) => void }) {
   const [step, setStep] = useState<Step>('source')
   const [source, setSource] = useState<Source | null>(null)
   const [selected, setSelected] = useState<Selected | null>(null)
@@ -158,6 +158,8 @@ export function NewOpportunityFlow({ onClose }: { onClose: () => void }) {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data?.message ?? data?.error ?? 'Could not create opportunity.')
+      // Seamless hand-off: drop straight into the new opportunity's life cycle.
+      if (onCreated && data?.id) { onCreated(String(data.id)); return }
       setResult({ ok: true, message: `Opportunity "${name.trim()}" created.` })
     } catch (e) {
       setResult({ ok: false, message: e instanceof Error ? e.message : 'Could not create opportunity.' })

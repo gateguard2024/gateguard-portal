@@ -2,11 +2,24 @@
 
 // Opportunity Life Cycle — glass shell (7 stages). Mock UI, on-vision.
 // Vision: docs/nexus/OPPORTUNITY_LIFECYCLE_VISION.md. Wired to real data in AM.
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PricingCalculator } from '@/components/nexus/PricingCalculator'
 
 const cyan = '#00C8FF'
 const STAGES = ['Survey', 'Financials', 'Proposal', 'Negotiate', 'Contract & Invoice', 'Sign', 'Payment'] as const
+
+// Canonical stage key per lifecycle step (what we PATCH onto opportunities.stage).
+const STAGE_KEYS = ['survey', 'financials', 'proposal', 'negotiate', 'contract_invoice', 'sign', 'payment'] as const
+// Tolerant map from whatever stage an opp currently has → the right step index.
+const STAGE_TO_STEP: Record<string, number> = {
+  info_request: 0, survey_request: 0, site_survey: 0, meet_present: 0, survey: 0, new: 0,
+  pre_approval: 1, financials: 1, quote: 1,
+  proposal: 2, propose: 2, proposal_sent: 2,
+  negotiate: 3, negotiation: 3,
+  agreement_deposit: 4, contract_invoice: 4, contract: 4,
+  agreement_signed: 5, sign: 5, signed: 5,
+  deposit_collected: 6, payment: 6, won: 6,
+}
 
 const cardStyle = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 18, padding: 18 } as const
 const inputStyle = { background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.92)', borderRadius: 12, padding: '10px 12px', width: '100%' } as const
@@ -23,12 +36,44 @@ function Sub({ children }: { children: React.ReactNode }) {
   return <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>{children}</div>
 }
 
-export function OpportunityLifecycle() {
+export function OpportunityLifecycle({ opportunityId, onClose }: { opportunityId?: string; onClose?: () => void } = {}) {
   const [stage, setStage] = useState(0)
+  const [opp, setOpp] = useState<{ name?: string; account_name?: string; stage?: string } | null>(null)
+
+  // Load the real opportunity (when opened from New / Existing / Lead-convert).
+  useEffect(() => {
+    if (!opportunityId) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(`/api/nexus/opps/opportunity-window/${opportunityId}`)
+        const data = await res.json().catch(() => ({}))
+        const o = data.opportunity ?? data ?? {}
+        if (cancelled) return
+        setOpp(o)
+        if (o.stage && STAGE_TO_STEP[o.stage] != null) setStage(STAGE_TO_STEP[o.stage])
+      } catch { /* keep defaults */ }
+    })()
+    return () => { cancelled = true }
+  }, [opportunityId])
+
+  // Advance/jump a stage → persist to the opportunity (best-effort; interns refine in #82).
+  function goToStage(i: number) {
+    setStage(i)
+    if (opportunityId) {
+      void fetch(`/api/crm/opportunities/${opportunityId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: STAGE_KEYS[i] }),
+      }).catch(() => {})
+    }
+  }
+
+  const dealName = opp?.name || opp?.account_name || 'New opportunity'
   return (
     <div style={{ minHeight: '100vh', background: 'radial-gradient(circle at top left, #11183a, #050712 50%)', color: 'white', fontFamily: 'Inter, Arial, sans-serif', padding: 24 }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-        <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#7DE5FF' }}>Opportunity · The Stratford</div>
+        {onClose && <button onClick={onClose} style={{ marginBottom: 14, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.8)', borderRadius: 999, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>← Back to Sales</button>}
+        <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#7DE5FF' }}>Opportunity · {dealName}{opp?.account_name && opp?.name ? ` · ${opp.account_name}` : ''}</div>
         <h1 style={{ margin: '4px 0 4px', fontSize: 26 }}>Deal life cycle</h1>
         <Sub>Move the deal from survey to signed &amp; paid. One step at a time.</Sub>
 
@@ -37,7 +82,7 @@ export function OpportunityLifecycle() {
           {STAGES.map((s, i) => {
             const active = i === stage, done = i < stage
             return (
-              <button key={s} onClick={() => setStage(i)} style={{
+              <button key={s} onClick={() => goToStage(i)} style={{
                 display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 14, cursor: 'pointer',
                 background: active ? 'rgba(0,200,255,0.18)' : done ? 'rgba(52,211,153,0.12)' : 'rgba(255,255,255,0.04)',
                 border: `1px solid ${active ? 'rgba(0,200,255,0.5)' : done ? 'rgba(52,211,153,0.4)' : 'rgba(255,255,255,0.1)'}`,
@@ -59,8 +104,8 @@ export function OpportunityLifecycle() {
         {stage === 6 && <Payment />}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24 }}>
-          <button onClick={() => setStage(Math.max(0, stage - 1))} disabled={stage === 0} style={{ ...btn, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)', opacity: stage === 0 ? 0.4 : 1 }}>← Back</button>
-          <button onClick={() => setStage(Math.min(STAGES.length - 1, stage + 1))} style={btn}>{stage === STAGES.length - 1 ? 'Done' : `Next: ${STAGES[stage + 1]} →`}</button>
+          <button onClick={() => goToStage(Math.max(0, stage - 1))} disabled={stage === 0} style={{ ...btn, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)', opacity: stage === 0 ? 0.4 : 1 }}>← Back</button>
+          <button onClick={() => stage === STAGES.length - 1 ? onClose?.() : goToStage(Math.min(STAGES.length - 1, stage + 1))} style={btn}>{stage === STAGES.length - 1 ? 'Done' : `Next: ${STAGES[stage + 1]} →`}</button>
         </div>
       </div>
     </div>
