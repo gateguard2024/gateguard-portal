@@ -12,6 +12,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth }                      from '@clerk/nextjs/server'
 import { createClient }              from '@supabase/supabase-js'
+import { getCurrentUser }            from '@/lib/current-user'
+import { resolveOrgScope }           from '@/lib/org-scope'
 
 function serviceDb() {
   return createClient(
@@ -31,12 +33,22 @@ export async function GET(req: NextRequest) {
 
   let query = serviceDb()
     .from('products')
-    .select('id, name, sku, brand, category, subcategory, description, sell_price, list_price, msrp, image_url, field_service, manual_url, active, tags')
+    .select('id, name, sku, brand, category, subcategory, description, sell_price, list_price, msrp, image_url, field_service, manual_url, active, tags, org_id')
     .order('brand', { nullsFirst: false })
     .order('name')
     .limit(limit)
 
   if (active) query = query.eq('active', true)
+
+  // Catalog layer: everyone sees the global GateGuard catalog (org_id null);
+  // dealers also see their own private items; corporate sees everything.
+  const scope = await resolveOrgScope(await getCurrentUser())
+  if (!scope.all) {
+    const ids = scope.ids.filter(Boolean)
+    query = ids.length > 0
+      ? query.or(`org_id.is.null,org_id.in.(${ids.join(',')})`)
+      : query.is('org_id', null)
+  }
 
   if (q) {
     // ilike search across name, sku, brand, description
@@ -57,6 +69,11 @@ export async function POST(req: NextRequest) {
 
   let body: Record<string, unknown>
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
+
+  // Catalog layer: dealers create PRIVATE items (org_id = their org).
+  // Corporate creates GLOBAL items (org_id null) unless they pass org_id.
+  const scope = await resolveOrgScope(await getCurrentUser())
+  const org_id = scope.all ? ((body.org_id as string) ?? null) : (scope.own_id ?? null)
 
   const {
     name,
@@ -96,6 +113,7 @@ export async function POST(req: NextRequest) {
     field_service: field_service === true,
     tags:          Array.isArray(tags) ? tags : [],
     active:        true,
+    org_id,
   }
 
   const { data, error } = await serviceDb()

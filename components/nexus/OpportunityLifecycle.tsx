@@ -655,15 +655,25 @@ function ProductPicker({ surveyId, opportunityId, onClose, onPick }: {
   const [q, setQ] = useState('')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [results, setResults] = useState<any[]>([])
+  const [loadingP, setLoadingP] = useState(true)
+  const [errP, setErrP] = useState<string | null>(null)
   const [mode, setMode] = useState<'search' | 'request'>('search')
   const [req, setReq] = useState({ name: '', brand: '', model: '', category: '', est_cost: '', notes: '' })
   const [sending, setSending] = useState(false)
 
   useEffect(() => {
     let active = true
+    setLoadingP(true)
     const t = setTimeout(async () => {
-      const j = await fetch(`/api/products?q=${encodeURIComponent(q)}&limit=20`).then(r => r.json()).catch(() => ({}))
-      if (active) setResults(j.products ?? [])
+      try {
+        const r = await fetch(`/api/products?q=${encodeURIComponent(q)}&limit=20`)
+        const j = await r.json().catch(() => ({}))
+        if (!active) return
+        if (!r.ok) { setErrP(j?.error || `Products error (${r.status})`); setResults([]) }
+        else { setErrP(null); setResults(Array.isArray(j.products) ? j.products : []) }
+      } catch {
+        if (active) { setErrP('Could not reach the product catalog.'); setResults([]) }
+      } finally { if (active) setLoadingP(false) }
     }, 220)
     return () => { active = false; clearTimeout(t) }
   }, [q])
@@ -678,6 +688,21 @@ function ProductPicker({ surveyId, opportunityId, onClose, onPick }: {
       })
       // Save the line now as a custom item marked pending corporate.
       onPick({ name: req.name.trim(), brand: req.brand || '', model: req.model || '', source: 'requested', product_id: null })
+    } finally { setSending(false) }
+  }
+
+  // Save as a PRIVATE product in this dealer's own catalog (org-scoped), then use it.
+  async function saveToMyCatalog() {
+    const nm = q.trim()
+    if (!nm) return
+    setSending(true)
+    try {
+      const r = await fetch('/api/products', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: nm, category: 'Misc' }),
+      })
+      const j = await r.json().catch(() => ({}))
+      onPick({ name: nm, product_id: j?.id ?? j?.product?.id ?? null, source: 'catalog' })
     } finally { setSending(false) }
   }
 
@@ -700,12 +725,18 @@ function ProductPicker({ surveyId, opportunityId, onClose, onPick }: {
                   <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{[p.brand, p.category].filter(Boolean).join(' · ') || 'Product'}</div>
                 </button>
               ))}
-              {results.length === 0 && <Sub>No matches. Add it as a one-time item or ask corporate.</Sub>}
+              {loadingP && <Sub>Loading products…</Sub>}
+              {!loadingP && errP && <Sub><span style={{ color: '#fca5a5' }}>{errP}</span> — add it as a one-time item or ask corporate.</Sub>}
+              {!loadingP && !errP && results.length === 0 && <Sub>{q ? `No products match “${q}”.` : 'No products in this catalog yet.'} Add it as a one-time item or ask corporate.</Sub>}
             </div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
-              <button onClick={() => { if (q.trim()) onPick({ name: q.trim(), source: 'one_time', product_id: null }) }} disabled={!q.trim()}
-                style={{ ...btn, flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.85)', opacity: q.trim() ? 1 : 0.5 }}>+ Use “{q.trim() || '…'}” once</button>
-              <button onClick={() => { setReq(r => ({ ...r, name: q })); setMode('request') }} style={{ ...btn, flex: 1, background: 'rgba(251,191,36,0.16)', border: '1px solid rgba(251,191,36,0.4)', color: '#fbbf24' }}>🚩 Ask corporate</button>
+            <div style={{ display: 'grid', gap: 8, marginTop: 14 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => { if (q.trim()) onPick({ name: q.trim(), source: 'one_time', product_id: null }) }} disabled={!q.trim()}
+                  style={{ ...btn, flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.85)', opacity: q.trim() ? 1 : 0.5 }}>+ Use “{q.trim() || '…'}” once</button>
+                <button onClick={saveToMyCatalog} disabled={!q.trim() || sending}
+                  style={{ ...btn, flex: 1, opacity: q.trim() && !sending ? 1 : 0.5 }}>★ Save to my catalog</button>
+              </div>
+              <button onClick={() => { setReq(r => ({ ...r, name: q })); setMode('request') }} style={{ ...btn, background: 'rgba(251,191,36,0.16)', border: '1px solid rgba(251,191,36,0.4)', color: '#fbbf24' }}>🚩 Ask corporate to add to GateGuard catalog</button>
             </div>
           </>
         ) : (
