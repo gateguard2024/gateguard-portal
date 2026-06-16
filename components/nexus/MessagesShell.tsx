@@ -142,6 +142,15 @@ const AVATAR_TINTS = ['#6B7EFF', '#34D399', '#F59E0B', '#EC4899', '#22D3EE', '#A
 const tintFor = (s: string) => AVATAR_TINTS[[...(s || '?')].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_TINTS.length];
 // Render real email HTML safely: drop scripts, global <style> (would leak into the
 // app), iframes, and inline event handlers — keep inline styles so formatting shows.
+// Make a plain-text email readable (5th-grader): drop the image-URL footnotes
+// Gmail dumps as [https://…], collapse runaway blank lines, trim tracking junk.
+const cleanPlainText = (body: string) => (body || '')
+  .replace(/\[https?:\/\/[^\]]+\]/g, '')                 // [https://lh3.googleusercontent…] dumps
+  .replace(/<https?:\/\/[^>]+>/g, '')                    // <https://…> angle-bracket links
+  .replace(/^\s*https?:\/\/\S+\s*$/gm, '')               // bare URL-only lines
+  .replace(/‌|­|​/g, '')                  // zero-width / tracking chars
+  .replace(/\n{3,}/g, '\n\n')                            // collapse blank-line runs
+  .trim();
 const sanitizeEmailHtml = (html: string) => (html || '')
   .replace(/<script[\s\S]*?<\/script>/gi, '')
   .replace(/<style[\s\S]*?<\/style>/gi, '')
@@ -445,7 +454,7 @@ export default function MessagesShell() {
                       </div>
                       {msg.body_html
                         ? <div className="nexus-email-html" style={{ background: '#ffffff', color: '#1a1a2e', padding: '20px 24px', fontSize: 14, lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(msg.body_html) }} />
-                        : <div className="px-5 py-4 text-sm" style={{ color: 'rgba(255,255,255,0.86)', lineHeight: 1.65, maxWidth: 680, whiteSpace: 'pre-wrap' }}>{msg.body}</div>}
+                        : <div className="px-5 py-4 text-sm" style={{ color: 'rgba(255,255,255,0.86)', lineHeight: 1.65, maxWidth: 680, whiteSpace: 'pre-wrap' }}>{cleanPlainText(msg.body)}</div>}
                     </div>
                   );
                 }

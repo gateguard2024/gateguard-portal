@@ -206,3 +206,31 @@ export async function fetchGmailInbox(
 
   return { fetched }
 }
+
+// Backfill formatted HTML for messages stored before HTML capture existed, so
+// older emails also render as real letters instead of ugly plain-text + URL dumps.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function backfillGmailHtml(supabase: any, channel: any, limit = 40): Promise<number> {
+  if (channel.channel_type !== 'gmail' || !channel.oauth_refresh_token) return 0
+  const { token } = await getGmailAccessToken(channel.oauth_refresh_token)
+  if (!token) return 0
+  const { data: rows } = await supabase
+    .from('messages')
+    .select('id, external_message_id')
+    .eq('channel_id', channel.id)
+    .is('body_html', null)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  let filled = 0
+  for (const r of rows ?? []) {
+    if (!r.external_message_id) continue
+    try {
+      const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${r.external_message_id}?format=full`, { headers: { Authorization: `Bearer ${token}` } })
+      if (!res.ok) continue
+      const msg = await res.json() as { payload?: GmailPart }
+      const html = extractHtml(msg.payload)
+      if (html) { await supabase.from('messages').update({ body_html: html }).eq('id', r.id); filled++ }
+    } catch { /* skip */ }
+  }
+  return filled
+}

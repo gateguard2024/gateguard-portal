@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { inngest } from '@/inngest/client'
-import { fetchGmailInbox } from '@/lib/mail-fetch'
+import { fetchGmailInbox, backfillGmailHtml } from '@/lib/mail-fetch'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -58,6 +58,8 @@ export async function POST(req: NextRequest) {
     fetched += res.fetched
     results.push({ channel_id: ch.id, fetched: res.fetched, error: res.error })
     if (res.error && !firstError) firstError = res.error
+    // Backfill HTML for older messages stored before HTML capture (best-effort).
+    try { await backfillGmailHtml(supabase, ch) } catch { /* non-blocking */ }
   }
   // Surface the real reason a sync pulled 0 (token expired, Gmail API off, etc.)
   return NextResponse.json(
