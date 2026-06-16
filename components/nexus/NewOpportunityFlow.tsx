@@ -150,7 +150,7 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
       }
       if (mrr.trim()) body.est_mrr = Number(mrr) || 0
       if (value.trim()) body.value = Number(value) || 0
-      if (units.trim()) body.description = `${notes.trim() ? notes.trim() + '\n' : ''}Units: ${units} · MRR @ $${MRR_PER_UNIT}/unit`
+      if (units.trim()) { body.units = Number(units) || 0; body.description = `${notes.trim() ? notes.trim() + '\n' : ''}Units: ${units} · MRR @ $${MRR_PER_UNIT}/unit` }
       if (selected?.lead_id) body.lead_id = selected.lead_id
 
       const res = await fetch('/api/crm/opportunities', {

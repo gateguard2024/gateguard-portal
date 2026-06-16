@@ -7,7 +7,7 @@
 //     $5/unit ≤ 500 units; slides toward cost/unit+$3 above 500 (cap $5, floor
 //     cost/unit+$2.25). Access cost over what units can carry → equipment fee at 2×.
 //   UNIT LOCKS (app + gateway) are ALWAYS add-ons at GG cost + $2 margin each.
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useUser } from '@clerk/nextjs'
 
 const PASS_INCLUDED = 500
@@ -55,15 +55,17 @@ function Line({ label, value }: { label: string; value: string }) {
   )
 }
 
-export function PricingCalculator({ initialUnits, initialUnitAutomation }: { initialUnits?: number | string | null; initialUnitAutomation?: boolean } = {}) {
+export function PricingCalculator({ initialUnits, initialUnitAutomation, initialDoors, initialCommonLocks, initialCameras, onCompute }: { initialUnits?: number | string | null; initialUnitAutomation?: boolean; initialDoors?: number | string | null; initialCommonLocks?: number | string | null; initialCameras?: number | string | null; onCompute?: (c: { units: number; ggFee: number; ggCost: number; suggestedRetail: number; commission: number; dealerMonthlyNet: number; empty: boolean }) => void } = {}) {
   const seedUnits = initialUnits != null && initialUnits !== '' ? String(initialUnits) : ''
+  const seed = (v: number | string | null | undefined) => (v != null && v !== '' && Number(v) > 0 ? String(v) : '')
   const [livingUnits, setLivingUnits] = useState(seedUnits)
-  const [doors, setDoors] = useState('')
-  const [commonLocks, setCommonLocks] = useState('')
+  // Pre-filled from the Site Survey (gates+common doors, common-area locks, cameras).
+  const [doors, setDoors] = useState(seed(initialDoors))
+  const [commonLocks, setCommonLocks] = useState(seed(initialCommonLocks))
   // If the deal has unit automation, seed app-controlled locks = unit count (rep adjusts).
   const [unitsApp, setUnitsApp] = useState(initialUnitAutomation ? seedUnits : '')
   const [unitsGw, setUnitsGw] = useState('')
-  const [camMon, setCamMon] = useState('')
+  const [camMon, setCamMon] = useState(seed(initialCameras))
   const [camBackup, setCamBackup] = useState('')
   const [passesPerUnit, setPassesPerUnit] = useState('1.5')
 
@@ -128,6 +130,18 @@ export function PricingCalculator({ initialUnits, initialUnitAutomation }: { ini
       noUnits: units === 0, empty: ggCost === 0,
     }
   }, [livingUnits, doors, commonLocks, unitsApp, unitsGw, camMon, camBackup, passesPerUnit])
+
+  // Emit recurring economics so Financials can build the install/payback card.
+  // (dealer view: retail = 2× fee; $1/unit MSO+agent override comes out of the markup)
+  useEffect(() => {
+    const ggFee = calc.dealerPrice
+    const suggestedRetail = ggFee * 2
+    const commission = calc.units * MSO_AGENT_PER_UNIT
+    onCompute?.({
+      units: calc.units, ggFee, ggCost: calc.ggCost, suggestedRetail, commission,
+      dealerMonthlyNet: suggestedRetail - ggFee - commission, empty: calc.empty,
+    })
+  }, [calc, onCompute])
 
   const ggFee = calc.dealerPrice          // what the dealer pays GG
   const suggestedRetail = ggFee * 2       // ~2× → end-user price

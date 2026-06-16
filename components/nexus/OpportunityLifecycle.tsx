@@ -415,6 +415,26 @@ function Survey({ opportunityId, opp }: { opportunityId?: string; opp?: Record<s
   const photoRef = useRef<HTMLInputElement | null>(null)
   const audioRef = useRef<HTMLInputElement | null>(null)
 
+  // Site basics — these counts drive the install cost in Financials. Saved on the
+  // opportunity (site_counts) so Financials can pre-fill the calculator. Units are
+  // read-only here: they come from the Overview field.
+  const sc0 = (opp?.site_counts ?? {}) as Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
+  const [counts, setCounts] = useState({
+    gates: sc0.gates != null ? String(sc0.gates) : '',
+    common_doors: sc0.common_doors != null ? String(sc0.common_doors) : '',
+    common_locks: sc0.common_locks != null ? String(sc0.common_locks) : '',
+    cameras: sc0.cameras != null ? String(sc0.cameras) : '',
+  })
+  async function saveCounts(next: typeof counts) {
+    setCounts(next)
+    if (!opportunityId) return
+    const toNum = (v: string) => (v.trim() ? Number(v) : null)
+    void fetch(`/api/crm/opportunities/${opportunityId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ site_counts: { gates: toNum(next.gates), common_doors: toNum(next.common_doors), common_locks: toNum(next.common_locks), cameras: toNum(next.cameras) } }),
+    })
+  }
+
   // Find-or-create the survey for this opportunity, then load it.
   useEffect(() => {
     if (!opportunityId) { setLoading(false); return }
@@ -530,6 +550,27 @@ function Survey({ opportunityId, opp }: { opportunityId?: string; opp?: Record<s
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       {banner && <div style={{ ...cardStyle, padding: 12, fontSize: 13, color: '#c4b5fd', background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.3)' }}>{banner}</div>}
+
+      {/* 0 · Site basics — drives the install cost in Financials */}
+      <Card>
+        <H>🏠 Site basics</H>
+        <Sub>How many of each? These feed the install price in Financials. Units come from the deal’s Overview.</Sub>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginTop: 12 }}>
+          <div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Living units</div>
+            <div style={{ ...inputStyle, padding: '8px 10px', fontSize: 13, opacity: 0.7, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>{opp?.units != null && opp?.units !== '' ? opp.units : '—'}</span>
+              <span style={{ fontSize: 10, color: '#7DE5FF' }}>from Overview</span>
+            </div>
+          </div>
+          {([['gates', 'Gates'], ['common_doors', 'Common-area doors'], ['common_locks', 'Common-area smart locks'], ['cameras', 'Cameras']] as const).map(([key, label]) => (
+            <div key={key}>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{label}</div>
+              <input value={counts[key]} onChange={e => saveCounts({ ...counts, [key]: e.target.value.replace(/[^0-9]/g, '') })} inputMode="numeric" placeholder="0" style={{ ...inputStyle, padding: '8px 10px', fontSize: 13 }} />
+            </div>
+          ))}
+        </div>
+      </Card>
 
       {/* 1 · Voice */}
       <Card style={{ background: 'radial-gradient(circle at 12% 0%, rgba(139,92,246,0.16), transparent 42%), rgba(255,255,255,0.04)', border: '1px solid rgba(139,92,246,0.3)' }}>
@@ -765,24 +806,89 @@ function ProductPicker({ surveyId, opportunityId, onClose, onPick }: {
   )
 }
 
+type CalcEcon = { units: number; ggFee: number; ggCost: number; suggestedRetail: number; commission: number; dealerMonthlyNet: number; empty: boolean }
+type LaborRate = { id: string; name: string; rate: number; unit: string }
+const usd0 = (n: number) => `$${Math.round(n).toLocaleString()}`
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function Financials({ opp }: { opp: Record<string, any> }) {
+  const sc = (opp?.site_counts ?? {}) as Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
+  const doorsSeed = (Number(sc.gates) || 0) + (Number(sc.common_doors) || 0)   // calc combines gates + common doors
+
+  const [econ, setEcon] = useState<CalcEcon | null>(null)
+  const onCompute = useCallback((c: CalcEcon) => setEcon(c), [])
+
+  // Labor rates (global defaults + this dealer's own) → real install labor cost.
+  const [rates, setRates] = useState<LaborRate[]>([])
+  const [rateId, setRateId] = useState('')
+  const [hours, setHours] = useState('')
+  const [equipment, setEquipment] = useState('')   // one-time hardware $ (auto-fills from BOM once catalog is populated)
+  useEffect(() => {
+    void fetch('/api/labor-rates').then(r => r.json()).then(j => {
+      const rs: LaborRate[] = j.labor_rates ?? []
+      setRates(rs)
+      if (rs[0]) setRateId(rs[0].id)
+    }).catch(() => {})
+  }, [])
+
+  const rate = rates.find(r => r.id === rateId)
+  const laborCost = (rate?.rate ?? 0) * (Number(hours) || 0)
+  const installCost = laborCost + (Number(equipment) || 0)
+  const monthlyNet = econ?.dealerMonthlyNet ?? 0
+  const annualNet = monthlyNet * 12
+  const paybackMonths = monthlyNet > 0 && installCost > 0 ? installCost / monthlyNet : 0
+
+  const stat = (label: string, value: string, sub?: string) => (
+    <div><div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{label}</div><div style={{ fontSize: 22, fontWeight: 700, color: '#6ee7b7' }}>{value}</div>{sub && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>{sub}</div>}</div>
+  )
+
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <Card style={{ background: 'rgba(255,255,255,0.03)' }}>
         <H>Pricing &amp; profitability</H>
-        <Sub>Built from the BOM. The calculator below feeds the deal — install cost + IRR keep the dealer profitable.</Sub>
-        {(opp?.units || opp?.unit_automation) && <div style={{ marginTop: 10, fontSize: 12, color: '#7DE5FF' }}>Carried from Overview: {opp.units ? `${opp.units} units` : 'units not set'}{opp.unit_automation ? ' · unit automation: Yes' : ''}</div>}
+        <Sub>Recurring is set by units. Install cost is built from what you found on the Site Survey — pre-filled below, adjust if needed.</Sub>
+        {(opp?.units || opp?.unit_automation || doorsSeed > 0 || Number(sc.common_locks) > 0 || Number(sc.cameras) > 0) && (
+          <div style={{ marginTop: 10, fontSize: 12, color: '#7DE5FF' }}>
+            Carried in: {opp.units ? `${opp.units} units` : 'units not set'}{opp.unit_automation ? ' · automation: Yes' : ''}
+            {doorsSeed > 0 ? ` · ${doorsSeed} gates/doors` : ''}{Number(sc.common_locks) > 0 ? ` · ${sc.common_locks} common locks` : ''}{Number(sc.cameras) > 0 ? ` · ${sc.cameras} cameras` : ''}
+          </div>
+        )}
       </Card>
-      <PricingCalculator initialUnits={opp?.units} initialUnitAutomation={!!opp?.unit_automation} />
-      <Card style={{ background: 'linear-gradient(180deg, rgba(52,211,153,0.1), rgba(8,18,34,0.6))', border: '1px solid rgba(52,211,153,0.3)' }}>
-        <H>Install &amp; lifetime profitability (IRR)</H>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))', gap: 12 }}>
-          {[['Install cost (BOM + labor)', '$8,400'], ['Upfront margin', '$3,900'], ['Monthly net (recurring)', '$1,000'], ['Deal IRR (24 mo)', '38%']].map(([k, v]) => (
-            <div key={k}><div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{k}</div><div style={{ fontSize: 22, fontWeight: 700, color: '#6ee7b7' }}>{v}</div></div>
-          ))}
+      <PricingCalculator initialUnits={opp?.units} initialUnitAutomation={!!opp?.unit_automation} initialDoors={doorsSeed || ''} initialCommonLocks={sc.common_locks} initialCameras={sc.cameras} onCompute={onCompute} />
+
+      {/* Install cost — real labor (from labor_rates) + one-time equipment */}
+      <Card>
+        <H>🔧 One-time install cost</H>
+        <Sub>Labor pulls from your labor rates. Equipment is a one-time hardware total (auto-fills from the BOM once your catalog has costs).</Sub>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 12 }}>
+          <div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Labor rate</div>
+            <select value={rateId} onChange={e => setRateId(e.target.value)} style={{ ...inputStyle, padding: '8px 10px', fontSize: 13, cursor: 'pointer' }}>
+              {rates.length === 0 && <option value="">No rates yet</option>}
+              {rates.map(r => <option key={r.id} value={r.id}>{r.name} — ${r.rate}/{r.unit}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{rate?.unit === 'hour' ? 'Hours' : 'Qty'}</div>
+            <input value={hours} onChange={e => setHours(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder="0" style={{ ...inputStyle, padding: '8px 10px', fontSize: 13 }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Equipment $ (one-time)</div>
+            <input value={equipment} onChange={e => setEquipment(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder="0" style={{ ...inputStyle, padding: '8px 10px', fontSize: 13 }} />
+          </div>
         </div>
-        <Sub>Mock — wired to real BOM cost + recurring model in AM.</Sub>
+      </Card>
+
+      {/* Deal economics — real recurring (from calculator) + payback */}
+      <Card style={{ background: 'linear-gradient(180deg, rgba(52,211,153,0.1), rgba(8,18,34,0.6))', border: '1px solid rgba(52,211,153,0.3)' }}>
+        <H>Deal economics</H>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))', gap: 12, marginTop: 8 }}>
+          {stat('Install cost', usd0(installCost), `labor ${usd0(laborCost)} + equip ${usd0(Number(equipment) || 0)}`)}
+          {stat('Monthly net (recurring)', usd0(monthlyNet), econ && !econ.empty ? `on ${econ.units} units` : 'enter site basics')}
+          {stat('Annual recurring net', usd0(annualNet))}
+          {stat('Payback', paybackMonths > 0 ? `${paybackMonths.toFixed(1)} mo` : '—', 'install ÷ monthly net')}
+        </div>
+        <Sub>Recurring is live from the calculator above. Once your product catalog carries hardware costs, equipment will auto-fill from the BOM.</Sub>
       </Card>
     </div>
   )

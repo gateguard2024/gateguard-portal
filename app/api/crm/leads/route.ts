@@ -41,6 +41,8 @@ export async function GET(req: NextRequest) {
       property_name:  row.property_name || '',
       created_at:     row.created_at,
       assigned_dealer: row.assigned_dealer ?? null,
+      units:          row.unit_count ?? null,
+      unit_count:     row.unit_count ?? null,
       // Detail page fields
       name:          row.property_name || row.company_name || row.contact_name,
       company:       row.company_name ?? '',

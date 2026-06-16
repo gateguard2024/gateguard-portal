@@ -204,7 +204,7 @@ export default function NexusHomeClient() {
         <div className="flex gap-1 rounded-[1.75rem] border px-2 py-2" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.86), rgba(3,9,22,0.92))', borderColor: 'rgba(59,130,246,0.22)', boxShadow: '0 0 44px rgba(0,124,255,0.18), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
           {NAV_ITEMS.map(({ label, id }) => {
             const active = activeTab === id
-            return <button key={id} type="button" onClick={() => setActiveTab(id)} className="whitespace-nowrap rounded-2xl border px-5 py-2 text-sm transition-all duration-200" style={active ? { background: 'linear-gradient(135deg, rgba(0,124,255,0.42) 0%, rgba(0,200,255,0.16) 100%)', border: '1px solid rgba(0,200,255,0.42)', color: 'rgba(255,255,255,0.94)', boxShadow: '0 0 22px rgba(0,124,255,0.34), inset 0 1px 0 rgba(255,255,255,0.12)' } : { background: 'rgba(255,255,255,0.018)', border: '0.5px solid rgba(255,255,255,0.055)', color: 'rgba(255,255,255,0.42)' }}>{label}</button>
+            return <button key={id} type="button" onClick={() => { setActiveTab(id); setNavNonce(n => n + 1) }} className="whitespace-nowrap rounded-2xl border px-5 py-2 text-sm transition-all duration-200" style={active ? { background: 'linear-gradient(135deg, rgba(0,124,255,0.42) 0%, rgba(0,200,255,0.16) 100%)', border: '1px solid rgba(0,200,255,0.42)', color: 'rgba(255,255,255,0.94)', boxShadow: '0 0 22px rgba(0,124,255,0.34), inset 0 1px 0 rgba(255,255,255,0.12)' } : { background: 'rgba(255,255,255,0.018)', border: '0.5px solid rgba(255,255,255,0.055)', color: 'rgba(255,255,255,0.42)' }}>{label}</button>
           })}
         </div>
       </nav>
