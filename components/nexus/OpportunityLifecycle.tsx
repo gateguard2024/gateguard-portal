@@ -732,7 +732,6 @@ function DeviceRow({ device, index, surveyId, opportunityId, onChange, onDelete 
   const num = (v: string) => (v.trim() ? Number(v) : null)
   const label = (t: string) => <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{t}</div>
   const sIn = { ...inputStyle, padding: '8px 10px', fontSize: 13 } as const
-  const isNewOrReplace = device.action === 'new' || device.action === 'replace'
   const isService = device.action === 'service'
 
   return (
@@ -786,11 +785,10 @@ function DeviceRow({ device, index, surveyId, opportunityId, onChange, onDelete 
             </select>
           </div>
 
-          {/* Pricing adapts to the work: equipment for new/replace, parts for service, labor always */}
-          {isNewOrReplace && <>
-            <div>{label('Unit cost')}<input value={device.unit_cost ?? ''} onChange={e => set({ unit_cost: num(e.target.value) })} inputMode="decimal" placeholder="$0" style={sIn} /></div>
-            <div>{label('Retail to client')}<input value={device.retail ?? ''} onChange={e => set({ retail: num(e.target.value) })} inputMode="decimal" placeholder="$0" style={sIn} /></div>
-          </>}
+          {/* Dealer cost + retail (auto-filled from the catalog when you pick a product) */}
+          <div>{label('Dealer cost')}<input value={device.unit_cost ?? ''} onChange={e => set({ unit_cost: num(e.target.value) })} inputMode="decimal" placeholder="$0" style={sIn} /></div>
+          <div>{label('Retail to client')}<input value={device.retail ?? ''} onChange={e => set({ retail: num(e.target.value) })} inputMode="decimal" placeholder="$0" style={sIn} /></div>
+          {device.unit_cost != null && device.retail != null && <div>{label('Margin')}<div style={{ ...sIn, color: '#6ee7b7', display: 'flex', alignItems: 'center' }}>${(device.retail - device.unit_cost).toLocaleString()}</div></div>}
           {isService && <div>{label('Repair / parts $')}<input value={device.repair_cost ?? ''} onChange={e => set({ repair_cost: num(e.target.value) })} inputMode="decimal" placeholder="$0" style={sIn} /></div>}
           <div>{label('Labor hours')}<input value={device.labor_hours ?? ''} onChange={e => set({ labor_hours: num(e.target.value) })} inputMode="decimal" placeholder="0" style={sIn} /></div>
 
@@ -879,13 +877,20 @@ function ProductPicker({ surveyId, opportunityId, onClose, onPick }: {
           <>
             <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search products… (gate operator, camera, reader)" style={inputStyle} />
             <div style={{ display: 'grid', gap: 6, marginTop: 12 }}>
-              {results.map(p => (
-                <button key={p.id} onClick={() => onPick({ name: p.name, brand: p.brand || '', model: p.model || '', product_id: p.id, source: 'catalog' })}
-                  style={{ textAlign: 'left', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '10px 12px', cursor: 'pointer' }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.92)' }}>{p.name}</div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{[p.brand, p.category].filter(Boolean).join(' · ') || 'Product'}</div>
-                </button>
-              ))}
+              {results.map(p => {
+                const cost = Number(p.dealer_cost) > 0 ? Number(p.dealer_cost) : null
+                const retail = Number(p.sell_price) > 0 ? Number(p.sell_price) : (Number(p.list_price) > 0 ? Number(p.list_price) : (Number(p.msrp) > 0 ? Number(p.msrp) : null))
+                return (
+                  <button key={p.id} onClick={() => onPick({ name: p.name, brand: p.brand || '', model: p.model || '', product_id: p.id, source: 'catalog', unit_cost: cost, retail })}
+                    style={{ textAlign: 'left', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '10px 12px', cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.92)' }}>{p.name}</div>
+                      {retail != null && <div style={{ fontSize: 12, color: '#6ee7b7', flexShrink: 0 }}>${retail.toLocaleString()}</div>}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{[p.brand, p.category].filter(Boolean).join(' · ') || 'Product'}{cost != null ? ` · cost $${cost.toLocaleString()}` : ''}</div>
+                  </button>
+                )
+              })}
               {loadingP && <Sub>Loading products…</Sub>}
               {!loadingP && errP && <Sub><span style={{ color: '#fca5a5' }}>{errP}</span> — add it as a one-time item or ask corporate.</Sub>}
               {!loadingP && !errP && results.length === 0 && <Sub>{q ? `No products match “${q}”.` : 'No products in this catalog yet.'} Add it as a one-time item or ask corporate.</Sub>}
