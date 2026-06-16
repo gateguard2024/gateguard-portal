@@ -6,19 +6,20 @@ import { useEffect, useState } from 'react'
 import { PricingCalculator } from '@/components/nexus/PricingCalculator'
 
 const cyan = '#00C8FF'
-const STAGES = ['Survey', 'Financials', 'Proposal', 'Negotiate', 'Contract & Invoice', 'Sign', 'Payment'] as const
+const STAGES = ['Overview', 'Survey', 'Financials', 'Proposal', 'Negotiate', 'Contract & Invoice', 'Sign', 'Payment'] as const
 
 // Canonical stage key per lifecycle step (what we PATCH onto opportunities.stage).
-const STAGE_KEYS = ['survey', 'financials', 'proposal', 'negotiate', 'contract_invoice', 'sign', 'payment'] as const
+const STAGE_KEYS = ['overview', 'survey', 'financials', 'proposal', 'negotiate', 'contract_invoice', 'sign', 'payment'] as const
 // Tolerant map from whatever stage an opp currently has → the right step index.
 const STAGE_TO_STEP: Record<string, number> = {
-  info_request: 0, survey_request: 0, site_survey: 0, meet_present: 0, survey: 0, new: 0,
-  pre_approval: 1, financials: 1, quote: 1,
-  proposal: 2, propose: 2, proposal_sent: 2,
-  negotiate: 3, negotiation: 3,
-  agreement_deposit: 4, contract_invoice: 4, contract: 4,
-  agreement_signed: 5, sign: 5, signed: 5,
-  deposit_collected: 6, payment: 6, won: 6,
+  overview: 0, new: 0, lead: 0, info_request: 0,
+  survey_request: 1, site_survey: 1, survey: 1, meet_present: 1,
+  pre_approval: 2, financials: 2, quote: 2,
+  proposal: 3, propose: 3, proposal_sent: 3,
+  negotiate: 4, negotiation: 4,
+  agreement_deposit: 5, contract_invoice: 5, contract: 5,
+  agreement_signed: 6, sign: 6, signed: 6,
+  deposit_collected: 7, payment: 7, won: 7,
 }
 
 const cardStyle = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 18, padding: 18 } as const
@@ -38,7 +39,9 @@ function Sub({ children }: { children: React.ReactNode }) {
 
 export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: { opportunityId?: string; onClose?: () => void; initialStage?: number } = {}) {
   const [stage, setStage] = useState(initialStage ?? 0)
-  const [opp, setOpp] = useState<{ name?: string; account_name?: string; stage?: string } | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [data, setData] = useState<Record<string, any> | null>(null)
+  const opp = (data?.opportunity ?? {}) as Record<string, any>
 
   // Load the real opportunity (when opened from New / Existing / Lead-convert).
   useEffect(() => {
@@ -47,10 +50,10 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
     void (async () => {
       try {
         const res = await fetch(`/api/nexus/opps/opportunity-window/${opportunityId}`)
-        const data = await res.json().catch(() => ({}))
-        const o = data.opportunity ?? data ?? {}
+        const payload = await res.json().catch(() => ({}))
         if (cancelled) return
-        setOpp(o)
+        setData(payload)
+        const o = payload.opportunity ?? {}
         // A shortcut (Site Survey / BOM / SOW / Proposals) sets initialStage → it wins.
         if (initialStage == null && o.stage && STAGE_TO_STEP[o.stage] != null) setStage(STAGE_TO_STEP[o.stage])
       } catch { /* keep defaults */ }
@@ -69,7 +72,7 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
     }
   }
 
-  const dealName = opp?.name || opp?.account_name || 'New opportunity'
+  const dealName = (opp?.name || opp?.account_name || 'New opportunity') as string
   return (
     <div style={{ minHeight: '100vh', background: 'radial-gradient(circle at top left, #11183a, #050712 50%)', color: 'white', fontFamily: 'Inter, Arial, sans-serif', padding: 24 }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
@@ -96,19 +99,113 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
           })}
         </div>
 
-        {stage === 0 && <Survey />}
-        {stage === 1 && <Financials />}
-        {stage === 2 && <Proposal />}
-        {stage === 3 && <Negotiate />}
-        {stage === 4 && <ContractInvoice />}
-        {stage === 5 && <Sign />}
-        {stage === 6 && <Payment />}
+        {stage === 0 && <Overview data={data} />}
+        {stage === 1 && <Survey />}
+        {stage === 2 && <Financials />}
+        {stage === 3 && <Proposal />}
+        {stage === 4 && <Negotiate />}
+        {stage === 5 && <ContractInvoice />}
+        {stage === 6 && <Sign />}
+        {stage === 7 && <Payment />}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24 }}>
           <button onClick={() => goToStage(Math.max(0, stage - 1))} disabled={stage === 0} style={{ ...btn, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)', opacity: stage === 0 ? 0.4 : 1 }}>← Back</button>
           <button onClick={() => stage === STAGES.length - 1 ? onClose?.() : goToStage(Math.min(STAGES.length - 1, stage + 1))} style={btn}>{stage === STAGES.length - 1 ? 'Done' : `Next: ${STAGES[stage + 1]} →`}</button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function Overview({ data }: { data: Record<string, any> | null }) {
+  const opp = data?.opportunity ?? {}
+  const contact = data?.contact ?? {}
+  const company = data?.company ?? {}
+  const property = data?.property ?? {}
+  const lead = data?.lead
+  const activities: any[] = data?.activities ?? [] // eslint-disable-line @typescript-eslint/no-explicit-any
+  const attachments: any[] = data?.attachments ?? [] // eslint-disable-line @typescript-eslint/no-explicit-any
+  const todos: any[] = data?.todos ?? [] // eslint-disable-line @typescript-eslint/no-explicit-any
+  const emails = activities.filter(a => (a.type || '').toLowerCase() === 'email')
+
+  const field = (label: string, value?: string | number | null) => (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</div>
+      <div style={{ fontSize: 14, color: value ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.35)' }}>{value || '—'}</div>
+    </div>
+  )
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
+      {lead && (
+        <Card style={{ gridColumn: '1 / -1', background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.3)' }}>
+          <Sub>Converted from lead — <b style={{ color: '#c4b5fd' }}>{lead.contact_name || lead.name || 'lead'}</b>. Notes, history &amp; attachments carry over here.</Sub>
+        </Card>
+      )}
+
+      <Card>
+        <H>Deal details</H>
+        {field('Account', opp.account_name || company.name)}
+        {field('Contact', contact.contact_name || contact.name || opp.contact_name)}
+        {field('Email', contact.email)}
+        {field('Phone', contact.phone)}
+        {field('Property', property.name || property.address || opp.property_address)}
+        {field('Owner', opp.owner_name)}
+        {field('Monthly $ (MRR)', opp.est_mrr != null ? `$${opp.est_mrr}` : null)}
+        {field('Source', opp.source)}
+      </Card>
+
+      <Card>
+        <H>Notes</H>
+        {opp.notes ? <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', whiteSpace: 'pre-wrap', marginBottom: 12 }}>{opp.notes}</div> : <Sub>No notes yet.</Sub>}
+        <textarea placeholder="Add a note…" style={{ ...inputStyle, minHeight: 70, marginTop: 12 }} />
+        <button style={{ ...btn, marginTop: 8 }}>Save note</button>
+      </Card>
+
+      <Card>
+        <H>Activity timeline</H>
+        {activities.length === 0 ? <Sub>No calls, emails, or meetings logged yet.</Sub> : (
+          <div style={{ display: 'grid', gap: 8 }}>
+            {activities.slice(0, 8).map((a, i) => (
+              <div key={a.id || i} style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, textTransform: 'capitalize' }}>{a.type || 'note'} {a.subject ? `· ${a.subject}` : ''}</div>
+                {a.body && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 2 }}>{String(a.body).slice(0, 120)}</div>}
+                {a.created_at && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>{String(a.created_at).slice(0, 10)}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <H>Attachments &amp; photos</H>
+        {attachments.length === 0 ? <Sub>No files yet.</Sub> : (
+          <div style={{ display: 'grid', gap: 6 }}>
+            {attachments.map((at, i) => <div key={at.id || i} style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>📎 {at.name || at.file_name || 'Attachment'}</div>)}
+          </div>
+        )}
+        <button style={{ ...btn, marginTop: 12 }}>+ Add attachment</button>
+      </Card>
+
+      <Card>
+        <H>Client emails</H>
+        {emails.length === 0 ? <Sub>Emails with this client appear here once Messages/Gmail is linked to the contact.</Sub> : (
+          <div style={{ display: 'grid', gap: 6 }}>
+            {emails.slice(0, 6).map((e, i) => <div key={e.id || i} style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>✉️ {e.subject || '(no subject)'}</div>)}
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <H>Calendar &amp; tasks</H>
+        {todos.length === 0 ? <Sub>No upcoming tasks or events.</Sub> : (
+          <div style={{ display: 'grid', gap: 6 }}>
+            {todos.slice(0, 6).map((t, i) => <div key={t.id || i} style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>📅 {t.title || 'Task'}{t.due_date ? ` · ${String(t.due_date).slice(0, 10)}` : ''}</div>)}
+          </div>
+        )}
+        <button style={{ ...btn, marginTop: 12 }}>+ Add task</button>
+      </Card>
     </div>
   )
 }

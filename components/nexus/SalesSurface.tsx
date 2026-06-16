@@ -50,16 +50,16 @@ const GROUPS: SalesGroup[] = [
     items: [
       { title: 'New Opportunity', subtitle: 'Start a deal from an existing lead or customer.', glyph: 'pipeline', panel: 'new-opp' },
       { title: 'Existing Opportunity', subtitle: 'Pick a deal you own or can see, and work it.', glyph: 'pipeline', panel: 'existing-opp' },
-      { title: 'Site Surveys', subtitle: 'Open a deal and capture its site survey.', glyph: 'research', stageJump: 0 },
+      { title: 'Site Surveys', subtitle: 'Open a deal and capture its site survey.', glyph: 'research', stageJump: 1 },
       { title: 'Rough Calculator', subtitle: 'Quick monthly pricing from gates, doors, cameras, and units.', glyph: 'quote', panel: 'rough-calc' },
     ],
   },
   {
     id: 'quotes', title: 'Quotes & Proposals', subtitle: 'Build the numbers and the proposal.', hex: '#FBBF24', glyph: 'quote',
     items: [
-      { title: 'Bill of Materials', subtitle: 'Open a deal to build its parts list & pricing.', glyph: 'quote', stageJump: 1 },
-      { title: 'Scope of Work', subtitle: 'Open a deal to define what gets installed.', glyph: 'job-open', stageJump: 0 },
-      { title: 'Proposals', subtitle: 'Open a deal to build & send its proposal.', glyph: 'quote', stageJump: 2 },
+      { title: 'Bill of Materials', subtitle: 'Open a deal to build its parts list & pricing.', glyph: 'quote', stageJump: 2 },
+      { title: 'Scope of Work', subtitle: 'Open a deal to define what gets installed.', glyph: 'job-open', stageJump: 1 },
+      { title: 'Proposals', subtitle: 'Open a deal to build & send its proposal.', glyph: 'quote', stageJump: 3 },
       { title: 'Closing this Month', subtitle: 'Deals expected to close this month.', glyph: 'activity', soon: true },
     ],
   },
