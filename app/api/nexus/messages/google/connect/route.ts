@@ -9,9 +9,9 @@ export const dynamic = 'force-dynamic'
 // callbacks separate. Set GMAIL_REDIRECT_URI (or it falls back to the app URL).
 export async function GET(req: Request) {
   const clientId = process.env.GOOGLE_CALENDAR_CLIENT_ID
-  // Derive the callback from the domain the request actually came in on, so the
-  // OAuth round-trip works on beta (the Vercel URL), prod, or any custom domain
-  // — independent of a possibly-stale GMAIL_REDIRECT_URI / NEXT_PUBLIC_APP_URL.
+  // Derive the callback from the host the user is actually on, so the round-trip
+  // stays on that domain (the Vercel beta URL or portal.gateguard.co for prod).
+  // The matching URI just needs to be registered in Google Cloud.
   const proto = req.headers.get('x-forwarded-proto') ?? 'https'
   const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? new URL(req.url).host
   const redirectUri = `${proto}://${host}/api/nexus/messages/google/callback`

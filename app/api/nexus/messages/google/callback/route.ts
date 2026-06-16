@@ -29,8 +29,10 @@ export async function GET(req: NextRequest) {
 
   const clientId = process.env.GOOGLE_CALENDAR_CLIENT_ID
   const clientSecret = process.env.GOOGLE_CALENDAR_CLIENT_SECRET
-  const redirectUri =
-    process.env.GMAIL_REDIRECT_URI ?? `${appUrl}/api/nexus/messages/google/callback`
+  // MUST exactly match the redirect_uri the connect step sent to Google (derived
+  // from the request host). A stale GMAIL_REDIRECT_URI would cause a second
+  // redirect_uri_mismatch at token exchange — so always use the same derivation.
+  const redirectUri = `${appUrl}/api/nexus/messages/google/callback`
   if (!clientId || !clientSecret) return back('gmail_error=not_configured')
 
   let userId: string
