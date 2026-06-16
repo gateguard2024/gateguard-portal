@@ -1,9 +1,9 @@
 'use client';
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Phone, MessageSquare, Mail, Send, CheckCircle2, User, Clock, Settings } from 'lucide-react';
+import { Search, MessageSquare, Send, Clock, Settings } from 'lucide-react';
 import MessagesConnectorPane from '@/components/nexus/MessagesConnectorPane';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowLeft, CalendarPlus, PhoneForwarded, PhoneMissed } = require('lucide-react') as any;
+const { ArrowLeft, PhoneForwarded, PhoneMissed } = require('lucide-react') as any;
 // --- Types ---
 type Channel = 'call' | 'text' | 'email';
 type Message = {
@@ -11,21 +11,28 @@ type Message = {
   direction: 'in' | 'out';
   channel: Channel;
   body: string;
+  body_html?: string;
+  subject?: string;
   at: string;
   duration_secs?: number;
 };
+type LinkedType = 'lead' | 'contact' | 'customer' | 'opportunity' | 'job';
 type Conversation = {
   id: string;
   contact_name: string;
   company?: string | null;
   channel: Channel;
   preview: string;
+  subject?: string;
   unread: boolean;
   needs_reply: boolean;
   last_at: string;
   messages: Message[];
   channel_id?: string | null;     // connector this thread belongs to (for replies)
   contact_address?: string | null; // recipient email/phone (for replies)
+  linked_type?: LinkedType | null;
+  linked_id?: string | null;
+  linked_label?: string | null;
 };
 // --- Real connector data, with a graceful preview fallback ---
 // Pulls the current user's threads from /api/nexus/messages/threads. If the
@@ -125,15 +132,14 @@ const formatDuration = (seconds?: number) => {
   const s = seconds % 60;
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 };
-const getChannelIcon = (channel: Channel, size = 16) => {
-  switch (channel) {
-    case 'call': return <Phone size={size} />;
-    case 'text': return <MessageSquare size={size} />;
-    case 'email': return <Mail size={size} />;
-  }
-};
-const FILTERS = ['All', 'Needs Reply', 'Calls', 'Texts', 'Email', 'Follow-ups'] as const;
+// Email-first + calm: three quiet filters instead of a crowded channel tab-row.
+const FILTERS = ['All', 'Unread', 'Needs reply'] as const;
 type FilterType = typeof FILTERS[number];
+const initials = (name: string) =>
+  (name || '').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('') || '✉';
+// Soft, deterministic avatar tint per contact so the list reads at a glance.
+const AVATAR_TINTS = ['#6B7EFF', '#34D399', '#F59E0B', '#EC4899', '#22D3EE', '#A78BFA'];
+const tintFor = (s: string) => AVATAR_TINTS[[...(s || '?')].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_TINTS.length];
 // --- Main Component ---
 export default function MessagesShell() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -173,11 +179,8 @@ export default function MessagesShell() {
         c.preview.toLowerCase().includes(searchQuery.toLowerCase());
       if (!matchesSearch) return false;
       switch (activeFilter) {
-        case 'Needs Reply': return c.needs_reply;
-        case 'Calls': return c.channel === 'call';
-        case 'Texts': return c.channel === 'text';
-        case 'Email': return c.channel === 'email';
-        case 'Follow-ups': return c.needs_reply;
+        case 'Unread': return c.unread;
+        case 'Needs reply': return c.needs_reply;
         case 'All':
         default: return true;
       }
@@ -185,6 +188,24 @@ export default function MessagesShell() {
   }, [conversations, searchQuery, activeFilter]);
   const selectedConversation = conversations.find(c => c.id === selectedId);
   const [sending, setSending] = useState(false);
+
+  // Assign-to-record picker (lead / contact / customer / opportunity / job)
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkQuery, setLinkQuery] = useState('');
+  const [linkResults, setLinkResults] = useState<{ id: string; label: string; sublabel?: string; type: string }[]>([]);
+  useEffect(() => {
+    if (!linkOpen) return;
+    let active = true;
+    const t = setTimeout(async () => {
+      const j = await fetch(`/api/todos/search-records?type=all&q=${encodeURIComponent(linkQuery)}`).then(r => r.json()).catch(() => ({}));
+      if (active) setLinkResults(Array.isArray(j.results) ? j.results : []);
+    }, 220);
+    return () => { active = false; clearTimeout(t); };
+  }, [linkQuery, linkOpen]);
+  const patchLink = async (conv: Conversation, payload: { linked_type: string | null; linked_id?: string | null; linked_label?: string | null }) => {
+    setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, linked_type: (payload.linked_type as LinkedType) ?? null, linked_id: payload.linked_id ?? null, linked_label: payload.linked_label ?? null } : c));
+    await fetch(`/api/nexus/messages/threads/${conv.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(() => {});
+  };
   const handleSend = async () => {
     const conv = selectedConversation;
     if (!replyText.trim() || !conv) return;
@@ -219,7 +240,6 @@ export default function MessagesShell() {
       setSending(false);
     }
   };
-  const handleAction = (action: string) => { console.log(`Action triggered: ${action} for conversation ${selectedId}`); };
   const glassPanel = { backgroundColor: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)' };
   const textPrimary = { color: 'rgba(255,255,255,0.9)' };
   const textSecondary = { color: 'rgba(255,255,255,0.5)' };
@@ -267,21 +287,20 @@ export default function MessagesShell() {
             <div className="p-6 text-center text-sm" style={textSecondary}>No conversations found.</div>
           ) : (
             filteredConversations.map(conv => (
-              <button key={conv.id} onClick={() => setSelectedId(conv.id)} className="w-full text-left p-3 rounded-2xl mb-1 flex items-start gap-3 transition-colors hover:bg-white/5" style={{ backgroundColor: selectedId === conv.id ? 'rgba(255,255,255,0.06)' : 'transparent' }}>
-                <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={glassPanel}>
-                  <div style={{ color: brandBlue }}>{getChannelIcon(conv.channel, 18)}</div>
+              <button key={conv.id} onClick={() => setSelectedId(conv.id)} className="w-full text-left px-3 py-3 rounded-2xl mb-0.5 flex items-center gap-3 transition-colors hover:bg-white/5" style={{ backgroundColor: selectedId === conv.id ? 'rgba(255,255,255,0.07)' : 'transparent' }}>
+                {/* unread dot rail keeps the row calm but scannable */}
+                <div className="w-1.5 flex-shrink-0 flex justify-center">
+                  {conv.unread && <span className="w-2 h-2 rounded-full" style={{ backgroundColor: brandBlue }} />}
+                </div>
+                <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-semibold" style={{ backgroundColor: `${tintFor(conv.contact_name)}22`, color: tintFor(conv.contact_name) }}>
+                  {initials(conv.contact_name)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2 mb-0.5">
-                    <span className="font-medium truncate text-sm">{conv.contact_name}</span>
-                    <span className="text-xs flex-shrink-0" style={conv.unread ? { color: brandBlue, fontWeight: 600 } : textFaint}>{formatRelativeTime(conv.last_at)}</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-sm" style={{ ...(conv.unread ? textPrimary : textSecondary), fontWeight: conv.unread ? 600 : 500 }}>{conv.contact_name}</span>
+                    <span className="text-[11px] flex-shrink-0" style={textFaint}>{formatRelativeTime(conv.last_at)}</span>
                   </div>
-                  {conv.company && <div className="text-xs mb-1 truncate" style={textFaint}>{conv.company}</div>}
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs truncate flex-1" style={conv.unread ? textPrimary : textSecondary}>{conv.preview}</span>
-                    {conv.unread && <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: brandBlue }} />}
-                  </div>
-                  {conv.needs_reply && <div className="mt-2 inline-block px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold" style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: '#34D399' }}>Needs Reply</div>}
+                  <div className="truncate text-xs mt-0.5" style={conv.unread ? textSecondary : textFaint}>{conv.preview}</div>
                 </div>
               </button>
             ))
@@ -300,14 +319,39 @@ export default function MessagesShell() {
           </div>
         ) : (
           <>
-            <div className="h-16 flex items-center justify-between px-4 border-b flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.08)', backgroundColor: 'rgba(0,0,0,0.2)' }}>
-              <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b flex-shrink-0 relative" style={{ borderColor: 'rgba(255,255,255,0.08)', backgroundColor: 'rgba(0,0,0,0.2)' }}>
+              <div className="flex items-center gap-3 min-w-0">
                 <button onClick={() => setSelectedId(null)} className="md:hidden p-2 -ml-2 rounded-full hover:bg-white/10"><ArrowLeft size={20} /></button>
-                <div className="w-8 h-8 rounded-full flex items-center justify-center" style={glassPanel}>{getChannelIcon(selectedConversation.channel, 16)}</div>
-                <div>
-                  <div className="font-medium text-sm flex items-center gap-2">{selectedConversation.contact_name}</div>
-                  {selectedConversation.company && <div className="text-xs" style={textSecondary}>{selectedConversation.company}</div>}
+                <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0" style={{ backgroundColor: `${tintFor(selectedConversation.contact_name)}22`, color: tintFor(selectedConversation.contact_name) }}>{initials(selectedConversation.contact_name)}</div>
+                <div className="min-w-0">
+                  <div className="font-semibold text-sm truncate">{selectedConversation.subject || selectedConversation.contact_name}</div>
+                  <div className="text-xs truncate" style={textSecondary}>{selectedConversation.contact_name}{selectedConversation.contact_address ? ` · ${selectedConversation.contact_address}` : ''}</div>
                 </div>
+              </div>
+              {/* Assign this thread to a CRM record */}
+              <div className="flex-shrink-0">
+                {selectedConversation.linked_label ? (
+                  <button onClick={() => setLinkOpen(o => !o)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs" style={{ backgroundColor: 'rgba(107,126,255,0.16)', border: '1px solid rgba(107,126,255,0.4)', color: '#b3bcff' }}>
+                    🔗 {selectedConversation.linked_label}<span style={textFaint}> · {selectedConversation.linked_type}</span>
+                  </button>
+                ) : (
+                  <button onClick={() => setLinkOpen(o => !o)} className="px-3 py-1.5 rounded-full text-xs hover:bg-white/10" style={glassPanel}>+ Link to record</button>
+                )}
+                {linkOpen && (
+                  <div className="absolute right-4 top-full mt-1 z-20 w-72 rounded-2xl p-2" style={{ background: 'linear-gradient(180deg, rgba(10,20,38,0.98), rgba(4,10,24,0.98))', border: '1px solid rgba(0,200,255,0.22)' }}>
+                    <input autoFocus value={linkQuery} onChange={e => setLinkQuery(e.target.value)} placeholder="Search leads, contacts, deals, jobs…" className="w-full rounded-xl px-3 py-2 text-sm bg-black/30 outline-none mb-2" style={{ ...textPrimary, border: '1px solid rgba(255,255,255,0.1)' }} />
+                    <div className="max-h-60 overflow-y-auto flex flex-col gap-1">
+                      {linkResults.map(r => (
+                        <button key={`${r.type}-${r.id}`} onClick={() => { void patchLink(selectedConversation, { linked_type: r.type, linked_id: r.id, linked_label: r.label }); setLinkOpen(false); setLinkQuery(''); }} className="text-left px-3 py-2 rounded-lg hover:bg-white/5">
+                          <div className="text-sm" style={textPrimary}>{r.label}</div>
+                          <div className="text-[11px]" style={textFaint}>{r.type}{r.sublabel ? ` · ${r.sublabel}` : ''}</div>
+                        </button>
+                      ))}
+                      {linkResults.length === 0 && <div className="px-3 py-2 text-xs" style={textFaint}>{linkQuery ? 'No matches.' : 'Type to search.'}</div>}
+                    </div>
+                    {selectedConversation.linked_label && <button onClick={() => { void patchLink(selectedConversation, { linked_type: null }); setLinkOpen(false); }} className="w-full mt-2 px-3 py-2 rounded-lg text-xs hover:bg-white/5" style={{ color: '#fca5a5' }}>Unlink</button>}
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
@@ -332,6 +376,24 @@ export default function MessagesShell() {
                     </div>
                   );
                 }
+                // Email → a readable letter (Front/Thunderbird style): clear From/date
+                // header, full-width body with comfortable line length & spacing.
+                if (msg.channel === 'email') {
+                  return (
+                    <div key={msg.id} className="rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div className="flex items-center justify-between gap-3 px-4 py-2.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: isInbound ? 'rgba(255,255,255,0.06)' : 'rgba(107,126,255,0.16)', color: isInbound ? 'rgba(255,255,255,0.6)' : '#b3bcff' }}>{isInbound ? 'Received' : 'Sent'}</span>
+                          <span className="text-xs truncate" style={textSecondary}>{isInbound ? selectedConversation.contact_name : 'You'}</span>
+                        </div>
+                        <span className="text-[11px] flex-shrink-0" style={textFaint}>{new Date(msg.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                      {msg.body_html
+                        ? <div className="px-5 py-4 text-sm email-body" style={{ color: 'rgba(255,255,255,0.86)', lineHeight: 1.65, maxWidth: 680 }} dangerouslySetInnerHTML={{ __html: msg.body_html }} />
+                        : <div className="px-5 py-4 text-sm" style={{ color: 'rgba(255,255,255,0.86)', lineHeight: 1.65, maxWidth: 680, whiteSpace: 'pre-wrap' }}>{msg.body}</div>}
+                    </div>
+                  );
+                }
                 return (
                   <div key={msg.id} className={`flex flex-col max-w-[80%] ${isInbound ? 'self-start' : 'self-end'}`}>
                     <div className={`px-4 py-2.5 text-sm shadow-sm ${isInbound ? 'rounded-2xl rounded-tl-sm bg-white/10' : 'rounded-2xl rounded-tr-sm'}`} style={isInbound ? undefined : { backgroundColor: brandBlue, color: 'white' }}>
@@ -343,13 +405,8 @@ export default function MessagesShell() {
               })}
             </div>
             <div className="p-4 flex-shrink-0" style={{ backgroundColor: 'rgba(0,0,0,0.3)', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-              <div className="flex items-center gap-2 mb-3 overflow-x-auto">
-                <button onClick={() => handleAction('Mark Replied')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-colors hover:bg-white/10" style={glassPanel}><CheckCircle2 size={12} /> Mark replied</button>
-                <button onClick={() => handleAction('Add Follow-up')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-colors hover:bg-white/10" style={glassPanel}><CalendarPlus size={12} /> Add follow-up</button>
-                <button onClick={() => handleAction('Open Contact')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-colors hover:bg-white/10" style={glassPanel}><User size={12} /> Open contact</button>
-              </div>
               <div className="flex items-end gap-2 p-2 rounded-3xl" style={glassPanel}>
-                <textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} placeholder={`Reply by ${selectedConversation.channel}...`} className="flex-1 bg-transparent border-none outline-none resize-none px-3 py-2 text-sm max-h-32 min-h-[40px] placeholder:text-white/30" style={textPrimary} rows={1} />
+                <textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} placeholder={selectedConversation.channel === 'email' ? 'Write a reply…' : `Reply by ${selectedConversation.channel}…`} className="flex-1 bg-transparent border-none outline-none resize-none px-3 py-2 text-sm max-h-32 min-h-[40px] placeholder:text-white/30" style={textPrimary} rows={1} />
                 <button onClick={handleSend} disabled={!replyText.trim() || sending} className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-opacity disabled:opacity-30" style={{ backgroundColor: brandBlue, color: 'white' }}><Send size={16} className="ml-0.5" /></button>
               </div>
             </div>

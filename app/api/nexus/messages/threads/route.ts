@@ -69,11 +69,17 @@ export async function GET() {
       last_at: t.last_message_at ?? t.created_at,
       channel_id: t.channel_id ?? null,
       contact_address: contact.address || null,
+      subject: t.subject || last?.subject || '',
+      linked_type: t.linked_type ?? null,
+      linked_id: t.linked_id ?? null,
+      linked_label: t.linked_label ?? null,
       messages: tMsgs.map((m) => ({
         id: m.id,
         direction: m.direction === 'outbound' ? 'out' : 'in',
         channel: uiChannel(m.source_type),
+        subject: m.subject || '',
         body: m.body || m.subject || '',
+        body_html: m.body_html || '',
         at: m.created_at,
       })),
     }
