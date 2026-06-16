@@ -203,7 +203,7 @@ export function SalesSurface() {
       {activePanel === 'rough-calc' && (
         <SalesDetailShell
           title="Rough Calculator"
-          subtitle="Enter what's on the site — price updates live (50% margin, $150 minimum)."
+          subtitle="Enter what's on the site — Gate Guard cost + dealer price update live."
           onClose={() => setActivePanel(null)}
           actions={<>
             <ActionButton label="Start a Quote" onClick={() => router.push('/quotes/new')} />

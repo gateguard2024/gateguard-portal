@@ -1,20 +1,23 @@
 'use client'
 
-// Itemized pricing calculator — see docs/nexus/PRICING_MODEL.md.
-// THE RULE (locked): price = max(MIN_FEE, cost × 2)  →  50% margin.
-// Reps just enter the site; price comes out. The two settings below are the
-// only knobs, and they live here (not in the rep UI).
+// Gate Guard cost + dealer-price calculator — see docs/nexus/PRICING_MODEL.md.
+// Step 1: compute GATE GUARD COST (what GG pays Brivo / Eagle Eye).
+// Step 2: dealer price = GG cost + (living units × per-unit margin), where the
+//         GG margin per unit is bounded $2.25 min / $3.00 max.
+// (Phase 2: dealer → end-user price.)
 import { useMemo, useState } from 'react'
 
-const MIN_FEE = 150          // minimum monthly price ($) — protects small sites
-const PRICE_MULTIPLIER = 2   // 2× cost = 50% margin
-const PASS_INCLUDED = 500    // mobile passes included in the MDU base
+const PASS_INCLUDED = 500
+const MARGIN_MIN = 2.25      // Gate Guard margin per unit — floor
+const MARGIN_MAX = 3.00      // Gate Guard margin per unit — ceiling
 
 const COST = {
-  base: 89.25,               // Brivo base — applies only when there's access (doors/units)
-  doorS1: 11.10, doorS2: 9.00, doorS3: 3.72,
-  unitPassApp: 2.25, unitGateway: 4.50,
-  camAccess: 14, camMonitored: 30,
+  base: 89.25,               // Brivo base/site (500 passes incl). Applies when there's access.
+  doorS1: 11.10, doorS2: 9.00, doorS3: 3.72,   // common/hardwired doors, tiered
+  commonLock: 2.25,          // Schlage/Allegion/dormakaba on a common-area door
+  unitPassApp: 2.25,         // unit lock controlled via Brivo mobile-pass app
+  unitGateway: 4.50,         // unit on Brivo smart-home via gateway
+  camera: 15,                // monitored OR stored-video only — both $15
   passBlock: 30,             // per 100 mobile passes over the 500 included
 }
 
@@ -38,71 +41,100 @@ function Num({ label, value, onChange, hint, decimal }: { label: string; value: 
 }
 
 export function PricingCalculator() {
+  const [livingUnits, setLivingUnits] = useState('')
   const [doors, setDoors] = useState('')
+  const [commonLocks, setCommonLocks] = useState('')
   const [unitsApp, setUnitsApp] = useState('')
   const [unitsGw, setUnitsGw] = useState('')
-  const [camAccess, setCamAccess] = useState('')
   const [camMon, setCamMon] = useState('')
-  const [passesPerUnit, setPassesPerUnit] = useState('2')
-  const [livingUnits, setLivingUnits] = useState('')
+  const [camBackup, setCamBackup] = useState('')
+  const [passesPerUnit, setPassesPerUnit] = useState('1.5')
+  const [margin, setMargin] = useState('2.25')   // GG margin per unit (clamped 2.25–3.00)
 
   const n = (s: string) => Number(s) || 0
 
   const calc = useMemo(() => {
-    const accessUnits = n(unitsApp) + n(unitsGw)         // units that carry per-unit hardware cost
-    const hasAccess = n(doors) > 0 || accessUnits > 0     // Brivo access present?
-    const livingTotal = n(livingUnits) || accessUnits     // property size for $/unit + resident passes
+    const accessUnits = n(unitsApp) + n(unitsGw)
+    const cameras = n(camMon) + n(camBackup)
+    const hasAccess = n(doors) > 0 || n(commonLocks) > 0 || accessUnits > 0
+    const livingTotal = n(livingUnits) || accessUnits
     const passes = hasAccess ? livingTotal * n(passesPerUnit) : 0
     const passBlocks = Math.ceil(Math.max(0, passes - PASS_INCLUDED) / 100)
-    const cost =
+
+    // Gate Guard cost (what GG pays Brivo / Eagle Eye)
+    const ggCost =
       (hasAccess ? COST.base : 0) +
       doorCost(n(doors)) +
+      n(commonLocks) * COST.commonLock +
       n(unitsApp) * COST.unitPassApp +
       n(unitsGw) * COST.unitGateway +
-      n(camAccess) * COST.camAccess +
-      n(camMon) * COST.camMonitored +
+      cameras * COST.camera +
       passBlocks * COST.passBlock
 
-    const priceRaw = cost * PRICE_MULTIPLIER
-    const price = Math.max(MIN_FEE, priceRaw)
-    const atFloor = price > priceRaw && cost > 0
-    const margin = price - cost
-    const marginPct = price > 0 ? (margin / price) * 100 : 0
-    const perUnit = livingTotal > 0 ? price / livingTotal : 0
-    return { cost, price, margin, marginPct, perUnit, atFloor, totalUnits: livingTotal, empty: cost === 0 }
-  }, [doors, unitsApp, unitsGw, camAccess, camMon, passesPerUnit, livingUnits])
+    // Dealer price = GG cost + per-unit margin (bounded)
+    const marginPerUnit = Math.min(MARGIN_MAX, Math.max(MARGIN_MIN, n(margin) || MARGIN_MIN))
+    const ggMargin = livingTotal * marginPerUnit
+    const dealerPrice = ggCost + ggMargin
+
+    return {
+      ggCost,
+      ggPerUnit: livingTotal > 0 ? ggCost / livingTotal : 0,
+      marginPerUnit,
+      ggMargin,
+      dealerPrice,
+      dealerPerUnit: livingTotal > 0 ? dealerPrice / livingTotal : 0,
+      livingTotal,
+      noUnits: livingTotal === 0,
+      empty: ggCost === 0,
+    }
+  }, [livingUnits, doors, commonLocks, unitsApp, unitsGw, camMon, camBackup, passesPerUnit, margin])
 
   return (
     <div className="space-y-5">
       <div className="rounded-3xl p-4" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.7), rgba(3,9,22,0.5))', border: '1px solid rgba(0,200,255,0.16)' }}>
         <div className="mb-1 text-base font-semibold" style={{ color: 'rgba(255,255,255,0.95)' }}>What's on this site?</div>
-        <div className="mb-4 text-[12px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Type how many of each. The price updates as you go.</div>
+        <div className="mb-4 text-[12px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Type how many of each — Gate Guard cost updates as you go.</div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Num label="Total living units" value={livingUnits} onChange={setLivingUnits} hint="property size — for $/unit" />
-          <Num label="Gates / common doors" value={doors} onChange={setDoors} />
+          <Num label="Total living units" value={livingUnits} onChange={setLivingUnits} hint="property size — for $/unit + passes" />
+          <Num label="Gates / common doors" value={doors} onChange={setDoors} hint="tiered $11.10 / $9 / $3.72" />
+          <Num label="Common-area smart locks" value={commonLocks} onChange={setCommonLocks} hint="$2.25 each" />
           <Num label="Smart-lock units (app)" value={unitsApp} onChange={setUnitsApp} hint="$2.25 cost/unit" />
           <Num label="Smart-home units (gateway)" value={unitsGw} onChange={setUnitsGw} hint="$4.50 cost/unit" />
-          <Num label="Cameras — backup only" value={camAccess} onChange={setCamAccess} hint="$14 cost each" />
-          <Num label="Cameras — monitored" value={camMon} onChange={setCamMon} hint="$30 cost each" />
+          <Num label="Cameras — monitored" value={camMon} onChange={setCamMon} hint="$15 cost each" />
+          <Num label="Cameras — backup only" value={camBackup} onChange={setCamBackup} hint="$15 cost each" />
           <Num label="Passes per unit" value={passesPerUnit} onChange={setPassesPerUnit} hint="500 incl · $30/100 over" decimal />
+          <Num label="GG margin / unit ($2.25–$3.00)" value={margin} onChange={setMargin} hint="bounded; default $2.25" decimal />
         </div>
       </div>
 
+      {/* Step 1 — Gate Guard cost (the foundation) */}
       <div className="rounded-3xl p-5" style={{ background: 'radial-gradient(circle at 14% 0%, rgba(0,124,255,0.16), transparent 40%), linear-gradient(180deg, rgba(8,18,34,0.82), rgba(3,9,22,0.6))', border: '1px solid rgba(0,200,255,0.28)' }}>
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: 'rgba(0,200,255,0.85)' }}>Monthly price</div>
-            <div className="mt-1 text-4xl font-bold" style={{ color: '#7DE5FF' }}>{calc.empty ? '—' : usd(calc.price)}</div>
-            {calc.totalUnits > 0 && !calc.empty && <div className="mt-1 text-[12px]" style={{ color: 'rgba(255,255,255,0.55)' }}>{usd(calc.perUnit)} per unit · {calc.totalUnits} units</div>}
-          </div>
-          <div className="text-right">
-            <div className="text-[12px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Cost {usd(calc.cost)}</div>
-            <div className="text-[12px]" style={{ color: calc.marginPct >= 50 ? '#6ee7b7' : '#fde68a' }}>Margin {calc.empty ? '—' : `${usd(calc.margin)} · ${calc.marginPct.toFixed(0)}%`}</div>
-            {calc.atFloor && <div className="mt-1 text-[11px]" style={{ color: '#fde68a' }}>At the ${MIN_FEE} minimum</div>}
+            <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: 'rgba(0,200,255,0.85)' }}>Gate Guard cost / month</div>
+            <div className="mt-1 text-4xl font-bold" style={{ color: '#7DE5FF' }}>{calc.empty ? '—' : usd(calc.ggCost)}</div>
+            {!calc.empty && !calc.noUnits && <div className="mt-1 text-[12px]" style={{ color: 'rgba(255,255,255,0.55)' }}>{usd(calc.ggPerUnit)} cost per unit · {calc.livingTotal} units</div>}
           </div>
         </div>
       </div>
-      <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Rule: price = 2× cost (50% margin), never below ${MIN_FEE}/mo. Brivo base only counts when there's access. Costs: docs/nexus/PRICING_MODEL.md.</div>
+
+      {/* Step 2 — Dealer price */}
+      <div className="rounded-3xl p-5" style={{ background: 'linear-gradient(180deg, rgba(52,211,153,0.08), rgba(8,18,34,0.6))', border: '1px solid rgba(52,211,153,0.28)' }}>
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: '#6ee7b7' }}>Dealer price / month</div>
+            <div className="mt-1 text-3xl font-bold" style={{ color: '#6ee7b7' }}>{calc.empty ? '—' : usd(calc.dealerPrice)}</div>
+            {!calc.empty && !calc.noUnits && <div className="mt-1 text-[12px]" style={{ color: 'rgba(255,255,255,0.55)' }}>{usd(calc.dealerPerUnit)} per unit</div>}
+          </div>
+          <div className="text-right text-[12px]" style={{ color: 'rgba(255,255,255,0.55)' }}>
+            <div>GG margin kept: {calc.empty ? '—' : usd(calc.ggMargin)}</div>
+            <div>{usd(calc.marginPerUnit)}/unit × {calc.livingTotal} units</div>
+          </div>
+        </div>
+        {calc.noUnits && !calc.empty && <div className="mt-3 text-[11px]" style={{ color: '#fde68a' }}>Add living units to apply the per-unit margin (gate-only / camera-only margin rule still TBD).</div>}
+      </div>
+
+      <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Step 1 = Gate Guard cost (Brivo + Eagle Eye). Step 2 = dealer price = cost + ${MARGIN_MIN.toFixed(2)}–${MARGIN_MAX.toFixed(2)}/unit margin. Costs: docs/nexus/PRICING_MODEL.md.</div>
     </div>
   )
 }

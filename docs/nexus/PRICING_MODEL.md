@@ -37,16 +37,22 @@ So pricing must be an **itemized calculator** (per component), not a single $/un
 - Fixed costs (base $89.25, doors, cameras, extra passes) sit **on top** of per-unit cost.
 - To stay ≤ $2.50/unit all-in on pass-app units, fixed costs can only add **$0.25/unit** — the base alone ($89.25) doesn't amortize under $0.25/unit until **~357 units**. So flat $5 only holds for large pass-app properties; everything else needs the levers below.
 
-## LOCKED RULE
-**Price = max($150 minimum, cost × 2)** → 50% margin. That's it.
-- Implemented in `components/nexus/PricingCalculator.tsx` (`MIN_FEE = 150`, `PRICE_MULTIPLIER = 2`).
-- **Scaling is automatic** — cost itself scales (Brivo door tiers $11.10→$9→$3.72; flat per-unit), so big sites get a lower blended $/unit with no separate slider.
-- **Gateway resolves itself** — gateway units cost $4.50, so at 2× they contribute $9 to price automatically. No separate gateway tier needed.
-- **Brivo base ($89.25) only counts when there's access** (doors/units). Cameras-only sites skip it.
-- **Minimum fee $150/mo** protects tiny sites.
-- No volume slider (kept 5th-grader simple). If desired later, it's one tunable lever.
+## MODEL (current)
+Two layers. Implemented in `components/nexus/PricingCalculator.tsx`.
 
-Where used: Sales → Opportunities → **Rough Calculator** (live). Next: feed the chosen price into the opportunity MRR + proposal builder.
+**Step 1 — Gate Guard cost** (what GG pays Brivo / Eagle Eye), monthly:
+- Base $89.25/site (500 passes incl; ~1.5 passes/unit) — applies when there's access
+- Doors tiered: $11.10 (1–2) / $9.00 (3–12) / $3.72 (13+)
+- Common-area smart lock (Schlage/Allegion/dormakaba): $2.25 each
+- Unit control: $2.25/unit (app) or $4.50/unit (gateway)
+- Cameras: $15 each (monitored OR stored-video — same cost)
+- Extra mobile passes: $30 per 100 over the 500 included
+
+**Step 2 — Dealer price** = GG cost + (living units × per-unit margin), where GG margin is **bounded $2.25 min / $3.00 max** per unit. (`MARGIN_MIN = 2.25`, `MARGIN_MAX = 3.00`.)
+
+**Phase 2 — End-user price** = dealer price + dealer markup (TBD).
+
+Open: how the per-unit margin applies to **gate-only / camera-only** sites with no living units (currently no margin until living units entered). Where used: Sales → Opportunities → **Rough Calculator** (live). Next: feed dealer price → opportunity MRR + proposal.
 
 ## Calculator requirement (when built)
 Itemized inputs per site: # gates/common doors (auto-tier S1/S2/S3), # units + control type (pass-app vs gateway), # cameras (with-access vs monitored), # mobile passes. Output: true monthly cost + recommended retail (per the model above) + blended $/unit + margin. Feeds the opportunity MRR field and the Sales → Opportunities → Rough Calculator.
