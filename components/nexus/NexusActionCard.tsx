@@ -51,7 +51,7 @@ export function NexusActionCard({
       <NexusGlyphTile kind={glyph} color={hex} />
       <div className="text-lg font-bold leading-tight" style={{ color: '#ffffff' }}>{title}</div>
       <div className="mt-2 text-[13px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.82)' }}>{subtitle}</div>
-      <div className="mt-auto pt-4 self-start rounded-full px-3.5 py-1.5 text-[13px] font-semibold opacity-95 transition-opacity group-hover:opacity-100" style={{ background: `rgba(${color},0.20)`, border: `1px solid rgba(${color},0.45)`, color: '#ffffff', boxShadow: `0 0 14px rgba(${color},0.22)` }}>{actionLabel}</div>
+      <div className="mt-auto pt-4 self-center text-center rounded-full px-3.5 py-1.5 text-[13px] font-semibold opacity-95 transition-opacity group-hover:opacity-100" style={{ background: `rgba(${color},0.20)`, border: `1px solid rgba(${color},0.45)`, color: '#ffffff', boxShadow: `0 0 14px rgba(${color},0.22)` }}>{actionLabel}</div>
     </button>
   )
 }
