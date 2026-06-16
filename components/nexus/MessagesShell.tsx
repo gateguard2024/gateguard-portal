@@ -140,6 +140,15 @@ const initials = (name: string) =>
 // Soft, deterministic avatar tint per contact so the list reads at a glance.
 const AVATAR_TINTS = ['#6B7EFF', '#34D399', '#F59E0B', '#EC4899', '#22D3EE', '#A78BFA'];
 const tintFor = (s: string) => AVATAR_TINTS[[...(s || '?')].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_TINTS.length];
+// Render real email HTML safely: drop scripts, global <style> (would leak into the
+// app), iframes, and inline event handlers — keep inline styles so formatting shows.
+const sanitizeEmailHtml = (html: string) => (html || '')
+  .replace(/<script[\s\S]*?<\/script>/gi, '')
+  .replace(/<style[\s\S]*?<\/style>/gi, '')
+  .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
+  .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
+  .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
+  .replace(/javascript:/gi, '');
 // --- Main Component ---
 export default function MessagesShell() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -206,6 +215,40 @@ export default function MessagesShell() {
     setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, linked_type: (payload.linked_type as LinkedType) ?? null, linked_id: payload.linked_id ?? null, linked_label: payload.linked_label ?? null } : c));
     await fetch(`/api/nexus/messages/threads/${conv.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(() => {});
   };
+
+  // Open a conversation + mark it read (clears the unread dot, Superhuman-style).
+  const selectConversation = React.useCallback((id: string) => {
+    setSelectedId(id);
+    setConversations(prev => prev.map(c => c.id === id ? { ...c, unread: false, needs_reply: false } : c));
+    void fetch(`/api/nexus/messages/threads/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ read: true }) }).catch(() => {});
+  }, []);
+
+  // Email signature (edited in Setup, appended server-side on send).
+  const [signature, setSignature] = useState('');
+  const [sigSaved, setSigSaved] = useState(false);
+  useEffect(() => { if (showSetup) void fetch('/api/nexus/messages/signature').then(r => r.json()).then(j => setSignature(j.signature ?? '')).catch(() => {}); }, [showSetup]);
+  const saveSignature = async () => {
+    await fetch('/api/nexus/messages/signature', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ signature }) }).catch(() => {});
+    setSigSaved(true); setTimeout(() => setSigSaved(false), 1800);
+  };
+
+  // Keyboard navigation — j/k (or ↑/↓) to move, Esc to close. Skips when typing.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (showSetup) return;
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      const list = filteredConversations;
+      if (list.length === 0) return;
+      const idx = list.findIndex(c => c.id === selectedId);
+      if (e.key === 'j' || e.key === 'ArrowDown') { e.preventDefault(); selectConversation(list[Math.min(list.length - 1, idx + 1)].id); }
+      else if (e.key === 'k' || e.key === 'ArrowUp') { e.preventDefault(); selectConversation(list[Math.max(0, idx < 0 ? 0 : idx - 1)].id); }
+      else if (e.key === 'Escape') { setSelectedId(null); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [filteredConversations, selectedId, showSetup, selectConversation]);
+
   const handleSend = async () => {
     const conv = selectedConversation;
     if (!replyText.trim() || !conv) return;
@@ -252,11 +295,19 @@ export default function MessagesShell() {
           <ArrowLeft size={16} /> Back to messages
         </button>
         <MessagesConnectorPane />
+        {/* Email signature — appended to every email you send */}
+        <div className="mt-6 rounded-2xl p-4" style={glassPanel}>
+          <div className="text-sm font-semibold mb-1">Email signature</div>
+          <div className="text-xs mb-3" style={textSecondary}>Added to the bottom of every email you send.</div>
+          <textarea value={signature} onChange={e => setSignature(e.target.value)} rows={5} placeholder={"Russel Feldman\nGateGuard\n(555) 123-4567"} className="w-full rounded-xl px-3 py-2 text-sm bg-black/30 outline-none resize-y" style={{ ...textPrimary, border: '1px solid rgba(255,255,255,0.1)' }} />
+          <button onClick={saveSignature} className="mt-3 px-4 py-2 rounded-full text-sm" style={{ backgroundColor: brandBlue, color: 'white' }}>{sigSaved ? 'Saved ✓' : 'Save signature'}</button>
+        </div>
       </div>
     );
   }
   return (
     <div className="flex w-full h-[78dvh] pb-4 font-sans overflow-hidden rounded-2xl" style={{ ...textPrimary, ...glassPanel }}>
+      <style>{`.nexus-email-html img{max-width:100%!important;height:auto!important} .nexus-email-html table{max-width:100%!important} .nexus-email-html a{color:#2563eb} .nexus-email-html *{max-width:100%}`}</style>
       {/* LEFT PANE: List */}
       <div className={`w-full md:w-[360px] flex-shrink-0 flex-col border-r ${selectedId ? 'hidden md:flex' : 'flex'}`} style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
         <div className="p-4 flex flex-col gap-4">
@@ -287,8 +338,8 @@ export default function MessagesShell() {
             <div className="p-6 text-center text-sm" style={textSecondary}>No conversations found.</div>
           ) : (
             filteredConversations.map(conv => (
-              <button key={conv.id} onClick={() => setSelectedId(conv.id)} className="w-full text-left px-3 py-3 rounded-2xl mb-0.5 flex items-center gap-3 transition-colors hover:bg-white/5" style={{ backgroundColor: selectedId === conv.id ? 'rgba(255,255,255,0.07)' : 'transparent' }}>
-                {/* unread dot rail keeps the row calm but scannable */}
+              <button key={conv.id} onClick={() => selectConversation(conv.id)} className="w-full text-left px-3 py-3 rounded-2xl mb-0.5 flex items-center gap-3 transition-colors hover:bg-white/5" style={{ backgroundColor: selectedId === conv.id ? 'rgba(255,255,255,0.07)' : 'transparent' }}>
+                {/* unread dot rail — only shows when actually unread */}
                 <div className="w-1.5 flex-shrink-0 flex justify-center">
                   {conv.unread && <span className="w-2 h-2 rounded-full" style={{ backgroundColor: brandBlue }} />}
                 </div>
@@ -297,10 +348,14 @@ export default function MessagesShell() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm" style={{ ...(conv.unread ? textPrimary : textSecondary), fontWeight: conv.unread ? 600 : 500 }}>{conv.contact_name}</span>
+                    <span className="truncate text-sm" style={{ ...(conv.unread ? textPrimary : textSecondary), fontWeight: conv.unread ? 700 : 500 }}>{conv.contact_name}</span>
                     <span className="text-[11px] flex-shrink-0" style={textFaint}>{formatRelativeTime(conv.last_at)}</span>
                   </div>
-                  <div className="truncate text-xs mt-0.5" style={conv.unread ? textSecondary : textFaint}>{conv.preview}</div>
+                  <div className="truncate text-xs mt-0.5">
+                    {conv.subject && <span style={{ ...(conv.unread ? textPrimary : textSecondary), fontWeight: conv.unread ? 600 : 500 }}>{conv.subject}</span>}
+                    {conv.subject && conv.preview && <span style={textFaint}>&nbsp;&mdash;&nbsp;</span>}
+                    <span style={textFaint}>{conv.preview}</span>
+                  </div>
                 </div>
               </button>
             ))
@@ -389,7 +444,7 @@ export default function MessagesShell() {
                         <span className="text-[11px] flex-shrink-0" style={textFaint}>{new Date(msg.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
                       {msg.body_html
-                        ? <div className="px-5 py-4 text-sm email-body" style={{ color: 'rgba(255,255,255,0.86)', lineHeight: 1.65, maxWidth: 680 }} dangerouslySetInnerHTML={{ __html: msg.body_html }} />
+                        ? <div className="nexus-email-html" style={{ background: '#ffffff', color: '#1a1a2e', padding: '20px 24px', fontSize: 14, lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(msg.body_html) }} />
                         : <div className="px-5 py-4 text-sm" style={{ color: 'rgba(255,255,255,0.86)', lineHeight: 1.65, maxWidth: 680, whiteSpace: 'pre-wrap' }}>{msg.body}</div>}
                     </div>
                   );

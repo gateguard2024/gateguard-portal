@@ -16,8 +16,9 @@ import { serve } from 'inngest/next'
 import { inngest } from '@/inngest/client'
 import { enrichProperty } from '@/inngest/functions/enrich-property'
 import { syncMailboxes } from '@/inngest/functions/sync-mailboxes'
+import { syncCalendars } from '@/inngest/functions/sync-calendars'
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [enrichProperty, syncMailboxes],
+  functions: [enrichProperty, syncMailboxes, syncCalendars],
 })

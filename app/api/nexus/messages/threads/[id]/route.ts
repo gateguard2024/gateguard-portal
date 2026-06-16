@@ -23,6 +23,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: 'Thread not found.' }, { status: 404 })
   }
 
+  // Mark-read (clears the unread dot when a conversation is opened).
+  if (body.read === true) {
+    await supabase.from('message_threads').update({ unread_count: 0, updated_at: new Date().toISOString() }).eq('id', params.id)
+    return NextResponse.json({ ok: true })
+  }
+
+  // Otherwise: assign/clear the linked CRM record.
   const linkedType = clean(body.linked_type)
   const { error } = await supabase
     .from('message_threads')

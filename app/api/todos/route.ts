@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { pushTodoToGcal } from '@/lib/gcal-sync'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -103,6 +104,13 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // Push-on-create: a dated task lands on the creator's Google Calendar instantly
+    // (no-op if they haven't connected Google). Best-effort — never blocks the save.
+    if (data?.due_date) {
+      try { await pushTodoToGcal(caller.id, { id: data.id, title: data.title, due_date: data.due_date, status: data.status, priority: data.priority }) } catch { /* best-effort */ }
+    }
+
     return NextResponse.json(data, { status: 201 })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error'

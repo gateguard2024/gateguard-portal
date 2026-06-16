@@ -43,11 +43,20 @@ export async function POST(req: NextRequest) {
 
   const cfg = channel.config ?? {}
   const fromAddress: string = cfg.from_address ?? cfg.user ?? user.email
+
+  // Append the user's saved signature (if any) to the outgoing message.
+  const { data: sig } = await supabase.from('user_settings').select('email_signature').eq('user_id', user.id).maybeSingle()
+  const signature = (sig?.email_signature ?? '').trim()
+  const textWithSig = signature ? `${text ?? ''}\n\n${signature}` : text
+  const htmlWithSig = html
+    ? (signature ? `${html}<br><br>${signature.replace(/\n/g, '<br>')}` : html)
+    : undefined
+
   const email: OutboundEmail = {
     to,
     subject: subject ?? '(no subject)',
-    text,
-    html,
+    text: textWithSig,
+    html: htmlWithSig,
     fromName: user.name,
     fromAddress,
   }

@@ -45,6 +45,23 @@ function extractBody(payload: GmailPart | undefined): string {
   return ''
 }
 
+// Pull the raw HTML body (formatted) so the reader can show it as a real email,
+// not stripped text. Recurses into multipart/alternative + multipart/related.
+function extractHtml(payload: GmailPart | undefined): string {
+  if (!payload) return ''
+  const decode = (data?: string) => (data ? Buffer.from(data, 'base64url').toString('utf8') : '')
+  if (payload.mimeType === 'text/html' && payload.body?.data) return decode(payload.body.data)
+  if (payload.parts?.length) {
+    const htmlPart = payload.parts.find((p) => p.mimeType === 'text/html')
+    if (htmlPart?.body?.data) return decode(htmlPart.body.data)
+    for (const p of payload.parts) {
+      const nested = extractHtml(p)
+      if (nested) return nested
+    }
+  }
+  return ''
+}
+
 export interface FetchResult { fetched: number; error?: string }
 
 export async function fetchGmailInbox(
@@ -114,6 +131,7 @@ export async function fetchGmailInbox(
           ? new Date(dateHeader).toISOString()
           : new Date().toISOString()
       const body = extractBody(msg.payload) || msg.snippet || ''
+      const bodyHtml = extractHtml(msg.payload)
 
       // Find or create the thread for this Gmail conversation.
       const gthread = msg.threadId || threadId
@@ -155,6 +173,7 @@ export async function fetchGmailInbox(
         to_addresses: [{ name: '', address: channel.config?.from_address ?? '' }],
         subject: subject || null,
         body,
+        body_html: bodyHtml || null,
         status: 'delivered',
         created_at: receivedAt,
       })
