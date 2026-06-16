@@ -17,6 +17,7 @@ const UNIT_PRICE = 5
 const FLOOR_LIMIT = 500
 const OVERAGE_MARKUP = 2
 const ADDON_MARGIN = 2        // unit door locks: GG cost + $2
+const MSO_AGENT_PER_UNIT = 1  // commission carved from the retail markup → MSO + agent
 
 const COST = {
   base: 89.25,
@@ -127,7 +128,9 @@ export function PricingCalculator() {
   }, [livingUnits, doors, commonLocks, unitsApp, unitsGw, camMon, camBackup, passesPerUnit])
 
   const ggFee = calc.dealerPrice          // what the dealer pays GG
-  const suggestedRetail = ggFee * 2       // ~2× → end-user price (hidden $1 MSO/agent lives in this markup)
+  const suggestedRetail = ggFee * 2       // ~2× → end-user price
+  const commission = calc.units * MSO_AGENT_PER_UNIT   // $1/unit → MSO + agent (from the retail markup)
+  const dealerProfit = suggestedRetail - ggFee - commission
 
   return (
     <div className="space-y-5">
@@ -190,6 +193,26 @@ export function PricingCalculator() {
         <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: '#7DE5FF' }}>Suggested retail / month</div>
         <div className="mt-1 text-3xl font-bold" style={{ color: '#7DE5FF' }}>{calc.empty ? '—' : usd(suggestedRetail)}</div>
         <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.45)' }}>Recommended price to the property — you set the final number.</div>
+      </div>
+
+      {/* Your expected profit — reconciles retail vs fee vs commission so nothing is "missing" */}
+      <div className="rounded-3xl p-5" style={{ background: 'linear-gradient(180deg, rgba(52,211,153,0.10), rgba(8,18,34,0.6))', border: '1px solid rgba(52,211,153,0.3)' }}>
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: '#6ee7b7' }}>Your expected profit / month</div>
+            <div className="mt-1 text-3xl font-bold" style={{ color: '#6ee7b7' }}>{calc.empty ? '—' : usd(dealerProfit)}</div>
+          </div>
+          {!calc.empty && !calc.noUnits && <div className="text-[12px]" style={{ color: 'rgba(255,255,255,0.55)' }}>≈ {usd(dealerProfit / calc.units)}/unit</div>}
+        </div>
+        {!calc.empty && (
+          <div className="mt-3 space-y-1.5 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.07)' }}>
+            <Line label="Suggested retail" value={usd(suggestedRetail)} />
+            <Line label="Gate Guard Fee" value={`(${usd(ggFee)})`} />
+            <Line label={`MSO & Agent Override${calc.units > 0 ? ` · ${usd(MSO_AGENT_PER_UNIT)}/unit` : ''}`} value={`(${usd(commission)})`} />
+            <div className="mt-1 border-t pt-1.5" style={{ borderColor: 'rgba(255,255,255,0.1)' }}><Line label="Your net profit" value={usd(dealerProfit)} /></div>
+          </div>
+        )}
+        <div className="mt-2 text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>MSO &amp; Agent Override is the network commission ({usd(MSO_AGENT_PER_UNIT)}/unit/mo) paid through Gate Guard to the master operator and agent.</div>
       </div>
 
       <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
