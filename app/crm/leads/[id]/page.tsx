@@ -646,7 +646,7 @@ function QualifySlideOver({ lead, open, onClose, onCreated }: {
           property_city:      lead.location?.split(",")?.[0]?.trim() ?? null,
           property_state:     lead.location?.split(",")?.[1]?.trim() ?? null,
           source:             lead.source,
-          show_lead_id:       lead.id.replace(/^show_/, ""),
+          lead_id:            lead.id.replace(/^show_/, ""),
         }),
       });
       const json = await res.json();
@@ -955,9 +955,8 @@ export default function LeadDetailPage() {
           est_setup:          lead.estSetup,
           est_mrr:            lead.estMrr,
           description:        lead.notes || null,
-          // show leads live in show_leads table — use show_lead_id (FK → show_leads)
-          // NOT lead_id which has a FK → leads (different table)
-          show_lead_id:       lead.id.replace(/^show_/, ''),
+          // leads now live in the unified leads table — link via lead_id
+          lead_id:            lead.id.replace(/^show_/, ''),
         }),
       });
       const json = await res.json();

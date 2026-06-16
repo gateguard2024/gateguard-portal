@@ -97,8 +97,8 @@ export async function POST(req: NextRequest) {
     const senderEmail = from_email ?? DEFAULT_FROM_EMAIL
 
     const { data: leads, error: fetchErr } = await supabase
-      .from('show_leads')
-      .select('id, name, email, property_name, property_intel, scout_status')
+      .from('leads')
+      .select('id, contact_name, email, property_name, property_intel, scout_status')
       .in('id', lead_ids)
 
     if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 })
@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
                      : `We work alongside or replace legacy systems to handle everything: gates, cameras, resident access, and ongoing service.`
 
         subject = `Quick question about access control at ${propName}`
-        body    = `Hi ${lead.name?.split(' ')[0] ?? 'there'},\n\n${hook}\n\nI wanted to reach out about GateGuard — we're a managed access control platform built specifically for multifamily. ${vendor} We operate on one flat monthly fee per unit.\n\nMost property managers see an immediate lift in resident satisfaction and a reduction in maintenance calls.\n\nWould you be open to a 15-minute call to see if it's a fit for ${propName}?\n\nBest,\n${senderName}`
+        body    = `Hi ${lead.contact_name?.split(' ')[0] ?? 'there'},\n\n${hook}\n\nI wanted to reach out about GateGuard — we're a managed access control platform built specifically for multifamily. ${vendor} We operate on one flat monthly fee per unit.\n\nMost property managers see an immediate lift in resident satisfaction and a reduction in maintenance calls.\n\nWould you be open to a 15-minute call to see if it's a fit for ${propName}?\n\nBest,\n${senderName}`
       }
 
       try {
@@ -161,22 +161,22 @@ export async function POST(req: NextRequest) {
         const resendId = (emailData as any)?.id ?? null
 
         await supabase.from('campaign_sends').insert({
-          show_lead_id:      lead.id,
+          lead_id:           lead.id,
           lead_email:        lead.email,
-          lead_name:         lead.name ?? null,
+          lead_name:         lead.contact_name ?? null,
           campaign_name:     'scout_aria',
           status:            'sent',
           resend_message_id: resendId,
           sent_at:           new Date().toISOString(),
         })
 
-        await supabase.from('show_leads').update({
+        await supabase.from('leads').update({
           scout_status:  'sent',
           scout_sent_at: new Date().toISOString(),
         }).eq('id', lead.id)
 
         await supabase.from('crm_activities').insert({
-          show_lead_id: lead.id,
+          lead_id: lead.id,
           type:         'email',
           direction:    'outbound',
           subject:      subject,
@@ -191,9 +191,9 @@ export async function POST(req: NextRequest) {
 
       } catch (sendErr: any) {
         await supabase.from('campaign_sends').insert({
-          show_lead_id:  lead.id,
+          lead_id:       lead.id,
           lead_email:    lead.email,
-          lead_name:     lead.name ?? null,
+          lead_name:     lead.contact_name ?? null,
           campaign_name: 'scout_aria',
           status:        'failed',
           error_message: sendErr.message,

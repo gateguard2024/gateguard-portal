@@ -110,15 +110,16 @@ export async function POST(req: NextRequest) {
       : (user.org_id ?? null)
 
     // Strip any client-supplied fields that don't exist on the table
-    const { org_id: _orgId, contact_name: _cn, show_lead_id, ...safeBody } = body
+    const { org_id: _orgId, contact_name: _cn, lead_id, ...safeBody } = body
 
     // ── Duplicate detection ────────────────────────────────────────────────────
-    // If this is a show lead conversion, check if an opportunity already exists
-    if (show_lead_id) {
+    // If this is a lead conversion, check if an opportunity already exists.
+    if (lead_id) {
       const { data: existing } = await supabase
         .from('opportunities')
         .select('id, name, stage')
-        .eq('show_lead_id', show_lead_id)
+        .eq('lead_id', lead_id)
+        .is('lost_at', null)
         .maybeSingle()
 
       if (existing) {
@@ -144,12 +145,27 @@ export async function POST(req: NextRequest) {
         owner_name:     user.name,
         owner_initials: user.initials,
         dealer_org_id,
-        ...(show_lead_id ? { show_lead_id } : {}),
+        ...(lead_id ? { lead_id } : {}),
       })
       .select()
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // ── Lead conversion: mark the lead converted + carry its history forward ────
+    if (lead_id && data?.id) {
+      try {
+        await supabase.from('leads')
+          .update({ opportunity_id: data.id, converted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+          .eq('id', lead_id)
+        await Promise.all([
+          supabase.from('activities').update({ opportunity_id: data.id }).eq('lead_id', lead_id).is('opportunity_id', null),
+          supabase.from('crm_activities').update({ opportunity_id: data.id }).eq('lead_id', lead_id).is('opportunity_id', null),
+          supabase.from('attachments').update({ opportunity_id: data.id }).eq('lead_id', lead_id).is('opportunity_id', null),
+        ])
+      } catch { /* conversion bookkeeping is best-effort */ }
+    }
+
     return NextResponse.json(data, { status: 201 })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })

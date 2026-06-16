@@ -122,12 +122,10 @@ export function QuickActions({
           subject:     emailSubject,
           body:        bodyText,      // plain-text fallback (for activity log)
           body_html:   bodyHtml,      // rich HTML including signature images
-          // Pass record linkage so the activity is tracked
-          // Show leads have "show_" prefix IDs — strip it and use show_lead_id FK
-          ...(recordType === 'lead' && recordId.startsWith('show_')
-            ? { show_lead_id: recordId.replace(/^show_/, '') }
-            : recordType === 'lead'
-            ? { lead_id: recordId }
+          // Pass record linkage so the activity is tracked.
+          // Leads use a plain UUID now; tolerate a legacy show_ prefix on the id.
+          ...(recordType === 'lead'
+            ? { lead_id: recordId.replace(/^show_/, '') }
             : {}),
           ...(recordType === 'opportunity' && { opportunity_id: recordId }),
         }),

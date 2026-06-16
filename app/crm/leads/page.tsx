@@ -453,12 +453,10 @@ export default function LeadsPage() {
           notes:           d.notes || null,
         }))
         setLeads(mapped)
-        // sendsData is keyed by show_lead_id (without show_ prefix)
-        // API returns the raw UUID, leads have id = show_<uuid>
+        // sendsData is keyed by lead_id (raw UUID), which matches lead.id now.
         const normalized: Record<string, SendStatus> = {}
         for (const [k, v] of Object.entries(sendsData || {})) {
-          normalized[`show_${k}`] = v as SendStatus
-          normalized[k] = v as SendStatus  // also store raw
+          normalized[k] = v as SendStatus
         }
         setSendMap(normalized)
       })

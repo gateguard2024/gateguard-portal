@@ -21,18 +21,23 @@ export async function opportunityInScope(id: string): Promise<boolean> {
   return isInScope(scope, (data as { dealer_org_id?: string | null } | null)?.dealer_org_id)
 }
 
-// A lead is in scope:
-//  - show_<uuid>  (show_leads): the importer/owner (assigned_to_user_id == caller)
-//  - <uuid>       (leads):      org_id in the caller's subtree
+// A lead is in scope if EITHER:
+//  - its org_id is in the caller's subtree, OR
+//  - the caller is the importer/owner (assigned_to_user_id == caller) — covers
+//    ARIA-imported leads (formerly the legacy show-lead pool) which may have no org_id.
+// rawId tolerates a legacy show_ prefix; leads use plain UUIDs now.
 export async function leadInScope(rawId: string): Promise<boolean> {
   const user = await getCurrentUser()
   const scope = await resolveOrgScope(user)
   if (scope.all) return true
-  if (rawId.startsWith('show_')) {
-    const uuid = rawId.replace('show_', '')
-    const { data } = await supabase.from('show_leads').select('assigned_to_user_id').eq('id', uuid).maybeSingle()
-    return (data as { assigned_to_user_id?: string | null } | null)?.assigned_to_user_id === user.id
-  }
-  const { data } = await supabase.from('leads').select('org_id').eq('id', rawId).maybeSingle()
-  return isInScope(scope, (data as { org_id?: string | null } | null)?.org_id)
+  const uuid = rawId.replace(/^show_/, '')
+  const { data } = await supabase
+    .from('leads')
+    .select('org_id, assigned_to_user_id')
+    .eq('id', uuid)
+    .maybeSingle()
+  const row = data as { org_id?: string | null; assigned_to_user_id?: string | null } | null
+  if (!row) return false
+  if (row.assigned_to_user_id && row.assigned_to_user_id === user.id) return true
+  return isInScope(scope, row.org_id)
 }

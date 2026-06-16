@@ -140,21 +140,21 @@ export async function GET(req: NextRequest) {
     // Campaigns run over the GLOBAL show-lead pool — corporate only.
     if (!user.isCorporate) return NextResponse.json({ error: 'Campaigns are run by the corporate marketing team.' }, { status: 403 })
 
-    // Fetch all show leads (no status column — check converted via opportunities)
+    // Fetch all leads (no status column — check converted via opportunities)
     const { data: allLeads, error } = await supabase
-      .from('show_leads')
-      .select('id, name, property_name, email, notes')
+      .from('leads')
+      .select('id, contact_name, property_name, email, notes')
       .order('created_at', { ascending: false })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // Find which show_lead_ids already have an opportunity (converted)
+    // Find which lead_ids already have an opportunity (converted)
     const { data: converted } = await supabase
       .from('opportunities')
-      .select('show_lead_id')
-      .not('show_lead_id', 'is', null)
+      .select('lead_id')
+      .not('lead_id', 'is', null)
 
-    const convertedIds = new Set((converted || []).map((o: any) => o.show_lead_id))
+    const convertedIds = new Set((converted || []).map((o: any) => o.lead_id))
 
     const rows = (allLeads || []).filter((r: any) => !convertedIds.has(r.id))
     const eligible = rows.filter((r: any) => r.email?.includes('@'))
@@ -162,7 +162,7 @@ export async function GET(req: NextRequest) {
     // Build sample email from first eligible lead (or placeholder)
     const sample = eligible[0]
     const sampleEmail = buildEmail(
-      sample?.name ?? 'Alex Johnson',
+      sample?.contact_name ?? 'Alex Johnson',
       sample?.property_name ?? 'Maple Ridge Apartments'
     )
 
@@ -195,17 +195,17 @@ export async function POST(req: NextRequest) {
     // ── TEST MODE: send one email to Russel using first eligible lead as sample ──
     if (testRun) {
       const { data: rows } = await supabase
-        .from('show_leads')
-        .select('id, name, property_name, email')
+        .from('leads')
+        .select('id, contact_name, property_name, email')
       const { data: converted } = await supabase
-        .from('opportunities').select('show_lead_id').not('show_lead_id', 'is', null)
-      const convertedIds = new Set((converted || []).map((o: any) => o.show_lead_id))
+        .from('opportunities').select('lead_id').not('lead_id', 'is', null)
+      const convertedIds = new Set((converted || []).map((o: any) => o.lead_id))
       const eligible = (rows || []).filter(
         (r: any) => !convertedIds.has(r.id) && r.email?.includes('@')
       )
       // Use first eligible lead's name/property for personalization, but send to Russel
       const sample  = eligible[0]
-      const name    = sample?.name         ?? 'Alex Johnson'
+      const name    = sample?.contact_name ?? 'Alex Johnson'
       const prop    = sample?.property_name ?? 'Maple Ridge Apartments'
       const { subject, html, text } = buildEmail(name, prop)
       const { error: sendError } = await resend.emails.send({
@@ -227,16 +227,16 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Fetch all show leads and exclude ones already converted to an opportunity
+    // Fetch all leads and exclude ones already converted to an opportunity
     const { data: rows, error } = await supabase
-      .from('show_leads')
-      .select('id, name, property_name, email')
+      .from('leads')
+      .select('id, contact_name, property_name, email')
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     const { data: convertedOpps } = await supabase
-      .from('opportunities').select('show_lead_id').not('show_lead_id', 'is', null)
-    const convertedIds = new Set((convertedOpps || []).map((o: any) => o.show_lead_id))
+      .from('opportunities').select('lead_id').not('lead_id', 'is', null)
+    const convertedIds = new Set((convertedOpps || []).map((o: any) => o.lead_id))
 
     const eligible = (rows || []).filter(
       (r: any) => !convertedIds.has(r.id) && r.email?.includes('@')
@@ -252,7 +252,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         dry_run:  true,
         eligible: eligible.length,
-        leads:    eligible.map((r: any) => ({ id: r.id, name: r.name, email: r.email })),
+        leads:    eligible.map((r: any) => ({ id: r.id, name: r.contact_name, email: r.email })),
       })
     }
 
@@ -263,7 +263,7 @@ export async function POST(req: NextRequest) {
       const batch = eligible.slice(i, i + BATCH)
 
       const messages = batch.map((lead: any) => {
-        const { subject, html, text } = buildEmail(lead.name, lead.property_name)
+        const { subject, html, text } = buildEmail(lead.contact_name, lead.property_name)
         return {
           from:    'Russel Feldman <rfeldman@gateguard.co>',
           to:      [lead.email],
@@ -285,9 +285,9 @@ export async function POST(req: NextRequest) {
           batch.forEach((lead: any) => {
             results.errors.push(`${lead.email}: ${errDetail}`)
             void supabase.from('campaign_sends').insert({
-              show_lead_id:  lead.id,
+              lead_id:       lead.id,
               lead_email:    lead.email,
-              lead_name:     lead.name,
+              lead_name:     lead.contact_name,
               campaign_name: 'show_follow_up',
               status:        'failed',
               error_message: errDetail,
@@ -304,9 +304,9 @@ export async function POST(req: NextRequest) {
               const errMsg = r.error.message ?? String(r.error)
               results.errors.push(`${lead.email}: ${errMsg}`)
               void supabase.from('campaign_sends').insert({
-                show_lead_id:  lead.id,
+                lead_id:       lead.id,
                 lead_email:    lead.email,
-                lead_name:     lead.name,
+                lead_name:     lead.contact_name,
                 campaign_name: 'show_follow_up',
                 status:        'failed',
                 error_message: errMsg,
@@ -318,9 +318,9 @@ export async function POST(req: NextRequest) {
               const sentAt   = new Date().toISOString()
               // Log the send with Resend message ID (needed for open-tracking webhook)
               void supabase.from('campaign_sends').insert({
-                show_lead_id:      lead.id,
+                lead_id:           lead.id,
                 lead_email:        lead.email,
-                lead_name:         lead.name,
+                lead_name:         lead.contact_name,
                 campaign_name:     'show_follow_up',
                 status:            'sent',
                 resend_message_id: resendId,
@@ -336,7 +336,7 @@ export async function POST(req: NextRequest) {
                 created_at:      sentAt,
               }).then(() => {})
               // Also stamp the lead notes field for quick visibility in the list
-              void supabase.from('show_leads').update({
+              void supabase.from('leads').update({
                 notes: `Campaign email sent ${new Date().toLocaleDateString()}`,
               }).eq('id', lead.id).then(() => {})
             }
@@ -347,9 +347,9 @@ export async function POST(req: NextRequest) {
         batch.forEach((lead: any) => {
           results.errors.push(`${lead.email}: ${e.message}`)
           void supabase.from('campaign_sends').insert({
-            show_lead_id:  lead.id,
+            lead_id:       lead.id,
             lead_email:    lead.email,
-            lead_name:     lead.name,
+            lead_name:     lead.contact_name,
             campaign_name: 'show_follow_up',
             status:        'failed',
             error_message: e.message,

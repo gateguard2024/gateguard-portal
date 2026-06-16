@@ -21,18 +21,20 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const status   = searchParams.get('status')
   const site_id  = searchParams.get('site_id')
+  const opportunity_id = searchParams.get('opportunity_id')
   const q        = searchParams.get('q')
   const limit    = parseInt(searchParams.get('limit') ?? '50')
 
   let query = supabase
     .from('surveys')
-    .select('id, survey_number, property_name, property_address, surveyor_name, surveyor_type, survey_date, status, devices, ai_summary, ai_sow, ai_bom, quote_id, site_id, created_at, updated_at')
+    .select('id, survey_number, property_name, property_address, surveyor_name, surveyor_type, survey_date, status, devices, ai_summary, ai_sow, ai_bom, quote_id, site_id, opportunity_id, created_at, updated_at')
     .order('created_at', { ascending: false })
     .limit(limit)
 
   query = applyOrgScope(query, scope, 'org_id')
   if (status)  query = query.eq('status', status)
   if (site_id) query = query.eq('site_id', site_id)
+  if (opportunity_id) query = query.eq('opportunity_id', opportunity_id)
   if (q)       query = query.ilike('property_name', `%${q}%`)
 
   const { data, error } = await query

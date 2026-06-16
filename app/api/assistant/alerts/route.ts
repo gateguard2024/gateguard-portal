@@ -35,7 +35,7 @@ export async function GET() {
         .in('status', ['open', 'in_progress']),
       // SCOUT: leads that opened the ARIA email but rep hasn't engaged yet
       supabase
-        .from('show_leads')
+        .from('leads')
         .select('id, property_name, scout_opened_at', { count: 'exact' })
         .eq('scout_status', 'opened')
         .in('stage', ['new', 'contacted'])
@@ -52,7 +52,7 @@ export async function GET() {
       open_wos:           wosRes.count    ?? 0,
       scout_opened:       scoutCount,
       scout_opened_leads: scoutOpened.map((l: any) => ({
-        id:            `show_${l.id}`,
+        id:            l.id,
         property_name: l.property_name,
         opened_at:     l.scout_opened_at,
       })),

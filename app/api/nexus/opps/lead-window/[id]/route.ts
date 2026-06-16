@@ -660,12 +660,36 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ success: false, message: activityError.message }, { status: 500 })
     }
 
+    // ── Carry the lead's history forward ─────────────────────────────────────
+    // Re-link (non-destructive: keep lead_id, add opportunity_id) so every note,
+    // call, email and file the lead already had now shows on the opportunity too.
+    // Best-effort: a relink failure must never block the conversion.
+    let carried = { activities: 0, crm_activities: 0, attachments: 0 }
+    try {
+      const relink = async (table: string) => {
+        const { data, error: relinkErr } = await supabase
+          .from(table)
+          .update({ opportunity_id: newOpp.id })
+          .eq('lead_id', lead.id)
+          .is('opportunity_id', null)
+          .select('id')
+        return relinkErr ? 0 : (data?.length ?? 0)
+      }
+      const [a, c, at] = await Promise.all([
+        relink('activities'),
+        relink('crm_activities'),
+        relink('attachments'),
+      ])
+      carried = { activities: a, crm_activities: c, attachments: at }
+    } catch { /* non-blocking */ }
+
     return NextResponse.json({
       success: true,
       message: 'Opportunity created.',
       opportunity: newOpp,
       opportunityId: newOpp.id,
       lead: updatedLead,
+      carried,
     })
   }
 

@@ -1,8 +1,8 @@
 /**
  * POST /api/aria/searches/[id]/import
  *
- * Creates a show_leads record for each prospect in the saved ARIA search.
- * Skips prospects whose property name already matches an existing show_lead.
+ * Creates a leads record for each prospect in the saved ARIA search.
+ * Skips prospects whose property name already matches an existing lead.
  * Returns the count of leads created.
  */
 import { NextRequest, NextResponse } from 'next/server'
@@ -59,7 +59,7 @@ export async function POST(
     // Check which property names already exist so we don't dupe
     const propertyNames = prospects.map((p: any) => p.property?.name).filter(Boolean)
     const { data: existingLeads } = await supabase
-      .from('show_leads')
+      .from('leads')
       .select('property_name')
       .in('property_name', propertyNames)
 
@@ -105,7 +105,7 @@ export async function POST(
         const state = addrParts[2]?.split(' ')[1] ?? null
 
         return {
-          name:          p.decision_maker?.name ?? 'Unknown Contact',
+          contact_name:  p.decision_maker?.name ?? 'Unknown Contact',
           email:         p.decision_maker?.email ?? p.decision_maker?.top_email_format ?? null,
           phone:         p.decision_maker?.phone ?? null,
           property_name: p.property?.name ?? 'Unknown Property',
@@ -114,7 +114,7 @@ export async function POST(
           state,
           property_type: p.property?.property_type ?? 'Multifamily',
           contact_title: p.decision_maker?.title ?? null,
-          units:         p.property?.units ?? null,
+          unit_count:    p.property?.units ?? null,
           notes:         noteParts,
           property_intel: {
             // Connectivity
@@ -170,7 +170,7 @@ export async function POST(
     }
 
     const { data: created, error: insertErr } = await supabase
-      .from('show_leads')
+      .from('leads')
       .insert(rows)
       .select('id')
 

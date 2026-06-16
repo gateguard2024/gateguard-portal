@@ -20,23 +20,26 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const updates = await req.json()
 
+  // Tolerant strip of any legacy show_ prefix — leads use plain UUIDs now
+  const uuid = params.id.replace(/^show_/, '')
+
   // Fetch existing intel
   const { data: lead } = await supabase
-    .from('show_leads')
+    .from('leads')
     .select('property_intel')
-    .eq('id', params.id)
+    .eq('id', uuid)
     .single()
 
   const merged = { ...(lead?.property_intel ?? {}), ...updates, updated_by: userId, updated_at: new Date().toISOString() }
 
   const { error } = await supabase
-    .from('show_leads')
+    .from('leads')
     .update({
       property_intel: merged,
       property_intel_updated_at: new Date().toISOString(),
       property_intel_source: 'rep_verified',
     })
-    .eq('id', params.id)
+    .eq('id', uuid)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true, property_intel: merged })

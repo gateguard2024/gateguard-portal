@@ -17,7 +17,7 @@ type Selected = {
   sublabel: string
   account_name: string
   contact_name: string
-  show_lead_id?: string
+  lead_id?: string
 }
 
 // GateGuard sales pipeline. "Deposit collected" is the conversion point —
@@ -109,13 +109,13 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
   function pickLead(l: LeadRow) {
     const account = l.property_name || l.company || l.company_name || ''
     const label = l.property_name || l.name || 'Lead'
-    const rawId = l.id.replace(/^show_/, '')   // leads come from show_leads, id is "show_<uuid>"
+    const rawId = l.id.replace(/^show_/, '')   // tolerate any legacy "show_" prefix; leads now use real ids
     setSelected({
       label,
       sublabel: [l.location, (l.stage ?? '').replace(/_/g, ' ')].filter(Boolean).join(' · ') || account || 'Lead',
       account_name: account,
       contact_name: l.contact_name || l.name || '',
-      show_lead_id: rawId,
+      lead_id: rawId,
     })
     const u = l.units ? Number(l.units) : 0
     setUnits(u ? String(u) : '')
@@ -151,7 +151,7 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
       if (mrr.trim()) body.est_mrr = Number(mrr) || 0
       if (value.trim()) body.value = Number(value) || 0
       if (units.trim()) body.description = `${notes.trim() ? notes.trim() + '\n' : ''}Units: ${units} · MRR @ $${MRR_PER_UNIT}/unit`
-      if (selected?.show_lead_id) body.show_lead_id = selected.show_lead_id
+      if (selected?.lead_id) body.lead_id = selected.lead_id
 
       const res = await fetch('/api/crm/opportunities', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),

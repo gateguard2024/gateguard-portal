@@ -21,7 +21,7 @@ export async function GET(_req: NextRequest) {
     // One row per lead — latest send record
     const { data, error } = await supabase
       .from('campaign_sends')
-      .select('show_lead_id, status, sent_at, opened_at, open_count, bounced_at, error_message, resend_message_id')
+      .select('lead_id, status, sent_at, opened_at, open_count, bounced_at, error_message, resend_message_id')
       .eq('campaign_name', 'show_follow_up')
       .order('sent_at', { ascending: false })
 
@@ -41,11 +41,11 @@ export async function GET(_req: NextRequest) {
 
     const best = new Map<string, any>()
     for (const row of (data || [])) {
-      if (!row.show_lead_id) continue
-      const existing = best.get(row.show_lead_id)
+      if (!row.lead_id) continue
+      const existing = best.get(row.lead_id)
       const rowPri   = priority[row.status] ?? 0
       const exPri    = existing ? (priority[existing.status] ?? 0) : -1
-      if (rowPri > exPri) best.set(row.show_lead_id, row)
+      if (rowPri > exPri) best.set(row.lead_id, row)
     }
 
     return NextResponse.json(Object.fromEntries(best))

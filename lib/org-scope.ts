@@ -175,7 +175,7 @@ export type AssignedEntity = 'leads' | 'opportunities' | 'work_orders' | 'quotes
 //   'clerk'   → matches PortalUser.id (Clerk user id, TEXT)
 //   'profile' → matches the internal profiles.id (UUID)
 const ASSIGN_CONFIG: Record<AssignedEntity, { column: string; identity: 'clerk' | 'profile' }> = {
-  leads:         { column: 'assigned_to_user_id', identity: 'clerk' },   // show_leads
+  leads:         { column: 'assigned_to_user_id', identity: 'clerk' },   // leads
   opportunities: { column: 'rep_id',              identity: 'profile' }, // opportunities
   work_orders:   { column: 'assigned_to',         identity: 'profile' }, // work_orders
   quotes:        { column: 'created_by',          identity: 'profile' }, // quotes

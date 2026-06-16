@@ -2,7 +2,7 @@
 
 // Opportunity Life Cycle — glass shell (7 stages). Mock UI, on-vision.
 // Vision: docs/nexus/OPPORTUNITY_LIFECYCLE_VISION.md. Wired to real data in AM.
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { PricingCalculator } from '@/components/nexus/PricingCalculator'
 
 const cyan = '#00C8FF'
@@ -97,7 +97,7 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
         </div>
 
         {stage === 0 && <Overview data={data} opportunityId={opportunityId} onSaved={loadData} />}
-        {stage === 1 && <Survey />}
+        {stage === 1 && <Survey opportunityId={opportunityId} opp={opp} />}
         {stage === 2 && <Financials opp={opp} />}
         {stage === 3 && <Proposal />}
         {stage === 4 && <Negotiate />}
@@ -199,6 +199,34 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
       })
       setNoteText(''); onSaved?.()
     } finally { setPosting(false) }
+  }
+
+  // Attachment upload → signed Storage URL → PUT file → record on opportunity.
+  const fileRef = useRef<HTMLInputElement | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadErr, setUploadErr] = useState<string | null>(null)
+  async function uploadFile(file: File) {
+    if (!opportunityId) return
+    setUploading(true); setUploadErr(null)
+    try {
+      const r = await fetch(`/api/nexus/opps/opportunity-window/${opportunityId}/attachment-url`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name }),
+      })
+      const sig = await r.json()
+      if (!r.ok) throw new Error(sig?.error || 'Could not start upload.')
+      const put = await fetch(sig.signedUrl, { method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file })
+      if (!put.ok) throw new Error('Upload failed.')
+      const rec = await fetch(`/api/nexus/opps/opportunity-window/${opportunityId}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'add_attachment', file_name: file.name, url: sig.publicUrl, file_type: file.type || null, size_bytes: file.size }),
+      })
+      const recJson = await rec.json()
+      if (!rec.ok || recJson.success === false) throw new Error(recJson?.message || 'Could not save file.')
+      onSaved?.()
+    } catch (e) {
+      setUploadErr(e instanceof Error ? e.message : 'Upload failed.')
+    } finally { setUploading(false) }
   }
 
   const field = (label: string, value?: string | number | null) => (
@@ -303,10 +331,14 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
         <H>Attachments &amp; photos</H>
         {attachments.length === 0 ? <Sub>No files yet.</Sub> : (
           <div style={{ display: 'grid', gap: 6 }}>
-            {attachments.map((at, i) => <div key={at.id || i} style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>📎 {at.name || at.file_name || 'Attachment'}</div>)}
+            {attachments.map((at, i) => at.url
+              ? <a key={at.id || i} href={at.url} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: '#7de5ff', textDecoration: 'none' }}>📎 {at.name || at.file_name || 'Attachment'}</a>
+              : <div key={at.id || i} style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>📎 {at.name || at.file_name || 'Attachment'}</div>)}
           </div>
         )}
-        <button style={{ ...btn, marginTop: 12 }}>+ Add attachment</button>
+        <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) void uploadFile(f); e.target.value = '' }} />
+        <button disabled={uploading || !opportunityId} onClick={() => fileRef.current?.click()} style={{ ...btn, marginTop: 12, opacity: uploading || !opportunityId ? 0.6 : 1 }}>{uploading ? 'Uploading…' : '+ Add attachment'}</button>
+        {uploadErr && <Sub><span style={{ color: '#fca5a5' }}>{uploadErr}</span></Sub>}
       </Card>
 
       <Card>
@@ -333,35 +365,371 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
   )
 }
 
-function Survey() {
-  const questions = ['How many gates / entry points?', 'How many living units?', 'How many common-area doors?', 'Camera coverage needed?', 'Smart locks on units?']
+// ─── Site Survey ──────────────────────────────────────────────────────────────
+// Simple enough for a 5th grader, powerful enough for the field. Four jobs:
+// 1) Voice (record / upload / paste → auto-fill devices)  2) Field notes
+// 3) Photos  4) Device inventory (Location · What · Action · Working? · Notes · $)
+// Everything saves onto the opportunity's survey row (devices = JSONB).
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SurveyDevice = {
+  id: string
+  name: string
+  product_id?: string | null
+  source?: 'catalog' | 'one_time' | 'requested'
+  brand?: string
+  model?: string
+  location: string
+  working?: boolean | null
+  action?: 'new' | 'keep' | 'service' | 'replace' | ''
+  notes?: string
+  repair_cost?: number | null
+}
+
+const ACTION_OPTS: { v: SurveyDevice['action']; label: string; color: string }[] = [
+  { v: 'keep', label: 'Keep', color: '#6ee7b7' },
+  { v: 'service', label: 'Service', color: '#7DE5FF' },
+  { v: 'replace', label: 'Replace', color: '#fbbf24' },
+  { v: 'new', label: 'New install', color: '#c4b5fd' },
+]
+
+const newSurveyDevice = (): SurveyDevice => ({
+  id: (globalThis.crypto?.randomUUID?.() ?? String(Date.now() + Math.random())),
+  name: '', location: '', working: null, action: '', notes: '', repair_cost: null, source: 'catalog',
+})
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function Survey({ opportunityId, opp }: { opportunityId?: string; opp?: Record<string, any> }) {
+  const [surveyId, setSurveyId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [transcript, setTranscript] = useState('')
+  const [notes, setNotes] = useState('')
+  const [devices, setDevices] = useState<SurveyDevice[]>([])
+  const [photos, setPhotos] = useState<string[]>([])
+  const [saving, setSaving] = useState(false)
+  const [parsing, setParsing] = useState(false)
+  const [recording, setRecording] = useState(false)
+  const [banner, setBanner] = useState<string | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recogRef = useRef<any>(null)
+  const photoRef = useRef<HTMLInputElement | null>(null)
+  const audioRef = useRef<HTMLInputElement | null>(null)
+
+  // Find-or-create the survey for this opportunity, then load it.
+  useEffect(() => {
+    if (!opportunityId) { setLoading(false); return }
+    let cancelled = false
+    void (async () => {
+      try {
+        const list = await fetch(`/api/surveys?opportunity_id=${opportunityId}&limit=1`).then(r => r.json()).catch(() => ({}))
+        const rows: any[] = list.surveys ?? list.records ?? (Array.isArray(list) ? list : []) // eslint-disable-line @typescript-eslint/no-explicit-any
+        let s = rows.find(r => r.opportunity_id === opportunityId) ?? rows[0]
+        if (!s) {
+          const created = await fetch('/api/surveys', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              opportunity_id: opportunityId,
+              property_name: opp?.account_name || opp?.property_address || 'Site survey',
+              property_address: opp?.property_address || null,
+            }),
+          }).then(r => r.json()).catch(() => null)
+          s = created?.survey ?? created
+        }
+        if (cancelled || !s?.id) { if (!cancelled) setLoading(false); return }
+        const full = await fetch(`/api/surveys/${s.id}`).then(r => r.json()).catch(() => ({}))
+        const sv = full.survey ?? full
+        if (cancelled) return
+        setSurveyId(s.id)
+        setTranscript(sv.voice_transcript || '')
+        setNotes(sv.notes_raw || '')
+        setDevices(Array.isArray(sv.devices) ? sv.devices : [])
+        setPhotos(Array.isArray(sv.photos) ? sv.photos : [])
+      } finally { if (!cancelled) setLoading(false) }
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opportunityId])
+
+  async function patch(body: Record<string, unknown>) {
+    if (!surveyId) return
+    setSaving(true)
+    try {
+      await fetch(`/api/surveys/${surveyId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      })
+    } finally { setSaving(false) }
+  }
+  const saveDevices = (next: SurveyDevice[]) => { setDevices(next); void patch({ devices: next }) }
+
+  // ── Voice: browser dictation ────────────────────────────────────────────────
+  function toggleRecord() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (globalThis as any).webkitSpeechRecognition || (globalThis as any).SpeechRecognition
+    if (!SR) { setBanner('Voice typing needs Chrome. You can upload a recording or paste text instead.'); return }
+    if (recording) { recogRef.current?.stop(); setRecording(false); return }
+    const r = new SR(); r.continuous = true; r.interimResults = true; r.lang = 'en-US'
+    let base = transcript
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    r.onresult = (e: any) => {
+      let interim = ''
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript
+        if (e.results[i].isFinal) base += (base ? ' ' : '') + t; else interim += t
+      }
+      setTranscript(base + (interim ? ' ' + interim : ''))
+    }
+    r.onend = () => { setRecording(false); setTranscript(base); void patch({ voice_transcript: base }) }
+    recogRef.current = r; r.start(); setRecording(true); setBanner(null)
+  }
+
+  async function uploadAudio(file: File) {
+    setParsing(true); setBanner('Transcribing recording…')
+    try {
+      const form = new FormData(); form.append('audio', file)
+      const j = await fetch('/api/plaud/transcribe', { method: 'POST', body: form }).then(r => r.json())
+      if (j.transcript) { setTranscript(j.transcript); await patch({ voice_transcript: j.transcript }); setBanner('Transcribed. Tap "Fill from voice" to build the device list.') }
+      else setBanner(j.error || 'Could not transcribe. Paste the text instead.')
+    } catch { setBanner('Could not transcribe. Paste the text instead.') }
+    finally { setParsing(false) }
+  }
+
+  async function fillFromVoice() {
+    if (transcript.trim().length < 10) { setBanner('Record or paste a bit more first.'); return }
+    setParsing(true); setBanner(null)
+    try {
+      const j = await fetch('/api/kb/parse-survey-transcript', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript, propertyName: opp?.account_name || null }),
+      }).then(r => r.json())
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const parsed: any[] = j.devices ?? []
+      if (!parsed.length) { setBanner('No devices found in the recording — add them by hand below.'); return }
+      const mapped: SurveyDevice[] = parsed.map(d => ({
+        ...newSurveyDevice(),
+        name: d.name || '', brand: d.brand || '', model: d.model || '', location: d.location || '',
+        working: d.condition === 'poor' || d.condition === 'fair' ? false : true,
+        action: d.action === 'new_install' ? 'new' : (d.action || ''),
+        notes: d.notes || '', source: 'one_time',
+      }))
+      saveDevices([...devices, ...mapped])
+      setBanner(`Added ${mapped.length} device${mapped.length === 1 ? '' : 's'} from your recording. Review below.`)
+    } catch { setBanner('Could not read the recording. Add devices by hand below.') }
+    finally { setParsing(false) }
+  }
+
+  async function uploadPhoto(file: File) {
+    if (!surveyId) return
+    const form = new FormData(); form.append('file', file)
+    const j = await fetch(`/api/surveys/${surveyId}/upload-image`, { method: 'POST', body: form }).then(r => r.json()).catch(() => ({}))
+    if (j.url) { const next = [...photos, j.url]; setPhotos(next); void patch({ photos: next }) }
+  }
+
+  if (!opportunityId) return <Card><Sub>Save the opportunity first, then the site survey opens here.</Sub></Card>
+  if (loading) return <Card><Sub>Opening the site survey…</Sub></Card>
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
-      <Card style={{ gridColumn: '1 / -1', background: 'radial-gradient(circle at 12% 0%, rgba(139,92,246,0.16), transparent 40%), rgba(255,255,255,0.04)', border: '1px solid rgba(139,92,246,0.3)' }}>
-        <H>🎙️ Audio walkthrough</H>
-        <Sub>Walk the property and talk it through — Nexus turns the recording into your survey, SOW, and BOM automatically.</Sub>
-        <div style={{ marginTop: 14, display: 'flex', gap: 10, alignItems: 'center' }}>
-          <button style={{ ...btn, background: 'rgba(139,92,246,0.2)', border: '1px solid rgba(139,92,246,0.5)', color: '#c4b5fd', borderRadius: 999, padding: '12px 20px' }}>● Record walkthrough</button>
-          <Sub>or answer the quick questions →</Sub>
+    <div style={{ display: 'grid', gap: 16 }}>
+      {banner && <div style={{ ...cardStyle, padding: 12, fontSize: 13, color: '#c4b5fd', background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.3)' }}>{banner}</div>}
+
+      {/* 1 · Voice */}
+      <Card style={{ background: 'radial-gradient(circle at 12% 0%, rgba(139,92,246,0.16), transparent 42%), rgba(255,255,255,0.04)', border: '1px solid rgba(139,92,246,0.3)' }}>
+        <H>🎙️ Talk through the property</H>
+        <Sub>Walk the site and say what you see. Or upload a recording. Then tap “Fill from voice” and Nexus builds your device list.</Sub>
+        <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button onClick={toggleRecord} style={{ ...btn, background: recording ? 'rgba(248,113,113,0.2)' : 'rgba(139,92,246,0.2)', border: `1px solid ${recording ? 'rgba(248,113,113,0.5)' : 'rgba(139,92,246,0.5)'}`, color: recording ? '#fca5a5' : '#c4b5fd', borderRadius: 999, padding: '12px 20px' }}>{recording ? '■ Stop' : '● Record'}</button>
+          <button onClick={() => audioRef.current?.click()} style={{ ...btn, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.8)', borderRadius: 999, padding: '12px 20px' }}>⬆ Upload recording</button>
+          <input ref={audioRef} type="file" accept="audio/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) void uploadAudio(f); e.target.value = '' }} />
+          <button onClick={fillFromVoice} disabled={parsing} style={{ ...btn, opacity: parsing ? 0.6 : 1 }}>{parsing ? 'Working…' : '✨ Fill from voice'}</button>
         </div>
+        <textarea value={transcript} onChange={e => setTranscript(e.target.value)} onBlur={() => patch({ voice_transcript: transcript })} placeholder="…your words show up here. You can also just type." rows={4} style={{ ...inputStyle, marginTop: 12, resize: 'vertical' }} />
       </Card>
+
+      {/* 2 · Field notes */}
       <Card>
-        <H>Quick survey</H>
-        <div style={{ display: 'grid', gap: 12 }}>
-          {questions.map(q => <label key={q} style={{ display: 'block' }}><div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>{q}</div><input style={inputStyle} placeholder="…" /></label>)}
-        </div>
+        <H>📝 Field notes</H>
+        <Sub>Anything else worth remembering — access, gate codes, who you met, parking, hazards.</Sub>
+        <textarea value={notes} onChange={e => setNotes(e.target.value)} onBlur={() => patch({ notes_raw: notes })} placeholder="Type your notes…" rows={3} style={{ ...inputStyle, marginTop: 10, resize: 'vertical' }} />
       </Card>
+
+      {/* 3 · Photos */}
       <Card>
-        <H>Generated SOW + BOM</H>
-        <Sub>Scope of work</Sub>
-        <ul style={{ margin: '6px 0 14px', paddingLeft: 18, fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>
-          <li>Install gate access at 2 entry points</li><li>Common-door access control</li><li>Camera coverage at amenities</li>
-        </ul>
-        <Sub>Bill of materials</Sub>
-        <div style={{ marginTop: 6, fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>
-          <div>Brivo 2-Door Controller × 2</div><div>Eagle Eye 4MP Camera × 4</div><div>Talk-Down Speaker × 1</div>
-        </div>
+        <H>📷 Survey photos</H>
+        <Sub>Snap the gate, the panel, the wiring — anything the installer should see.</Sub>
+        {photos.length > 0 && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+            {photos.map((p, i) => <a key={i} href={p} target="_blank" rel="noreferrer"><img src={p} alt={`Photo ${i + 1}`} style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 10, border: '1px solid rgba(255,255,255,0.12)' }} /></a>)}
+          </div>
+        )}
+        <input ref={photoRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) void uploadPhoto(f); e.target.value = '' }} />
+        <button onClick={() => photoRef.current?.click()} style={{ ...btn, marginTop: 12, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.8)' }}>+ Add photo</button>
       </Card>
+
+      {/* 4 · Device inventory */}
+      <Card>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <H>🧰 What’s on site?</H>
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>{saving ? 'Saving…' : `${devices.length} item${devices.length === 1 ? '' : 's'}`}</span>
+        </div>
+        <Sub>Add each device you find. Keep it quick — Location, what it is, is it working, and what to do.</Sub>
+        <div style={{ display: 'grid', gap: 12, marginTop: 12 }}>
+          {devices.map((d, i) => (
+            <DeviceRow key={d.id} device={d} index={i + 1} surveyId={surveyId} opportunityId={opportunityId}
+              onChange={nd => saveDevices(devices.map(x => x.id === d.id ? nd : x))}
+              onDelete={() => saveDevices(devices.filter(x => x.id !== d.id))} />
+          ))}
+        </div>
+        <button onClick={() => saveDevices([...devices, newSurveyDevice()])} style={{ ...btn, marginTop: 12 }}>+ Add device</button>
+      </Card>
+    </div>
+  )
+}
+
+// One device — simple on the surface, full data underneath.
+function DeviceRow({ device, index, surveyId, opportunityId, onChange, onDelete }: {
+  device: SurveyDevice; index: number; surveyId: string | null; opportunityId?: string
+  onChange: (d: SurveyDevice) => void; onDelete: () => void
+}) {
+  const [picking, setPicking] = useState(false)
+  const set = (patch: Partial<SurveyDevice>) => onChange({ ...device, ...patch })
+  const label = (t: string) => <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{t}</div>
+  const sIn = { ...inputStyle, padding: '8px 10px', fontSize: 13 } as const
+
+  return (
+    <div style={{ background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: '#7DE5FF' }}>#{index}{device.source === 'requested' ? '  · 🚩 pending corporate' : device.source === 'one_time' ? '  · custom' : ''}</span>
+        <button onClick={onDelete} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 16 }}>✕</button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+        <div>
+          {label('Where')}
+          <input value={device.location} onChange={e => set({ location: e.target.value })} placeholder="Main gate, Lobby, Unit 101…" style={sIn} />
+        </div>
+        <div style={{ gridColumn: '1 / -1' }}>
+          {label('What is it?')}
+          <button onClick={() => setPicking(true)} style={{ ...sIn, textAlign: 'left', cursor: 'pointer', color: device.name ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.4)' }}>
+            {device.name ? `${device.name}${device.brand ? ` · ${device.brand}` : ''}` : 'Tap to choose a product…'}
+          </button>
+        </div>
+        <div>
+          {label('Working?')}
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[{ v: true, t: 'Yes' }, { v: false, t: 'No' }].map(o => (
+              <button key={o.t} onClick={() => set({ working: o.v })} style={{
+                flex: 1, padding: '8px 0', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                background: device.working === o.v ? (o.v ? 'rgba(110,231,183,0.2)' : 'rgba(248,113,113,0.2)') : 'rgba(255,255,255,0.05)',
+                border: `1px solid ${device.working === o.v ? (o.v ? 'rgba(110,231,183,0.5)' : 'rgba(248,113,113,0.5)') : 'rgba(255,255,255,0.12)'}`,
+                color: device.working === o.v ? (o.v ? '#6ee7b7' : '#fca5a5') : 'rgba(255,255,255,0.6)',
+              }}>{o.t}</button>
+            ))}
+          </div>
+        </div>
+        <div>
+          {label('What to do')}
+          <select value={device.action || ''} onChange={e => set({ action: e.target.value as SurveyDevice['action'] })} style={{ ...sIn, cursor: 'pointer' }}>
+            <option value="">Choose…</option>
+            {ACTION_OPTS.map(a => <option key={a.v} value={a.v}>{a.label}</option>)}
+          </select>
+        </div>
+        <div>
+          {label('Repair cost')}
+          <input value={device.repair_cost ?? ''} onChange={e => set({ repair_cost: e.target.value ? Number(e.target.value) : null })} inputMode="decimal" placeholder="$0" style={sIn} />
+        </div>
+        <div style={{ gridColumn: '1 / -1' }}>
+          {label('Notes')}
+          <input value={device.notes || ''} onChange={e => set({ notes: e.target.value })} placeholder="Anything the installer should know…" style={sIn} />
+        </div>
+      </div>
+      {picking && <ProductPicker surveyId={surveyId} opportunityId={opportunityId}
+        onClose={() => setPicking(false)}
+        onPick={(p) => { set(p); setPicking(false) }} />}
+    </div>
+  )
+}
+
+// Choose from catalog · add a one-time item · or ask corporate to add it.
+function ProductPicker({ surveyId, opportunityId, onClose, onPick }: {
+  surveyId: string | null; opportunityId?: string
+  onClose: () => void; onPick: (p: Partial<SurveyDevice>) => void
+}) {
+  const [q, setQ] = useState('')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [results, setResults] = useState<any[]>([])
+  const [mode, setMode] = useState<'search' | 'request'>('search')
+  const [req, setReq] = useState({ name: '', brand: '', model: '', category: '', est_cost: '', notes: '' })
+  const [sending, setSending] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    const t = setTimeout(async () => {
+      const j = await fetch(`/api/products?q=${encodeURIComponent(q)}&limit=20`).then(r => r.json()).catch(() => ({}))
+      if (active) setResults(j.products ?? [])
+    }, 220)
+    return () => { active = false; clearTimeout(t) }
+  }, [q])
+
+  async function sendRequest() {
+    if (!req.name.trim()) return
+    setSending(true)
+    try {
+      await fetch('/api/products/request', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...req, opportunity_id: opportunityId, survey_id: surveyId }),
+      })
+      // Save the line now as a custom item marked pending corporate.
+      onPick({ name: req.name.trim(), brand: req.brand || '', model: req.model || '', source: 'requested', product_id: null })
+    } finally { setSending(false) }
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: '80vh', overflow: 'auto', background: 'linear-gradient(180deg, rgba(10,20,38,0.98), rgba(4,10,24,0.98))', border: '1px solid rgba(0,200,255,0.22)', borderRadius: 22, padding: 18 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <H>{mode === 'search' ? 'Choose a product' : '🚩 Ask corporate to add it'}</H>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+        </div>
+
+        {mode === 'search' ? (
+          <>
+            <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search products… (gate operator, camera, reader)" style={inputStyle} />
+            <div style={{ display: 'grid', gap: 6, marginTop: 12 }}>
+              {results.map(p => (
+                <button key={p.id} onClick={() => onPick({ name: p.name, brand: p.brand || '', model: p.model || '', product_id: p.id, source: 'catalog' })}
+                  style={{ textAlign: 'left', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '10px 12px', cursor: 'pointer' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.92)' }}>{p.name}</div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{[p.brand, p.category].filter(Boolean).join(' · ') || 'Product'}</div>
+                </button>
+              ))}
+              {results.length === 0 && <Sub>No matches. Add it as a one-time item or ask corporate.</Sub>}
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+              <button onClick={() => { if (q.trim()) onPick({ name: q.trim(), source: 'one_time', product_id: null }) }} disabled={!q.trim()}
+                style={{ ...btn, flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.85)', opacity: q.trim() ? 1 : 0.5 }}>+ Use “{q.trim() || '…'}” once</button>
+              <button onClick={() => { setReq(r => ({ ...r, name: q })); setMode('request') }} style={{ ...btn, flex: 1, background: 'rgba(251,191,36,0.16)', border: '1px solid rgba(251,191,36,0.4)', color: '#fbbf24' }}>🚩 Ask corporate</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <Sub>We’ll save this line now and send the details to corporate to add to the catalog.</Sub>
+            <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
+              <input value={req.name} onChange={e => setReq({ ...req, name: e.target.value })} placeholder="Product name *" style={inputStyle} />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <input value={req.brand} onChange={e => setReq({ ...req, brand: e.target.value })} placeholder="Brand" style={inputStyle} />
+                <input value={req.model} onChange={e => setReq({ ...req, model: e.target.value })} placeholder="Model" style={inputStyle} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <input value={req.category} onChange={e => setReq({ ...req, category: e.target.value })} placeholder="Category" style={inputStyle} />
+                <input value={req.est_cost} onChange={e => setReq({ ...req, est_cost: e.target.value })} inputMode="decimal" placeholder="Est. cost $" style={inputStyle} />
+              </div>
+              <input value={req.notes} onChange={e => setReq({ ...req, notes: e.target.value })} placeholder="Notes for corporate" style={inputStyle} />
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+              <button onClick={() => setMode('search')} style={{ ...btn, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.8)' }}>← Back</button>
+              <button onClick={sendRequest} disabled={!req.name.trim() || sending} style={{ ...btn, flex: 1, opacity: !req.name.trim() || sending ? 0.6 : 1 }}>{sending ? 'Sending…' : 'Save line + send to corporate'}</button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }

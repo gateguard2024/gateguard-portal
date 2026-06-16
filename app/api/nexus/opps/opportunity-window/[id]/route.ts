@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
+import { resolveOrgScope, applyOrgScope, getProfileId } from '@/lib/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,7 +46,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       owner_name, owner_initials, account_name, management_co, owner_entity,
       property_address, property_city, property_state, property_zip,
       site_contact_name, site_contact_title, site_contact_phone, site_contact_email,
-      units, source, assigned_from_lead, show_lead_id, site_id
+      units, source, assigned_from_lead, site_id
     `)
     .eq('id', oppId)
   oppQuery = applyOrgScope(oppQuery, scope, 'dealer_org_id')
@@ -192,4 +192,56 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       { title: 'Mark Lost',         subtitle: 'Close this out with a reason.',        action: 'mark_lost' },
     ],
   })
+}
+
+// ─── POST — opportunity workspace actions ────────────────────────────────────
+const clean = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+
+export async function POST(req: NextRequest, { params }: RouteContext) {
+  const user = await getCurrentUser()
+  if (!user.canViewCRM) {
+    return NextResponse.json({ success: false, message: 'CRM access denied.' }, { status: 403 })
+  }
+
+  const body = await req.json().catch(() => ({}))
+  const action = clean(body.action)
+  const oppId = params.id
+
+  // Confirm the opportunity is in the caller's scope before any write.
+  const scope = await resolveOrgScope(user)
+  let scopeQuery = supabase.from('opportunities').select('id, dealer_org_id').eq('id', oppId)
+  scopeQuery = applyOrgScope(scopeQuery, scope, 'dealer_org_id')
+  const { data: opp, error: scopeErr } = await scopeQuery.maybeSingle()
+  if (scopeErr) return NextResponse.json({ success: false, message: scopeErr.message }, { status: 500 })
+  if (!opp) {
+    return NextResponse.json({ success: false, message: 'Opportunity not found or outside your access.' }, { status: 404 })
+  }
+
+  const profileId = await getProfileId(user.id)
+
+  // ── add_attachment ──────────────────────────────────────────────────────────
+  if (action === 'add_attachment') {
+    const fileName = clean(body.file_name)
+    const url = clean(body.url)
+    if (!fileName || !url) {
+      return NextResponse.json({ success: false, message: 'Missing file.' }, { status: 400 })
+    }
+    const { data, error: insErr } = await supabase
+      .from('attachments')
+      .insert({
+        dealer_org_id: (opp as Record<string, unknown>).dealer_org_id,
+        uploaded_by: profileId,
+        file_name: fileName,
+        url,
+        file_type: clean(body.file_type) || null,
+        size_bytes: typeof body.size_bytes === 'number' ? body.size_bytes : null,
+        opportunity_id: oppId,
+      })
+      .select('id, file_name, url, file_type, size_bytes, created_at')
+      .single()
+    if (insErr) return NextResponse.json({ success: false, message: insErr.message }, { status: 500 })
+    return NextResponse.json({ success: true, message: 'Attachment added.', attachment: data })
+  }
+
+  return NextResponse.json({ success: false, message: 'Unknown opportunity action.' }, { status: 400 })
 }

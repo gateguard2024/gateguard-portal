@@ -35,25 +35,20 @@ export async function POST(
       return NextResponse.json({ error: 'Target org is outside your access.' }, { status: 403 })
     }
 
-    // show_ prefix → update show_leads table
-    if (rawId.startsWith('show_')) {
-      const uuid = rawId.replace('show_', '')
+    // Tolerant strip of any legacy show_ prefix — leads use plain UUIDs now
+    const uuid = rawId.replace(/^show_/, '')
 
-      const { error } = await supabase
-        .from('show_leads')
-        .update({ assigned_dealer: dealer })
-        .eq('id', uuid)
+    const { error } = await supabase
+      .from('leads')
+      .update({ assigned_dealer: dealer })
+      .eq('id', uuid)
 
-      if (error) {
-        console.error('[/api/crm/leads/[id]/assign] Supabase error:', error)
-        return NextResponse.json({ error: error.message }, { status: 500 })
-      }
-
-      return NextResponse.json({ ok: true })
+    if (error) {
+      console.error('[/api/crm/leads/[id]/assign] Supabase error:', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Future: handle other lead id types here
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('[/api/crm/leads/[id]/assign] Unexpected error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

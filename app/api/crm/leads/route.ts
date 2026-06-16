@@ -14,22 +14,17 @@ export async function GET(req: NextRequest) {
     const user  = await getCurrentUser()
     const scope = await resolveOrgScope(user)
 
-    // show_leads don't have org_id yet — GateGuard corporate can see all.
-    // When leads are owned by a specific dealer org, filter by assigned_dealer_org_id.
-    // For now: corporate sees all; others see only leads assigned to their org subtree.
+    // Single bucket: read from `leads`. Corporate sees all; others see their
+    // org's leads plus unassigned (null-org) leads (migrated legacy records).
     let query = supabase
-      .from('show_leads')
-      .select('*, source, city, state, property_type, contact_title, units, notes')
+      .from('leads')
+      .select('id, contact_name, company_name, property_name, email, phone, property_type, contact_title, unit_count, location, city, state, stage, source, notes, assigned_dealer, opportunity_id, created_at')
+      .is('opportunity_id', null)          // hide leads already converted to an opportunity
+      .is('lost_at', null)
       .order('created_at', { ascending: false })
 
-    // If there's an org filter needed and the table has assigned_dealer column,
-    // scope to only leads where assigned_dealer is in the user's subtree.
-    // Corporate sees everything.
     if (!scope.all && scope.ids.length > 0) {
-      // Show leads assigned to this dealer OR unassigned (null — visible to all dealers)
-      query = query.or(
-        `assigned_dealer.is.null,assigned_dealer.in.(${scope.ids.join(',')})`
-      )
+      query = query.or(`org_id.is.null,org_id.in.(${scope.ids.join(',')})`)
     }
 
     const { data, error } = await query
@@ -39,26 +34,20 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: 500 })
     }
 
-    // show_leads has no status column — check conversion via opportunities table
-    const { data: convertedOpps } = await supabase
-      .from('opportunities').select('show_lead_id').not('show_lead_id', 'is', null)
-    const convertedIds = new Set((convertedOpps || []).map((o: any) => o.show_lead_id))
-
-    const leads = (data || []).filter((row: any) => !convertedIds.has(row.id)).map((row: any) => ({
-      id:             `show_${row.id}`,
+    const leads = (data || []).map((row: any) => ({
+      id:             row.id,
       type:           'lead' as const,
-      contact_name:   row.name,
+      contact_name:   row.contact_name,
       property_name:  row.property_name || '',
       created_at:     row.created_at,
       assigned_dealer: row.assigned_dealer ?? null,
       // Detail page fields
-      name:          row.property_name || row.name,
-      company:       '',
-      contact:       row.name,
+      name:          row.property_name || row.company_name || row.contact_name,
+      company:       row.company_name ?? '',
+      contact:       row.contact_name,
       propertyType:  row.property_type ?? 'Multifamily',
-      location:      row.city && row.state
-        ? `${row.city}, ${row.state}`
-        : (row.city ?? 'Atlanta') + ', ' + (row.state ?? 'GA'),
+      location:      row.location
+        || (row.city && row.state ? `${row.city}, ${row.state}` : (row.city ?? 'Atlanta') + ', ' + (row.state ?? 'GA')),
       stage:        row.stage ?? 'new',
       rep:          'R. Feldman',
       repInitials:  'RF',
@@ -79,7 +68,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    await getCurrentUser()
+    const user = await getCurrentUser()
     const body = await req.json()
 
     const {
@@ -93,9 +82,11 @@ export async function POST(req: NextRequest) {
     }
 
     const { data, error } = await supabase
-      .from('show_leads')
+      .from('leads')
       .insert({
-        name:          name.trim(),
+        org_id:        user.org_id ?? null,
+        contact_name:  name.trim(),
+        company_name:  company?.trim() ?? null,
         email:         email?.trim() ?? null,
         phone:         phone?.trim() ?? null,
         property_name: property_name?.trim() ?? company?.trim() ?? null,
@@ -104,14 +95,14 @@ export async function POST(req: NextRequest) {
         state:         state?.trim() ?? null,
         property_type: property_type ?? 'Multifamily',
         contact_title: contact_title?.trim() ?? null,
-        units:         units ? parseInt(units, 10) : null,
+        unit_count:    units ? parseInt(units, 10) : null,
         notes:         notes?.trim() ?? null,
       })
       .select()
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ id: `show_${data.id}`, ...data }, { status: 201 })
+    return NextResponse.json({ id: data.id, ...data }, { status: 201 })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }

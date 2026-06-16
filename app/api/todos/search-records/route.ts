@@ -25,14 +25,14 @@ export async function GET(req: NextRequest) {
 
     if (type === 'lead' || type === 'all') {
       const { data } = await supabase
-        .from('show_leads')
-        .select('id, name, company')
-        .ilike('name', `%${q}%`)
+        .from('leads')
+        .select('id, contact_name, company_name')
+        .ilike('contact_name', `%${q}%`)
         .limit(5)
       ;(data ?? []).forEach(r => results.push({
         id: r.id, type: 'lead',
-        label: r.name ?? 'Unnamed Lead',
-        sublabel: r.company ?? undefined,
+        label: r.contact_name ?? 'Unnamed Lead',
+        sublabel: r.company_name ?? undefined,
       }))
     }
 

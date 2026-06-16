@@ -14,8 +14,8 @@ export async function GET() {
   try {
     const supabase = createClient(url, key)
     const { data, error, count } = await supabase
-      .from('show_leads')
-      .select('id, name, email, created_at', { count: 'exact' })
+      .from('leads')
+      .select('id, contact_name, email, created_at', { count: 'exact' })
       .limit(3)
 
     if (error) {

@@ -15,8 +15,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'name and email required' }, { status: 400 })
     }
 
-    const { error } = await supabase.from('show_leads').insert({
-      name,
+    const { error } = await supabase.from('leads').insert({
+      contact_name: name,
       property_name: property_name || null,
       email,
       phone: phone || null,
