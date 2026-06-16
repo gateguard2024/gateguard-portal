@@ -55,11 +55,13 @@ function Line({ label, value }: { label: string; value: string }) {
   )
 }
 
-export function PricingCalculator() {
-  const [livingUnits, setLivingUnits] = useState('')
+export function PricingCalculator({ initialUnits, initialUnitAutomation }: { initialUnits?: number | string | null; initialUnitAutomation?: boolean } = {}) {
+  const seedUnits = initialUnits != null && initialUnits !== '' ? String(initialUnits) : ''
+  const [livingUnits, setLivingUnits] = useState(seedUnits)
   const [doors, setDoors] = useState('')
   const [commonLocks, setCommonLocks] = useState('')
-  const [unitsApp, setUnitsApp] = useState('')
+  // If the deal has unit automation, seed app-controlled locks = unit count (rep adjusts).
+  const [unitsApp, setUnitsApp] = useState(initialUnitAutomation ? seedUnits : '')
   const [unitsGw, setUnitsGw] = useState('')
   const [camMon, setCamMon] = useState('')
   const [camBackup, setCamBackup] = useState('')

@@ -2,7 +2,7 @@
 
 // Opportunity Life Cycle — glass shell (7 stages). Mock UI, on-vision.
 // Vision: docs/nexus/OPPORTUNITY_LIFECYCLE_VISION.md. Wired to real data in AM.
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { PricingCalculator } from '@/components/nexus/PricingCalculator'
 
 const cyan = '#00C8FF'
@@ -44,22 +44,19 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
   const opp = (data?.opportunity ?? {}) as Record<string, any>
 
   // Load the real opportunity (when opened from New / Existing / Lead-convert).
-  useEffect(() => {
+  const loadData = useCallback(async () => {
     if (!opportunityId) return
-    let cancelled = false
-    void (async () => {
-      try {
-        const res = await fetch(`/api/nexus/opps/opportunity-window/${opportunityId}`)
-        const payload = await res.json().catch(() => ({}))
-        if (cancelled) return
-        setData(payload)
-        const o = payload.opportunity ?? {}
-        // A shortcut (Site Survey / BOM / SOW / Proposals) sets initialStage → it wins.
-        if (initialStage == null && o.stage && STAGE_TO_STEP[o.stage] != null) setStage(STAGE_TO_STEP[o.stage])
-      } catch { /* keep defaults */ }
-    })()
-    return () => { cancelled = true }
+    try {
+      const res = await fetch(`/api/nexus/opps/opportunity-window/${opportunityId}`)
+      const payload = await res.json().catch(() => ({}))
+      setData(payload)
+      const o = payload.opportunity ?? {}
+      // A shortcut (Site Survey / BOM / SOW / Proposals) sets initialStage → it wins.
+      if (initialStage == null && o.stage && STAGE_TO_STEP[o.stage] != null) setStage(STAGE_TO_STEP[o.stage])
+    } catch { /* keep defaults */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opportunityId])
+  useEffect(() => { void loadData() }, [loadData])
 
   // Advance/jump a stage → persist to the opportunity (best-effort; interns refine in #82).
   function goToStage(i: number) {
@@ -99,9 +96,9 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
           })}
         </div>
 
-        {stage === 0 && <Overview data={data} />}
+        {stage === 0 && <Overview data={data} opportunityId={opportunityId} onSaved={loadData} />}
         {stage === 1 && <Survey />}
-        {stage === 2 && <Financials />}
+        {stage === 2 && <Financials opp={opp} />}
         {stage === 3 && <Proposal />}
         {stage === 4 && <Negotiate />}
         {stage === 5 && <ContractInvoice />}
@@ -118,7 +115,7 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function Overview({ data }: { data: Record<string, any> | null }) {
+function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> | null; opportunityId?: string; onSaved?: () => void }) {
   const opp = data?.opportunity ?? {}
   const contact = data?.contact ?? {}
   const company = data?.company ?? {}
@@ -129,11 +126,92 @@ function Overview({ data }: { data: Record<string, any> | null }) {
   const todos: any[] = data?.todos ?? [] // eslint-disable-line @typescript-eslint/no-explicit-any
   const emails = activities.filter(a => (a.type || '').toLowerCase() === 'email')
 
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const emptyForm = { account_name: '', contact_name: '', email: '', phone: '', property: '', owner_name: '', units: '', unit_automation: false, mrr: '', source: '' }
+  const [form, setForm] = useState(emptyForm)
+  useEffect(() => {
+    setForm({
+      account_name: opp.account_name || company.name || '',
+      contact_name: opp.contact_name || contact.contact_name || contact.name || '',
+      email: opp.contact_email || contact.email || '',
+      phone: opp.contact_phone || contact.phone || '',
+      property: opp.property_address || property.name || property.address || '',
+      owner_name: opp.owner_name || '',
+      units: opp.units != null ? String(opp.units) : (contact.unit_count != null ? String(contact.unit_count) : ''),
+      unit_automation: !!opp.unit_automation,
+      mrr: opp.est_mrr != null ? String(opp.est_mrr) : '',
+      source: opp.source || '',
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data])
+
+  async function save() {
+    if (!opportunityId) { setEditing(false); return }
+    setSaving(true)
+    try {
+      await fetch(`/api/crm/opportunities/${opportunityId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          account_name: form.account_name || null,
+          contact_name: form.contact_name || null,
+          contact_email: form.email || null,
+          contact_phone: form.phone || null,
+          property_address: form.property || null,
+          owner_name: form.owner_name || null,
+          units: form.units ? Number(form.units) : null,
+          unit_automation: form.unit_automation,
+          est_mrr: form.mrr ? Number(form.mrr) : null,
+          source: form.source || null,
+        }),
+      })
+      onSaved?.()
+      setEditing(false)
+    } finally { setSaving(false) }
+  }
+
+  // Activity composer — Log call / email / meeting / note → real crm_activities.
+  const [actType, setActType] = useState<'call' | 'email' | 'meeting' | 'note'>('note')
+  const [actSubject, setActSubject] = useState('')
+  const [actBody, setActBody] = useState('')
+  const [posting, setPosting] = useState(false)
+  async function postActivity() {
+    if (!opportunityId || !actSubject.trim()) return
+    setPosting(true)
+    try {
+      await fetch('/api/crm/activities', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: actType, subject: actSubject.trim(), body: actBody || null, opportunity_id: opportunityId }),
+      })
+      setActSubject(''); setActBody('')
+      onSaved?.()
+    } finally { setPosting(false) }
+  }
+  // Quick note (its own box) → posts a note activity so notes stack in the timeline.
+  const [noteText, setNoteText] = useState('')
+  async function saveNote() {
+    if (!opportunityId || !noteText.trim()) return
+    setPosting(true)
+    try {
+      await fetch('/api/crm/activities', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'note', subject: 'Note', body: noteText.trim(), opportunity_id: opportunityId }),
+      })
+      setNoteText(''); onSaved?.()
+    } finally { setPosting(false) }
+  }
+
   const field = (label: string, value?: string | number | null) => (
     <div style={{ marginBottom: 10 }}>
-      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</div>
-      <div style={{ fontSize: 14, color: value ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.35)' }}>{value || '—'}</div>
+      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</div>
+      <div style={{ fontSize: 14, color: value || value === 0 ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.4)' }}>{value || value === 0 ? value : 'Not set'}</div>
     </div>
+  )
+  const editField = (label: string, key: keyof typeof emptyForm, numeric = false) => (
+    <label style={{ display: 'block', marginBottom: 10 }}>
+      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{label}</div>
+      <input value={String(form[key] ?? '')} inputMode={numeric ? 'numeric' : 'text'} onChange={e => setForm(f => ({ ...f, [key]: numeric ? e.target.value.replace(/[^0-9.]/g, '') : e.target.value }))} style={{ ...inputStyle }} />
+    </label>
   )
 
   return (
@@ -144,27 +222,70 @@ function Overview({ data }: { data: Record<string, any> | null }) {
         </Card>
       )}
 
-      <Card>
-        <H>Deal details</H>
-        {field('Account', opp.account_name || company.name)}
-        {field('Contact', contact.contact_name || contact.name || opp.contact_name)}
-        {field('Email', contact.email)}
-        {field('Phone', contact.phone)}
-        {field('Property', property.name || property.address || opp.property_address)}
-        {field('Owner', opp.owner_name)}
-        {field('Monthly $ (MRR)', opp.est_mrr != null ? `$${opp.est_mrr}` : null)}
-        {field('Source', opp.source)}
+      <Card style={{ gridColumn: '1 / -1' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ fontSize: 16, fontWeight: 600, color: 'rgba(255,255,255,0.95)' }}>Deal details</div>
+          {!editing
+            ? <button onClick={() => setEditing(true)} style={{ ...btn, padding: '8px 14px' }}>✏️ Edit</button>
+            : <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setEditing(false)} style={{ ...btn, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.7)' }}>Cancel</button>
+                <button onClick={save} disabled={saving} style={{ ...btn, opacity: saving ? 0.5 : 1 }}>{saving ? 'Saving…' : 'Save'}</button>
+              </div>}
+        </div>
+        {/* Two critical fields first — these carry into Financials */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px,1fr))', gap: 16, marginBottom: 8, paddingBottom: 14, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          {editing ? editField('Number of units', 'units', true) : field('Number of units', form.units || undefined)}
+          <div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Unit automation?</div>
+            {editing ? (
+              <div style={{ display: 'flex', gap: 8 }}>
+                {[['Yes', true], ['No', false]].map(([lbl, val]) => (
+                  <button key={String(val)} onClick={() => setForm(f => ({ ...f, unit_automation: val as boolean }))} style={{ ...btn, padding: '8px 18px', background: form.unit_automation === val ? 'rgba(0,200,255,0.2)' : 'rgba(255,255,255,0.05)', border: form.unit_automation === val ? '1px solid rgba(0,200,255,0.5)' : '1px solid rgba(255,255,255,0.12)', color: form.unit_automation === val ? '#7DE5FF' : 'rgba(255,255,255,0.7)' }}>{lbl}</button>
+                ))}
+              </div>
+            ) : <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.92)' }}>{form.unit_automation ? 'Yes — locks on units' : 'No'}</div>}
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px,1fr))', gap: '0 24px' }}>
+          {editing ? editField('Account', 'account_name') : field('Account', form.account_name || undefined)}
+          {editing ? editField('Contact', 'contact_name') : field('Contact', form.contact_name || undefined)}
+          {editing ? editField('Email', 'email') : field('Email', form.email || undefined)}
+          {editing ? editField('Phone', 'phone') : field('Phone', form.phone || undefined)}
+          {editing ? editField('Property', 'property') : field('Property', form.property || undefined)}
+          {editing ? editField('Owner', 'owner_name') : field('Owner', form.owner_name || undefined)}
+          {editing ? (
+            <label style={{ display: 'block', marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Monthly $ (MRR)</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input value={form.mrr} inputMode="decimal" onChange={e => setForm(f => ({ ...f, mrr: e.target.value.replace(/[^0-9.]/g, '') }))} style={{ ...inputStyle }} />
+                <button type="button" onClick={() => setForm(f => ({ ...f, mrr: String((Number(f.units) || 0) * 10) }))} style={{ ...btn, whiteSpace: 'nowrap' }}>$10 × units</button>
+              </div>
+            </label>
+          ) : field('Monthly $ (MRR)', form.mrr ? `$${form.mrr}` : null)}
+          {editing ? editField('Source', 'source') : field('Source', form.source || undefined)}
+        </div>
       </Card>
 
       <Card>
         <H>Notes</H>
-        {opp.notes ? <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', whiteSpace: 'pre-wrap', marginBottom: 12 }}>{opp.notes}</div> : <Sub>No notes yet.</Sub>}
-        <textarea placeholder="Add a note…" style={{ ...inputStyle, minHeight: 70, marginTop: 12 }} />
-        <button style={{ ...btn, marginTop: 8 }}>Save note</button>
+        <textarea value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Add a note…" style={{ ...inputStyle, minHeight: 70 }} />
+        <button onClick={saveNote} disabled={posting || !noteText.trim()} style={{ ...btn, marginTop: 8, opacity: posting || !noteText.trim() ? 0.5 : 1 }}>Save note</button>
+        <Sub>Notes stack in the activity timeline →</Sub>
       </Card>
 
       <Card>
         <H>Activity timeline</H>
+        {/* Log a call, email, meeting, or note right here */}
+        <div style={{ marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+            {(['call', 'email', 'meeting', 'note'] as const).map(t => (
+              <button key={t} onClick={() => setActType(t)} style={{ ...btn, padding: '6px 14px', textTransform: 'capitalize', background: actType === t ? 'rgba(0,200,255,0.2)' : 'rgba(255,255,255,0.05)', border: actType === t ? '1px solid rgba(0,200,255,0.5)' : '1px solid rgba(255,255,255,0.12)', color: actType === t ? '#7DE5FF' : 'rgba(255,255,255,0.7)' }}>{t}</button>
+            ))}
+          </div>
+          <input value={actSubject} onChange={e => setActSubject(e.target.value)} placeholder={`${actType} — what happened?`} style={{ ...inputStyle, marginBottom: 8 }} />
+          <textarea value={actBody} onChange={e => setActBody(e.target.value)} placeholder="Details (optional)" style={{ ...inputStyle, minHeight: 48 }} />
+          <button onClick={postActivity} disabled={posting || !actSubject.trim()} style={{ ...btn, marginTop: 8, opacity: posting || !actSubject.trim() ? 0.5 : 1 }}>Add to timeline</button>
+        </div>
         {activities.length === 0 ? <Sub>No calls, emails, or meetings logged yet.</Sub> : (
           <div style={{ display: 'grid', gap: 8 }}>
             {activities.slice(0, 8).map((a, i) => (
@@ -190,11 +311,13 @@ function Overview({ data }: { data: Record<string, any> | null }) {
 
       <Card>
         <H>Client emails</H>
-        {emails.length === 0 ? <Sub>Emails with this client appear here once Messages/Gmail is linked to the contact.</Sub> : (
+        {emails.length === 0 ? <Sub>No emails yet.</Sub> : (
           <div style={{ display: 'grid', gap: 6 }}>
             {emails.slice(0, 6).map((e, i) => <div key={e.id || i} style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>✉️ {e.subject || '(no subject)'}</div>)}
           </div>
         )}
+        <button onClick={() => setActType('email')} style={{ ...btn, marginTop: 12 }}>✉️ New email</button>
+        <Sub>Logs an email on the timeline. Full send/inbox comes with Messages.</Sub>
       </Card>
 
       <Card>
@@ -243,14 +366,16 @@ function Survey() {
   )
 }
 
-function Financials() {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function Financials({ opp }: { opp: Record<string, any> }) {
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <Card style={{ background: 'rgba(255,255,255,0.03)' }}>
         <H>Pricing &amp; profitability</H>
         <Sub>Built from the BOM. The calculator below feeds the deal — install cost + IRR keep the dealer profitable.</Sub>
+        {(opp?.units || opp?.unit_automation) && <div style={{ marginTop: 10, fontSize: 12, color: '#7DE5FF' }}>Carried from Overview: {opp.units ? `${opp.units} units` : 'units not set'}{opp.unit_automation ? ' · unit automation: Yes' : ''}</div>}
       </Card>
-      <PricingCalculator />
+      <PricingCalculator initialUnits={opp?.units} initialUnitAutomation={!!opp?.unit_automation} />
       <Card style={{ background: 'linear-gradient(180deg, rgba(52,211,153,0.1), rgba(8,18,34,0.6))', border: '1px solid rgba(52,211,153,0.3)' }}>
         <H>Install &amp; lifetime profitability (IRR)</H>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))', gap: 12 }}>
