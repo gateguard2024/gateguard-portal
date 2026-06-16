@@ -36,8 +36,8 @@ function Sub({ children }: { children: React.ReactNode }) {
   return <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>{children}</div>
 }
 
-export function OpportunityLifecycle({ opportunityId, onClose }: { opportunityId?: string; onClose?: () => void } = {}) {
-  const [stage, setStage] = useState(0)
+export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: { opportunityId?: string; onClose?: () => void; initialStage?: number } = {}) {
+  const [stage, setStage] = useState(initialStage ?? 0)
   const [opp, setOpp] = useState<{ name?: string; account_name?: string; stage?: string } | null>(null)
 
   // Load the real opportunity (when opened from New / Existing / Lead-convert).
@@ -51,7 +51,8 @@ export function OpportunityLifecycle({ opportunityId, onClose }: { opportunityId
         const o = data.opportunity ?? data ?? {}
         if (cancelled) return
         setOpp(o)
-        if (o.stage && STAGE_TO_STEP[o.stage] != null) setStage(STAGE_TO_STEP[o.stage])
+        // A shortcut (Site Survey / BOM / SOW / Proposals) sets initialStage → it wins.
+        if (initialStage == null && o.stage && STAGE_TO_STEP[o.stage] != null) setStage(STAGE_TO_STEP[o.stage])
       } catch { /* keep defaults */ }
     })()
     return () => { cancelled = true }
