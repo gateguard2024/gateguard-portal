@@ -8,6 +8,7 @@
 //     cost/unit+$2.25). Access cost over what units can carry → equipment fee at 2×.
 //   UNIT LOCKS (app + gateway) are ALWAYS add-ons at GG cost + $2 margin each.
 import { useMemo, useState } from 'react'
+import { useUser } from '@clerk/nextjs'
 
 const PASS_INCLUDED = 500
 const MARGIN_MIN = 2.25
@@ -63,6 +64,14 @@ export function PricingCalculator() {
   const [camBackup, setCamBackup] = useState('')
   const [passesPerUnit, setPassesPerUnit] = useState('1.5')
 
+  // Internal view (GG cost + profit) is for GateGuard corporate admins only.
+  // Everyone else sees the dealer copy: Gate Guard Fee + Suggested Retail.
+  const { user } = useUser()
+  const meta = (user?.publicMetadata ?? {}) as Record<string, unknown>
+  const internal = meta.org_tier === 'corporate' && meta.role === 'admin'
+  const [viewAsDealer, setViewAsDealer] = useState(false)   // admins can preview the dealer copy
+  const showInternal = internal && !viewAsDealer
+
   const n = (s: string) => Number(s) || 0
 
   const calc = useMemo(() => {
@@ -117,8 +126,17 @@ export function PricingCalculator() {
     }
   }, [livingUnits, doors, commonLocks, unitsApp, unitsGw, camMon, camBackup, passesPerUnit])
 
+  const ggFee = calc.dealerPrice          // what the dealer pays GG
+  const suggestedRetail = ggFee * 2       // ~2× → end-user price (hidden $1 MSO/agent lives in this markup)
+
   return (
     <div className="space-y-5">
+      {internal && (
+        <div className="flex items-center gap-2 rounded-full p-1 text-[12px] font-semibold" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.1)', width: 'fit-content' }}>
+          <button type="button" onClick={() => setViewAsDealer(false)} className="rounded-full px-3 py-1.5" style={!viewAsDealer ? { background: 'rgba(0,200,255,0.2)', border: '1px solid rgba(0,200,255,0.5)', color: '#7DE5FF' } : { color: 'rgba(255,255,255,0.6)' }}>Internal (cost + profit)</button>
+          <button type="button" onClick={() => setViewAsDealer(true)} className="rounded-full px-3 py-1.5" style={viewAsDealer ? { background: 'rgba(52,211,153,0.2)', border: '1px solid rgba(52,211,153,0.5)', color: '#6ee7b7' } : { color: 'rgba(255,255,255,0.6)' }}>Dealer view (preview)</button>
+        </div>
+      )}
       <div className="rounded-3xl p-4" style={{ background: 'linear-gradient(180deg, rgba(8,18,34,0.7), rgba(3,9,22,0.5))', border: '1px solid rgba(0,200,255,0.16)' }}>
         <div className="mb-1 text-base font-semibold" style={{ color: 'rgba(255,255,255,0.95)' }}>What's on this site?</div>
         <div className="mb-4 text-[12px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Type how many of each — cost + dealer price update as you go.</div>
@@ -134,24 +152,28 @@ export function PricingCalculator() {
         </div>
       </div>
 
-      <div className="rounded-3xl p-5" style={{ background: 'radial-gradient(circle at 14% 0%, rgba(0,124,255,0.16), transparent 40%), linear-gradient(180deg, rgba(8,18,34,0.82), rgba(3,9,22,0.6))', border: '1px solid rgba(0,200,255,0.28)' }}>
-        <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: 'rgba(0,200,255,0.85)' }}>Gate Guard cost / month</div>
-        <div className="mt-1 text-4xl font-bold" style={{ color: '#7DE5FF' }}>{calc.empty ? '—' : usd(calc.ggCost)}</div>
-        {!calc.empty && <div className="mt-1 text-[12px]" style={{ color: 'rgba(255,255,255,0.55)' }}>Access {usd(calc.ggCost - (calc.appUnits * COST.unitPassApp + calc.gwUnits * COST.unitGateway))} + unit locks {usd(calc.appUnits * COST.unitPassApp + calc.gwUnits * COST.unitGateway)}</div>}
-      </div>
+      {showInternal && (
+        <div className="rounded-3xl p-5" style={{ background: 'radial-gradient(circle at 14% 0%, rgba(0,124,255,0.16), transparent 40%), linear-gradient(180deg, rgba(8,18,34,0.82), rgba(3,9,22,0.6))', border: '1px solid rgba(0,200,255,0.28)' }}>
+          <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: 'rgba(0,200,255,0.85)' }}>Gate Guard cost / month · internal</div>
+          <div className="mt-1 text-4xl font-bold" style={{ color: '#7DE5FF' }}>{calc.empty ? '—' : usd(calc.ggCost)}</div>
+          {!calc.empty && <div className="mt-1 text-[12px]" style={{ color: 'rgba(255,255,255,0.55)' }}>Access {usd(calc.ggCost - (calc.appUnits * COST.unitPassApp + calc.gwUnits * COST.unitGateway))} + unit locks {usd(calc.appUnits * COST.unitPassApp + calc.gwUnits * COST.unitGateway)}</div>}
+        </div>
+      )}
 
       <div className="rounded-3xl p-5" style={{ background: 'linear-gradient(180deg, rgba(52,211,153,0.08), rgba(8,18,34,0.6))', border: '1px solid rgba(52,211,153,0.28)' }}>
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: '#6ee7b7' }}>Dealer price / month</div>
-            <div className="mt-1 text-3xl font-bold" style={{ color: '#6ee7b7' }}>{calc.empty ? '—' : usd(calc.dealerPrice)}</div>
+            <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: '#6ee7b7' }}>Gate Guard Fee / month</div>
+            <div className="mt-1 text-3xl font-bold" style={{ color: '#6ee7b7' }}>{calc.empty ? '—' : usd(ggFee)}</div>
           </div>
-          <div className="text-right text-[12px]" style={{ color: 'rgba(255,255,255,0.55)' }}>
-            {!calc.empty && !calc.noUnits && <>
-              <div style={{ color: calc.marginPerUnit >= MARGIN_MIN ? '#6ee7b7' : '#fca5a5' }}>{usd(calc.marginPerUnit)}/unit margin</div>
-              <div>{usd(calc.margin)} total</div>
-            </>}
-          </div>
+          {showInternal && (
+            <div className="text-right text-[12px]" style={{ color: 'rgba(255,255,255,0.55)' }}>
+              {!calc.empty && !calc.noUnits && <>
+                <div style={{ color: calc.marginPerUnit >= MARGIN_MIN ? '#6ee7b7' : '#fca5a5' }}>{usd(calc.marginPerUnit)}/unit margin</div>
+                <div>{usd(calc.margin)} total margin</div>
+              </>}
+            </div>
+          )}
         </div>
         {!calc.empty && (
           <div className="mt-3 space-y-1.5 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.07)' }}>
@@ -164,7 +186,17 @@ export function PricingCalculator() {
         {calc.noUnits && !calc.empty && <div className="mt-3 text-[11px]" style={{ color: '#fde68a' }}>Add living units to price the access service (gate-only / camera-only rule still TBD).</div>}
       </div>
 
-      <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Access = $5/unit ≤ 500 (slides above); over-budget doors/cameras billed at {OVERAGE_MARKUP}× as equipment fees. Unit locks always cost + ${ADDON_MARGIN.toFixed(2)}. Costs: docs/nexus/PRICING_MODEL.md.</div>
+      <div className="rounded-3xl p-5" style={{ background: 'linear-gradient(180deg, rgba(0,200,255,0.08), rgba(8,18,34,0.6))', border: '1px solid rgba(0,200,255,0.28)' }}>
+        <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: '#7DE5FF' }}>Suggested retail / month</div>
+        <div className="mt-1 text-3xl font-bold" style={{ color: '#7DE5FF' }}>{calc.empty ? '—' : usd(suggestedRetail)}</div>
+        <div className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.45)' }}>Recommended price to the property — you set the final number.</div>
+      </div>
+
+      <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+        {showInternal
+          ? <>Access = $5/unit ≤ 500 (slides above); over-budget doors/cameras billed at {OVERAGE_MARKUP}× as equipment fees. Unit locks always cost + ${ADDON_MARGIN.toFixed(2)}. Costs: docs/nexus/PRICING_MODEL.md.</>
+          : <>Gate Guard Fee is your monthly cost from Gate Guard. Suggested retail is a recommended price to the property — you set the final number.</>}
+      </div>
     </div>
   )
 }
