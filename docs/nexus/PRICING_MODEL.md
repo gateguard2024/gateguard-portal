@@ -48,11 +48,20 @@ Two layers. Implemented in `components/nexus/PricingCalculator.tsx`.
 - Cameras: $15 each (monitored OR stored-video — same cost)
 - Extra mobile passes: $30 per 100 over the 500 included
 
-**Step 2 — Dealer price** = GG cost + (living units × per-unit margin), where GG margin is **bounded $2.25 min / $3.00 max** per unit. (`MARGIN_MIN = 2.25`, `MARGIN_MAX = 3.00`.)
+**Step 2 — Dealer price = ACCESS (per-unit) + UNIT-LOCK ADD-ONS.**
+
+*Access* (base, gates/common doors, common-area locks, cameras, passes):
+- **$5/unit** up to **500 units**. Above 500 it **slides** toward `accessCost/unit + $3`, capped at $5, floored at `accessCost/unit + $2.25` → margin in the **$2.25–$3** band as the site grows.
+- Each unit carries up to **$5 − $2.25 = $2.75** of access cost → **equipment budget = units × $2.75** (auto-scales with the unit↔door↔camera ratio).
+- Access cost **over** budget (door/camera-heavy sites) → **"equipment fee" at 2× cost**, shown ≈ per door. Margin never drops below the $2.25 floor.
+
+*Unit door locks (app + gateway) are NOT in the $5/unit model* — they are **always add-ons at GG cost + $2**: app unit = $4.25, gateway unit = $6.50.
+
+Constants in `PricingCalculator.tsx`: `UNIT_PRICE = 5`, `FLOOR_LIMIT = 500`, `MARGIN_MIN = 2.25`, `MARGIN_TARGET = 3.0`, `OVERAGE_MARKUP = 2`, `ADDON_MARGIN = 2`.
 
 **Phase 2 — End-user price** = dealer price + dealer markup (TBD).
 
-Open: how the per-unit margin applies to **gate-only / camera-only** sites with no living units (currently no margin until living units entered). Where used: Sales → Opportunities → **Rough Calculator** (live). Next: feed dealer price → opportunity MRR + proposal.
+Open: gate-only / camera-only sites (no living units) — per-unit margin can't apply; needs its own rule. Where used: Sales → Opportunities → **Rough Calculator** (live). Next: feed dealer price → opportunity MRR + proposal.
 
 ## Calculator requirement (when built)
 Itemized inputs per site: # gates/common doors (auto-tier S1/S2/S3), # units + control type (pass-app vs gateway), # cameras (with-access vs monitored), # mobile passes. Output: true monthly cost + recommended retail (per the model above) + blended $/unit + margin. Feeds the opportunity MRR field and the Sales → Opportunities → Rough Calculator.
