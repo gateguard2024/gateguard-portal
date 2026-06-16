@@ -31,10 +31,12 @@ export async function GET(req: NextRequest) {
   const limit  = Math.min(parseInt(searchParams.get('limit') ?? '20', 10), 100)
   const active = searchParams.get('active') !== 'false' // default true
 
+  // select('*') is drift-proof — this db's products schema differs from the
+  // migration files (e.g. no list_price), so we never name columns that may
+  // be absent. Callers read whatever fields exist.
   let query = serviceDb()
     .from('products')
-    .select('id, name, sku, brand, category, subcategory, description, sell_price, list_price, msrp, image_url, field_service, manual_url, active, tags, org_id')
-    .order('brand', { nullsFirst: false })
+    .select('*')
     .order('name')
     .limit(limit)
 
@@ -99,28 +101,43 @@ export async function POST(req: NextRequest) {
     ? sku.trim().toUpperCase()
     : `CUSTOM-${Date.now().toString().slice(-6)}`
 
-  const row = {
-    name:          name.trim(),
-    description:   description ?? null,
-    sku:           resolvedSku,
-    brand:         brand       ?? null,
-    category:      category    ?? 'Custom',
-    subcategory:   subcategory ?? null,
-    sell_price:    typeof sell_price === 'number' ? sell_price : 0,
-    list_price:    typeof list_price === 'number' ? list_price : (typeof sell_price === 'number' ? sell_price : 0),
-    msrp:          typeof msrp       === 'number' ? msrp       : null,
-    image_url:     image_url   ?? null,
-    field_service: field_service === true,
-    tags:          Array.isArray(tags) ? tags : [],
-    active:        true,
+  // Build only with core columns that reliably exist (this db's products schema
+  // drifted from the migrations — e.g. no list_price). Optional columns are added
+  // only when the caller supplied a value, and a missing-column error retries
+  // without it, so a dealer "Save to my catalog" (name only) always succeeds.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const row: Record<string, any> = {
+    name:        name.trim(),
+    sku:         resolvedSku,
+    category:    category ?? 'Custom',
+    active:      true,
     org_id,
   }
+  if (description != null) row.description = description
+  if (brand != null) row.brand = brand
+  if (subcategory != null) row.subcategory = subcategory
+  if (typeof sell_price === 'number') row.sell_price = sell_price
+  if (typeof list_price === 'number') row.list_price = list_price
+  if (typeof msrp === 'number') row.msrp = msrp
+  if (image_url != null) row.image_url = image_url
+  if (field_service != null) row.field_service = field_service === true
+  if (Array.isArray(tags)) row.tags = tags
 
-  const { data, error } = await serviceDb()
-    .from('products')
-    .insert(row)
-    .select('id, name, sku, brand, category, sell_price, list_price, image_url, field_service, active')
-    .single()
+  async function insertRow(r: Record<string, unknown>): Promise<{ data: unknown; error: { code?: string; message: string } | null }> {
+    return serviceDb().from('products').insert(r).select('*').single()
+  }
+
+  let { data, error } = await insertRow(row)
+  // Strip any column the live schema doesn't have and retry (handles drift).
+  let guard = 0
+  while (error && error.code === '42703' && guard < 8) {
+    const m = /column "?([a-z_]+)"? of relation/i.exec(error.message) || /'([a-z_]+)' column/i.exec(error.message)
+    const col = m?.[1]
+    if (!col || !(col in row)) break
+    delete row[col]
+    guard++
+    ;({ data, error } = await insertRow(row))
+  }
 
   if (error) {
     // Duplicate SKU — append a suffix and retry once
@@ -129,7 +146,7 @@ export async function POST(req: NextRequest) {
       const { data: d2, error: e2 } = await serviceDb()
         .from('products')
         .insert(row)
-        .select('id, name, sku, brand, category, sell_price, list_price, image_url, field_service, active')
+        .select('*')
         .single()
       if (e2) return NextResponse.json({ error: e2.message }, { status: 500 })
       return NextResponse.json({ product: d2 }, { status: 201 })

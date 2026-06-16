@@ -33,12 +33,15 @@ GRANT ALL ON TABLE public.labor_rates TO postgres, anon, authenticated, service_
 CREATE INDEX IF NOT EXISTS labor_rates_org_id_idx ON public.labor_rates (org_id);
 
 -- 3 ── A few global defaults so the pricing calc / survey have something to start from.
+--      Plain guarded inserts (no VALUES alias / type inference) for portability.
 INSERT INTO public.labor_rates (org_id, name, rate, unit)
-SELECT * FROM (VALUES
-  (NULL::uuid, 'Standard Install Labor', 125, 'hour'),
-  (NULL::uuid, 'Service Call',            95, 'trip'),
-  (NULL::uuid, 'After-Hours / Emergency',185, 'hour')
-) AS v(org_id, name, rate, unit)
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.labor_rates l WHERE l.org_id IS NULL AND l.name = v.name
-);
+SELECT NULL::uuid, 'Standard Install Labor', 125::numeric, 'hour'
+WHERE NOT EXISTS (SELECT 1 FROM public.labor_rates WHERE org_id IS NULL AND name = 'Standard Install Labor');
+
+INSERT INTO public.labor_rates (org_id, name, rate, unit)
+SELECT NULL::uuid, 'Service Call', 95::numeric, 'trip'
+WHERE NOT EXISTS (SELECT 1 FROM public.labor_rates WHERE org_id IS NULL AND name = 'Service Call');
+
+INSERT INTO public.labor_rates (org_id, name, rate, unit)
+SELECT NULL::uuid, 'After-Hours / Emergency', 185::numeric, 'hour'
+WHERE NOT EXISTS (SELECT 1 FROM public.labor_rates WHERE org_id IS NULL AND name = 'After-Hours / Emergency');
