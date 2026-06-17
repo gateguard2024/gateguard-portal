@@ -53,6 +53,16 @@ const procedures = [
   { id: "pr1", name: "Camera Health Check", steps: ["Verify online status", "Clean lens", "Check view angle", "Confirm recording"] },
   { id: "pr2", name: "Access Control Test", steps: ["Test reader", "Test mobile pass", "Check door strike", "Confirm event log"] },
 ];
+// One simple, canonical 4-stage status set for Jobs/Work Orders (5th-grader clear).
+// Every underlying status maps into exactly one of these buckets.
+const JOB_COLUMNS: { key: string; label: string; from: string[]; accent: string }[] = [
+  { key: "New",         label: "New",          from: ["Pending", "open", "New", "Approved"],                  accent: "#64748b" },
+  { key: "Scheduled",   label: "Scheduled",    from: ["Assigned", "scheduled", "Scheduled"],                  accent: "#3b82f6" },
+  { key: "In Progress", label: "In Progress",  from: ["In Progress", "in_progress", "On Site", "En Route", "Waiting Parts"], accent: "#f59e0b" },
+  { key: "Done",        label: "Done",         from: ["Done", "completed", "Complete"],                       accent: "#10b981" },
+];
+const bucketOf = (status: string) => JOB_COLUMNS.find(c => c.from.includes(status))?.key ?? "New";
+
 function money(n: number) {
   return `$${n.toLocaleString()}`;
 }
@@ -119,14 +129,13 @@ function App() {
   );
 }
 function Dashboard({ jobs, loading }: { jobs: RealWO[]; loading: boolean }) {
-  const done = (s: string) => s === 'Complete' || s === 'Completed';
-  const kpis: [string, string][] = [
-    ["Open Work Orders", String(jobs.filter(j => !done(j.status)).length)],
-    ["Total Work Orders", String(jobs.length)],
-    ["Unassigned", String(jobs.filter(j => !j.assignedTechId).length)],
-    ["Completed", String(jobs.filter(j => done(j.status)).length)],
-  ];
-  return <Grid>{kpis.map(([k, v]) => <Card key={k}><Small>{k}</Small><Big>{loading ? '…' : v}</Big></Card>)}<WorkOrderBoard jobs={jobs} /></Grid>;
+  // KPI cards mirror the 4 board columns so the numbers and the board always agree.
+  return <Grid>
+    {JOB_COLUMNS.map(col => (
+      <Card key={col.key}><Small>{col.label}</Small><Big>{loading ? '…' : String(jobs.filter(j => bucketOf(j.status) === col.key).length)}</Big></Card>
+    ))}
+    <WorkOrderBoard jobs={jobs} />
+  </Grid>;
 }
 function WorkOrders({ jobs, loading, onRefresh }: { jobs: RealWO[]; techs: RealTech[]; loading: boolean; onRefresh: () => void }) {
   return <Grid>
@@ -218,10 +227,22 @@ function Messages() {
   return <Grid><Card><h2>WO Team Chat</h2><p><b>Mike:</b> Camera replaced and view angle corrected.</p><p><b>Sarah:</b> Need Brivo controller from stock.</p><input placeholder="Write a comment..." style={input} /><button style={btn}>Send</button></Card></Grid>;
 }
 function WorkOrderBoard({ jobs }: { jobs: RealWO[] }) {
-  // Columns = the statuses actually present (falls back to a sensible default set).
-  const present = Array.from(new Set(jobs.map(j => j.status).filter(Boolean)));
-  const statuses = present.length ? present : ["Open", "In Progress", "Complete"];
-  return <Card><h2>WO Status Board</h2><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>{statuses.map(st => <div key={st}><h3>{st}</h3>{jobs.filter(w => w.status === st).map(w => <WOCard key={w.id} wo={w} />)}</div>)}</div></Card>;
+  // Always the same 4 columns, in order — New → Scheduled → In Progress → Done.
+  return <Card><h2 style={{ marginBottom: 12 }}>Jobs board</h2>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 12 }}>
+      {JOB_COLUMNS.map(col => {
+        const items = jobs.filter(w => bucketOf(w.status) === col.key);
+        return <div key={col.key}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: 12, background: `${col.accent}22`, border: `1px solid ${col.accent}55`, marginBottom: 10 }}>
+            <span style={{ fontWeight: 700, fontSize: 13 }}>{col.label}</span>
+            <span style={{ fontSize: 12, color: "#aab" }}>{items.length}</span>
+          </div>
+          {items.map(w => <WOCard key={w.id} wo={w} />)}
+          {items.length === 0 && <p style={{ color: "#556", fontSize: 12, textAlign: "center", padding: "8px 0" }}>—</p>}
+        </div>;
+      })}
+    </div>
+  </Card>;
 }
 function WOCard({ wo }: { wo: RealWO }) {
   return <div style={{ padding: 14, borderRadius: 14, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.08)", marginBottom: 10 }}>
