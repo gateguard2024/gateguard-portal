@@ -114,17 +114,27 @@ function App() {
   }, [loadOps]);
   const selectedWO = workOrders[0];
   return (
-    <div style={{ minHeight: "100vh", background: "radial-gradient(circle at top left, #1c2455, #050712 45%)", color: "white", fontFamily: "Inter, Arial, sans-serif", padding: 24 }}>
-      <a href="/?tab=jobs" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 16px", borderRadius: 999, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.85)", textDecoration: "none", marginBottom: 20, fontSize: 14 }}>← Back to Nexus</a>
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>
-        {pages.map(p => (
-          <button key={p} onClick={() => setPage(p)} style={{ padding: "12px 16px", borderRadius: 14, border: `1px solid ${page === p ? cyan : "rgba(255,255,255,.1)"}`, background: page === p ? "rgba(0,200,255,.16)" : "rgba(255,255,255,.04)", color: "white", cursor: "pointer" }}>
-            {p}
-          </button>
-        ))}
+    <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 50% -8%, rgba(0,124,255,0.10), transparent 55%), linear-gradient(180deg, #0a1430 0%, #060b1a 60%, #04060f 100%)", color: "white", fontFamily: "Inter, system-ui, Arial, sans-serif", padding: 24 }}>
+      <a href="/?tab=jobs" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 16px", borderRadius: 999, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.82)", textDecoration: "none", marginBottom: 20, fontSize: 14, backdropFilter: "blur(20px)" }}>← Back to Nexus</a>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 10, letterSpacing: "0.24em", textTransform: "uppercase", color: "rgba(0,200,255,0.8)" }}>Nexus</div>
+        <h1 style={{ margin: "4px 0 2px", fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em" }}>Operations Hub</h1>
+        <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 14 }}>Jobs, work orders, dispatch, and parts — in one place.</p>
       </div>
-      <h1 style={{ marginBottom: 8 }}>GateGuard CMMS</h1>
-      <p style={{ color: "#aab", marginBottom: 24 }}>MaintainX-style maintenance layered on Nexus data.</p>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 24 }}>
+        {pages.map(p => {
+          const on = page === p;
+          return (
+            <button key={p} onClick={() => setPage(p)} style={{ padding: "9px 16px", borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all .2s",
+              background: on ? "linear-gradient(135deg, rgba(0,124,255,0.42) 0%, rgba(0,200,255,0.16) 100%)" : "rgba(255,255,255,0.02)",
+              border: on ? "1px solid rgba(0,200,255,0.42)" : "0.5px solid rgba(255,255,255,0.07)",
+              color: on ? "rgba(255,255,255,0.96)" : "rgba(255,255,255,0.5)",
+              boxShadow: on ? "0 0 22px rgba(0,124,255,0.30), inset 0 1px 0 rgba(255,255,255,0.12)" : "none" }}>
+              {p}
+            </button>
+          );
+        })}
+      </div>
       {page === "Dashboard" && <Dashboard jobs={jobs} loading={loading} />}
       {page === "Work Orders" && <WorkOrders jobs={jobs} techs={techs} loading={loading} onRefresh={loadOps} onCreate={createWO} onUpdate={updateWO} />}
       {page === "WO Detail" && <WODetail wo={selectedWO} />}
