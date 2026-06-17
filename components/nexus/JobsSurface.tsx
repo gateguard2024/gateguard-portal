@@ -361,6 +361,7 @@ export function JobsSurface({ onOpenDispatch }: { onOpenDispatch?: () => void } 
                 <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>Open today’s jobs, handle what needs attention, schedule site work, or review active work.</p>
               </div>
               <div className="flex items-center gap-2">
+                <a href="/cmms" className="rounded-full px-4 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(135deg, rgba(52,211,153,0.30), rgba(0,200,255,0.14))', border: '1px solid rgba(52,211,153,0.34)', color: '#bff7e0', boxShadow: '0 0 18px rgba(52,211,153,0.16)' }}>🔧 Operations Hub →</a>
                 {onOpenDispatch && (
                   <button type="button" onClick={onOpenDispatch} className="rounded-full px-4 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(135deg, rgba(0,124,255,0.30), rgba(0,200,255,0.14))', border: '1px solid rgba(0,200,255,0.34)', color: '#bfe9ff', boxShadow: '0 0 18px rgba(0,124,255,0.16)' }}>Open Dispatch board →</button>
                 )}

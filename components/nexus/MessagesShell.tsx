@@ -449,7 +449,7 @@ export default function MessagesShell() {
                 const isInbound = msg.direction === 'in';
                 if (isCall) {
                   return (
-                    <div key={msg.id} className="flex justify-center my-4">
+                    <div key={msg.id} className="shrink-0 flex justify-center my-4">
                       <div className="px-4 py-3 rounded-2xl flex items-center gap-4 min-w-[240px]" style={glassPanel}>
                         <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: isInbound ? 'rgba(255,255,255,0.05)' : 'rgba(107,126,255,0.1)' }}>
                           {isInbound ? <PhoneMissed size={18} style={textSecondary} /> : <PhoneForwarded size={18} style={{ color: brandBlue }} />}
@@ -469,7 +469,7 @@ export default function MessagesShell() {
                 // header, full-width body with comfortable line length & spacing.
                 if (msg.channel === 'email') {
                   return (
-                    <div key={msg.id} className="rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div key={msg.id} className="shrink-0 rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
                       <div className="flex items-center justify-between gap-3 px-4 py-2.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: isInbound ? 'rgba(255,255,255,0.06)' : 'rgba(107,126,255,0.16)', color: isInbound ? 'rgba(255,255,255,0.6)' : '#b3bcff' }}>{isInbound ? 'Received' : 'Sent'}</span>
@@ -484,7 +484,7 @@ export default function MessagesShell() {
                   );
                 }
                 return (
-                  <div key={msg.id} className={`flex flex-col max-w-[80%] ${isInbound ? 'self-start' : 'self-end'}`}>
+                  <div key={msg.id} className={`shrink-0 flex flex-col max-w-[80%] ${isInbound ? 'self-start' : 'self-end'}`}>
                     <div className={`px-4 py-2.5 text-sm shadow-sm ${isInbound ? 'rounded-2xl rounded-tl-sm bg-white/10' : 'rounded-2xl rounded-tr-sm'}`} style={isInbound ? undefined : { backgroundColor: brandBlue, color: 'white' }}>
                       {msg.body}
                     </div>

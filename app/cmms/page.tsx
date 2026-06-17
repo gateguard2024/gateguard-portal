@@ -115,6 +115,7 @@ function App() {
   const selectedWO = workOrders[0];
   return (
     <div style={{ minHeight: "100vh", background: "radial-gradient(circle at top left, #1c2455, #050712 45%)", color: "white", fontFamily: "Inter, Arial, sans-serif", padding: 24 }}>
+      <a href="/?tab=jobs" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 16px", borderRadius: 999, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.85)", textDecoration: "none", marginBottom: 20, fontSize: 14 }}>← Back to Nexus</a>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>
         {pages.map(p => (
           <button key={p} onClick={() => setPage(p)} style={{ padding: "12px 16px", borderRadius: 14, border: `1px solid ${page === p ? cyan : "rgba(255,255,255,.1)"}`, background: page === p ? "rgba(0,200,255,.16)" : "rgba(255,255,255,.04)", color: "white", cursor: "pointer" }}>

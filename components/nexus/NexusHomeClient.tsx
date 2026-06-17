@@ -126,6 +126,14 @@ export default function NexusHomeClient() {
       const qs = params.toString()
       window.history.replaceState({}, '', qs ? `/?${qs}` : '/')
     }
+    // Deep-link to a tab (e.g. returning from /cmms via "← Back to Nexus" → ?tab=jobs).
+    const tab = params.get('tab') as NexusTabId | null
+    if (tab && NAV_ITEMS.some(n => n.id === tab)) {
+      setActiveTab(tab)
+      params.delete('tab')
+      const qs = params.toString()
+      window.history.replaceState({}, '', qs ? `/?${qs}` : '/')
+    }
   }, [isAdmin])
 
   useEffect(() => {
