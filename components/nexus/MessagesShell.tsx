@@ -385,7 +385,7 @@ export default function MessagesShell() {
           </div>
           {syncMsg && <div className="text-[11px]" style={{ color: syncMsg.toLowerCase().includes('error') || syncMsg.toLowerCase().includes('issue') ? '#fca5a5' : 'rgba(255,255,255,0.45)' }}>{syncMsg}</div>}
         </div>
-        <div className="flex-1 overflow-y-auto hide-scrollbar">
+        <div className="flex-1 min-h-0 overflow-y-auto hide-scrollbar">
           {filteredConversations.length === 0 ? (
             <div className="p-6 text-center text-sm" style={textSecondary}>No conversations found.</div>
           ) : (() => {
@@ -425,7 +425,7 @@ export default function MessagesShell() {
         </div>
       </div>
       {/* ── CENTER: Thread ───────────────────────────────────────── */}
-      <div className={`flex-1 flex-col h-full ${!selectedId ? 'hidden md:flex' : 'flex'}`} style={{ background: '#0a0a0c' }}>
+      <div className={`flex-1 min-w-0 min-h-0 flex-col h-full ${!selectedId ? 'hidden md:flex' : 'flex'}`} style={{ background: '#0a0a0c' }}>
         {!selectedConversation ? (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
             <div className="w-16 h-16 rounded-3xl flex items-center justify-center mb-4" style={glassPanel}>
@@ -443,7 +443,7 @@ export default function MessagesShell() {
                 <div className="text-[12px] truncate" style={textSecondary}>{selectedConversation.contact_name}{selectedConversation.contact_address ? ` · ${selectedConversation.contact_address}` : ''}</div>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4 hide-scrollbar">
+            <div className="flex-1 min-h-0 overflow-y-auto p-6 flex flex-col gap-4 hide-scrollbar">
               {selectedConversation.messages.map((msg) => {
                 const isCall = msg.channel === 'call';
                 const isInbound = msg.direction === 'in';
@@ -478,8 +478,8 @@ export default function MessagesShell() {
                         <span className="text-[11px] flex-shrink-0" style={textFaint}>{new Date(msg.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
                       {msg.body_html
-                        ? <div className="nexus-email-html" style={{ background: '#ffffff', color: '#1a1a2e', padding: '20px 24px', fontSize: 14, lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(msg.body_html) }} />
-                        : <div className="px-5 py-4 text-sm" style={{ color: 'rgba(255,255,255,0.86)', lineHeight: 1.65, maxWidth: 680, whiteSpace: 'pre-wrap' }}>{cleanPlainText(msg.body)}</div>}
+                        ? <div className="nexus-email-html hide-scrollbar" style={{ background: '#ffffff', color: '#1a1a2e', padding: '20px 24px', fontSize: 14, lineHeight: 1.6, maxHeight: '62vh', overflowY: 'auto' }} dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(msg.body_html) }} />
+                        : <div className="hide-scrollbar px-5 py-4 text-sm" style={{ color: 'rgba(255,255,255,0.86)', lineHeight: 1.65, maxWidth: 680, whiteSpace: 'pre-wrap', maxHeight: '62vh', overflowY: 'auto' }}>{cleanPlainText(msg.body)}</div>}
                     </div>
                   );
                 }
