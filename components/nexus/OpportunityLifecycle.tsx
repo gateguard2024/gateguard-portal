@@ -4,6 +4,7 @@
 // Vision: docs/nexus/OPPORTUNITY_LIFECYCLE_VISION.md. Wired to real data in AM.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { PricingCalculator } from '@/components/nexus/PricingCalculator'
+import { ContactsCard } from '@/components/nexus/ContactsCard'
 
 const cyan = '#00C8FF'
 const STAGES = ['Overview', 'Survey', 'Financials', 'Proposal', 'Negotiate', 'Contract & Invoice', 'Sign', 'Payment'] as const
@@ -360,6 +361,9 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
         <button onClick={saveNote} disabled={posting || !noteText.trim()} style={{ ...btn, marginTop: 8, opacity: posting || !noteText.trim() ? 0.5 : 1 }}>Save note</button>
         <Sub>Notes stack in the activity timeline →</Sub>
       </Card>
+
+      {/* Contacts (many-to-many) — add/remove people on this deal */}
+      {opportunityId && <ContactsCard entityType="opportunity" entityId={opportunityId} accent="#7DE5FF" />}
 
       {/* Calendar & tasks — self-assigned, with details + check-to-complete */}
       <Card>

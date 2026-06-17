@@ -242,6 +242,33 @@ export default function MessagesShell() {
     await fetch(`/api/nexus/messages/threads/${conv.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(() => {});
   };
 
+  // Create a new CRM record straight from the email (sender's name + address),
+  // then auto-link this thread to it. One tap turns an email into a lead/deal/customer.
+  const [creating, setCreating] = useState<string | null>(null);
+  const createAndLink = async (conv: Conversation, type: 'lead' | 'opportunity' | 'customer' | 'contact') => {
+    setCreating(type);
+    try {
+      const who = conv.contact_name || conv.contact_address || 'New record';
+      const email = conv.contact_address || '';
+      let id: string | null = null; let label = who;
+      if (type === 'contact') {
+        const r = await fetch('/api/crm/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: who, email }) }).then(r => r.json()).catch(() => ({}));
+        id = r?.id ?? r?.contact?.id ?? null;
+      } else if (type === 'lead') {
+        const r = await fetch('/api/crm/leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: who, email, source: 'email' }) }).then(r => r.json()).catch(() => ({}));
+        id = r?.id ?? r?.record?.id ?? null;
+      } else if (type === 'opportunity') {
+        label = `${who} — Opportunity`;
+        const r = await fetch('/api/crm/opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: label, account_name: who, contact_name: who, contact_email: email }) }).then(r => r.json()).catch(() => ({}));
+        id = r?.id ?? r?.data?.id ?? null; label = r?.name ?? label;
+      } else if (type === 'customer') {
+        const r = await fetch('/api/customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: who, org_tier: 'client', primary_contact_name: conv.contact_name || null, primary_contact_email: email }) }).then(r => r.json()).catch(() => ({}));
+        id = r?.id ?? r?.record?.id ?? r?.data?.id ?? null;
+      }
+      if (id) await patchLink(conv, { linked_type: type, linked_id: String(id), linked_label: label });
+    } finally { setCreating(null); }
+  };
+
   // Open a conversation + mark it read (clears the unread dot, Superhuman-style).
   const selectConversation = React.useCallback((id: string) => {
     setSelectedId(id);
@@ -504,7 +531,7 @@ export default function MessagesShell() {
                   <span className="font-semibold text-[13px] truncate">{selectedConversation.linked_label}</span>
                 </div>
               ) : (
-                <button onClick={() => setLinkOpen(o => !o)} className="w-full px-3 py-2 rounded-lg text-[13px] text-left" style={{ background: '#18181b', border: '1px dashed rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.6)' }}>+ Link to lead, deal, customer, job…</button>
+                <button onClick={() => setLinkOpen(o => !o)} className="w-full px-3 py-2 rounded-lg text-[13px] text-left" style={{ background: '#18181b', border: '1px dashed rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.6)' }}>+ Link to existing record…</button>
               )}
               {linkOpen && (
                 <div className="absolute left-0 right-0 top-full mt-1 z-20 rounded-xl p-2" style={{ background: '#161620', border: '1px solid rgba(99,102,241,0.3)' }}>
@@ -521,6 +548,27 @@ export default function MessagesShell() {
                 </div>
               )}
             </div>
+
+            {/* Create a new record from this email (one tap, auto-links) */}
+            {!selectedConversation.linked_label && (
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-wider mb-2" style={textSecondary}>Create from this email</div>
+                <div className="flex flex-col gap-1.5">
+                  {([['contact', 'Contact', '#60a5fa'], ['lead', 'Lead', '#f59e0b'], ['opportunity', 'Opportunity', '#818cf8'], ['customer', 'Customer', '#34d399']] as const).map(([type, label, color]) => (
+                    <button key={type} onClick={() => createAndLink(selectedConversation, type)} disabled={creating !== null}
+                      className="w-full px-3 py-2 rounded-lg text-[13px] text-left flex items-center justify-between disabled:opacity-50" style={{ background: '#18181b', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      <span className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
+                        New {label}
+                      </span>
+                      <span className="text-[11px]" style={textFaint}>{creating === type ? 'Creating…' : '+'}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="text-[11px] mt-2" style={textFaint}>Uses {selectedConversation.contact_name || selectedConversation.contact_address || 'the sender'} and auto-links this thread.</div>
+              </div>
+            )}
+
             {/* Channel */}
             <div>
               <div className="text-[11px] font-bold uppercase tracking-wider mb-2" style={textSecondary}>Channel</div>
