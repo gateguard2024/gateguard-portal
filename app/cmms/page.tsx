@@ -1,8 +1,11 @@
 'use client';
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 type Status = "New" | "Approved" | "In Progress" | "Waiting Parts" | "Complete";
 type Priority = "Low" | "Medium" | "High" | "Urgent";
+// Real work-order + tech shapes from /api/dispatch (existing data — no new tables).
+type RealWO = { id: string; property?: string; jobType?: string; assignedTech?: string | null; assignedTechId?: string | null; eta?: string; priority: Priority; status: string; woNumber?: string | null; title?: string | null; site_id?: string | null };
+type RealTech = { id: string; name: string; initials?: string; status?: string };
 const brand = "#6B7EFF";
 const cyan = "#00C8FF";
 const products = [
@@ -80,6 +83,15 @@ function Card({ children }: { children: React.ReactNode }) {
 function App() {
   const pages = ["Dashboard", "Work Orders", "WO Detail", "Requests", "Assets", "Locations", "PM", "Procedures", "Parts", "Reporting", "Messages"];
   const [page, setPage] = useState("Dashboard");
+  // Real Work Orders + Dispatch (from /api/dispatch). Other pages still mock for now.
+  const [jobs, setJobs] = useState<RealWO[]>([]);
+  const [techs, setTechs] = useState<RealTech[]>([]);
+  const [loading, setLoading] = useState(true);
+  const loadOps = React.useCallback(() => {
+    setLoading(true);
+    fetch('/api/dispatch').then(r => r.json()).then(d => { setJobs(d.jobs ?? []); setTechs(d.techs ?? []); }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { loadOps(); }, [loadOps]);
   const selectedWO = workOrders[0];
   return (
     <div style={{ minHeight: "100vh", background: "radial-gradient(circle at top left, #1c2455, #050712 45%)", color: "white", fontFamily: "Inter, Arial, sans-serif", padding: 24 }}>
@@ -92,8 +104,8 @@ function App() {
       </div>
       <h1 style={{ marginBottom: 8 }}>GateGuard CMMS</h1>
       <p style={{ color: "#aab", marginBottom: 24 }}>MaintainX-style maintenance layered on Nexus data.</p>
-      {page === "Dashboard" && <Dashboard />}
-      {page === "Work Orders" && <WorkOrders />}
+      {page === "Dashboard" && <Dashboard jobs={jobs} loading={loading} />}
+      {page === "Work Orders" && <WorkOrders jobs={jobs} techs={techs} loading={loading} onRefresh={loadOps} />}
       {page === "WO Detail" && <WODetail wo={selectedWO} />}
       {page === "Requests" && <Requests />}
       {page === "Assets" && <Assets />}
@@ -106,22 +118,24 @@ function App() {
     </div>
   );
 }
-function Dashboard() {
-  const margin = marginForWO("wo1");
-  const kpis = [
-    ["Open WOs", "3"],
-    ["Overdue", "1"],
-    ["PM Due This Week", "2"],
-    ["Low Stock Parts", "1"],
-    ["Month Margin", money(margin.margin)],
+function Dashboard({ jobs, loading }: { jobs: RealWO[]; loading: boolean }) {
+  const done = (s: string) => s === 'Complete' || s === 'Completed';
+  const kpis: [string, string][] = [
+    ["Open Work Orders", String(jobs.filter(j => !done(j.status)).length)],
+    ["Total Work Orders", String(jobs.length)],
+    ["Unassigned", String(jobs.filter(j => !j.assignedTechId).length)],
+    ["Completed", String(jobs.filter(j => done(j.status)).length)],
   ];
-  return <Grid>{kpis.map(([k, v]) => <Card key={k}><Small>{k}</Small><Big>{v}</Big></Card>)}<WorkOrderBoard /></Grid>;
+  return <Grid>{kpis.map(([k, v]) => <Card key={k}><Small>{k}</Small><Big>{loading ? '…' : v}</Big></Card>)}<WorkOrderBoard jobs={jobs} /></Grid>;
 }
-function WorkOrders() {
+function WorkOrders({ jobs, loading, onRefresh }: { jobs: RealWO[]; techs: RealTech[]; loading: boolean; onRefresh: () => void }) {
   return <Grid>
-    <Card><h2>Work Orders</h2>{workOrders.map(wo => <WOCard key={wo.id} wo={wo} />)}</Card>
-    <WorkOrderBoard />
-    <Card><h2>Calendar View</h2>{workOrders.map(wo => <p key={wo.id}>{wo.due_date} — {wo.wo_number}</p>)}</Card>
+    <Card>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><h2>Work Orders</h2><button onClick={onRefresh} style={{ ...btn, marginTop: 0, padding: "8px 12px" }}>↻ Refresh</button></div>
+      {loading ? <p style={{ color: "#aab" }}>Loading…</p> : jobs.length === 0 ? <p style={{ color: "#aab" }}>No work orders yet.</p> : jobs.map(wo => <WOCard key={wo.id} wo={wo} />)}
+    </Card>
+    <WorkOrderBoard jobs={jobs} />
+    <Card><h2>Schedule</h2>{jobs.length === 0 ? <p style={{ color: "#aab" }}>Nothing scheduled.</p> : jobs.map(wo => <p key={wo.id}>{wo.eta || 'TBD'} — {wo.woNumber || wo.title || 'WO'}</p>)}</Card>
   </Grid>;
 }
 function WODetail({ wo }: { wo: WorkOrder }) {
@@ -203,14 +217,17 @@ function Reporting() {
 function Messages() {
   return <Grid><Card><h2>WO Team Chat</h2><p><b>Mike:</b> Camera replaced and view angle corrected.</p><p><b>Sarah:</b> Need Brivo controller from stock.</p><input placeholder="Write a comment..." style={input} /><button style={btn}>Send</button></Card></Grid>;
 }
-function WorkOrderBoard() {
-  const statuses: Status[] = ["New", "In Progress", "Waiting Parts", "Complete"];
-  return <Card><h2>WO Status Board</h2><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>{statuses.map(st => <div key={st}><h3>{st}</h3>{workOrders.filter(w => w.status === st).map(w => <WOCard key={w.id} wo={w} />)}</div>)}</div></Card>;
+function WorkOrderBoard({ jobs }: { jobs: RealWO[] }) {
+  // Columns = the statuses actually present (falls back to a sensible default set).
+  const present = Array.from(new Set(jobs.map(j => j.status).filter(Boolean)));
+  const statuses = present.length ? present : ["Open", "In Progress", "Complete"];
+  return <Card><h2>WO Status Board</h2><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>{statuses.map(st => <div key={st}><h3>{st}</h3>{jobs.filter(w => w.status === st).map(w => <WOCard key={w.id} wo={w} />)}</div>)}</div></Card>;
 }
-function WOCard({ wo }: { wo: WorkOrder }) {
-  const site = sites.find(s => s.id === wo.site_id);
+function WOCard({ wo }: { wo: RealWO }) {
   return <div style={{ padding: 14, borderRadius: 14, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.08)", marginBottom: 10 }}>
-    <b>{wo.wo_number}</b><p>{site?.name}</p><Badge tone={wo.priority === "Urgent" ? "urgent" : wo.priority === "High" ? "high" : "default"}>{wo.priority}</Badge>
+    <b>{wo.woNumber || wo.title || "Work Order"}</b>
+    <p style={{ color: "#aab", fontSize: 13, margin: "4px 0" }}>{wo.property || "—"}{wo.assignedTech ? ` · ${wo.assignedTech}` : " · Unassigned"}</p>
+    <Badge tone={wo.priority === "Urgent" ? "urgent" : wo.priority === "High" ? "high" : "default"}>{wo.priority}</Badge>
   </div>;
 }
 function Grid({ children }: { children: React.ReactNode }) {
