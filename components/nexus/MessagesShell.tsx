@@ -135,6 +135,23 @@ const formatDuration = (seconds?: number) => {
 // Email-first + calm: three quiet filters instead of a crowded channel tab-row.
 const FILTERS = ['All', 'Unread', 'Needs reply'] as const;
 type FilterType = typeof FILTERS[number];
+// Record-type badge colors (matches the link-to-record types).
+const RECORD_BADGE: Record<string, { label: string; color: string }> = {
+  lead: { label: 'Lead', color: '#f59e0b' },
+  customer: { label: 'Customer', color: '#34d399' },
+  opportunity: { label: 'Deal', color: '#818cf8' },
+  contact: { label: 'Contact', color: '#60a5fa' },
+  job: { label: 'Job', color: '#2dd4bf' },
+  dealer: { label: 'Dealer', color: '#a78bfa' },
+};
+// Bucket a conversation by day for the Today / Yesterday / Earlier list grouping.
+const dayBucket = (iso: string) => {
+  const d = new Date(iso); const n = new Date();
+  const y = new Date(n); y.setDate(n.getDate() - 1);
+  if (d.toDateString() === n.toDateString()) return 'Today';
+  if (d.toDateString() === y.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric' });
+};
 const initials = (name: string) =>
   (name || '').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('') || '✉';
 // Soft, deterministic avatar tint per contact so the list reads at a glance.
@@ -315,110 +332,91 @@ export default function MessagesShell() {
     );
   }
   return (
-    <div className="flex w-full h-[78dvh] pb-4 font-sans overflow-hidden rounded-2xl" style={{ ...textPrimary, ...glassPanel }}>
-      <style>{`.nexus-email-html img{max-width:100%!important;height:auto!important} .nexus-email-html table{max-width:100%!important} .nexus-email-html a{color:#2563eb} .nexus-email-html *{max-width:100%}`}</style>
-      {/* LEFT PANE: List */}
-      <div className={`w-full md:w-[360px] flex-shrink-0 flex-col border-r ${selectedId ? 'hidden md:flex' : 'flex'}`} style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
-        <div className="p-4 flex flex-col gap-4">
+    <div className="flex w-full h-[78dvh] font-sans overflow-hidden rounded-2xl" style={{ ...textPrimary, background: '#0e0e10', border: '1px solid rgba(255,255,255,0.08)' }}>
+      <style>{`.nexus-email-html img{max-width:100%!important;height:auto!important} .nexus-email-html table{max-width:100%!important} .nexus-email-html a{color:#2563eb} .nexus-email-html *{max-width:100%} @keyframes spin{to{transform:rotate(360deg)}} .hide-scrollbar::-webkit-scrollbar{display:none} .hide-scrollbar{-ms-overflow-style:none;scrollbar-width:none}`}</style>
+
+      {/* ── LEFT: Inbox ──────────────────────────────────────────── */}
+      <div className={`w-full md:w-[320px] flex-shrink-0 flex-col border-r ${selectedId ? 'hidden md:flex' : 'flex'}`} style={{ borderColor: 'rgba(255,255,255,0.08)', background: '#121214' }}>
+        <div className="px-4 pt-4 pb-3 flex flex-col gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-semibold tracking-tight">Messages</h1>
+            <h1 className="text-[15px] font-semibold tracking-tight">Inbox</h1>
             <div className="flex items-center gap-1">
-              <button onClick={runSync} disabled={syncing} title="Refresh" className="p-2 rounded-full hover:bg-white/10 disabled:opacity-50" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                <span style={{ display: 'inline-block', fontSize: 16, animation: syncing ? 'spin 1s linear infinite' : 'none' }}>↻</span>
+              <button onClick={runSync} disabled={syncing} title="Refresh" className="p-1.5 rounded-md hover:bg-white/10 disabled:opacity-50" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                <span style={{ display: 'inline-block', fontSize: 15, animation: syncing ? 'spin 1s linear infinite' : 'none' }}>↻</span>
               </button>
-              <button onClick={() => setShowSetup(true)} title="Connect mailboxes" className="p-2 rounded-full hover:bg-white/10" style={{ color: 'rgba(255,255,255,0.6)' }}><Settings size={18} /></button>
+              <button onClick={() => setShowSetup(true)} title="Connect mailbox & signature" className="p-1.5 rounded-md hover:bg-white/10" style={{ color: 'rgba(255,255,255,0.55)' }}><Settings size={16} /></button>
             </div>
           </div>
-          <div className="flex items-center gap-2 px-3 py-2 rounded-2xl" style={glassPanel}>
-            <Search size={16} style={textSecondary} />
-            <input type="text" placeholder="Search conversations..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="bg-transparent border-none outline-none text-sm w-full placeholder:text-white/30" style={textPrimary} />
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <Search size={14} style={textSecondary} />
+            <input type="text" placeholder="Search…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="bg-transparent border-none outline-none text-[13px] w-full placeholder:text-white/30" style={textPrimary} />
           </div>
-          {syncMsg && <div className="text-[11px] px-1" style={{ color: syncMsg.toLowerCase().includes('error') || syncMsg.toLowerCase().includes('issue') ? '#fca5a5' : 'rgba(255,255,255,0.5)' }}>{syncMsg}</div>}
+          <div className="flex items-center gap-1.5">
+            {FILTERS.map(filter => (
+              <button key={filter} onClick={() => setActiveFilter(filter)} className="px-3 py-1 rounded-full text-[12px] font-medium transition-colors" style={{ backgroundColor: activeFilter === filter ? 'rgba(99,102,241,0.18)' : 'transparent', border: activeFilter === filter ? '1px solid rgba(99,102,241,0.4)' : '1px solid transparent', color: activeFilter === filter ? '#c7d2fe' : 'rgba(255,255,255,0.5)' }}>{filter}</button>
+            ))}
+          </div>
+          {syncMsg && <div className="text-[11px]" style={{ color: syncMsg.toLowerCase().includes('error') || syncMsg.toLowerCase().includes('issue') ? '#fca5a5' : 'rgba(255,255,255,0.45)' }}>{syncMsg}</div>}
         </div>
-        <div className="px-4 pb-2 overflow-x-auto flex items-center gap-2">
-          {FILTERS.map(filter => (
-            <button key={filter} onClick={() => setActiveFilter(filter)} className="px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors" style={{ backgroundColor: activeFilter === filter ? 'rgba(255,255,255,0.1)' : 'transparent', border: activeFilter === filter ? '1px solid rgba(255,255,255,0.15)' : '1px solid transparent', color: activeFilter === filter ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)' }}>
-              {filter}
-            </button>
-          ))}
-        </div>
-        <div className="flex-1 overflow-y-auto px-2 pb-4">
+        <div className="flex-1 overflow-y-auto hide-scrollbar">
           {filteredConversations.length === 0 ? (
             <div className="p-6 text-center text-sm" style={textSecondary}>No conversations found.</div>
-          ) : (
-            filteredConversations.map(conv => (
-              <button key={conv.id} onClick={() => selectConversation(conv.id)} className="w-full text-left px-3 py-3 rounded-2xl mb-0.5 flex items-center gap-3 transition-colors hover:bg-white/5" style={{ backgroundColor: selectedId === conv.id ? 'rgba(255,255,255,0.07)' : 'transparent' }}>
-                {/* unread dot rail — only shows when actually unread */}
-                <div className="w-1.5 flex-shrink-0 flex justify-center">
-                  {conv.unread && <span className="w-2 h-2 rounded-full" style={{ backgroundColor: brandBlue }} />}
-                </div>
-                <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-semibold" style={{ backgroundColor: `${tintFor(conv.contact_name)}22`, color: tintFor(conv.contact_name) }}>
-                  {initials(conv.contact_name)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm" style={{ ...(conv.unread ? textPrimary : textSecondary), fontWeight: conv.unread ? 700 : 500 }}>{conv.contact_name}</span>
-                    <span className="text-[11px] flex-shrink-0" style={textFaint}>{formatRelativeTime(conv.last_at)}</span>
-                  </div>
-                  <div className="truncate text-xs mt-0.5">
-                    {conv.subject && <span style={{ ...(conv.unread ? textPrimary : textSecondary), fontWeight: conv.unread ? 600 : 500 }}>{conv.subject}</span>}
-                    {conv.subject && conv.preview && <span style={textFaint}>&nbsp;&mdash;&nbsp;</span>}
-                    <span style={textFaint}>{conv.preview}</span>
-                  </div>
-                </div>
-              </button>
-            ))
-          )}
+          ) : (() => {
+            const groups: { label: string; items: Conversation[] }[] = [];
+            for (const c of filteredConversations) {
+              const label = dayBucket(c.last_at);
+              const g = groups.find(x => x.label === label);
+              if (g) g.items.push(c); else groups.push({ label, items: [c] });
+            }
+            return groups.map(group => (
+              <div key={group.label}>
+                <div className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider sticky top-0 z-10" style={{ color: 'rgba(255,255,255,0.4)', background: '#121214', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>{group.label}</div>
+                {group.items.map(conv => {
+                  const sel = selectedId === conv.id;
+                  const badge = conv.linked_type ? RECORD_BADGE[conv.linked_type] : null;
+                  const indent = conv.unread ? 16 : 0;
+                  return (
+                    <button key={conv.id} onClick={() => selectConversation(conv.id)} className="w-full text-left px-4 py-3 flex flex-col gap-1 transition-colors hover:bg-white/[0.03]" style={{ backgroundColor: sel ? 'rgba(99,102,241,0.10)' : 'transparent', borderLeft: sel ? '2px solid #6366f1' : '2px solid transparent' }}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {conv.unread && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#6366f1' }} />}
+                          <span className="truncate text-[14px]" style={{ color: conv.unread ? '#f4f4f5' : 'rgba(255,255,255,0.7)', fontWeight: conv.unread ? 700 : 500 }}>{conv.contact_name}</span>
+                        </div>
+                        <span className="text-[12px] flex-shrink-0" style={{ color: sel ? '#a5b4fc' : 'rgba(255,255,255,0.4)' }}>{formatRelativeTime(conv.last_at)}</span>
+                      </div>
+                      <div className="flex items-center gap-2 min-w-0" style={{ paddingLeft: indent }}>
+                        {badge && <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wide flex-shrink-0" style={{ background: `${badge.color}22`, color: badge.color, border: `1px solid ${badge.color}33` }}>{badge.label}</span>}
+                        <span className="truncate text-[13px]" style={{ color: conv.unread ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.5)', fontWeight: conv.unread ? 500 : 400 }}>{conv.subject || conv.preview || '(no subject)'}</span>
+                      </div>
+                      {conv.subject && conv.preview && <span className="truncate text-[12px]" style={{ color: 'rgba(255,255,255,0.35)', paddingLeft: indent }}>{conv.preview}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            ));
+          })()}
         </div>
       </div>
-      {/* RIGHT PANE: Thread Area */}
-      <div className={`flex-1 flex-col h-full bg-black/20 ${!selectedId ? 'hidden md:flex' : 'flex'}`}>
+      {/* ── CENTER: Thread ───────────────────────────────────────── */}
+      <div className={`flex-1 flex-col h-full ${!selectedId ? 'hidden md:flex' : 'flex'}`} style={{ background: '#0a0a0c' }}>
         {!selectedConversation ? (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
             <div className="w-16 h-16 rounded-3xl flex items-center justify-center mb-4" style={glassPanel}>
               <MessageSquare size={24} style={textSecondary} />
             </div>
             <h3 className="text-lg font-medium mb-2" style={textPrimary}>Pick a conversation</h3>
-            <p className="text-sm max-w-xs" style={textSecondary}>Select a message from the list to read and reply.</p>
+            <p className="text-sm max-w-xs" style={textSecondary}>Select a message to read and reply. Use <span className="font-mono text-xs px-1 rounded" style={{ background: 'rgba(255,255,255,0.08)' }}>j</span> / <span className="font-mono text-xs px-1 rounded" style={{ background: 'rgba(255,255,255,0.08)' }}>k</span> to move.</p>
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b flex-shrink-0 relative" style={{ borderColor: 'rgba(255,255,255,0.08)', backgroundColor: 'rgba(0,0,0,0.2)' }}>
-              <div className="flex items-center gap-3 min-w-0">
-                <button onClick={() => setSelectedId(null)} className="md:hidden p-2 -ml-2 rounded-full hover:bg-white/10"><ArrowLeft size={20} /></button>
-                <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0" style={{ backgroundColor: `${tintFor(selectedConversation.contact_name)}22`, color: tintFor(selectedConversation.contact_name) }}>{initials(selectedConversation.contact_name)}</div>
-                <div className="min-w-0">
-                  <div className="font-semibold text-sm truncate">{selectedConversation.subject || selectedConversation.contact_name}</div>
-                  <div className="text-xs truncate" style={textSecondary}>{selectedConversation.contact_name}{selectedConversation.contact_address ? ` · ${selectedConversation.contact_address}` : ''}</div>
-                </div>
-              </div>
-              {/* Assign this thread to a CRM record */}
-              <div className="flex-shrink-0">
-                {selectedConversation.linked_label ? (
-                  <button onClick={() => setLinkOpen(o => !o)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs" style={{ backgroundColor: 'rgba(107,126,255,0.16)', border: '1px solid rgba(107,126,255,0.4)', color: '#b3bcff' }}>
-                    🔗 {selectedConversation.linked_label}<span style={textFaint}> · {selectedConversation.linked_type}</span>
-                  </button>
-                ) : (
-                  <button onClick={() => setLinkOpen(o => !o)} className="px-3 py-1.5 rounded-full text-xs hover:bg-white/10" style={glassPanel}>+ Link to record</button>
-                )}
-                {linkOpen && (
-                  <div className="absolute right-4 top-full mt-1 z-20 w-72 rounded-2xl p-2" style={{ background: 'linear-gradient(180deg, rgba(10,20,38,0.98), rgba(4,10,24,0.98))', border: '1px solid rgba(0,200,255,0.22)' }}>
-                    <input autoFocus value={linkQuery} onChange={e => setLinkQuery(e.target.value)} placeholder="Search leads, contacts, deals, jobs…" className="w-full rounded-xl px-3 py-2 text-sm bg-black/30 outline-none mb-2" style={{ ...textPrimary, border: '1px solid rgba(255,255,255,0.1)' }} />
-                    <div className="max-h-60 overflow-y-auto flex flex-col gap-1">
-                      {linkResults.map(r => (
-                        <button key={`${r.type}-${r.id}`} onClick={() => { void patchLink(selectedConversation, { linked_type: r.type, linked_id: r.id, linked_label: r.label }); setLinkOpen(false); setLinkQuery(''); }} className="text-left px-3 py-2 rounded-lg hover:bg-white/5">
-                          <div className="text-sm" style={textPrimary}>{r.label}</div>
-                          <div className="text-[11px]" style={textFaint}>{r.type}{r.sublabel ? ` · ${r.sublabel}` : ''}</div>
-                        </button>
-                      ))}
-                      {linkResults.length === 0 && <div className="px-3 py-2 text-xs" style={textFaint}>{linkQuery ? 'No matches.' : 'Type to search.'}</div>}
-                    </div>
-                    {selectedConversation.linked_label && <button onClick={() => { void patchLink(selectedConversation, { linked_type: null }); setLinkOpen(false); }} className="w-full mt-2 px-3 py-2 rounded-lg text-xs hover:bg-white/5" style={{ color: '#fca5a5' }}>Unlink</button>}
-                  </div>
-                )}
+            <div className="flex items-center gap-3 px-6 py-3 border-b flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+              <button onClick={() => setSelectedId(null)} className="md:hidden p-2 -ml-2 rounded-full hover:bg-white/10"><ArrowLeft size={20} /></button>
+              <div className="min-w-0">
+                <div className="font-semibold text-[15px] truncate tracking-tight">{selectedConversation.subject || selectedConversation.contact_name}</div>
+                <div className="text-[12px] truncate" style={textSecondary}>{selectedConversation.contact_name}{selectedConversation.contact_address ? ` · ${selectedConversation.contact_address}` : ''}</div>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4 hide-scrollbar">
               {selectedConversation.messages.map((msg) => {
                 const isCall = msg.channel === 'call';
                 const isInbound = msg.direction === 'in';
@@ -468,15 +466,69 @@ export default function MessagesShell() {
                 );
               })}
             </div>
-            <div className="p-4 flex-shrink-0" style={{ backgroundColor: 'rgba(0,0,0,0.3)', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-              <div className="flex items-end gap-2 p-2 rounded-3xl" style={glassPanel}>
-                <textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} placeholder={selectedConversation.channel === 'email' ? 'Write a reply…' : `Reply by ${selectedConversation.channel}…`} className="flex-1 bg-transparent border-none outline-none resize-none px-3 py-2 text-sm max-h-32 min-h-[40px] placeholder:text-white/30" style={textPrimary} rows={1} />
-                <button onClick={handleSend} disabled={!replyText.trim() || sending} className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-opacity disabled:opacity-30" style={{ backgroundColor: brandBlue, color: 'white' }}><Send size={16} className="ml-0.5" /></button>
+            <div className="p-4 flex-shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+              <div className="rounded-xl flex flex-col" style={{ background: '#18181b', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <div className="flex items-center gap-2 px-4 py-2 text-[12px]" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.5)' }}>
+                  <span className="font-semibold">Reply via:</span>
+                  <span className="px-2 py-0.5 rounded capitalize" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.8)' }}>{selectedConversation.channel === 'email' ? 'Email' : selectedConversation.channel}</span>
+                </div>
+                <textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); void handleSend(); } }} placeholder="Type your reply… (⌘↵ to send)" className="w-full bg-transparent border-none outline-none resize-none p-4 text-[14px] placeholder:text-white/30 min-h-[72px]" style={textPrimary} />
+                <div className="flex justify-between items-center px-4 py-2.5" style={{ background: 'rgba(255,255,255,0.02)', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                  <span className="text-[11px]" style={textFaint}>Signature added automatically</span>
+                  <button onClick={handleSend} disabled={!replyText.trim() || sending} className="px-4 py-1.5 rounded-md text-[13px] font-semibold flex items-center gap-2 disabled:opacity-40" style={{ background: '#6366f1', color: 'white' }}>{sending ? 'Sending…' : 'Send'} <span className="font-mono text-[10px] px-1 rounded" style={{ background: 'rgba(255,255,255,0.2)' }}>⌘↵</span></button>
+                </div>
               </div>
             </div>
           </>
         )}
       </div>
+
+      {/* ── RIGHT: Context ───────────────────────────────────────── */}
+      {selectedConversation && (
+        <div className="hidden lg:flex w-[280px] flex-shrink-0 border-l flex-col overflow-y-auto hide-scrollbar" style={{ borderColor: 'rgba(255,255,255,0.08)', background: '#121214' }}>
+          <div className="p-5 flex flex-col items-center text-center" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <div className="w-16 h-16 rounded-full flex items-center justify-center font-bold text-xl mb-3" style={{ background: `${tintFor(selectedConversation.contact_name)}22`, color: tintFor(selectedConversation.contact_name) }}>{initials(selectedConversation.contact_name)}</div>
+            <h3 className="font-bold text-[15px]">{selectedConversation.contact_name}</h3>
+            {selectedConversation.contact_address && <p className="text-[12px] mt-0.5 break-all" style={textSecondary}>{selectedConversation.contact_address}</p>}
+          </div>
+          <div className="p-4 flex flex-col gap-5">
+            {/* Link to record — lead / contact / customer / opportunity / job */}
+            <div className="relative">
+              <div className="flex justify-between items-center mb-2">
+                <div className="text-[11px] font-bold uppercase tracking-wider" style={textSecondary}>Linked record</div>
+                {selectedConversation.linked_label && <button onClick={() => void patchLink(selectedConversation, { linked_type: null })} className="text-[11px]" style={{ color: '#fca5a5' }}>Unlink</button>}
+              </div>
+              {selectedConversation.linked_label ? (
+                <div className="p-3 rounded-lg flex items-center gap-2" style={{ background: '#18181b', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  {(() => { const b = selectedConversation.linked_type ? RECORD_BADGE[selectedConversation.linked_type] : null; return b ? <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase flex-shrink-0" style={{ background: `${b.color}22`, color: b.color }}>{b.label}</span> : null; })()}
+                  <span className="font-semibold text-[13px] truncate">{selectedConversation.linked_label}</span>
+                </div>
+              ) : (
+                <button onClick={() => setLinkOpen(o => !o)} className="w-full px-3 py-2 rounded-lg text-[13px] text-left" style={{ background: '#18181b', border: '1px dashed rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.6)' }}>+ Link to lead, deal, customer, job…</button>
+              )}
+              {linkOpen && (
+                <div className="absolute left-0 right-0 top-full mt-1 z-20 rounded-xl p-2" style={{ background: '#161620', border: '1px solid rgba(99,102,241,0.3)' }}>
+                  <input autoFocus value={linkQuery} onChange={e => setLinkQuery(e.target.value)} placeholder="Search…" className="w-full rounded-lg px-3 py-2 text-sm bg-black/30 outline-none mb-2" style={{ ...textPrimary, border: '1px solid rgba(255,255,255,0.1)' }} />
+                  <div className="max-h-56 overflow-y-auto flex flex-col gap-1 hide-scrollbar">
+                    {linkResults.map(r => (
+                      <button key={`${r.type}-${r.id}`} onClick={() => { void patchLink(selectedConversation, { linked_type: r.type, linked_id: r.id, linked_label: r.label }); setLinkOpen(false); setLinkQuery(''); }} className="text-left px-2 py-1.5 rounded-lg hover:bg-white/5">
+                        <div className="text-[13px]">{r.label}</div>
+                        <div className="text-[11px]" style={textFaint}>{r.type}{r.sublabel ? ` · ${r.sublabel}` : ''}</div>
+                      </button>
+                    ))}
+                    {linkResults.length === 0 && <div className="px-2 py-1.5 text-xs" style={textFaint}>{linkQuery ? 'No matches.' : 'Type to search.'}</div>}
+                  </div>
+                </div>
+              )}
+            </div>
+            {/* Channel */}
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wider mb-2" style={textSecondary}>Channel</div>
+              <span className="px-2 py-1 rounded text-[12px] capitalize" style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.7)' }}>{selectedConversation.channel}</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
