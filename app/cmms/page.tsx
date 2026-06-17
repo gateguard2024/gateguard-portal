@@ -102,6 +102,16 @@ function App() {
     fetch('/api/dispatch').then(r => r.json()).then(d => { setJobs(d.jobs ?? []); setTechs(d.techs ?? []); }).catch(() => {}).finally(() => setLoading(false));
   }, []);
   useEffect(() => { loadOps(); }, [loadOps]);
+  // Create a work order (existing /api/dispatch POST) and edit/assign/close one
+  // (existing /api/maintenance/[id] PATCH). No new endpoints.
+  const createWO = React.useCallback(async (payload: Record<string, unknown>) => {
+    await fetch('/api/dispatch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(() => {});
+    loadOps();
+  }, [loadOps]);
+  const updateWO = React.useCallback(async (id: string, patch: Record<string, unknown>) => {
+    await fetch(`/api/maintenance/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }).catch(() => {});
+    loadOps();
+  }, [loadOps]);
   const selectedWO = workOrders[0];
   return (
     <div style={{ minHeight: "100vh", background: "radial-gradient(circle at top left, #1c2455, #050712 45%)", color: "white", fontFamily: "Inter, Arial, sans-serif", padding: 24 }}>
@@ -115,7 +125,7 @@ function App() {
       <h1 style={{ marginBottom: 8 }}>GateGuard CMMS</h1>
       <p style={{ color: "#aab", marginBottom: 24 }}>MaintainX-style maintenance layered on Nexus data.</p>
       {page === "Dashboard" && <Dashboard jobs={jobs} loading={loading} />}
-      {page === "Work Orders" && <WorkOrders jobs={jobs} techs={techs} loading={loading} onRefresh={loadOps} />}
+      {page === "Work Orders" && <WorkOrders jobs={jobs} techs={techs} loading={loading} onRefresh={loadOps} onCreate={createWO} onUpdate={updateWO} />}
       {page === "WO Detail" && <WODetail wo={selectedWO} />}
       {page === "Requests" && <Requests />}
       {page === "Assets" && <Assets />}
@@ -137,15 +147,68 @@ function Dashboard({ jobs, loading }: { jobs: RealWO[]; loading: boolean }) {
     <WorkOrderBoard jobs={jobs} />
   </Grid>;
 }
-function WorkOrders({ jobs, loading, onRefresh }: { jobs: RealWO[]; techs: RealTech[]; loading: boolean; onRefresh: () => void }) {
+// Map our 4 simple columns to the real DB status values for edits.
+const COL_TO_DB: Record<string, string> = { New: "open", Scheduled: "scheduled", "In Progress": "in_progress", Done: "completed" };
+const sel: React.CSSProperties = { background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.14)", color: "white", borderRadius: 10, padding: "6px 8px", fontSize: 12 };
+
+function WorkOrders({ jobs, techs, loading, onRefresh, onCreate, onUpdate }: { jobs: RealWO[]; techs: RealTech[]; loading: boolean; onRefresh: () => void; onCreate: (p: Record<string, unknown>) => void; onUpdate: (id: string, patch: Record<string, unknown>) => void }) {
+  const [showNew, setShowNew] = useState(false);
+  const [form, setForm] = useState({ customer_name: "", title: "", priority: "medium", assignee_id: "" });
+  function submit() {
+    if (!form.customer_name.trim()) return;
+    const tech = techs.find(t => t.id === form.assignee_id);
+    onCreate({ customer_name: form.customer_name.trim(), title: form.title.trim() || form.customer_name.trim(), priority: form.priority, assignee_id: form.assignee_id || null, assignee_name: tech?.name ?? null });
+    setForm({ customer_name: "", title: "", priority: "medium", assignee_id: "" }); setShowNew(false);
+  }
   return <Grid>
     <Card>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><h2>Work Orders</h2><button onClick={onRefresh} style={{ ...btn, marginTop: 0, padding: "8px 12px" }}>↻ Refresh</button></div>
-      {loading ? <p style={{ color: "#aab" }}>Loading…</p> : jobs.length === 0 ? <p style={{ color: "#aab" }}>No work orders yet.</p> : jobs.map(wo => <WOCard key={wo.id} wo={wo} />)}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <h2>Work Orders</h2>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => setShowNew(s => !s)} style={{ ...btn, marginTop: 0, padding: "8px 12px" }}>+ New</button>
+          <button onClick={onRefresh} style={{ ...btn, marginTop: 0, padding: "8px 12px", background: "rgba(255,255,255,.08)" }}>↻</button>
+        </div>
+      </div>
+      {showNew && (
+        <div style={{ background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 14, padding: 14, marginBottom: 12, display: "grid", gap: 8 }}>
+          <input placeholder="Customer / site *" value={form.customer_name} onChange={e => setForm({ ...form, customer_name: e.target.value })} style={input} />
+          <input placeholder="What needs doing? (title)" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} style={input} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <select value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })} style={{ ...sel, flex: 1 }}>
+              {["low", "medium", "high", "critical"].map(p => <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)} priority</option>)}
+            </select>
+            <select value={form.assignee_id} onChange={e => setForm({ ...form, assignee_id: e.target.value })} style={{ ...sel, flex: 1 }}>
+              <option value="">Unassigned</option>
+              {techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <button onClick={submit} disabled={!form.customer_name.trim()} style={{ ...btn, opacity: form.customer_name.trim() ? 1 : 0.5 }}>Create work order</button>
+        </div>
+      )}
+      {loading ? <p style={{ color: "#aab" }}>Loading…</p> : jobs.length === 0 ? <p style={{ color: "#aab" }}>No work orders yet. Tap “+ New”.</p> : jobs.map(wo => <WORow key={wo.id} wo={wo} techs={techs} onUpdate={onUpdate} />)}
     </Card>
     <WorkOrderBoard jobs={jobs} />
     <Card><h2>Schedule</h2>{jobs.length === 0 ? <p style={{ color: "#aab" }}>Nothing scheduled.</p> : jobs.map(wo => <p key={wo.id}>{wo.eta || 'TBD'} — {wo.woNumber || wo.title || 'WO'}</p>)}</Card>
   </Grid>;
+}
+// Editable WO row — change status (the 4 columns) and reassign the tech inline.
+function WORow({ wo, techs, onUpdate }: { wo: RealWO; techs: RealTech[]; onUpdate: (id: string, patch: Record<string, unknown>) => void }) {
+  return <div style={{ padding: 12, borderRadius: 12, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.08)", marginBottom: 8 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+      <b>{wo.woNumber || wo.title || "Work Order"}</b>
+      <Badge tone={wo.priority === "Urgent" ? "urgent" : wo.priority === "High" ? "high" : "default"}>{wo.priority}</Badge>
+    </div>
+    <p style={{ color: "#aab", fontSize: 13, margin: "4px 0 8px" }}>{wo.property || "—"}</p>
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <select value={bucketOf(wo.status)} onChange={e => onUpdate(wo.id, { status: COL_TO_DB[e.target.value] })} style={sel}>
+        {JOB_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+      </select>
+      <select value={wo.assignedTechId ?? ""} onChange={e => { const t = techs.find(x => x.id === e.target.value); onUpdate(wo.id, { assignee_id: e.target.value || null, assignee_name: t?.name ?? null }); }} style={sel}>
+        <option value="">Unassigned</option>
+        {techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+      </select>
+    </div>
+  </div>;
 }
 function WODetail({ wo }: { wo: WorkOrder }) {
   const site = sites.find(s => s.id === wo.site_id);
