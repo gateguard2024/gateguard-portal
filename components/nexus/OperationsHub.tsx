@@ -742,6 +742,30 @@ function Parts() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", brand: "", sku: "", category: "", sell_price: "", manual_url: "", image_url: "" });
+  // Part-Finder: web lookup -> proposed product the user confirms
+  const [findQ, setFindQ] = useState("");
+  const [finding, setFinding] = useState(false);
+  const [findMsg, setFindMsg] = useState<string | null>(null);
+  async function findProduct() {
+    const v = findQ.trim();
+    if (!v || finding) return;
+    setFinding(true); setFindMsg(null); setMsg(null);
+    const isUrl = /^https?:\/\//i.test(v);
+    const r = await fetch("/api/products/find", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(isUrl ? { url: v } : { query: v }) }).then(x => x.json()).catch(() => null);
+    setFinding(false);
+    if (r && r.proposed && r.proposed.name) {
+      const p = r.proposed;
+      setForm({
+        name: p.name || "", brand: p.brand || "", sku: p.sku || p.model || "",
+        category: p.category || "", sell_price: "",
+        manual_url: p.manual_url || "", image_url: p.image_url || "",
+      });
+      setShowNew(true);
+      setFindMsg(`Found: ${p.name}${p.manual_url ? " — manual linked ✓" : " — no manual found, paste one if you have it"}. Review the fields below and tap Add.`);
+    } else {
+      setFindMsg((r && r.error) || "Couldn't find that product. Paste the product page URL, or fill it in manually below.");
+    }
+  }
   // AI manual coverage: product_id -> { chunks, figures }
   const [coverage, setCoverage] = useState<Record<string, { chunks: number; figures: number }>>({});
   const [ingestState, setIngestState] = useState<Record<string, "queued" | "error">>({});
@@ -777,6 +801,15 @@ function Parts() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h2 style={{ fontSize: 16 }}>Add a product</h2>
         <button onClick={() => { setShowNew(s => !s); setMsg(null); }} style={btn}>{showNew ? "Cancel" : "+ Add product"}</button>
+      </div>
+      {/* Part-Finder: paste a part # / name / product URL and we look it up */}
+      <div style={{ ...card, marginTop: 12, display: "grid", gap: 8 }}>
+        <Small>🔎 Find it for me — type a part number / name, or paste the product page URL.</Small>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input placeholder="e.g. LiftMaster CSL24UL  or  https://…/manual.pdf" value={findQ} onChange={e => setFindQ(e.target.value)} onKeyDown={e => { if (e.key === "Enter") findProduct(); }} style={{ ...input, flex: 1 }} />
+          <button onClick={findProduct} disabled={!findQ.trim() || finding} style={{ ...btn, opacity: findQ.trim() && !finding ? 1 : 0.5 }}>{finding ? "Looking…" : "Look it up"}</button>
+        </div>
+        {findMsg && <p style={{ fontSize: 12, color: findMsg.startsWith("Found") ? "#34d399" : "#fbbf24", margin: 0 }}>{findMsg}</p>}
       </div>
       {showNew ? <div style={{ ...card, marginTop: 12, display: "grid", gap: 8 }}>
         <input placeholder="Product name *" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={input} />
