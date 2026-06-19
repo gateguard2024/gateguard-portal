@@ -15,6 +15,31 @@ import { searchKnowledge, serviceDb } from '@/lib/vectorize'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
+// Parse Claude's JSON, salvaging a truncated response (cut at the last complete
+// object and close open arrays/braces) so a long procedure never crashes.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function salvageJson(raw: string): any | null {
+  const start = raw.indexOf('{')
+  if (start < 0) return null
+  const s = raw.slice(start)
+  try { return JSON.parse(s) } catch { /* truncated — repair below */ }
+  const lastBrace = s.lastIndexOf('}')
+  if (lastBrace < 0) return null
+  let cut = s.slice(0, lastBrace + 1).replace(/,\s*$/, '')
+  let curly = 0, sq = 0, inStr = false, esc = false
+  for (const c of cut) {
+    if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue }
+    if (c === '"') inStr = true
+    else if (c === '{') curly++
+    else if (c === '}') curly--
+    else if (c === '[') sq++
+    else if (c === ']') sq--
+  }
+  while (sq-- > 0) cut += ']'
+  while (curly-- > 0) cut += '}'
+  try { return JSON.parse(cut) } catch { return null }
+}
+
 export async function POST(req: NextRequest) {
   if (!(await isTechAuthed(req))) {
     let userId: string | null = null
@@ -50,7 +75,7 @@ export async function POST(req: NextRequest) {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
     const m = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 3000,
+      max_tokens: 8000,
       system: `You write field procedures for a security gate / access-control installer app, for NOVICE techs (about 5th-grade reading level). Use short, plain sentences and ONE action per step. The first time you use a technical word, add a plain meaning in parentheses. Use the EXACT terminal/LED labels from the terminal map when wiring.
 
 Write a ${isInstall ? 'complete INSTALL (from box to commissioned)' : 'SERVICE / preventive-maintenance (PM)'} procedure.
@@ -75,14 +100,13 @@ Respond ONLY with valid JSON (no prose, no fences):
 Rules:
 - ${isInstall ? 'Order: prep → mount → wire → power → configure/commission → test. The LAST steps and definition_of_done MUST include the UL 325 safety test: trip the photo eye / safety edge while closing and confirm the gate stops or reverses within 2 seconds, and confirm two entrapment-protection means per zone.' : 'Include: visual inspection checklist, measurements with expected ranges, lubrication/cleaning, and a monthly safety-device test (break the photo-eye beam mid-close → must stop/reverse).'}
 - Any step with live power or spring tension MUST carry a DANGER/WARNING safety item telling the tech to lock out power / restrain the spring FIRST.
-- 8–16 steps. Be specific to this device when the manual content allows; otherwise give correct general gate/access practice.`,
+- 8–12 steps. Keep EVERY field to one short line (no long paragraphs) so the whole JSON stays compact and complete. Be specific to this device when the manual content allows; otherwise give correct general gate/access practice.`,
       messages: [{ role: 'user', content: `Device: ${device_name || 'gate/access device'}\n\nTerminal map: ${terminalJson}\n\nManual passages:\n${context || 'none available — use correct general practice'}\n\nWrite the ${isInstall ? 'install' : 'service/PM'} procedure.` }],
     })
 
     const raw = m.content[0]?.type === 'text' ? m.content[0].text : '{}'
-    const match = raw.match(/\{[\s\S]*\}/)
-    if (!match) throw new Error('No JSON in procedure response')
-    const procedure = JSON.parse(match[0])
+    const procedure = salvageJson(raw)
+    if (!procedure || !Array.isArray(procedure.steps)) throw new Error('Could not build a complete procedure — tap Try Again.')
     procedure.mode = isInstall ? 'install' : 'service'
     return NextResponse.json({ procedure })
   } catch (err: unknown) {

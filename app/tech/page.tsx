@@ -140,10 +140,10 @@ const C = {
   topBarBg:      'rgba(8,14,28,0.72)',          // glass topBar / header
   border:        'rgba(255,255,255,0.09)',
   borderMed:     'rgba(255,255,255,0.16)',
-  textPrimary:   '#DCE8FF',   // bright white-blue — main text on dark
-  textSecondary: '#6B8CAE',   // mid blue-gray — secondary text
-  textMuted:     '#334966',   // muted labels
-  textOnDark:    '#DCE8FF',   // same on dark backgrounds
+  textPrimary:   '#F1F6FF',   // near-white — main text on dark
+  textSecondary: '#AEC6E8',   // light blue-gray — secondary text (brightened)
+  textMuted:     '#7E97BC',   // labels — brightened from a dull navy so they read
+  textOnDark:    '#F1F6FF',   // same on dark backgrounds
   blue:    '#6B7EFF',
   cyan:    '#00C8FF',
   amber:   '#F59E0B',
@@ -168,6 +168,10 @@ function NavIcon({ k, size = 22 }: { k: string; size?: number }) {
     survey:   <><path d="M12 22s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12z" {...p} /><circle cx="12" cy="10" r="2.5" {...p} /></>,
     netscout: <><path d="M2 9a16 16 0 0 1 20 0" {...p} /><path d="M5 12.5a11 11 0 0 1 14 0" {...p} /><path d="M8.5 16a6 6 0 0 1 7 0" {...p} /><circle cx="12" cy="19.5" r="1" fill="currentColor" stroke="none" /></>,
     train:    <><path d="M22 10 12 5 2 10l10 5 10-5z" {...p} /><path d="M6 12v5c0 1.1 2.7 3 6 3s6-1.9 6-3v-5" {...p} /></>,
+    wrench:   <path d="M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 1 5.4-5.4l-2.7 2.7-2-2 2.7-2.7z" {...p} />,
+    service:  <><circle cx="12" cy="12" r="3" {...p} /><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L16 3H8l-.6 2.5a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5A7 7 0 0 0 3 12a7 7 0 0 0 .1 1.2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2L8 21h8l.6-2.5a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5A7 7 0 0 0 19 12z" {...p} /></>,
+    speaker:  <><path d="M11 5 6 9H3v6h3l5 4V5z" {...p} /><path d="M16 9a3 3 0 0 1 0 6M19 6a7 7 0 0 1 0 12" {...p} /></>,
+    doc:      <><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" {...p} /><path d="M14 3v5h5M9 13h6M9 17h6" {...p} /></>,
   }
   return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">{paths[k] ?? null}</svg>
 }
@@ -1869,7 +1873,7 @@ function TechTool() {
                     <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
                       <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 800, color: accent }}>{String(s.n ?? i + 1).padStart(2, '0')}</span>
                       <span style={{ flex: 1, fontWeight: 700, fontSize: 14, color: C.textPrimary }}>{s.title}</span>
-                      <button onClick={() => readAloud(`${s.title}. ${s.instruction}. ${s.detail || ''}`)} title="Read aloud" style={{ ...S.iconBtn, width: 32, height: 32 }}>🔊</button>
+                      <button onClick={() => readAloud(`${s.title}. ${s.instruction}. ${s.detail || ''}`)} title="Read aloud" style={{ ...S.iconBtn, width: 32, height: 32 }}><NavIcon k="speaker" size={16} /></button>
                     </div>
                     {(s.safety ?? []).map(safetyPanel)}
                     <div style={{ fontSize: 14, color: C.textPrimary, margin: '6px 0', lineHeight: 1.45 }}>{s.instruction}</div>
@@ -1950,7 +1954,7 @@ function TechTool() {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ fontSize: 22, lineHeight: 1 }}>📄</div>
+              <div style={{ color: C.blue, display: 'flex' }}><NavIcon k="doc" size={24} /></div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: hasManual ? C.blue : C.textMuted, letterSpacing: '0.1em', marginBottom: 3 }}>
                   VIEW MANUAL
@@ -1969,7 +1973,7 @@ function TechTool() {
             style={{ padding: '20px', borderRadius: 14, textAlign: 'left', cursor: 'pointer', background: 'rgba(16,185,129,0.14)', border: `1px solid rgba(16,185,129,0.42)`, boxShadow: '0 2px 16px rgba(0,0,0,0.25)' }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ fontSize: 22, lineHeight: 1 }}>🔧</div>
+              <div style={{ color: C.green, display: 'flex' }}><NavIcon k="diagnose" size={24} /></div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: C.green, letterSpacing: '0.1em', marginBottom: 3 }}>
                   TROUBLESHOOT
@@ -1988,7 +1992,7 @@ function TechTool() {
             style={{ padding: '20px', borderRadius: 14, textAlign: 'left', cursor: 'pointer', background: 'rgba(245,158,11,0.14)', border: `1px solid rgba(245,158,11,0.42)`, boxShadow: '0 2px 16px rgba(0,0,0,0.25)' }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ fontSize: 22, lineHeight: 1 }}>📐</div>
+              <div style={{ color: C.amber, display: 'flex' }}><NavIcon k="wiring" size={24} /></div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: C.amber, letterSpacing: '0.1em', marginBottom: 3 }}>
                   WIRING GUIDE
@@ -2007,7 +2011,7 @@ function TechTool() {
             style={{ padding: '20px', borderRadius: 14, textAlign: 'left', cursor: 'pointer', background: 'rgba(167,139,250,0.14)', border: `1px solid rgba(167,139,250,0.42)`, boxShadow: '0 2px 16px rgba(0,0,0,0.25)' }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ fontSize: 22, lineHeight: 1 }}>🔌</div>
+              <div style={{ color: C.purple, display: 'flex' }}><NavIcon k="cable" size={24} /></div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: C.purple, letterSpacing: '0.1em', marginBottom: 3 }}>
                   CABLE GUIDE
@@ -2023,7 +2027,7 @@ function TechTool() {
           {/* Install Guide */}
           <button onClick={() => loadProcedure('install')} style={{ padding: '20px', borderRadius: 14, textAlign: 'left', cursor: 'pointer', background: 'rgba(0,200,255,0.12)', border: `1px solid rgba(0,200,255,0.40)`, boxShadow: '0 2px 16px rgba(0,0,0,0.25)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ fontSize: 22, lineHeight: 1 }}>🛠️</div>
+              <div style={{ color: C.cyan, display: 'flex' }}><NavIcon k="wrench" size={24} /></div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: C.cyan, letterSpacing: '0.1em', marginBottom: 3 }}>INSTALL GUIDE</div>
                 <div style={{ fontFamily: SANS, fontSize: 13, color: C.textSecondary }}>Step-by-step from box to commissioned · with safety + UL 325 test</div>
@@ -2035,7 +2039,7 @@ function TechTool() {
           {/* Service / PM */}
           <button onClick={() => loadProcedure('service')} style={{ padding: '20px', borderRadius: 14, textAlign: 'left', cursor: 'pointer', background: 'rgba(16,185,129,0.12)', border: `1px solid rgba(16,185,129,0.40)`, boxShadow: '0 2px 16px rgba(0,0,0,0.25)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ fontSize: 22, lineHeight: 1 }}>🧰</div>
+              <div style={{ color: C.green, display: 'flex' }}><NavIcon k="service" size={24} /></div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: C.green, letterSpacing: '0.1em', marginBottom: 3 }}>SERVICE / PM</div>
                 <div style={{ fontFamily: SANS, fontSize: 13, color: C.textSecondary }}>Inspect, measure, lubricate, test safety devices</div>
@@ -3390,7 +3394,7 @@ function TechTool() {
 
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                 <div style={{ ...S.stepText, flex: 1 }}>{simpler ? simpler.text : current.text}</div>
-                <button onClick={() => readAloud(`${simpler ? simpler.text : current.text}. ${(simpler ? simpler.detail : current.detail) || ''}`)} title="Read aloud" style={{ ...S.iconBtn, width: 38, height: 38, flexShrink: 0 }}>🔊</button>
+                <button onClick={() => readAloud(`${simpler ? simpler.text : current.text}. ${(simpler ? simpler.detail : current.detail) || ''}`)} title="Read aloud" style={{ ...S.iconBtn, width: 38, height: 38, flexShrink: 0 }}><NavIcon k="speaker" size={16} /></button>
               </div>
               <div style={{ marginBottom: 8, display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
                 {simpler
