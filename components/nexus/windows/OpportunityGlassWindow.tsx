@@ -115,9 +115,11 @@ export function OpportunityGlassWindow({
         const r = await fetch(`/api/crm/opportunities/${oppId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'lost', lost_at: new Date().toISOString(), lost_reason: reason || null }) })
         setMsg(r.ok ? { ok: true, text: 'Marked lost.' } : { ok: false, text: 'Could not update.' })
       } else if (action === 'create_project') {
-        const r = await fetch('/api/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: `${opp.name || opp.account_name || 'New deal'} — Install`, job_type: 'new_install', opportunity_id: oppId, site_id: opp.site_id ?? null, opportunity_name: opp.name ?? null }) })
+        // One home for field jobs = work_orders (Operations Hub board + /tech read this).
+        const acct = (opp.account_name ?? company?.name ?? opp.name ?? 'New deal') as string
+        const r = await fetch('/api/dispatch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customer_name: acct, title: `${opp.name || acct} — Install`, job_type: 'Install', priority: 'normal', opportunity_id: oppId, site_id: opp.site_id ?? null, description: (opp.description ?? opp.scope ?? `Install from won opportunity: ${opp.name ?? acct}`) as string }) })
         const j = await r.json().catch(() => ({}))
-        setMsg(r.ok ? { ok: true, text: 'Install job created ✓ — find it under Jobs.' } : { ok: false, text: j.error || 'Could not create job.' })
+        setMsg(r.ok ? { ok: true, text: 'Install job created ✓ — find it in Operations → Work Orders and on the assigned tech’s phone.' } : { ok: false, text: j.error || 'Could not create job.' })
       } else if (action === 'schedule_followup') {
         const r = await fetch('/api/todos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: `Follow up: ${opp.name || opp.account_name || 'opportunity'}`, linked_type: 'opportunity', linked_id: oppId }) })
         setMsg(r.ok ? { ok: true, text: 'Follow-up added to your To-Dos ✓' } : { ok: false, text: 'Could not add follow-up.' })

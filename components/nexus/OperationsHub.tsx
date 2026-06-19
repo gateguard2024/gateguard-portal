@@ -979,7 +979,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
         {/* Work to perform */}
         <Card>
           <h2 style={{ fontSize: 15, marginBottom: 6 }}>Work to perform</h2>
-          <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 14, whiteSpace: "pre-wrap", margin: 0 }}>{wo.description || "No work description yet. Add details so the tech knows exactly what to do."}</p>
+          <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 14, whiteSpace: "pre-wrap", margin: 0 }}>{wo.description || wo.notes || "No work description yet. Add details so the tech knows exactly what to do."}</p>
           {wo.priority && <div style={{ marginTop: 8 }}><Badge tone={String(wo.priority).toLowerCase() === "critical" || String(wo.priority).toLowerCase() === "urgent" ? "urgent" : String(wo.priority).toLowerCase() === "high" ? "high" : "default"}>{wo.priority} priority</Badge></div>}
         </Card>
 

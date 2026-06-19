@@ -103,6 +103,7 @@ export async function POST(req: NextRequest) {
   const {
     customer_name, job_type = 'Repair', assignee_id, assignee_name,
     priority = 'normal', scheduled_date, notes, title, site_id,
+    opportunity_id, description,
   } = body
 
   if (!customer_name) {
@@ -111,23 +112,36 @@ export async function POST(req: NextRequest) {
 
   const org_id = user.isCorporate ? (body.org_id ?? null) : (user.org_id ?? null)
 
-  const { data, error } = await supabase
-    .from('work_orders')
-    .insert({
-      title:          title || `${job_type} — ${customer_name}`,
-      customer_name,
-      job_type,
-      assignee_id:    assignee_id ?? null,
-      assignee_name:  assignee_name ?? null,
-      priority,
-      status:         assignee_id ? 'scheduled' : 'open',
-      scheduled_date: scheduled_date ?? null,
-      notes:          notes ?? null,
-      site_id:        site_id ?? null,
-      org_id,
-    })
-    .select()
-    .single()
+  // Drift-resilient insert: opportunity_id/description need migration 124.
+  // If a column isn't present yet, strip it and retry rather than failing.
+  let row: Record<string, unknown> = {
+    title:          title || `${job_type} — ${customer_name}`,
+    customer_name,
+    job_type,
+    assignee_id:    assignee_id ?? null,
+    assignee_name:  assignee_name ?? null,
+    priority,
+    status:         assignee_id ? 'scheduled' : 'open',
+    scheduled_date: scheduled_date ?? null,
+    notes:          notes ?? null,
+    description:    description ?? notes ?? null,
+    site_id:        site_id ?? null,
+    opportunity_id: opportunity_id ?? null,
+    org_id,
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let data: any = null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let error: any = null
+  for (let i = 0; i < 4; i++) {
+    const res = await supabase.from('work_orders').insert(row).select().single()
+    data = res.data; error = res.error
+    if (!error) break
+    const m = /Could not find the '(\w+)' column|column "?(\w+)"? .* does not exist/.exec(error.message)
+    const bad = m?.[1] || m?.[2]
+    if ((error.code === 'PGRST204' || error.code === '42703') && bad && bad in row) { delete row[bad]; continue }
+    break
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
