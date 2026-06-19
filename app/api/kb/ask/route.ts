@@ -165,8 +165,15 @@ Respond ONLY with valid JSON — no prose, no markdown fences. Exact schema:
   "expected": "string or null — expected value/range for measure steps (e.g. '115±10', '>12', '0')",
   "choices": ["string"] or null,
   "manual_ref": { "url": "string or null", "page": number or null, "section": "string or null" },
-  "safety": [ { "level": "DANGER"|"WARNING"|"CAUTION"|"NOTICE", "hazard": "what the danger is", "consequence": "what happens if ignored", "avoidance": "how to stay safe" } ] or null
+  "safety": [ { "level": "DANGER"|"WARNING"|"CAUTION"|"NOTICE", "hazard": "what the danger is", "consequence": "what happens if ignored", "avoidance": "how to stay safe" } ] or null,
+  "confidence": number,
+  "likely_causes": [ { "cause": "plain-language cause", "likelihood": "high"|"med"|"low", "action": "what to do about it", "part": "part to check or replace, or null" } ] or null
 }
+
+CONFIDENCE & LIKELY CAUSES:
+  - Always set "confidence" 0.0–1.0 — how sure you are this is the right next step / diagnosis. Be honest; low when the symptom is vague.
+  - On the FIRST step ONLY (no steps completed yet), also return "likely_causes" — 2 to 4 ranked probable causes, each with a short action and the part to check/replace (or null). Otherwise set likely_causes to null.
+  - If confidence is low, or the fix needs the factory / an RMA / a board swap / a licensed electrician, set "type" to "escalate".
 
 WRITE FOR A 5TH-GRADER (very important):
   - Use short, everyday words and one action per step. Aim for a 5th–6th grade reading level.

@@ -97,6 +97,8 @@ interface Step {
   image_url?: string | null
   image_caption?: string | null
   safety?: { level: 'DANGER' | 'WARNING' | 'CAUTION' | 'NOTICE'; hazard: string; consequence: string; avoidance: string }[] | null
+  confidence?: number | null
+  likely_causes?: { cause: string; likelihood: string; action: string; part: string | null }[] | null
   session_id: string
 }
 
@@ -604,6 +606,24 @@ function TechTool() {
     setProcLoading(false)
   }
   function toggleProc(key: string) { setProcDone(p => { const n = new Set(p); n.has(key) ? n.delete(key) : n.add(key); return n }) }
+  // Escalate WITH context — build the whole session so a senior doesn't re-ask.
+  function escalationText(): string {
+    const L: string[] = ['GATEGUARD FIELD ESCALATION']
+    if (techName) L.push(`Tech: ${techName}`)
+    if (selected) L.push(`Device: ${[selected.brand, selected.name, selected.sku ? `(${selected.sku})` : ''].filter(Boolean).join(' ')}`)
+    L.push(`Problem: ${symptom}${errorCode ? ` | code ${errorCode}` : ''}`)
+    if (connectedDevices.length) L.push(`Connected: ${connectedDevices.join(', ')}`)
+    L.push('', 'Steps tried:')
+    history.forEach((h, i) => L.push(`  ${i + 1}. ${h.question} → ${h.answer}`))
+    if (current) L.push('', `Now: [${current.type}] ${current.text}`)
+    if (selected?.manual_url) L.push('', `Manual: ${selected.manual_url}`)
+    return L.join('\n')
+  }
+  async function shareEscalation() {
+    const text = escalationText()
+    try { if (typeof navigator !== 'undefined' && navigator.share) { await navigator.share({ title: 'Field escalation', text }); return } } catch { /* fall through to copy */ }
+    try { await navigator.clipboard?.writeText(text); setEscalateCopied(true); setTimeout(() => setEscalateCopied(false), 1800) } catch { /* ignore */ }
+  }
   // reset the "explain simpler" view whenever a new diagnostic step arrives
   useEffect(() => { setSimpler(null) }, [current])
   async function explainSimpler() {
@@ -619,6 +639,7 @@ function TechTool() {
   // Resolution capture state
   const [resolutionConfirmed,  setResolutionConfirmed]  = useState<'yes' | 'no' | null>(null)
   const [resolutionNote,       setResolutionNote]       = useState('')
+  const [escalateCopied,       setEscalateCopied]       = useState(false)
   const [resolutionSubmitting, setResolutionSubmitting] = useState(false)
   const [resolutionSaved,      setResolutionSaved]      = useState(false)
 
@@ -3293,7 +3314,14 @@ function TechTool() {
               <div style={S.stepHeader}>
                 <div style={{ ...S.stepNum, color: cfg.numColor }}>{pad2(history.length + 1)}</div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ ...S.stepTypeLabel, color: cfg.accent }}>{cfg.label}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ ...S.stepTypeLabel, color: cfg.accent }}>{cfg.label}</div>
+                    {typeof current.confidence === 'number' && (
+                      <span style={{ fontFamily: MONO, fontSize: 8, letterSpacing: '0.06em', padding: '2px 6px', borderRadius: 999, border: `1px solid ${current.confidence >= 0.75 ? C.green : current.confidence >= 0.5 ? C.amber : C.red}55`, color: current.confidence >= 0.75 ? C.green : current.confidence >= 0.5 ? C.amber : C.red }}>
+                        AI {Math.round(current.confidence * 100)}%
+                      </span>
+                    )}
+                  </div>
                   {current.manual_ref?.url && (
                     <a
                       href={`${current.manual_ref.url}${current.manual_ref.page ? `#page=${current.manual_ref.page}` : ''}`}
@@ -3305,6 +3333,25 @@ function TechTool() {
                   )}
                 </div>
               </div>
+
+              {/* Most likely causes (step 1) */}
+              {current.likely_causes && current.likely_causes.length > 0 && (
+                <div style={{ background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.28)', borderRadius: 10, padding: 12, marginBottom: 10 }}>
+                  <div style={{ fontFamily: MONO, fontSize: 9, color: C.purple, letterSpacing: '0.1em', marginBottom: 8 }}>MOST LIKELY CAUSES</div>
+                  {current.likely_causes.map((lc, i) => {
+                    const tone = lc.likelihood === 'high' ? C.red : lc.likelihood === 'med' ? C.amber : C.textSecondary
+                    return (
+                      <div key={i} style={{ padding: '6px 0', borderBottom: i < current.likely_causes!.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                          <span style={{ fontFamily: MONO, fontSize: 8, fontWeight: 800, color: tone, textTransform: 'uppercase', flexShrink: 0 }}>{lc.likelihood}</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: C.textPrimary }}>{lc.cause}</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: C.textSecondary, marginTop: 2 }}>{lc.action}{lc.part ? ` · part: ${lc.part}` : ''}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
 
               {/* ANSI Z535.6 safety panels — shown ABOVE the action */}
               {current.safety && current.safety.length > 0 && current.safety.map((s, i) => {
@@ -3323,10 +3370,11 @@ function TechTool() {
                 <div style={{ ...S.stepText, flex: 1 }}>{simpler ? simpler.text : current.text}</div>
                 <button onClick={() => readAloud(`${simpler ? simpler.text : current.text}. ${(simpler ? simpler.detail : current.detail) || ''}`)} title="Read aloud" style={{ ...S.iconBtn, width: 38, height: 38, flexShrink: 0 }}>🔊</button>
               </div>
-              <div style={{ marginBottom: 8 }}>
+              <div style={{ marginBottom: 8, display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
                 {simpler
                   ? <button onClick={() => setSimpler(null)} style={{ fontFamily: MONO, fontSize: 10, color: C.textSecondary, background: 'none', border: 'none', cursor: 'pointer', letterSpacing: '0.05em', padding: 0 }}>↺ SHOW ORIGINAL</button>
                   : <button onClick={explainSimpler} disabled={simplifying} style={{ fontFamily: MONO, fontSize: 10, color: C.cyan, background: 'none', border: 'none', cursor: 'pointer', letterSpacing: '0.05em', padding: 0 }}>{simplifying ? 'SIMPLIFYING…' : '🟢 EXPLAIN SIMPLER'}</button>}
+                <button onClick={shareEscalation} style={{ fontFamily: MONO, fontSize: 10, color: C.red, background: 'none', border: 'none', cursor: 'pointer', letterSpacing: '0.05em', padding: 0 }}>{escalateCopied ? '✓ COPIED' : '🆘 STUCK? SEND TO A SENIOR'}</button>
               </div>
 
               {/* Image — real manual figure when ingested, else the device photo */}
@@ -3596,9 +3644,15 @@ function TechTool() {
 
               {/* ── Terminal: escalate ── */}
               {current.type === 'escalate' && (
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <button style={S.newSessionBtn} onClick={reset}>NEW SESSION</button>
-                  <button style={S.keepGoingBtn} onClick={() => answer('Continue diagnosing')}>CONTINUE</button>
+                <div>
+                  <button onClick={shareEscalation} style={{ width: '100%', minHeight: 48, borderRadius: 12, background: C.red, color: '#fff', border: 'none', fontFamily: MONO, fontSize: 12, fontWeight: 800, letterSpacing: '0.06em', cursor: 'pointer', marginBottom: 10 }}>
+                    {escalateCopied ? '✓ COPIED — PASTE TO YOUR SENIOR' : '🆘 SEND TO A SENIOR (with full details)'}
+                  </button>
+                  <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, marginBottom: 10 }}>Sends the device, the problem, and every step you tried — so they don&apos;t have to ask.</div>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <button style={S.newSessionBtn} onClick={reset}>NEW SESSION</button>
+                    <button style={S.keepGoingBtn} onClick={() => answer('Continue diagnosing')}>CONTINUE</button>
+                  </div>
                 </div>
               )}
 
