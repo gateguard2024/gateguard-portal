@@ -43,12 +43,14 @@ function Badge({ children, tone = "default" }: { children: React.ReactNode; tone
   return <span style={{ padding: "4px 9px", borderRadius: 999, background: bg, border: "1px solid rgba(255,255,255,.1)", fontSize: 11 }}>{children}</span>;
 }
 const num = (v: unknown) => Number(v) || 0;
-const TABS = ["Dashboard", "Work Orders", "Locations", "Parts", "PM"] as const;
+const TABS = ["Dashboard", "Work Orders", "Calendar", "Locations", "Techs", "Parts", "PM"] as const;
 type Tab = typeof TABS[number];
 const TAB_HINT: Record<Tab, string> = {
   Dashboard: "Snapshot + jobs board",
   "Work Orders": "Create, assign, track",
-  Locations: "Sites, assets, lifetime value",
+  Calendar: "What's scheduled, by day",
+  Locations: "Your sites — tap to edit details",
+  Techs: "Add techs + set their app code",
   Parts: "Inventory + stock levels",
   PM: "Recurring maintenance",
 };
@@ -86,7 +88,9 @@ export function OperationsHub({ embedded }: { embedded?: boolean } = {}) {
 
     {page === "Dashboard" && <Dashboard jobs={jobs} techs={techs} loading={loading} onOpen={setOpenId} onUpdate={updateWO} />}
     {page === "Work Orders" && <WorkOrders jobs={jobs} techs={techs} loading={loading} onCreate={createWO} onUpdate={updateWO} onOpen={setOpenId} />}
+    {page === "Calendar" && <CalendarView onOpenWO={setOpenId} />}
     {page === "Locations" && <Locations />}
+    {page === "Techs" && <Techs />}
     {page === "Parts" && <Parts />}
     {page === "PM" && <PM />}
     {openId && <JobDetailDrawer id={openId} techs={techs} onClose={() => { setOpenId(null); loadOps(); }} onUpdate={updateWO} />}
@@ -186,29 +190,214 @@ function Board({ jobs, onOpen }: { jobs: RealWO[]; onOpen: (id: string) => void 
   </Card>;
 }
 
+/* ── Calendar: scheduled work, by day (real /api/calendar/events) ────────── */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function CalendarView({ onOpenWO }: { onOpenWO: (id: string) => void }) {
+  const today = new Date();
+  const [ym, setYm] = useState({ y: today.getFullYear(), m: today.getMonth() + 1 });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [events, setEvents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/calendar/events?year=${ym.y}&month=${ym.m}&scope=team`).then(r => r.json()).then(d => setEvents(d.events ?? [])).catch(() => {}).finally(() => setLoading(false));
+  }, [ym]);
+  const monthName = new Date(ym.y, ym.m - 1, 1).toLocaleString("en-US", { month: "long", year: "numeric" });
+  const firstDow = new Date(ym.y, ym.m - 1, 1).getDay();
+  const daysInMonth = new Date(ym.y, ym.m, 0).getDate();
+  const EVENT_COLOR: Record<string, string> = { work_order: "#34d399", work_order_phase: "#f59e0b", pm_schedule: "#0ea5e9", todo: "#6B7EFF", crm_activity: "#a78bfa", tracker_task: "#a78bfa", nexus_event: "#94a3b8", gcal: "#c084fc" };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dayEvents = (day: number) => { const d = `${ym.y}-${String(ym.m).padStart(2, "0")}-${String(day).padStart(2, "0")}`; return events.filter((e: any) => String(e.date ?? "").slice(0, 10) === d); };
+  const shift = (delta: number) => setYm(p => { let m = p.m + delta, y = p.y; if (m > 12) { m = 1; y++; } if (m < 1) { m = 12; y--; } return { y, m }; });
+  const cells: (number | null)[] = [...Array(firstDow).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+  return <Card>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+      <button onClick={() => shift(-1)} style={{ ...btn, background: "rgba(255,255,255,0.06)" }}>‹</button>
+      <h2 style={{ fontSize: 16 }}>{loading ? "Loading…" : monthName}</h2>
+      <button onClick={() => shift(1)} style={{ ...btn, background: "rgba(255,255,255,0.06)" }}>›</button>
+    </div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 6 }}>
+      {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <div key={i} style={{ textAlign: "center", fontSize: 11, color: "rgba(255,255,255,0.4)", padding: 4 }}>{d}</div>)}
+      {cells.map((day, i) => {
+        if (day === null) return <div key={`x${i}`} />;
+        const evs = dayEvents(day);
+        const isToday = ym.y === today.getFullYear() && ym.m === today.getMonth() + 1 && day === today.getDate();
+        return <div key={day} style={{ minHeight: 78, padding: 6, borderRadius: 10, background: isToday ? "rgba(0,200,255,0.10)" : "rgba(255,255,255,0.03)", border: isToday ? "1px solid rgba(0,200,255,0.4)" : "1px solid rgba(255,255,255,0.06)" }}>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginBottom: 3 }}>{day}</div>
+          {evs.slice(0, 3).map((e, j) => <div key={e.id || j} onClick={() => e.type === "work_order" && onOpenWO(e.id)} title={e.title} style={{ cursor: e.type === "work_order" ? "pointer" : "default", fontSize: 10, lineHeight: 1.3, marginBottom: 2, padding: "1px 4px", borderRadius: 5, background: `${EVENT_COLOR[e.type] ?? "#94a3b8"}26`, borderLeft: `2px solid ${EVENT_COLOR[e.type] ?? "#94a3b8"}`, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.title}</div>)}
+          {evs.length > 3 && <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)" }}>+{evs.length - 3} more</div>}
+        </div>;
+      })}
+    </div>
+    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 12, fontSize: 11, color: "rgba(255,255,255,0.5)" }}>
+      <span><span style={{ color: "#34d399" }}>■</span> Work order</span>
+      <span><span style={{ color: "#f59e0b" }}>■</span> Job phase</span>
+      <span><span style={{ color: "#0ea5e9" }}>■</span> PM</span>
+      <span><span style={{ color: "#6B7EFF" }}>■</span> To-do</span>
+    </div>
+  </Card>;
+}
+
+/* ── Techs: add technicians + set their /tech app code (password) ────────── */
+function genTechCode(initials: string) { return `GG-${(initials || "GG").toUpperCase().slice(0, 2)}-${Math.floor(1000 + Math.random() * 9000)}`; }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function Techs() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [techs, setTechs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showNew, setShowNew] = useState(false);
+  const [form, setForm] = useState({ name: "", role: "Tech", phone: "", email: "" });
+  const [copied, setCopied] = useState<string | null>(null);
+  const load = React.useCallback(() => { setLoading(true); fetch("/api/dispatch/technicians").then(r => r.json()).then(d => setTechs(d.technicians ?? [])).catch(() => {}).finally(() => setLoading(false)); }, []);
+  useEffect(() => { load(); }, [load]);
+  async function addTech() {
+    if (!form.name.trim()) return;
+    await fetch("/api/dispatch/technicians", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) }).catch(() => {});
+    setForm({ name: "", role: "Tech", phone: "", email: "" }); setShowNew(false); load();
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function setCode(t: any) {
+    const code = genTechCode(t.initials || (t.name || "").split(" ").map((w: string) => w[0]).join(""));
+    await fetch(`/api/dispatch/technicians/${t.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tech_code: code }) }).catch(() => {});
+    load();
+  }
+  function copy(code: string) { navigator.clipboard?.writeText(code).then(() => { setCopied(code); setTimeout(() => setCopied(null), 1500); }).catch(() => {}); }
+  return <div style={{ display: "grid", gap: 14 }}>
+    <Card>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <h2 style={{ fontSize: 16 }}>Technicians</h2>
+        <button onClick={() => setShowNew(s => !s)} style={btn}>+ Add tech</button>
+      </div>
+      <Small>Each tech logs into the field tool at <b style={{ color: "rgba(255,255,255,0.7)" }}>/tech</b> using their personal code below.</Small>
+      {showNew && <div style={{ ...card, marginTop: 12, display: "grid", gap: 8 }}>
+        <input placeholder="Full name *" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={input} />
+        <div style={{ display: "flex", gap: 8 }}>
+          <input placeholder="Role" value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} style={{ ...input, flex: 1 }} />
+          <input placeholder="Phone" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} style={{ ...input, flex: 1 }} />
+        </div>
+        <input placeholder="Email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} style={input} />
+        <button onClick={addTech} disabled={!form.name.trim()} style={{ ...btn, opacity: form.name.trim() ? 1 : 0.5 }}>Add technician</button>
+      </div>}
+    </Card>
+    {loading ? <Card><Small>Loading…</Small></Card> : techs.length === 0 ? <Card><Small>No technicians yet. Tap “+ Add tech”.</Small></Card> :
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px,1fr))", gap: 14 }}>
+        {techs.map(t => <Card key={t.id}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <b style={{ fontSize: 15 }}>{t.name}</b>
+            <Badge tone={t.status === "available" ? "good" : "default"}>{t.role || "Tech"}</Badge>
+          </div>
+          {(t.phone || t.email) && <Small>{[t.phone, t.email].filter(Boolean).join(" · ")}</Small>}
+          <div style={{ marginTop: 12 }}>
+            <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 4 }}>App code (their password for /tech)</div>
+            {t.tech_code ? <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <code style={{ fontFamily: "monospace", fontSize: 14, background: "rgba(0,200,255,0.12)", border: "1px solid rgba(0,200,255,0.3)", borderRadius: 8, padding: "5px 10px" }}>{t.tech_code}</code>
+              <button onClick={() => copy(t.tech_code)} style={{ ...btn, background: "rgba(255,255,255,0.08)", padding: "6px 10px" }}>{copied === t.tech_code ? "Copied!" : "Copy"}</button>
+              <button onClick={() => setCode(t)} style={{ ...btn, background: "rgba(255,255,255,0.08)", padding: "6px 10px" }}>Regen</button>
+            </div> : <button onClick={() => setCode(t)} style={btn}>Generate code</button>}
+          </div>
+        </Card>)}
+      </div>}
+  </div>;
+}
+
 /* ── Locations: sites with asset + open-WO counts (real /api/sites) ──────── */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function Locations() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [sites, setSites] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  useEffect(() => { fetch("/api/sites?limit=60").then(r => r.json()).then(d => setSites(d.sites ?? [])).catch(() => {}).finally(() => setLoading(false)); }, []);
+  const [openSite, setOpenSite] = useState<string | null>(null);
+  const load = React.useCallback(() => { setLoading(true); fetch("/api/sites?limit=60").then(r => r.json()).then(d => setSites(d.sites ?? [])).catch(() => {}).finally(() => setLoading(false)); }, []);
+  useEffect(() => { load(); }, [load]);
   if (loading) return <Card><Small>Loading sites…</Small></Card>;
-  if (sites.length === 0) return <Card><Small>No sites found yet.</Small></Card>;
-  return <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px,1fr))", gap: 14 }}>
-    {sites.map(s => <Card key={s.id}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-        <b style={{ fontSize: 15 }}>{s.name || "Site"}</b>
-        {s.offline_asset_count > 0 ? <Badge tone="urgent">{s.offline_asset_count} offline</Badge> : <Badge tone="good">healthy</Badge>}
-      </div>
-      <Small>{[s.city, s.state].filter(Boolean).join(", ") || "—"}</Small>
-      <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 13 }}>
-        <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Units</div><b>{num(s.units) || "—"}</b></div>
-        <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Assets</div><b>{num(s.asset_count)}</b></div>
-        <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Open WOs</div><b>{num(s.open_wo_count)}</b></div>
-      </div>
-      {s.latest_event?.summary && <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 12, marginTop: 10 }}>Latest: {s.latest_event.summary}</p>}
-    </Card>)}
+  if (sites.length === 0) return <Card><Small>No sites found yet. These come from your customer / org sites.</Small></Card>;
+  return <>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px,1fr))", gap: 14 }}>
+      {sites.map(s => <Card key={s.id} style={{ cursor: "pointer" }}>
+        <div onClick={() => setOpenSite(s.id)}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <b style={{ fontSize: 15 }}>{s.name || "Site"}</b>
+            {s.offline_asset_count > 0 ? <Badge tone="urgent">{s.offline_asset_count} offline</Badge> : <Badge tone="good">healthy</Badge>}
+          </div>
+          <Small>{[s.city, s.state].filter(Boolean).join(", ") || "—"}</Small>
+          <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 13 }}>
+            <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Units</div><b>{num(s.units) || "—"}</b></div>
+            <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Assets</div><b>{num(s.asset_count)}</b></div>
+            <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Open WOs</div><b>{num(s.open_wo_count)}</b></div>
+          </div>
+          <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, marginTop: 10 }}>Tap to view & edit details →</p>
+        </div>
+      </Card>)}
+    </div>
+    {openSite && <SiteDetailDrawer id={openSite} onClose={() => { setOpenSite(null); load(); }} />}
+  </>;
+}
+
+/* ── Site detail: full canonical site, editable (real /api/sites/[id]) ───── */
+const SITE_FIELDS: { key: string; label: string; full?: boolean }[] = [
+  { key: "name", label: "Property name", full: true },
+  { key: "address", label: "Street address", full: true },
+  { key: "city", label: "City" }, { key: "state", label: "State" }, { key: "zip", label: "ZIP" },
+  { key: "property_type", label: "Property type" }, { key: "units", label: "Units" },
+  { key: "primary_contact_name", label: "Contact name" }, { key: "primary_contact_phone", label: "Contact phone" },
+  { key: "primary_contact_email", label: "Contact email", full: true },
+  { key: "pm_name", label: "Property manager" }, { key: "pm_phone", label: "PM phone" },
+  { key: "pm_email", label: "PM email", full: true },
+  { key: "access_notes", label: "Access / gate notes", full: true },
+];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function SiteDetailDrawer({ id, onClose }: { id: string; onClose: () => void }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [site, setSite] = useState<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [assets, setAssets] = useState<any[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [wos, setWos] = useState<any[]>([]);
+  const [edit, setEdit] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/sites/${id}`).then(r => r.json()).then(d => { setSite(d.site ?? null); setAssets(d.assets ?? d.site_assets ?? []); setWos(d.work_orders ?? d.workOrders ?? []); }).catch(() => {}).finally(() => setLoading(false));
+  }, [id]);
+  const val = (k: string) => (k in edit ? edit[k] : (site?.[k] ?? "")) as string;
+  async function save() {
+    if (Object.keys(edit).length === 0) { onClose(); return; }
+    setSaving(true);
+    const r = await fetch(`/api/sites/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(edit) }).catch(() => null);
+    setSaving(false);
+    if (r && r.ok) { setSaved(true); setTimeout(() => setSaved(false), 1500); setEdit({}); const d = await r.json().catch(() => null); if (d?.site) setSite(d.site); }
+  }
+  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.62)", backdropFilter: "blur(6px)", display: "flex", justifyContent: "flex-end" }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: "min(600px,100%)", height: "100%", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#060b1a)", borderLeft: "1px solid rgba(0,200,255,0.22)", padding: 20, color: "white" }}>
+      <button onClick={onClose} style={{ ...btn, background: "rgba(255,255,255,0.06)", marginBottom: 16 }}>✕ Close</button>
+      {loading ? <Small>Loading…</Small> : !site ? <Small>Couldn’t load this site.</Small> : <div style={{ display: "grid", gap: 14 }}>
+        <div>
+          <div style={{ fontSize: 11, color: "rgba(0,200,255,0.8)", letterSpacing: "0.1em" }}>SITE</div>
+          <h2 style={{ margin: "4px 0", fontSize: 22 }}>{site.name || "Site"}</h2>
+          <Small>{[site.city, site.state].filter(Boolean).join(", ") || "—"}</Small>
+        </div>
+        <Card>
+          <h2 style={{ fontSize: 15, marginBottom: 10 }}>Details</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {SITE_FIELDS.map(f => <div key={f.key} style={{ gridColumn: f.full ? "1 / -1" : undefined }}>
+              <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 3 }}>{f.label}</div>
+              <input value={val(f.key)} onChange={e => setEdit(p => ({ ...p, [f.key]: e.target.value }))} style={{ ...input, padding: 9, fontSize: 13 }} />
+            </div>)}
+          </div>
+          <button onClick={save} disabled={saving} style={{ ...btn, marginTop: 12, background: saved ? "#10b981" : "#6366f1" }}>{saving ? "Saving…" : saved ? "✓ Saved" : "Save details"}</button>
+        </Card>
+        <Card>
+          <h2 style={{ fontSize: 15, marginBottom: 8 }}>Assets ({assets.length})</h2>
+          {assets.length === 0 ? <Small>No assets logged at this site yet.</Small> : assets.map((a, i) => <p key={a.id || i} style={{ margin: "5px 0", fontSize: 14 }}>{a.name || a.device_type || "Asset"} {a.status && <Badge tone={a.status === "offline" ? "urgent" : "good"}>{a.status}</Badge>}</p>)}
+        </Card>
+        <Card>
+          <h2 style={{ fontSize: 15, marginBottom: 8 }}>Recent work orders ({wos.length})</h2>
+          {wos.length === 0 ? <Small>None yet.</Small> : wos.slice(0, 8).map((w, i) => <p key={w.id || i} style={{ margin: "5px 0", fontSize: 14 }}>{w.wo_number || w.title || "WO"} <span style={{ color: "rgba(255,255,255,0.5)" }}>· {w.status}</span></p>)}
+        </Card>
+      </div>}
+    </div>
   </div>;
 }
 
