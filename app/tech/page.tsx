@@ -591,6 +591,16 @@ function TechTool() {
   const [showMeterGuide,  setShowMeterGuide]  = useState(false)
   const [simpler,         setSimpler]         = useState<{ text: string; detail: string | null } | null>(null)
   const [simplifying,     setSimplifying]     = useState(false)
+  const [deviceWebImg,    setDeviceWebImg]    = useState<string | null>(null)
+  const [videoRoom,       setVideoRoom]       = useState<string | null>(null)
+  // Web image fallback for a device that has no catalog photo / manual figure
+  useEffect(() => {
+    if (!selected || selected.image_url) { setDeviceWebImg(null); return }
+    let cancelled = false
+    fetch('/api/kb/part-image', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-tech-code': techCode }, body: JSON.stringify({ query: [selected.brand, selected.name, selected.sku].filter(Boolean).join(' ') }) })
+      .then(r => r.json()).then(d => { if (!cancelled) setDeviceWebImg(d.image_url ?? null) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [selected, techCode])
   // Guided procedures (install / service)
   const [procMode,        setProcMode]        = useState<'install' | 'service'>('install')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -620,7 +630,13 @@ function TechTool() {
     history.forEach((h, i) => L.push(`  ${i + 1}. ${h.question} → ${h.answer}`))
     if (current) L.push('', `Now: [${current.type}] ${current.text}`)
     if (selected?.manual_url) L.push('', `Manual: ${selected.manual_url}`)
+    if (videoRoom) L.push('', `Join live video: https://meet.jit.si/${videoRoom}`)
     return L.join('\n')
+  }
+  function startVideoHelp() {
+    const room = videoRoom || `gateguard-${(sessionId || '').slice(0, 8) || Date.now().toString(36)}`
+    setVideoRoom(room)
+    try { window.open(`https://meet.jit.si/${room}`, '_blank') } catch { /* ignore */ }
   }
   async function shareEscalation() {
     const text = escalationText()
@@ -3383,13 +3399,18 @@ function TechTool() {
                 <button onClick={shareEscalation} style={{ fontFamily: MONO, fontSize: 10, color: C.red, background: 'none', border: 'none', cursor: 'pointer', letterSpacing: '0.05em', padding: 0 }}>{escalateCopied ? '✓ COPIED' : '🆘 STUCK? SEND TO A SENIOR'}</button>
               </div>
 
-              {/* Image — real manual figure when ingested, else the device photo */}
-              {(current.image_url || selected?.image_url) && (
-                <a href={current.image_url || selected?.image_url || '#'} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: 10, borderRadius: 10, overflow: 'hidden', border: `1px solid ${C.border}`, background: '#fff' }}>
-                  <img src={current.image_url || selected?.image_url || ''} alt={current.image_caption || 'Reference'} style={{ width: '100%', maxHeight: 220, objectFit: 'contain', display: 'block' }} />
-                  {current.image_caption && <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, padding: '4px 8px', background: C.bgCard }}>{current.image_caption}</div>}
-                </a>
-              )}
+              {/* Image — manual figure when ingested, else catalog photo, else a web image */}
+              {(() => {
+                const img = current.image_url || selected?.image_url || deviceWebImg
+                if (!img) return null
+                const isWeb = !current.image_url && !selected?.image_url
+                return (
+                  <a href={img} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: 10, borderRadius: 10, overflow: 'hidden', border: `1px solid ${C.border}`, background: '#fff' }}>
+                    <img src={img} alt={current.image_caption || 'Reference'} style={{ width: '100%', maxHeight: 220, objectFit: 'contain', display: 'block' }} />
+                    {(current.image_caption || isWeb) && <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, padding: '4px 8px', background: C.bgCard }}>{current.image_caption || 'Web image — verify it matches your device'}</div>}
+                  </a>
+                )
+              })()}
 
               {(simpler ? simpler.detail : current.detail) && (
                 <div style={S.detailBlock}>{simpler ? simpler.detail : current.detail}</div>
@@ -3651,10 +3672,13 @@ function TechTool() {
               {/* ── Terminal: escalate ── */}
               {current.type === 'escalate' && (
                 <div>
-                  <button onClick={shareEscalation} style={{ width: '100%', minHeight: 48, borderRadius: 12, background: C.red, color: '#fff', border: 'none', fontFamily: MONO, fontSize: 12, fontWeight: 800, letterSpacing: '0.06em', cursor: 'pointer', marginBottom: 10 }}>
+                  <button onClick={shareEscalation} style={{ width: '100%', minHeight: 48, borderRadius: 12, background: C.red, color: '#fff', border: 'none', fontFamily: MONO, fontSize: 12, fontWeight: 800, letterSpacing: '0.06em', cursor: 'pointer', marginBottom: 8 }}>
                     {escalateCopied ? '✓ COPIED — PASTE TO YOUR SENIOR' : '🆘 SEND TO A SENIOR (with full details)'}
                   </button>
-                  <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, marginBottom: 10 }}>Sends the device, the problem, and every step you tried — so they don&apos;t have to ask.</div>
+                  <button onClick={startVideoHelp} style={{ width: '100%', minHeight: 48, borderRadius: 12, background: 'rgba(0,200,255,0.14)', color: '#7dd3fc', border: '1px solid rgba(0,200,255,0.34)', fontFamily: MONO, fontSize: 12, fontWeight: 800, letterSpacing: '0.06em', cursor: 'pointer', marginBottom: 10 }}>
+                    📹 START LIVE VIDEO HELP (show a senior)
+                  </button>
+                  <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, marginBottom: 10 }}>Send sends the device, problem, and every step tried. Video opens a room — share the link (it&apos;s in the details) so a senior sees your camera.</div>
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     <button style={S.newSessionBtn} onClick={reset}>NEW SESSION</button>
                     <button style={S.keepGoingBtn} onClick={() => answer('Continue diagnosing')}>CONTINUE</button>
