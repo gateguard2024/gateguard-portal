@@ -738,7 +738,21 @@ function Parts() {
   const [parts, setParts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
-  useEffect(() => { fetch("/api/products?limit=60").then(r => r.json()).then(d => setParts(d.products ?? [])).catch(() => {}).finally(() => setLoading(false)); }, []);
+  const [showNew, setShowNew] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [form, setForm] = useState({ name: "", brand: "", sku: "", category: "", sell_price: "", manual_url: "", image_url: "" });
+  const load = React.useCallback(() => { setLoading(true); fetch("/api/products?limit=80").then(r => r.json()).then(d => setParts(d.products ?? [])).catch(() => {}).finally(() => setLoading(false)); }, []);
+  useEffect(() => { load(); }, [load]);
+  async function create() {
+    if (!form.name.trim() || busy) return; setBusy(true); setMsg(null);
+    const body: Record<string, unknown> = { name: form.name.trim(), brand: form.brand.trim() || null, sku: form.sku.trim() || null, category: form.category.trim() || null, manual_url: form.manual_url.trim() || null, image_url: form.image_url.trim() || null };
+    if (form.sell_price && !isNaN(Number(form.sell_price))) body.sell_price = Number(form.sell_price);
+    const r = await fetch("/api/products", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
+    setBusy(false);
+    if (r && r.ok) { setForm({ name: "", brand: "", sku: "", category: "", sell_price: "", manual_url: "", image_url: "" }); setShowNew(false); setMsg(form.manual_url.trim() ? "Added ✓ — run the manual ingest to vectorize its manual + figures." : "Product added ✓"); load(); }
+    else setMsg("Couldn't add the product.");
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cost = (p: any) => num(p.dealer_cost ?? p.unit_cost ?? p.cost);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -748,6 +762,27 @@ function Parts() {
   const shown = parts.filter(p => !q || `${p.name ?? ""} ${p.sku ?? ""}`.toLowerCase().includes(q.toLowerCase()));
   if (loading) return <Card><Small>Loading parts…</Small></Card>;
   return <div style={{ display: "grid", gap: 14 }}>
+    <Card>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h2 style={{ fontSize: 16 }}>Add a product</h2>
+        <button onClick={() => { setShowNew(s => !s); setMsg(null); }} style={btn}>{showNew ? "Cancel" : "+ Add product"}</button>
+      </div>
+      {showNew ? <div style={{ ...card, marginTop: 12, display: "grid", gap: 8 }}>
+        <input placeholder="Product name *" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={input} />
+        <div style={{ display: "flex", gap: 8 }}>
+          <input placeholder="Brand" value={form.brand} onChange={e => setForm({ ...form, brand: e.target.value })} style={{ ...input, flex: 1 }} />
+          <input placeholder="Model / SKU" value={form.sku} onChange={e => setForm({ ...form, sku: e.target.value })} style={{ ...input, flex: 1 }} />
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input placeholder="Category (Camera, Gate…)" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} style={{ ...input, flex: 1 }} />
+          <input placeholder="Sell price $" value={form.sell_price} onChange={e => setForm({ ...form, sell_price: e.target.value })} style={{ ...input, flex: 1 }} />
+        </div>
+        <input placeholder="Manual PDF URL (we'll read it for the AI + diagrams)" value={form.manual_url} onChange={e => setForm({ ...form, manual_url: e.target.value })} style={input} />
+        <input placeholder="Image URL (optional)" value={form.image_url} onChange={e => setForm({ ...form, image_url: e.target.value })} style={input} />
+        <button onClick={create} disabled={!form.name.trim() || busy} style={{ ...btn, opacity: form.name.trim() && !busy ? 1 : 0.5 }}>{busy ? "Adding…" : "Add to catalog"}</button>
+      </div> : <Small>Name is all you need. Add a manual PDF link and it powers the field tool's AI diagnostics, wiring help, and step images.</Small>}
+      {msg && <p style={{ fontSize: 12, color: msg.includes("✓") ? "#34d399" : "#fca5a5", marginTop: 8 }}>{msg}</p>}
+    </Card>
     <input placeholder="Search parts by name or SKU" value={q} onChange={e => setQ(e.target.value)} style={input} />
     {shown.length === 0 ? <Card><Small>No parts found.</Small></Card> : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px,1fr))", gap: 14 }}>
       {shown.map(p => {

@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
     list_price,
     msrp,
     image_url,
+    manual_url,
     field_service,
     tags,
   } = body
@@ -120,6 +121,7 @@ export async function POST(req: NextRequest) {
   if (typeof list_price === 'number') row.list_price = list_price
   if (typeof msrp === 'number') row.msrp = msrp
   if (image_url != null) row.image_url = image_url
+  if (manual_url != null) row.manual_url = manual_url
   if (field_service != null) row.field_service = field_service === true
   if (Array.isArray(tags)) row.tags = tags
 

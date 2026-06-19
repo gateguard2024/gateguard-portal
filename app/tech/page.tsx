@@ -18,7 +18,7 @@ import { CableGuide }   from '@/components/tech/CableGuide'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type StepType = 'question' | 'action' | 'measure' | 'select' | 'photo' | 'resolved' | 'escalate'
-type Screen   = 'pin' | 'identity' | 'home' | 'devices' | 'choice' | 'symptom' | 'diag' | 'wiring' | 'cable' | 'install' | 'survey' | 'survey_add' | 'survey_transcript' | 'training' | 'training_course' | 'netscout' | 'jobs'
+type Screen   = 'pin' | 'identity' | 'home' | 'devices' | 'choice' | 'symptom' | 'diag' | 'wiring' | 'cable' | 'install' | 'procedure' | 'survey' | 'survey_add' | 'survey_transcript' | 'training' | 'training_course' | 'netscout' | 'jobs'
 
 // ─── Site Survey Types ────────────────────────────────────────────────────────
 interface SurveyDevice {
@@ -589,6 +589,21 @@ function TechTool() {
   const [showMeterGuide,  setShowMeterGuide]  = useState(false)
   const [simpler,         setSimpler]         = useState<{ text: string; detail: string | null } | null>(null)
   const [simplifying,     setSimplifying]     = useState(false)
+  // Guided procedures (install / service)
+  const [procMode,        setProcMode]        = useState<'install' | 'service'>('install')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [procData,        setProcData]        = useState<any>(null)
+  const [procLoading,     setProcLoading]     = useState(false)
+  const [procDone,        setProcDone]        = useState<Set<string>>(new Set())
+  async function loadProcedure(mode: 'install' | 'service') {
+    setProcMode(mode); setProcData(null); setProcDone(new Set()); setProcLoading(true); setScreen('procedure')
+    try {
+      const d = await fetch('/api/kb/procedure', { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ product_id: selected?.id, mode, device_name: selected?.name }) }).then(r => r.json())
+      if (d.procedure) setProcData(d.procedure)
+    } catch { /* ignore */ }
+    setProcLoading(false)
+  }
+  function toggleProc(key: string) { setProcDone(p => { const n = new Set(p); n.has(key) ? n.delete(key) : n.add(key); return n }) }
   // reset the "explain simpler" view whenever a new diagnostic step arrives
   useEffect(() => { setSimpler(null) }, [current])
   async function explainSimpler() {
@@ -1754,6 +1769,97 @@ function TechTool() {
   // ═══════════════════════════════════════════════════════════════════════════
   // SCREEN: CHOICE — manual vs troubleshoot
   // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SCREEN: PROCEDURE — guided Install / Service-PM, step by step
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (screen === 'procedure') {
+    const p = procData
+    const accent = procMode === 'install' ? C.cyan : C.green
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const steps = (p?.steps ?? []) as any[]
+    const dod = (p?.definition_of_done ?? []) as string[]
+    const total = steps.length + dod.length
+    const done = steps.filter((_, i) => procDone.has(`step:${i}`)).length + dod.filter((_, i) => procDone.has(`dod:${i}`)).length
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const safetyPanel = (s: any, i: number) => { const a = ANSI[s.level] ?? ANSI.WARNING; return (
+      <div key={i} style={{ borderRadius: 8, overflow: 'hidden', marginBottom: 6, border: `1px solid ${a.bg}` }}>
+        <div style={{ background: a.bg, color: a.fg, fontFamily: MONO, fontWeight: 800, fontSize: 10, letterSpacing: '0.1em', padding: '4px 8px' }}>{a.icon} {s.level}</div>
+        <div style={{ padding: '6px 8px', fontSize: 12, lineHeight: 1.4, color: C.textPrimary }}><b>{s.hazard}</b> — {s.consequence}. <span style={{ color: C.textSecondary }}>Avoid: {s.avoidance}</span></div>
+      </div>) }
+    const chips = (label: string, arr: string[]) => arr?.length ? (
+      <div style={{ marginBottom: 8 }}>
+        <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.1em', marginBottom: 4 }}>{label}</div>
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>{arr.map((t, i) => <span key={i} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 999, background: 'rgba(255,255,255,0.05)', border: `1px solid ${C.border}`, color: C.textPrimary }}>{t}</span>)}</div>
+      </div>) : null
+    return (
+      <div style={S.shell}>
+        <div style={S.diagHeader}>
+          <button style={S.iconBtn} onClick={() => setScreen(selected ? 'choice' : 'home')}>‹</button>
+          <div style={{ flex: 1 }}>
+            <div style={S.topBarTitle}>{procMode === 'install' ? 'INSTALL GUIDE' : 'SERVICE / PM'}</div>
+            <div style={S.topBarSub}>{(selected?.name || 'DEVICE').toUpperCase().slice(0, 30)}</div>
+          </div>
+          {total > 0 && <div style={{ fontFamily: MONO, fontSize: 10, color: accent }}>{done}/{total}</div>}
+        </div>
+        <div className="gg-list" style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+          {procLoading || !p ? (
+            <div style={{ fontFamily: MONO, fontSize: 12, color: C.textMuted, textAlign: 'center', padding: '40px 0' }}>{procLoading ? 'Building your step-by-step guide…' : 'No guide available.'}</div>
+          ) : (
+            <>
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: C.textPrimary }}>{p.title}</div>
+                {p.est_total_minutes ? <div style={{ fontFamily: MONO, fontSize: 10, color: C.textMuted, marginTop: 3 }}>≈ {p.est_total_minutes} MIN · {total} STEPS</div> : null}
+              </div>
+
+              {/* Pre-job */}
+              <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                <div style={{ fontFamily: MONO, fontSize: 9, color: accent, letterSpacing: '0.1em', marginBottom: 8 }}>BEFORE YOU START</div>
+                {chips('TOOLS', p.tools)}{chips('PARTS', p.parts)}{chips('SAFETY GEAR', p.ppe)}
+                {(p.grouped_safety ?? []).map(safetyPanel)}
+              </div>
+
+              {/* Steps */}
+              {steps.map((s, i) => {
+                const isDone = procDone.has(`step:${i}`)
+                return (
+                  <div key={i} style={{ background: C.bgCard, border: `1px solid ${isDone ? 'rgba(16,185,129,0.4)' : C.border}`, borderRadius: 12, padding: 12, marginBottom: 10 }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                      <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 800, color: accent }}>{String(s.n ?? i + 1).padStart(2, '0')}</span>
+                      <span style={{ flex: 1, fontWeight: 700, fontSize: 14, color: C.textPrimary }}>{s.title}</span>
+                      <button onClick={() => readAloud(`${s.title}. ${s.instruction}. ${s.detail || ''}`)} title="Read aloud" style={{ ...S.iconBtn, width: 32, height: 32 }}>🔊</button>
+                    </div>
+                    {(s.safety ?? []).map(safetyPanel)}
+                    <div style={{ fontSize: 14, color: C.textPrimary, margin: '6px 0', lineHeight: 1.45 }}>{s.instruction}</div>
+                    {(s.spec_callouts ?? []).length > 0 && <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>{s.spec_callouts.map((c: { kind: string; value: string; unit: string }, k: number) => <span key={k} style={{ fontFamily: MONO, fontSize: 10, padding: '3px 8px', borderRadius: 6, background: 'rgba(0,200,255,0.1)', border: '1px solid rgba(0,200,255,0.3)', color: C.cyan }}>{c.kind}: {c.value}{c.unit}</span>)}</div>}
+                    {s.detail && <div style={{ fontSize: 12, color: C.textSecondary, marginBottom: 6, whiteSpace: 'pre-line' }}>{s.detail}</div>}
+                    {s.verification && <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8 }}>✓ Check: {s.verification}</div>}
+                    <button onClick={() => toggleProc(`step:${i}`)} style={{ width: '100%', minHeight: 40, borderRadius: 8, fontFamily: MONO, fontSize: 11, fontWeight: 700, cursor: 'pointer', background: isDone ? C.green : 'rgba(255,255,255,0.06)', color: isDone ? '#06120c' : C.textSecondary, border: `1px solid ${isDone ? C.green : C.border}` }}>{isDone ? '✓ DONE' : 'MARK DONE'}</button>
+                  </div>
+                )
+              })}
+
+              {/* Definition of done / commissioning */}
+              {dod.length > 0 && (
+                <div style={{ background: 'rgba(0,200,255,0.07)', border: '1px solid rgba(0,200,255,0.24)', borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                  <div style={{ fontFamily: MONO, fontSize: 9, color: C.cyan, letterSpacing: '0.1em', marginBottom: 8 }}>{procMode === 'install' ? 'COMMISSIONING — MUST PASS' : 'CLOSE-OUT CHECKS'}</div>
+                  {dod.map((d, i) => { const ok = procDone.has(`dod:${i}`); return (
+                    <label key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '6px 0', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={ok} onChange={() => toggleProc(`dod:${i}`)} style={{ marginTop: 2 }} />
+                      <span style={{ fontSize: 13, color: ok ? C.textMuted : C.textPrimary, textDecoration: ok ? 'line-through' : 'none' }}>{d}</span>
+                    </label>) })}
+                </div>
+              )}
+
+              {total > 0 && done === total
+                ? <div style={{ textAlign: 'center', fontFamily: MONO, fontSize: 12, color: C.green, padding: 12 }}>✓ ALL STEPS COMPLETE</div>
+                : <div style={{ textAlign: 'center', fontFamily: MONO, fontSize: 10, color: C.textMuted, padding: 8 }}>{done} of {total} done</div>}
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   if (screen === 'choice') {
     const hasManual = !!selected?.manual_url
     return (
@@ -1868,6 +1974,30 @@ function TechTool() {
                 </div>
               </div>
               <span style={{ color: C.purple, fontSize: 18 }}>›</span>
+            </div>
+          </button>
+
+          {/* Install Guide */}
+          <button onClick={() => loadProcedure('install')} style={{ padding: '20px', borderRadius: 14, textAlign: 'left', cursor: 'pointer', background: 'rgba(0,200,255,0.12)', border: `1px solid rgba(0,200,255,0.40)`, boxShadow: '0 2px 16px rgba(0,0,0,0.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ fontSize: 22, lineHeight: 1 }}>🛠️</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: C.cyan, letterSpacing: '0.1em', marginBottom: 3 }}>INSTALL GUIDE</div>
+                <div style={{ fontFamily: SANS, fontSize: 13, color: C.textSecondary }}>Step-by-step from box to commissioned · with safety + UL 325 test</div>
+              </div>
+              <span style={{ color: C.cyan, fontSize: 18 }}>›</span>
+            </div>
+          </button>
+
+          {/* Service / PM */}
+          <button onClick={() => loadProcedure('service')} style={{ padding: '20px', borderRadius: 14, textAlign: 'left', cursor: 'pointer', background: 'rgba(16,185,129,0.12)', border: `1px solid rgba(16,185,129,0.40)`, boxShadow: '0 2px 16px rgba(0,0,0,0.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ fontSize: 22, lineHeight: 1 }}>🧰</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: C.green, letterSpacing: '0.1em', marginBottom: 3 }}>SERVICE / PM</div>
+                <div style={{ fontFamily: SANS, fontSize: 13, color: C.textSecondary }}>Inspect, measure, lubricate, test safety devices</div>
+              </div>
+              <span style={{ color: C.green, fontSize: 18 }}>›</span>
             </div>
           </button>
 
