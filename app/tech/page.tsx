@@ -118,17 +118,18 @@ interface Product {
 const C = {
   bg:            '#070B14',   // deep near-black navy — content area background
   bgDeep:        '#040710',   // deeper — nested panels, detail blocks
-  bgCard:        '#0E1729',   // card surfaces
-  bgInput:       '#0A1220',   // input fields
-  bgSurface:     '#131F35',   // elevated surfaces, hover states
-  topBarBg:      '#040810',   // deepest dark — topBar / header
-  border:        'rgba(107,126,255,0.13)',
-  borderMed:     'rgba(107,126,255,0.24)',
+  bgCard:        'rgba(255,255,255,0.045)',   // glass card surfaces (over the dark gradient)
+  bgInput:       'rgba(4,8,18,0.55)',          // input fields
+  bgSurface:     'rgba(255,255,255,0.07)',     // elevated surfaces, hover states
+  topBarBg:      'rgba(8,14,28,0.72)',          // glass topBar / header
+  border:        'rgba(255,255,255,0.09)',
+  borderMed:     'rgba(255,255,255,0.16)',
   textPrimary:   '#DCE8FF',   // bright white-blue — main text on dark
   textSecondary: '#6B8CAE',   // mid blue-gray — secondary text
   textMuted:     '#334966',   // muted labels
   textOnDark:    '#DCE8FF',   // same on dark backgrounds
   blue:    '#6B7EFF',
+  cyan:    '#00C8FF',
   amber:   '#F59E0B',
   green:   '#10B981',
   red:     '#F87171',
@@ -705,7 +706,7 @@ function TechTool() {
 
   // ── GPS ping helper — fire-and-forget, never blocks UI ───────────────────
   function pingGPS(eventType: string = 'ping', workOrderId?: string) {
-    if (!techId || !navigator.geolocation) return
+    if (!techId || !gpsGranted || !navigator.geolocation) return
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         fetch(`/api/dispatch/technicians/${techId}/location`, {
@@ -747,7 +748,7 @@ function TechTool() {
     } else if (res.status === 401) {
       setCodeError(true); setCodeInput('')
     } else {
-      alert(`Server error (${res.status}) — check Vercel env vars.`)
+      setCodeError(true); setCodeInput('')   // show in-app error instead of a native alert
     }
   }
 
@@ -3690,15 +3691,15 @@ function TechTool() {
 // Two-tone layout: dark navy topBar + clean white/light content.
 // Touch targets ≥44px — outdoor / gloved use.
 const S: Record<string, React.CSSProperties> = {
-  shell:        { minHeight: '100dvh', maxHeight: '100dvh', background: C.bg, display: 'flex', flexDirection: 'column', fontFamily: SANS, maxWidth: 480, margin: '0 auto', overflow: 'hidden' },
+  shell:        { minHeight: '100dvh', maxHeight: '100dvh', background: 'radial-gradient(ellipse at 50% -10%, rgba(0,124,255,0.12), transparent 55%), linear-gradient(180deg, #0a1430 0%, #060b1a 60%, #04060f 100%)', display: 'flex', flexDirection: 'column', fontFamily: SANS, maxWidth: 480, margin: '0 auto', overflow: 'hidden' },
 
   // ── PIN screen card ───────────────────────────────────────────────────────
   pinCard:      { width: '100%', maxWidth: 360, padding: '44px 32px', background: C.bgCard, borderRadius: 28, border: `1px solid ${C.borderMed}`, margin: '0 20px', boxShadow: '0 0 60px rgba(107,126,255,0.18), 0 4px 40px rgba(0,0,0,0.6)' },
   pinLogo:      { width: 84, height: 84, borderRadius: 22, background: 'rgba(107,126,255,0.15)', border: `1.5px solid rgba(107,126,255,0.50)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 24, fontWeight: 700, color: C.blue, margin: '0 auto', letterSpacing: '0.05em', boxShadow: '0 0 32px rgba(107,126,255,0.30), inset 0 1px 0 rgba(255,255,255,0.08)' },
 
   // ── Top bar — DEEP DARK (header identity strip) ───────────────────────────
-  topBar:       { display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: C.topBarBg, borderBottom: '1px solid rgba(107,126,255,0.12)', flexShrink: 0, boxShadow: '0 2px 24px rgba(0,0,0,0.6)' },
-  diagHeader:   { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: C.topBarBg, borderBottom: '1px solid rgba(107,126,255,0.12)', flexShrink: 0 },
+  topBar:       { display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: C.topBarBg, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0, boxShadow: '0 2px 24px rgba(0,0,0,0.5)' },
+  diagHeader:   { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: C.topBarBg, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 },
   ggMark:       { width: 40, height: 40, borderRadius: 11, background: 'rgba(107,126,255,0.18)', border: '1.5px solid rgba(107,126,255,0.50)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 13, fontWeight: 700, color: C.blue, flexShrink: 0, letterSpacing: '0.05em', boxShadow: '0 0 14px rgba(107,126,255,0.22)' },
   topBarTitle:  { fontFamily: MONO, fontSize: 12, fontWeight: 700, color: C.textOnDark, letterSpacing: '0.08em' },
   topBarSub:    { fontFamily: MONO, fontSize: 9, color: 'rgba(107,160,255,0.50)', letterSpacing: '0.12em', marginTop: 2 },
