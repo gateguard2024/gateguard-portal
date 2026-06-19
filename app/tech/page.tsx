@@ -2209,7 +2209,7 @@ function TechTool() {
           <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
             {condOpts.map(c => (
               <button key={c} onClick={() => setSdCondition(c)} style={{
-                flex: 1, padding: '10px 4px', borderRadius: 8, cursor: 'pointer',
+                flex: 1, padding: '13px 4px', minHeight: 44, borderRadius: 8, cursor: 'pointer',
                 border: `1px solid ${sdCondition === c ? condColor(c) : C.border}`,
                 background: sdCondition === c ? `${condColor(c)}15` : 'transparent',
                 fontFamily: MONO, fontSize: 9, letterSpacing: '0.08em',
@@ -2224,7 +2224,7 @@ function TechTool() {
           <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
             {actionOpts.map(o => (
               <button key={o.value} onClick={() => setSdAction(o.value)} style={{
-                flex: '1 0 auto', padding: '10px 6px', borderRadius: 8, cursor: 'pointer',
+                flex: '1 0 auto', padding: '13px 6px', minHeight: 44, borderRadius: 8, cursor: 'pointer',
                 border: `1px solid ${sdAction === o.value ? o.color : C.border}`,
                 background: sdAction === o.value ? `${o.color}15` : 'transparent',
                 fontFamily: MONO, fontSize: 9, letterSpacing: '0.08em',
@@ -2802,7 +2802,7 @@ function TechTool() {
                       onClick={() => setShowMeterGuide(v => !v)}
                       title="Meter setup guide"
                       style={{
-                        flexShrink: 0, width: 38, height: 38, borderRadius: 8,
+                        flexShrink: 0, width: 44, height: 44, borderRadius: 8,
                         border: `1px solid ${showMeterGuide ? C.purple : C.border}`,
                         background: showMeterGuide ? 'rgba(124,58,237,0.1)' : C.bgInput,
                         cursor: 'pointer', display: 'flex', flexDirection: 'column',
@@ -3713,8 +3713,8 @@ const S: Record<string, React.CSSProperties> = {
   pinLogo:      { width: 84, height: 84, borderRadius: 22, background: 'rgba(107,126,255,0.15)', border: `1.5px solid rgba(107,126,255,0.50)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 24, fontWeight: 700, color: C.blue, margin: '0 auto', letterSpacing: '0.05em', boxShadow: '0 0 32px rgba(107,126,255,0.30), inset 0 1px 0 rgba(255,255,255,0.08)' },
 
   // ── Top bar — DEEP DARK (header identity strip) ───────────────────────────
-  topBar:       { display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: C.topBarBg, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0, boxShadow: '0 2px 24px rgba(0,0,0,0.5)' },
-  diagHeader:   { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: C.topBarBg, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 },
+  topBar:       { display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', paddingTop: 'calc(14px + env(safe-area-inset-top))', background: C.topBarBg, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0, boxShadow: '0 2px 24px rgba(0,0,0,0.5)' },
+  diagHeader:   { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', paddingTop: 'calc(12px + env(safe-area-inset-top))', background: C.topBarBg, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 },
   ggMark:       { width: 40, height: 40, borderRadius: 11, background: 'rgba(107,126,255,0.18)', border: '1.5px solid rgba(107,126,255,0.50)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: 13, fontWeight: 700, color: C.blue, flexShrink: 0, letterSpacing: '0.05em', boxShadow: '0 0 14px rgba(107,126,255,0.22)' },
   topBarTitle:  { fontFamily: MONO, fontSize: 12, fontWeight: 700, color: C.textOnDark, letterSpacing: '0.08em' },
   topBarSub:    { fontFamily: MONO, fontSize: 9, color: 'rgba(107,160,255,0.50)', letterSpacing: '0.12em', marginTop: 2 },
@@ -3727,7 +3727,7 @@ const S: Record<string, React.CSSProperties> = {
   progressFill: { height: '100%', background: `linear-gradient(90deg, ${C.blue} 0%, #9B6BFF 100%)`, transition: 'width 0.4s ease' },
 
   // ── Bottom navigation bar ─────────────────────────────────────────────────
-  legendStrip:  { display: 'flex', borderTop: '1px solid rgba(107,126,255,0.13)', background: C.bgCard, flexShrink: 0, boxShadow: '0 -4px 24px rgba(0,0,0,0.45)', minHeight: 64 },
+  legendStrip:  { display: 'flex', borderTop: '1px solid rgba(255,255,255,0.08)', background: C.topBarBg, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', flexShrink: 0, boxShadow: '0 -4px 24px rgba(0,0,0,0.45)', minHeight: 64, paddingBottom: 'env(safe-area-inset-bottom)' },
 
   // ── Form elements ─────────────────────────────────────────────────────────
   fieldLabel:   { fontFamily: MONO, fontSize: 9, letterSpacing: '0.16em', color: C.textMuted, marginBottom: -4 },
