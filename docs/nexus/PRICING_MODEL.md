@@ -57,7 +57,7 @@ Two layers. Implemented in `components/nexus/PricingCalculator.tsx`.
 
 *Unit door locks (app + gateway) are NOT in the $5/unit model* — they are **always add-ons at GG cost + $2**: app unit = $4.25, gateway unit = $6.50.
 
-Constants in `PricingCalculator.tsx`: `UNIT_PRICE = 5`, `FLOOR_LIMIT = 500`, `MARGIN_MIN = 2.25`, `MARGIN_TARGET = 3.0`, `OVERAGE_MARKUP = 2`, `ADDON_MARGIN = 2`.
+Constants + cost basis now live SERVER-SIDE in `lib/pricing-model.ts` (`UNIT_PRICE = 5`, `FLOOR_LIMIT = 500`, `MARGIN_MIN = 2.25`, `MARGIN_TARGET = 3.0`, `OVERAGE_MARKUP = 2`, `ADDON_MARGIN = 2`, and the `COST` table). The browser only POSTs counts to `/api/pricing/compute` and renders the gated result — GG cost + margin are returned to corporate admins only, never to dealers, so the cost basis never ships in the client bundle.
 
 **Phase 2 — End-user price** = dealer price + dealer markup (TBD).
 

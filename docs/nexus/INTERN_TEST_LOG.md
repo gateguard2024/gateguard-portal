@@ -37,4 +37,19 @@ Where: **Operations Hub → Parts** tab, "🔎 Find it for me" box.
 **Depends on infra:** `SERPER_API_KEY` (web search) + `ANTHROPIC_API_KEY`. With no SERPER key, query lookup returns the "paste a URL / add manually" message; URL paste still works.
 
 ---
+
+## Build 3 — Pricing calculator hardened (cost moved server-side)  (pushed beta · YYYY-MM-DD)
+Where: **Sales → Opportunities → Financials** (Pricing & profitability) and **Sales surface** rough calculator.
+
+- ☐ Calculator still totals correctly as you type units / gates / locks / cameras (compare a known site to the old numbers).
+- ☐ Numbers update within ~½ sec after typing stops (debounced server call — confirm no lag/flicker).
+- ☐ As **corporate admin**: "Internal (cost + profit)" shows Gate Guard cost / margin; "Dealer view (preview)" hides them.
+- ☐ As a **dealer/non-admin** login: only Gate Guard Fee, Suggested Retail, and Your Expected Profit show — **no GG cost, no margin** anywhere.
+- ☐ **Security check (critical):** open browser DevTools → Sources/Network on the calculator page as a dealer. The numbers `89.25`, `11.10`, `2.25`, `4.50` and the margin math must **NOT** appear in any client JS. They should only be in the `/api/pricing/compute` response, and only when the logged-in user is a corporate admin.
+- ☐ `/api/pricing/compute` called directly by a dealer session returns a result with **no** `ggCost`/`margin` fields even if `viewAsDealer:false` is forced in the body.
+- ☐ Opportunity Financials payback/MRR still populate from the calculator output.
+
+**Depends on infra:** none (pure compute). Clerk role/tier metadata must be set for the internal view to appear.
+
+---
 *(new builds appended below as they ship)*
