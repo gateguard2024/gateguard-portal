@@ -46,6 +46,7 @@ type JobCard = {
   actionLabel: string
   badgeKey?: keyof NonNullable<JobsWorkbenchData['stats']>
   badgeLabel?: string
+  opsTab?: string   // when set, the card opens the Operations Hub on this tab
 }
 
 const JOBS_LABELS: Record<JobsFocus, string> = {
@@ -58,10 +59,10 @@ const JOBS_LABELS: Record<JobsFocus, string> = {
 }
 
 const JOB_CARDS: JobCard[] = [
-  { focus: 'scheduledToday', title: 'Today’s Jobs', subtitle: 'See site visits, scheduled work, and appointments for today.', hex: '#00C8FF', glyph: 'job-calendar', actionLabel: 'Open →', badgeKey: 'scheduledToday', badgeLabel: 'Today' },
-  { focus: 'needsAttention', title: 'Needs Attention', subtitle: 'Jobs that are overdue, blocked, or waiting on a next step.', hex: '#007CFF', glyph: 'job-alert', actionLabel: 'Open →', badgeKey: 'needsAttention' },
-  { focus: 'recentlyUpdated', title: 'Schedule Visit', subtitle: 'Plan a site visit, assign a time, and keep the job moving.', hex: '#34D399', glyph: 'job-calendar', actionLabel: 'Open →', badgeKey: 'recentlyUpdated', badgeLabel: 'Field' },
-  { focus: 'openJobs', title: 'Open Jobs', subtitle: 'Review active jobs, recent updates, files, tasks, and work orders.', hex: '#FBBF24', glyph: 'job-open', actionLabel: 'Open →', badgeKey: 'openJobs', badgeLabel: 'Active' },
+  { focus: 'openJobs', title: 'Operations Hub', subtitle: 'Dashboard, jobs board, parts, sites, techs — everything in one place.', hex: '#00C8FF', glyph: 'job-open', actionLabel: 'Open →', opsTab: 'Dashboard' },
+  { focus: 'openJobs', title: 'Work Orders', subtitle: 'Create, assign, schedule, and track every job.', hex: '#007CFF', glyph: 'job-alert', actionLabel: 'Open →', badgeKey: 'openJobs', badgeLabel: 'Active', opsTab: 'Work Orders' },
+  { focus: 'needsAttention', title: 'Requests', subtitle: 'Incoming requests from sites — turn them into jobs.', hex: '#FBBF24', glyph: 'job-alert', actionLabel: 'Open →', opsTab: 'Requests' },
+  { focus: 'scheduledToday', title: 'Jobs Calendar', subtitle: 'What’s scheduled, by day, week, or month.', hex: '#34D399', glyph: 'job-calendar', actionLabel: 'Open →', badgeKey: 'scheduledToday', badgeLabel: 'Today', opsTab: 'Calendar' },
 ]
 
 function rgb(hex: string): string {
@@ -212,6 +213,7 @@ function JobsDetailShell({ title, subtitle, onClose, children, actions }: { titl
 export function JobsSurface({ onOpenDispatch }: { onOpenDispatch?: () => void } = {}) {
   const [busy, setBusy] = useState(false)
   const [showOps, setShowOps] = useState(false)
+  const [opsTab, setOpsTab] = useState<string>('Dashboard')
   const [status, setStatus] = useState<string | null>(null)
   const [jobsWorkbench, setJobsWorkbench] = useState<JobsWorkbenchData | null>(null)
   const [jobsFocus, setJobsFocus] = useState<JobsFocus>('needsAttention')
@@ -356,7 +358,7 @@ export function JobsSurface({ onOpenDispatch }: { onOpenDispatch?: () => void } 
         <div className="fixed inset-0 z-[95] overflow-y-auto px-4 py-5 sm:py-6" style={{ background: 'radial-gradient(ellipse at 50% -8%, rgba(0,124,255,0.12), transparent 55%), linear-gradient(180deg, #0a1430 0%, #060b1a 60%, #04060f 100%)', backdropFilter: 'blur(8px)' }}>
           <div className="mx-auto w-full max-w-6xl">
             <NexusGlassBackButton label="Back to Jobs" onClick={() => setShowOps(false)} />
-            <div className="mt-4"><OperationsHub embedded /></div>
+            <div className="mt-4"><OperationsHub embedded initialTab={opsTab} /></div>
           </div>
         </div>
       )}
@@ -372,14 +374,14 @@ export function JobsSurface({ onOpenDispatch }: { onOpenDispatch?: () => void } 
                 <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>Open today’s jobs, handle what needs attention, schedule site work, or review active work.</p>
               </div>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={() => setShowOps(true)} className="rounded-full px-4 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(135deg, rgba(52,211,153,0.30), rgba(0,200,255,0.14))', border: '1px solid rgba(52,211,153,0.34)', color: '#bff7e0', boxShadow: '0 0 18px rgba(52,211,153,0.16)' }}>🔧 Operations Hub →</button>
+                <button type="button" onClick={() => { setOpsTab('Dashboard'); setShowOps(true) }} className="rounded-full px-4 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(135deg, rgba(52,211,153,0.30), rgba(0,200,255,0.14))', border: '1px solid rgba(52,211,153,0.34)', color: '#bff7e0', boxShadow: '0 0 18px rgba(52,211,153,0.16)' }}>🔧 Operations Hub →</button>
                 <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(52,211,153,0.12)', color: 'rgba(134,239,172,0.96)', border: '1px solid rgba(52,211,153,0.28)', boxShadow: '0 0 18px rgba(52,211,153,0.10)' }}>{busy ? 'Loading…' : 'Field Ops'}</div>
               </div>
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {JOB_CARDS.map(card => (
-                <JobCardButton key={card.focus} card={card} count={card.badgeKey ? jobsWorkbench?.stats?.[card.badgeKey] ?? 0 : 0} onClick={() => void openJobsWorkbench(card.focus)} />
+                <JobCardButton key={card.title} card={card} count={card.badgeKey ? jobsWorkbench?.stats?.[card.badgeKey] ?? 0 : 0} onClick={() => { setOpsTab(card.opsTab ?? 'Dashboard'); setShowOps(true) }} />
               ))}
             </div>
 

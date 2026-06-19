@@ -145,6 +145,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
   }
 
+  // When the job is completed, free the assigned tech back to "available"
+  if (body.status === 'completed') {
+    const freedTechId = (data as Record<string, unknown>).assignee_id ?? (current as Record<string, unknown> | null)?.assignee_id
+    if (freedTechId) {
+      await supabase
+        .from('technicians')
+        .update({ current_job_id: null, status: 'available' })
+        .eq('id', freedTechId as string)
+    }
+  }
+
   // ── Email notification ────────────────────────────────────────────
   // Only fire when status actually changed, the new status has an event,
   // and the caller has not explicitly opted out (send_notifications defaults to true)

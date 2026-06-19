@@ -58,8 +58,8 @@ const TAB_HINT: Record<Tab, string> = {
   Playbooks: "Step-by-step templates to assign",
 };
 
-export function OperationsHub({ embedded }: { embedded?: boolean } = {}) {
-  const [page, setPage] = useState<Tab>("Dashboard");
+export function OperationsHub({ embedded, initialTab }: { embedded?: boolean; initialTab?: string } = {}) {
+  const [page, setPage] = useState<Tab>(initialTab && (TABS as readonly string[]).includes(initialTab) ? initialTab as Tab : "Dashboard");
   const [jobs, setJobs] = useState<RealWO[]>([]);
   const [techs, setTechs] = useState<RealTech[]>([]);
   const [loading, setLoading] = useState(true);
@@ -134,16 +134,33 @@ function Dashboard({ jobs, techs, loading, onOpen, onUpdate }: { jobs: RealWO[];
   </div>;
 }
 
-/* ── Work Orders: create + list + board ──────────────────────────────────── */
+/* ── Work Orders: create + search/filter + list + board ──────────────────── */
+const WO_FILTERS = [
+  { key: "all", label: "All" },
+  { key: "open", label: "Open" },
+  { key: "unassigned", label: "Unassigned" },
+  { key: "urgent", label: "Urgent" },
+  { key: "done", label: "Done" },
+];
 function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen }: { jobs: RealWO[]; techs: RealTech[]; loading: boolean; onCreate: (p: Record<string, unknown>) => void; onUpdate: (id: string, patch: Record<string, unknown>) => void; onOpen: (id: string) => void }) {
   const [showNew, setShowNew] = useState(false);
-  const [form, setForm] = useState({ customer_name: "", title: "", priority: "medium", assignee_id: "" });
+  const [form, setForm] = useState({ customer_name: "", title: "", priority: "medium", assignee_id: "", scheduled_date: "" });
+  const [q, setQ] = useState("");
+  const [filter, setFilter] = useState("all");
   function submit() {
     if (!form.customer_name.trim()) return;
     const t = techs.find(x => x.id === form.assignee_id);
-    onCreate({ customer_name: form.customer_name.trim(), title: form.title.trim() || form.customer_name.trim(), priority: form.priority, assignee_id: form.assignee_id || null, assignee_name: t?.name ?? null });
-    setForm({ customer_name: "", title: "", priority: "medium", assignee_id: "" }); setShowNew(false);
+    onCreate({ customer_name: form.customer_name.trim(), title: form.title.trim() || form.customer_name.trim(), priority: form.priority, assignee_id: form.assignee_id || null, assignee_name: t?.name ?? null, scheduled_date: form.scheduled_date || null });
+    setForm({ customer_name: "", title: "", priority: "medium", assignee_id: "", scheduled_date: "" }); setShowNew(false);
   }
+  const shown = jobs.filter(w => {
+    if (filter === "unassigned" && w.assignedTechId) return false;
+    if (filter === "urgent" && !["Urgent", "High"].includes(w.priority)) return false;
+    if (filter === "done" && bucketOf(w.status) !== "Done") return false;
+    if (filter === "open" && bucketOf(w.status) === "Done") return false;
+    if (q && !`${w.woNumber ?? ""} ${w.title ?? ""} ${w.property ?? ""} ${w.assignedTech ?? ""}`.toLowerCase().includes(q.toLowerCase())) return false;
+    return true;
+  });
   return <div style={{ display: "grid", gap: 16 }}>
     <Card>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -157,19 +174,27 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen }: { jobs
           <select value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })} style={{ ...sel, flex: 1 }}>{["low", "medium", "high", "critical"].map(p => <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)} priority</option>)}</select>
           <select value={form.assignee_id} onChange={e => setForm({ ...form, assignee_id: e.target.value })} style={{ ...sel, flex: 1 }}><option value="">Unassigned</option>{techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
         </div>
+        <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 3 }}>Schedule date (shows on Calendar)</div><input type="date" value={form.scheduled_date} onChange={e => setForm({ ...form, scheduled_date: e.target.value })} style={input} /></div>
         <button onClick={submit} disabled={!form.customer_name.trim()} style={{ ...btn, opacity: form.customer_name.trim() ? 1 : 0.5 }}>Create work order</button>
       </div>}
-      {loading ? <Small>Loading…</Small> : jobs.length === 0 ? <Small>No work orders yet. Tap “+ New”.</Small> : jobs.map(wo => <WORow key={wo.id} wo={wo} techs={techs} onUpdate={onUpdate} onOpen={onOpen} />)}
+      {/* search + filter chips */}
+      <input placeholder="Search WO#, site, tech…" value={q} onChange={e => setQ(e.target.value)} style={{ ...input, padding: 10, marginBottom: 8 }} />
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+        {WO_FILTERS.map(f => { const on = filter === f.key; const n = f.key === "all" ? jobs.length : jobs.filter(w => f.key === "unassigned" ? !w.assignedTechId : f.key === "urgent" ? ["Urgent", "High"].includes(w.priority) : f.key === "done" ? bucketOf(w.status) === "Done" : bucketOf(w.status) !== "Done").length;
+          return <button key={f.key} onClick={() => setFilter(f.key)} style={{ ...sel, cursor: "pointer", padding: "5px 11px", background: on ? "rgba(0,200,255,0.18)" : "rgba(255,255,255,.06)", border: on ? "1px solid rgba(0,200,255,0.42)" : "1px solid rgba(255,255,255,.14)", color: "white" }}>{f.label} <span style={{ color: "rgba(255,255,255,0.45)" }}>{n}</span></button>; })}
+      </div>
+      {loading ? <Small>Loading…</Small> : jobs.length === 0 ? <Small>No work orders yet. Tap “+ New”.</Small> : shown.length === 0 ? <Small>No work orders match.</Small> : shown.map(wo => <WORow key={wo.id} wo={wo} techs={techs} onUpdate={onUpdate} onOpen={onOpen} />)}
     </Card>
     <Board jobs={jobs} onOpen={onOpen} />
   </div>;
 }
 
 function WORow({ wo, techs, onUpdate, onOpen }: { wo: RealWO; techs: RealTech[]; onUpdate: (id: string, patch: Record<string, unknown>) => void; onOpen: (id: string) => void }) {
+  const sched = wo.eta && wo.eta !== "TBD" ? String(wo.eta).slice(0, 10) : null;
   return <div style={{ padding: 12, borderRadius: 12, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.08)", marginBottom: 8 }}>
     <div onClick={() => onOpen(wo.id)} style={{ cursor: "pointer" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><b>{wo.woNumber || wo.title || "Work Order"}</b><Badge tone={wo.priority === "Urgent" ? "urgent" : wo.priority === "High" ? "high" : "default"}>{wo.priority}</Badge></div>
-      <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, margin: "4px 0 8px" }}>{wo.property || "—"} <span style={{ color: "rgba(255,255,255,0.3)" }}>· tap for detail</span></p>
+      <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, margin: "4px 0 8px" }}>{wo.property || "—"}{sched ? ` · 📅 ${sched}` : ""} <span style={{ color: "rgba(255,255,255,0.3)" }}>· tap for detail</span></p>
     </div>
     <div onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       <select value={bucketOf(wo.status)} onChange={e => onUpdate(wo.id, { status: COL_TO_DB[e.target.value] })} style={sel}>{JOB_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}</select>
@@ -324,6 +349,14 @@ function CalendarView({ onOpenWO }: { onOpenWO: (id: string) => void }) {
 function genTechCode(initials: string) { return `GG-${(initials || "GG").toUpperCase().slice(0, 2)}-${Math.floor(1000 + Math.random() * 9000)}`; }
 const TECH_LEVELS = ["Apprentice", "Tech", "Senior Tech", "Lead", "Supervisor"];
 const TECH_STATUS = ["available", "offline", "on_job"];
+const WEEK_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+type TimeOff = { start: string; end: string; reason: string };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function techOffToday(t: any): TimeOff | null {
+  const today = ymd(new Date());
+  const list: TimeOff[] = t?.schedule?.time_off ?? [];
+  return list.find(o => o.start && o.end && o.start <= today && today <= o.end) ?? null;
+}
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function Techs() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -334,6 +367,7 @@ function Techs() {
   const [copied, setCopied] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [edit, setEdit] = useState<Record<string, string>>({});
+  const [sched, setSched] = useState<{ days: string[]; start: string; end: string; timeOff: TimeOff[] }>({ days: [], start: "08:00", end: "17:00", timeOff: [] });
   const [savingId, setSavingId] = useState<string | null>(null);
   const load = React.useCallback(() => { setLoading(true); fetch("/api/dispatch/technicians").then(r => r.json()).then(d => setTechs(d.technicians ?? [])).catch(() => {}).finally(() => setLoading(false)); }, []);
   useEffect(() => { load(); }, [load]);
@@ -350,13 +384,19 @@ function Techs() {
   }
   function copy(code: string) { navigator.clipboard?.writeText(code).then(() => { setCopied(code); setTimeout(() => setCopied(null), 1500); }).catch(() => {}); }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function startEdit(t: any) { setEditId(t.id); setEdit({ name: t.name ?? "", phone: t.phone ?? "", email: t.email ?? "", role: t.role ?? "Tech", level: t.level ?? "", status: t.status ?? "offline", skills: Array.isArray(t.skills) ? t.skills.join(", ") : (t.skills ?? "") }); }
+  function startEdit(t: any) {
+    setEditId(t.id);
+    setEdit({ name: t.name ?? "", phone: t.phone ?? "", email: t.email ?? "", role: t.role ?? "Tech", level: t.level ?? "", status: t.status ?? "offline", skills: Array.isArray(t.skills) ? t.skills.join(", ") : (t.skills ?? "") });
+    const sc = t.schedule ?? {};
+    setSched({ days: Array.isArray(sc.days) ? sc.days : [], start: sc.start || "08:00", end: sc.end || "17:00", timeOff: Array.isArray(sc.time_off) ? sc.time_off : [] });
+  }
   async function saveEdit(id: string) {
     setSavingId(id);
     const payload: Record<string, unknown> = {
       name: edit.name?.trim(), phone: edit.phone?.trim() || null, email: edit.email?.trim() || null,
       role: edit.role || "Tech", level: edit.level || null, status: edit.status || "offline",
       skills: (edit.skills || "").split(",").map(s => s.trim()).filter(Boolean),
+      schedule: { days: sched.days, start: sched.start, end: sched.end, time_off: sched.timeOff.filter(o => o.start && o.end) },
     };
     if (edit.name?.trim()) payload.initials = edit.name.trim().split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
     await fetch(`/api/dispatch/technicians/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).catch(() => {});
@@ -382,9 +422,12 @@ function Techs() {
     {loading ? <Card><Small>Loading…</Small></Card> : techs.length === 0 ? <Card><Small>No technicians yet. Tap “+ Add tech”.</Small></Card> :
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px,1fr))", gap: 14 }}>
         {techs.map(t => <Card key={t.id}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, cursor: "pointer" }} onClick={() => editId === t.id ? setEditId(null) : startEdit(t)}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, cursor: "pointer", alignItems: "center" }} onClick={() => editId === t.id ? setEditId(null) : startEdit(t)}>
             <b style={{ fontSize: 15 }}>{t.name}</b>
-            <Badge tone={t.status === "available" ? "good" : "default"}>{t.level || t.role || "Tech"}</Badge>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              {techOffToday(t) && <Badge tone="urgent">Off: {techOffToday(t)?.reason || "PTO"}</Badge>}
+              <Badge tone={t.status === "available" ? "good" : "default"}>{t.level || t.role || "Tech"}</Badge>
+            </div>
           </div>
           {(t.phone || t.email) && <Small>{[t.phone, t.email].filter(Boolean).join(" · ")}</Small>}
           {Array.isArray(t.skills) && t.skills.length > 0 && <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 6 }}>{t.skills.map((s: string, i: number) => <span key={i} style={{ fontSize: 10, padding: "2px 7px", borderRadius: 999, background: "rgba(99,102,241,0.18)", border: "1px solid rgba(99,102,241,0.3)" }}>{s}</span>)}</div>}
@@ -401,6 +444,35 @@ function Techs() {
             </div>
             <input placeholder="Role / title (e.g. Install Tech)" value={edit.role} onChange={e => setEdit({ ...edit, role: e.target.value })} style={{ ...input, padding: 9, fontSize: 13 }} />
             <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 3 }}>Skills / certifications (comma-separated)</div><input placeholder="Brivo, fiber splicing, OSHA-10" value={edit.skills} onChange={e => setEdit({ ...edit, skills: e.target.value })} style={{ ...input, padding: 9, fontSize: 13 }} /></div>
+
+            {/* Working days + hours */}
+            <div style={{ paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+              <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 5 }}>Working days</div>
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                {WEEK_DAYS.map(d => { const on = sched.days.includes(d); return <button key={d} onClick={() => setSched(s => ({ ...s, days: on ? s.days.filter(x => x !== d) : [...s.days, d] }))} style={{ ...sel, cursor: "pointer", padding: "4px 9px", background: on ? "rgba(0,200,255,0.18)" : "rgba(255,255,255,.05)", border: on ? "1px solid rgba(0,200,255,0.42)" : "1px solid rgba(255,255,255,.12)", color: "white" }}>{d}</button>; })}
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
+                <span style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Hours</span>
+                <input type="time" value={sched.start} onChange={e => setSched(s => ({ ...s, start: e.target.value }))} style={{ ...sel, padding: 8 }} />
+                <span style={{ color: "rgba(255,255,255,0.4)" }}>to</span>
+                <input type="time" value={sched.end} onChange={e => setSched(s => ({ ...s, end: e.target.value }))} style={{ ...sel, padding: 8 }} />
+              </div>
+            </div>
+
+            {/* Time off / unavailable */}
+            <div style={{ paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
+                <span style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Time off / unavailable (vacation, PTO)</span>
+                <button onClick={() => setSched(s => ({ ...s, timeOff: [...s.timeOff, { start: "", end: "", reason: "" }] }))} style={{ ...btn, background: "rgba(255,255,255,0.08)", padding: "4px 10px", fontSize: 12 }}>+ Add</button>
+              </div>
+              {sched.timeOff.length === 0 ? <Small>None — tech is available on working days.</Small> : sched.timeOff.map((o, i) => <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+                <input type="date" value={o.start} onChange={e => setSched(s => ({ ...s, timeOff: s.timeOff.map((x, j) => j === i ? { ...x, start: e.target.value } : x) }))} style={{ ...sel, padding: 7 }} />
+                <input type="date" value={o.end} onChange={e => setSched(s => ({ ...s, timeOff: s.timeOff.map((x, j) => j === i ? { ...x, end: e.target.value } : x) }))} style={{ ...sel, padding: 7 }} />
+                <input placeholder="Reason" value={o.reason} onChange={e => setSched(s => ({ ...s, timeOff: s.timeOff.map((x, j) => j === i ? { ...x, reason: e.target.value } : x) }))} style={{ ...input, padding: 7, fontSize: 12, flex: 1, minWidth: 80 }} />
+                <button onClick={() => setSched(s => ({ ...s, timeOff: s.timeOff.filter((_, j) => j !== i) }))} style={{ ...btn, background: "rgba(255,80,80,0.14)", padding: "0 10px" }}>×</button>
+              </div>)}
+            </div>
+
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => saveEdit(t.id)} disabled={savingId === t.id} style={{ ...btn, flex: 1, opacity: savingId === t.id ? 0.6 : 1 }}>{savingId === t.id ? "Saving…" : "Save"}</button>
               <button onClick={() => setEditId(null)} style={{ ...btn, background: "rgba(255,255,255,0.06)" }}>Cancel</button>
@@ -1035,6 +1107,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <div style={{ flex: 1, minWidth: 140 }}><Small>Status</Small><select value={bucketOf(wo.status)} onChange={e => patchField({ status: COL_TO_DB[e.target.value] })} style={{ ...sel, width: "100%", marginTop: 4 }}>{JOB_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}</select></div>
             <div style={{ flex: 1, minWidth: 140 }}><Small>Assigned to</Small><select value={wo.assignee_id ?? ""} onChange={e => { const t = techs.find(x => x.id === e.target.value); patchField({ assignee_id: e.target.value || null, assignee_name: t?.name ?? null }); }} style={{ ...sel, width: "100%", marginTop: 4 }}><option value="">Unassigned</option>{techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
+            <div style={{ flex: 1, minWidth: 140 }}><Small>Schedule date</Small><input type="date" value={wo.scheduled_date ? String(wo.scheduled_date).slice(0, 10) : ""} onChange={e => patchField({ scheduled_date: e.target.value || null })} style={{ ...sel, width: "100%", marginTop: 4 }} /></div>
           </div>
         </Card>
 
