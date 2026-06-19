@@ -592,6 +592,10 @@ function TechTool() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [openJob,    setOpenJob]    = useState<any>(null)
   const [jobHours,   setJobHours]   = useState('')
+  const [scanBusy,   setScanBusy]   = useState(false)
+  const [scanMsg,    setScanMsg]    = useState<string | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [scanResult, setScanResult] = useState<any>(null)
   const [allTechs,   setAllTechs]   = useState<{ id: string; name: string; initials: string }[]>([])
   const [gpsGranted, setGpsGranted] = useState(false)
 
@@ -702,13 +706,14 @@ function TechTool() {
     await fetch(`/api/maintenance/${woId}`, { method: 'PATCH', headers: apiHeaders(), body: JSON.stringify({ status }) }).catch(() => {})
     refreshOpenJob(woId); loadMyJobs()
   }
-  async function uploadJobPhoto(woId: string, file: File) {
+  async function uploadJobPhoto(woId: string, file: File, stage: string = 'general') {
     if (!file) return
     try {
       const up = await fetch(`/api/maintenance/${woId}/photo-upload-url`, { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ filename: file.name }) }).then(r => r.json())
       if (up?.signedUrl) {
         await fetch(up.signedUrl, { method: 'PUT', headers: { 'Content-Type': file.type || 'image/jpeg' }, body: file })
-        await fetch(`/api/maintenance/${woId}/photos`, { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ file_url: up.publicUrl, caption: file.name, technician_name: techName }) }).catch(() => {})
+        // tag the photo's stage in file_name (parsed on display): "before|name.jpg"
+        await fetch(`/api/maintenance/${woId}/photos`, { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ file_url: up.publicUrl, file_name: `${stage}|${file.name}`, caption: stage, technician_name: techName }) }).catch(() => {})
       }
     } catch (_) { /* ignore */ }
     refreshOpenJob(woId)
@@ -717,6 +722,45 @@ function TechTool() {
     if (!hours || hours <= 0) return
     await fetch(`/api/maintenance/${woId}/time`, { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ hours, technician_name: techName }) }).catch(() => {})
     refreshOpenJob(woId)
+  }
+  // ── Scan device nameplate/QR → identify → add to site ───────────────────────
+  function findMatchProduct(model: string | null, brand: string | null): Product | null {
+    if (!model && !brand) return null
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const m = norm(model || '')
+    if (!m) return null
+    return products.find(p => {
+      const sku = norm(p.sku || ''); const name = norm(p.name || '')
+      return (sku && (sku.includes(m) || m.includes(sku))) || (name && name.includes(m))
+    }) ?? null
+  }
+  async function scanAsset(file: File) {
+    if (!file || scanBusy) return
+    setScanBusy(true); setScanMsg(null)
+    try {
+      const b64: string = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(file) })
+      const d = await fetch('/api/tech/scan-asset', { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ image: b64 }) }).then(r => r.json())
+      if (d.error) throw new Error(d.error)
+      const a = d.asset || {}
+      const matched = findMatchProduct(a.model, a.brand)
+      setScanResult({
+        brand: a.brand || matched?.brand || '', model: a.model || matched?.sku || '',
+        serial: a.serial || '', mac: a.mac || '',
+        name: a.name || matched?.name || [a.brand, a.model].filter(Boolean).join(' ') || 'Device',
+        category: a.category || matched?.category || '',
+        product_id: matched?.id || null, manual_url: matched?.manual_url || null, matchedName: matched?.name || null,
+      })
+    } catch (e) { setScanMsg(e instanceof Error ? e.message : 'Scan failed — try again') }
+    setScanBusy(false)
+  }
+  async function addScannedAsset(siteId: string) {
+    if (!scanResult || !siteId) { setScanMsg('No site linked to this job — cannot add.'); return }
+    setScanBusy(true)
+    await fetch(`/api/sites/${siteId}/assets`, { method: 'POST', headers: apiHeaders(), body: JSON.stringify({
+      product_name: scanResult.name, product_id: scanResult.product_id, product_category: scanResult.category || null,
+      serial_number: scanResult.serial || null, mac_address: scanResult.mac || null, status: 'active',
+    }) }).catch(() => {})
+    setScanBusy(false); setScanResult(null); setScanMsg('Added to site equipment ✓')
   }
 
   // ── GPS ping helper — fire-and-forget, never blocks UI ───────────────────
@@ -1077,20 +1121,78 @@ function TechTool() {
                 })}
               </div>
 
-              {/* Photos (proof) */}
+              {/* Photos (proof) — Before / During / After quick-capture */}
+              {(() => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const allPhotos = (openJob._photos ?? []) as any[]
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const stageOf = (p: any) => { const s = String(p.file_name ?? p.caption ?? '').split('|')[0].toLowerCase(); return ['before', 'during', 'after'].includes(s) ? s : 'general' }
+                const STAGES: { key: string; label: string; tip: string }[] = [
+                  { key: 'before', label: 'Before', tip: 'Arrival / existing condition' },
+                  { key: 'during', label: 'During', tip: 'Work in progress' },
+                  { key: 'after', label: 'After', tip: 'Finished install' },
+                ]
+                return (
+                  <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                    <span style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.1em' }}>PHOTOS ({allPhotos.length})</span>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      {STAGES.map(st => {
+                        const count = allPhotos.filter(p => stageOf(p) === st.key).length
+                        return (
+                          <label key={st.key} style={{ flex: 1, minHeight: 56, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '8px 4px', borderRadius: 10, cursor: 'pointer', background: count > 0 ? 'rgba(0,200,255,0.10)' : 'rgba(255,255,255,0.05)', border: `1px solid ${count > 0 ? 'rgba(0,200,255,0.34)' : C.border}` }} title={st.tip}>
+                            <span style={{ color: count > 0 ? C.cyan : C.textSecondary, fontSize: 18, lineHeight: 1 }}>📷</span>
+                            <span style={{ fontFamily: MONO, fontSize: 9, fontWeight: 700, color: count > 0 ? C.cyan : C.textSecondary, letterSpacing: '0.05em' }}>{st.label}{count > 0 ? ` ·${count}` : ''}</span>
+                            <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadJobPhoto(openJob.id, f, st.key); e.target.value = '' }} />
+                          </label>
+                        )
+                      })}
+                    </div>
+                    {allPhotos.length > 0 && (
+                      <div style={{ marginTop: 10 }}>
+                        {STAGES.concat([{ key: 'general', label: 'Other', tip: '' }]).map(st => {
+                          const ph = allPhotos.filter(p => stageOf(p) === st.key)
+                          if (ph.length === 0) return null
+                          return (
+                            <div key={st.key} style={{ marginBottom: 8 }}>
+                              <div style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.1em', marginBottom: 4 }}>{st.label.toUpperCase()}</div>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px,1fr))', gap: 6 }}>
+                                {ph.map((p, i) => <img key={p.id || i} src={p.file_url || p.url} alt="" style={{ width: '100%', height: 60, objectFit: 'cover', borderRadius: 8 }} />)}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* Scan device → add to site equipment */}
               <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, marginBottom: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.1em' }}>PHOTOS ({(openJob._photos ?? []).length})</span>
-                  <label style={{ fontFamily: MONO, fontSize: 9, color: C.blue, cursor: 'pointer' }}>+ ADD PHOTO
-                    <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadJobPhoto(openJob.id, f); e.target.value = '' }} />
+                  <span style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.1em' }}>ADD EQUIPMENT</span>
+                  <label style={{ fontFamily: MONO, fontSize: 9, color: C.cyan, cursor: 'pointer' }}>{scanBusy && !scanResult ? 'READING…' : '⌖ SCAN NAMEPLATE / QR'}
+                    <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) scanAsset(f); e.target.value = '' }} />
                   </label>
                 </div>
-                {(openJob._photos ?? []).length > 0 && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px,1fr))', gap: 6, marginTop: 8 }}>
-                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                    {(openJob._photos ?? []).map((p: any, i: number) => <img key={p.id || i} src={p.file_url || p.url} alt="" style={{ width: '100%', height: 60, objectFit: 'cover', borderRadius: 8 }} />)}
+                {!scanResult && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>Photograph a device label — we’ll read the make, model, serial & MAC and match the manual.</div>}
+                {scanResult && (
+                  <div style={{ marginTop: 10, display: 'grid', gap: 7 }}>
+                    {([['name', 'Name'], ['brand', 'Brand'], ['model', 'Model'], ['serial', 'Serial'], ['mac', 'MAC'], ['category', 'Category']] as [string, string][]).map(([k, label]) => (
+                      <div key={k}>
+                        <div style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.08em', marginBottom: 2 }}>{label.toUpperCase()}</div>
+                        <input value={scanResult[k] ?? ''} onChange={e => setScanResult({ ...scanResult, [k]: e.target.value })} style={{ width: '100%', boxSizing: 'border-box', background: C.bgInput, border: `1px solid ${C.border}`, borderRadius: 8, color: C.textPrimary, padding: 9, fontSize: 13 }} />
+                      </div>
+                    ))}
+                    {scanResult.matchedName && <div style={{ fontSize: 11, color: C.green }}>✓ Matched catalog: {scanResult.matchedName}{scanResult.manual_url ? ' · manual linked' : ''}</div>}
+                    {scanResult.manual_url && <a href={scanResult.manual_url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: C.cyan }}>📄 Open manual</a>}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                      <button onClick={() => addScannedAsset(openJob.site_id)} disabled={scanBusy} style={{ flex: 1, minHeight: 44, borderRadius: 10, background: C.cyan, color: '#06121c', border: 'none', fontFamily: MONO, fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>{scanBusy ? 'ADDING…' : '+ ADD TO SITE EQUIPMENT'}</button>
+                      <button onClick={() => setScanResult(null)} style={{ padding: '0 16px', minHeight: 44, borderRadius: 10, background: 'rgba(255,255,255,0.06)', color: C.textSecondary, border: `1px solid ${C.border}`, fontFamily: MONO, fontSize: 11, cursor: 'pointer' }}>✕</button>
+                    </div>
                   </div>
                 )}
+                {scanMsg && <div style={{ fontSize: 11, marginTop: 8, color: scanMsg.includes('✓') ? C.green : C.amber }}>{scanMsg}</div>}
               </div>
 
               {/* Log hours */}
