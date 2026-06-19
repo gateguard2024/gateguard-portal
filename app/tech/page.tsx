@@ -594,6 +594,7 @@ function TechTool() {
   const [jobHours,   setJobHours]   = useState('')
   const [scanBusy,   setScanBusy]   = useState(false)
   const [scanMsg,    setScanMsg]    = useState<string | null>(null)
+  const [briefLoading, setBriefLoading] = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [scanResult, setScanResult] = useState<any>(null)
   const [allTechs,   setAllTechs]   = useState<{ id: string; name: string; initials: string }[]>([])
@@ -700,7 +701,16 @@ function TechTool() {
     refreshOpenJob(woId)
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async function openJobDetail(job: any) { refreshOpenJob(job.id, job) }
+  async function openJobDetail(job: any) { await refreshOpenJob(job.id, job); fetchJobBrief(job.id) }
+  async function fetchJobBrief(woId: string) {
+    setBriefLoading(true)
+    try {
+      const d = await fetch(`/api/tech/job-brief/${woId}`, { headers: apiHeaders() }).then(r => r.json())
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setOpenJob((prev: any) => prev && prev.id === woId ? { ...prev, _brief: d.brief ?? null, _briefRecent: d.recent ?? [], _briefEquipment: d.equipment ?? [] } : prev)
+    } catch { /* brief optional */ }
+    setBriefLoading(false)
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function setJobStatus(woId: string, status: string) {
     await fetch(`/api/maintenance/${woId}`, { method: 'PATCH', headers: apiHeaders(), body: JSON.stringify({ status }) }).catch(() => {})
@@ -1089,6 +1099,15 @@ function TechTool() {
           {/* DETAIL */}
           {openJob && (
             <>
+              {/* AI pre-job brief */}
+              {(briefLoading || openJob._brief) && (
+                <div style={{ background: 'rgba(0,200,255,0.07)', border: '1px solid rgba(0,200,255,0.24)', borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                  <div style={{ fontFamily: MONO, fontSize: 9, color: C.cyan, letterSpacing: '0.1em', marginBottom: 4 }}>🤖 PRE-JOB BRIEF</div>
+                  {briefLoading && !openJob._brief
+                    ? <div style={{ fontSize: 12, color: C.textMuted }}>Preparing your brief…</div>
+                    : <div style={{ fontSize: 13, lineHeight: 1.5, color: C.textPrimary }}>{openJob._brief}</div>}
+                </div>
+              )}
               {openJob.site_access_notes && (
                 <div style={{ background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.30)', borderRadius: 12, padding: 12, marginBottom: 12 }}>
                   <div style={{ fontFamily: MONO, fontSize: 9, color: C.amber, letterSpacing: '0.1em' }}>🔑 ACCESS / GATE NOTES</div>
@@ -1202,7 +1221,7 @@ function TechTool() {
                 <button onClick={() => { logJobHours(openJob.id, Number(jobHours)); setJobHours('') }} disabled={!jobHours} style={{ padding: '8px 14px', borderRadius: 8, background: C.blue, color: '#fff', border: 'none', fontFamily: MONO, fontSize: 10, fontWeight: 700, cursor: jobHours ? 'pointer' : 'not-allowed', opacity: jobHours ? 1 : 0.5 }}>LOG</button>
               </div>
 
-              <button onClick={() => { setSymptom(openJob.title || ''); setConnectedDevices([]); setScreen('symptom') }} style={{ width: '100%', padding: 14, borderRadius: 12, background: 'rgba(0,200,255,0.12)', border: '1px solid rgba(0,200,255,0.34)', color: '#7dd3fc', fontFamily: MONO, fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.06em', marginBottom: 12 }}>🤖 GET AI TECH SUPPORT</button>
+              <button onClick={() => { setSymptom(openJob.title || ''); setConnectedDevices(((openJob._briefEquipment ?? []) as { product_name?: string }[]).map(e => e.product_name || '').filter(Boolean)); setScreen('symptom') }} style={{ width: '100%', padding: 14, borderRadius: 12, background: 'rgba(0,200,255,0.12)', border: '1px solid rgba(0,200,255,0.34)', color: '#7dd3fc', fontFamily: MONO, fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.06em', marginBottom: 12 }}>🤖 GET AI TECH SUPPORT</button>
 
               {/* Mark complete — proof gated */}
               {(() => {
