@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { stageForBucket, VETTING_OPTIONS, type ReviewPoint } from '@/lib/dealer-onboarding'
 
 type Bucket = 'draft' | 'needs_nda' | 'nda_sent' | 'nda_signed' | 'needs_agreement' | 'agreement_signed' | 'needs_compliance' | 'ready_to_approve' | 'live'
 
@@ -26,6 +27,9 @@ type DealerItem = {
   compliance_needed: boolean
   next_action?: string | null
   bucket: Bucket
+  channel_manager_name?: string | null
+  vetting_status?: string | null
+  reviews?: ReviewPoint[]
   resume_href: string
   open_href: string
 }
@@ -84,6 +88,22 @@ export function InternalDealerOnboardingBoard() {
   const [uploadingDoc, setUploadingDoc] = useState<'nda' | 'agreement' | null>(null)
   const ndaFileRef = useRef<HTMLInputElement>(null)
   const agreementFileRef = useRef<HTMLInputElement>(null)
+  const [cmDraft, setCmDraft] = useState('')
+  const [savingHealth, setSavingHealth] = useState(false)
+
+  // Save vetting (stage 1) / channel manager (stage 2) for a partner.
+  async function saveHealth(orgId: string, patch: Record<string, string>) {
+    setSavingHealth(true); setActionMessage(null)
+    try {
+      const res = await fetch('/api/nexus/internal/dealer-onboarding', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ org_id: orgId, ...patch }) })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.success === false) throw new Error(data?.message ?? 'Could not save.')
+      setActionMessage('Saved.')
+      await load()
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : 'Could not save.')
+    } finally { setSavingHealth(false) }
+  }
 
   async function load() {
     setLoading(true)
@@ -103,6 +123,11 @@ export function InternalDealerOnboardingBoard() {
   }
 
   useEffect(() => { void load() }, [])
+  // Keep the channel-manager input in sync with the selected dealer.
+  useEffect(() => {
+    const sel = items.find(i => i.id === selectedId)
+    setCmDraft(sel?.channel_manager_name ?? '')
+  }, [selectedId, items])
 
   async function sendDoc(item: DealerItem, kind: 'nda' | 'agreement') {
     setBusy(kind)
@@ -265,6 +290,47 @@ export function InternalDealerOnboardingBoard() {
             <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>NDA</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.nda_status}</div></div>
             <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>Agreement</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.agreement_status}</div></div>
             <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>Compliance</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.compliance_needed ? 'Needs review' : 'Looks OK'}</div></div>
+          </div>
+
+          {/* Partner health — 8-stage spec layer: vetting, channel manager, reviews */}
+          <div className="mt-4 rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="flex items-center justify-between">
+              <div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>Partner health</div>
+              <div className="text-[10px] font-semibold" style={{ color: '#C4B5FD' }}>Stage {stageForBucket(selected.bucket).n} of 8 — {stageForBucket(selected.bucket).label}</div>
+            </div>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {/* Vetting (stage 1) */}
+              <div>
+                <div className="mb-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Vetting</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {VETTING_OPTIONS.map(opt => {
+                    const on = (selected.vetting_status ?? 'not_started') === opt.value
+                    return <button key={opt.value} type="button" disabled={savingHealth} onClick={() => saveHealth(selected.id, { vetting_status: opt.value })} className="rounded-full px-2.5 py-1 text-[10px] font-semibold disabled:opacity-50" style={{ background: on ? `${opt.color}26` : 'rgba(255,255,255,0.05)', border: `1px solid ${on ? opt.color + '66' : 'rgba(255,255,255,0.1)'}`, color: on ? opt.color : 'rgba(255,255,255,0.6)' }}>{opt.label}</button>
+                  })}
+                </div>
+              </div>
+              {/* Channel manager (stage 2) */}
+              <div>
+                <div className="mb-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Channel Manager</div>
+                <div className="flex gap-1.5">
+                  <input value={cmDraft} onChange={e => setCmDraft(e.target.value)} placeholder="Assign a manager" className="min-w-0 flex-1 rounded-lg px-2.5 py-1.5 text-xs outline-none" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }} />
+                  <button type="button" disabled={savingHealth || cmDraft === (selected.channel_manager_name ?? '')} onClick={() => saveHealth(selected.id, { channel_manager_name: cmDraft.trim() })} className="rounded-lg px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-40" style={{ background: 'rgba(139,92,246,0.2)', border: '1px solid rgba(139,92,246,0.4)', color: '#ddd6fe' }}>Save</button>
+                </div>
+              </div>
+            </div>
+            {/* 30/60/90 reviews (stage 8) — live dealers only */}
+            {selected.bucket === 'live' && selected.reviews && selected.reviews.length > 0 && (
+              <div className="mt-3">
+                <div className="mb-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>30 / 60 / 90-day reviews</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {selected.reviews.map(r => {
+                    const c = r.state === 'overdue' ? '#F87171' : r.state === 'due' ? '#FBBF24' : '#34D399'
+                    const txt = r.state === 'overdue' ? 'overdue' : r.state === 'due' ? 'due now' : `due ${new Date(r.dueAt).toLocaleDateString()}`
+                    return <span key={r.day} className="rounded-full px-2.5 py-1 text-[10px] font-semibold" style={{ background: `${c}22`, border: `1px solid ${c}55`, color: c }}>{r.day}-day · {txt}</span>
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">

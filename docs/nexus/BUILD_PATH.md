@@ -24,8 +24,11 @@ Proposal step rebuilt as a 3-card flow (add products / custom line / review) tha
 ## Build 5 — Site lifecycle + activity timeline (#60, #59)  ✅ shipped
 Unified `/api/activity` feed + reusable `ActivityTimeline` (mounted on opportunities + site drawer); `lib/site-lifecycle.ts` activation rule (contract signed AND deposit paid) + migration 126 + auto-activate on deposit conversion. **Run migration 126 on beta then prod.**
 
-## Build 6 — Dealer onboarding + network (#48, #61, #10)
-8-stage dealer onboarding workflow; dealer recruitment pipeline (prospect→vetting→onboarding); fold Dealers + Feature Settings into the admin hub.
+## Build 6a — Dealer onboarding 8-stage layer (#48 core)  ✅ shipped
+`lib/dealer-onboarding.ts` (canonical 8 stages + bucket→stage map + 30/60/90 review schedule) + migration 127 (vetting + channel manager columns). Onboarding board now shows Stage N/8, editable Vetting (stage 1) + Channel Manager (stage 2), and 30/60/90 review badges for live dealers (stage 8). **Run migration 127 on beta then prod.**
+
+## Build 6b — Recruitment pipeline + Feature Settings into hub (#61, #10)  ← later
+Pre-org prospect/application funnel (prospect→vetting→onboarding) and fold Feature Settings into the admin hub as a board (currently routes out / "coming soon").
 
 ## Build 7 — Org/user admin (#75, #76, #77, #78, #64, #79)
 Assignable-orgs endpoint; Add-Person company picker; user deactivate/reactivate + move-org (glass); record sharing/co-working; retire legacy /admin/users + /admin/settings/features.

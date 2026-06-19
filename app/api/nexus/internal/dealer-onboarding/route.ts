@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { reviewSchedule } from '@/lib/dealer-onboarding'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,6 +39,9 @@ type OrgRow = {
   contact_email?: string | null
   contact_phone?: string | null
   partner_docs?: Array<{ type?: string; status?: string; expires_at?: string | null }> | null
+  channel_manager_name?: string | null
+  vetting_status?: string | null
+  vetting_notes?: string | null
 }
 
 type SigRow = {
@@ -134,9 +138,11 @@ export async function GET() {
       return NextResponse.json({ success: false, message: 'You do not have access to dealer onboarding.' }, { status: 403 })
     }
 
+    // select('*') is drift-proof: the onboarding columns (migration 127) may not
+    // exist yet, and naming a missing column would error the whole query.
     let orgQuery = supabase
       .from('organizations')
-      .select('id,name,org_tier,tier_label,parent_org_id,is_active,onboarding_complete,onboarded_at,created_at,email,phone,license_number,service_area_states,contact_name,contact_email,contact_phone,partner_docs')
+      .select('*')
       .in('org_tier', Array.from(PARTNER_TIERS))
       .order('created_at', { ascending: false })
       .limit(120)
@@ -197,6 +203,11 @@ export async function GET() {
         partner_docs: org.partner_docs ?? [],
         bucket,
         next_action: nextActionFor(org, bucket, nda, agreement),
+        // 8-stage spec layer (#48): vetting (stage 1), channel manager (stage 2),
+        // and computed 30/60/90 reviews (stage 8) from onboarded_at.
+        channel_manager_name: org.channel_manager_name ?? null,
+        vetting_status: org.vetting_status ?? null,
+        reviews: bucket === 'live' ? reviewSchedule(org.onboarded_at) : [],
         resume_href: `/admin/dealers/new?resume=${org.id}`,
         open_href: `/admin/dealers/${org.id}`,
       }
@@ -205,5 +216,49 @@ export async function GET() {
     return NextResponse.json({ success: true, items })
   } catch (error) {
     return NextResponse.json({ success: false, message: error instanceof Error ? error.message : 'Could not load dealer onboarding.' }, { status: 500 })
+  }
+}
+
+// PATCH — set vetting (stage 1) + channel manager (stage 2) on a partner org.
+// Body: { org_id, vetting_status?, vetting_notes?, channel_manager_name? }
+export async function PATCH(req: NextRequest) {
+  try {
+    const user = await getCurrentUser()
+    if (!user.isCorporate && !user.isMasterAgent && !user.isMasterDealer) {
+      return NextResponse.json({ success: false, message: 'You do not have access to dealer onboarding.' }, { status: 403 })
+    }
+    const body = await req.json().catch(() => ({}))
+    const org_id = body.org_id as string | undefined
+    if (!org_id) return NextResponse.json({ success: false, message: 'org_id is required' }, { status: 400 })
+
+    // Non-corporate can only edit their own subtree.
+    if (!user.isCorporate) {
+      const { data: org } = await supabase.from('organizations').select('id,parent_org_id').eq('id', org_id).maybeSingle()
+      if (!org || !(org.id === user.org_id || org.parent_org_id === user.org_id)) {
+        return NextResponse.json({ success: false, message: 'Not found' }, { status: 404 })
+      }
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const patch: Record<string, any> = {}
+    if (typeof body.vetting_status === 'string') patch.vetting_status = body.vetting_status
+    if (typeof body.vetting_notes === 'string') patch.vetting_notes = body.vetting_notes
+    if (typeof body.channel_manager_name === 'string') patch.channel_manager_name = body.channel_manager_name
+    if (Object.keys(patch).length === 0) return NextResponse.json({ success: false, message: 'Nothing to update' }, { status: 400 })
+
+    // Drift-safe: strip any column the live schema lacks (pre-migration) and retry.
+    let { error } = await supabase.from('organizations').update(patch).eq('id', org_id)
+    let guard = 0
+    while (error && (error.code === '42703' || error.code === 'PGRST204') && guard < 5) {
+      const col = /'([a-z_]+)' column/i.exec(error.message)?.[1] || /column "?([a-z_]+)"?/i.exec(error.message)?.[1]
+      if (!col || !(col in patch)) break
+      delete patch[col]; guard++
+      if (Object.keys(patch).length === 0) return NextResponse.json({ success: false, message: 'Run migration 127 to enable these fields.' }, { status: 400 })
+      ;({ error } = await supabase.from('organizations').update(patch).eq('id', org_id))
+    }
+    if (error) return NextResponse.json({ success: false, message: error.message }, { status: 500 })
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    return NextResponse.json({ success: false, message: error instanceof Error ? error.message : 'Update failed.' }, { status: 500 })
   }
 }

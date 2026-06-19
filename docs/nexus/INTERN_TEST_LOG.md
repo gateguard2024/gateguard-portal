@@ -109,4 +109,21 @@ Site lifecycle (#60) — where: **Operations → Locations → site drawer heade
 **Depends on infra:** migration 126 (`sites` lifecycle columns). Timeline needs none.
 
 ---
+
+## Build 6a — Dealer onboarding 8-stage layer  (pushed beta · YYYY-MM-DD)
+**⚠ Run migration 127 on beta Supabase first** (`127_dealer_onboarding.sql` — adds vetting + channel-manager columns to `organizations`).
+Where: **Internal (admin) → Dealer Onboarding** board → click a dealer.
+
+- ☐ The board still loads and the 9 stage buckets (Draft … Live Dealers) show counts (must work even before migration 127 runs).
+- ☐ Click any dealer → a **"Partner health"** card shows, with **"Stage N of 8"** matching where they are.
+- ☐ Click a **Vetting** chip (Not started / In progress / Cleared / Flagged) → it saves and stays selected after the board reloads. *(needs migration 127)*
+- ☐ Type a name in **Channel Manager**, click **Save** → it sticks after reload. *(needs migration 127)*
+- ☐ For a **Live** dealer, the card shows **30 / 60 / 90-day review** chips (green = upcoming, amber = due now, red = overdue) based on when they went live.
+- ☐ Before migration 127 runs: clicking a vetting chip shows a friendly "Run migration 127" message — it does NOT crash the board.
+- ☐ Send NDA / Countersign / Upload / Approve buttons still work exactly as before (no regression).
+- ☐ A non-corporate manager only sees dealers in their own network (no one else's).
+
+**Depends on infra:** migration 127 (`organizations` vetting + channel_manager columns).
+
+---
 *(new builds appended below as they ship)*
