@@ -164,8 +164,23 @@ Respond ONLY with valid JSON — no prose, no markdown fences. Exact schema:
   "unit": "string or null — measurement unit for measure steps (VAC, VDC, Ω, mA, ms)",
   "expected": "string or null — expected value/range for measure steps (e.g. '115±10', '>12', '0')",
   "choices": ["string"] or null,
-  "manual_ref": { "url": "string or null", "page": number or null, "section": "string or null" }
+  "manual_ref": { "url": "string or null", "page": number or null, "section": "string or null" },
+  "safety": [ { "level": "DANGER"|"WARNING"|"CAUTION"|"NOTICE", "hazard": "what the danger is", "consequence": "what happens if ignored", "avoidance": "how to stay safe" } ] or null
 }
+
+WRITE FOR A 5TH-GRADER (very important):
+  - Use short, everyday words and one action per step. Aim for a 5th–6th grade reading level.
+  - The FIRST time you use a technical word, add a plain meaning in parentheses, e.g. "the contactor (the big power switch)".
+  - Keep "text" simple and direct ("Turn off the power at the breaker."). Put the wiring/terminal detail in "detail".
+  - Still use the EXACT terminal/LED/error labels from the maps below — just explain them simply.
+
+SAFETY (ANSI Z535.6) — set "safety" whenever a step involves any hazard:
+  - DANGER = will kill/seriously hurt (live 120VAC mains, releasing a tensioned gate spring).
+  - WARNING = could kill/seriously hurt (gate pinch/crush points, working at height).
+  - CAUTION = minor/moderate injury (sharp edges, hot parts).
+  - NOTICE = no injury but could damage equipment (wrong polarity, over-torque).
+  - Each safety item MUST say the hazard, the consequence, and how to avoid it.
+  - Before any energized or spring-tension step, the FIRST safety item must be a DANGER/WARNING telling the tech to lock out power / restrain spring tension first.
 
 Step types:
   question  → single yes/no check
@@ -317,6 +332,26 @@ Relevant manual/KB content:\n${context}\n\nWhat is the next diagnostic step?`
         page:    chunks[0].page_number,
         section: chunks[0].section_title,
       }
+    }
+
+    // Attach a real manual figure to SHOW the diagram/part (graceful if none / table absent).
+    // Prefer a figure on the cited manual page; else a wiring figure for this device.
+    step.image_url = null
+    if (product_id) {
+      try {
+        const refPage = step.manual_ref?.page ?? chunks[0]?.page_number ?? null
+        let fig = null
+        if (refPage != null) {
+          const r = await db.from('manual_figures').select('image_url, caption, figure_type, page_number').eq('product_id', product_id).eq('page_number', refPage).limit(1).maybeSingle()
+          fig = r.data
+        }
+        if (!fig) {
+          const pref = step.type === 'measure' || step.type === 'action' ? 'wiring' : 'photo'
+          const r2 = await db.from('manual_figures').select('image_url, caption, figure_type').eq('product_id', product_id).eq('figure_type', pref).limit(1).maybeSingle()
+          fig = r2.data
+        }
+        if (fig?.image_url) { step.image_url = fig.image_url; step.image_caption = fig.caption ?? null }
+      } catch { /* manual_figures not ingested yet — UI falls back to the product photo */ }
     }
 
     // 5. Log session

@@ -94,7 +94,21 @@ interface Step {
   expected?:  string | null      // for measure (e.g. "115±10", ">12", "0")
   choices?:   string[] | null    // for select
   manual_ref: { url: string | null; page: number | null; section: string | null } | null
+  image_url?: string | null
+  image_caption?: string | null
+  safety?: { level: 'DANGER' | 'WARNING' | 'CAUTION' | 'NOTICE'; hazard: string; consequence: string; avoidance: string }[] | null
   session_id: string
+}
+
+// ANSI Z535.6 signal-word panels
+const ANSI: Record<string, { bg: string; fg: string; icon: string }> = {
+  DANGER:  { bg: '#C8102E', fg: '#fff', icon: '⛔' },
+  WARNING: { bg: '#FF6900', fg: '#1a1100', icon: '⚠️' },
+  CAUTION: { bg: '#FFD100', fg: '#1a1500', icon: '⚠️' },
+  NOTICE:  { bg: '#0072CE', fg: '#fff', icon: 'ℹ️' },
+}
+function readAloud(text: string) {
+  try { if (typeof window === 'undefined' || !window.speechSynthesis) return; window.speechSynthesis.cancel(); window.speechSynthesis.speak(new SpeechSynthesisUtterance(text)) } catch { /* no TTS */ }
 }
 
 interface HistoryItem { question: string; answer: string }
@@ -3149,7 +3163,31 @@ function TechTool() {
                 </div>
               </div>
 
-              <div style={S.stepText}>{current.text}</div>
+              {/* ANSI Z535.6 safety panels — shown ABOVE the action */}
+              {current.safety && current.safety.length > 0 && current.safety.map((s, i) => {
+                const a = ANSI[s.level] ?? ANSI.WARNING
+                return (
+                  <div key={i} style={{ borderRadius: 10, overflow: 'hidden', marginBottom: 10, border: `1px solid ${a.bg}` }}>
+                    <div style={{ background: a.bg, color: a.fg, fontFamily: MONO, fontWeight: 800, fontSize: 11, letterSpacing: '0.1em', padding: '6px 10px' }}>{a.icon} {s.level}</div>
+                    <div style={{ padding: '8px 10px', fontSize: 13, lineHeight: 1.45, color: C.textPrimary }}>
+                      <b>{s.hazard}</b> — {s.consequence}. <span style={{ color: C.textSecondary }}>Avoid: {s.avoidance}</span>
+                    </div>
+                  </div>
+                )
+              })}
+
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                <div style={{ ...S.stepText, flex: 1 }}>{current.text}</div>
+                <button onClick={() => readAloud(`${current.text}. ${current.detail || ''}`)} title="Read aloud" style={{ ...S.iconBtn, width: 38, height: 38, flexShrink: 0 }}>🔊</button>
+              </div>
+
+              {/* Image — real manual figure when ingested, else the device photo */}
+              {(current.image_url || selected?.image_url) && (
+                <a href={current.image_url || selected?.image_url || '#'} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: 10, borderRadius: 10, overflow: 'hidden', border: `1px solid ${C.border}`, background: '#fff' }}>
+                  <img src={current.image_url || selected?.image_url || ''} alt={current.image_caption || 'Reference'} style={{ width: '100%', maxHeight: 220, objectFit: 'contain', display: 'block' }} />
+                  {current.image_caption && <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, padding: '4px 8px', background: C.bgCard }}>{current.image_caption}</div>}
+                </a>
+              )}
 
               {current.detail && (
                 <div style={S.detailBlock}>{current.detail}</div>
