@@ -5,6 +5,7 @@ import { JobGlassWindow } from '@/components/nexus/windows/JobGlassWindow'
 import { type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 import { NexusActionCard } from '@/components/nexus/NexusActionCard'
 import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
+import { OperationsHub } from '@/components/nexus/OperationsHub'
 
 type JobsFocus = 'myJobs' | 'needsAttention' | 'scheduledToday' | 'openJobs' | 'recentlyUpdated' | 'search'
 type BoardAction = 'add_note' | 'create_task' | 'schedule_visit' | 'mark_complete' | null
@@ -210,6 +211,7 @@ function JobsDetailShell({ title, subtitle, onClose, children, actions }: { titl
 
 export function JobsSurface({ onOpenDispatch }: { onOpenDispatch?: () => void } = {}) {
   const [busy, setBusy] = useState(false)
+  const [showOps, setShowOps] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [jobsWorkbench, setJobsWorkbench] = useState<JobsWorkbenchData | null>(null)
   const [jobsFocus, setJobsFocus] = useState<JobsFocus>('needsAttention')
@@ -349,6 +351,15 @@ export function JobsSurface({ onOpenDispatch }: { onOpenDispatch?: () => void } 
 
   return (
     <section className="mt-9 w-full max-w-5xl">
+      {/* Operations Hub — opens inline (no page jump), seamless inside the Jobs tab. */}
+      {showOps && (
+        <div className="fixed inset-0 z-[95] overflow-y-auto px-4 py-5 sm:py-6" style={{ background: 'radial-gradient(ellipse at 50% -8%, rgba(0,124,255,0.12), transparent 55%), linear-gradient(180deg, #0a1430 0%, #060b1a 60%, #04060f 100%)', backdropFilter: 'blur(8px)' }}>
+          <div className="mx-auto w-full max-w-6xl">
+            <NexusGlassBackButton label="Back to Jobs" onClick={() => setShowOps(false)} />
+            <div className="mt-4"><OperationsHub embedded /></div>
+          </div>
+        </div>
+      )}
       <div className="rounded-[2rem] p-5 sm:p-6" style={{ background: 'radial-gradient(circle at 12% 0%, rgba(52,211,153,0.14), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.78), rgba(3,9,22,0.72))', border: '1px solid rgba(52,211,153,0.18)', boxShadow: '0 28px 90px rgba(0,0,0,0.38), 0 0 46px rgba(52,211,153,0.10), inset 0 1px 0 rgba(255,255,255,0.07)', backdropFilter: 'blur(26px)' }}>
         {selectedJobId && jobWindowData ? (
           <JobGlassWindow data={jobWindowData as Parameters<typeof JobGlassWindow>[0]['data']} onBack={closeJobWindow} onRefresh={refreshOpenJob} />
@@ -361,7 +372,7 @@ export function JobsSurface({ onOpenDispatch }: { onOpenDispatch?: () => void } 
                 <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>Open today’s jobs, handle what needs attention, schedule site work, or review active work.</p>
               </div>
               <div className="flex items-center gap-2">
-                <a href="/cmms" className="rounded-full px-4 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(135deg, rgba(52,211,153,0.30), rgba(0,200,255,0.14))', border: '1px solid rgba(52,211,153,0.34)', color: '#bff7e0', boxShadow: '0 0 18px rgba(52,211,153,0.16)' }}>🔧 Operations Hub →</a>
+                <button type="button" onClick={() => setShowOps(true)} className="rounded-full px-4 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(135deg, rgba(52,211,153,0.30), rgba(0,200,255,0.14))', border: '1px solid rgba(52,211,153,0.34)', color: '#bff7e0', boxShadow: '0 0 18px rgba(52,211,153,0.16)' }}>🔧 Operations Hub →</button>
                 {onOpenDispatch && (
                   <button type="button" onClick={onOpenDispatch} className="rounded-full px-4 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(135deg, rgba(0,124,255,0.30), rgba(0,200,255,0.14))', border: '1px solid rgba(0,200,255,0.34)', color: '#bfe9ff', boxShadow: '0 0 18px rgba(0,124,255,0.16)' }}>Open Dispatch board →</button>
                 )}
