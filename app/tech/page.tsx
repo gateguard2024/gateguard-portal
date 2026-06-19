@@ -18,7 +18,7 @@ import { CableGuide }   from '@/components/tech/CableGuide'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type StepType = 'question' | 'action' | 'measure' | 'select' | 'photo' | 'resolved' | 'escalate'
-type Screen   = 'pin' | 'identity' | 'home' | 'choice' | 'symptom' | 'diag' | 'wiring' | 'cable' | 'install' | 'survey' | 'survey_add' | 'survey_transcript' | 'training' | 'training_course' | 'netscout' | 'jobs'
+type Screen   = 'pin' | 'identity' | 'home' | 'devices' | 'choice' | 'symptom' | 'diag' | 'wiring' | 'cable' | 'install' | 'survey' | 'survey_add' | 'survey_transcript' | 'training' | 'training_course' | 'netscout' | 'jobs'
 
 // ─── Site Survey Types ────────────────────────────────────────────────────────
 interface SurveyDevice {
@@ -154,6 +154,41 @@ function NavIcon({ k, size = 22 }: { k: string; size?: number }) {
     train:    <><path d="M22 10 12 5 2 10l10 5 10-5z" {...p} /><path d="M6 12v5c0 1.1 2.7 3 6 3s6-1.9 6-3v-5" {...p} /></>,
   }
   return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">{paths[k] ?? null}</svg>
+}
+
+function dataUrlToFile(dataUrl: string, name: string): File {
+  const [head, b64] = dataUrl.split(',')
+  const mime = head.match(/:(.*?);/)?.[1] || 'image/png'
+  const bin = atob(b64); const arr = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
+  return new File([arr], name, { type: mime })
+}
+
+// Touch/mouse signature pad. Calls onSave(pngDataUrl) when the tech taps Save.
+function SignaturePad({ onSave, onCancel }: { onSave: (dataUrl: string) => void; onCancel: () => void }) {
+  const ref = useRef<HTMLCanvasElement | null>(null)
+  const drawing = useRef(false)
+  const dirty = useRef(false)
+  function pos(e: React.PointerEvent<HTMLCanvasElement>) {
+    const c = ref.current!; const r = c.getBoundingClientRect()
+    return { x: (e.clientX - r.left) * (c.width / r.width), y: (e.clientY - r.top) * (c.height / r.height) }
+  }
+  function start(e: React.PointerEvent<HTMLCanvasElement>) { drawing.current = true; const ctx = ref.current!.getContext('2d')!; const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.currentTarget.setPointerCapture(e.pointerId) }
+  function move(e: React.PointerEvent<HTMLCanvasElement>) { if (!drawing.current) return; const ctx = ref.current!.getContext('2d')!; const p = pos(e); ctx.lineTo(p.x, p.y); ctx.strokeStyle = '#0a1322'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke(); dirty.current = true }
+  function end() { drawing.current = false }
+  function clear() { const c = ref.current!; const ctx = c.getContext('2d')!; ctx.clearRect(0, 0, c.width, c.height); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); dirty.current = false }
+  useEffect(() => { clear() }, [])
+  return (
+    <div>
+      <canvas ref={ref} width={520} height={180} onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerLeave={end}
+        style={{ width: '100%', height: 150, borderRadius: 10, background: '#fff', touchAction: 'none', border: '1px solid rgba(255,255,255,0.2)' }} />
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <button onClick={() => { if (dirty.current) onSave(ref.current!.toDataURL('image/png')) }} style={{ flex: 1, minHeight: 44, borderRadius: 10, background: '#00C8FF', color: '#06121c', border: 'none', fontFamily: MONO, fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>SAVE SIGNATURE</button>
+        <button onClick={clear} style={{ padding: '0 14px', minHeight: 44, borderRadius: 10, background: 'rgba(255,255,255,0.06)', color: 'rgba(200,220,255,0.8)', border: '1px solid rgba(255,255,255,0.14)', fontFamily: MONO, fontSize: 11, cursor: 'pointer' }}>CLEAR</button>
+        <button onClick={onCancel} style={{ padding: '0 14px', minHeight: 44, borderRadius: 10, background: 'rgba(255,255,255,0.06)', color: 'rgba(200,220,255,0.8)', border: '1px solid rgba(255,255,255,0.14)', fontFamily: MONO, fontSize: 11, cursor: 'pointer' }}>✕</button>
+      </div>
+    </div>
+  )
 }
 
 const STEP_CFG: Record<StepType, {
@@ -595,6 +630,9 @@ function TechTool() {
   const [scanBusy,   setScanBusy]   = useState(false)
   const [scanMsg,    setScanMsg]    = useState<string | null>(null)
   const [briefLoading, setBriefLoading] = useState(false)
+  const [showSig,    setShowSig]    = useState(false)
+  const [partQuery,  setPartQuery]  = useState('')
+  const [partBusy,   setPartBusy]   = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [scanResult, setScanResult] = useState<any>(null)
   const [allTechs,   setAllTechs]   = useState<{ id: string; name: string; initials: string }[]>([])
@@ -671,6 +709,11 @@ function TechTool() {
     return () => clearInterval(interval)
   }, [techId]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Load the tech's open work whenever the Home dashboard is shown ──────────
+  useEffect(() => {
+    if (screen === 'home' && techCode) loadMyJobs()
+  }, [screen]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Auth ──────────────────────────────────────────────────────────────────
   function apiHeaders(): HeadersInit {
     return { 'Content-Type': 'application/json', 'x-tech-code': techCode }
@@ -692,7 +735,7 @@ function TechTool() {
       fetch(`/api/maintenance/${woId}`, { headers: apiHeaders() }).then(r => r.json()).catch(() => null),
       fetch(`/api/maintenance/${woId}/photos`, { headers: apiHeaders() }).then(r => r.json()).catch(() => null),
     ])
-    setOpenJob({ ...(base ?? openJob), _checklist: d?.checklist ?? [], _description: d?.work_order?.description ?? base?.description, _photos: ph?.photos ?? [], status: d?.work_order?.status ?? base?.status })
+    setOpenJob({ ...(base ?? openJob), _checklist: d?.checklist ?? [], _description: d?.work_order?.description ?? base?.description, _photos: ph?.photos ?? [], _parts: d?.parts_used ?? [], status: d?.work_order?.status ?? base?.status })
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function toggleJobStep(woId: string, item: any) {
@@ -771,6 +814,18 @@ function TechTool() {
       serial_number: scanResult.serial || null, mac_address: scanResult.mac || null, status: 'active',
     }) }).catch(() => {})
     setScanBusy(false); setScanResult(null); setScanMsg('Added to site equipment ✓')
+  }
+  // ── Parts used + customer signature on completion (existing tables) ──────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function addPartUsed(woId: string, product: any) {
+    if (partBusy) return; setPartBusy(true)
+    await fetch(`/api/maintenance/${woId}/parts`, { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ name: product.name, qty: 1, technician_name: techName }) }).catch(() => {})
+    setPartBusy(false); setPartQuery(''); refreshOpenJob(woId)
+  }
+  async function saveSignature(woId: string, dataUrl: string) {
+    const f = dataUrlToFile(dataUrl, 'customer-signature.png')
+    await uploadJobPhoto(woId, f, 'signature')   // stored as a tagged work_order_photo
+    setShowSig(false)
   }
 
   // ── GPS ping helper — fire-and-forget, never blocks UI ───────────────────
@@ -1223,6 +1278,42 @@ function TechTool() {
 
               <button onClick={() => { setSymptom(openJob.title || ''); setConnectedDevices(((openJob._briefEquipment ?? []) as { product_name?: string }[]).map(e => e.product_name || '').filter(Boolean)); setScreen('symptom') }} style={{ width: '100%', padding: 14, borderRadius: 12, background: 'rgba(0,200,255,0.12)', border: '1px solid rgba(0,200,255,0.34)', color: '#7dd3fc', fontFamily: MONO, fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.06em', marginBottom: 12 }}>🤖 GET AI TECH SUPPORT</button>
 
+              {/* Parts used */}
+              {(() => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const parts = (openJob._parts ?? []) as any[]
+                const q = partQuery.trim().toLowerCase()
+                const matches = q ? products.filter(p => `${p.name} ${p.brand} ${p.sku}`.toLowerCase().includes(q)).slice(0, 6) : []
+                return (
+                  <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                    <span style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.1em' }}>PARTS USED ({parts.length})</span>
+                    {parts.length > 0 && <div style={{ marginTop: 6 }}>{parts.map((p, i) => <div key={p.id || i} style={{ fontSize: 13, padding: '3px 0' }}>{p.name} × {p.qty ?? 1}</div>)}</div>}
+                    <input value={partQuery} onChange={e => setPartQuery(e.target.value)} placeholder="Add a part — search catalog…" style={{ width: '100%', boxSizing: 'border-box', marginTop: 8, background: C.bgInput, border: `1px solid ${C.border}`, borderRadius: 8, color: C.textPrimary, padding: 10, fontSize: 13 }} />
+                    {matches.map(p => (
+                      <button key={p.id} onClick={() => addPartUsed(openJob.id, p)} disabled={partBusy} style={{ display: 'block', width: '100%', textAlign: 'left', marginTop: 6, padding: '10px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: `1px solid ${C.border}`, color: C.textPrimary, fontSize: 13, cursor: 'pointer' }}>
+                        + {p.name} <span style={{ color: C.textMuted, fontFamily: MONO, fontSize: 10 }}>{p.sku}</span>
+                      </button>
+                    ))}
+                  </div>
+                )
+              })()}
+
+              {/* Customer sign-off */}
+              {(() => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const signed = ((openJob._photos ?? []) as any[]).some(p => String(p.file_name ?? p.caption ?? '').split('|')[0].toLowerCase() === 'signature')
+                return (
+                  <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.1em' }}>CUSTOMER SIGN-OFF</span>
+                      {signed ? <span style={{ fontFamily: MONO, fontSize: 9, color: C.green }}>✓ SIGNED</span>
+                        : !showSig && <button onClick={() => setShowSig(true)} style={{ fontFamily: MONO, fontSize: 9, color: C.cyan, background: 'none', border: 'none', cursor: 'pointer' }}>✍️ CAPTURE SIGNATURE</button>}
+                    </div>
+                    {showSig && <div style={{ marginTop: 10 }}><SignaturePad onSave={d => saveSignature(openJob.id, d)} onCancel={() => setShowSig(false)} /></div>}
+                  </div>
+                )
+              })()}
+
               {/* Mark complete — proof gated */}
               {(() => {
                 const allDone = checklist.length > 0 && doneCount === checklist.length
@@ -1245,9 +1336,106 @@ function TechTool() {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SCREEN: HOME — device picker
+  // SCREEN: HOME — tech dashboard (open work + quick tools)
   // ═══════════════════════════════════════════════════════════════════════════
   if (screen === 'home') {
+    const firstName = (techName || '').split(' ')[0] || 'there'
+    const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+    const openCount = myJobs.filter(j => !['completed', 'complete', 'done'].includes(String(j.status || '').toLowerCase())).length
+    const TILES: { k: string; label: string; go: () => void }[] = [
+      { k: 'diagnose', label: 'Find / Diagnose', go: () => setScreen('devices') },
+      { k: 'jobs', label: 'My Jobs', go: () => { setOpenJob(null); loadMyJobs(); setScreen('jobs') } },
+      { k: 'wiring', label: 'Wiring', go: () => setScreen('wiring') },
+      { k: 'cable', label: 'Cable', go: () => setScreen('cable') },
+      { k: 'survey', label: 'Survey', go: () => { setSurveyProposal(null); setScreen('survey') } },
+      { k: 'netscout', label: 'NetScout', go: () => setScreen('netscout') },
+      { k: 'train', label: 'Training', go: () => setScreen('training') },
+    ]
+    const tileStyle: React.CSSProperties = { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 92, borderRadius: 16, background: C.bgCard, border: `1px solid ${C.border}`, cursor: 'pointer', color: C.cyan }
+    return (
+      <div style={S.shell}>
+        <style>{`.gg-list::-webkit-scrollbar{display:none}`}</style>
+        <div style={S.topBar}>
+          <div style={{ ...S.ggMark, padding: 6, background: 'rgba(255,255,255,0.06)' }}><img src="/logo.png" alt="GateGuard" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
+          <div style={{ flex: 1 }}>
+            <div style={S.topBarTitle}>GATEGUARD FIELD</div>
+            <div style={S.topBarSub}>FIELD HOME</div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: MONO, fontSize: 9, color: C.textOnDark, letterSpacing: '0.08em' }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: gpsGranted ? C.green : C.amber, display: 'inline-block', flexShrink: 0 }} />
+              <span style={{ maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(techName || 'TECH').split(' ')[0].toUpperCase()}</span>
+            </div>
+            <a href="/" style={{ fontFamily: MONO, fontSize: 8, color: 'rgba(160,190,255,0.45)', letterSpacing: '0.06em', textDecoration: 'none' }}>← PORTAL</a>
+          </div>
+        </div>
+
+        <div className="gg-list" style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+          {/* Hero */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: C.textPrimary }}>Hi, {firstName} 👋</div>
+            <div style={{ fontFamily: MONO, fontSize: 10, color: C.textMuted, letterSpacing: '0.08em', marginTop: 3 }}>{today.toUpperCase()}</div>
+          </div>
+
+          {/* Open work */}
+          <div style={{ background: 'radial-gradient(circle at 0% 0%, rgba(0,200,255,0.10), transparent 60%), rgba(255,255,255,0.04)', border: '1px solid rgba(0,200,255,0.20)', borderRadius: 16, padding: 14, marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <span style={{ fontFamily: MONO, fontSize: 10, color: C.cyan, letterSpacing: '0.1em' }}>YOUR OPEN WORK</span>
+              <span style={{ fontFamily: MONO, fontSize: 22, fontWeight: 800, color: C.cyan }}>{jobsLoading ? '…' : openCount}</span>
+            </div>
+            <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+              {jobsLoading && myJobs.length === 0 ? <div style={{ fontSize: 12, color: C.textMuted }}>Loading your jobs…</div>
+                : myJobs.length === 0 ? <div style={{ fontSize: 13, color: C.textMuted }}>No jobs assigned right now. Tap a tool below to get going.</div>
+                  : myJobs.slice(0, 3).map(j => (
+                    <button key={j.id} onClick={() => { openJobDetail(j); setScreen('jobs') }} style={{ textAlign: 'left', padding: 11, borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: `1px solid ${C.border}`, cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                        <span style={{ fontWeight: 700, fontSize: 14, color: C.textPrimary }}>{j.title || j.wo_number || 'Work Order'}</span>
+                        <span style={{ fontFamily: MONO, fontSize: 9, color: C.blue }}>{j.status}</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: C.textMuted, marginTop: 3 }}>{j.site_name || j.customer_name || '—'}{j.scheduled_date ? ` · ${String(j.scheduled_date).slice(0, 10)}` : ''}</div>
+                    </button>
+                  ))}
+            </div>
+            {myJobs.length > 0 && <button onClick={() => { setOpenJob(null); setScreen('jobs') }} style={{ marginTop: 10, fontFamily: MONO, fontSize: 10, color: C.cyan, background: 'none', border: 'none', cursor: 'pointer', letterSpacing: '0.06em' }}>VIEW ALL JOBS ›</button>}
+          </div>
+
+          {/* Quick tools */}
+          <div style={{ fontFamily: MONO, fontSize: 10, color: C.textMuted, letterSpacing: '0.1em', marginBottom: 8 }}>QUICK TOOLS</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {TILES.map(t => (
+              <button key={t.k} onClick={t.go} style={tileStyle}>
+                <NavIcon k={t.k} size={26} />
+                <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: C.textPrimary, letterSpacing: '0.05em' }}>{t.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Bottom nav */}
+        <div style={S.legendStrip}>
+          {[
+            { k: 'diagnose', label: 'DIAGNOSE', go: () => setScreen('devices') },
+            { k: 'jobs', label: 'MY JOBS', go: () => { setOpenJob(null); loadMyJobs(); setScreen('jobs') } },
+            { k: 'wiring', label: 'WIRING', go: () => setScreen('wiring') },
+            { k: 'cable', label: 'CABLE', go: () => setScreen('cable') },
+            { k: 'survey', label: 'SURVEY', go: () => { setSurveyProposal(null); setScreen('survey') } },
+            { k: 'netscout', label: 'NETSCOUT', go: () => setScreen('netscout') },
+            { k: 'train', label: 'TRAIN', go: () => setScreen('training') },
+          ].map(n => (
+            <button key={n.k} onClick={n.go} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}>
+              <span style={{ color: C.textSecondary, display: 'flex' }}><NavIcon k={n.k} /></span>
+              <span style={{ fontFamily: MONO, fontSize: 9, color: C.textSecondary, letterSpacing: '0.06em' }}>{n.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SCREEN: DEVICES — device picker (was the landing; now reached via Diagnose)
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (screen === 'devices') {
     const EXCLUDE = ['wire', 'hardware', 'cable', 'conduit', 'connector', 'supply']
     const serviceProds = products.filter(p =>
       !EXCLUDE.some(x => p.category.toLowerCase().includes(x))
@@ -1272,10 +1460,10 @@ function TechTool() {
       <div style={S.shell}>
         <style>{`.gg-chips::-webkit-scrollbar,.gg-list::-webkit-scrollbar{display:none}`}</style>
         <div style={S.topBar}>
-          <div style={{ ...S.ggMark, padding: 6, background: 'rgba(255,255,255,0.06)' }}><img src="/logo.png" alt="GateGuard" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
-          <div style={{ flex: 1 }}>
+          <button onClick={() => setScreen('home')} style={{ ...S.ggMark, padding: 6, background: 'rgba(255,255,255,0.06)', cursor: 'pointer' }} title="Home"><img src="/logo.png" alt="GateGuard" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></button>
+          <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => setScreen('home')}>
             <div style={S.topBarTitle}>GATEGUARD FIELD TOOL</div>
-            <div style={S.topBarSub}>SELECT DEVICE</div>
+            <div style={S.topBarSub}>‹ SELECT DEVICE</div>
           </div>
           {techName ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
@@ -3792,7 +3980,7 @@ function TechTool() {
 
         {/* Bottom nav */}
         <div style={S.legendStrip}>
-          <button onClick={() => setScreen('home')} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}>
+          <button onClick={() => setScreen('devices')} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}>
             <span style={{ color: C.textSecondary, display: 'flex' }}><NavIcon k="diagnose" /></span>
             <span style={{ fontFamily: MONO, fontSize: 9, color: C.textSecondary, letterSpacing: '0.06em' }}>DIAGNOSE</span>
           </button>
