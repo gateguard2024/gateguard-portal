@@ -96,6 +96,17 @@ async function getClerkRole(clerkUserId: string | null): Promise<SimpleRole> {
   }
 }
 
+async function getClerkDeactivated(clerkUserId: string | null): Promise<boolean> {
+  if (!clerkUserId) return false
+  try {
+    const client = await clerkClient()
+    const u = await client.users.getUser(clerkUserId)
+    return u.publicMetadata?.deactivated === true || (u as { banned?: boolean }).banned === true
+  } catch {
+    return false
+  }
+}
+
 // ── GET ────────────────────────────────────────────────────────────────────
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -146,6 +157,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     }
 
     const role = await getClerkRole(target.clerk_user_id)
+    const deactivated = await getClerkDeactivated(target.clerk_user_id)
     const name = [target.first_name, target.last_name].filter(Boolean).join(' ') || target.email || 'User'
 
     return NextResponse.json({
@@ -155,6 +167,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
         clerk_user_id: target.clerk_user_id,
         name, email: target.email,
         role,
+        deactivated,
         org_id: target.org_id,
         org_name: org?.name ?? 'Organization',
         org_tier: orgTier,
@@ -250,6 +263,54 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         updated_at: new Date().toISOString(),
       }, { onConflict: 'clerk_user_id,org_id,feature_key' })
       return NextResponse.json({ success: true, feature_key: featureKey, access_level: requested })
+    }
+
+    // ── deactivate / reactivate (soft) ──
+    if (action === 'set_active') {
+      const active = body.active === true
+      // Don't let an admin lock themselves out.
+      if (target.clerk_user_id === caller.id) {
+        return NextResponse.json({ success: false, message: 'You cannot deactivate your own account.' }, { status: 400 })
+      }
+      const client = await clerkClient()
+      const existing = await client.users.getUser(target.clerk_user_id)
+      await client.users.updateUserMetadata(target.clerk_user_id, {
+        publicMetadata: { ...existing.publicMetadata, deactivated: !active, deactivated_at: active ? null : new Date().toISOString() },
+      })
+      // Enforce sign-in block too (reversible). Best-effort across Clerk versions.
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const c = client.users as any
+        if (active) { if (typeof c.unbanUser === 'function') await c.unbanUser(target.clerk_user_id) }
+        else { if (typeof c.banUser === 'function') await c.banUser(target.clerk_user_id) }
+      } catch { /* metadata flag still applied */ }
+      return NextResponse.json({ success: true, deactivated: !active })
+    }
+
+    // ── move to another org (hierarchy-gated) ──
+    if (action === 'move_org') {
+      const destOrgId = body.dest_org_id as string
+      if (!destOrgId) return NextResponse.json({ success: false, message: 'Missing destination org.' }, { status: 400 })
+      // Caller must be able to manage the destination org too.
+      if (!canManageOrg(caller, destOrgId, scope.ids)) {
+        return NextResponse.json({ success: false, message: 'That organization is outside your network.' }, { status: 403 })
+      }
+      const { data: destOrg } = await supabase.from('organizations').select('id, org_tier').eq('id', destOrgId).maybeSingle()
+      if (!destOrg) return NextResponse.json({ success: false, message: 'Destination org not found.' }, { status: 404 })
+
+      // Update profile + Clerk metadata so org context follows the user everywhere.
+      const { error: profErr } = await supabase.from('profiles').update({ org_id: destOrgId }).eq('id', target.id)
+      if (profErr) return NextResponse.json({ success: false, message: profErr.message }, { status: 500 })
+      try {
+        const client = await clerkClient()
+        const existing = await client.users.getUser(target.clerk_user_id)
+        await client.users.updateUserMetadata(target.clerk_user_id, {
+          publicMetadata: { ...existing.publicMetadata, org_id: destOrgId, org_tier: destOrg.org_tier },
+        })
+      } catch { /* profile is source of truth; metadata best-effort */ }
+      // Old-org feature overrides are keyed by org_id and no longer apply — clean them up.
+      try { await supabase.from('user_feature_access').delete().eq('clerk_user_id', target.clerk_user_id).eq('org_id', target.org_id) } catch { /* non-fatal */ }
+      return NextResponse.json({ success: true, org_id: destOrgId })
     }
 
     return NextResponse.json({ success: false, message: 'Unknown action.' }, { status: 400 })

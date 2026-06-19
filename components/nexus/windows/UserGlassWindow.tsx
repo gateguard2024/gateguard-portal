@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   effectiveAccess, rolePresetAccess, ACCESS_RANK,
   type AccessLevel, type SimpleRole,
@@ -12,7 +12,7 @@ export type UserWindowData = {
   user: {
     id: string; clerk_user_id: string; name: string; email: string
     role: SimpleRole; org_id: string; org_name: string; org_tier: string
-    last_login_at: string | null
+    last_login_at: string | null; deactivated?: boolean
   }
   catalog: CatalogItem[]
   orgAccess: Record<string, AccessLevel>
@@ -52,6 +52,12 @@ export function UserGlassWindow({
   const [busy, setBusy] = useState(false)
   const [advanced, setAdvanced] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  // Move-to-org picker + deactivate (Build 7)
+  const [orgs, setOrgs] = useState<{ id: string; name: string; tier_label: string }[]>([])
+  const [moveTo, setMoveTo] = useState('')
+  useEffect(() => {
+    void fetch('/api/nexus/internal/assignable-orgs').then(r => r.json()).then(j => setOrgs(j.orgs ?? [])).catch(() => {})
+  }, [])
 
   async function post(body: Record<string, unknown>) {
     setBusy(true); setMsg(null)
@@ -140,6 +146,39 @@ export function UserGlassWindow({
                   </button>
                 )
               })}
+            </div>
+          </Section>
+
+          {/* Status & Organization (Build 7) */}
+          <Section title="Status & Organization" accent="#fbbf24">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {/* Active / deactivated */}
+              <div className="rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="text-[10px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.4)' }}>Account status</div>
+                <div className="mt-1 text-sm font-semibold" style={{ color: user.deactivated ? '#fca5a5' : '#34d399' }}>{user.deactivated ? 'Deactivated' : 'Active'}</div>
+                <button type="button" disabled={busy} onClick={() => post({ action: 'set_active', active: !!user.deactivated })}
+                  className="mt-2 rounded-lg px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
+                  style={user.deactivated
+                    ? { background: 'rgba(52,211,153,0.18)', border: '1px solid rgba(52,211,153,0.4)', color: '#6ee7b7' }
+                    : { background: 'rgba(248,113,113,0.14)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5' }}>
+                  {user.deactivated ? 'Reactivate user' : 'Deactivate user'}
+                </button>
+                <div className="mt-1.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.34)' }}>{user.deactivated ? 'They cannot sign in until reactivated.' : 'Blocks sign-in. Reversible at any time.'}</div>
+              </div>
+              {/* Move org */}
+              <div className="rounded-2xl p-3" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="text-[10px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.4)' }}>Organization</div>
+                <div className="mt-1 text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>{user.org_name}</div>
+                <div className="mt-2 flex gap-1.5">
+                  <select value={moveTo} onChange={e => setMoveTo(e.target.value)} className="min-w-0 flex-1 rounded-lg px-2 py-1.5 text-[11px] outline-none" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)' }}>
+                    <option value="">Move to…</option>
+                    {orgs.filter(o => o.id !== user.org_id).map(o => <option key={o.id} value={o.id}>{o.name} ({o.tier_label})</option>)}
+                  </select>
+                  <button type="button" disabled={busy || !moveTo} onClick={async () => { const ok = await post({ action: 'move_org', dest_org_id: moveTo }); if (ok) setMoveTo('') }}
+                    className="rounded-lg px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-40" style={{ background: 'rgba(139,92,246,0.2)', border: '1px solid rgba(139,92,246,0.4)', color: '#ddd6fe' }}>Move</button>
+                </div>
+                <div className="mt-1.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.34)' }}>Only organizations in your network are listed.</div>
+              </div>
             </div>
           </Section>
 

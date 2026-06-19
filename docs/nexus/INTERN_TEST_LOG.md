@@ -126,4 +126,40 @@ Where: **Internal (admin) → Dealer Onboarding** board → click a dealer.
 **Depends on infra:** migration 127 (`organizations` vetting + channel_manager columns).
 
 ---
+
+## Build 7a — User deactivate + move-org  (pushed beta · YYYY-MM-DD)
+Where: **Internal (admin) → Users & Features → open a user** (Users & Access glass window).
+
+- ☐ Opening a user shows a **"Status & Organization"** section with account status (Active/Deactivated) and the current org.
+- ☐ Click **Deactivate user** → status flips to "Deactivated"; reopen shows it stuck. (That user should not be able to sign in afterward — verify with a test account.)
+- ☐ Click **Reactivate user** → status returns to Active; they can sign in again.
+- ☐ You **cannot** deactivate your own account (it shows a message and refuses).
+- ☐ The **Move to…** dropdown lists only organizations in your network (not every org).
+- ☐ Pick an org + **Move** → the user's organization updates (reopen to confirm the new org name).
+- ☐ A non-corporate admin only sees their own network in both the move list and the user list (no cross-org leakage).
+- ☐ Role change + per-feature access (existing features) still work — no regression.
+
+**Depends on infra:** none new (uses Clerk + profiles). No migration.
+
+---
+
+## Build 8 — L10 weekly meeting runner  (pushed beta · YYYY-MM-DD)
+Where: **EOS / Operating System** page → green **"Run L10"** button (or go to `/eos/l10`).
+
+- ☐ The runner opens with the 7-segment agenda across the top: Segue, Scorecard, Rock Review, Headlines, To-Do List, IDS, Conclude (with minute budgets).
+- ☐ Click **Start meeting** → the Segment timer counts **down** and the Total timer counts **up**.
+- ☐ When a segment's time runs out, its timer turns **red** and keeps going negative (doesn't stop the meeting).
+- ☐ **Pause/Resume** stops and restarts both timers.
+- ☐ **Next segment / Back** move through the agenda and reset the segment timer to that segment's budget.
+- ☐ Scorecard segment lists your real measurables with their latest value.
+- ☐ Rock Review lists real rocks; clicking **On Track / Off Track** saves (reopen the EOS Rocks tab to confirm it stuck).
+- ☐ To-Do List shows real to-dos; checking one marks it done (confirm on the EOS To-Dos tab).
+- ☐ IDS lists open issues by priority; **Solved ✓** marks an issue resolved (confirm on EOS Issues tab).
+- ☐ "Drop to Issues" boxes (Scorecard/Rocks/Headlines/IDS) create a new issue that appears in IDS and on the EOS Issues tab.
+- ☐ "Capture a to-do" in IDS creates a to-do (appears on EOS To-Dos tab).
+- ☐ Conclude shows counts (issues solved / to-dos created / open to-dos) and a 1–10 rating selector.
+
+**Depends on infra:** none new — reuses the existing `/api/eos/*` endpoints.
+
+---
 *(new builds appended below as they ship)*

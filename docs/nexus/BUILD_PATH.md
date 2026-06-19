@@ -30,11 +30,16 @@ Unified `/api/activity` feed + reusable `ActivityTimeline` (mounted on opportuni
 ## Build 6b — Recruitment pipeline + Feature Settings into hub (#61, #10)  ← later
 Pre-org prospect/application funnel (prospect→vetting→onboarding) and fold Feature Settings into the admin hub as a board (currently routes out / "coming soon").
 
-## Build 7 — Org/user admin (#75, #76, #77, #78, #64, #79)
-Assignable-orgs endpoint; Add-Person company picker; user deactivate/reactivate + move-org (glass); record sharing/co-working; retire legacy /admin/users + /admin/settings/features.
+## Build 7a — Org/user admin core (#75, #76, #77, #78)  ✅ shipped
+Assignable-orgs endpoint + Add-Person company picker were already in place; added **deactivate/reactivate** (soft, Clerk metadata + ban) and **move-user-to-another-org** (hierarchy-gated) actions on the user-window backend + a "Status & Organization" section in the Users & Access glass window.
+
+## Build 7b — Record sharing + legacy retirement (#64, #79)  ← later
+Record sharing / co-working + admin redistribute; retire legacy /admin/users + /admin/settings/features pages.
 
 ## Build 8 — EOS / Traction (#70, #71, #69)
-V/TO + Rocks + Scorecard + Issues surface; restore dashboard EOS; L10 weekly meeting runner; rebuild Timeline/Gantt planner in glass.
+- #70 EOS surface (V/TO + Rocks + Scorecard + Issues) — already built (`/eos`).
+- ✅ #71 **L10 weekly meeting runner** shipped — `/eos/l10`: 7-segment agenda, per-segment + total timers, live data from the EOS APIs, IDS solve + drop-to-issues + capture to-dos, conclude rating. "Run L10" button on the EOS header.
+- #69 Tracker/Gantt glass rebuild — separate (deferred, Build 8b).
 
 ## Build 9 — Integrations & extras (#83, #74, #73)
 Brivo Users module (per-site); University/Training section; "Ask Nexus anything" smart router bar.

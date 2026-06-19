@@ -1890,6 +1890,13 @@ export default function EOSPage() {
               <Flag size={13} />
               Q2 2026
             </div>
+            <a
+              href="/eos/l10"
+              className="flex items-center gap-1.5 text-sm font-semibold bg-emerald-600 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-700 transition-colors shadow-sm shadow-emerald-600/30"
+            >
+              <Timer size={13} />
+              Run L10
+            </a>
             <button
               onClick={() => setCoachOpen(true)}
               className="flex items-center gap-1.5 text-sm font-semibold bg-[#6B7EFF] text-white px-3 py-1.5 rounded-lg hover:bg-[#5B6EEF] transition-colors shadow-sm shadow-[#6B7EFF]/30"
