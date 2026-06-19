@@ -156,6 +156,15 @@ function NavIcon({ k, size = 22 }: { k: string; size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">{paths[k] ?? null}</svg>
 }
 
+// ── Offline-first data layer (no service worker; safe + additive) ───────────
+// Queues JSON writes when offline and replays them on reconnect. Reads are
+// cached so a tech can view their jobs in a dead zone.
+type QueuedWrite = { id: string; url: string; method: string; body: unknown; ts: number }
+const GG_QUEUE_KEY = 'gg_tech_write_queue'
+const GG_JOBS_CACHE = 'gg_tech_jobs_cache'
+function ggReadQueue(): QueuedWrite[] { try { return JSON.parse(localStorage.getItem(GG_QUEUE_KEY) || '[]') } catch { return [] } }
+function ggWriteQueue(q: QueuedWrite[]) { try { localStorage.setItem(GG_QUEUE_KEY, JSON.stringify(q)) } catch { /* storage full/blocked */ } }
+
 function dataUrlToFile(dataUrl: string, name: string): File {
   const [head, b64] = dataUrl.split(',')
   const mime = head.match(/:(.*?);/)?.[1] || 'image/png'
@@ -630,6 +639,8 @@ function TechTool() {
   const [scanBusy,   setScanBusy]   = useState(false)
   const [scanMsg,    setScanMsg]    = useState<string | null>(null)
   const [briefLoading, setBriefLoading] = useState(false)
+  const [online,     setOnline]     = useState(true)
+  const [queuedN,    setQueuedN]    = useState(0)
   const [showSig,    setShowSig]    = useState(false)
   const [partQuery,  setPartQuery]  = useState('')
   const [partBusy,   setPartBusy]   = useState(false)
@@ -719,14 +730,48 @@ function TechTool() {
     return { 'Content-Type': 'application/json', 'x-tech-code': techCode }
   }
 
-  // ── My Jobs (work orders assigned to this tech) ─────────────────────────────
+  // ── Offline write queue: try now, queue if no signal, replay on reconnect ──
+  function enqueueWrite(url: string, method: string, body: unknown) {
+    const q = ggReadQueue()
+    q.push({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, url, method, body, ts: Date.now() })
+    ggWriteQueue(q); setQueuedN(q.length)
+  }
+  async function queuedWrite(url: string, method: string, body: unknown) {
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      try { return await fetch(url, { method, headers: apiHeaders(), body: JSON.stringify(body) }) }
+      catch { enqueueWrite(url, method, body) }
+    } else { enqueueWrite(url, method, body) }
+    return null
+  }
+  async function drainQueue() {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return
+    const code = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('gg_tech_code')) || ''
+    let q = ggReadQueue()
+    while (q.length) {
+      const item = q[0]
+      try {
+        const r = await fetch(item.url, { method: item.method, headers: { 'Content-Type': 'application/json', 'x-tech-code': code }, body: JSON.stringify(item.body) })
+        if (!r.ok && r.status >= 500) break   // server hiccup — keep & retry later
+      } catch { break }                        // signal dropped again — stop, keep rest
+      q = q.slice(1); ggWriteQueue(q); setQueuedN(q.length)
+    }
+  }
+  // online/offline awareness + auto-sync on reconnect
+  useEffect(() => {
+    const upd = () => { const on = typeof navigator !== 'undefined' ? navigator.onLine : true; setOnline(on); if (on) drainQueue() }
+    upd(); setQueuedN(ggReadQueue().length)
+    window.addEventListener('online', upd); window.addEventListener('offline', upd)
+    return () => { window.removeEventListener('online', upd); window.removeEventListener('offline', upd) }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── My Jobs (work orders assigned to this tech) — cached for offline view ──
   function loadMyJobs() {
     setJobsLoading(true)
     const url = techId ? `/api/tech/work-orders?tech_id=${techId}` : '/api/tech/work-orders'
     fetch(url, { headers: apiHeaders() })
       .then(r => r.json())
-      .then(d => setMyJobs(d.work_orders ?? []))
-      .catch(() => {})
+      .then(d => { const list = d.work_orders ?? []; setMyJobs(list); try { localStorage.setItem(GG_JOBS_CACHE, JSON.stringify(list)) } catch { /* ignore */ } })
+      .catch(() => { try { setMyJobs(JSON.parse(localStorage.getItem(GG_JOBS_CACHE) || '[]')) } catch { /* ignore */ } })
       .finally(() => setJobsLoading(false))
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -740,8 +785,11 @@ function TechTool() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function toggleJobStep(woId: string, item: any) {
     const next = !(item.is_complete || item.completed)
-    await fetch(`/api/maintenance/${woId}/checklist`, { method: 'PATCH', headers: apiHeaders(), body: JSON.stringify({ item_id: item.id, is_complete: next }) }).catch(() => {})
-    refreshOpenJob(woId)
+    // optimistic local flip so it works instantly offline
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setOpenJob((prev: any) => prev ? { ...prev, _checklist: (prev._checklist || []).map((c: any) => c.id === item.id ? { ...c, is_complete: next, completed: next } : c) } : prev)
+    await queuedWrite(`/api/maintenance/${woId}/checklist`, 'PATCH', { item_id: item.id, is_complete: next })
+    if (typeof navigator !== 'undefined' && navigator.onLine) refreshOpenJob(woId)
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function openJobDetail(job: any) { await refreshOpenJob(job.id, job); fetchJobBrief(job.id) }
@@ -756,8 +804,10 @@ function TechTool() {
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function setJobStatus(woId: string, status: string) {
-    await fetch(`/api/maintenance/${woId}`, { method: 'PATCH', headers: apiHeaders(), body: JSON.stringify({ status }) }).catch(() => {})
-    refreshOpenJob(woId); loadMyJobs()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setOpenJob((prev: any) => prev ? { ...prev, status } : prev)   // optimistic
+    await queuedWrite(`/api/maintenance/${woId}`, 'PATCH', { status })
+    if (typeof navigator !== 'undefined' && navigator.onLine) { refreshOpenJob(woId); loadMyJobs() }
   }
   async function uploadJobPhoto(woId: string, file: File, stage: string = 'general') {
     if (!file) return
@@ -773,8 +823,8 @@ function TechTool() {
   }
   async function logJobHours(woId: string, hours: number) {
     if (!hours || hours <= 0) return
-    await fetch(`/api/maintenance/${woId}/time`, { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ hours, technician_name: techName }) }).catch(() => {})
-    refreshOpenJob(woId)
+    await queuedWrite(`/api/maintenance/${woId}/time`, 'POST', { hours, technician_name: techName })
+    if (typeof navigator !== 'undefined' && navigator.onLine) refreshOpenJob(woId)
   }
   // ── Scan device nameplate/QR → identify → add to site ───────────────────────
   function findMatchProduct(model: string | null, brand: string | null): Product | null {
@@ -819,8 +869,8 @@ function TechTool() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function addPartUsed(woId: string, product: any) {
     if (partBusy) return; setPartBusy(true)
-    await fetch(`/api/maintenance/${woId}/parts`, { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ name: product.name, qty: 1, technician_name: techName }) }).catch(() => {})
-    setPartBusy(false); setPartQuery(''); refreshOpenJob(woId)
+    await queuedWrite(`/api/maintenance/${woId}/parts`, 'POST', { name: product.name, qty: 1, technician_name: techName })
+    setPartBusy(false); setPartQuery(''); if (typeof navigator !== 'undefined' && navigator.onLine) refreshOpenJob(woId)
   }
   async function saveSignature(woId: string, dataUrl: string) {
     const f = dataUrlToFile(dataUrl, 'customer-signature.png')
@@ -1134,6 +1184,11 @@ function TechTool() {
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+          {(!online || queuedN > 0) && (
+            <div style={{ marginBottom: 12, borderRadius: 10, padding: '8px 12px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.05em', background: online ? 'rgba(0,200,255,0.10)' : 'rgba(245,158,11,0.12)', border: `1px solid ${online ? 'rgba(0,200,255,0.3)' : 'rgba(245,158,11,0.3)'}`, color: online ? C.cyan : C.amber }}>
+              {online ? `↑ SYNCING ${queuedN} CHANGE${queuedN === 1 ? '' : 'S'}…` : `OFFLINE — ${queuedN} CHANGE${queuedN === 1 ? '' : 'S'} SAVED · WILL SYNC WHEN BACK ONLINE`}
+            </div>
+          )}
           {/* LIST */}
           {!openJob && (jobsLoading ? (
             <div style={{ fontFamily: MONO, fontSize: 11, color: C.textMuted }}>Loading your jobs…</div>
@@ -1371,6 +1426,11 @@ function TechTool() {
         </div>
 
         <div className="gg-list" style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+          {(!online || queuedN > 0) && (
+            <div style={{ marginBottom: 12, borderRadius: 10, padding: '8px 12px', fontFamily: MONO, fontSize: 10, letterSpacing: '0.05em', background: online ? 'rgba(0,200,255,0.10)' : 'rgba(245,158,11,0.12)', border: `1px solid ${online ? 'rgba(0,200,255,0.3)' : 'rgba(245,158,11,0.3)'}`, color: online ? C.cyan : C.amber }}>
+              {online ? `↑ SYNCING ${queuedN} CHANGE${queuedN === 1 ? '' : 'S'}…` : `OFFLINE — ${queuedN} CHANGE${queuedN === 1 ? '' : 'S'} SAVED · WILL SYNC LATER`}
+            </div>
+          )}
           {/* Hero */}
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 22, fontWeight: 700, color: C.textPrimary }}>Hi, {firstName} 👋</div>
@@ -1460,10 +1520,11 @@ function TechTool() {
       <div style={S.shell}>
         <style>{`.gg-chips::-webkit-scrollbar,.gg-list::-webkit-scrollbar{display:none}`}</style>
         <div style={S.topBar}>
+          <button style={S.iconBtn} onClick={() => setScreen('home')} title="Home">‹</button>
           <button onClick={() => setScreen('home')} style={{ ...S.ggMark, padding: 6, background: 'rgba(255,255,255,0.06)', cursor: 'pointer' }} title="Home"><img src="/logo.png" alt="GateGuard" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></button>
           <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => setScreen('home')}>
             <div style={S.topBarTitle}>GATEGUARD FIELD TOOL</div>
-            <div style={S.topBarSub}>‹ SELECT DEVICE</div>
+            <div style={S.topBarSub}>SELECT DEVICE</div>
           </div>
           {techName ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
