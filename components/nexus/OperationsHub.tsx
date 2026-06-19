@@ -742,8 +742,19 @@ function Parts() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", brand: "", sku: "", category: "", sell_price: "", manual_url: "", image_url: "" });
+  // AI manual coverage: product_id -> { chunks, figures }
+  const [coverage, setCoverage] = useState<Record<string, { chunks: number; figures: number }>>({});
+  const [ingestState, setIngestState] = useState<Record<string, "queued" | "error">>({});
+  const loadCoverage = React.useCallback(() => { fetch("/api/kb/coverage").then(r => r.json()).then(d => setCoverage(d.coverage ?? {})).catch(() => {}); }, []);
   const load = React.useCallback(() => { setLoading(true); fetch("/api/products?limit=80").then(r => r.json()).then(d => setParts(d.products ?? [])).catch(() => {}).finally(() => setLoading(false)); }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); loadCoverage(); }, [load, loadCoverage]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function vectorize(p: any) {
+    if (!p?.id) return;
+    setIngestState(s => ({ ...s, [p.id]: "queued" }));
+    const r = await fetch("/api/kb/ingest-manual", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ product_id: p.id }) }).catch(() => null);
+    if (!r || !r.ok) setIngestState(s => ({ ...s, [p.id]: "error" }));
+  }
   async function create() {
     if (!form.name.trim() || busy) return; setBusy(true); setMsg(null);
     const body: Record<string, unknown> = { name: form.name.trim(), brand: form.brand.trim() || null, sku: form.sku.trim() || null, category: form.category.trim() || null, manual_url: form.manual_url.trim() || null, image_url: form.image_url.trim() || null };
@@ -788,16 +799,34 @@ function Parts() {
       {shown.map(p => {
         const oh = onHand(p);
         const low = oh != null && num(oh) <= 3;
+        const cov = coverage[String(p.id)];
+        const aiReady = !!cov && cov.chunks > 0;
+        const state = ingestState[String(p.id)];
         return <Card key={p.id}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
             <b style={{ fontSize: 15 }}>{p.name || "Part"}</b>
-            {low && <Badge tone="urgent">Low stock</Badge>}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              {low && <Badge tone="urgent">Low stock</Badge>}
+              {aiReady && <Badge tone="good">AI ready{cov.figures > 0 ? ` · ${cov.figures} 🖼` : ""}</Badge>}
+            </div>
           </div>
           {p.sku && <Small>{p.sku}</Small>}
           <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 13 }}>
             <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Cost</div><b>{cost(p) ? money(cost(p)) : "—"}</b></div>
             <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Price</div><b>{price(p) ? money(price(p)) : "—"}</b></div>
             {oh != null && <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>On hand</div><b>{num(oh)}</b></div>}
+          </div>
+          {/* AI manual intake: vectorize on demand so the field tool gets diagnostics + diagrams */}
+          <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+            {!p.manual_url ? (
+              <Small>No manual linked — add a manual PDF URL to power AI diagnostics.</Small>
+            ) : state === "queued" ? (
+              <Small>Vectorizing manual… this runs in the background. Refresh in a minute.</Small>
+            ) : state === "error" ? (
+              <span style={{ fontSize: 12, color: "#fca5a5" }}>Couldn&apos;t queue — <button onClick={() => vectorize(p)} style={{ ...btn, padding: "2px 8px", fontSize: 12 }}>Retry</button></span>
+            ) : (
+              <button onClick={() => vectorize(p)} style={{ ...btn, padding: "5px 12px", fontSize: 12 }}>{aiReady ? "Re-vectorize manual" : "Vectorize manual now"}</button>
+            )}
           </div>
         </Card>;
       })}
