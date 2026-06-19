@@ -31,15 +31,35 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   }
 }
 
-// POST — clock in (creates a new open entry; rejects if one already open for this tech)
+// POST — log labor. Two modes:
+//   { duration_mins } or { hours }  → log a completed entry directly (Log Labor)
+//   (none)                          → clock in (open entry)
+// Works for portal (Clerk) AND /tech (passes technician_name/technician_id).
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const user = await getCurrentUser()
     const body = await req.json()
+    // user is optional — the /tech field tool calls without a Clerk session
+    let user: { id?: string; name?: string; org_id?: string | null } | null = null
+    try { user = await getCurrentUser() } catch { user = null }
+    const techName = body.technician_name ?? user?.name ?? 'Technician'
+    const techId   = body.technician_id ?? user?.id ?? null
+    const orgId    = user?.org_id ?? null
 
-    const techName = body.technician_name ?? user.name ?? ''
+    // Direct-duration logging — insert a completed entry
+    const directMins = body.duration_mins != null ? Math.round(Number(body.duration_mins))
+      : body.hours != null ? Math.round(Number(body.hours) * 60) : null
+    if (directMins && directMins > 0) {
+      const clockOut = new Date()
+      const clockIn  = new Date(clockOut.getTime() - directMins * 60000)
+      const { data, error } = await supabase
+        .from('work_order_time_entries')
+        .insert({ work_order_id: params.id, org_id: orgId, technician_id: techId, technician_name: techName, clock_in: clockIn.toISOString(), clock_out: clockOut.toISOString(), duration_mins: directMins, notes: body.notes ?? null })
+        .select().single()
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json(data, { status: 201 })
+    }
 
-    // Check for existing open entry for this tech on this WO
+    // Clock-in: reject if one already open for this tech
     const { data: existing } = await supabase
       .from('work_order_time_entries')
       .select('id, clock_in')
@@ -49,24 +69,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .maybeSingle()
 
     if (existing) {
-      return NextResponse.json(
-        { error: 'already_clocked_in', entry_id: existing.id, clock_in: existing.clock_in },
-        { status: 409 }
-      )
+      return NextResponse.json({ error: 'already_clocked_in', entry_id: existing.id, clock_in: existing.clock_in }, { status: 409 })
     }
 
     const { data, error } = await supabase
       .from('work_order_time_entries')
-      .insert({
-        work_order_id:   params.id,
-        org_id:          user.org_id ?? null,
-        technician_id:   user.id,
-        technician_name: techName,
-        clock_in:        new Date().toISOString(),
-        notes:           body.notes ?? null,
-      })
-      .select()
-      .single()
+      .insert({ work_order_id: params.id, org_id: orgId, technician_id: techId, technician_name: techName, clock_in: new Date().toISOString(), notes: body.notes ?? null })
+      .select().single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json(data, { status: 201 })

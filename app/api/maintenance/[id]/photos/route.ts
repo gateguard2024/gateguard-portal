@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
+import { isTechAuthed } from '@/lib/tech-auth'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -26,15 +27,20 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const user = await getCurrentUser()
+  // Portal (Clerk) OR /tech (x-tech-code) may post photos.
+  let user: { org_id?: string | null; name?: string; email?: string } | null = null
+  try { user = await getCurrentUser() } catch { user = null }
+  if (!user && !(await isTechAuthed(req))) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
   const body = await req.json()
-  const { file_url, file_name } = body
+  const { file_url, file_name, caption } = body
 
   if (!file_url) {
     return NextResponse.json({ error: 'file_url is required' }, { status: 400 })
   }
 
-  const org_id = user.org_id ?? null
+  const org_id = user?.org_id ?? null
 
   const { data, error } = await supabase
     .from('work_order_photos')
@@ -42,8 +48,8 @@ export async function POST(
       work_order_id: params.id,
       org_id,
       file_url,
-      file_name:     file_name ?? null,
-      uploaded_by:   user.name ?? user.email ?? null,
+      file_name:     file_name ?? caption ?? null,
+      uploaded_by:   user?.name ?? user?.email ?? body.technician_name ?? 'Field tech',
     })
     .select()
     .single()

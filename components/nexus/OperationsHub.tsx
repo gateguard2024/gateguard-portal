@@ -568,6 +568,14 @@ function SiteDetailDrawer({ id, onClose }: { id: string; onClose: () => void }) 
             <button onClick={createWorkOrder} disabled={!woTitle.trim() || busy} style={{ ...btn, opacity: woTitle.trim() && !busy ? 1 : 0.5 }}>Create</button>
           </div>}
           {woMsg && <p style={{ fontSize: 12, color: woMsg.includes("✓") ? "#34d399" : "#fca5a5", marginTop: 8 }}>{woMsg}</p>}
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+            <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 6 }}>Public request form — give this link (or a QR of it) to the property manager so they can report issues:</div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <code style={{ fontSize: 11, background: "rgba(0,200,255,0.1)", border: "1px solid rgba(0,200,255,0.25)", borderRadius: 8, padding: "5px 9px", wordBreak: "break-all" }}>{`/request/${id}`}</code>
+              <button onClick={() => { const url = `${typeof window !== "undefined" ? window.location.origin : ""}/request/${id}`; navigator.clipboard?.writeText(url).then(() => setWoMsg("Request link copied ✓")).catch(() => {}); }} style={{ ...btn, background: "rgba(255,255,255,0.08)", padding: "5px 12px", fontSize: 12 }}>Copy link</button>
+              <a href={`/request/${id}`} target="_blank" rel="noreferrer" style={{ ...btn, background: "rgba(255,255,255,0.08)", padding: "5px 12px", fontSize: 12, textDecoration: "none" }}>Open</a>
+            </div>
+          </div>
         </Card>
 
         <Card>
@@ -755,13 +763,17 @@ function Procurement() {
   const [showNew, setShowNew] = useState(false);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({ supplier: "", po_number: "", notes: "" });
+  const [lines, setLines] = useState<{ name: string; qty: string; unit_cost: string }[]>([{ name: "", qty: "1", unit_cost: "" }]);
   const load = React.useCallback(() => { setLoading(true); fetch("/api/purchase-orders").then(r => r.json()).then(d => setPos(d.records ?? [])).catch(() => {}).finally(() => setLoading(false)); }, []);
   useEffect(() => { load(); }, [load]);
+  const linesTotal = lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unit_cost) || 0), 0);
   async function create() {
     if (!form.supplier.trim() || busy) return; setBusy(true);
-    await fetch("/api/purchase-orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ supplier: form.supplier.trim(), po_number: form.po_number.trim() || null, notes: form.notes.trim() || null, items: [] }) }).catch(() => {});
-    setForm({ supplier: "", po_number: "", notes: "" }); setShowNew(false); setBusy(false); load();
+    const items = lines.filter(l => l.name.trim()).map(l => ({ name: l.name.trim(), qty: Number(l.qty) || 1, unit_cost: Number(l.unit_cost) || 0 }));
+    await fetch("/api/purchase-orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ supplier: form.supplier.trim(), po_number: form.po_number.trim() || null, notes: form.notes.trim() || null, items }) }).catch(() => {});
+    setForm({ supplier: "", po_number: "", notes: "" }); setLines([{ name: "", qty: "1", unit_cost: "" }]); setShowNew(false); setBusy(false); load();
   }
+  async function setStatus(id: string, status: string) { await fetch(`/api/purchase-orders/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) }).catch(() => {}); load(); }
   const poTone = (s: string) => s === "received" || s === "closed" ? "good" : s === "draft" ? "default" : "high";
   return <div style={{ display: "grid", gap: 14 }}>
     <Card>
@@ -772,8 +784,16 @@ function Procurement() {
       {showNew && <div style={{ ...card, marginTop: 12, display: "grid", gap: 8 }}>
         <input placeholder="Supplier *" value={form.supplier} onChange={e => setForm({ ...form, supplier: e.target.value })} style={input} />
         <input placeholder="PO number (optional)" value={form.po_number} onChange={e => setForm({ ...form, po_number: e.target.value })} style={input} />
+        <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Line items</div>
+        {lines.map((l, i) => <div key={i} style={{ display: "flex", gap: 6 }}>
+          <input placeholder="Item" value={l.name} onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} style={{ ...input, padding: 9, fontSize: 13, flex: 2 }} />
+          <input type="number" placeholder="Qty" value={l.qty} onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, qty: e.target.value } : x))} style={{ ...input, padding: 9, fontSize: 13, width: 64 }} />
+          <input type="number" placeholder="$ ea" value={l.unit_cost} onChange={e => setLines(ls => ls.map((x, j) => j === i ? { ...x, unit_cost: e.target.value } : x))} style={{ ...input, padding: 9, fontSize: 13, width: 80 }} />
+          {lines.length > 1 && <button onClick={() => setLines(ls => ls.filter((_, j) => j !== i))} style={{ ...btn, background: "rgba(255,80,80,0.14)", padding: "0 10px" }}>×</button>}
+        </div>)}
+        <button onClick={() => setLines(ls => [...ls, { name: "", qty: "1", unit_cost: "" }])} style={{ ...btn, background: "rgba(255,255,255,0.06)", justifySelf: "start", padding: "6px 12px" }}>+ Add line</button>
         <input placeholder="Notes" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} style={input} />
-        <button onClick={create} disabled={!form.supplier.trim() || busy} style={{ ...btn, opacity: form.supplier.trim() && !busy ? 1 : 0.5 }}>{busy ? "Creating…" : "Create PO"}</button>
+        <button onClick={create} disabled={!form.supplier.trim() || busy} style={{ ...btn, opacity: form.supplier.trim() && !busy ? 1 : 0.5 }}>{busy ? "Creating…" : `Create PO · ${money(linesTotal)}`}</button>
       </div>}
     </Card>
     {loading ? <Card><Small>Loading…</Small></Card> : pos.length === 0 ? <Card><Small>No purchase orders yet.</Small></Card> :
@@ -785,8 +805,13 @@ function Procurement() {
           </div>
           <Small>{p.po_number ? `PO ${p.po_number}` : "No PO #"}{p.expected_at ? ` · expected ${String(p.expected_at).slice(0, 10)}` : ""}</Small>
           <div style={{ fontSize: 22, fontWeight: 800, color: "#00C8FF", margin: "8px 0 0" }}>{money(num(p.total))}</div>
-          {(p.purchase_order_items ?? []).length > 0 && <div style={{ marginTop: 8 }}>{(p.purchase_order_items ?? []).slice(0, 5).map((it: { id?: string; name?: string; description?: string; qty?: number }, i: number) => <p key={it.id || i} style={{ margin: "3px 0", fontSize: 13, color: "rgba(255,255,255,0.7)" }}>{it.name || it.description || "Item"} × {num(it.qty)}</p>)}</div>}
+          {(p.purchase_order_items ?? []).length > 0 && <div style={{ marginTop: 8 }}>{(p.purchase_order_items ?? []).slice(0, 6).map((it: { id?: string; name?: string; description?: string; qty?: number; unit_cost?: number }, i: number) => <p key={it.id || i} style={{ margin: "3px 0", fontSize: 13, color: "rgba(255,255,255,0.7)" }}>{it.name || it.description || "Item"} × {num(it.qty)}{it.unit_cost ? ` · ${money(num(it.unit_cost))}` : ""}</p>)}</div>}
           {p.notes && <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 12, marginTop: 8 }}>{p.notes}</p>}
+          <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" }}>
+            {p.status === "draft" && <button onClick={() => setStatus(p.id, "ordered")} style={{ ...btn, padding: "6px 12px" }}>Mark ordered</button>}
+            {p.status === "ordered" && <button onClick={() => setStatus(p.id, "received")} style={{ ...btn, padding: "6px 12px", background: "#10b981" }}>Mark received ✓</button>}
+            {p.status !== "received" && p.status !== "cancelled" && <button onClick={() => setStatus(p.id, "cancelled")} style={{ ...btn, padding: "6px 12px", background: "rgba(255,255,255,0.06)" }}>Cancel</button>}
+          </div>
         </Card>)}
       </div>}
   </div>;
@@ -801,6 +826,8 @@ function Playbooks() {
   const [showNew, setShowNew] = useState(false);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({ title: "", category: "", description: "", stepsText: "" });
+  const [editId, setEditId] = useState<string | null>(null);
+  const [eForm, setEForm] = useState({ title: "", category: "", stepsText: "" });
   const load = React.useCallback(() => { setLoading(true); fetch("/api/playbooks").then(r => r.json()).then(d => setItems(d.playbooks ?? [])).catch(() => {}).finally(() => setLoading(false)); }, []);
   useEffect(() => { load(); }, [load]);
   async function create() {
@@ -810,6 +837,14 @@ function Playbooks() {
     setForm({ title: "", category: "", description: "", stepsText: "" }); setShowNew(false); setBusy(false); load();
   }
   async function remove(id: string) { await fetch(`/api/playbooks/${id}`, { method: "DELETE" }).catch(() => {}); load(); }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function startEdit(p: any) { setEditId(p.id); setEForm({ title: p.title ?? "", category: p.category ?? "", stepsText: (p.steps ?? []).map((s: unknown) => typeof s === "string" ? s : (s as { title?: string })?.title).filter(Boolean).join("\n") }); }
+  async function saveEdit(id: string) {
+    const steps = eForm.stepsText.split("\n").map(s => s.trim()).filter(Boolean);
+    if (!eForm.title.trim() || busy) return; setBusy(true);
+    await fetch(`/api/playbooks/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: eForm.title.trim(), category: eForm.category.trim() || null, steps }) }).catch(() => {});
+    setEditId(null); setBusy(false); load();
+  }
   return <div style={{ display: "grid", gap: 14 }}>
     <Card>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
@@ -833,10 +868,23 @@ function Playbooks() {
             {p.org_id ? <Badge>Yours</Badge> : <Badge tone="good">Global</Badge>}
           </div>
           {p.category && <Small>{p.category}</Small>}
-          <ol style={{ margin: "10px 0 0", paddingLeft: 18, fontSize: 13, color: "rgba(255,255,255,0.8)" }}>
-            {(p.steps ?? []).slice(0, 8).map((s: unknown, i: number) => <li key={i} style={{ margin: "3px 0" }}>{typeof s === "string" ? s : (s as { title?: string })?.title}</li>)}
-          </ol>
-          {p.org_id && <button onClick={() => remove(p.id)} style={{ ...btn, background: "rgba(255,80,80,0.14)", border: "1px solid rgba(255,80,80,0.3)", padding: "5px 10px", marginTop: 10, fontSize: 12 }}>Delete</button>}
+          {editId === p.id ? <div style={{ ...card, marginTop: 10, display: "grid", gap: 8 }}>
+            <input placeholder="Name" value={eForm.title} onChange={e => setEForm({ ...eForm, title: e.target.value })} style={{ ...input, padding: 9, fontSize: 13 }} />
+            <input placeholder="Category" value={eForm.category} onChange={e => setEForm({ ...eForm, category: e.target.value })} style={{ ...input, padding: 9, fontSize: 13 }} />
+            <textarea value={eForm.stepsText} onChange={e => setEForm({ ...eForm, stepsText: e.target.value })} rows={6} style={{ ...input, padding: 9, fontSize: 13, resize: "vertical", fontFamily: "inherit" }} />
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => saveEdit(p.id)} disabled={busy} style={{ ...btn, flex: 1, opacity: busy ? 0.6 : 1 }}>{busy ? "Saving…" : "Save"}</button>
+              <button onClick={() => setEditId(null)} style={{ ...btn, background: "rgba(255,255,255,0.06)" }}>Cancel</button>
+            </div>
+          </div> : <>
+            <ol style={{ margin: "10px 0 0", paddingLeft: 18, fontSize: 13, color: "rgba(255,255,255,0.8)" }}>
+              {(p.steps ?? []).slice(0, 8).map((s: unknown, i: number) => <li key={i} style={{ margin: "3px 0" }}>{typeof s === "string" ? s : (s as { title?: string })?.title}</li>)}
+            </ol>
+            {p.org_id && <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+              <button onClick={() => startEdit(p)} style={{ ...btn, background: "rgba(255,255,255,0.08)", padding: "5px 12px", fontSize: 12 }}>Edit</button>
+              <button onClick={() => remove(p.id)} style={{ ...btn, background: "rgba(255,80,80,0.14)", border: "1px solid rgba(255,80,80,0.3)", padding: "5px 10px", fontSize: 12 }}>Delete</button>
+            </div>}
+          </>}
         </Card>)}
       </div>}
   </div>;
@@ -873,6 +921,10 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [photos, setPhotos] = useState<any[]>([]);
   const [woUploading, setWoUploading] = useState(false);
+  const [showAddPart, setShowAddPart] = useState(false);
+  const [pForm, setPForm] = useState({ name: "", qty: "1", unit_cost: "", unit_price: "" });
+  const [laborH, setLaborH] = useState("");
+  const [partBusy, setPartBusy] = useState(false);
   const load = React.useCallback(() => {
     setLoading(true);
     Promise.all([
@@ -958,6 +1010,16 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
     } catch (_) { /* ignore */ }
     setWoUploading(false); load();
   }
+  async function addPart() {
+    if (!pForm.name.trim() || partBusy) return; setPartBusy(true);
+    await fetch(`/api/maintenance/${id}/parts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: pForm.name.trim(), qty: Number(pForm.qty) || 1, unit_cost: pForm.unit_cost ? Number(pForm.unit_cost) : null, unit_price: pForm.unit_price ? Number(pForm.unit_price) : null }) }).catch(() => {});
+    setPForm({ name: "", qty: "1", unit_cost: "", unit_price: "" }); setShowAddPart(false); setPartBusy(false); load();
+  }
+  async function logLabor() {
+    const h = Number(laborH); if (!h || h <= 0 || partBusy) return; setPartBusy(true);
+    await fetch(`/api/maintenance/${id}/time`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hours: h }) }).catch(() => {});
+    setLaborH(""); setPartBusy(false); load();
+  }
 
   return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.62)", backdropFilter: "blur(6px)", display: "flex", justifyContent: "flex-end" }}>
     <div onClick={e => e.stopPropagation()} style={{ width: "min(580px,100%)", height: "100%", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#060b1a)", borderLeft: "1px solid rgba(0,200,255,0.22)", padding: 20, paddingBottom: 130, color: "white" }}>
@@ -1037,6 +1099,10 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             <div><Small>Parts price</Small><div style={{ fontSize: 16, fontWeight: 700 }}>{money(partsRev)}</div></div>
             <div><Small>Labor logged</Small><div style={{ fontSize: 16, fontWeight: 700 }}>{Math.round((laborMins / 60) * 10) / 10} hrs</div></div>
           </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
+            <input type="number" step="0.25" placeholder="Hours" value={laborH} onChange={e => setLaborH(e.target.value)} style={{ ...input, padding: 9, width: 110 }} />
+            <button onClick={logLabor} disabled={!laborH || partBusy} style={{ ...btn, opacity: laborH && !partBusy ? 1 : 0.5 }}>Log labor</button>
+          </div>
         </Card>
 
         {/* Checklist / Playbook steps (was Procedures) */}
@@ -1066,7 +1132,19 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
 
         {/* Parts used */}
         <Card>
-          <h2 style={{ fontSize: 15 }}>Parts used</h2>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <h2 style={{ fontSize: 15 }}>Parts used</h2>
+            <button onClick={() => setShowAddPart(s => !s)} style={{ ...btn, padding: "6px 12px" }}>+ Add</button>
+          </div>
+          {showAddPart && <div style={{ ...card, marginBottom: 10, display: "grid", gap: 8 }}>
+            <input placeholder="Part name *" value={pForm.name} onChange={e => setPForm({ ...pForm, name: e.target.value })} style={{ ...input, padding: 9, fontSize: 13 }} />
+            <div style={{ display: "flex", gap: 8 }}>
+              <input type="number" placeholder="Qty" value={pForm.qty} onChange={e => setPForm({ ...pForm, qty: e.target.value })} style={{ ...input, padding: 9, fontSize: 13, flex: 1 }} />
+              <input type="number" placeholder="Cost $" value={pForm.unit_cost} onChange={e => setPForm({ ...pForm, unit_cost: e.target.value })} style={{ ...input, padding: 9, fontSize: 13, flex: 1 }} />
+              <input type="number" placeholder="Price $" value={pForm.unit_price} onChange={e => setPForm({ ...pForm, unit_price: e.target.value })} style={{ ...input, padding: 9, fontSize: 13, flex: 1 }} />
+            </div>
+            <button onClick={addPart} disabled={!pForm.name.trim() || partBusy} style={{ ...btn, opacity: pForm.name.trim() && !partBusy ? 1 : 0.5 }}>{partBusy ? "Adding…" : "Add part"}</button>
+          </div>}
           {parts.length === 0 ? <Small>None yet.</Small> : parts.map((p, i) => <p key={p.id || i} style={{ margin: "6px 0" }}>{p.name || "Part"} × {num(p.qty)} <span style={{ color: "#34d399" }}>· {money((num(p.unit_price) - num(p.unit_cost)) * num(p.qty))} margin</span></p>)}
         </Card>
 

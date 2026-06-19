@@ -575,6 +575,7 @@ function TechTool() {
   const [jobsLoading, setJobsLoading] = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [openJob,    setOpenJob]    = useState<any>(null)
+  const [jobHours,   setJobHours]   = useState('')
   const [allTechs,   setAllTechs]   = useState<{ id: string; name: string; initials: string }[]>([])
   const [gpsGranted, setGpsGranted] = useState(false)
 
@@ -665,15 +666,41 @@ function TechTool() {
       .finally(() => setJobsLoading(false))
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function refreshOpenJob(woId: string, base?: any) {
+    const [d, ph] = await Promise.all([
+      fetch(`/api/maintenance/${woId}`, { headers: apiHeaders() }).then(r => r.json()).catch(() => null),
+      fetch(`/api/maintenance/${woId}/photos`, { headers: apiHeaders() }).then(r => r.json()).catch(() => null),
+    ])
+    setOpenJob({ ...(base ?? openJob), _checklist: d?.checklist ?? [], _description: d?.work_order?.description ?? base?.description, _photos: ph?.photos ?? [], status: d?.work_order?.status ?? base?.status })
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function toggleJobStep(woId: string, item: any) {
     const next = !(item.is_complete || item.completed)
     await fetch(`/api/maintenance/${woId}/checklist`, { method: 'PATCH', headers: apiHeaders(), body: JSON.stringify({ item_id: item.id, is_complete: next }) }).catch(() => {})
-    if (openJob) { const d = await fetch(`/api/maintenance/${woId}`, { headers: apiHeaders() }).then(r => r.json()).catch(() => null); if (d?.work_order) setOpenJob({ ...openJob, _checklist: d.checklist ?? [] }) }
+    refreshOpenJob(woId)
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async function openJobDetail(job: any) {
-    const d = await fetch(`/api/maintenance/${job.id}`, { headers: apiHeaders() }).then(r => r.json()).catch(() => null)
-    setOpenJob({ ...job, _checklist: d?.checklist ?? [], _description: d?.work_order?.description ?? job.description })
+  async function openJobDetail(job: any) { refreshOpenJob(job.id, job) }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function setJobStatus(woId: string, status: string) {
+    await fetch(`/api/maintenance/${woId}`, { method: 'PATCH', headers: apiHeaders(), body: JSON.stringify({ status }) }).catch(() => {})
+    refreshOpenJob(woId); loadMyJobs()
+  }
+  async function uploadJobPhoto(woId: string, file: File) {
+    if (!file) return
+    try {
+      const up = await fetch(`/api/maintenance/${woId}/photo-upload-url`, { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ filename: file.name }) }).then(r => r.json())
+      if (up?.signedUrl) {
+        await fetch(up.signedUrl, { method: 'PUT', headers: { 'Content-Type': file.type || 'image/jpeg' }, body: file })
+        await fetch(`/api/maintenance/${woId}/photos`, { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ file_url: up.publicUrl, caption: file.name, technician_name: techName }) }).catch(() => {})
+      }
+    } catch (_) { /* ignore */ }
+    refreshOpenJob(woId)
+  }
+  async function logJobHours(woId: string, hours: number) {
+    if (!hours || hours <= 0) return
+    await fetch(`/api/maintenance/${woId}/time`, { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ hours, technician_name: techName }) }).catch(() => {})
+    refreshOpenJob(woId)
   }
 
   // ── GPS ping helper — fire-and-forget, never blocks UI ───────────────────
@@ -1033,7 +1060,46 @@ function TechTool() {
                   )
                 })}
               </div>
-              <button onClick={() => { setSymptom(openJob.title || ''); setConnectedDevices([]); setScreen('symptom') }} style={{ width: '100%', padding: 14, borderRadius: 12, background: 'rgba(0,200,255,0.12)', border: '1px solid rgba(0,200,255,0.34)', color: '#7dd3fc', fontFamily: MONO, fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.06em' }}>🤖 GET AI TECH SUPPORT</button>
+
+              {/* Photos (proof) */}
+              <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.1em' }}>PHOTOS ({(openJob._photos ?? []).length})</span>
+                  <label style={{ fontFamily: MONO, fontSize: 9, color: C.blue, cursor: 'pointer' }}>+ ADD PHOTO
+                    <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadJobPhoto(openJob.id, f); e.target.value = '' }} />
+                  </label>
+                </div>
+                {(openJob._photos ?? []).length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px,1fr))', gap: 6, marginTop: 8 }}>
+                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                    {(openJob._photos ?? []).map((p: any, i: number) => <img key={p.id || i} src={p.file_url || p.url} alt="" style={{ width: '100%', height: 60, objectFit: 'cover', borderRadius: 8 }} />)}
+                  </div>
+                )}
+              </div>
+
+              {/* Log hours */}
+              <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.1em', flex: 1 }}>LOG LABOR</span>
+                <input type="number" step="0.25" placeholder="hrs" value={jobHours} onChange={e => setJobHours(e.target.value)} style={{ width: 70, background: '#0a1322', border: `1px solid ${C.border}`, borderRadius: 8, color: C.textPrimary, padding: 8, fontSize: 13 }} />
+                <button onClick={() => { logJobHours(openJob.id, Number(jobHours)); setJobHours('') }} disabled={!jobHours} style={{ padding: '8px 14px', borderRadius: 8, background: C.blue, color: '#fff', border: 'none', fontFamily: MONO, fontSize: 10, fontWeight: 700, cursor: jobHours ? 'pointer' : 'not-allowed', opacity: jobHours ? 1 : 0.5 }}>LOG</button>
+              </div>
+
+              <button onClick={() => { setSymptom(openJob.title || ''); setConnectedDevices([]); setScreen('symptom') }} style={{ width: '100%', padding: 14, borderRadius: 12, background: 'rgba(0,200,255,0.12)', border: '1px solid rgba(0,200,255,0.34)', color: '#7dd3fc', fontFamily: MONO, fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.06em', marginBottom: 12 }}>🤖 GET AI TECH SUPPORT</button>
+
+              {/* Mark complete — proof gated */}
+              {(() => {
+                const allDone = checklist.length > 0 && doneCount === checklist.length
+                const hasPhoto = (openJob._photos ?? []).length > 0
+                const can = allDone && hasPhoto
+                const isDone = ['completed', 'complete', 'done'].includes(String(openJob.status || '').toLowerCase())
+                if (isDone) return <div style={{ textAlign: 'center', fontFamily: MONO, fontSize: 11, color: C.green, padding: 10 }}>✓ JOB COMPLETE</div>
+                return (
+                  <>
+                    <button onClick={() => can && setJobStatus(openJob.id, 'completed')} disabled={!can} style={{ width: '100%', padding: 14, borderRadius: 12, background: can ? C.green : 'rgba(255,255,255,0.06)', color: can ? '#06120c' : C.textMuted, border: 'none', fontFamily: MONO, fontSize: 12, fontWeight: 800, cursor: can ? 'pointer' : 'not-allowed', letterSpacing: '0.06em' }}>✓ COMPLETE JOB</button>
+                    {!can && <div style={{ textAlign: 'center', fontSize: 11, color: C.amber, marginTop: 6 }}>🔒 {!allDone ? (checklist.length === 0 ? 'Add & finish steps first' : `Finish all steps (${doneCount}/${checklist.length})`) : 'Add at least one photo'}</div>}
+                  </>
+                )
+              })()}
             </>
           )}
         </div>
