@@ -141,6 +141,21 @@ const C = {
   purpleAlpha: 'rgba(167,139,250,0.15)',
 }
 
+// Clean line-icons for the bottom nav (replaces emoji). Stroke uses currentColor.
+function NavIcon({ k, size = 22 }: { k: string; size?: number }) {
+  const p = { fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
+  const paths: Record<string, React.ReactNode> = {
+    diagnose: <><circle cx="11" cy="11" r="7" {...p} /><line x1="21" y1="21" x2="16.65" y2="16.65" {...p} /></>,
+    jobs:     <><rect x="3" y="7" width="18" height="13" rx="2" {...p} /><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" {...p} /><line x1="3" y1="12" x2="21" y2="12" {...p} /></>,
+    wiring:   <path d="M13 2 3 14h8l-1 8 11-12h-8l0-8z" {...p} />,
+    cable:    <><path d="M9 2v6M15 2v6" {...p} /><path d="M7 8h10v3a5 5 0 0 1-10 0V8z" {...p} /><path d="M12 16v6" {...p} /></>,
+    survey:   <><path d="M12 22s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12z" {...p} /><circle cx="12" cy="10" r="2.5" {...p} /></>,
+    netscout: <><path d="M2 9a16 16 0 0 1 20 0" {...p} /><path d="M5 12.5a11 11 0 0 1 14 0" {...p} /><path d="M8.5 16a6 6 0 0 1 7 0" {...p} /><circle cx="12" cy="19.5" r="1" fill="currentColor" stroke="none" /></>,
+    train:    <><path d="M22 10 12 5 2 10l10 5 10-5z" {...p} /><path d="M6 12v5c0 1.1 2.7 3 6 3s6-1.9 6-3v-5" {...p} /></>,
+  }
+  return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">{paths[k] ?? null}</svg>
+}
+
 const STEP_CFG: Record<StepType, {
   accent: string; surface: string; border: string; label: string; numColor: string
 }> = {
@@ -896,7 +911,7 @@ function TechTool() {
       <div style={{ ...S.shell, justifyContent: 'center', alignItems: 'center' }}>
         <div style={S.pinCard} className="gg-fade-in">
           <div style={{ textAlign: 'center', marginBottom: 28 }}>
-            <div style={S.pinLogo} className="gg-pin-logo">GG</div>
+            <div style={{ ...S.pinLogo, padding: 16, background: 'rgba(255,255,255,0.06)' }} className="gg-pin-logo"><img src="/logo.png" alt="GateGuard" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
             <div style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.2em', color: C.textMuted, marginTop: 10 }}>
               GATEGUARD FIELD TOOL
             </div>
@@ -1136,7 +1151,7 @@ function TechTool() {
       <div style={S.shell}>
         <style>{`.gg-chips::-webkit-scrollbar,.gg-list::-webkit-scrollbar{display:none}`}</style>
         <div style={S.topBar}>
-          <div style={S.ggMark}>GG</div>
+          <div style={{ ...S.ggMark, padding: 6, background: 'rgba(255,255,255,0.06)' }}><img src="/logo.png" alt="GateGuard" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
           <div style={{ flex: 1 }}>
             <div style={S.topBarTitle}>GATEGUARD FIELD TOOL</div>
             <div style={S.topBarSub}>SELECT DEVICE</div>
@@ -1289,50 +1304,50 @@ function TechTool() {
         <div style={S.legendStrip}>
           {/* DIAGNOSE — currently active */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: `2.5px solid ${C.blue}`, background: 'rgba(107,126,255,0.06)' }}>
-            <span style={{ fontSize: 22 }}>🔍</span>
-            <span style={{ fontFamily: MONO, fontSize: 8, fontWeight: 700, color: C.blue, letterSpacing: '0.06em' }}>DIAGNOSE</span>
+            <span style={{ color: C.blue, display: 'flex' }}><NavIcon k="diagnose" /></span>
+            <span style={{ fontFamily: MONO, fontSize: 9, fontWeight: 700, color: C.blue, letterSpacing: '0.06em' }}>DIAGNOSE</span>
           </div>
           {/* MY JOBS */}
           <button onClick={() => { setOpenJob(null); setScreen('jobs'); loadMyJobs() }} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}>
-            <span style={{ fontSize: 22 }}>🧰</span>
-            <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.06em' }}>MY JOBS</span>
+            <span style={{ color: C.textSecondary, display: 'flex' }}><NavIcon k="jobs" /></span>
+            <span style={{ fontFamily: MONO, fontSize: 9, color: C.textSecondary, letterSpacing: '0.06em' }}>MY JOBS</span>
           </button>
           {/* WIRING */}
           <button onClick={() => setScreen('wiring')} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}>
-            <span style={{ fontSize: 22 }}>⚡</span>
-            <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.06em' }}>WIRING</span>
+            <span style={{ color: C.textSecondary, display: 'flex' }}><NavIcon k="wiring" /></span>
+            <span style={{ fontFamily: MONO, fontSize: 9, color: C.textSecondary, letterSpacing: '0.06em' }}>WIRING</span>
           </button>
           {/* CABLE */}
           <button
             onClick={() => setScreen('cable')}
             style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}
           >
-            <span style={{ fontSize: 22 }}>🔌</span>
-            <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.06em' }}>CABLE</span>
+            <span style={{ color: C.textSecondary, display: 'flex' }}><NavIcon k="cable" /></span>
+            <span style={{ fontFamily: MONO, fontSize: 9, color: C.textSecondary, letterSpacing: '0.06em' }}>CABLE</span>
           </button>
           {/* SURVEY */}
           <button
             onClick={() => { setSurveyProposal(null); setScreen('survey') }}
             style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}
           >
-            <span style={{ fontSize: 22 }}>📍</span>
-            <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.06em' }}>SURVEY</span>
+            <span style={{ color: C.textSecondary, display: 'flex' }}><NavIcon k="survey" /></span>
+            <span style={{ fontFamily: MONO, fontSize: 9, color: C.textSecondary, letterSpacing: '0.06em' }}>SURVEY</span>
           </button>
           {/* NETSCOUT */}
           <button
             onClick={() => setScreen('netscout')}
             style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}
           >
-            <span style={{ fontSize: 22 }}>📡</span>
-            <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.06em' }}>NETSCOUT</span>
+            <span style={{ color: C.textSecondary, display: 'flex' }}><NavIcon k="netscout" /></span>
+            <span style={{ fontFamily: MONO, fontSize: 9, color: C.textSecondary, letterSpacing: '0.06em' }}>NETSCOUT</span>
           </button>
           {/* TRAIN */}
           <button
             onClick={() => setScreen('training')}
             style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}
           >
-            <span style={{ fontSize: 22 }}>🎓</span>
-            <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.06em' }}>TRAIN</span>
+            <span style={{ color: C.textSecondary, display: 'flex' }}><NavIcon k="train" /></span>
+            <span style={{ fontFamily: MONO, fontSize: 9, color: C.textSecondary, letterSpacing: '0.06em' }}>TRAIN</span>
           </button>
         </div>
       </div>
@@ -1548,7 +1563,7 @@ function TechTool() {
 
         {/* Top bar */}
         <div style={S.topBar}>
-          <div style={S.ggMark}>GG</div>
+          <div style={{ ...S.ggMark, padding: 6, background: 'rgba(255,255,255,0.06)' }}><img src="/logo.png" alt="GateGuard" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
           <div style={{ flex: 1 }}>
             <div style={S.topBarTitle}>NEW INSTALLATION — DEMO</div>
             <div style={S.topBarSub}>G3 INTERCOM + HUB MINI + ACS300 + DK6050 ×2</div>
@@ -3657,20 +3672,20 @@ function TechTool() {
         {/* Bottom nav */}
         <div style={S.legendStrip}>
           <button onClick={() => setScreen('home')} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}>
-            <span style={{ fontSize: 22 }}>🔍</span>
-            <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.06em' }}>DIAGNOSE</span>
+            <span style={{ color: C.textSecondary, display: 'flex' }}><NavIcon k="diagnose" /></span>
+            <span style={{ fontFamily: MONO, fontSize: 9, color: C.textSecondary, letterSpacing: '0.06em' }}>DIAGNOSE</span>
           </button>
           <button onClick={() => setScreen('wiring')} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}>
-            <span style={{ fontSize: 22 }}>⚡</span>
-            <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.06em' }}>WIRING</span>
+            <span style={{ color: C.textSecondary, display: 'flex' }}><NavIcon k="wiring" /></span>
+            <span style={{ fontFamily: MONO, fontSize: 9, color: C.textSecondary, letterSpacing: '0.06em' }}>WIRING</span>
           </button>
           <button onClick={() => setScreen('cable')} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}>
-            <span style={{ fontSize: 22 }}>🔌</span>
-            <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.06em' }}>CABLE</span>
+            <span style={{ color: C.textSecondary, display: 'flex' }}><NavIcon k="cable" /></span>
+            <span style={{ fontFamily: MONO, fontSize: 9, color: C.textSecondary, letterSpacing: '0.06em' }}>CABLE</span>
           </button>
           <button onClick={() => { setSurveyProposal(null); setScreen('survey') }} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}>
-            <span style={{ fontSize: 22 }}>📍</span>
-            <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.06em' }}>SURVEY</span>
+            <span style={{ color: C.textSecondary, display: 'flex' }}><NavIcon k="survey" /></span>
+            <span style={{ fontFamily: MONO, fontSize: 9, color: C.textSecondary, letterSpacing: '0.06em' }}>SURVEY</span>
           </button>
           {/* NETSCOUT — active */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: `2.5px solid ${C.blue}`, background: 'rgba(107,126,255,0.06)' }}>
@@ -3678,8 +3693,8 @@ function TechTool() {
             <span style={{ fontFamily: MONO, fontSize: 8, fontWeight: 700, color: C.blue, letterSpacing: '0.06em' }}>NETSCOUT</span>
           </div>
           <button onClick={() => setScreen('training')} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}>
-            <span style={{ fontSize: 22 }}>🎓</span>
-            <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.06em' }}>TRAIN</span>
+            <span style={{ color: C.textSecondary, display: 'flex' }}><NavIcon k="train" /></span>
+            <span style={{ fontFamily: MONO, fontSize: 9, color: C.textSecondary, letterSpacing: '0.06em' }}>TRAIN</span>
           </button>
         </div>
       </div>
