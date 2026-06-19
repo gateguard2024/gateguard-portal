@@ -68,4 +68,45 @@ Where: **Sales** kanban (`/crm`, `/crm/opportunities`) and **Opportunity → Dea
 **Depends on infra:** none. Reuses existing `/api/dispatch` (work_orders) + `/api/crm/opportunities` PATCH.
 
 ---
+
+## Build 4b — Guided quote builder  (pushed beta · YYYY-MM-DD)
+Where: **Opportunity → Deal life cycle → Proposal** step.
+
+- ☐ Opening Proposal on an opp with **no** quote shows the 3-step builder (Add products / custom line / Review & create).
+- ☐ Searching the catalog returns products; clicking one adds it as a line at its sell price.
+- ☐ "Type a custom line" adds a line; the **One-time / Monthly** toggle puts it in the right bucket.
+- ☐ Editing a line's qty updates its subtotal and the One-time / Monthly totals live.
+- ☐ "Create quote" creates a real quote (gets a GG-YYYY-NNNN number) tied to the opportunity; totals match.
+- ☐ After creating, the step shows the quote summary with **Open/edit** and **Client proposal view** links that open the full quote pages.
+- ☐ Re-opening Proposal on an opp that already has a quote shows the summary (not a blank builder) — no accidental duplicate.
+- ☐ "+ Start another quote" returns to the builder.
+- ☐ Created quote appears in the quotes list / Money surface scoped to the right org.
+
+**Depends on infra:** none. Reuses `/api/quotes` (POST) + `/api/products` search.
+
+---
+
+## Build 5 — Site lifecycle + unified activity timeline  (pushed beta · YYYY-MM-DD)
+**⚠ Run migration 126 on beta Supabase first** (`126_site_lifecycle.sql` — adds lifecycle columns to `sites`).
+
+Activity timeline (#59) — where: **Opportunity → Deal life cycle** (bottom, "Deal activity") and **Operations → Locations → site drawer** (bottom, "Site activity").
+
+- ☐ Opening a deal shows a "Deal activity" feed combining notes/calls/emails/meetings/tasks + quotes + work orders, newest first, with icons + relative times.
+- ☐ Logging a note/activity on the opp then reloading shows it in the feed.
+- ☐ Creating a quote (Proposal step) shows a "Quote GG-…" entry in the feed.
+- ☐ Converting to a job (Payment step) shows a "Work order …" entry in the feed.
+- ☐ A record with no activity shows the friendly empty state (not an error).
+- ☐ Site drawer shows a "Site activity" feed (events + work orders + quotes for that site).
+- ☐ **Scope check:** the feed only loads for records the user is allowed to see (try an opp/site outside your org → 404, no data leak).
+
+Site lifecycle (#60) — where: **Operations → Locations → site drawer header**.
+
+- ☐ Site shows a status chip: Prospect / Onboarding / Active / Inactive / Churned.
+- ☐ A site without contract+deposit shows "To activate: Contract not signed · Deposit not collected".
+- ☐ Converting a won deal that's linked to a site (opp has site_id) flips that site to **Active** (after migration 126 is run) — re-open the site to confirm.
+- ☐ Before migration 126 runs, conversion still works (site stamp fails silently, no crash).
+
+**Depends on infra:** migration 126 (`sites` lifecycle columns). Timeline needs none.
+
+---
 *(new builds appended below as they ship)*

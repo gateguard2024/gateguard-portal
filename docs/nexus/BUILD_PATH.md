@@ -18,11 +18,11 @@ Gates/doors/cameras/units → install cost; pull units from Overview; feed surve
 ## Build 4a — 7-stage pipeline + deposit automation (#82)  ✅ shipped
 Canonical pipeline in `lib/pipeline.ts` (single source of truth) + tolerant `normalizeStage()` so lifecycle stages never drop off the board; deposit-collected → Closed Won + auto-create install job.
 
-## Build 4b — Guided quote builder (#66)  ← next
-Rebuild the quote builder as the simple guided-card flow.
+## Build 4b — Guided quote builder (#66)  ✅ shipped
+Proposal step rebuilt as a 3-card flow (add products / custom line / review) that builds a real quote tied to the opportunity, with links to the full quote + client proposal pages.
 
-## Build 5 — Site lifecycle + activity timeline (#60, #59)
-Site activation rule (contract signed AND deposit paid); unified per-record activity timeline (emails + events + notes).
+## Build 5 — Site lifecycle + activity timeline (#60, #59)  ✅ shipped
+Unified `/api/activity` feed + reusable `ActivityTimeline` (mounted on opportunities + site drawer); `lib/site-lifecycle.ts` activation rule (contract signed AND deposit paid) + migration 126 + auto-activate on deposit conversion. **Run migration 126 on beta then prod.**
 
 ## Build 6 — Dealer onboarding + network (#48, #61, #10)
 8-stage dealer onboarding workflow; dealer recruitment pipeline (prospect→vetting→onboarding); fold Dealers + Feature Settings into the admin hub.

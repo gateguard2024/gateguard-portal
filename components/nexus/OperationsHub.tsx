@@ -17,6 +17,8 @@
 //   /api/products                       parts inventory
 //   /api/pm-schedules                   preventive maintenance
 import React, { useEffect, useState } from "react";
+import { siteActivation, SITE_STATUS_LABELS, SITE_STATUS_COLORS } from "@/lib/site-lifecycle";
+import { ActivityTimeline } from "@/components/nexus/ActivityTimeline";
 
 type RealWO = { id: string; property?: string; assignedTech?: string | null; assignedTechId?: string | null; eta?: string; priority: string; status: string; woNumber?: string | null; title?: string | null };
 type RealTech = { id: string; name: string };
@@ -627,6 +629,14 @@ function SiteDetailDrawer({ id, onClose }: { id: string; onClose: () => void }) 
           <div style={{ fontSize: 11, color: "rgba(0,200,255,0.8)", letterSpacing: "0.1em" }}>SITE</div>
           <h2 style={{ margin: "4px 0", fontSize: 22 }}>{site.name || "Site"}</h2>
           <Small>{[site.city, site.state].filter(Boolean).join(", ") || "—"}</Small>
+          {/* Lifecycle status (#60): Active only when contract signed AND deposit paid */}
+          {(() => {
+            const a = siteActivation(site);
+            return <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, background: `${SITE_STATUS_COLORS[a.status]}22`, border: `1px solid ${SITE_STATUS_COLORS[a.status]}66`, color: SITE_STATUS_COLORS[a.status] }}>{SITE_STATUS_LABELS[a.status]}</span>
+              {!a.active && a.blockers.length > 0 && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>To activate: {a.blockers.join(" · ")}</span>}
+            </div>;
+          })()}
         </div>
 
         {/* + New work order from this site */}
@@ -726,6 +736,9 @@ function SiteDetailDrawer({ id, onClose }: { id: string; onClose: () => void }) 
             <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{e.event_type}{e.created_at ? ` · ${String(e.created_at).slice(0, 10)}` : ""}</div>
           </div>)}
         </Card>
+
+        {/* Unified activity timeline (#59) */}
+        <ActivityTimeline entity="site" id={id} title="Site activity" />
       </div>}
     </div>
   </div>;

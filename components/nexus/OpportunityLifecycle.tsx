@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { PricingCalculator } from '@/components/nexus/PricingCalculator'
 import { ContactsCard } from '@/components/nexus/ContactsCard'
+import { ActivityTimeline } from '@/components/nexus/ActivityTimeline'
 import { normalizeStage } from '@/lib/pipeline'
 
 const cyan = '#00C8FF'
@@ -101,7 +102,7 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
         {stage === 0 && <Overview data={data} opportunityId={opportunityId} onSaved={loadData} />}
         {stage === 1 && <Survey opportunityId={opportunityId} opp={opp} />}
         {stage === 2 && <Financials opp={opp} />}
-        {stage === 3 && <Proposal />}
+        {stage === 3 && <Proposal opp={opp} opportunityId={opportunityId} onSaved={loadData} />}
         {stage === 4 && <Negotiate />}
         {stage === 5 && <ContractInvoice />}
         {stage === 6 && <Sign />}
@@ -111,6 +112,9 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
           <button onClick={() => goToStage(Math.max(0, stage - 1))} disabled={stage === 0} style={{ ...btn, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)', opacity: stage === 0 ? 0.4 : 1 }}>← Back</button>
           <button onClick={() => stage === STAGES.length - 1 ? onClose?.() : goToStage(Math.min(STAGES.length - 1, stage + 1))} style={btn}>{stage === STAGES.length - 1 ? 'Done' : `Next: ${STAGES[stage + 1]} →`}</button>
         </div>
+
+        {/* Unified activity timeline — always visible for this deal */}
+        {opportunityId && <div style={{ marginTop: 24 }}><ActivityTimeline entity="opportunity" id={opportunityId} title="Deal activity" /></div>}
       </div>
     </div>
   )
@@ -1024,49 +1028,169 @@ function Financials({ opp }: { opp: Record<string, any> }) {
   )
 }
 
-function Proposal() {
-  const addons = [
-    { id: 'mon', name: 'Camera monitoring', price: 300 },
-    { id: 'locks', name: 'Smart locks on units', price: 425 },
-    { id: 'talk', name: 'Talk-down at gate', price: 95 },
-  ]
-  const [on, setOn] = useState<Record<string, boolean>>({})
-  const base = 1250
-  const total = base + addons.filter(a => on[a.id]).reduce((s, a) => s + a.price, 0)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type QLine = { category: string; description: string; qty: number; unit_price: number; is_recurring: boolean }
+
+// Guided quote builder (#66). 5th-grade simple: search a product or type a
+// line, add it, watch the total. Builds a real quote tied to this opportunity.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function Proposal({ opp, opportunityId, onSaved }: { opp: Record<string, any>; opportunityId?: string; onSaved?: () => void }) {
+  const acct = (opp?.account_name || opp?.name || 'Customer') as string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [existing, setExisting] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [items, setItems] = useState<QLine[]>([])
+  const [q, setQ] = useState('')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [results, setResults] = useState<any[]>([])
+  const [draft, setDraft] = useState({ description: '', qty: '1', unit_price: '', is_recurring: false })
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  const [err, setErr] = useState(false)
+
+  // Load an existing quote for this opp (so we don't double-create).
+  useEffect(() => {
+    if (!opportunityId) { setLoading(false); return }
+    void fetch(`/api/quotes?opportunity_id=${opportunityId}`).then(r => r.json()).then(j => {
+      const rec = (j.records ?? [])[0] ?? null
+      setExisting(rec)
+    }).catch(() => {}).finally(() => setLoading(false))
+  }, [opportunityId])
+
+  // Product search (reuses the catalog) — debounced.
+  useEffect(() => {
+    if (!q.trim()) { setResults([]); return }
+    const t = setTimeout(() => {
+      void fetch(`/api/products?q=${encodeURIComponent(q.trim())}&limit=8`).then(r => r.json()).then(j => setResults(j.products ?? [])).catch(() => {})
+    }, 250)
+    return () => clearTimeout(t)
+  }, [q])
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const priceOf = (p: any) => Number(p.sell_price ?? p.unit_price ?? p.price ?? p.list_price ?? 0) || 0
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const addProduct = (p: any) => { setItems(it => [...it, { category: p.category || 'Equipment', description: p.name || 'Item', qty: 1, unit_price: priceOf(p), is_recurring: false }]); setQ(''); setResults([]) }
+  const addManual = () => {
+    if (!draft.description.trim()) return
+    setItems(it => [...it, { category: 'General', description: draft.description.trim(), qty: Number(draft.qty) || 1, unit_price: Number(draft.unit_price) || 0, is_recurring: draft.is_recurring }])
+    setDraft({ description: '', qty: '1', unit_price: '', is_recurring: false })
+  }
+  const removeItem = (i: number) => setItems(it => it.filter((_, idx) => idx !== i))
+  const setQty = (i: number, v: string) => setItems(it => it.map((x, idx) => idx === i ? { ...x, qty: Number(v) || 0 } : x))
+
+  const oneTime = items.filter(i => !i.is_recurring).reduce((s, i) => s + i.qty * i.unit_price, 0)
+  const mrr = items.filter(i => i.is_recurring).reduce((s, i) => s + i.qty * i.unit_price, 0)
+
+  async function createQuote() {
+    if (busy || items.length === 0) return
+    setBusy(true); setErr(false); setMsg(null)
+    try {
+      const r = await fetch('/api/quotes', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: `${opp?.name || acct} — Proposal`,
+          opportunity_id: opportunityId ?? null,
+          client_name: acct,
+          client_email: opp?.contact_email ?? opp?.email ?? opp?.client_email ?? null,
+          site_id: opp?.site_id ?? null,
+          property_name: opp?.property_name ?? opp?.name ?? null,
+          units: opp?.units ?? null,
+          line_items: items,
+        }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j.error || 'create')
+      setExisting(j.quote)
+      setItems([])
+      setMsg(`Quote ${j.quote?.quote_number ?? ''} created ✓`)
+      onSaved?.()
+    } catch (e) {
+      setErr(true); setMsg(e instanceof Error && e.message !== 'create' ? e.message : 'Could not create the quote.')
+    } finally { setBusy(false) }
+  }
+
+  if (loading) return <Card><Sub>Loading proposal…</Sub></Card>
+
+  // Already has a quote → show it + links instead of the builder.
+  if (existing) {
+    return (
+      <div style={{ display: 'grid', gap: 16 }}>
+        <Card style={{ background: 'linear-gradient(180deg, rgba(0,124,255,0.12), rgba(8,18,34,0.6))', border: '1px solid rgba(0,200,255,0.3)' }}>
+          <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#7DE5FF' }}>Proposal · {acct}</div>
+          <h2 style={{ margin: '6px 0', fontSize: 24 }}>{existing.quote_number || 'Quote'}</h2>
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 8 }}>
+            <div><Sub>One-time</Sub><div style={{ fontSize: 22, fontWeight: 800, color: '#7DE5FF' }}>{usd(Number(existing.total_one_time) || 0)}</div></div>
+            <div><Sub>Monthly</Sub><div style={{ fontSize: 22, fontWeight: 800, color: '#6ee7b7' }}>{usd(Number(existing.total_mrr) || 0)}/mo</div></div>
+            <div><Sub>Status</Sub><div style={{ fontSize: 15, fontWeight: 700, textTransform: 'capitalize' }}>{existing.status || 'draft'}</div></div>
+          </div>
+          <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
+            <a href={`/quotes/${existing.id}`} target="_blank" rel="noreferrer" style={{ ...btn, textDecoration: 'none' }}>Open / edit quote →</a>
+            <a href={`/quotes/${existing.id}/proposal`} target="_blank" rel="noreferrer" style={{ ...btn, background: 'rgba(52,211,153,0.18)', border: '1px solid rgba(52,211,153,0.45)', color: '#6ee7b7', textDecoration: 'none' }}>Client proposal view →</a>
+          </div>
+          <Sub>Edit line items, send for signature, and track acceptance from the full quote page.</Sub>
+        </Card>
+        <button onClick={() => setExisting(null)} style={{ ...btn, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)', width: 'fit-content' }}>+ Start another quote</button>
+        {msg && <p style={{ fontSize: 12.5, color: err ? '#fca5a5' : '#6ee7b7' }}>{msg}</p>}
+      </div>
+    )
+  }
+
+  // Builder.
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px,1fr))', gap: 16 }}>
-      <Card style={{ gridColumn: '1 / -1', background: 'radial-gradient(circle at 50% 0%, rgba(0,124,255,0.2), transparent 50%), rgba(255,255,255,0.04)', textAlign: 'center', padding: 28 }}>
-        <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#7DE5FF' }}>Proposal · prepared for</div>
-        <h2 style={{ margin: '6px 0', fontSize: 28 }}>The Stratford</h2>
-        <Sub>A modern access &amp; security upgrade — interactive, add what you want.</Sub>
+    <div style={{ display: 'grid', gap: 16 }}>
+      <Card style={{ background: 'radial-gradient(circle at 50% 0%, rgba(0,124,255,0.18), transparent 55%), rgba(255,255,255,0.04)', textAlign: 'center' }}>
+        <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#7DE5FF' }}>Build the proposal · {acct}</div>
+        <Sub>Add what you&apos;re selling — search a product or type a line. The total adds up as you go.</Sub>
       </Card>
+
       <Card>
-        <H>What's included</H>
-        <ul style={{ paddingLeft: 18, fontSize: 13, color: 'rgba(255,255,255,0.8)', lineHeight: 1.8 }}>
-          <li>Gate access at 2 entry points</li><li>Common-door access control</li><li>500 resident mobile passes</li><li>4 amenity cameras</li>
-        </ul>
-        <div style={{ marginTop: 12, fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>Base service</div>
-        <div style={{ fontSize: 24, fontWeight: 700, color: '#7DE5FF' }}>{usd(base)}/mo</div>
+        <H>1. Add products</H>
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search your catalog (camera, gate operator, reader…)" style={inputStyle} />
+        {results.length > 0 && (
+          <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+            {results.map(p => (
+              <button key={p.id} onClick={() => addProduct(p)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', textAlign: 'left', background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '10px 12px', cursor: 'pointer', color: 'white' }}>
+                <span style={{ fontSize: 13 }}>{p.name}{p.sku ? <span style={{ color: 'rgba(255,255,255,0.4)' }}> · {p.sku}</span> : null}</span>
+                <b style={{ fontSize: 13, color: '#7DE5FF' }}>{usd(priceOf(p))}</b>
+              </button>
+            ))}
+          </div>
+        )}
       </Card>
+
       <Card>
-        <H>Add to your plan</H>
-        <Sub>Tap to add — your total updates live.</Sub>
-        <div style={{ display: 'grid', gap: 10, margin: '12px 0' }}>
-          {addons.map(a => (
-            <button key={a.id} onClick={() => setOn(o => ({ ...o, [a.id]: !o[a.id] }))} style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', borderRadius: 14, cursor: 'pointer', textAlign: 'left',
-              background: on[a.id] ? 'rgba(52,211,153,0.14)' : 'rgba(0,0,0,0.2)', border: `1px solid ${on[a.id] ? 'rgba(52,211,153,0.45)' : 'rgba(255,255,255,0.1)'}`, color: 'white',
-            }}>
-              <span><span style={{ marginRight: 8 }}>{on[a.id] ? '✓' : '+'}</span>{a.name}</span>
-              <b>{usd(a.price)}/mo</b>
-            </button>
-          ))}
+        <H>2. Or type a custom line</H>
+        <div style={{ display: 'grid', gap: 8 }}>
+          <input value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })} placeholder="Description (e.g. Install labor, Annual service)" style={inputStyle} />
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <input value={draft.qty} onChange={e => setDraft({ ...draft, qty: e.target.value.replace(/[^0-9]/g, '') })} placeholder="Qty" style={{ ...inputStyle, width: 80 }} />
+            <input value={draft.unit_price} onChange={e => setDraft({ ...draft, unit_price: e.target.value.replace(/[^0-9.]/g, '') })} placeholder="Price each $" style={{ ...inputStyle, width: 130 }} />
+            <button onClick={() => setDraft({ ...draft, is_recurring: !draft.is_recurring })} style={{ ...btn, background: draft.is_recurring ? 'rgba(52,211,153,0.18)' : 'rgba(255,255,255,0.06)', border: `1px solid ${draft.is_recurring ? 'rgba(52,211,153,0.45)' : 'rgba(255,255,255,0.12)'}`, color: draft.is_recurring ? '#6ee7b7' : 'rgba(255,255,255,0.7)' }}>{draft.is_recurring ? '✓ Monthly' : 'One-time'}</button>
+            <button onClick={addManual} disabled={!draft.description.trim()} style={{ ...btn, opacity: draft.description.trim() ? 1 : 0.5 }}>Add line</button>
+          </div>
         </div>
-        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <span style={{ color: 'rgba(255,255,255,0.6)' }}>Your total</span>
-          <span style={{ fontSize: 26, fontWeight: 800, color: '#6ee7b7' }}>{usd(total)}/mo</span>
+      </Card>
+
+      <Card>
+        <H>3. Review &amp; create</H>
+        {items.length === 0 ? <Sub>No lines yet — add a product or a custom line above.</Sub> : (
+          <div style={{ display: 'grid', gap: 6 }}>
+            {items.map((it, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '8px 12px' }}>
+                <span style={{ flex: 1, fontSize: 13 }}>{it.description} {it.is_recurring && <span style={{ color: '#6ee7b7', fontSize: 11 }}>· monthly</span>}</span>
+                <input value={String(it.qty)} onChange={e => setQty(i, e.target.value.replace(/[^0-9]/g, ''))} style={{ ...inputStyle, width: 56, padding: '6px 8px', textAlign: 'center' }} />
+                <span style={{ fontSize: 13, width: 90, textAlign: 'right' }}>{usd(it.qty * it.unit_price)}{it.is_recurring ? '/mo' : ''}</span>
+                <button onClick={() => removeItem(i)} style={{ background: 'none', border: 'none', color: '#fca5a5', cursor: 'pointer', fontSize: 16 }}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 12, paddingTop: 12, display: 'flex', gap: 24, justifyContent: 'flex-end' }}>
+          <div style={{ textAlign: 'right' }}><Sub>One-time</Sub><div style={{ fontSize: 20, fontWeight: 800, color: '#7DE5FF' }}>{usd(oneTime)}</div></div>
+          <div style={{ textAlign: 'right' }}><Sub>Monthly</Sub><div style={{ fontSize: 20, fontWeight: 800, color: '#6ee7b7' }}>{usd(mrr)}/mo</div></div>
         </div>
-        <button style={{ ...btn, width: '100%', marginTop: 12, padding: '12px' }}>Accept proposal</button>
+        <button onClick={createQuote} disabled={busy || items.length === 0} style={{ ...btn, width: '100%', marginTop: 12, padding: 12, opacity: !busy && items.length > 0 ? 1 : 0.5 }}>{busy ? 'Creating…' : 'Create quote'}</button>
+        {msg && <p style={{ fontSize: 12.5, color: err ? '#fca5a5' : '#6ee7b7', marginTop: 10 }}>{msg}</p>}
       </Card>
     </div>
   )
@@ -1167,6 +1291,16 @@ function Payment({ opp, opportunityId, onConverted }: { opp: Record<string, any>
         }),
       })
       if (!r.ok) throw new Error('job')
+      // 3) Activation rule (#60): contract signed AND deposit paid → the linked
+      //    site becomes Active. Best-effort; won't block conversion if the
+      //    lifecycle columns (migration 126) aren't deployed yet.
+      if (opp?.site_id) {
+        const now = new Date().toISOString()
+        void fetch(`/api/sites/${opp.site_id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lifecycle_status: 'active', contract_signed_at: now, deposit_paid_at: now, activated_at: now }),
+        }).catch(() => {})
+      }
       setDone(true)
       setMsg('Deal closed & install job created ✓ — find it in Operations → Work Orders and on the assigned tech’s phone.')
       onConverted?.()
