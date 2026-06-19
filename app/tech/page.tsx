@@ -596,13 +596,16 @@ function TechTool() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [procData,        setProcData]        = useState<any>(null)
   const [procLoading,     setProcLoading]     = useState(false)
+  const [procErr,         setProcErr]         = useState<string | null>(null)
   const [procDone,        setProcDone]        = useState<Set<string>>(new Set())
   async function loadProcedure(mode: 'install' | 'service') {
-    setProcMode(mode); setProcData(null); setProcDone(new Set()); setProcLoading(true); setScreen('procedure')
+    setProcMode(mode); setProcData(null); setProcDone(new Set()); setProcErr(null); setProcLoading(true); setScreen('procedure')
     try {
-      const d = await fetch('/api/kb/procedure', { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ product_id: selected?.id, mode, device_name: selected?.name }) }).then(r => r.json())
+      const r = await fetch('/api/kb/procedure', { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ product_id: selected?.id, mode, device_name: selected?.name }) })
+      const d = await r.json().catch(() => ({}))
       if (d.procedure) setProcData(d.procedure)
-    } catch { /* ignore */ }
+      else setProcErr(d.error || `Couldn't build the guide (HTTP ${r.status}).`)
+    } catch (e) { setProcErr(e instanceof Error ? e.message : 'Network error — check signal and retry.') }
     setProcLoading(false)
   }
   function toggleProc(key: string) { setProcDone(p => { const n = new Set(p); n.has(key) ? n.delete(key) : n.add(key); return n }) }
@@ -1824,7 +1827,10 @@ function TechTool() {
         </div>
         <div className="gg-list" style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
           {procLoading || !p ? (
-            <div style={{ fontFamily: MONO, fontSize: 12, color: C.textMuted, textAlign: 'center', padding: '40px 0' }}>{procLoading ? 'Building your step-by-step guide…' : 'No guide available.'}</div>
+            <div style={{ textAlign: 'center', padding: '40px 16px' }}>
+              <div style={{ fontFamily: MONO, fontSize: 12, color: procErr ? C.amber : C.textMuted }}>{procLoading ? 'Building your step-by-step guide…' : (procErr || 'No guide available.')}</div>
+              {!procLoading && <button onClick={() => loadProcedure(procMode)} style={{ marginTop: 14, padding: '10px 18px', borderRadius: 10, background: accent, color: '#06121c', border: 'none', fontFamily: MONO, fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>↻ TRY AGAIN</button>}
+            </div>
           ) : (
             <>
               <div style={{ marginBottom: 14 }}>

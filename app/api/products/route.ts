@@ -14,6 +14,7 @@ import { auth }                      from '@clerk/nextjs/server'
 import { createClient }              from '@supabase/supabase-js'
 import { getCurrentUser }            from '@/lib/current-user'
 import { resolveOrgScope }           from '@/lib/org-scope'
+import { inngest }                   from '@/inngest/client'
 
 function serviceDb() {
   return createClient(
@@ -128,6 +129,13 @@ export async function POST(req: NextRequest) {
   async function insertRow(r: Record<string, unknown>): Promise<{ data: unknown; error: { code?: string; message: string } | null }> {
     return serviceDb().from('products').insert(r).select('*').single()
   }
+  // Phase E: auto-vectorize the manual in the background (universal coverage)
+  async function fireManualIngest(p: unknown) {
+    const pid = (p as { id?: string } | null)?.id
+    if (pid && manual_url) {
+      try { await inngest.send({ name: 'kb/manual.ingest', data: { product_id: pid, manual_url } }) } catch { /* non-fatal */ }
+    }
+  }
 
   let { data, error } = await insertRow(row)
   // Strip any column the live schema doesn't have and retry (handles drift).
@@ -154,10 +162,12 @@ export async function POST(req: NextRequest) {
         .select('*')
         .single()
       if (e2) return NextResponse.json({ error: e2.message }, { status: 500 })
+      await fireManualIngest(d2)
       return NextResponse.json({ product: d2 }, { status: 201 })
     }
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  await fireManualIngest(data)
   return NextResponse.json({ product: data }, { status: 201 })
 }
