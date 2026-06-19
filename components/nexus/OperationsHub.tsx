@@ -43,7 +43,7 @@ function Badge({ children, tone = "default" }: { children: React.ReactNode; tone
   return <span style={{ padding: "4px 9px", borderRadius: 999, background: bg, border: "1px solid rgba(255,255,255,.1)", fontSize: 11 }}>{children}</span>;
 }
 const num = (v: unknown) => Number(v) || 0;
-const TABS = ["Dashboard", "Work Orders", "Calendar", "Locations", "Techs", "Parts", "PM"] as const;
+const TABS = ["Dashboard", "Work Orders", "Calendar", "Locations", "Techs", "Parts", "PM", "Playbooks"] as const;
 type Tab = typeof TABS[number];
 const TAB_HINT: Record<Tab, string> = {
   Dashboard: "Snapshot + jobs board",
@@ -53,6 +53,7 @@ const TAB_HINT: Record<Tab, string> = {
   Techs: "Add techs + set their app code",
   Parts: "Inventory + stock levels",
   PM: "Recurring maintenance",
+  Playbooks: "Step-by-step templates to assign",
 };
 
 export function OperationsHub({ embedded }: { embedded?: boolean } = {}) {
@@ -93,6 +94,7 @@ export function OperationsHub({ embedded }: { embedded?: boolean } = {}) {
     {page === "Techs" && <Techs />}
     {page === "Parts" && <Parts />}
     {page === "PM" && <PM />}
+    {page === "Playbooks" && <Playbooks />}
     {openId && <JobDetailDrawer id={openId} techs={techs} onClose={() => { setOpenId(null); loadOps(); }} onUpdate={updateWO} />}
   </div>;
 }
@@ -642,6 +644,56 @@ function PM() {
   </div>;
 }
 
+/* ── Playbooks: reusable step templates (global + org), assignable to WOs ── */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function Playbooks() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showNew, setShowNew] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState({ title: "", category: "", description: "", stepsText: "" });
+  const load = React.useCallback(() => { setLoading(true); fetch("/api/playbooks").then(r => r.json()).then(d => setItems(d.playbooks ?? [])).catch(() => {}).finally(() => setLoading(false)); }, []);
+  useEffect(() => { load(); }, [load]);
+  async function create() {
+    const steps = form.stepsText.split("\n").map(s => s.trim()).filter(Boolean);
+    if (!form.title.trim() || steps.length === 0 || busy) return; setBusy(true);
+    await fetch("/api/playbooks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: form.title.trim(), category: form.category.trim() || null, description: form.description.trim() || null, steps }) }).catch(() => {});
+    setForm({ title: "", category: "", description: "", stepsText: "" }); setShowNew(false); setBusy(false); load();
+  }
+  async function remove(id: string) { await fetch(`/api/playbooks/${id}`, { method: "DELETE" }).catch(() => {}); load(); }
+  return <div style={{ display: "grid", gap: 14 }}>
+    <Card>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <h2 style={{ fontSize: 16 }}>Playbooks</h2>
+        <button onClick={() => setShowNew(s => !s)} style={btn}>+ New playbook</button>
+      </div>
+      <Small>Build a reusable list of steps once, then assign it to any work order in one tap. Global playbooks are shared by GateGuard; yours are private to your team.</Small>
+      {showNew && <div style={{ ...card, marginTop: 12, display: "grid", gap: 8 }}>
+        <input placeholder="Playbook name * (e.g. Quarterly Gate PM)" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} style={input} />
+        <input placeholder="Category (Gate, Camera, Access Control…)" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} style={input} />
+        <input placeholder="Short description" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} style={input} />
+        <textarea placeholder={"Steps — one per line:\nPower off at disconnect\nInspect chain tension\nTest safety loops"} value={form.stepsText} onChange={e => setForm({ ...form, stepsText: e.target.value })} rows={6} style={{ ...input, resize: "vertical", fontFamily: "inherit" }} />
+        <button onClick={create} disabled={!form.title.trim() || !form.stepsText.trim() || busy} style={{ ...btn, opacity: form.title.trim() && form.stepsText.trim() && !busy ? 1 : 0.5 }}>{busy ? "Saving…" : "Save playbook"}</button>
+      </div>}
+    </Card>
+    {loading ? <Card><Small>Loading…</Small></Card> : items.length === 0 ? <Card><Small>No playbooks yet. Tap “+ New playbook”.</Small></Card> :
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px,1fr))", gap: 14 }}>
+        {items.map(p => <Card key={p.id}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <b style={{ fontSize: 15 }}>{p.title}</b>
+            {p.org_id ? <Badge>Yours</Badge> : <Badge tone="good">Global</Badge>}
+          </div>
+          {p.category && <Small>{p.category}</Small>}
+          <ol style={{ margin: "10px 0 0", paddingLeft: 18, fontSize: 13, color: "rgba(255,255,255,0.8)" }}>
+            {(p.steps ?? []).slice(0, 8).map((s: unknown, i: number) => <li key={i} style={{ margin: "3px 0" }}>{typeof s === "string" ? s : (s as { title?: string })?.title}</li>)}
+          </ol>
+          {p.org_id && <button onClick={() => remove(p.id)} style={{ ...btn, background: "rgba(255,80,80,0.14)", border: "1px solid rgba(255,80,80,0.3)", padding: "5px 10px", marginTop: 10, fontSize: 12 }}>Delete</button>}
+        </Card>)}
+      </div>}
+  </div>;
+}
+
 /* ── Job drawer: detail + money + checklist + parts + team chat + complete ─ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: RealTech[]; onClose: () => void; onUpdate: (id: string, patch: Record<string, unknown>) => void }) {
@@ -657,6 +709,19 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   const [loading, setLoading] = useState(true);
   const [newItem, setNewItem] = useState("");
   const [chat, setChat] = useState("");
+  // site + equipment pull-through, manuals, playbooks, AI support
+  const [siteId, setSiteId] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [siteEquip, setSiteEquip] = useState<any[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [siteHistory, setSiteHistory] = useState<any[]>([]);
+  const [manualMap, setManualMap] = useState<Record<string, string>>({});
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [playbooks, setPlaybooks] = useState<any[]>([]);
+  const [aiQ, setAiQ] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [aiStep, setAiStep] = useState<any>(null);
+  const [aiBusy, setAiBusy] = useState(false);
   const load = React.useCallback(() => {
     setLoading(true);
     Promise.all([
@@ -665,10 +730,27 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
     ]).then(([d, t]) => {
       setWo(d.work_order ?? null); setParts(d.parts_used ?? []);
       setChecklist(d.checklist ?? []); setComments(d.comments ?? []);
-      setLaborMins(t.totalMins ?? 0);
+      setLaborMins(t.totalMins ?? 0); setSiteId(d.work_order?.site_id ?? null);
     }).finally(() => setLoading(false));
   }, [id]);
   useEffect(() => { load(); }, [load]);
+  // manual links + playbook templates (load once)
+  useEffect(() => {
+    fetch(`/api/products?limit=300`).then(r => r.json()).then(d => {
+      const m: Record<string, string> = {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (d.products ?? []).forEach((p: any) => { if (p.manual_url) { if (p.id) m[String(p.id)] = p.manual_url; if (p.name) m[String(p.name).toLowerCase()] = p.manual_url; } });
+      setManualMap(m);
+    }).catch(() => {});
+    fetch(`/api/playbooks`).then(r => r.json()).then(d => setPlaybooks(d.playbooks ?? [])).catch(() => {});
+  }, []);
+  // equipment on the linked site + that site's service history
+  useEffect(() => {
+    if (!siteId) { setSiteEquip([]); setSiteHistory([]); return; }
+    fetch(`/api/sites/${siteId}`).then(r => r.json()).then(d => { setSiteEquip(d.assets ?? []); setSiteHistory((d.work_orders ?? []).filter((w: { id: string }) => w.id !== id)); }).catch(() => {});
+  }, [siteId, id]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const manualFor = (a: any) => manualMap[String(a.product_id)] || manualMap[String(a.product_name || a.name || "").toLowerCase()] || null;
 
   const partsCost = parts.reduce((s, p) => s + num(p.unit_cost) * num(p.qty), 0);
   const partsRev = parts.reduce((s, p) => s + num(p.unit_price) * num(p.qty), 0);
@@ -693,6 +775,21 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
     await fetch(`/api/maintenance/${id}/comments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content }) }).catch(() => {});
     load();
   }
+  async function askAI() {
+    const symptom = aiQ.trim(); if (!symptom || aiBusy) return; setAiBusy(true); setAiStep(null);
+    try {
+      const r = await fetch(`/api/kb/ask`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ symptom, connected_devices: siteEquip.map(a => a.product_name || a.name).filter(Boolean) }) });
+      const d = await r.json(); if (d.error) throw new Error(d.error); setAiStep(d);
+    } catch (e) { setAiStep({ text: e instanceof Error ? e.message : "Couldn't reach AI support.", type: "escalate" }); }
+    setAiBusy(false);
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function assignPlaybook(pb: any) {
+    if (!pb) return;
+    const steps: string[] = (pb.steps ?? []).map((s: unknown) => typeof s === "string" ? s : ((s as { title?: string; text?: string })?.title || (s as { text?: string })?.text || "")).filter(Boolean);
+    for (const title of steps) await fetch(`/api/maintenance/${id}/checklist`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title }) }).catch(() => {});
+    load();
+  }
 
   return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.62)", backdropFilter: "blur(6px)", display: "flex", justifyContent: "flex-end" }}>
     <div onClick={e => e.stopPropagation()} style={{ width: "min(580px,100%)", height: "100%", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#060b1a)", borderLeft: "1px solid rgba(0,200,255,0.22)", padding: 20, paddingBottom: 130, color: "white" }}>
@@ -711,6 +808,55 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
           </div>
         </Card>
 
+        {/* Work to perform */}
+        <Card>
+          <h2 style={{ fontSize: 15, marginBottom: 6 }}>Work to perform</h2>
+          <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 14, whiteSpace: "pre-wrap", margin: 0 }}>{wo.description || "No work description yet. Add details so the tech knows exactly what to do."}</p>
+          {wo.priority && <div style={{ marginTop: 8 }}><Badge tone={String(wo.priority).toLowerCase() === "critical" || String(wo.priority).toLowerCase() === "urgent" ? "urgent" : String(wo.priority).toLowerCase() === "high" ? "high" : "default"}>{wo.priority} priority</Badge></div>}
+        </Card>
+
+        {/* Site pull-through */}
+        <Card>
+          <h2 style={{ fontSize: 15, marginBottom: 6 }}>Site</h2>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>{wo.customer_name || "—"}</div>
+          {(wo.site_address || wo.site_city) && <Small>{[wo.site_address, wo.site_city, wo.site_state, wo.site_zip].filter(Boolean).join(", ")}</Small>}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
+            {(wo.site_contact_name || wo.site_contact_phone) && <div><Small>On-site contact</Small><div style={{ fontSize: 13 }}>{wo.site_contact_name || "—"}{wo.site_contact_phone ? ` · ${wo.site_contact_phone}` : ""}</div></div>}
+            {(wo.site_pm_name || wo.site_pm_phone) && <div><Small>Property manager</Small><div style={{ fontSize: 13 }}>{wo.site_pm_name || "—"}{wo.site_pm_phone ? ` · ${wo.site_pm_phone}` : ""}</div></div>}
+          </div>
+          {wo.site_access_notes && <div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.28)" }}><Small>🔑 Access / gate notes</Small><div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", marginTop: 2 }}>{wo.site_access_notes}</div></div>}
+          {siteHistory.length > 0 && <div style={{ marginTop: 10 }}><Small>Past work at this site ({siteHistory.length})</Small>{siteHistory.slice(0, 5).map((w, i) => <p key={w.id || i} style={{ margin: "4px 0", fontSize: 13 }}>{w.wo_number || w.title || "WO"} <span style={{ color: "rgba(255,255,255,0.45)" }}>· {w.status}{w.scheduled_date ? ` · ${String(w.scheduled_date).slice(0, 10)}` : ""}</span></p>)}</div>}
+        </Card>
+
+        {/* Equipment on site + manuals */}
+        <Card>
+          <h2 style={{ fontSize: 15, marginBottom: 8 }}>Equipment on site ({siteEquip.length})</h2>
+          {siteEquip.length === 0 ? <Small>No equipment recorded for this site yet.</Small> : siteEquip.map((a, i) => { const man = manualFor(a); return <div key={a.id || i} style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", padding: "6px 0", borderBottom: i < siteEquip.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
+            <div style={{ fontSize: 14, minWidth: 0 }}>{a.product_name || a.name || "Equipment"}{a.serial_number ? <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}> · {a.serial_number}</span> : ""}{a.location_note ? <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 12 }}> · {a.location_note}</span> : ""}</div>
+            <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+              {a.status && <Badge tone={a.status === "offline" ? "urgent" : "good"}>{a.status}</Badge>}
+              {man && <a href={man} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "#7dd3fc", textDecoration: "none", padding: "3px 8px", borderRadius: 8, border: "1px solid rgba(125,211,252,0.3)" }}>📄 Manual</a>}
+            </div>
+          </div>; })}
+        </Card>
+
+        {/* AI Tech Support */}
+        <Card style={{ background: "rgba(0,200,255,0.06)", border: "1px solid rgba(0,200,255,0.22)" }}>
+          <h2 style={{ fontSize: 15, marginBottom: 6 }}>🤖 AI Tech Support</h2>
+          <Small>Describe the symptom — get guided, manual-backed steps.</Small>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <input placeholder="e.g. Gate won't open, motor hums" value={aiQ} onChange={e => setAiQ(e.target.value)} onKeyDown={e => { if (e.key === "Enter") askAI(); }} style={{ ...input, padding: 9 }} />
+            <button onClick={askAI} disabled={aiBusy || !aiQ.trim()} style={{ ...btn, opacity: aiBusy || !aiQ.trim() ? 0.5 : 1 }}>{aiBusy ? "Thinking…" : "Ask"}</button>
+          </div>
+          {aiStep && <div style={{ marginTop: 10, padding: 12, borderRadius: 10, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}>
+            <div style={{ fontSize: 11, color: "#7dd3fc", textTransform: "uppercase", letterSpacing: "0.08em" }}>{aiStep.type || "step"}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, margin: "4px 0" }}>{aiStep.text}</div>
+            {aiStep.detail && <div style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>{aiStep.detail}</div>}
+            {aiStep.expected && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginTop: 4 }}>Expected: {aiStep.expected}{aiStep.unit ? ` ${aiStep.unit}` : ""}</div>}
+            {aiStep.manual_ref?.url && <a href={aiStep.manual_ref.url} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 6, fontSize: 12, color: "#7dd3fc" }}>📄 Manual{aiStep.manual_ref.page ? ` p.${aiStep.manual_ref.page}` : ""}</a>}
+          </div>}
+        </Card>
+
         {/* Money / profitability (was WO Detail + Reporting) */}
         <Card>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
@@ -725,12 +871,18 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
           </div>
         </Card>
 
-        {/* Checklist (was Procedures) */}
+        {/* Checklist / Playbook steps (was Procedures) */}
         <Card>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-            <h2 style={{ fontSize: 15 }}>Checklist</h2>
+            <h2 style={{ fontSize: 15 }}>Steps / Checklist</h2>
             <Small>{doneCount}/{checklist.length} done</Small>
           </div>
+          {playbooks.length > 0 && <div style={{ marginBottom: 10 }}>
+            <select defaultValue="" onChange={e => { const pb = playbooks.find(p => String(p.id) === e.target.value); if (pb) { assignPlaybook(pb); e.target.value = ""; } }} style={{ ...sel, width: "100%", padding: 9 }}>
+              <option value="">▶ Assign a playbook…</option>
+              {playbooks.map(p => <option key={p.id} value={p.id}>{p.title}{p.org_id ? "" : " (global)"} — {(p.steps ?? []).length} steps</option>)}
+            </select>
+          </div>}
           {checklist.map(c => {
             const done = c.is_complete || c.completed || c.done;
             return <label key={c.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 0", cursor: "pointer" }}>

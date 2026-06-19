@@ -18,7 +18,7 @@ import { CableGuide }   from '@/components/tech/CableGuide'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type StepType = 'question' | 'action' | 'measure' | 'select' | 'photo' | 'resolved' | 'escalate'
-type Screen   = 'pin' | 'identity' | 'home' | 'choice' | 'symptom' | 'diag' | 'wiring' | 'cable' | 'install' | 'survey' | 'survey_add' | 'survey_transcript' | 'training' | 'training_course' | 'netscout'
+type Screen   = 'pin' | 'identity' | 'home' | 'choice' | 'symptom' | 'diag' | 'wiring' | 'cable' | 'install' | 'survey' | 'survey_add' | 'survey_transcript' | 'training' | 'training_course' | 'netscout' | 'jobs'
 
 // ─── Site Survey Types ────────────────────────────────────────────────────────
 interface SurveyDevice {
@@ -569,6 +569,12 @@ function TechTool() {
   // GPS / identity state
   const [techId,     setTechId]     = useState<string | null>(null)
   const [techName,   setTechName]   = useState<string | null>(null)
+  // My Jobs (work orders assigned to this tech)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [myJobs,     setMyJobs]     = useState<any[]>([])
+  const [jobsLoading, setJobsLoading] = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [openJob,    setOpenJob]    = useState<any>(null)
   const [allTechs,   setAllTechs]   = useState<{ id: string; name: string; initials: string }[]>([])
   const [gpsGranted, setGpsGranted] = useState(false)
 
@@ -646,6 +652,28 @@ function TechTool() {
   // ── Auth ──────────────────────────────────────────────────────────────────
   function apiHeaders(): HeadersInit {
     return { 'Content-Type': 'application/json', 'x-tech-code': techCode }
+  }
+
+  // ── My Jobs (work orders assigned to this tech) ─────────────────────────────
+  function loadMyJobs() {
+    setJobsLoading(true)
+    const url = techId ? `/api/tech/work-orders?tech_id=${techId}` : '/api/tech/work-orders'
+    fetch(url, { headers: apiHeaders() })
+      .then(r => r.json())
+      .then(d => setMyJobs(d.work_orders ?? []))
+      .catch(() => {})
+      .finally(() => setJobsLoading(false))
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function toggleJobStep(woId: string, item: any) {
+    const next = !(item.is_complete || item.completed)
+    await fetch(`/api/maintenance/${woId}/checklist`, { method: 'PATCH', headers: apiHeaders(), body: JSON.stringify({ item_id: item.id, is_complete: next }) }).catch(() => {})
+    if (openJob) { const d = await fetch(`/api/maintenance/${woId}`, { headers: apiHeaders() }).then(r => r.json()).catch(() => null); if (d?.work_order) setOpenJob({ ...openJob, _checklist: d.checklist ?? [] }) }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function openJobDetail(job: any) {
+    const d = await fetch(`/api/maintenance/${job.id}`, { headers: apiHeaders() }).then(r => r.json()).catch(() => null)
+    setOpenJob({ ...job, _checklist: d?.checklist ?? [], _description: d?.work_order?.description ?? job.description })
   }
 
   // ── GPS ping helper — fire-and-forget, never blocks UI ───────────────────
@@ -936,6 +964,84 @@ function TechTool() {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // SCREEN: MY JOBS — work orders dispatched to this tech
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (screen === 'jobs') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const checklist = (openJob?._checklist ?? []) as any[]
+    const doneCount = checklist.filter((c) => c.is_complete || c.completed).length
+    return (
+      <div style={S.shell}>
+        <div style={S.topBar}>
+          <button style={S.iconBtn} onClick={() => { openJob ? setOpenJob(null) : setScreen('home') }}>‹</button>
+          <div style={{ flex: 1 }}>
+            <div style={S.topBarTitle}>{openJob ? (openJob.wo_number || 'WORK ORDER') : 'MY JOBS'}</div>
+            <div style={S.topBarSub}>{openJob ? (openJob.site_name || openJob.customer_name || '') : (techName || 'DISPATCHED TO YOU')}</div>
+          </div>
+          {!openJob && <button style={S.iconBtn} onClick={loadMyJobs}>↻</button>}
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+          {/* LIST */}
+          {!openJob && (jobsLoading ? (
+            <div style={{ fontFamily: MONO, fontSize: 11, color: C.textMuted }}>Loading your jobs…</div>
+          ) : myJobs.length === 0 ? (
+            <div style={{ fontFamily: MONO, fontSize: 11, color: C.textMuted }}>No jobs assigned to you right now.</div>
+          ) : myJobs.map((j) => (
+            <div key={j.id} onClick={() => openJobDetail(j)} style={{ background: C.bgCard, borderRadius: 14, border: `1px solid ${C.border}`, padding: 14, marginBottom: 12, cursor: 'pointer' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <span style={{ fontWeight: 700, fontSize: 14 }}>{j.title || j.wo_number || 'Work Order'}</span>
+                <span style={{ fontFamily: MONO, fontSize: 9, color: C.blue }}>{j.status}</span>
+              </div>
+              <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>{j.site_name || j.customer_name || '—'}{j.scheduled_date ? ` · ${String(j.scheduled_date).slice(0, 10)}` : ''}</div>
+              {j.site_address && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>📍 {j.site_address}</div>}
+              {j.checklist_total > 0 && <div style={{ fontFamily: MONO, fontSize: 9, color: C.green, marginTop: 6 }}>✓ {j.checklist_done}/{j.checklist_total} steps</div>}
+            </div>
+          )))}
+
+          {/* DETAIL */}
+          {openJob && (
+            <>
+              {openJob.site_access_notes && (
+                <div style={{ background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.30)', borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                  <div style={{ fontFamily: MONO, fontSize: 9, color: C.amber, letterSpacing: '0.1em' }}>🔑 ACCESS / GATE NOTES</div>
+                  <div style={{ fontSize: 13, marginTop: 4 }}>{openJob.site_access_notes}</div>
+                </div>
+              )}
+              {(openJob.site_contact_name || openJob.site_contact_phone) && (
+                <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                  <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.1em' }}>ON-SITE CONTACT</div>
+                  <div style={{ fontSize: 13, marginTop: 4 }}>{openJob.site_contact_name || '—'}{openJob.site_contact_phone ? <a href={`tel:${openJob.site_contact_phone}`} style={{ color: C.blue, marginLeft: 8 }}>{openJob.site_contact_phone}</a> : ''}</div>
+                </div>
+              )}
+              <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.1em' }}>WORK TO PERFORM</div>
+                <div style={{ fontSize: 13, marginTop: 4, whiteSpace: 'pre-wrap' }}>{openJob._description || 'No description provided.'}</div>
+              </div>
+              <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, letterSpacing: '0.1em' }}>STEPS</span>
+                  <span style={{ fontFamily: MONO, fontSize: 9, color: C.green }}>{doneCount}/{checklist.length}</span>
+                </div>
+                {checklist.length === 0 ? <div style={{ fontSize: 12, color: C.textMuted, marginTop: 6 }}>No steps yet.</div> : checklist.map((c) => {
+                  const done = c.is_complete || c.completed
+                  return (
+                    <label key={c.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 0', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={!!done} onChange={() => toggleJobStep(openJob.id, c)} />
+                      <span style={{ fontSize: 13, textDecoration: done ? 'line-through' : 'none', color: done ? C.textMuted : C.textPrimary }}>{c.title || c.label}</span>
+                    </label>
+                  )
+                })}
+              </div>
+              <button onClick={() => { setSymptom(openJob.title || ''); setConnectedDevices([]); setScreen('symptom') }} style={{ width: '100%', padding: 14, borderRadius: 12, background: 'rgba(0,200,255,0.12)', border: '1px solid rgba(0,200,255,0.34)', color: '#7dd3fc', fontFamily: MONO, fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.06em' }}>🤖 GET AI TECH SUPPORT</button>
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // SCREEN: HOME — device picker
   // ═══════════════════════════════════════════════════════════════════════════
   if (screen === 'home') {
@@ -1119,6 +1225,11 @@ function TechTool() {
             <span style={{ fontSize: 22 }}>🔍</span>
             <span style={{ fontFamily: MONO, fontSize: 8, fontWeight: 700, color: C.blue, letterSpacing: '0.06em' }}>DIAGNOSE</span>
           </div>
+          {/* MY JOBS */}
+          <button onClick={() => { setOpenJob(null); setScreen('jobs'); loadMyJobs() }} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}>
+            <span style={{ fontSize: 22 }}>🧰</span>
+            <span style={{ fontFamily: MONO, fontSize: 8, color: C.textMuted, letterSpacing: '0.06em' }}>MY JOBS</span>
+          </button>
           {/* WIRING */}
           <button onClick={() => setScreen('wiring')} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '10px 0', borderTop: '2.5px solid transparent', background: 'none', border: 'none', cursor: 'pointer' }}>
             <span style={{ fontSize: 22 }}>⚡</span>
