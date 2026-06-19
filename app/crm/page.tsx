@@ -15,9 +15,11 @@ import { cn } from "@/lib/utils";
 // ── Types ──────────────────────────────────────────────────────────────────
 type Stage =
   | "meet_present"
-  | "survey_request"
+  | "survey"
   | "propose"
   | "negotiate"
+  | "contract"
+  | "deposit"
   | "won"
   | "lost";
 
@@ -72,13 +74,13 @@ const STAGE_CONFIG: Record<
     dot: "bg-blue-400",
     pill: "bg-blue-100 text-blue-700",
   },
-  survey_request: {
-    label: "Survey Request",
+  survey: {
+    label: "Site Survey",
     dot: "bg-violet-400",
     pill: "bg-violet-100 text-violet-700",
   },
   propose: {
-    label: "Propose",
+    label: "Proposal",
     dot: "bg-amber-400",
     pill: "bg-amber-100 text-amber-700",
   },
@@ -86,6 +88,16 @@ const STAGE_CONFIG: Record<
     label: "Negotiate",
     dot: "bg-orange-400",
     pill: "bg-orange-100 text-orange-700",
+  },
+  contract: {
+    label: "Contract & Sign",
+    dot: "bg-cyan-400",
+    pill: "bg-cyan-100 text-cyan-700",
+  },
+  deposit: {
+    label: "Deposit",
+    dot: "bg-teal-400",
+    pill: "bg-teal-100 text-teal-700",
   },
   won: {
     label: "Closed Won",
@@ -101,9 +113,11 @@ const STAGE_CONFIG: Record<
 
 const ACTIVE_STAGES: Stage[] = [
   "meet_present",
-  "survey_request",
+  "survey",
   "propose",
   "negotiate",
+  "contract",
+  "deposit",
 ];
 
 // ── AI Deal Score ─────────────────────────────────────────────────────────
@@ -112,9 +126,11 @@ function getAiScore(opp: Opportunity): { score: number; color: string; bg: strin
   for (let i = 0; i < opp.id.length; i++) hash = (hash * 31 + opp.id.charCodeAt(i)) & 0xffff;
   const stageBase: Record<Stage, [number, number]> = {
     meet_present:   [32, 58],
-    survey_request: [44, 67],
+    survey:         [44, 67],
     propose:        [58, 82],
     negotiate:      [71, 94],
+    contract:       [80, 96],
+    deposit:        [86, 98],
     won:            [88, 99],
     lost:           [8,  28],
   };
@@ -696,9 +712,11 @@ export default function CRMPage() {
                     const pct = Math.max(3, Math.round((total / maxTotal) * 100));
                     const barColors: Record<Stage, string> = {
                       meet_present:   "bg-[#6B7EFF]",
-                      survey_request: "bg-violet-400",
+                      survey:         "bg-violet-400",
                       propose:        "bg-amber-400",
                       negotiate:      "bg-rose-400",
+                      contract:       "bg-cyan-400",
+                      deposit:        "bg-teal-400",
                       won:            "bg-emerald-500",
                       lost:           "bg-slate-300",
                     };
@@ -1327,9 +1345,11 @@ export default function CRMPage() {
                   className="w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6B7EFF]/30 bg-white"
                 >
                   <option value="meet_present">Meet &amp; Present</option>
-                  <option value="survey_request">Survey Request</option>
-                  <option value="propose">Propose</option>
+                  <option value="survey">Site Survey</option>
+                  <option value="propose">Proposal</option>
                   <option value="negotiate">Negotiate</option>
+                  <option value="contract">Contract &amp; Sign</option>
+                  <option value="deposit">Deposit</option>
                 </select>
               </div>
 

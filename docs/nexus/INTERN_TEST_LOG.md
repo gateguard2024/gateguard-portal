@@ -52,4 +52,20 @@ Where: **Sales → Opportunities → Financials** (Pricing & profitability) and 
 **Depends on infra:** none (pure compute). Clerk role/tier metadata must be set for the internal view to appear.
 
 ---
+
+## Build 4a — 7-stage pipeline + deposit automation  (pushed beta · YYYY-MM-DD)
+Where: **Sales** kanban (`/crm`, `/crm/opportunities`) and **Opportunity → Deal life cycle**.
+
+- ☐ The opportunity board shows the 7 columns in order: Meet & Present, Site Survey, Proposal, Negotiate, Contract & Sign, Deposit, Closed Won (+ Lost).
+- ☐ **Drop-off bug fixed:** open an opp, advance it to the "Contract & Invoice", "Sign", and "Payment" steps in the Deal life cycle — then return to the board. The opp must appear in **Contract & Sign / Deposit** columns, never vanish.
+- ☐ Pipeline $ total and open/won counts still look right after moving deals.
+- ☐ Deal life cycle → **Payment** step: both checkboxes ("Contract signed", "Deposit received") must be checked before the convert button enables.
+- ☐ Clicking **"Deposit collected — convert to install job"** moves the opp to **Closed Won** AND creates an install **work order** (check Operations → Work Orders, linked to the opp).
+- ☐ Re-opening a won opp's Payment step shows "Already converted" and doesn't make a duplicate job.
+- ☐ If job creation fails, the opp still moves to Won and a clear message says to add the job manually (no silent failure).
+- ☐ Creating a new opp from the legacy CRM form: stage dropdown shows Site Survey / Proposal / Contract & Sign / Deposit (no more "Survey Request").
+
+**Depends on infra:** none. Reuses existing `/api/dispatch` (work_orders) + `/api/crm/opportunities` PATCH.
+
+---
 *(new builds appended below as they ship)*

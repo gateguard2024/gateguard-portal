@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { PricingCalculator } from '@/components/nexus/PricingCalculator'
 import { ContactsCard } from '@/components/nexus/ContactsCard'
+import { normalizeStage } from '@/lib/pipeline'
 
 const cyan = '#00C8FF'
 const STAGES = ['Overview', 'Survey', 'Financials', 'Proposal', 'Negotiate', 'Contract & Invoice', 'Sign', 'Payment'] as const
@@ -104,7 +105,7 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
         {stage === 4 && <Negotiate />}
         {stage === 5 && <ContractInvoice />}
         {stage === 6 && <Sign />}
-        {stage === 7 && <Payment />}
+        {stage === 7 && <Payment opp={opp} opportunityId={opportunityId} onConverted={loadData} />}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24 }}>
           <button onClick={() => goToStage(Math.max(0, stage - 1))} disabled={stage === 0} style={{ ...btn, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)', opacity: stage === 0 ? 0.4 : 1 }}>← Back</button>
@@ -1131,27 +1132,82 @@ function Sign() {
   )
 }
 
-function Payment() {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function Payment({ opp, opportunityId, onConverted }: { opp: Record<string, any>; opportunityId?: string; onConverted?: () => void }) {
+  const alreadyWon = normalizeStage(opp?.stage) === 'won'
+  const acct = (opp?.account_name || opp?.name || 'Customer') as string
+  const [signed, setSigned] = useState(false)
+  const [paid, setPaid] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState(alreadyWon)
+  const [msg, setMsg] = useState<string | null>(alreadyWon ? 'Already converted — the install job is in Operations → Work Orders.' : null)
+  const [err, setErr] = useState(false)
+  const canConvert = signed && paid && !busy && !done && !!opportunityId
+
+  // The "automation": once the rep confirms the contract is signed AND the
+  // deposit is in, the deal converts — opp → Closed Won + an install job opens.
+  async function convert() {
+    if (!opportunityId || busy) return
+    setBusy(true); setErr(false); setMsg(null)
+    try {
+      // 1) Move the opportunity to Closed Won (probability 100).
+      await fetch(`/api/crm/opportunities/${opportunityId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: 'won', probability: 100 }),
+      })
+      // 2) Open the install job (work order), linked back to this opportunity.
+      const r = await fetch('/api/dispatch', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_name: acct,
+          title: `${opp?.name || acct} — Install`,
+          job_type: 'Install', priority: 'normal',
+          opportunity_id: opportunityId, site_id: opp?.site_id ?? null,
+          description: (opp?.description ?? opp?.scope ?? `Install from won opportunity: ${opp?.name ?? acct}`) as string,
+        }),
+      })
+      if (!r.ok) throw new Error('job')
+      setDone(true)
+      setMsg('Deal closed & install job created ✓ — find it in Operations → Work Orders and on the assigned tech’s phone.')
+      onConverted?.()
+    } catch {
+      setErr(true); setMsg('Stage updated, but the install job could not be created. Open Operations → Work Orders to add it manually.')
+    } finally { setBusy(false) }
+  }
+
+  const check = (on: boolean, label: string, set: (v: boolean) => void) => (
+    <button type="button" onClick={() => set(!on)} disabled={done} style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', width: '100%', background: on ? 'rgba(52,211,153,0.12)' : 'rgba(0,0,0,0.2)', border: `1px solid ${on ? 'rgba(52,211,153,0.4)' : 'rgba(255,255,255,0.1)'}`, borderRadius: 12, padding: 14, cursor: done ? 'default' : 'pointer', opacity: done ? 0.7 : 1 }}>
+      <span style={{ width: 22, height: 22, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? '#34d399' : 'rgba(255,255,255,0.08)', color: '#06241a', fontSize: 14, fontWeight: 800 }}>{on ? '✓' : ''}</span>
+      <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.9)', fontWeight: 600 }}>{label}</span>
+    </button>
+  )
+
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <Card style={{ background: 'linear-gradient(180deg, rgba(52,211,153,0.1), rgba(8,18,34,0.6))', border: '1px solid rgba(52,211,153,0.3)' }}>
-        <H>Deposit payment</H>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ fontSize: 30, fontWeight: 800, color: '#6ee7b7' }}>{usd(4200)}</div>
-          <span style={{ padding: '6px 12px', borderRadius: 999, background: 'rgba(251,191,36,0.16)', border: '1px solid rgba(251,191,36,0.4)', color: '#fde68a', fontSize: 12 }}>Awaiting payment</span>
+        <H>Close the deal</H>
+        <Sub>When the contract is signed AND the deposit is paid, convert the deal — it becomes Closed Won and an install job opens automatically.</Sub>
+        <div style={{ display: 'grid', gap: 10, marginTop: 14 }}>
+          {check(signed, 'Contract is signed (fully executed)', setSigned)}
+          {check(paid, 'Deposit payment received', setPaid)}
         </div>
-        <Sub>When the contract is signed AND the deposit is paid, the deal converts automatically.</Sub>
       </Card>
+
       <Card>
-        <H>Auto-handover on signed + paid</H>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px,1fr))', gap: 12 }}>
+        <H>Convert to install job</H>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px,1fr))', gap: 12, marginBottom: 14 }}>
           <div style={{ background: 'rgba(0,200,255,0.1)', border: '1px solid rgba(0,200,255,0.3)', borderRadius: 14, padding: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#7DE5FF' }}>→ Customer created</div><Sub>The Stratford becomes an active customer account.</Sub>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#7DE5FF' }}>→ Closed Won</div><Sub>{acct} moves to Closed Won in the pipeline.</Sub>
           </div>
           <div style={{ background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)', borderRadius: 14, padding: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#6ee7b7' }}>→ Active Job created</div><Sub>Install job opens with the BOM, schedule, and deposit linked.</Sub>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#6ee7b7' }}>→ Install job created</div><Sub>Opens in Operations → Work Orders, linked to this deal.</Sub>
           </div>
         </div>
+        <button onClick={convert} disabled={!canConvert} style={{ ...btn, width: '100%', padding: 13, background: canConvert ? 'rgba(52,211,153,0.2)' : 'rgba(255,255,255,0.06)', border: `1px solid ${canConvert ? 'rgba(52,211,153,0.5)' : 'rgba(255,255,255,0.12)'}`, color: canConvert ? '#6ee7b7' : 'rgba(255,255,255,0.4)', cursor: canConvert ? 'pointer' : 'not-allowed' }}>
+          {done ? 'Converted ✓' : busy ? 'Converting…' : 'Deposit collected — convert to install job'}
+        </button>
+        {!done && !canConvert && !busy && <Sub>Check both boxes above to enable conversion.</Sub>}
+        {msg && <p style={{ fontSize: 12.5, color: err ? '#fca5a5' : '#6ee7b7', marginTop: 10 }}>{msg}</p>}
       </Card>
     </div>
   )

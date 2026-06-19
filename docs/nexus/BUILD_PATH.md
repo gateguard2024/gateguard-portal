@@ -15,8 +15,11 @@ Type a part # or paste a URL → web lookup proposes name/brand/model/manual →
 ## Build 3 — Pricing calculator + server-side cost (#84, #86)
 Gates/doors/cameras/units → install cost; pull units from Overview; feed survey → financials; move GG cost server-side (security).
 
-## Build 4 — CRM pipeline (#82, #66)
-Adopt the 7-stage sales pipeline + "deposit-collected" automation; rebuild the quote builder as the simple guided-card flow.
+## Build 4a — 7-stage pipeline + deposit automation (#82)  ✅ shipped
+Canonical pipeline in `lib/pipeline.ts` (single source of truth) + tolerant `normalizeStage()` so lifecycle stages never drop off the board; deposit-collected → Closed Won + auto-create install job.
+
+## Build 4b — Guided quote builder (#66)  ← next
+Rebuild the quote builder as the simple guided-card flow.
 
 ## Build 5 — Site lifecycle + activity timeline (#60, #59)
 Site activation rule (contract signed AND deposit paid); unified per-record activity timeline (emails + events + notes).

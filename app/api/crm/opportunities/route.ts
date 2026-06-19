@@ -2,29 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
+import { STAGE_ORDER, STAGE_LABELS, STAGE_PROB, normalizeStage } from '@/lib/pipeline'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 export const dynamic = 'force-dynamic'
-
-const STAGE_ORDER = [
-  'meet_present', 'survey_request', 'propose', 'negotiate', 'won', 'lost', 'dead'
-]
-const STAGE_LABELS: Record<string, string> = {
-  meet_present:   'Meet & Present',
-  survey_request: 'Survey Request',
-  propose:        'Propose',
-  negotiate:      'Negotiate',
-  won:            'Closed Won',
-  lost:           'Lost',
-  dead:           'Dead',
-}
-const STAGE_PROB: Record<string, number> = {
-  meet_present: 20, survey_request: 35, propose: 50,
-  negotiate: 75, won: 100, lost: 0, dead: 0,
-}
 
 export async function GET(req: NextRequest) {
   try {
@@ -66,12 +50,16 @@ export async function GET(req: NextRequest) {
       return acc
     }, {} as Record<string, any>)
 
+    // Bucket every opp into its canonical pipeline column. normalizeStage()
+    // guarantees a column always exists, so lifecycle stages like
+    // contract_invoice / sign / payment never drop off the board.
     let pipelineTotal = 0
     records.forEach((opp: any) => {
-      if (grouped[opp.stage]) {
-        grouped[opp.stage].records.push(opp)
-        grouped[opp.stage].total += Number(opp.amount || 0)
-        if (!['won', 'lost', 'dead'].includes(opp.stage)) {
+      const col = normalizeStage(opp.stage)
+      if (grouped[col]) {
+        grouped[col].records.push(opp)
+        grouped[col].total += Number(opp.amount || 0)
+        if (!['won', 'lost', 'dead'].includes(col)) {
           pipelineTotal += Number(opp.amount || 0)
         }
       }
@@ -83,8 +71,8 @@ export async function GET(req: NextRequest) {
       pipelineTotal: user.canViewFinancials ? pipelineTotal : null,
       counts: {
         total: records.length,
-        open:  records.filter((o: any) => !['won','lost','dead'].includes(o.stage)).length,
-        won:   records.filter((o: any) => o.stage === 'won').length,
+        open:  records.filter((o: any) => !['won','lost','dead'].includes(normalizeStage(o.stage))).length,
+        won:   records.filter((o: any) => normalizeStage(o.stage) === 'won').length,
       }
     })
   } catch (err: any) {
@@ -141,7 +129,7 @@ export async function POST(req: NextRequest) {
       .insert({
         ...safeBody,
         stage,
-        probability:    body.probability ?? STAGE_PROB[stage],
+        probability:    body.probability ?? STAGE_PROB[normalizeStage(stage)],
         owner_name:     user.name,
         owner_initials: user.initials,
         dealer_org_id,

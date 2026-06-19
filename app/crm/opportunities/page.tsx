@@ -29,9 +29,11 @@ import { CSS } from "@dnd-kit/utilities";
 // ── Types ──────────────────────────────────────────────────────────────────
 type Stage =
   | "meet_present"
-  | "survey_request"
+  | "survey"
   | "propose"
   | "negotiate"
+  | "contract"
+  | "deposit"
   | "won"
   | "lost";
 
@@ -113,14 +115,14 @@ const STAGE_CONFIG: Record<
     pill: "bg-blue-100 text-blue-700",
     col: "bg-blue-50 border-blue-200",
   },
-  survey_request: {
-    label: "Survey Request",
+  survey: {
+    label: "Site Survey",
     dot: "bg-violet-400",
     pill: "bg-violet-100 text-violet-700",
     col: "bg-violet-50 border-violet-200",
   },
   propose: {
-    label: "Propose",
+    label: "Proposal",
     dot: "bg-amber-400",
     pill: "bg-amber-100 text-amber-700",
     col: "bg-amber-50 border-amber-200",
@@ -130,6 +132,18 @@ const STAGE_CONFIG: Record<
     dot: "bg-orange-400",
     pill: "bg-orange-100 text-orange-700",
     col: "bg-orange-50 border-orange-200",
+  },
+  contract: {
+    label: "Contract & Sign",
+    dot: "bg-cyan-400",
+    pill: "bg-cyan-100 text-cyan-700",
+    col: "bg-cyan-50 border-cyan-200",
+  },
+  deposit: {
+    label: "Deposit",
+    dot: "bg-teal-400",
+    pill: "bg-teal-100 text-teal-700",
+    col: "bg-teal-50 border-teal-200",
   },
   won: {
     label: "Closed Won",
@@ -147,9 +161,11 @@ const STAGE_CONFIG: Record<
 
 const KANBAN_STAGES: Stage[] = [
   "meet_present",
-  "survey_request",
+  "survey",
   "propose",
   "negotiate",
+  "contract",
+  "deposit",
   "won",
 ];
 
