@@ -39,7 +39,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     supabase
       .from('site_events')
-      .select('id, event_type, event_source, summary, severity, metadata, created_at')
+      .select('id, event_type, event_source, title, description, summary, severity, metadata, created_at')
       .eq('site_id', id)
       .order('created_at', { ascending: false })
       .limit(20),
