@@ -1,8 +1,21 @@
 'use client';
-// Operations Hub — work orders + dispatch, glass, 5th-grader simple.
-// Reused inline inside the Jobs tab (seamless, no page jump) and at /cmms.
-// All data from existing endpoints: /api/dispatch (list+create) and
-// /api/maintenance/[id] (+ /time) for detail/edit. No new tables.
+// Operations Hub — the one place for jobs, work orders, dispatch, sites, parts
+// and preventive maintenance. Glass, 5th-grader simple. Reused inline inside the
+// Jobs tab (seamless, no page jump) and at /cmms.
+//
+// Folds the old 11-tab CMMS into 5 plain-English tabs. The heavy work-order
+// detail (money/profitability, checklist a.k.a. procedures, parts used, team
+// chat a.k.a. messages, complete) lives inside the job drawer — open any job.
+//
+// All data from existing endpoints (no new tables):
+//   /api/dispatch                       jobs + techs (list + create)
+//   /api/maintenance/[id]               work_order + checklist + comments + parts_used
+//   /api/maintenance/[id] (PATCH)       status / assignee / complete
+//   /api/maintenance/[id]/checklist     add + toggle checklist (procedures)
+//   /api/maintenance/[id]/comments      add team chat (messages)
+//   /api/sites                          locations (asset + open-WO counts)
+//   /api/products                       parts inventory
+//   /api/pm-schedules                   preventive maintenance
 import React, { useEffect, useState } from "react";
 
 type RealWO = { id: string; property?: string; assignedTech?: string | null; assignedTechId?: string | null; eta?: string; priority: string; status: string; woNumber?: string | null; title?: string | null };
@@ -23,15 +36,25 @@ const btn = { background: "#6366f1", color: "white", border: 0, borderRadius: 12
 const input = { width: "100%", boxSizing: "border-box" as const, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.12)", color: "white", borderRadius: 12, padding: 12, fontSize: 14 };
 const sel = { background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.14)", color: "white", borderRadius: 10, padding: "6px 8px", fontSize: 12 } as const;
 const Small = ({ children }: { children: React.ReactNode }) => <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 13 }}>{children}</div>;
-const Big = ({ children }: { children: React.ReactNode }) => <div style={{ fontSize: 30, fontWeight: 800, color: "#00C8FF", margin: "6px 0" }}>{children}</div>;
+const Big = ({ children, color }: { children: React.ReactNode; color?: string }) => <div style={{ fontSize: 30, fontWeight: 800, color: color ?? "#00C8FF", margin: "6px 0" }}>{children}</div>;
 const Card = ({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) => <div style={{ ...card, ...style }}>{children}</div>;
 function Badge({ children, tone = "default" }: { children: React.ReactNode; tone?: string }) {
-  const bg = tone === "urgent" ? "rgba(255,80,80,.18)" : tone === "high" ? "rgba(255,170,0,.18)" : "rgba(255,255,255,.08)";
+  const bg = tone === "urgent" ? "rgba(255,80,80,.18)" : tone === "high" ? "rgba(255,170,0,.18)" : tone === "good" ? "rgba(52,211,153,.18)" : "rgba(255,255,255,.08)";
   return <span style={{ padding: "4px 9px", borderRadius: 999, background: bg, border: "1px solid rgba(255,255,255,.1)", fontSize: 11 }}>{children}</span>;
 }
+const num = (v: unknown) => Number(v) || 0;
+const TABS = ["Dashboard", "Work Orders", "Locations", "Parts", "PM"] as const;
+type Tab = typeof TABS[number];
+const TAB_HINT: Record<Tab, string> = {
+  Dashboard: "Snapshot + jobs board",
+  "Work Orders": "Create, assign, track",
+  Locations: "Sites, assets, lifetime value",
+  Parts: "Inventory + stock levels",
+  PM: "Recurring maintenance",
+};
 
 export function OperationsHub({ embedded }: { embedded?: boolean } = {}) {
-  const [page, setPage] = useState("Dashboard");
+  const [page, setPage] = useState<Tab>("Dashboard");
   const [jobs, setJobs] = useState<RealWO[]>([]);
   const [techs, setTechs] = useState<RealTech[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,32 +71,60 @@ export function OperationsHub({ embedded }: { embedded?: boolean } = {}) {
     {!embedded && <>
       <div style={{ fontSize: 10, letterSpacing: "0.24em", textTransform: "uppercase", color: "rgba(0,200,255,0.8)" }}>Nexus</div>
       <h1 style={{ margin: "4px 0 2px", fontSize: 26, fontWeight: 700 }}>Operations Hub</h1>
-      <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 14, marginBottom: 16 }}>Jobs, work orders, and dispatch — in one place.</p>
+      <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 14, marginBottom: 16 }}>Jobs, work orders, dispatch, sites, and parts — in one place.</p>
     </>}
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
-      {["Dashboard", "Work Orders"].map(p => {
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+      {TABS.map(p => {
         const on = page === p;
         return <button key={p} onClick={() => setPage(p)} style={{ padding: "9px 16px", borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: "pointer",
           background: on ? "linear-gradient(135deg, rgba(0,124,255,0.42), rgba(0,200,255,0.16))" : "rgba(255,255,255,0.02)",
           border: on ? "1px solid rgba(0,200,255,0.42)" : "0.5px solid rgba(255,255,255,0.07)", color: on ? "white" : "rgba(255,255,255,0.5)" }}>{p}</button>;
       })}
-      <button onClick={loadOps} style={{ ...btn, background: "rgba(255,255,255,0.06)" }}>↻</button>
+      <button onClick={loadOps} title="Refresh" style={{ ...btn, background: "rgba(255,255,255,0.06)" }}>↻</button>
     </div>
-    {page === "Dashboard" && <Dashboard jobs={jobs} loading={loading} onOpen={setOpenId} />}
+    <p style={{ color: "rgba(255,255,255,0.34)", fontSize: 12, marginBottom: 18 }}>{TAB_HINT[page]}</p>
+
+    {page === "Dashboard" && <Dashboard jobs={jobs} techs={techs} loading={loading} onOpen={setOpenId} onUpdate={updateWO} />}
     {page === "Work Orders" && <WorkOrders jobs={jobs} techs={techs} loading={loading} onCreate={createWO} onUpdate={updateWO} onOpen={setOpenId} />}
+    {page === "Locations" && <Locations />}
+    {page === "Parts" && <Parts />}
+    {page === "PM" && <PM />}
     {openId && <JobDetailDrawer id={openId} techs={techs} onClose={() => { setOpenId(null); loadOps(); }} onUpdate={updateWO} />}
   </div>;
 }
 
-function Dashboard({ jobs, loading, onOpen }: { jobs: RealWO[]; loading: boolean; onOpen: (id: string) => void }) {
+/* ── Dashboard: counts + dispatch strip + jobs board ─────────────────────── */
+function Dashboard({ jobs, techs, loading, onOpen, onUpdate }: { jobs: RealWO[]; techs: RealTech[]; loading: boolean; onOpen: (id: string) => void; onUpdate: (id: string, patch: Record<string, unknown>) => void }) {
+  const unassigned = jobs.filter(j => !j.assignedTechId && bucketOf(j.status) !== "Done");
   return <div style={{ display: "grid", gap: 16 }}>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 14 }}>
-      {JOB_COLUMNS.map(col => <Card key={col.key}><Small>{col.label}</Small><Big>{loading ? "…" : String(jobs.filter(j => bucketOf(j.status) === col.key).length)}</Big></Card>)}
+      {JOB_COLUMNS.map(col => <Card key={col.key}><Small>{col.label}</Small><Big color={col.accent === "#10b981" ? "#34d399" : undefined}>{loading ? "…" : String(jobs.filter(j => bucketOf(j.status) === col.key).length)}</Big></Card>)}
     </div>
+
+    {/* Dispatch strip — folds dispatch in without a crowded separate page */}
+    <Card>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <h2 style={{ fontSize: 16 }}>Needs a tech</h2>
+        <Small>{techs.length} {techs.length === 1 ? "tech" : "techs"} available</Small>
+      </div>
+      {loading ? <Small>Loading…</Small> : unassigned.length === 0 ? <Small>Everything's assigned. 🎉</Small> : <div style={{ display: "grid", gap: 8 }}>
+        {unassigned.map(w => <div key={w.id} style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", padding: 10, borderRadius: 12, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.08)" }}>
+          <div onClick={() => onOpen(w.id)} style={{ cursor: "pointer", minWidth: 0 }}>
+            <b style={{ fontSize: 13 }}>{w.woNumber || w.title || "Work Order"}</b>
+            <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 12 }}>{w.property || "—"}</div>
+          </div>
+          <select defaultValue="" onChange={e => { const t = techs.find(x => x.id === e.target.value); if (e.target.value) onUpdate(w.id, { assignee_id: e.target.value, assignee_name: t?.name ?? null, status: "scheduled" }); }} style={sel}>
+            <option value="">Assign tech…</option>{techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </div>)}
+      </div>}
+    </Card>
+
     <Board jobs={jobs} onOpen={onOpen} />
   </div>;
 }
 
+/* ── Work Orders: create + list + board ──────────────────────────────────── */
 function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen }: { jobs: RealWO[]; techs: RealTech[]; loading: boolean; onCreate: (p: Record<string, unknown>) => void; onUpdate: (id: string, patch: Record<string, unknown>) => void; onOpen: (id: string) => void }) {
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState({ customer_name: "", title: "", priority: "medium", assignee_id: "" });
@@ -135,56 +186,213 @@ function Board({ jobs, onOpen }: { jobs: RealWO[]; onOpen: (id: string) => void 
   </Card>;
 }
 
+/* ── Locations: sites with asset + open-WO counts (real /api/sites) ──────── */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function Locations() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [sites, setSites] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { fetch("/api/sites?limit=60").then(r => r.json()).then(d => setSites(d.sites ?? [])).catch(() => {}).finally(() => setLoading(false)); }, []);
+  if (loading) return <Card><Small>Loading sites…</Small></Card>;
+  if (sites.length === 0) return <Card><Small>No sites found yet.</Small></Card>;
+  return <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px,1fr))", gap: 14 }}>
+    {sites.map(s => <Card key={s.id}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+        <b style={{ fontSize: 15 }}>{s.name || "Site"}</b>
+        {s.offline_asset_count > 0 ? <Badge tone="urgent">{s.offline_asset_count} offline</Badge> : <Badge tone="good">healthy</Badge>}
+      </div>
+      <Small>{[s.city, s.state].filter(Boolean).join(", ") || "—"}</Small>
+      <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 13 }}>
+        <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Units</div><b>{num(s.units) || "—"}</b></div>
+        <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Assets</div><b>{num(s.asset_count)}</b></div>
+        <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Open WOs</div><b>{num(s.open_wo_count)}</b></div>
+      </div>
+      {s.latest_event?.summary && <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 12, marginTop: 10 }}>Latest: {s.latest_event.summary}</p>}
+    </Card>)}
+  </div>;
+}
+
+/* ── Parts: inventory (real /api/products) ───────────────────────────────── */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function Parts() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [parts, setParts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [q, setQ] = useState("");
+  useEffect(() => { fetch("/api/products?limit=60").then(r => r.json()).then(d => setParts(d.products ?? [])).catch(() => {}).finally(() => setLoading(false)); }, []);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cost = (p: any) => num(p.dealer_cost ?? p.unit_cost ?? p.cost);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const price = (p: any) => num(p.sell_price ?? p.unit_price ?? p.price ?? p.list_price);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const onHand = (p: any) => p.on_hand ?? p.qty_on_hand ?? p.stock ?? null;
+  const shown = parts.filter(p => !q || `${p.name ?? ""} ${p.sku ?? ""}`.toLowerCase().includes(q.toLowerCase()));
+  if (loading) return <Card><Small>Loading parts…</Small></Card>;
+  return <div style={{ display: "grid", gap: 14 }}>
+    <input placeholder="Search parts by name or SKU" value={q} onChange={e => setQ(e.target.value)} style={input} />
+    {shown.length === 0 ? <Card><Small>No parts found.</Small></Card> : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px,1fr))", gap: 14 }}>
+      {shown.map(p => {
+        const oh = onHand(p);
+        const low = oh != null && num(oh) <= 3;
+        return <Card key={p.id}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <b style={{ fontSize: 15 }}>{p.name || "Part"}</b>
+            {low && <Badge tone="urgent">Low stock</Badge>}
+          </div>
+          {p.sku && <Small>{p.sku}</Small>}
+          <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 13 }}>
+            <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Cost</div><b>{cost(p) ? money(cost(p)) : "—"}</b></div>
+            <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Price</div><b>{price(p) ? money(price(p)) : "—"}</b></div>
+            {oh != null && <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>On hand</div><b>{num(oh)}</b></div>}
+          </div>
+        </Card>;
+      })}
+    </div>}
+  </div>;
+}
+
+/* ── PM: preventive maintenance schedules (real /api/pm-schedules) ───────── */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function PM() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { fetch("/api/pm-schedules").then(r => r.json()).then(d => setItems(d.pm_schedules ?? [])).catch(() => {}).finally(() => setLoading(false)); }, []);
+  if (loading) return <Card><Small>Loading schedules…</Small></Card>;
+  if (items.length === 0) return <Card><Small>No preventive-maintenance schedules yet.</Small></Card>;
+  return <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px,1fr))", gap: 14 }}>
+    {items.map(s => <Card key={s.id}>
+      <b style={{ fontSize: 15 }}>{s.title || "Schedule"}</b>
+      <div style={{ marginTop: 8, fontSize: 13, color: "rgba(255,255,255,0.7)" }}>
+        {s.interval_days ? `Every ${s.interval_days} days` : "—"}
+        {s.next_due_at && <div style={{ color: "rgba(255,255,255,0.5)" }}>Next due: {String(s.next_due_at).slice(0, 10)}</div>}
+      </div>
+      {s.description && <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 12, marginTop: 8 }}>{s.description}</p>}
+    </Card>)}
+  </div>;
+}
+
+/* ── Job drawer: detail + money + checklist + parts + team chat + complete ─ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: RealTech[]; onClose: () => void; onUpdate: (id: string, patch: Record<string, unknown>) => void }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [wo, setWo] = useState<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [parts, setParts] = useState<any[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [checklist, setChecklist] = useState<any[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [comments, setComments] = useState<any[]>([]);
   const [laborMins, setLaborMins] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [newItem, setNewItem] = useState("");
+  const [chat, setChat] = useState("");
   const load = React.useCallback(() => {
     setLoading(true);
     Promise.all([
       fetch(`/api/maintenance/${id}`).then(r => r.json()).catch(() => ({})),
       fetch(`/api/maintenance/${id}/time`).then(r => r.json()).catch(() => ({})),
-    ]).then(([d, t]) => { setWo(d.work_order ?? null); setParts(d.parts_used ?? []); setLaborMins(t.totalMins ?? 0); }).finally(() => setLoading(false));
+    ]).then(([d, t]) => {
+      setWo(d.work_order ?? null); setParts(d.parts_used ?? []);
+      setChecklist(d.checklist ?? []); setComments(d.comments ?? []);
+      setLaborMins(t.totalMins ?? 0);
+    }).finally(() => setLoading(false));
   }, [id]);
   useEffect(() => { load(); }, [load]);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const n = (v: any) => Number(v) || 0;
-  const partsCost = parts.reduce((s, p) => s + n(p.unit_cost) * n(p.qty), 0);
-  const partsRev = parts.reduce((s, p) => s + n(p.unit_price) * n(p.qty), 0);
+
+  const partsCost = parts.reduce((s, p) => s + num(p.unit_cost) * num(p.qty), 0);
+  const partsRev = parts.reduce((s, p) => s + num(p.unit_price) * num(p.qty), 0);
+  const margin = partsRev - partsCost;
+  const marginPct = partsRev > 0 ? Math.round((margin / partsRev) * 100) : 0;
+  const doneCount = checklist.filter(c => c.is_complete || c.completed || c.done).length;
   const patchField = (p: Record<string, unknown>) => { onUpdate(id, p); setWo((w: typeof wo) => w ? { ...w, ...p } : w); };
+
+  async function addChecklist() {
+    const title = newItem.trim(); if (!title) return; setNewItem("");
+    await fetch(`/api/maintenance/${id}/checklist`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title }) }).catch(() => {});
+    load();
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function toggleChecklist(item: any) {
+    const next = !(item.is_complete || item.completed || item.done);
+    await fetch(`/api/maintenance/${id}/checklist`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item_id: item.id, is_complete: next }) }).catch(() => {});
+    load();
+  }
+  async function addComment() {
+    const content = chat.trim(); if (!content) return; setChat("");
+    await fetch(`/api/maintenance/${id}/comments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content }) }).catch(() => {});
+    load();
+  }
+
   return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.62)", backdropFilter: "blur(6px)", display: "flex", justifyContent: "flex-end" }}>
-    <div onClick={e => e.stopPropagation()} style={{ width: "min(560px,100%)", height: "100%", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#060b1a)", borderLeft: "1px solid rgba(0,200,255,0.22)", padding: 20, color: "white" }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: "min(580px,100%)", height: "100%", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#060b1a)", borderLeft: "1px solid rgba(0,200,255,0.22)", padding: 20, color: "white" }}>
       <button onClick={onClose} style={{ ...btn, background: "rgba(255,255,255,0.06)", marginBottom: 16 }}>✕ Close</button>
       {loading ? <Small>Loading…</Small> : !wo ? <Small>Couldn’t load this work order.</Small> : <div style={{ display: "grid", gap: 14 }}>
         <div>
           <div style={{ fontSize: 11, color: "rgba(0,200,255,0.8)", letterSpacing: "0.1em" }}>{wo.wo_number || "WORK ORDER"}</div>
           <h2 style={{ margin: "4px 0", fontSize: 22 }}>{wo.title || "Work order"}</h2>
-          <Small>{wo.customer_name || "—"}{wo.scheduled_date ? ` · ${wo.scheduled_date}` : ""}</Small>
+          <Small>{wo.customer_name || wo.site_address || "—"}{wo.scheduled_date ? ` · ${String(wo.scheduled_date).slice(0, 10)}` : ""}</Small>
         </div>
+
         <Card>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <div style={{ flex: 1, minWidth: 140 }}><Small>Status</Small><select value={bucketOf(wo.status)} onChange={e => patchField({ status: COL_TO_DB[e.target.value] })} style={{ ...sel, width: "100%", marginTop: 4 }}>{JOB_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}</select></div>
             <div style={{ flex: 1, minWidth: 140 }}><Small>Assigned to</Small><select value={wo.assignee_id ?? ""} onChange={e => { const t = techs.find(x => x.id === e.target.value); patchField({ assignee_id: e.target.value || null, assignee_name: t?.name ?? null }); }} style={{ ...sel, width: "100%", marginTop: 4 }}><option value="">Unassigned</option>{techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
           </div>
         </Card>
+
+        {/* Money / profitability (was WO Detail + Reporting) */}
         <Card>
-          <h2 style={{ fontSize: 15 }}>Money on this job</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
-            <div><Small>Parts cost</Small><div style={{ fontSize: 18, fontWeight: 700 }}>{money(partsCost)}</div></div>
-            <div><Small>Parts price</Small><div style={{ fontSize: 18, fontWeight: 700 }}>{money(partsRev)}</div></div>
-            <div><Small>Parts margin</Small><div style={{ fontSize: 18, fontWeight: 700, color: "#34d399" }}>{money(partsRev - partsCost)}</div></div>
-            <div><Small>Labor logged</Small><div style={{ fontSize: 18, fontWeight: 700 }}>{Math.round((laborMins / 60) * 10) / 10} hrs</div></div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <h2 style={{ fontSize: 15 }}>Money on this job</h2>
+            {partsRev > 0 && <Badge tone="good">{marginPct}% margin</Badge>}
+          </div>
+          <div style={{ fontSize: 30, fontWeight: 800, color: "#00C8FF", margin: "6px 0" }}>{money(margin)} <span style={{ fontSize: 14, color: "rgba(255,255,255,0.5)", fontWeight: 600 }}>margin</span></div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 4 }}>
+            <div><Small>Parts cost</Small><div style={{ fontSize: 16, fontWeight: 700 }}>{money(partsCost)}</div></div>
+            <div><Small>Parts price</Small><div style={{ fontSize: 16, fontWeight: 700 }}>{money(partsRev)}</div></div>
+            <div><Small>Labor logged</Small><div style={{ fontSize: 16, fontWeight: 700 }}>{Math.round((laborMins / 60) * 10) / 10} hrs</div></div>
           </div>
         </Card>
+
+        {/* Checklist (was Procedures) */}
+        <Card>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+            <h2 style={{ fontSize: 15 }}>Checklist</h2>
+            <Small>{doneCount}/{checklist.length} done</Small>
+          </div>
+          {checklist.map(c => {
+            const done = c.is_complete || c.completed || c.done;
+            return <label key={c.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 0", cursor: "pointer" }}>
+              <input type="checkbox" checked={!!done} onChange={() => toggleChecklist(c)} />
+              <span style={{ textDecoration: done ? "line-through" : "none", color: done ? "rgba(255,255,255,0.45)" : "white", fontSize: 14 }}>{c.title || c.label}</span>
+            </label>;
+          })}
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <input placeholder="Add a step…" value={newItem} onChange={e => setNewItem(e.target.value)} onKeyDown={e => { if (e.key === "Enter") addChecklist(); }} style={{ ...input, padding: 9 }} />
+            <button onClick={addChecklist} style={btn}>Add</button>
+          </div>
+        </Card>
+
+        {/* Parts used */}
         <Card>
           <h2 style={{ fontSize: 15 }}>Parts used</h2>
-          {parts.length === 0 ? <Small>None yet.</Small> : parts.map((p, i) => <p key={p.id || i} style={{ margin: "6px 0" }}>{p.name || "Part"} × {n(p.qty)} <span style={{ color: "#34d399" }}>· {money((n(p.unit_price) - n(p.unit_cost)) * n(p.qty))} margin</span></p>)}
+          {parts.length === 0 ? <Small>None yet.</Small> : parts.map((p, i) => <p key={p.id || i} style={{ margin: "6px 0" }}>{p.name || "Part"} × {num(p.qty)} <span style={{ color: "#34d399" }}>· {money((num(p.unit_price) - num(p.unit_cost)) * num(p.qty))} margin</span></p>)}
         </Card>
+
+        {/* Team chat (was Messages) */}
+        <Card>
+          <h2 style={{ fontSize: 15, marginBottom: 8 }}>Team chat</h2>
+          {comments.length === 0 ? <Small>No messages yet.</Small> : comments.map((c, i) => <p key={c.id || i} style={{ margin: "6px 0", fontSize: 14 }}><b>{c.author_name || c.created_by || "Team"}:</b> <span style={{ color: "rgba(255,255,255,0.82)" }}>{c.content || c.body}</span></p>)}
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <input placeholder="Write a message…" value={chat} onChange={e => setChat(e.target.value)} onKeyDown={e => { if (e.key === "Enter") addComment(); }} style={{ ...input, padding: 9 }} />
+            <button onClick={addComment} style={btn}>Send</button>
+          </div>
+        </Card>
+
         {wo.description && <Card><h2 style={{ fontSize: 15 }}>Notes</h2><p style={{ color: "rgba(255,255,255,0.8)", whiteSpace: "pre-wrap" }}>{wo.description}</p></Card>}
+
+        {bucketOf(wo.status) !== "Done" && <button onClick={() => patchField({ status: "completed" })} style={{ ...btn, background: "#10b981", padding: 14, fontSize: 15 }}>✓ Complete Work Order</button>}
       </div>}
     </div>
   </div>;
