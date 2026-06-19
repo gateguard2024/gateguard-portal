@@ -272,8 +272,20 @@ export function OpportunityGlassWindow({
                   {msg.text}
                 </div>
               )}
+              {stageMeta === 'won' && (
+                <button
+                  type="button"
+                  onClick={() => handleAction('create_project')}
+                  disabled={busy !== null}
+                  className="w-full rounded-2xl p-3 text-left transition-all hover:-translate-y-0.5 disabled:opacity-50"
+                  style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.34)', color: 'rgba(255,255,255,0.92)' }}
+                >
+                  <div className="text-xs font-semibold">{busy === 'create_project' ? 'Creating job…' : '🛠️ Create install job'}</div>
+                  <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Turn this won deal into a job for the field team</div>
+                </button>
+              )}
               {nextBestActions.length === 0 ? (
-                <Empty text="No suggested actions." />
+                stageMeta === 'won' ? null : <Empty text="No suggested actions." />
               ) : (
                 nextBestActions.map(action => (
                   <button

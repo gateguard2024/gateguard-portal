@@ -43,15 +43,17 @@ function Badge({ children, tone = "default" }: { children: React.ReactNode; tone
   return <span style={{ padding: "4px 9px", borderRadius: 999, background: bg, border: "1px solid rgba(255,255,255,.1)", fontSize: 11 }}>{children}</span>;
 }
 const num = (v: unknown) => Number(v) || 0;
-const TABS = ["Dashboard", "Work Orders", "Calendar", "Locations", "Techs", "Parts", "PM", "Playbooks"] as const;
+const TABS = ["Dashboard", "Work Orders", "Requests", "Calendar", "Locations", "Techs", "Parts", "Procurement", "PM", "Playbooks"] as const;
 type Tab = typeof TABS[number];
 const TAB_HINT: Record<Tab, string> = {
   Dashboard: "Snapshot + jobs board",
   "Work Orders": "Create, assign, track",
+  Requests: "Incoming requests → turn into jobs",
   Calendar: "What's scheduled, by day",
   Locations: "Your sites — tap to edit details",
   Techs: "Add techs + set their app code",
   Parts: "Inventory + stock levels",
+  Procurement: "Purchase orders to suppliers",
   PM: "Recurring maintenance",
   Playbooks: "Step-by-step templates to assign",
 };
@@ -89,10 +91,12 @@ export function OperationsHub({ embedded }: { embedded?: boolean } = {}) {
 
     {page === "Dashboard" && <Dashboard jobs={jobs} techs={techs} loading={loading} onOpen={setOpenId} onUpdate={updateWO} />}
     {page === "Work Orders" && <WorkOrders jobs={jobs} techs={techs} loading={loading} onCreate={createWO} onUpdate={updateWO} onOpen={setOpenId} />}
+    {page === "Requests" && <Requests onConverted={loadOps} />}
     {page === "Calendar" && <CalendarView onOpenWO={setOpenId} />}
     {page === "Locations" && <Locations />}
     {page === "Techs" && <Techs />}
     {page === "Parts" && <Parts />}
+    {page === "Procurement" && <Procurement />}
     {page === "PM" && <PM />}
     {page === "Playbooks" && <Playbooks />}
     {openId && <JobDetailDrawer id={openId} techs={techs} onClose={() => { setOpenId(null); loadOps(); }} onUpdate={updateWO} />}
@@ -318,6 +322,8 @@ function CalendarView({ onOpenWO }: { onOpenWO: (id: string) => void }) {
 
 /* ── Techs: add technicians + set their /tech app code (password) ────────── */
 function genTechCode(initials: string) { return `GG-${(initials || "GG").toUpperCase().slice(0, 2)}-${Math.floor(1000 + Math.random() * 9000)}`; }
+const TECH_LEVELS = ["Apprentice", "Tech", "Senior Tech", "Lead", "Supervisor"];
+const TECH_STATUS = ["available", "offline", "on_job"];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function Techs() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -326,6 +332,9 @@ function Techs() {
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState({ name: "", role: "Tech", phone: "", email: "" });
   const [copied, setCopied] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [edit, setEdit] = useState<Record<string, string>>({});
+  const [savingId, setSavingId] = useState<string | null>(null);
   const load = React.useCallback(() => { setLoading(true); fetch("/api/dispatch/technicians").then(r => r.json()).then(d => setTechs(d.technicians ?? [])).catch(() => {}).finally(() => setLoading(false)); }, []);
   useEffect(() => { load(); }, [load]);
   async function addTech() {
@@ -340,13 +349,26 @@ function Techs() {
     load();
   }
   function copy(code: string) { navigator.clipboard?.writeText(code).then(() => { setCopied(code); setTimeout(() => setCopied(null), 1500); }).catch(() => {}); }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function startEdit(t: any) { setEditId(t.id); setEdit({ name: t.name ?? "", phone: t.phone ?? "", email: t.email ?? "", role: t.role ?? "Tech", level: t.level ?? "", status: t.status ?? "offline", skills: Array.isArray(t.skills) ? t.skills.join(", ") : (t.skills ?? "") }); }
+  async function saveEdit(id: string) {
+    setSavingId(id);
+    const payload: Record<string, unknown> = {
+      name: edit.name?.trim(), phone: edit.phone?.trim() || null, email: edit.email?.trim() || null,
+      role: edit.role || "Tech", level: edit.level || null, status: edit.status || "offline",
+      skills: (edit.skills || "").split(",").map(s => s.trim()).filter(Boolean),
+    };
+    if (edit.name?.trim()) payload.initials = edit.name.trim().split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
+    await fetch(`/api/dispatch/technicians/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).catch(() => {});
+    setSavingId(null); setEditId(null); load();
+  }
   return <div style={{ display: "grid", gap: 14 }}>
     <Card>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
         <h2 style={{ fontSize: 16 }}>Technicians</h2>
         <button onClick={() => setShowNew(s => !s)} style={btn}>+ Add tech</button>
       </div>
-      <Small>Each tech logs into the field tool at <b style={{ color: "rgba(255,255,255,0.7)" }}>/tech</b> using their personal code below.</Small>
+      <Small>Tap a tech to edit their details. Each logs into the field tool at <b style={{ color: "rgba(255,255,255,0.7)" }}>/tech</b> using their personal code.</Small>
       {showNew && <div style={{ ...card, marginTop: 12, display: "grid", gap: 8 }}>
         <input placeholder="Full name *" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={input} />
         <div style={{ display: "flex", gap: 8 }}>
@@ -360,11 +382,31 @@ function Techs() {
     {loading ? <Card><Small>Loading…</Small></Card> : techs.length === 0 ? <Card><Small>No technicians yet. Tap “+ Add tech”.</Small></Card> :
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px,1fr))", gap: 14 }}>
         {techs.map(t => <Card key={t.id}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, cursor: "pointer" }} onClick={() => editId === t.id ? setEditId(null) : startEdit(t)}>
             <b style={{ fontSize: 15 }}>{t.name}</b>
-            <Badge tone={t.status === "available" ? "good" : "default"}>{t.role || "Tech"}</Badge>
+            <Badge tone={t.status === "available" ? "good" : "default"}>{t.level || t.role || "Tech"}</Badge>
           </div>
           {(t.phone || t.email) && <Small>{[t.phone, t.email].filter(Boolean).join(" · ")}</Small>}
+          {Array.isArray(t.skills) && t.skills.length > 0 && <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 6 }}>{t.skills.map((s: string, i: number) => <span key={i} style={{ fontSize: 10, padding: "2px 7px", borderRadius: 999, background: "rgba(99,102,241,0.18)", border: "1px solid rgba(99,102,241,0.3)" }}>{s}</span>)}</div>}
+
+          {editId === t.id && <div style={{ ...card, marginTop: 10, display: "grid", gap: 8 }}>
+            <input placeholder="Full name" value={edit.name} onChange={e => setEdit({ ...edit, name: e.target.value })} style={{ ...input, padding: 9, fontSize: 13 }} />
+            <div style={{ display: "flex", gap: 8 }}>
+              <input placeholder="Phone" value={edit.phone} onChange={e => setEdit({ ...edit, phone: e.target.value })} style={{ ...input, padding: 9, fontSize: 13, flex: 1 }} />
+              <input placeholder="Email" value={edit.email} onChange={e => setEdit({ ...edit, email: e.target.value })} style={{ ...input, padding: 9, fontSize: 13, flex: 1 }} />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ flex: 1 }}><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 3 }}>Level</div><select value={edit.level} onChange={e => setEdit({ ...edit, level: e.target.value })} style={{ ...sel, width: "100%", padding: 9 }}><option value="">—</option>{TECH_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}</select></div>
+              <div style={{ flex: 1 }}><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 3 }}>Status</div><select value={edit.status} onChange={e => setEdit({ ...edit, status: e.target.value })} style={{ ...sel, width: "100%", padding: 9 }}>{TECH_STATUS.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+            </div>
+            <input placeholder="Role / title (e.g. Install Tech)" value={edit.role} onChange={e => setEdit({ ...edit, role: e.target.value })} style={{ ...input, padding: 9, fontSize: 13 }} />
+            <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 3 }}>Skills / certifications (comma-separated)</div><input placeholder="Brivo, fiber splicing, OSHA-10" value={edit.skills} onChange={e => setEdit({ ...edit, skills: e.target.value })} style={{ ...input, padding: 9, fontSize: 13 }} /></div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => saveEdit(t.id)} disabled={savingId === t.id} style={{ ...btn, flex: 1, opacity: savingId === t.id ? 0.6 : 1 }}>{savingId === t.id ? "Saving…" : "Save"}</button>
+              <button onClick={() => setEditId(null)} style={{ ...btn, background: "rgba(255,255,255,0.06)" }}>Cancel</button>
+            </div>
+          </div>}
+
           <div style={{ marginTop: 12 }}>
             <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 4 }}>App code (their password for /tech)</div>
             {t.tech_code ? <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -445,6 +487,10 @@ function SiteDetailDrawer({ id, onClose }: { id: string; onClose: () => void }) 
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  // + new work order from this site
+  const [showNewWo, setShowNewWo] = useState(false);
+  const [woTitle, setWoTitle] = useState("");
+  const [woMsg, setWoMsg] = useState<string | null>(null);
   const load = React.useCallback(() => {
     setLoading(true);
     Promise.all([
@@ -486,6 +532,13 @@ function SiteDetailDrawer({ id, onClose }: { id: string; onClose: () => void }) 
     } catch (_) { /* ignore */ }
     setUploading(false); load();
   }
+  async function createWorkOrder() {
+    if (!woTitle.trim() || busy) return; setBusy(true); setWoMsg(null);
+    const r = await fetch(`/api/dispatch`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ customer_name: site?.name || "Site", site_id: id, title: woTitle.trim(), priority: "normal" }) }).catch(() => null);
+    setBusy(false);
+    if (r && r.ok) { setWoTitle(""); setShowNewWo(false); setWoMsg("Work order created ✓ — find it in Work Orders."); load(); }
+    else setWoMsg("Couldn't create the work order.");
+  }
   const val = (k: string) => (k in edit ? edit[k] : (site?.[k] ?? "")) as string;
   async function save() {
     if (Object.keys(edit).length === 0) { onClose(); return; }
@@ -503,6 +556,20 @@ function SiteDetailDrawer({ id, onClose }: { id: string; onClose: () => void }) 
           <h2 style={{ margin: "4px 0", fontSize: 22 }}>{site.name || "Site"}</h2>
           <Small>{[site.city, site.state].filter(Boolean).join(", ") || "—"}</Small>
         </div>
+
+        {/* + New work order from this site */}
+        <Card>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h2 style={{ fontSize: 15 }}>Work at this site</h2>
+            <button onClick={() => { setShowNewWo(s => !s); setWoMsg(null); }} style={btn}>+ New work order</button>
+          </div>
+          {showNewWo && <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <input placeholder="What needs doing? (e.g. Gate won't open)" value={woTitle} onChange={e => setWoTitle(e.target.value)} onKeyDown={e => { if (e.key === "Enter") createWorkOrder(); }} style={{ ...input, padding: 9 }} />
+            <button onClick={createWorkOrder} disabled={!woTitle.trim() || busy} style={{ ...btn, opacity: woTitle.trim() && !busy ? 1 : 0.5 }}>Create</button>
+          </div>}
+          {woMsg && <p style={{ fontSize: 12, color: woMsg.includes("✓") ? "#34d399" : "#fca5a5", marginTop: 8 }}>{woMsg}</p>}
+        </Card>
+
         <Card>
           <h2 style={{ fontSize: 15, marginBottom: 10 }}>Details</h2>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -644,6 +711,87 @@ function PM() {
   </div>;
 }
 
+/* ── Requests: incoming work requests → convert to a work order ──────────── */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function Requests({ onConverted }: { onConverted: () => void }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const load = React.useCallback(() => { setLoading(true); fetch("/api/requests").then(r => r.json()).then(d => setItems(d.requests ?? [])).catch(() => {}).finally(() => setLoading(false)); }, []);
+  useEffect(() => { load(); }, [load]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function convert(r: any) {
+    if (busyId) return; setBusyId(r.id);
+    try {
+      const woRes = await fetch("/api/dispatch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ customer_name: r.site_name || "Site", site_id: r.site_id, title: r.title, notes: r.description || r.area || null, priority: r.priority_requested || "normal" }) }).then(x => x.json()).catch(() => null);
+      const woId = woRes?.id || woRes?.work_order?.id || woRes?.job?.id || null;
+      await fetch("/api/request", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ request_id: r.id, status: "converted", converted_wo_id: woId }) }).catch(() => {});
+    } catch (_) { /* ignore */ }
+    setBusyId(null); load(); onConverted();
+  }
+  if (loading) return <Card><Small>Loading requests…</Small></Card>;
+  if (items.length === 0) return <Card><Small>No open requests. New requests from QR forms or property managers will appear here.</Small></Card>;
+  return <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px,1fr))", gap: 14 }}>
+    {items.map(r => <Card key={r.id}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+        <b style={{ fontSize: 15 }}>{r.title}</b>
+        <Badge tone={["urgent", "high"].includes(String(r.priority_requested)) ? "urgent" : "default"}>{r.priority_requested || "normal"}</Badge>
+      </div>
+      <Small>{r.site_name || "—"}{r.site_city ? ` · ${r.site_city}, ${r.site_state}` : ""}{r.area ? ` · ${r.area}` : ""}</Small>
+      {r.description && <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 13, margin: "8px 0 0" }}>{r.description}</p>}
+      {(r.contact_name || r.contact_phone) && <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 12, margin: "6px 0 0" }}>From: {r.contact_name || "—"}{r.contact_phone ? ` · ${r.contact_phone}` : ""}</p>}
+      <button onClick={() => convert(r)} disabled={busyId === r.id} style={{ ...btn, marginTop: 12, opacity: busyId === r.id ? 0.6 : 1 }}>{busyId === r.id ? "Converting…" : "Convert to work order →"}</button>
+    </Card>)}
+  </div>;
+}
+
+/* ── Procurement: purchase orders to suppliers (real /api/purchase-orders) ─ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function Procurement() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [pos, setPos] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showNew, setShowNew] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState({ supplier: "", po_number: "", notes: "" });
+  const load = React.useCallback(() => { setLoading(true); fetch("/api/purchase-orders").then(r => r.json()).then(d => setPos(d.records ?? [])).catch(() => {}).finally(() => setLoading(false)); }, []);
+  useEffect(() => { load(); }, [load]);
+  async function create() {
+    if (!form.supplier.trim() || busy) return; setBusy(true);
+    await fetch("/api/purchase-orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ supplier: form.supplier.trim(), po_number: form.po_number.trim() || null, notes: form.notes.trim() || null, items: [] }) }).catch(() => {});
+    setForm({ supplier: "", po_number: "", notes: "" }); setShowNew(false); setBusy(false); load();
+  }
+  const poTone = (s: string) => s === "received" || s === "closed" ? "good" : s === "draft" ? "default" : "high";
+  return <div style={{ display: "grid", gap: 14 }}>
+    <Card>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h2 style={{ fontSize: 16 }}>Purchase orders</h2>
+        <button onClick={() => setShowNew(s => !s)} style={btn}>+ New PO</button>
+      </div>
+      {showNew && <div style={{ ...card, marginTop: 12, display: "grid", gap: 8 }}>
+        <input placeholder="Supplier *" value={form.supplier} onChange={e => setForm({ ...form, supplier: e.target.value })} style={input} />
+        <input placeholder="PO number (optional)" value={form.po_number} onChange={e => setForm({ ...form, po_number: e.target.value })} style={input} />
+        <input placeholder="Notes" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} style={input} />
+        <button onClick={create} disabled={!form.supplier.trim() || busy} style={{ ...btn, opacity: form.supplier.trim() && !busy ? 1 : 0.5 }}>{busy ? "Creating…" : "Create PO"}</button>
+      </div>}
+    </Card>
+    {loading ? <Card><Small>Loading…</Small></Card> : pos.length === 0 ? <Card><Small>No purchase orders yet.</Small></Card> :
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px,1fr))", gap: 14 }}>
+        {pos.map(p => <Card key={p.id}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <b style={{ fontSize: 15 }}>{p.supplier || "Supplier"}</b>
+            <Badge tone={poTone(p.status)}>{p.status}</Badge>
+          </div>
+          <Small>{p.po_number ? `PO ${p.po_number}` : "No PO #"}{p.expected_at ? ` · expected ${String(p.expected_at).slice(0, 10)}` : ""}</Small>
+          <div style={{ fontSize: 22, fontWeight: 800, color: "#00C8FF", margin: "8px 0 0" }}>{money(num(p.total))}</div>
+          {(p.purchase_order_items ?? []).length > 0 && <div style={{ marginTop: 8 }}>{(p.purchase_order_items ?? []).slice(0, 5).map((it: { id?: string; name?: string; description?: string; qty?: number }, i: number) => <p key={it.id || i} style={{ margin: "3px 0", fontSize: 13, color: "rgba(255,255,255,0.7)" }}>{it.name || it.description || "Item"} × {num(it.qty)}</p>)}</div>}
+          {p.notes && <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 12, marginTop: 8 }}>{p.notes}</p>}
+        </Card>)}
+      </div>}
+  </div>;
+}
+
 /* ── Playbooks: reusable step templates (global + org), assignable to WOs ── */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function Playbooks() {
@@ -722,15 +870,20 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [aiStep, setAiStep] = useState<any>(null);
   const [aiBusy, setAiBusy] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [photos, setPhotos] = useState<any[]>([]);
+  const [woUploading, setWoUploading] = useState(false);
   const load = React.useCallback(() => {
     setLoading(true);
     Promise.all([
       fetch(`/api/maintenance/${id}`).then(r => r.json()).catch(() => ({})),
       fetch(`/api/maintenance/${id}/time`).then(r => r.json()).catch(() => ({})),
-    ]).then(([d, t]) => {
+      fetch(`/api/maintenance/${id}/photos`).then(r => r.json()).catch(() => ({})),
+    ]).then(([d, t, ph]) => {
       setWo(d.work_order ?? null); setParts(d.parts_used ?? []);
       setChecklist(d.checklist ?? []); setComments(d.comments ?? []);
       setLaborMins(t.totalMins ?? 0); setSiteId(d.work_order?.site_id ?? null);
+      setPhotos(ph.photos ?? []);
     }).finally(() => setLoading(false));
   }, [id]);
   useEffect(() => { load(); }, [load]);
@@ -757,6 +910,10 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   const margin = partsRev - partsCost;
   const marginPct = partsRev > 0 ? Math.round((margin / partsRev) * 100) : 0;
   const doneCount = checklist.filter(c => c.is_complete || c.completed || c.done).length;
+  const allStepsDone = checklist.length > 0 && doneCount === checklist.length;
+  const hasPhoto = photos.length > 0;
+  const canComplete = allStepsDone && hasPhoto;
+  const completeBlockReason = !allStepsDone ? (checklist.length === 0 ? "Add at least one step, then check it off" : `Finish all steps (${doneCount}/${checklist.length})`) : !hasPhoto ? "Add at least one photo as proof" : "";
   const patchField = (p: Record<string, unknown>) => { onUpdate(id, p); setWo((w: typeof wo) => w ? { ...w, ...p } : w); };
 
   async function addChecklist() {
@@ -789,6 +946,17 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
     const steps: string[] = (pb.steps ?? []).map((s: unknown) => typeof s === "string" ? s : ((s as { title?: string; text?: string })?.title || (s as { text?: string })?.text || "")).filter(Boolean);
     for (const title of steps) await fetch(`/api/maintenance/${id}/checklist`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title }) }).catch(() => {});
     load();
+  }
+  async function uploadWoPhoto(file: File) {
+    if (!file || woUploading) return; setWoUploading(true);
+    try {
+      const up = await fetch(`/api/maintenance/${id}/photo-upload-url`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename: file.name }) }).then(r => r.json());
+      if (up?.signedUrl) {
+        await fetch(up.signedUrl, { method: "PUT", headers: { "Content-Type": file.type || "image/jpeg" }, body: file });
+        await fetch(`/api/maintenance/${id}/photos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ file_url: up.publicUrl, caption: file.name }) }).catch(() => {});
+      }
+    } catch (_) { /* ignore */ }
+    setWoUploading(false); load();
   }
 
   return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.62)", backdropFilter: "blur(6px)", display: "flex", justifyContent: "flex-end" }}>
@@ -912,9 +1080,27 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
           </div>
         </Card>
 
+        {/* Photos (proof) */}
+        <Card>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <h2 style={{ fontSize: 15 }}>Photos ({photos.length})</h2>
+            <label style={{ ...btn, padding: "6px 12px", display: "inline-block" }}>{woUploading ? "Uploading…" : "+ Photo"}
+              <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadWoPhoto(f); e.target.value = ""; }} />
+            </label>
+          </div>
+          {photos.length === 0 ? <Small>No photos yet. At least one is required to complete the job.</Small> : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px,1fr))", gap: 8 }}>
+            {photos.map((p, i) => <a key={p.id || i} href={p.file_url || p.url} target="_blank" rel="noreferrer" style={{ display: "block", borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)" }}>
+              <img src={p.file_url || p.url} alt={p.caption || "Photo"} style={{ width: "100%", height: 84, objectFit: "cover", display: "block" }} />
+            </a>)}
+          </div>}
+        </Card>
+
         {wo.description && <Card><h2 style={{ fontSize: 15 }}>Notes</h2><p style={{ color: "rgba(255,255,255,0.8)", whiteSpace: "pre-wrap" }}>{wo.description}</p></Card>}
 
-        {bucketOf(wo.status) !== "Done" && <button onClick={() => patchField({ status: "completed" })} style={{ ...btn, background: "#10b981", padding: 14, fontSize: 15 }}>✓ Complete Work Order</button>}
+        {bucketOf(wo.status) !== "Done" && <div>
+          <button onClick={() => canComplete && patchField({ status: "completed" })} disabled={!canComplete} style={{ ...btn, width: "100%", background: canComplete ? "#10b981" : "rgba(255,255,255,0.08)", color: canComplete ? "white" : "rgba(255,255,255,0.45)", padding: 14, fontSize: 15, cursor: canComplete ? "pointer" : "not-allowed" }}>✓ Complete Work Order</button>
+          {!canComplete && <p style={{ fontSize: 12, color: "#fbbf24", textAlign: "center", marginTop: 8 }}>🔒 {completeBlockReason}</p>}
+        </div>}
       </div>}
     </div>
   </div>;
