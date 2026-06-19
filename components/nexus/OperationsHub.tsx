@@ -216,15 +216,15 @@ function CalendarView({ onOpenWO }: { onOpenWO: (id: string) => void }) {
       <h2 style={{ fontSize: 16 }}>{loading ? "Loading…" : monthName}</h2>
       <button onClick={() => shift(1)} style={{ ...btn, background: "rgba(255,255,255,0.06)" }}>›</button>
     </div>
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 6 }}>
-      {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <div key={i} style={{ textAlign: "center", fontSize: 11, color: "rgba(255,255,255,0.4)", padding: 4 }}>{d}</div>)}
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0,1fr))", gap: 5, width: "100%" }}>
+      {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, i) => <div key={i} style={{ minWidth: 0, textAlign: "center", fontSize: 10, color: "rgba(255,255,255,0.4)", padding: "2px 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d}</div>)}
       {cells.map((day, i) => {
-        if (day === null) return <div key={`x${i}`} />;
+        if (day === null) return <div key={`x${i}`} style={{ minWidth: 0 }} />;
         const evs = dayEvents(day);
         const isToday = ym.y === today.getFullYear() && ym.m === today.getMonth() + 1 && day === today.getDate();
-        return <div key={day} style={{ minHeight: 78, padding: 6, borderRadius: 10, background: isToday ? "rgba(0,200,255,0.10)" : "rgba(255,255,255,0.03)", border: isToday ? "1px solid rgba(0,200,255,0.4)" : "1px solid rgba(255,255,255,0.06)" }}>
+        return <div key={day} style={{ minWidth: 0, boxSizing: "border-box", minHeight: 72, padding: 5, borderRadius: 10, overflow: "hidden", background: isToday ? "rgba(0,200,255,0.10)" : "rgba(255,255,255,0.03)", border: isToday ? "1px solid rgba(0,200,255,0.4)" : "1px solid rgba(255,255,255,0.06)" }}>
           <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginBottom: 3 }}>{day}</div>
-          {evs.slice(0, 3).map((e, j) => <div key={e.id || j} onClick={() => e.type === "work_order" && onOpenWO(e.id)} title={e.title} style={{ cursor: e.type === "work_order" ? "pointer" : "default", fontSize: 10, lineHeight: 1.3, marginBottom: 2, padding: "1px 4px", borderRadius: 5, background: `${EVENT_COLOR[e.type] ?? "#94a3b8"}26`, borderLeft: `2px solid ${EVENT_COLOR[e.type] ?? "#94a3b8"}`, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.title}</div>)}
+          {evs.slice(0, 3).map((e, j) => <div key={e.id || j} onClick={() => e.type === "work_order" && onOpenWO(e.id)} title={e.title} style={{ cursor: e.type === "work_order" ? "pointer" : "default", fontSize: 9, lineHeight: 1.25, marginBottom: 2, padding: "1px 4px", borderRadius: 5, background: `${EVENT_COLOR[e.type] ?? "#94a3b8"}26`, borderLeft: `2px solid ${EVENT_COLOR[e.type] ?? "#94a3b8"}`, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{e.title}</div>)}
           {evs.length > 3 && <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)" }}>+{evs.length - 3} more</div>}
         </div>;
       })}
@@ -353,14 +353,29 @@ function SiteDetailDrawer({ id, onClose }: { id: string; onClose: () => void }) 
   const [assets, setAssets] = useState<any[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [wos, setWos] = useState<any[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [events, setEvents] = useState<any[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [pm, setPm] = useState<any[]>([]);
   const [edit, setEdit] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/sites/${id}`).then(r => r.json()).then(d => { setSite(d.site ?? null); setAssets(d.assets ?? d.site_assets ?? []); setWos(d.work_orders ?? d.workOrders ?? []); }).catch(() => {}).finally(() => setLoading(false));
+    Promise.all([
+      fetch(`/api/sites/${id}`).then(r => r.json()).catch(() => ({})),
+      fetch(`/api/pm-schedules`).then(r => r.json()).catch(() => ({})),
+    ]).then(([d, p]) => {
+      setSite(d.site ?? null); setAssets(d.assets ?? d.site_assets ?? []);
+      setWos(d.work_orders ?? d.workOrders ?? []); setEvents(d.events ?? []);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setPm((p.pm_schedules ?? []).filter((s: any) => s.site_id === id));
+    }).finally(() => setLoading(false));
   }, [id]);
+  const isDone = (s?: string) => ["completed", "complete", "done", "closed"].includes(String(s || "").toLowerCase());
+  const pastWos = wos.filter(w => isDone(w.status));
+  const upcomingWos = wos.filter(w => !isDone(w.status));
   const val = (k: string) => (k in edit ? edit[k] : (site?.[k] ?? "")) as string;
   async function save() {
     if (Object.keys(edit).length === 0) { onClose(); return; }
@@ -370,7 +385,7 @@ function SiteDetailDrawer({ id, onClose }: { id: string; onClose: () => void }) 
     if (r && r.ok) { setSaved(true); setTimeout(() => setSaved(false), 1500); setEdit({}); const d = await r.json().catch(() => null); if (d?.site) setSite(d.site); }
   }
   return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.62)", backdropFilter: "blur(6px)", display: "flex", justifyContent: "flex-end" }}>
-    <div onClick={e => e.stopPropagation()} style={{ width: "min(600px,100%)", height: "100%", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#060b1a)", borderLeft: "1px solid rgba(0,200,255,0.22)", padding: 20, color: "white" }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: "min(600px,100%)", height: "100%", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#060b1a)", borderLeft: "1px solid rgba(0,200,255,0.22)", padding: 20, paddingBottom: 130, color: "white" }}>
       <button onClick={onClose} style={{ ...btn, background: "rgba(255,255,255,0.06)", marginBottom: 16 }}>✕ Close</button>
       {loading ? <Small>Loading…</Small> : !site ? <Small>Couldn’t load this site.</Small> : <div style={{ display: "grid", gap: 14 }}>
         <div>
@@ -388,13 +403,38 @@ function SiteDetailDrawer({ id, onClose }: { id: string; onClose: () => void }) 
           </div>
           <button onClick={save} disabled={saving} style={{ ...btn, marginTop: 12, background: saved ? "#10b981" : "#6366f1" }}>{saving ? "Saving…" : saved ? "✓ Saved" : "Save details"}</button>
         </Card>
+
+        {/* Equipment on site */}
         <Card>
-          <h2 style={{ fontSize: 15, marginBottom: 8 }}>Assets ({assets.length})</h2>
-          {assets.length === 0 ? <Small>No assets logged at this site yet.</Small> : assets.map((a, i) => <p key={a.id || i} style={{ margin: "5px 0", fontSize: 14 }}>{a.name || a.device_type || "Asset"} {a.status && <Badge tone={a.status === "offline" ? "urgent" : "good"}>{a.status}</Badge>}</p>)}
+          <h2 style={{ fontSize: 15, marginBottom: 8 }}>Equipment on site ({assets.length})</h2>
+          {assets.length === 0 ? <Small>No equipment logged at this site yet.</Small> : assets.map((a, i) => <div key={a.id || i} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "6px 0", borderBottom: i < assets.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
+            <div style={{ fontSize: 14 }}>{a.name || a.device_type || "Equipment"}{a.serial_number ? <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}> · {a.serial_number}</span> : ""}</div>
+            {a.status && <Badge tone={a.status === "offline" ? "urgent" : "good"}>{a.status}</Badge>}
+          </div>)}
         </Card>
+
+        {/* Planned service */}
         <Card>
-          <h2 style={{ fontSize: 15, marginBottom: 8 }}>Recent work orders ({wos.length})</h2>
-          {wos.length === 0 ? <Small>None yet.</Small> : wos.slice(0, 8).map((w, i) => <p key={w.id || i} style={{ margin: "5px 0", fontSize: 14 }}>{w.wo_number || w.title || "WO"} <span style={{ color: "rgba(255,255,255,0.5)" }}>· {w.status}</span></p>)}
+          <h2 style={{ fontSize: 15, marginBottom: 8 }}>Planned service</h2>
+          {pm.length === 0 && upcomingWos.length === 0 ? <Small>Nothing scheduled. Set up recurring service in the PM tab.</Small> : <>
+            {pm.map((s, i) => <p key={s.id || i} style={{ margin: "5px 0", fontSize: 14 }}>🔁 {s.title} <span style={{ color: "rgba(255,255,255,0.5)" }}>· every {s.interval_days}d{s.next_due_at ? ` · next ${String(s.next_due_at).slice(0, 10)}` : ""}</span></p>)}
+            {upcomingWos.map((w, i) => <p key={w.id || i} style={{ margin: "5px 0", fontSize: 14 }}>📅 {w.wo_number || w.title || "WO"} <span style={{ color: "rgba(255,255,255,0.5)" }}>· {w.status}{w.scheduled_date ? ` · ${String(w.scheduled_date).slice(0, 10)}` : ""}</span></p>)}
+          </>}
+        </Card>
+
+        {/* Service history — past work orders */}
+        <Card>
+          <h2 style={{ fontSize: 15, marginBottom: 8 }}>Service history ({pastWos.length})</h2>
+          {pastWos.length === 0 ? <Small>No completed work orders yet.</Small> : pastWos.slice(0, 12).map((w, i) => <p key={w.id || i} style={{ margin: "5px 0", fontSize: 14 }}>{w.wo_number || w.title || "WO"} <span style={{ color: "rgba(255,255,255,0.5)" }}>· {w.completed_at ? String(w.completed_at).slice(0, 10) : w.status}</span></p>)}
+        </Card>
+
+        {/* Site notes & history (events) */}
+        <Card>
+          <h2 style={{ fontSize: 15, marginBottom: 8 }}>Notes & history</h2>
+          {events.length === 0 ? <Small>No activity logged yet.</Small> : events.slice(0, 15).map((e, i) => <div key={e.id || i} style={{ padding: "6px 0", borderBottom: i < Math.min(events.length, 15) - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
+            <div style={{ fontSize: 13 }}>{e.summary || e.event_type}</div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{e.event_type}{e.created_at ? ` · ${String(e.created_at).slice(0, 10)}` : ""}</div>
+          </div>)}
         </Card>
       </div>}
     </div>
@@ -514,7 +554,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   }
 
   return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.62)", backdropFilter: "blur(6px)", display: "flex", justifyContent: "flex-end" }}>
-    <div onClick={e => e.stopPropagation()} style={{ width: "min(580px,100%)", height: "100%", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#060b1a)", borderLeft: "1px solid rgba(0,200,255,0.22)", padding: 20, color: "white" }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: "min(580px,100%)", height: "100%", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#060b1a)", borderLeft: "1px solid rgba(0,200,255,0.22)", padding: 20, paddingBottom: 130, color: "white" }}>
       <button onClick={onClose} style={{ ...btn, background: "rgba(255,255,255,0.06)", marginBottom: 16 }}>✕ Close</button>
       {loading ? <Small>Loading…</Small> : !wo ? <Small>Couldn’t load this work order.</Small> : <div style={{ display: "grid", gap: 14 }}>
         <div>
