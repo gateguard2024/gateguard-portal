@@ -587,6 +587,19 @@ function TechTool() {
   // Measure step state
   const [measureInput,    setMeasureInput]    = useState('')
   const [showMeterGuide,  setShowMeterGuide]  = useState(false)
+  const [simpler,         setSimpler]         = useState<{ text: string; detail: string | null } | null>(null)
+  const [simplifying,     setSimplifying]     = useState(false)
+  // reset the "explain simpler" view whenever a new diagnostic step arrives
+  useEffect(() => { setSimpler(null) }, [current])
+  async function explainSimpler() {
+    if (!current || simplifying) return
+    setSimplifying(true)
+    try {
+      const d = await fetch('/api/kb/simplify', { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ text: current.text, detail: current.detail }) }).then(r => r.json())
+      if (!d.error) setSimpler({ text: d.text, detail: d.detail ?? null })
+    } catch { /* ignore */ }
+    setSimplifying(false)
+  }
 
   // Resolution capture state
   const [resolutionConfirmed,  setResolutionConfirmed]  = useState<'yes' | 'no' | null>(null)
@@ -3177,8 +3190,13 @@ function TechTool() {
               })}
 
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                <div style={{ ...S.stepText, flex: 1 }}>{current.text}</div>
-                <button onClick={() => readAloud(`${current.text}. ${current.detail || ''}`)} title="Read aloud" style={{ ...S.iconBtn, width: 38, height: 38, flexShrink: 0 }}>🔊</button>
+                <div style={{ ...S.stepText, flex: 1 }}>{simpler ? simpler.text : current.text}</div>
+                <button onClick={() => readAloud(`${simpler ? simpler.text : current.text}. ${(simpler ? simpler.detail : current.detail) || ''}`)} title="Read aloud" style={{ ...S.iconBtn, width: 38, height: 38, flexShrink: 0 }}>🔊</button>
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                {simpler
+                  ? <button onClick={() => setSimpler(null)} style={{ fontFamily: MONO, fontSize: 10, color: C.textSecondary, background: 'none', border: 'none', cursor: 'pointer', letterSpacing: '0.05em', padding: 0 }}>↺ SHOW ORIGINAL</button>
+                  : <button onClick={explainSimpler} disabled={simplifying} style={{ fontFamily: MONO, fontSize: 10, color: C.cyan, background: 'none', border: 'none', cursor: 'pointer', letterSpacing: '0.05em', padding: 0 }}>{simplifying ? 'SIMPLIFYING…' : '🟢 EXPLAIN SIMPLER'}</button>}
               </div>
 
               {/* Image — real manual figure when ingested, else the device photo */}
@@ -3189,8 +3207,8 @@ function TechTool() {
                 </a>
               )}
 
-              {current.detail && (
-                <div style={S.detailBlock}>{current.detail}</div>
+              {(simpler ? simpler.detail : current.detail) && (
+                <div style={S.detailBlock}>{simpler ? simpler.detail : current.detail}</div>
               )}
 
               {/* Measure: expected spec + meter guide toggle */}
