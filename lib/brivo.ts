@@ -117,6 +117,41 @@ export async function getOrgBrivoToken(orgId: string): Promise<BrivoToken> {
   return { token: tokens.access_token, apiKey, orgId }
 }
 
+// ─── Per-SITE token (from the site_integrations vault) ───────────────────────
+// Each property site can hold its OWN Brivo login in the encrypted vault. This
+// is the per-site path; getOrgBrivoToken remains for the legacy per-org setup.
+export interface SiteBrivoToken { token: string; apiKey: string; brivoSiteId: string }
+
+export async function getSiteBrivoToken(siteId: string): Promise<SiteBrivoToken> {
+  // Imported lazily to avoid a cycle (site-integrations → crypto only).
+  const { getSiteVendorCreds } = await import('@/lib/site-integrations')
+  const creds = await getSiteVendorCreds(siteId, 'brivo')
+  if (!creds?.username || !creds?.password) throw new Error('Brivo credentials are not set for this site.')
+
+  // Each site brings its OWN Brivo api key + app credentials — nothing shared.
+  // (Falls back to GateGuard's app-level env vars only if a site didn't provide
+  // its own, so legacy single-app setups keep working.)
+  let apiKey = creds.api_key
+  let authBasic = creds.auth_basic
+  if (!authBasic && creds.client_id && creds.client_secret) {
+    authBasic = Buffer.from(`${creds.client_id}:${creds.client_secret}`).toString('base64')
+  }
+  if (!apiKey || !authBasic) {
+    const app = getBrivoAppCreds()
+    apiKey = apiKey || app.apiKey
+    authBasic = authBasic || app.authBasic
+  }
+
+  const res = await fetch(BRIVO_AUTH_URL, {
+    method: 'POST',
+    headers: { Authorization: `Basic ${authBasic}`, 'api-key': apiKey, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'password', username: creds.username, password: creds.password }).toString(),
+  })
+  if (!res.ok) throw new Error(`Brivo auth failed (${res.status})`)
+  const tokens = await res.json()
+  return { token: tokens.access_token, apiKey, brivoSiteId: String(creds.site_id ?? '') }
+}
+
 // ─── Master account token (sees all sites) ──────────────────────────────────
 // Corporate access: GateGuard's master Brivo login can see every site. Cached
 // in-process. Set BRIVO_MASTER_USERNAME + BRIVO_MASTER_PASSWORD in env.

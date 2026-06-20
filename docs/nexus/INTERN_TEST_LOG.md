@@ -162,4 +162,57 @@ Where: **EOS / Operating System** page → green **"Run L10"** button (or go to 
 **Depends on infra:** none new — reuses the existing `/api/eos/*` endpoints.
 
 ---
+
+## Build 9 — Movable How-To window  (pushed beta · YYYY-MM-DD)
+Where: any Nexus screen (home + tabs) — a blue **"? How-to"** button floats bottom-right.
+
+- ☐ The "? How-to" button shows on the main Nexus screens, above the bottom tab bar.
+- ☐ Clicking it opens a small floating help window.
+- ☐ **Drag** the window by its top bar ("⠿ How-To · drag me anywhere") to anywhere on screen.
+- ☐ Close it, reopen it — it remembers where you left it.
+- ☐ The search box filters the how-to list as you type.
+- ☐ Clicking a how-to expands its steps; clicking again collapses it.
+- ☐ The window stays on top while you click around the screen behind it (you don't lose your place).
+- ☐ Works on a phone (drag with finger; fits the screen).
+
+*(Brivo Users module and University/Training were already built — spot-check they still load: Admin → Brivo users for a site with credentials; `/training` shows courses.)*
+
+**Depends on infra:** none new (reads existing `/api/kb/articles`).
+
+---
+
+## Build 10 — Per-site vendor connections (credentials vault)  (pushed beta · YYYY-MM-DD)
+**⚠ Run migration 128** (`128_site_integrations.sql`) **and set `CREDENTIALS_ENC_KEY`** on beta (any long random string) before testing saving.
+Where: **Operations → Locations → open a site → "Connections"** card.
+
+- ☐ The Connections card lists 4 vendors: Brivo, Eagle Eye, Shelly, UniFi — each with a status chip (Not set / Configured / Verified / Error).
+- ☐ If `CREDENTIALS_ENC_KEY` isn't set, the card shows a clear "encryption key not set" notice and Save is disabled.
+- ☐ Click **Set up** on Brivo, enter username/password/site ID, **Save** → status becomes "Configured".
+- ☐ Click **Test** on Brivo → with real credentials it becomes **Verified**; with bad ones it shows **Error** + the reason (no crash).
+- ☐ Re-open the site: secret fields are **blank** (we never send saved secrets back) and the status still shows Configured/Verified.
+- ☐ Saving with a blank field doesn't wipe a previously-saved secret (partial update is safe).
+- ☐ Eagle Eye / Shelly / UniFi save and show "Configured" (their live Test says "coming next" — expected).
+- ☐ A non-admin (or someone outside the site's org) can't open this (the card/endpoint returns nothing for them).
+- ☐ **Security:** in DevTools Network, the integrations GET response contains status only — **no usernames, passwords, or keys**.
+
+**Depends on infra:** migration 128 + `CREDENTIALS_ENC_KEY` env on beta. (With full per-site Brivo creds entered, Test no longer needs the shared `BRIVO_*` env vars.)
+
+---
+
+## Build 10b — Add-a-site + full per-site credentials (add / edit / delete)  (pushed beta · YYYY-MM-DD)
+Where: **Operations → Locations**.
+
+- ☐ **"+ Add a site"** button at the top opens a short form (name required; address/city/state/units optional).
+- ☐ **Create site → add its keys** creates the site and immediately opens it.
+- ☐ The new site's **Connections** card lists Brivo, Eagle Eye, Shelly, UniFi.
+- ☐ **Brivo now asks for that site's OWN full credentials** — username, password, API key, client ID, client secret, site ID (nothing shared with other sites).
+- ☐ **Add:** Set up a vendor → fill fields → Save → status "Configured".
+- ☐ **Edit:** Update → change a field → Save (blank fields don't wipe existing secrets).
+- ☐ **Delete:** **Remove** button asks to confirm, then clears that vendor's login for that site (status back to "Not set").
+- ☐ Two different sites can hold completely different Brivo logins — set both and confirm they don't bleed into each other.
+- ☐ A non-admin can't add a site or see the Connections card.
+
+**Depends on infra:** migration 128 + `CREDENTIALS_ENC_KEY` (same as Build 10).
+
+---
 *(new builds appended below as they ship)*

@@ -16,6 +16,7 @@ import { JobsSurface } from '@/components/nexus/JobsSurface'
 import { MoneyDocsSurfaceNext } from '@/components/nexus/MoneyDocsSurfaceNext'
 import { MyDaySurface } from '@/components/nexus/MyDaySurface'
 import { SalesSurface } from '@/components/nexus/SalesSurface'
+import { HowToWindow } from '@/components/nexus/HowToWindow'
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -216,6 +217,9 @@ export default function NexusHomeClient() {
           })}
         </div>
       </nav>
+
+      {/* Movable how-to window — floats over any screen (#73) */}
+      <HowToWindow />
     </div>
   )
 }

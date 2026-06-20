@@ -19,6 +19,7 @@
 import React, { useEffect, useState } from "react";
 import { siteActivation, SITE_STATUS_LABELS, SITE_STATUS_COLORS } from "@/lib/site-lifecycle";
 import { ActivityTimeline } from "@/components/nexus/ActivityTimeline";
+import { SiteConnections } from "@/components/nexus/SiteConnections";
 
 type RealWO = { id: string; property?: string; assignedTech?: string | null; assignedTechId?: string | null; eta?: string; priority: string; status: string; woNumber?: string | null; title?: string | null };
 type RealTech = { id: string; name: string };
@@ -501,11 +502,45 @@ function Locations() {
   const [sites, setSites] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [openSite, setOpenSite] = useState<string | null>(null);
+  // + Add a site (5th-grade simple: name + basics → opens the site to add its keys)
+  const [showNew, setShowNew] = useState(false);
+  const [form, setForm] = useState({ name: "", address: "", city: "", state: "", units: "" });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
   const load = React.useCallback(() => { setLoading(true); fetch("/api/sites?limit=60").then(r => r.json()).then(d => setSites(d.sites ?? [])).catch(() => {}).finally(() => setLoading(false)); }, []);
   useEffect(() => { load(); }, [load]);
-  if (loading) return <Card><Small>Loading sites…</Small></Card>;
-  if (sites.length === 0) return <Card><Small>No sites found yet. These come from your customer / org sites.</Small></Card>;
+  async function createSite() {
+    if (!form.name.trim() || busy) return; setBusy(true); setMsg(null);
+    const body: Record<string, unknown> = { name: form.name.trim(), address: form.address.trim() || null, city: form.city.trim() || null, state: form.state.trim() || null };
+    if (form.units && !isNaN(Number(form.units))) body.units = Number(form.units);
+    const r = await fetch("/api/sites", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(x => x.json()).catch(() => null);
+    setBusy(false);
+    const newId = r?.site?.id;
+    if (newId) { setForm({ name: "", address: "", city: "", state: "", units: "" }); setShowNew(false); load(); setOpenSite(newId); }
+    else setMsg((r && r.error) || "Couldn't create the site.");
+  }
+  const input = { background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.92)", borderRadius: 10, padding: "9px 11px", width: "100%", fontSize: 13 } as const;
+  const addBar = <Card style={{ marginBottom: 14 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div><b style={{ fontSize: 15 }}>Add a site</b><div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>Name it, create it, then add its own gate/camera logins.</div></div>
+      <button onClick={() => { setShowNew(s => !s); setMsg(null); }} style={btn}>{showNew ? "Cancel" : "+ Add a site"}</button>
+    </div>
+    {showNew && <div style={{ ...card, marginTop: 12, display: "grid", gap: 8 }}>
+      <input placeholder="Site / property name *" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={input} />
+      <input placeholder="Street address" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} style={input} />
+      <div style={{ display: "flex", gap: 8 }}>
+        <input placeholder="City" value={form.city} onChange={e => setForm({ ...form, city: e.target.value })} style={{ ...input, flex: 2 }} />
+        <input placeholder="State" value={form.state} onChange={e => setForm({ ...form, state: e.target.value })} style={{ ...input, flex: 1 }} />
+        <input placeholder="Units" value={form.units} onChange={e => setForm({ ...form, units: e.target.value.replace(/[^0-9]/g, "") })} style={{ ...input, flex: 1 }} />
+      </div>
+      <button onClick={createSite} disabled={!form.name.trim() || busy} style={{ ...btn, opacity: form.name.trim() && !busy ? 1 : 0.5 }}>{busy ? "Creating…" : "Create site → add its keys"}</button>
+      {msg && <p style={{ fontSize: 12, color: "#fca5a5", margin: 0 }}>{msg}</p>}
+    </div>}
+  </Card>;
+  if (loading) return <>{addBar}<Card><Small>Loading sites…</Small></Card></>;
+  if (sites.length === 0) return <>{addBar}<Card><Small>No sites yet. Tap “+ Add a site” to create your first one.</Small></Card>{openSite && <SiteDetailDrawer id={openSite} onClose={() => { setOpenSite(null); load(); }} />}</>;
   return <>
+    {addBar}
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px,1fr))", gap: 14 }}>
       {sites.map(s => <Card key={s.id} style={{ cursor: "pointer" }}>
         <div onClick={() => setOpenSite(s.id)}>
@@ -736,6 +771,9 @@ function SiteDetailDrawer({ id, onClose }: { id: string; onClose: () => void }) 
             <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{e.event_type}{e.created_at ? ` · ${String(e.created_at).slice(0, 10)}` : ""}</div>
           </div>)}
         </Card>
+
+        {/* Per-site vendor connections (Brivo / Eagle Eye / Shelly / UniFi) */}
+        <SiteConnections siteId={id} />
 
         {/* Unified activity timeline (#59) */}
         <ActivityTimeline entity="site" id={id} title="Site activity" />

@@ -41,8 +41,25 @@ Record sharing / co-working + admin redistribute; retire legacy /admin/users + /
 - ✅ #71 **L10 weekly meeting runner** shipped — `/eos/l10`: 7-segment agenda, per-segment + total timers, live data from the EOS APIs, IDS solve + drop-to-issues + capture to-dos, conclude rating. "Run L10" button on the EOS header.
 - #69 Tracker/Gantt glass rebuild — separate (deferred, Build 8b).
 
-## Build 9 — Integrations & extras (#83, #74, #73)
-Brivo Users module (per-site); University/Training section; "Ask Nexus anything" smart router bar.
+## Build 9 — Integrations & extras (#83, #74, #73)  ✅ shipped
+- #83 Brivo Users module — already built (per-org Brivo token, list/create users + groups, scope-gated `BrivoUsersSurface`). ✅
+- #74 University/Training — already built (`/training`: courses, chapters, quizzes, certs, progress). ✅
+- ✅ #73 — Ask bar + command router already existed; added the **movable how-to window** (`HowToWindow`): draggable, remembers position, reads the platform how-tos, floats over any Nexus screen. Mounted in `NexusHomeClient`.
+
+## Build 10 — Per-site multi-vendor credentials vault  ✅ shipped (foundation + Brivo)
+Each property site has its OWN credentials for **Brivo, Eagle Eye, Shelly, UniFi**.
+- `lib/crypto-creds.ts` — AES-256-GCM, ONE master key (`CREDENTIALS_ENC_KEY`); secrets stored as encrypted rows (no per-site env).
+- Migration `128_site_integrations.sql` — `site_integrations(site_id, vendor, credentials_enc, status, …)` + GRANT.
+- `lib/site-integrations.ts` — unified `getSiteVendorCreds(siteId, vendor)` + status (never returns secrets) + save + test-marking.
+- `lib/brivo.ts` → `getSiteBrivoToken(siteId)` reads the vault (Brivo wired end-to-end with a real Test).
+- `/api/sites/[id]/integrations` — GET status / PUT save (encrypted) / POST test; admin + site-scope gated.
+- **Connections card** on the site drawer to enter + test each vendor's creds.
+- **Run migration 128 + set `CREDENTIALS_ENC_KEY`** on beta then prod.
+## Build 10b — Add-a-site + full per-site credentials  ✅ shipped
+- **"+ Add a site"** in Operations → Locations: create a site, then it opens straight to its Connections card.
+- **Brivo is now fully per-site** (own username, password, API key, client ID, client secret, site ID) — nothing shared; `getSiteBrivoToken` builds auth from the site's own creds (env app keys only as legacy fallback).
+- **Add / Edit / Delete** all wired: Set up, Update (blank-safe), and **Remove** (confirm + DELETE endpoint).
+- Remaining (Build 10c): live clients for Eagle Eye / Shelly / UniFi + repoint the Brivo **Users list/create** screen (BrivoUsersSurface) to the per-site token.
 
 ## Build 10 — Platform hardening (#65, #68, #50, #49, #51, #88, #89)
 Security batch 2 (ilike/activities scope/role-tech); consolidate Gmail OAuth; doc-portal security/expiry/domain; retire legacy external links + ops pages; code-split Nexus surfaces; concurrency (pooled conn + caching).
