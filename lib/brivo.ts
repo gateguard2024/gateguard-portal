@@ -342,6 +342,24 @@ export async function setBrivoUserSuspended(
   return { success: true }
 }
 
+// ─── Doors / access points ───────────────────────────────────────────────────
+export interface BrivoDoor { id: string; name: string }
+
+/** List a site's doors (access points). */
+export async function listBrivoDoors(token: string, apiKey: string, brivoSiteId: string): Promise<BrivoDoor[]> {
+  // Brivo exposes doors as "access points". If your Brivo plan uses a different
+  // path, this is the one line to adjust.
+  const data = await brivoGet(token, apiKey, '/access-points', { filter: `site eq "${brivoSiteId}"`, pageSize: '100' })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data.data ?? []).map((d: any) => ({ id: String(d.id), name: d.name ?? 'Door' }))
+}
+
+/** Remotely unlock / pulse a door. Sensitive action — callers must confirm. */
+export async function unlockBrivoDoor(token: string, apiKey: string, doorId: string): Promise<{ success: true }> {
+  await brivoPost(token, apiKey, `/access-points/${doorId}/unlock`, {})
+  return { success: true }
+}
+
 /** List the Brivo groups for a site (used for the Add-User access picker). */
 export async function listBrivoGroups(
   token: string,

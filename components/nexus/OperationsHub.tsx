@@ -20,6 +20,7 @@ import React, { useEffect, useState } from "react";
 import { siteActivation, SITE_STATUS_LABELS, SITE_STATUS_COLORS } from "@/lib/site-lifecycle";
 import { ActivityTimeline } from "@/components/nexus/ActivityTimeline";
 import { SiteConnections } from "@/components/nexus/SiteConnections";
+import { SiteDoors } from "@/components/nexus/SiteDoors";
 
 type RealWO = { id: string; property?: string; assignedTech?: string | null; assignedTechId?: string | null; eta?: string; priority: string; status: string; woNumber?: string | null; title?: string | null };
 type RealTech = { id: string; name: string };
@@ -774,6 +775,9 @@ export function SiteDetailDrawer({ id, onClose }: { id: string; onClose: () => v
 
         {/* Per-site vendor connections (Brivo / Eagle Eye / Shelly / UniFi) */}
         <SiteConnections siteId={id} />
+
+        {/* Brivo doors — list + unlock (logged) */}
+        <SiteDoors siteId={id} />
 
         {/* Unified activity timeline (#59) */}
         <ActivityTimeline entity="site" id={id} title="Site activity" />

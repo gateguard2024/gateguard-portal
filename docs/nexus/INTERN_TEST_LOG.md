@@ -227,4 +227,18 @@ Where: bottom nav **Operations** → **Find Property** (or **Property Systems**)
 **Depends on infra:** migration 128 + `CREDENTIALS_ENC_KEY` (for the Connections part).
 
 ---
+
+## Build 10e — Brivo Doors (list + unlock, logged)  (pushed beta · YYYY-MM-DD)
+Where: open a site (Operations → Find Property → Edit details & connections, or /cmms → Locations) → **Doors (Brivo)** card.
+
+- ☐ For a site with Brivo connected + verified, the Doors card lists that property's real doors.
+- ☐ For a site without Brivo set, it shows a friendly "Set up Brivo in Connections above" note (no crash).
+- ☐ Clicking **Unlock** asks to confirm ("Unlock … now?"). Cancel = nothing happens.
+- ☐ Confirming unlocks the door (verify physically / in Brivo) and shows "Unlocked ✓ — logged."
+- ☐ The unlock appears in that site's **activity timeline** (event "door_unlock") with who + when.
+- ☐ A non-admin / out-of-scope user can't see or unlock the site's doors.
+
+**Depends on infra:** site has Brivo creds saved + verified (Build 10). Note: door endpoint path assumes Brivo "access-points" — if your Brivo plan differs, that's the one line in lib/brivo.ts to adjust.
+
+---
 *(new builds appended below as they ship)*
