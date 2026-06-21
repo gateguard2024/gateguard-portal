@@ -5,10 +5,7 @@
  * Admin/corporate within the site's org scope only.
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
-import { resolveOrgScope } from '@/lib/org-scope'
-import { normalizeRole } from '@/lib/permissions'
 import { credsKeyConfigured } from '@/lib/crypto-creds'
 import { SITE_VENDORS, type SiteVendor, listSiteIntegrationStatus, setSiteVendorCreds, deleteSiteVendorCreds, markIntegrationTest, getSiteVendorCreds } from '@/lib/site-integrations'
 import { getSiteBrivoToken } from '@/lib/brivo'
@@ -16,26 +13,23 @@ import { getSiteBrivoToken } from '@/lib/brivo'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-
-async function canManageSite(siteId: string): Promise<boolean> {
+// Credentials are a CORPORATE asset — dealers never see or edit vendor logins.
+// Entering them is part of behind-the-scenes new-site onboarding at corporate.
+async function canManageSite(_siteId: string): Promise<boolean> {
   const user = await getCurrentUser()
-  if (!user.isCorporate && normalizeRole(user.role) !== 'admin') return false
-  const scope = await resolveOrgScope(user)
-  if (scope.all) return true
-  const { data } = await supabase.from('sites').select('master_dealer_id, install_dealer_id, service_dealer_id, org_id').eq('id', siteId).maybeSingle()
-  if (!data) return false
-  return [data.master_dealer_id, data.install_dealer_id, data.service_dealer_id, data.org_id].some(o => o && scope.ids.includes(o))
+  return user.isCorporate
 }
 
+const CORP_ONLY = 'Vendor logins are managed by Gate Guard corporate. Contact Gate Guard to connect or change a system for this property.'
+
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  if (!(await canManageSite(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!(await canManageSite(params.id))) return NextResponse.json({ error: CORP_ONLY }, { status: 403 })
   const integrations = await listSiteIntegrationStatus(params.id)
   return NextResponse.json({ integrations, key_configured: credsKeyConfigured() })
 }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!(await canManageSite(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!(await canManageSite(params.id))) return NextResponse.json({ error: CORP_ONLY }, { status: 403 })
   if (!credsKeyConfigured()) return NextResponse.json({ error: 'Credential encryption key (CREDENTIALS_ENC_KEY) is not configured on the server.' }, { status: 503 })
   const body = await req.json().catch(() => ({}))
   const vendor = body.vendor as SiteVendor
@@ -51,7 +45,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!(await canManageSite(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!(await canManageSite(params.id))) return NextResponse.json({ error: CORP_ONLY }, { status: 403 })
   const vendor = (req.nextUrl.searchParams.get('vendor') ?? '') as SiteVendor
   if (!SITE_VENDORS.includes(vendor)) return NextResponse.json({ error: 'Unknown vendor' }, { status: 400 })
   const { error } = await deleteSiteVendorCreds(params.id, vendor)
@@ -60,7 +54,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!(await canManageSite(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!(await canManageSite(params.id))) return NextResponse.json({ error: CORP_ONLY }, { status: 403 })
   const body = await req.json().catch(() => ({}))
   if (body.action !== 'test') return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
   const vendor = body.vendor as SiteVendor

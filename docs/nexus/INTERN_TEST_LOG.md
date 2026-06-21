@@ -252,5 +252,22 @@ Where: site panel → **Doors (Brivo)** card.
 
 Note: cameras are entered **manually** for now. Auto-listing from Eagle Eye needs the exact Eagle Eye API/auth (port from GGSOC) — see below.
 
+## Build 10g — Corporate-only credentials + Integrations console  (pushed beta · YYYY-MM-DD)
+Model: **corporate enters/owns vendor credentials; dealers operate but never see them.**
+
+Corporate console — **Internal (admin) → Site Integrations**:
+- ☐ Card lists every site with per-vendor chips (Brivo/Eagle Eye/Shelly/UniFi): green ✓ verified, amber • configured, grey — not set, red ! error.
+- ☐ Search filters sites; **"Not connected"** filter shows only sites with nothing set up.
+- ☐ Clicking a site opens its full panel; corporate sees the **Connections** card to enter/test keys.
+- ☐ Shows "X/4 connected" per site.
+
+Permission split:
+- ☐ As a **dealer** (non-corporate) login: open a site → you see **Doors / cameras** but the **Connections card is gone** (can't see/edit keys).
+- ☐ As a dealer you can still list/unlock doors, link cameras, and manage Brivo users at your sites.
+- ☐ The credentials API (`/api/sites/[id]/integrations`) returns 403 for non-corporate even if called directly.
+- ☐ As corporate you see Connections everywhere and the console.
+
+**Depends on infra:** migrations 128/129/130 + `CREDENTIALS_ENC_KEY`.
+
 ---
 *(new builds appended below as they ship)*

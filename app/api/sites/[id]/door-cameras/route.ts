@@ -27,7 +27,8 @@ async function canManageSite(siteId: string): Promise<boolean> {
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   if (!(await canManageSite(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  const { data } = await supabase.from('door_cameras').select('door_id, door_name, camera_id, camera_name, stream_url').eq('site_id', params.id)
+  // select('*') is drift-safe: the tags column (migration 130) may not exist yet.
+  const { data } = await supabase.from('door_cameras').select('*').eq('site_id', params.id)
   return NextResponse.json({ mappings: data ?? [] })
 }
 
@@ -37,7 +38,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   const door_id = String(body.door_id ?? '')
   const camera_name = String(body.camera_name ?? '').trim()
   if (!door_id || !camera_name) return NextResponse.json({ error: 'door_id and camera_name are required' }, { status: 400 })
-  const { error } = await supabase.from('door_cameras').upsert({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const row: Record<string, any> = {
     site_id: params.id,
     door_id,
     door_name: body.door_name ? String(body.door_name) : null,
@@ -45,7 +47,12 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     camera_name,
     stream_url: body.stream_url ? String(body.stream_url).trim() : null,
     updated_at: new Date().toISOString(),
-  }, { onConflict: 'site_id,door_id' })
+  }
+  if (Array.isArray(body.tags)) row.tags = body.tags.map((t: unknown) => String(t).trim()).filter(Boolean)
+  async function up(r: Record<string, unknown>) { return supabase.from('door_cameras').upsert(r, { onConflict: 'site_id,door_id' }) }
+  let { error } = await up(row)
+  // Drift-safe: if the tags column isn't deployed yet, retry without it.
+  if (error && (error.code === '42703' || error.code === 'PGRST204') && 'tags' in row) { delete row.tags; ({ error } = await up(row)) }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }

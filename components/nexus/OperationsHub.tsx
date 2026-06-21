@@ -17,6 +17,7 @@
 //   /api/products                       parts inventory
 //   /api/pm-schedules                   preventive maintenance
 import React, { useEffect, useState } from "react";
+import { useUser } from "@clerk/nextjs";
 import { siteActivation, SITE_STATUS_LABELS, SITE_STATUS_COLORS } from "@/lib/site-lifecycle";
 import { ActivityTimeline } from "@/components/nexus/ActivityTimeline";
 import { SiteConnections } from "@/components/nexus/SiteConnections";
@@ -577,6 +578,9 @@ const SITE_FIELDS: { key: string; label: string; full?: boolean }[] = [
 ];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function SiteDetailDrawer({ id, onClose }: { id: string; onClose: () => void }) {
+  // Credentials are corporate-only; dealers see Doors/cameras but not Connections.
+  const { user } = useUser();
+  const isCorporate = ((user?.publicMetadata as Record<string, unknown> | undefined)?.org_tier) === "corporate";
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [site, setSite] = useState<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -773,8 +777,8 @@ export function SiteDetailDrawer({ id, onClose }: { id: string; onClose: () => v
           </div>)}
         </Card>
 
-        {/* Per-site vendor connections (Brivo / Eagle Eye / Shelly / UniFi) */}
-        <SiteConnections siteId={id} />
+        {/* Per-site vendor connections — corporate only (dealers never see keys) */}
+        {isCorporate && <SiteConnections siteId={id} />}
 
         {/* Brivo doors — list + unlock (logged) */}
         <SiteDoors siteId={id} />
