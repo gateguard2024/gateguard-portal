@@ -59,7 +59,10 @@ Each property site has its OWN credentials for **Brivo, Eagle Eye, Shelly, UniFi
 - **"+ Add a site"** in Operations → Locations: create a site, then it opens straight to its Connections card.
 - **Brivo is now fully per-site** (own username, password, API key, client ID, client secret, site ID) — nothing shared; `getSiteBrivoToken` builds auth from the site's own creds (env app keys only as legacy fallback).
 - **Add / Edit / Delete** all wired: Set up, Update (blank-safe), and **Remove** (confirm + DELETE endpoint).
-- Remaining (Build 10c): live clients for Eagle Eye / Shelly / UniFi + repoint the Brivo **Users list/create** screen (BrivoUsersSurface) to the per-site token.
+## Build 10c — Brivo Users repointed per-site + Shelly live test  ✅ shipped
+- Brivo **Users list / add / suspend** now run off the per-site vault token (`getSiteBrivoToken`); the site picker merges vault sites + legacy org sites; `/api/brivo/users(+[id])` accept `site_id` or `org_id`.
+- **Shelly** has a real connection Test (device-list call).
+- Remaining (Build 10d): live Test clients for **Eagle Eye** + **UniFi** — port the exact auth flow from GGSOC (don't guess).
 
 ## Build 10 — Platform hardening (#65, #68, #50, #49, #51, #88, #89)
 Security batch 2 (ilike/activities scope/role-tech); consolidate Gmail OAuth; doc-portal security/expiry/domain; retire legacy external links + ops pages; code-split Nexus surfaces; concurrency (pooled conn + caching).

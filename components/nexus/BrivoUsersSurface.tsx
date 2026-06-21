@@ -5,15 +5,21 @@
 // Add User → Suspend/Reactivate. Read is live; writes hit the Brivo API.
 import { useCallback, useEffect, useState } from 'react'
 
-type Site = { org_id: string; name: string; brivo_site_id: string }
+type Site = { org_id?: string; site_id?: string; name: string; brivo_site_id: string }
 type BrivoUser = { id: string; firstName: string; lastName: string; email: string | null; phone: string | null; unitNumber: string | null; active: boolean; groupIds: string[] }
 type Group = { id: string; name: string }
 
 const inputStyle = { background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.92)' } as const
 
+// A site can come from the per-site vault (site_id) or legacy per-org (org_id).
+// We pass one stable ref string around and translate it to query/body params.
+const refFor = (s: Site) => (s.site_id ? `site:${s.site_id}` : `org:${s.org_id}`)
+const queryFor = (ref: string) => ref.startsWith('site:') ? `site_id=${encodeURIComponent(ref.slice(5))}` : `org_id=${encodeURIComponent(ref.slice(4))}`
+const bodyRef = (ref: string): Record<string, string> => ref.startsWith('site:') ? { site_id: ref.slice(5) } : { org_id: ref.slice(4) }
+
 export function BrivoUsersSurface() {
   const [sites, setSites] = useState<Site[]>([])
-  const [orgId, setOrgId] = useState('')
+  const [ref, setRef] = useState('')
   const [users, setUsers] = useState<BrivoUser[]>([])
   const [groups, setGroups] = useState<Group[]>([])
   const [loading, setLoading] = useState(true)
@@ -29,16 +35,16 @@ export function BrivoUsersSurface() {
         const data = await res.json().catch(() => ({}))
         const list: Site[] = data.sites ?? []
         setSites(list)
-        if (list[0]) setOrgId(list[0].org_id)
+        if (list[0]) setRef(refFor(list[0]))
         else { setLoading(false) }
       } catch { setError('Could not load your Brivo sites.'); setLoading(false) }
     })()
   }, [])
 
-  const loadUsers = useCallback(async (oid: string) => {
+  const loadUsers = useCallback(async (r: string) => {
     setLoading(true); setError(null)
     try {
-      const res = await fetch(`/api/brivo/users?org_id=${encodeURIComponent(oid)}&groups=1`)
+      const res = await fetch(`/api/brivo/users?${queryFor(r)}&groups=1`)
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data?.error ?? 'Could not load users.')
       setUsers(data.users ?? [])
@@ -47,12 +53,12 @@ export function BrivoUsersSurface() {
     finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { if (orgId) void loadUsers(orgId) }, [orgId, loadUsers])
+  useEffect(() => { if (ref) void loadUsers(ref) }, [ref, loadUsers])
 
   async function toggleSuspend(u: BrivoUser) {
     setBusyId(u.id)
     try {
-      const res = await fetch(`/api/brivo/users/${u.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ org_id: orgId, suspended: u.active }) })
+      const res = await fetch(`/api/brivo/users/${u.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...bodyRef(ref), suspended: u.active }) })
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d?.error ?? 'Update failed.') }
       setUsers(prev => prev.map(x => x.id === u.id ? { ...x, active: !x.active } : x))
     } catch (e) { setError(e instanceof Error ? e.message : 'Update failed.') }
@@ -62,7 +68,7 @@ export function BrivoUsersSurface() {
   const filtered = query.trim()
     ? users.filter(u => `${u.firstName} ${u.lastName} ${u.email ?? ''} ${u.unitNumber ?? ''}`.toLowerCase().includes(query.trim().toLowerCase()))
     : users
-  const siteName = sites.find(s => s.org_id === orgId)?.name ?? ''
+  const siteName = sites.find(s => refFor(s) === ref)?.name ?? ''
 
   return (
     <section className="mt-9 w-full max-w-5xl">
@@ -79,8 +85,8 @@ export function BrivoUsersSurface() {
         </div>
 
         {sites.length > 1 && (
-          <select value={orgId} onChange={e => setOrgId(e.target.value)} className="mb-4 w-full rounded-xl px-3 py-2 text-sm outline-none sm:max-w-sm" style={inputStyle}>
-            {sites.map(s => <option key={s.org_id} value={s.org_id} style={{ background: '#0b1424' }}>{s.name}</option>)}
+          <select value={ref} onChange={e => setRef(e.target.value)} className="mb-4 w-full rounded-xl px-3 py-2 text-sm outline-none sm:max-w-sm" style={inputStyle}>
+            {sites.map(s => <option key={refFor(s)} value={refFor(s)} style={{ background: '#0b1424' }}>{s.name}</option>)}
           </select>
         )}
 
@@ -116,12 +122,12 @@ export function BrivoUsersSurface() {
         )}
       </div>
 
-      {addOpen && <AddBrivoUser orgId={orgId} siteName={siteName} groups={groups} onClose={() => setAddOpen(false)} onAdded={() => { setAddOpen(false); void loadUsers(orgId) }} />}
+      {addOpen && <AddBrivoUser siteRef={ref} siteName={siteName} groups={groups} onClose={() => setAddOpen(false)} onAdded={() => { setAddOpen(false); void loadUsers(ref) }} />}
     </section>
   )
 }
 
-function AddBrivoUser({ orgId, siteName, groups, onClose, onAdded }: { orgId: string; siteName: string; groups: Group[]; onClose: () => void; onAdded: () => void }) {
+function AddBrivoUser({ siteRef, siteName, groups, onClose, onAdded }: { siteRef: string; siteName: string; groups: Group[]; onClose: () => void; onAdded: () => void }) {
   const [first, setFirst] = useState('')
   const [last, setLast] = useState('')
   const [email, setEmail] = useState('')
@@ -133,7 +139,7 @@ function AddBrivoUser({ orgId, siteName, groups, onClose, onAdded }: { orgId: st
   async function submit() {
     setBusy(true); setErr(null)
     try {
-      const res = await fetch('/api/brivo/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ org_id: orgId, firstName: first, lastName: last, email, unit, groupId: groupId || null }) })
+      const res = await fetch('/api/brivo/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...bodyRef(siteRef), firstName: first, lastName: last, email, unit, groupId: groupId || null }) })
       const d = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(d?.error ?? 'Could not add user.')
       onAdded()

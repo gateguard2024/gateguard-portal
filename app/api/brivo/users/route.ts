@@ -1,25 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/current-user'
-import { getAllowedBrivoSite } from '@/lib/brivo-scope'
-import { getOrgBrivoToken, listBrivoUsers, listBrivoGroups, createBrivoUser } from '@/lib/brivo'
+import { getAllowedBrivoSite, getAllowedVaultBrivoSite } from '@/lib/brivo-scope'
+import { getOrgBrivoToken, getSiteBrivoToken, listBrivoUsers, listBrivoGroups, createBrivoUser } from '@/lib/brivo'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-// GET /api/brivo/users?org_id=<org>&groups=1
-// Each site authenticates with its OWN Brivo credentials (per org).
+// Resolve a Brivo token + brivo_site_id from EITHER a per-site id (vault) or a
+// legacy org id. Returns null if the caller can't access the requested target.
+async function resolveBrivo(req: NextRequest, body?: Record<string, unknown>) {
+  const user = await getCurrentUser()
+  const siteId = String(body?.site_id ?? req.nextUrl.searchParams.get('site_id') ?? '')
+  const orgId = String(body?.org_id ?? req.nextUrl.searchParams.get('org_id') ?? '')
+  if (siteId) {
+    const site = await getAllowedVaultBrivoSite(user, siteId)
+    if (!site) return null
+    const { token, apiKey, brivoSiteId } = await getSiteBrivoToken(siteId)
+    return { token, apiKey, brivoSiteId: brivoSiteId || site.brivo_site_id }
+  }
+  if (orgId) {
+    const site = await getAllowedBrivoSite(user, orgId)
+    if (!site) return null
+    const { token, apiKey } = await getOrgBrivoToken(orgId)
+    return { token, apiKey, brivoSiteId: site.brivo_site_id }
+  }
+  return null
+}
+
+// GET /api/brivo/users?site_id=<site>|org_id=<org>&groups=1
 export async function GET(req: NextRequest) {
   try {
-    const user = await getCurrentUser()
-    const orgId = req.nextUrl.searchParams.get('org_id') ?? ''
-    if (!orgId) return NextResponse.json({ error: 'org_id is required' }, { status: 400 })
-    const site = await getAllowedBrivoSite(user, orgId)
-    if (!site) return NextResponse.json({ error: 'That site is outside your access.' }, { status: 403 })
-
-    const { token, apiKey } = await getOrgBrivoToken(orgId)
-    const users = await listBrivoUsers(token, apiKey, site.brivo_site_id)
+    const ctx = await resolveBrivo(req)
+    if (!ctx) return NextResponse.json({ error: 'That site is outside your access (or has no Brivo login set).' }, { status: 403 })
+    const users = await listBrivoUsers(ctx.token, ctx.apiKey, ctx.brivoSiteId)
     const groups = req.nextUrl.searchParams.get('groups')
-      ? await listBrivoGroups(token, apiKey, site.brivo_site_id).catch(() => [])
+      ? await listBrivoGroups(ctx.token, ctx.apiKey, ctx.brivoSiteId).catch(() => [])
       : undefined
     return NextResponse.json({ users, ...(groups ? { groups } : {}) })
   } catch (e) {
@@ -27,22 +42,18 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/brivo/users  { org_id, firstName, lastName, email?, unit?, groupId? }
+// POST /api/brivo/users  { site_id|org_id, firstName, lastName, email?, unit?, groupId? }
 export async function POST(req: NextRequest) {
   try {
-    const user = await getCurrentUser()
     const body = await req.json().catch(() => ({}))
-    const orgId = String(body.org_id ?? '')
-    if (!orgId) return NextResponse.json({ error: 'org_id is required' }, { status: 400 })
-    const site = await getAllowedBrivoSite(user, orgId)
-    if (!site) return NextResponse.json({ error: 'That site is outside your access.' }, { status: 403 })
+    const ctx = await resolveBrivo(req, body)
+    if (!ctx) return NextResponse.json({ error: 'That site is outside your access (or has no Brivo login set).' }, { status: 403 })
 
     const firstName = String(body.firstName ?? '').trim()
     const lastName = String(body.lastName ?? '').trim()
     if (!firstName || !lastName) return NextResponse.json({ error: 'First and last name are required.' }, { status: 400 })
 
-    const { token, apiKey } = await getOrgBrivoToken(orgId)
-    const created = await createBrivoUser(token, apiKey, {
+    const created = await createBrivoUser(ctx.token, ctx.apiKey, {
       firstName,
       lastName,
       email: body.email ? String(body.email).trim() : null,

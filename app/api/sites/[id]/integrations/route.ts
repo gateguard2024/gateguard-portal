@@ -10,7 +10,7 @@ import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope } from '@/lib/org-scope'
 import { normalizeRole } from '@/lib/permissions'
 import { credsKeyConfigured } from '@/lib/crypto-creds'
-import { SITE_VENDORS, type SiteVendor, listSiteIntegrationStatus, setSiteVendorCreds, deleteSiteVendorCreds, markIntegrationTest } from '@/lib/site-integrations'
+import { SITE_VENDORS, type SiteVendor, listSiteIntegrationStatus, setSiteVendorCreds, deleteSiteVendorCreds, markIntegrationTest, getSiteVendorCreds } from '@/lib/site-integrations'
 import { getSiteBrivoToken } from '@/lib/brivo'
 
 export const dynamic = 'force-dynamic'
@@ -79,6 +79,28 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
   }
 
-  // Other vendors: credentials are stored; live connectivity test ships per-vendor next.
+  // Shelly Cloud: a device-list call verifies the auth key + server.
+  if (vendor === 'shelly') {
+    try {
+      const creds = await getSiteVendorCreds(params.id, 'shelly')
+      if (!creds?.auth_key || !creds?.server) throw new Error('Shelly auth key and server are required.')
+      const server = creds.server.replace(/^https?:\/\//, '').replace(/\/$/, '')
+      const res = await fetch(`https://${server}/interface/device/list`, {
+        method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ auth_key: creds.auth_key }).toString(),
+        signal: AbortSignal.timeout(8000),
+      })
+      const j = await res.json().catch(() => ({}))
+      const ok = res.ok && j?.isok !== false
+      await markIntegrationTest(params.id, 'shelly', ok, ok ? undefined : 'Shelly rejected the auth key / server.')
+      return NextResponse.json({ ok, verified: ok, ...(ok ? {} : { error: 'Shelly rejected the auth key / server.' }) })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Shelly test failed'
+      await markIntegrationTest(params.id, 'shelly', false, msg)
+      return NextResponse.json({ ok: false, error: msg })
+    }
+  }
+
+  // Eagle Eye + UniFi: credentials are stored; live test ports from GGSOC next.
   return NextResponse.json({ ok: true, verified: false, note: 'Saved. Live connection test for this vendor is coming next.' })
 }
