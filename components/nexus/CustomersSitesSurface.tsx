@@ -6,6 +6,7 @@ import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 import { NexusActionCard } from '@/components/nexus/NexusActionCard'
 import CustomerSiteFinder from '@/components/nexus/CustomerSiteFinder'
+import { SiteDetailDrawer } from '@/components/nexus/OperationsHub'
 
 type CustomersSitesPanel = 'find-customer' | 'find-property' | 'attention' | 'systems' | null
 
@@ -126,6 +127,7 @@ function SimpleSearchBox({ placeholder, mode }: { placeholder: string; mode: 'cu
   const [loading, setLoading] = useState(false)
   const [detailLoading, setDetailLoading] = useState(false)
   const [message, setMessage] = useState<string | null>('Type at least 2 characters, then search.')
+  const [manageSiteId, setManageSiteId] = useState<string | null>(null)  // opens the full editable site panel (details + connections)
 
   async function runSearch() {
     const q = query.trim()
@@ -239,14 +241,19 @@ function SimpleSearchBox({ placeholder, mode }: { placeholder: string; mode: 'cu
           <div className="mt-1 text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>{selected.title}</div>
           <div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.52)' }}>{selected.subtitle}</div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" onClick={() => openHref(selected.href)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40" disabled={!selected.href} style={{ background: 'linear-gradient(135deg, #00C8FF, #007CFF)', color: 'white' }}>Open</button>
-            <button type="button" className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.92)' }}>Add Note — Coming Soon</button>
+            {(selected.type === 'site' || selected.type === 'property') && (
+              <button type="button" onClick={() => setManageSiteId(selected.id)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'linear-gradient(135deg, #00C8FF, #007CFF)', color: 'white' }}>Edit details & connections</button>
+            )}
+            <button type="button" onClick={() => openHref(selected.href)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40" disabled={!selected.href} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.92)' }}>Open full page</button>
             <button type="button" onClick={() => void loadDetail(selected)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.62)' }}>{detailLoading ? 'Loading…' : 'See Overview'}</button>
           </div>
         </div>
       )}
 
       {detail && <SimpleOverview detail={detail} onOpen={openHref} />}
+
+      {/* Full editable site panel (details + per-site Connections) */}
+      {manageSiteId && <SiteDetailDrawer id={manageSiteId} onClose={() => setManageSiteId(null)} />}
     </div>
   )
 }

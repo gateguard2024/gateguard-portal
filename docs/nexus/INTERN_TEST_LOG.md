@@ -215,4 +215,16 @@ Where: **Operations → Locations**.
 **Depends on infra:** migration 128 + `CREDENTIALS_ENC_KEY` (same as Build 10).
 
 ---
+
+## Build 10d — Site edit + Connections reachable from Operations  (pushed beta · YYYY-MM-DD)
+Where: bottom nav **Operations** → **Find Property** (or **Property Systems**).
+
+- ☐ Search a property/site, click a result → the Selected panel shows an **"Edit details & connections"** button.
+- ☐ Clicking it opens the full editable site panel (Details to edit + **Connections** card to add/edit/remove Brivo/Eagle Eye/Shelly/UniFi).
+- ☐ This is the same panel as `/cmms → Locations → site`; changes save the same way.
+- ☐ "Open full page" still works for the legacy site page.
+
+**Depends on infra:** migration 128 + `CREDENTIALS_ENC_KEY` (for the Connections part).
+
+---
 *(new builds appended below as they ship)*

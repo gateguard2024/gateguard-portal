@@ -20,3 +20,10 @@ CREATE INDEX IF NOT EXISTS idx_site_integrations_site ON public.site_integration
 
 -- Grant Data API access (required — Supabase enforces this Oct 30 2026)
 GRANT ALL ON TABLE public.site_integrations TO postgres, anon, authenticated, service_role;
+
+-- SECURITY: this table holds (encrypted) credentials. Enable RLS with NO
+-- policies so the public API roles (anon / authenticated) can NEVER read or
+-- write it directly. Our server routes use the service_role key, which bypasses
+-- RLS, and they enforce auth + org-scope themselves. So the encrypted blobs are
+-- only ever reachable through our scoped endpoints — not the public Data API.
+ALTER TABLE public.site_integrations ENABLE ROW LEVEL SECURITY;

@@ -575,7 +575,7 @@ const SITE_FIELDS: { key: string; label: string; full?: boolean }[] = [
   { key: "access_notes", label: "Access / gate notes", full: true },
 ];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function SiteDetailDrawer({ id, onClose }: { id: string; onClose: () => void }) {
+export function SiteDetailDrawer({ id, onClose }: { id: string; onClose: () => void }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [site, setSite] = useState<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
