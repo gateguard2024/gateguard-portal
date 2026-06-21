@@ -64,11 +64,32 @@ Each property site has its OWN credentials for **Brivo, Eagle Eye, Shelly, UniFi
 - **Shelly** has a real connection Test (device-list call).
 - Remaining (Build 10d): live Test clients for **Eagle Eye** + **UniFi** — port the exact auth flow from GGSOC (don't guess).
 
-## Build 10 — Platform hardening (#65, #68, #50, #49, #51, #88, #89)
-Security batch 2 (ilike/activities scope/role-tech); consolidate Gmail OAuth; doc-portal security/expiry/domain; retire legacy external links + ops pages; code-split Nexus surfaces; concurrency (pooled conn + caching).
+---
 
-## Build 11 — Framework upgrade (#80)  ← do last, isolated
-Next 14→15 + Clerk 5→6. Highest blast radius; its own weekend pass.
+# ⚠️ RE-BASELINE (June 2026) — numbering was double-using "Build 10"
+
+The "Build 10a–10g" entries above are NOT the original Build 10 (platform hardening).
+They are a separate, user-directed **INTEGRATIONS TRACK** that grew out of Build 9.
+Renamed/clarified here so nothing collides:
+
+## INTEGRATIONS TRACK (in progress — current focus)
+Shipped: per-site encrypted credentials vault (Brivo/Eagle Eye/Shelly/UniFi) ·
+add/edit/delete site + creds · Brivo Users per-site · Brivo Doors (list + unlock
++ audit) · camera↔door mapping + tags · Shelly live test · corporate-only
+credential model + Connections hidden from dealers · corporate **Integrations
+console** (Internal → Site Integrations) · friendly "contact Gate Guard" messaging.
+Migrations: 128 (site_integrations + RLS), 129 (door_cameras), 130 (tags).
+**Remaining on this track:**
+- IT-1 **Eagle Eye Connect (v3 OAuth)** — authorize→callback→token store/refresh→live `/cameras` picker + auto-sync vendor tags.
+- IT-2 **Shelly / UniFi operate-cards** (relays, network/clients) + **cellular relays** as a 5th vendor.
+- IT-3 Fold credential setup into the **new-site onboarding** flow (checklist step at handoff).
+
+## ORIGINAL ROADMAP — still owed (after the integrations track)
+- 6b — dealer recruitment pipeline (#61) + Feature Settings into hub (#10)
+- 7b — record sharing/co-working (#64) + retire legacy admin (#79)
+- 8b — Tracker/Gantt glass rebuild (#69)
+- **Build 10 (real) — Platform hardening** (#65, #68, #50, #49, #51, #88, #89): security batch 2, Gmail OAuth consolidation, doc-portal security, legacy retirement, code-split, concurrency.
+- **Build 11 — Framework upgrade** (#80): Next 14→15 + Clerk 5→6, isolated weekend pass.
 
 ---
 Also standing: run pending migrations (122–125) on prod; ops task — add Gate Guard user / verify mprabhu access (#72).

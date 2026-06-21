@@ -20,7 +20,8 @@ export function SiteDoors({ siteId }: { siteId: string }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
-  const [camForm, setCamForm] = useState({ camera_name: "", stream_url: "", tags: "" });
+  const [camForm, setCamForm] = useState({ camera_name: "", stream_url: "", tags: "", camera_id: "" });
+  const [eeCams, setEeCams] = useState<{ id: string; name: string; tags: string[] }[]>([]);
 
   const load = React.useCallback(() => {
     setLoading(true); setNote(null);
@@ -36,6 +37,10 @@ export function SiteDoors({ siteId }: { siteId: string }) {
     }).catch(() => setNote("Couldn't load doors.")).finally(() => setLoading(false));
   }, [siteId]);
   useEffect(() => { load(); }, [load]);
+  // Live Eagle Eye cameras for the picker (best-effort; manual entry if absent).
+  useEffect(() => {
+    fetch(`/api/eagle-eye/cameras?site_id=${siteId}`).then(r => r.ok ? r.json() : { cameras: [] }).then(d => setEeCams(d.cameras ?? [])).catch(() => {});
+  }, [siteId]);
 
   async function unlock(d: Door) {
     if (!window.confirm(`Unlock "${d.name}" now? This physically unlocks the door.`)) return;
@@ -49,13 +54,18 @@ export function SiteDoors({ siteId }: { siteId: string }) {
   function startEdit(d: Door) {
     const existing = cams[d.id];
     setEditId(d.id);
-    setCamForm({ camera_name: existing?.camera_name ?? "", stream_url: existing?.stream_url ?? "", tags: (existing?.tags ?? []).join(", ") });
+    setCamForm({ camera_name: existing?.camera_name ?? "", stream_url: existing?.stream_url ?? "", tags: (existing?.tags ?? []).join(", "), camera_id: existing?.camera_id ?? "" });
+  }
+  function pickCamera(id: string) {
+    const c = eeCams.find(x => x.id === id);
+    if (!c) { setCamForm(f => ({ ...f, camera_id: "" })); return; }
+    setCamForm(f => ({ ...f, camera_id: c.id, camera_name: c.name, tags: c.tags.join(", ") }));
   }
   async function saveCam(d: Door) {
     if (!camForm.camera_name.trim()) return;
     setBusyId(d.id);
     const tags = camForm.tags.split(",").map(t => t.trim()).filter(Boolean);
-    await fetch(`/api/sites/${siteId}/door-cameras`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ door_id: d.id, door_name: d.name, camera_name: camForm.camera_name.trim(), stream_url: camForm.stream_url.trim() || null, tags }) }).catch(() => {});
+    await fetch(`/api/sites/${siteId}/door-cameras`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ door_id: d.id, door_name: d.name, camera_name: camForm.camera_name.trim(), camera_id: camForm.camera_id || null, stream_url: camForm.stream_url.trim() || null, tags }) }).catch(() => {});
     setBusyId(null); setEditId(null); load();
   }
   async function unlinkCam(d: Door) {
@@ -100,6 +110,12 @@ export function SiteDoors({ siteId }: { siteId: string }) {
                   </div>
                   {editing && (
                     <div style={{ display: "grid", gap: 6, marginTop: 10 }}>
+                      {eeCams.length > 0 && (
+                        <select value={camForm.camera_id} onChange={e => pickCamera(e.target.value)} style={{ ...input, cursor: "pointer" }}>
+                          <option value="">Pick an Eagle Eye camera… (or type below)</option>
+                          {eeCams.map(c => <option key={c.id} value={c.id} style={{ background: "#0b1424" }}>{c.name}</option>)}
+                        </select>
+                      )}
                       <input placeholder="Camera name (e.g. Front Gate Cam)" value={camForm.camera_name} onChange={e => setCamForm({ ...camForm, camera_name: e.target.value })} style={input} />
                       <input placeholder="Live view URL (optional)" value={camForm.stream_url} onChange={e => setCamForm({ ...camForm, stream_url: e.target.value })} style={input} />
                       <input placeholder="Tags (comma-separated, e.g. entrance, LPR)" value={camForm.tags} onChange={e => setCamForm({ ...camForm, tags: e.target.value })} style={input} />

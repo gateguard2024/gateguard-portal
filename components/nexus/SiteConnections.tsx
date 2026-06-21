@@ -15,7 +15,7 @@ const VENDORS: { vendor: Vendor; label: string; fields: Field[] }[] = [
     { key: "api_key", label: "Brivo API key", secret: true }, { key: "client_id", label: "Brivo client ID" }, { key: "client_secret", label: "Brivo client secret", secret: true },
     { key: "site_id", label: "Brivo site ID", placeholder: "e.g. 123456" } ] },
   { vendor: "eagle_eye", label: "Eagle Eye · Cameras", fields: [
-    { key: "api_key", label: "API key", secret: true }, { key: "account_id", label: "Account ID" } ] },
+    { key: "client_id", label: "EEN client ID" }, { key: "client_secret", label: "EEN client secret", secret: true } ] },
   { vendor: "shelly", label: "Shelly · Relays / Power", fields: [
     { key: "auth_key", label: "Cloud auth key", secret: true }, { key: "server", label: "Cloud server", placeholder: "shelly-12-eu.shelly.cloud" } ] },
   { vendor: "unifi", label: "UniFi · Network", fields: [
@@ -104,7 +104,8 @@ export function SiteConnections({ siteId }: { siteId: string }) {
                     ))}
                     <div style={{ display: "flex", gap: 8 }}>
                       <button onClick={() => save(vendor)} disabled={busy || !keyOk} style={{ fontSize: 12, fontWeight: 600, background: "rgba(0,200,255,0.18)", border: "1px solid rgba(0,200,255,0.45)", color: "#7DE5FF", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy || !keyOk ? 0.5 : 1 }}>{busy ? "Saving…" : "Save"}</button>
-                      {s?.configured && <button onClick={() => test(vendor)} disabled={busy} style={{ fontSize: 12, fontWeight: 600, background: "rgba(52,211,153,0.16)", border: "1px solid rgba(52,211,153,0.4)", color: "#6ee7b7", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy ? 0.5 : 1 }}>Test</button>}
+                      {s?.configured && vendor !== "eagle_eye" && <button onClick={() => test(vendor)} disabled={busy} style={{ fontSize: 12, fontWeight: 600, background: "rgba(52,211,153,0.16)", border: "1px solid rgba(52,211,153,0.4)", color: "#6ee7b7", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy ? 0.5 : 1 }}>Test</button>}
+                      {s?.configured && vendor === "eagle_eye" && <button onClick={() => { window.location.href = `/api/eagle-eye/connect?site_id=${siteId}`; }} style={{ fontSize: 12, fontWeight: 600, background: "rgba(52,211,153,0.16)", border: "1px solid rgba(52,211,153,0.4)", color: "#6ee7b7", borderRadius: 10, padding: "7px 14px", cursor: "pointer" }}>{s.status === "verified" ? "Reconnect Eagle Eye" : "Connect Eagle Eye →"}</button>}
                       {s?.configured && <button onClick={() => remove(vendor, label)} disabled={busy} style={{ fontSize: 12, fontWeight: 600, background: "rgba(248,113,113,0.14)", border: "1px solid rgba(248,113,113,0.4)", color: "#fca5a5", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy ? 0.5 : 1, marginLeft: "auto" }}>Remove</button>}
                     </div>
                   </div>

@@ -269,5 +269,17 @@ Permission split:
 
 **Depends on infra:** migrations 128/129/130 + `CREDENTIALS_ENC_KEY`.
 
+## IT-1 — Eagle Eye Connect (v3 OAuth) + live camera picker  (pushed beta · YYYY-MM-DD)
+Setup is **corporate-only**. Where (corporate): site → Connections → Eagle Eye.
+
+- ☐ Corporate enters Eagle Eye **client ID + client secret** → Save → status "Configured".
+- ☐ A **"Connect Eagle Eye →"** button appears (corporate only). Clicking it goes to Eagle Eye's login/consent, then returns to the app; status flips to **Verified**.
+- ☐ After connect, in the **Doors** card → + Camera, a **"Pick an Eagle Eye camera…"** dropdown lists that account's real cameras; picking one fills the name + its Eagle Eye tags automatically.
+- ☐ Manual camera entry still works if you'd rather type it.
+- ☐ Dealers can use the camera **picker/list** at their sites, but never see the Connect button or credentials.
+- ☐ Token auto-refreshes (camera list keeps working after the access token expires).
+
+**Setup prereq (corporate, one-time):** register a confidential client in the Eagle Eye developer portal and set its **redirect URI to** `https://<your-domain>/api/eagle-eye/callback`. Then paste client ID/secret per site.
+
 ---
 *(new builds appended below as they ship)*

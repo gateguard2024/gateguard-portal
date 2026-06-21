@@ -29,8 +29,8 @@ export const VENDOR_FIELDS: Record<SiteVendor, { label: string; fields: VendorFi
     { key: 'site_id', label: 'Brivo site ID', placeholder: 'e.g. 123456' },
   ] },
   eagle_eye: { label: 'Eagle Eye (Cameras)', fields: [
-    { key: 'api_key', label: 'API key', secret: true },
-    { key: 'account_id', label: 'Account ID' },
+    { key: 'client_id', label: 'EEN client ID' },
+    { key: 'client_secret', label: 'EEN client secret', secret: true },
   ] },
   shelly:    { label: 'Shelly (Relays / Power)', fields: [
     { key: 'auth_key', label: 'Cloud auth key', secret: true },
@@ -78,6 +78,13 @@ export async function setSiteVendorCreds(siteId: string, vendor: SiteVendor, cre
     { onConflict: 'site_id,vendor' },
   )
   return { error: error?.message ?? null }
+}
+
+/** Merge new keys into a site's existing vendor creds (e.g. add OAuth tokens
+ * without losing the client id/secret). */
+export async function mergeSiteVendorCreds(siteId: string, vendor: SiteVendor, patch: Record<string, string>): Promise<{ error: string | null }> {
+  const existing = (await getSiteVendorCreds(siteId, vendor)) ?? {}
+  return setSiteVendorCreds(siteId, vendor, { ...existing, ...patch })
 }
 
 /** Remove a site's credentials for one vendor entirely. */
