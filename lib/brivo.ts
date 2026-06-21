@@ -345,13 +345,22 @@ export async function setBrivoUserSuspended(
 // ─── Doors / access points ───────────────────────────────────────────────────
 export interface BrivoDoor { id: string; name: string }
 
-/** List a site's doors (access points). */
-export async function listBrivoDoors(token: string, apiKey: string, brivoSiteId: string): Promise<BrivoDoor[]> {
-  // Brivo exposes doors as "access points". If your Brivo plan uses a different
-  // path, this is the one line to adjust.
-  const data = await brivoGet(token, apiKey, '/access-points', { filter: `site eq "${brivoSiteId}"`, pageSize: '100' })
+/** List a site's doors (access points).
+ * Each property has its OWN Brivo account, so the account behind these creds
+ * contains only this site's access points — no site filter needed (and the
+ * /access-points endpoint rejects the users/groups-style `site eq "X"` filter).
+ * If a brivoSiteId is provided we still narrow client-side when the access point
+ * carries a site id, but never to an empty list. */
+export async function listBrivoDoors(token: string, apiKey: string, brivoSiteId?: string): Promise<BrivoDoor[]> {
+  const data = await brivoGet(token, apiKey, '/access-points', { pageSize: '100' })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (data.data ?? []).map((d: any) => ({ id: String(d.id), name: d.name ?? 'Door' }))
+  const all = (data.data ?? []) as any[]
+  let rows = all
+  if (brivoSiteId) {
+    const narrowed = all.filter(d => String(d.siteId ?? d.site?.id ?? d.site ?? '') === String(brivoSiteId))
+    if (narrowed.length > 0) rows = narrowed   // only narrow if the field actually matched
+  }
+  return rows.map(d => ({ id: String(d.id), name: d.name ?? 'Door' }))
 }
 
 /** Remotely unlock / pulse a door. Sensitive action — callers must confirm. */
