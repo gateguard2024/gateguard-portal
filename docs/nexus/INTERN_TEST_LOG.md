@@ -240,5 +240,17 @@ Where: open a site (Operations → Find Property → Edit details & connections,
 
 **Depends on infra:** site has Brivo creds saved + verified (Build 10). Note: door endpoint path assumes Brivo "access-points" — if your Brivo plan differs, that's the one line in lib/brivo.ts to adjust.
 
+## Build 10f — Camera ↔ door mapping  (pushed beta · YYYY-MM-DD)
+**⚠ Run migration 129** (`129_door_cameras.sql`).
+Where: site panel → **Doors (Brivo)** card.
+
+- ☐ Each door row shows "No camera linked" or the linked camera (📹 name; clickable if a URL was given).
+- ☐ **+ Camera** lets you type a camera name + optional live-view URL → **Save camera** → it shows on the row.
+- ☐ **Unlink** removes the camera from that door.
+- ☐ Unlocking a door that has a camera shows "(camera: …)" in the result and the **activity timeline** door-unlock entry mentions the camera.
+- ☐ Camera links persist after reload and are per-site (don't appear on other sites).
+
+Note: cameras are entered **manually** for now. Auto-listing from Eagle Eye needs the exact Eagle Eye API/auth (port from GGSOC) — see below.
+
 ---
 *(new builds appended below as they ship)*

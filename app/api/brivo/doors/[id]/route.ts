@@ -38,19 +38,25 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     await unlockBrivoDoor(token, apiKey, params.id)
 
-    // Audit trail — also shows in the site activity timeline; future camera link.
+    // Audit trail — also shows in the site activity timeline. If a camera is
+    // mapped to this door, record it so footage can be pulled for the moment.
     if (siteId) {
       const doorName = String(body.door_name ?? 'Door')
+      let cam: { camera_name?: string; camera_id?: string; stream_url?: string } | null = null
+      try {
+        const { data } = await supabase.from('door_cameras').select('camera_name, camera_id, stream_url').eq('site_id', siteId).eq('door_id', params.id).maybeSingle()
+        cam = data ?? null
+      } catch { /* mapping optional */ }
       try {
         await supabase.from('site_events').insert({
           site_id: siteId,
           event_type: 'door_unlock',
           event_source: 'brivo',
           title: `Door unlocked: ${doorName}`,
-          description: `Unlocked remotely by ${user.name} via Nexus`,
+          description: `Unlocked remotely by ${user.name} via Nexus${cam?.camera_name ? ` · camera: ${cam.camera_name}` : ''}`,
           summary: `${doorName} unlocked by ${user.name}`,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          metadata: { door_id: params.id, door_name: doorName, by_user_id: user.id, by_name: user.name } as any,
+          metadata: { door_id: params.id, door_name: doorName, by_user_id: user.id, by_name: user.name, camera_name: cam?.camera_name ?? null, camera_id: cam?.camera_id ?? null, stream_url: cam?.stream_url ?? null } as any,
         })
       } catch { /* audit is best-effort; the unlock already happened */ }
     }
