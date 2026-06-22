@@ -19,6 +19,9 @@ export function SiteSecurity({ siteId }: { siteId: string }) {
   const [clip, setClip] = useState<{ camId: string; name: string; ts: string } | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [events, setEvents] = useState<any[]>([]);     // recent door_unlock site events
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [allCams, setAllCams] = useState<any[]>([]);   // every Eagle Eye camera on this site
+  const [camPage, setCamPage] = useState(0);           // 9-per-page grid pagination
   const noPreview = useRef<Set<string>>(new Set());
 
   const load = React.useCallback(() => {
@@ -27,13 +30,15 @@ export function SiteSecurity({ siteId }: { siteId: string }) {
       fetch(`/api/brivo/doors?site_id=${siteId}`).then(r => r.ok ? r.json() : { doors: [] }).catch(() => ({ doors: [] })),
       fetch(`/api/sites/${siteId}/door-cameras`).then(r => r.json()).catch(() => ({ mappings: [] })),
       fetch(`/api/sites/${siteId}`).then(r => r.json()).catch(() => ({ events: [] })),
-    ]).then(([d, c, s]) => {
+      fetch(`/api/eagle-eye/cameras?site_id=${siteId}`).then(r => r.json()).catch(() => ({ cameras: [] })),
+    ]).then(([d, c, s, cm]) => {
       setDoors(d.doors ?? []);
       const m: Record<string, CamMap> = {};
       (c.mappings ?? []).forEach((x: CamMap) => { m[x.door_id] = x; });
       setCams(m);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setEvents((s.events ?? []).filter((e: any) => e.event_type === "door_unlock"));
+      setAllCams(Array.isArray(cm?.cameras) ? cm.cameras : []);
     }).finally(() => setLoading(false));
   }, [siteId]);
   useEffect(() => { load(); }, [load]);
@@ -93,6 +98,48 @@ export function SiteSecurity({ siteId }: { siteId: string }) {
     <div style={card}>
       <div style={{ fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 4 }}>Site Security</div>
       <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 12 }}>Watch each door, unlock, and pull recent footage — all here, no Eagle Eye needed.</div>
+
+      {/* All cameras — 9-up grid, paginated. Shows everything Eagle Eye sees at this site. */}
+      {allCams.length > 0 && (() => {
+        const pages = Math.ceil(allCams.length / 9);
+        const pageCams = allCams.slice(camPage * 9, camPage * 9 + 9);
+        return (
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>📹 Cameras ({allCams.length})</div>
+              {pages > 1 && <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button onClick={() => setCamPage(p => Math.max(0, p - 1))} disabled={camPage === 0} style={{ fontSize: 12, fontWeight: 600, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.14)", color: "white", borderRadius: 8, padding: "4px 10px", cursor: camPage === 0 ? "default" : "pointer", opacity: camPage === 0 ? 0.4 : 1 }}>‹ Prev</button>
+                <span style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>Pg {camPage + 1} / {pages}</span>
+                <button onClick={() => setCamPage(p => Math.min(pages - 1, p + 1))} disabled={camPage >= pages - 1} style={{ fontSize: 12, fontWeight: 600, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.14)", color: "white", borderRadius: 8, padding: "4px 10px", cursor: camPage >= pages - 1 ? "default" : "pointer", opacity: camPage >= pages - 1 ? 0.4 : 1 }}>Next ›</button>
+              </div>}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 8 }}>
+              {pageCams.map((c, i) => {
+                const camId = String(c.id ?? c.camera_id ?? c.esn ?? "");
+                const name = c.name ?? c.camera_name ?? `Camera ${camPage * 9 + i + 1}`;
+                const ok = camId && !noPreview.current.has(camId);
+                return (
+                  <button key={camId || i} onClick={() => camId && setClip({ camId, name, ts: new Date(Date.now() - 120000).toISOString() })} style={{ padding: 0, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, overflow: "hidden", background: "#05080f", cursor: camId ? "pointer" : "default", textAlign: "left" }}>
+                    <div style={{ position: "relative", aspectRatio: "16/9", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {ok ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img alt={name} src={`/api/eagle-eye/preview?site_id=${siteId}&camera_id=${encodeURIComponent(camId)}&t=${tick}`} onError={() => { noPreview.current.add(camId); setTick(n => n + 1); }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      ) : <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>preview unavailable</div>}
+                      {ok && <span style={{ position: "absolute", top: 5, right: 6, fontSize: 8.5, fontWeight: 700, color: "#fca5a5" }}>● LIVE</span>}
+                      <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, fontSize: 10.5, color: "#fff", background: "rgba(0,0,0,0.55)", padding: "3px 7px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 6 }}>Tap any camera to watch its recent recording. Doors with a linked camera show below.</div>
+          </div>
+        );
+      })()}
+
+      {!loading && allCams.length === 0 && doors.length > 0 && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginBottom: 12 }}>No cameras yet — finish connecting Eagle Eye in the 🔑 Setup tab (enter credentials, then “Connect Eagle Eye →”).</div>}
+
+      <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.85)", marginBottom: 8 }}>Doors</div>
       {loading ? <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Loading…</div>
         : doors.length === 0 ? <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>No doors for this site (connect Brivo + link cameras in the Doors card).</div>
         : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px,1fr))", gap: 12 }}>{doors.map(d => <Tile key={d.id} door={d} />)}</div>}

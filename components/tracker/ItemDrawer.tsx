@@ -175,13 +175,13 @@ export function ItemDrawer({ item, groups, allItems, orgUsers, onClose, onUpdate
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, zIndex: 50, display: 'flex', justifyContent: 'flex-end',
+      position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(0,0,0,0.4)',
     }} onClick={onClose}>
       <div
         style={{
-          width: '100%', maxWidth: 520, height: '100%',
-          background: '#fff', boxShadow: '-8px 0 40px rgba(0,0,0,0.12)',
-          borderLeft: '1px solid #E2E8F0',
+          width: '100%', maxWidth: 560, maxHeight: '92vh',
+          background: '#fff', boxShadow: '0 30px 80px rgba(0,0,0,0.25)',
+          border: '1px solid #E2E8F0', borderRadius: 18,
           display: 'flex', flexDirection: 'column',
           overflow: 'hidden',
         }}

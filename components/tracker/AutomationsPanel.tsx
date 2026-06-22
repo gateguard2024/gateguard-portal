@@ -115,12 +115,12 @@ export function AutomationsPanel({ onClose }: AutomationsPanelProps) {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', justifyContent: 'flex-end' }} onClick={onClose}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(0,0,0,0.4)' }} onClick={onClose}>
       <div
         style={{
-          width: '100%', maxWidth: 420, height: '100%',
-          background: '#fff', boxShadow: '-8px 0 40px rgba(0,0,0,0.12)',
-          borderLeft: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          width: '100%', maxWidth: 460, maxHeight: '92vh',
+          background: '#fff', boxShadow: '0 30px 80px rgba(0,0,0,0.25)',
+          border: '1px solid #E2E8F0', borderRadius: 18, display: 'flex', flexDirection: 'column', overflow: 'hidden',
         }}
         onClick={e => e.stopPropagation()}
       >

@@ -61,7 +61,7 @@ export function SlideOver({
   if (!open) return null
 
   return (
-    <div className={cn('fixed inset-0 flex', zIndex)}>
+    <div className={cn('fixed inset-0 flex items-center justify-center p-4', zIndex)}>
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
@@ -69,13 +69,13 @@ export function SlideOver({
         aria-hidden="true"
       />
 
-      {/* Panel — slides in from right */}
+      {/* Panel — centered popup */}
       <div
         ref={panelRef}
         className={cn(
-          'absolute right-0 top-0 h-full bg-background shadow-2xl flex flex-col',
-          'border-l border-border',
-          'animate-in slide-in-from-right duration-200',
+          'relative max-w-[95vw] max-h-[92vh] rounded-2xl bg-background shadow-2xl flex flex-col',
+          'border border-border',
+          'animate-in fade-in zoom-in-95 duration-200',
           sizeClass[size]
         )}
         role="dialog"
