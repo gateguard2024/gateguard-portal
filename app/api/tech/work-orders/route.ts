@@ -25,19 +25,31 @@ export async function GET(req: NextRequest) {
   const code = req.headers.get('x-tech-code') ?? ''
   const qpTechId = new URL(req.url).searchParams.get('tech_id')
 
-  // Resolve which technician this is
+  // Resolve which technician this is (id + name; name is a fallback match).
   let techId = qpTechId
-  if (!techId && code) {
-    const { data: t } = await db.from('technicians').select('id').eq('tech_code', code).maybeSingle()
-    techId = t?.id ?? null
+  let techName: string | null = null
+  if (techId) {
+    const { data: t } = await db.from('technicians').select('name').eq('id', techId).maybeSingle()
+    techName = (t as { name?: string } | null)?.name ?? null
+  } else if (code) {
+    const { data: t } = await db.from('technicians').select('id, name').eq('tech_code', code).maybeSingle()
+    techId = (t as { id?: string } | null)?.id ?? null
+    techName = (t as { name?: string } | null)?.name ?? null
   }
   if (!techId) return NextResponse.json({ work_orders: [], note: 'No tech_id — pass ?tech_id= or use a per-tech code' })
 
-  // WOs assigned to this tech (assignee_id or assigned_to), open/scheduled/in-progress first
+  // WOs assigned to this tech. Match by assignee_id / assigned_to, and also by
+  // assignee_name as a safety net (covers legacy/duplicate technician records where
+  // the assigned id differs from the one the tech signs in as). open/scheduled first.
+  const orParts = [`assignee_id.eq.${techId}`, `assigned_to.eq.${techId}`]
+  if (techName) {
+    const safeName = techName.replace(/[,()*\\]/g, ' ').trim()
+    if (safeName) orParts.push(`assignee_name.ilike.${safeName}`)
+  }
   const { data: wos, error } = await db
     .from('work_orders')
     .select('id, wo_number, title, description, status, priority, scheduled_date, scheduled_time, site_id, customer_name, assignee_id, assigned_to')
-    .or(`assignee_id.eq.${techId},assigned_to.eq.${techId}`)
+    .or(orParts.join(','))
     .order('scheduled_date', { ascending: true })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

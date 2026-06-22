@@ -747,12 +747,24 @@ function TechTool() {
   // ── On mount: check sessionStorage for saved code + restore identity ────────
   useEffect(() => {
     const saved = sessionStorage.getItem('gg_tech_code')
-    if (saved) { setTechCode(saved); setScreen('home') }
     const savedTechId   = localStorage.getItem('gg_tech_id')
     const savedTechName = localStorage.getItem('gg_tech_name')
     if (savedTechId && savedTechName) {
       setTechId(savedTechId)
       setTechName(savedTechName)
+    }
+    if (saved) {
+      setTechCode(saved)
+      // If we know who they are, go home. Otherwise make them pick an identity so
+      // their assigned jobs can be matched (a global code with no identity sees none).
+      if (savedTechId) {
+        setScreen('home')
+      } else {
+        fetch('/api/tech/identity', { headers: { 'x-tech-code': saved } })
+          .then(r => r.json())
+          .then(d => { setAllTechs(d.technicians ?? []); setScreen('identity') })
+          .catch(() => setScreen('home'))
+      }
     }
   }, [])
 
