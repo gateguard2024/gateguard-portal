@@ -194,6 +194,31 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }).catch(console.error)
   }
 
+  // Also notify the assigned TECH — on a status change, or when they were just
+  // assigned. Honors the same send_notifications opt-out.
+  const justAssigned = body.assignee_id !== undefined && !!body.assignee_id
+  if (sendNotifications && (emailEvent || justAssigned) && data.assignee_id) {
+    void (async () => {
+      try {
+        const { data: tech } = await supabase.from('technicians').select('email').eq('id', data.assignee_id).maybeSingle()
+        const techEmail = (tech as { email?: string } | null)?.email
+        if (techEmail) {
+          await notifyWOEvent({
+            work_order_id:   params.id,
+            wo_number:       data.wo_number,
+            title:           data.title,
+            customer_name:   data.customer_name,
+            event:           (emailEvent ?? 'scheduled') as WOEvent,
+            recipient_email: techEmail,
+            assignee_name:   data.assignee_name ?? undefined,
+            scheduled_date:  data.scheduled_date ?? undefined,
+            tech_eta:        data.tech_eta ?? undefined,
+          })
+        }
+      } catch (e) { console.error('[maintenance PATCH] tech notify failed:', (e as Error).message) }
+    })()
+  }
+
   // ── SMS notification ──────────────────────────────────────────────────────
   // Pull PM phone from site — fire SMS in parallel with email
   const smsEvent = statusChanged ? SMS_EVENT[body.status] : null

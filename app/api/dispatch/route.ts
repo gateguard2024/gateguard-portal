@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope, applyOrgScope } from '@/lib/org-scope'
+import { notifyWOEvent } from '@/lib/email'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -150,6 +151,26 @@ export async function POST(req: NextRequest) {
       .from('technicians')
       .update({ current_job_id: data.id, status: 'on_site' })
       .eq('id', assignee_id)
+
+    // Email the assigned tech about the new ticket — unless the creator opted out.
+    if (body.notify !== false) {
+      try {
+        const { data: tech } = await supabase.from('technicians').select('email, name').eq('id', assignee_id).maybeSingle()
+        const techEmail = (tech as { email?: string } | null)?.email
+        if (techEmail) {
+          await notifyWOEvent({
+            work_order_id:   data.id,
+            wo_number:       data.wo_number ?? '',
+            title:           data.title ?? '',
+            customer_name:   data.customer_name ?? '',
+            event:           'created',
+            recipient_email: techEmail,
+            assignee_name:   data.assignee_name ?? (tech as { name?: string } | null)?.name ?? undefined,
+            scheduled_date:  data.scheduled_date ?? undefined,
+          })
+        }
+      } catch (e) { console.error('[dispatch] tech notify failed:', (e as Error).message) }
+    }
   }
 
   return NextResponse.json({ job: data }, { status: 201 })

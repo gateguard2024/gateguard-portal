@@ -50,6 +50,41 @@ function Badge({ children, tone = "default" }: { children: React.ReactNode; tone
 }
 const num = (v: unknown) => Number(v) || 0;
 
+// Open a clean, printer-friendly work order in a new tab and trigger print.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function printWorkOrder(wo: any, equip: any[]) {
+  const esc = (s: unknown) => String(s ?? "").replace(/[<>&]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c] as string));
+  const rows = (equip || []).map((a: any) => `<tr><td>${esc(a.product_name || a.name || "Equipment")}</td><td>${esc(a.serial_number || "")}</td><td>${esc(a.location_note || "")}</td></tr>`).join(""); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const addr = [wo.site_address, wo.site_city, wo.site_state, wo.site_zip].filter(Boolean).map(esc).join(", ");
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(wo.wo_number || "Work Order")}</title><style>
+    body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:32px;max-width:760px;margin:0 auto}
+    h1{margin:0 0 2px;font-size:24px}h2{font-size:15px;border-bottom:2px solid #111;padding-bottom:4px;margin-bottom:6px}
+    .muted{color:#555}.sec{margin-top:20px}.label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#666}
+    .grid{display:flex;gap:32px;flex-wrap:wrap}table{width:100%;border-collapse:collapse;margin-top:6px}
+    td,th{border:1px solid #ccc;padding:6px 8px;text-align:left;font-size:13px}
+  </style></head><body>
+    <h1>Work Order ${esc(wo.wo_number || "")}</h1>
+    <div class="muted">${esc(wo.title || "")}</div>
+    <div class="sec"><span class="label">Site</span><div style="font-weight:600">${esc(wo.customer_name || "—")}</div><div class="muted">${addr}</div></div>
+    <div class="sec grid">
+      <div><span class="label">Status</span><div>${esc(wo.status || "")}</div></div>
+      <div><span class="label">Priority</span><div>${esc(wo.priority || "")}</div></div>
+      <div><span class="label">Assigned to</span><div>${esc(wo.assignee_name || "Unassigned")}</div></div>
+      <div><span class="label">Scheduled</span><div>${esc(String(wo.scheduled_date || "").slice(0, 10) || "—")}</div></div>
+    </div>
+    <div class="sec"><h2>Work to perform</h2><div style="white-space:pre-wrap">${esc(wo.description || wo.notes || "—")}</div></div>
+    <div class="sec"><h2>Equipment on site</h2>${rows ? `<table><tr><th>Equipment</th><th>Serial</th><th>Location</th></tr>${rows}</table>` : '<div class="muted">None recorded.</div>'}</div>
+    <div class="sec"><span class="label">On-site contact</span><div>${esc(wo.site_contact_name || "—")}${wo.site_contact_phone ? " · " + esc(wo.site_contact_phone) : ""}</div></div>
+    ${wo.site_access_notes ? `<div class="sec"><span class="label">Access / gate notes</span><div>${esc(wo.site_access_notes)}</div></div>` : ""}
+    <div class="sec" style="margin-top:36px;border-top:1px solid #ccc;padding-top:8px"><span class="label">Tech signature</span><div style="height:48px"></div></div>
+    <div class="muted" style="font-size:11px;margin-top:12px">GateGuard · printed ${new Date().toLocaleString()}</div>
+  </body></html>`;
+  const w = window.open("", "_blank");
+  if (!w) return;
+  w.document.write(html); w.document.close(); w.focus();
+  setTimeout(() => w.print(), 350);
+}
+
 // Simple centered popup for data entry — keeps forms out of the page flow so
 // each task is a clear, focused step (easy enough for a 5th grader).
 function Modal({ title, onClose, children, maxWidth = 460 }: { title: string; onClose: () => void; children: React.ReactNode; maxWidth?: number }) {
@@ -92,7 +127,7 @@ export function OperationsHub({ embedded, initialTab }: { embedded?: boolean; in
   const createWO = async (p: Record<string, unknown>) => { await fetch("/api/dispatch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p) }).catch(() => {}); loadOps(); };
   const updateWO = async (id: string, patch: Record<string, unknown>) => { await fetch(`/api/maintenance/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }).catch(() => {}); loadOps(); };
 
-  return <div style={{ color: "white" }}>
+  return <div style={{ color: "white", paddingBottom: 120 }}>
     {!embedded && <>
       <div style={{ fontSize: 10, letterSpacing: "0.24em", textTransform: "uppercase", color: "rgba(0,200,255,0.8)" }}>Nexus</div>
       <h1 style={{ margin: "4px 0 2px", fontSize: 26, fontWeight: 700 }}>Operations Hub</h1>
@@ -112,7 +147,7 @@ export function OperationsHub({ embedded, initialTab }: { embedded?: boolean; in
     {page === "Dashboard" && <Dashboard jobs={jobs} techs={techs} loading={loading} onOpen={setOpenId} onUpdate={updateWO} />}
     {page === "Work Orders" && <WorkOrders jobs={jobs} techs={techs} loading={loading} onCreate={createWO} onUpdate={updateWO} onOpen={setOpenId} />}
     {page === "Requests" && <Requests onConverted={loadOps} />}
-    {page === "Calendar" && <CalendarView onOpenWO={setOpenId} />}
+    {page === "Calendar" && <CalendarView onOpenWO={setOpenId} jobs={jobs} />}
     {page === "Locations" && <Locations />}
     {page === "Techs" && <Techs />}
     {page === "Parts" && <Parts />}
@@ -164,7 +199,7 @@ const WO_FILTERS = [
 ];
 function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen }: { jobs: RealWO[]; techs: RealTech[]; loading: boolean; onCreate: (p: Record<string, unknown>) => void; onUpdate: (id: string, patch: Record<string, unknown>) => void; onOpen: (id: string) => void }) {
   const [showNew, setShowNew] = useState(false);
-  const [form, setForm] = useState({ site_id: "", customer_name: "", title: "", priority: "medium", assignee_id: "", scheduled_date: "" });
+  const [form, setForm] = useState({ site_id: "", customer_name: "", title: "", priority: "medium", assignee_id: "", scheduled_date: "", notify: true });
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("open");
   // Site picker for the New WO popup.
@@ -180,11 +215,11 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen }: { jobs
       .catch(() => {}).finally(() => setSitesLoading(false));
   }, [showNew, sites.length]);
   const siteMatches = sites.filter(s => !siteQ || `${s.name ?? ""} ${s.address ?? ""} ${s.city ?? ""}`.toLowerCase().includes(siteQ.toLowerCase())).slice(0, 30);
-  function resetForm() { setForm({ site_id: "", customer_name: "", title: "", priority: "medium", assignee_id: "", scheduled_date: "" }); setSiteQ(""); }
+  function resetForm() { setForm({ site_id: "", customer_name: "", title: "", priority: "medium", assignee_id: "", scheduled_date: "", notify: true }); setSiteQ(""); }
   function submit() {
     if (!form.customer_name.trim()) return;
     const t = techs.find(x => x.id === form.assignee_id);
-    onCreate({ site_id: form.site_id || null, customer_name: form.customer_name.trim(), title: form.title.trim() || form.customer_name.trim(), priority: form.priority, assignee_id: form.assignee_id || null, assignee_name: t?.name ?? null, scheduled_date: form.scheduled_date || null });
+    onCreate({ site_id: form.site_id || null, customer_name: form.customer_name.trim(), title: form.title.trim() || form.customer_name.trim(), priority: form.priority, assignee_id: form.assignee_id || null, assignee_name: t?.name ?? null, scheduled_date: form.scheduled_date || null, notify: form.notify });
     resetForm(); setShowNew(false);
   }
   const shown = jobs.filter(w => {
@@ -234,6 +269,10 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen }: { jobs
             <select value={form.assignee_id} onChange={e => setForm({ ...form, assignee_id: e.target.value })} style={{ ...sel, flex: 1, padding: 10 }}><option value="">Unassigned</option>{techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
           </div>
           <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 3 }}>Schedule date (shows on Calendar)</div><input type="date" value={form.scheduled_date} onChange={e => setForm({ ...form, scheduled_date: e.target.value })} style={input} /></div>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "rgba(255,255,255,0.8)", cursor: "pointer", padding: "4px 0" }}>
+            <input type="checkbox" checked={form.notify} onChange={e => setForm({ ...form, notify: e.target.checked })} style={{ width: 16, height: 16 }} />
+            📧 Email the assigned tech about this job
+          </label>
           <button onClick={submit} disabled={!form.customer_name.trim()} style={{ ...btn, opacity: form.customer_name.trim() ? 1 : 0.5 }}>{form.site_id ? "Create work order" : "Pick a site first"}</button>
         </div>
       </Modal>}
@@ -302,7 +341,7 @@ const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const evTime = (e: any) => (e.time ? String(e.time).slice(0, 5) : "");
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function CalendarView({ onOpenWO }: { onOpenWO: (id: string) => void }) {
+function CalendarView({ onOpenWO, jobs = [] }: { onOpenWO: (id: string) => void; jobs?: RealWO[] }) {
   const today = new Date(); const todayKey = ymd(today);
   const [view, setView] = useState<"month" | "week" | "day">("month");
   const [anchor, setAnchor] = useState(new Date(today.getFullYear(), today.getMonth(), today.getDate()));
@@ -351,7 +390,20 @@ function CalendarView({ onOpenWO }: { onOpenWO: (id: string) => void }) {
 
   const Chip = ({ e, mini }: { e: typeof events[number]; mini?: boolean }) => <div onClick={() => e.type === "work_order" && onOpenWO(e.id)} title={e.title} style={{ cursor: e.type === "work_order" ? "pointer" : "default", fontSize: mini ? 9 : 12, lineHeight: 1.3, marginBottom: 3, padding: mini ? "1px 4px" : "5px 8px", borderRadius: 6, background: `${EVENT_COLOR[e.type] ?? "#94a3b8"}26`, borderLeft: `2px solid ${EVENT_COLOR[e.type] ?? "#94a3b8"}`, whiteSpace: mini ? "nowrap" : "normal", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{evTime(e) && <b style={{ opacity: 0.85 }}>{evTime(e)} </b>}{e.title}{!mini && e.owner_name && <span style={{ color: "rgba(255,255,255,0.45)" }}> · {e.owner_name}</span>}</div>;
 
+  // Assigned/created jobs that have no date yet never land on a calendar grid —
+  // surface them here so a job is never invisible. Respects the tech show/hide chips.
+  const unscheduled = jobs.filter(w => (!w.eta || w.eta === "TBD") && bucketOf(w.status) !== "Done" && !hidden.has(w.assignedTech || "Unassigned"));
+
   return <Card>
+    {unscheduled.length > 0 && <div style={{ marginBottom: 12, padding: 10, borderRadius: 12, background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.3)" }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#fcd34d", marginBottom: 6 }}>⏳ Needs a date ({unscheduled.length}) — these jobs won't show on the calendar until scheduled</div>
+      <div style={{ display: "grid", gap: 5 }}>
+        {unscheduled.slice(0, 8).map(w => <button key={w.id} onClick={() => onOpenWO(w.id)} style={{ textAlign: "left", cursor: "pointer", display: "flex", justifyContent: "space-between", gap: 8, padding: "7px 10px", borderRadius: 9, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.1)", color: "white" }}>
+          <span style={{ fontSize: 13 }}>{w.woNumber || w.title || "Work Order"}</span>
+          <span style={{ fontSize: 11.5, color: "rgba(255,255,255,0.5)" }}>{w.assignedTech || "Unassigned"} · tap to schedule</span>
+        </button>)}
+      </div>
+    </div>}
     {/* Toolbar */}
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
       <div style={{ display: "flex", gap: 6 }}>
@@ -732,8 +784,8 @@ export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onCl
     setSaving(false);
     if (r && r.ok) { setSaved(true); setTimeout(() => setSaved(false), 1500); setEdit({}); const d = await r.json().catch(() => null); if (d?.site) setSite(d.site); }
   }
-  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.62)", backdropFilter: "blur(6px)", display: "flex", justifyContent: "flex-end" }}>
-    <div onClick={e => e.stopPropagation()} style={{ width: "min(600px,100%)", height: "100%", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#060b1a)", borderLeft: "1px solid rgba(0,200,255,0.22)", padding: 20, paddingBottom: 130, color: "white" }}>
+  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.62)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: "min(760px,100%)", maxHeight: "92vh", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#060b1a)", border: "1px solid rgba(0,200,255,0.22)", borderRadius: 18, padding: 20, paddingBottom: 28, color: "white", boxShadow: "0 30px 90px rgba(0,0,0,0.55)" }}>
       <button onClick={onClose} style={{ ...btn, background: "rgba(255,255,255,0.06)", marginBottom: 16 }}>✕ Close</button>
       {loading ? <Small>Loading…</Small> : !site ? <Small>Couldn’t load this site.</Small> : <div style={{ display: "grid", gap: 14 }}>
         <div>
@@ -1224,6 +1276,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   const [showAddEq, setShowAddEq] = useState(false);
   const [eqForm, setEqForm] = useState({ product_name: "", serial_number: "", location_note: "" });
   const [eqBusy, setEqBusy] = useState(false);
+  const [notifyOnChange, setNotifyOnChange] = useState(true);
   const load = React.useCallback(() => {
     setLoading(true);
     Promise.all([
@@ -1272,7 +1325,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   const hasPhoto = photos.length > 0;
   const canComplete = allStepsDone && hasPhoto;
   const completeBlockReason = !allStepsDone ? (checklist.length === 0 ? "Add at least one step, then check it off" : `Finish all steps (${doneCount}/${checklist.length})`) : !hasPhoto ? "Add at least one photo as proof" : "";
-  const patchField = (p: Record<string, unknown>) => { onUpdate(id, p); setWo((w: typeof wo) => w ? { ...w, ...p } : w); };
+  const patchField = (p: Record<string, unknown>) => { onUpdate(id, { ...p, send_notifications: notifyOnChange }); setWo((w: typeof wo) => w ? { ...w, ...p } : w); };
 
   async function addChecklist() {
     const title = newItem.trim(); if (!title) return; setNewItem("");
@@ -1327,9 +1380,12 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
     setLaborH(""); setPartBusy(false); load();
   }
 
-  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.62)", backdropFilter: "blur(6px)", display: "flex", justifyContent: "flex-end" }}>
-    <div onClick={e => e.stopPropagation()} style={{ width: "min(580px,100%)", height: "100%", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#060b1a)", borderLeft: "1px solid rgba(0,200,255,0.22)", padding: 20, paddingBottom: 130, color: "white" }}>
-      <button onClick={onClose} style={{ ...btn, background: "rgba(255,255,255,0.06)", marginBottom: 16 }}>✕ Close</button>
+  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.62)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: "min(720px,100%)", maxHeight: "92vh", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#060b1a)", border: "1px solid rgba(0,200,255,0.22)", borderRadius: 18, padding: 20, paddingBottom: 28, color: "white", boxShadow: "0 30px 90px rgba(0,0,0,0.55)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 16 }}>
+        <button onClick={onClose} style={{ ...btn, background: "rgba(255,255,255,0.06)" }}>✕ Close</button>
+        {wo && <button onClick={() => printWorkOrder(wo, siteEquip)} style={{ ...btn, background: "rgba(255,255,255,0.06)" }}>🖨 Print</button>}
+      </div>
       {loading ? <Small>Loading…</Small> : !wo ? <Small>Couldn’t load this work order.</Small> : <div style={{ display: "grid", gap: 14 }}>
         <div>
           <div style={{ fontSize: 11, color: "rgba(0,200,255,0.8)", letterSpacing: "0.1em" }}>{wo.wo_number || "WORK ORDER"}</div>
@@ -1343,6 +1399,10 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             <div style={{ flex: 1, minWidth: 140 }}><Small>Assigned to</Small><select value={wo.assignee_id ?? ""} onChange={e => { const t = techs.find(x => x.id === e.target.value); patchField({ assignee_id: e.target.value || null, assignee_name: t?.name ?? null }); }} style={{ ...sel, width: "100%", marginTop: 4 }}><option value="">Unassigned</option>{techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
             <div style={{ flex: 1, minWidth: 140 }}><Small>Schedule date</Small><input type="date" value={wo.scheduled_date ? String(wo.scheduled_date).slice(0, 10) : ""} onChange={e => patchField({ scheduled_date: e.target.value || null })} style={{ ...sel, width: "100%", marginTop: 4 }} /></div>
           </div>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "rgba(255,255,255,0.7)", cursor: "pointer", marginTop: 10 }}>
+            <input type="checkbox" checked={notifyOnChange} onChange={e => setNotifyOnChange(e.target.checked)} style={{ width: 15, height: 15 }} />
+            📧 Email the tech &amp; customer when I change this job
+          </label>
         </Card>
 
         {/* Work to perform — editable so anyone can spell out the scope for the tech. */}
