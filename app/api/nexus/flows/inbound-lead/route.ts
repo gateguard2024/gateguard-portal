@@ -202,7 +202,7 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      await supabase.from('activities').insert({
+      await supabase.from('crm_activities').insert({
         dealer_org_id: orgId,
         created_by: profileId,
         type: 'note',

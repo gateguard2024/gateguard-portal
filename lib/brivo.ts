@@ -369,6 +369,46 @@ export async function unlockBrivoDoor(token: string, apiKey: string, doorId: str
   return { success: true }
 }
 
+// ─── Resident credentials / Brivo Mobile Pass ───────────────────────────────
+// Lets a dealer fix "I didn't get my mobile pass" without logging into Brivo:
+// revoke the old pass + send a fresh one.
+//
+// NOTE: Brivo Mobile Pass is created via the credentials API. The exact body
+// (mobile-pass credential format id) varies by Brivo account — set
+// BRIVO_BMP_FORMAT_ID, or confirm the call against the GGSOC implementation.
+// These functions are the single spot to adjust.
+const BMP_FORMAT_ID = process.env.BRIVO_BMP_FORMAT_ID ? Number(process.env.BRIVO_BMP_FORMAT_ID) : 110
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function listBrivoUserCredentials(token: string, apiKey: string, userId: string): Promise<any[]> {
+  const data = await brivoGet(token, apiKey, `/users/${userId}/credentials`, { pageSize: '100' })
+  return data.data ?? []
+}
+
+/** Revoke a credential (delete the mobile pass). */
+export async function deleteBrivoCredential(token: string, apiKey: string, credentialId: string): Promise<void> {
+  await brivoDelete(token, apiKey, `/credentials/${credentialId}`)
+}
+
+/** Resend a Brivo Mobile Pass: revoke existing mobile-pass credentials for the
+ * user, then issue + assign a fresh one (Brivo emails the new invite). */
+export async function resendBrivoMobilePass(token: string, apiKey: string, userId: string, email: string | null): Promise<{ revoked: number }> {
+  const creds = await listBrivoUserCredentials(token, apiKey, userId)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const passes = creds.filter((c: any) => /mobile|bmp|pass/i.test(`${c.credentialFormat?.name ?? ''} ${c.fieldName ?? ''} ${c.type ?? ''}`))
+  for (const p of passes) { try { await deleteBrivoCredential(token, apiKey, String(p.id)) } catch { /* continue */ } }
+
+  // Issue a new Brivo Mobile Pass — credential keyed to the user's email; Brivo
+  // sends the invite. (Confirm format id / shape against your Brivo account.)
+  const created = await brivoPost(token, apiKey, '/credentials', {
+    credentialFormat: { id: BMP_FORMAT_ID },
+    referenceId: email ?? `user-${userId}`,
+  })
+  const credId = String(created.id ?? created.referenceId ?? '')
+  if (credId) { try { await brivoPut(token, apiKey, `/users/${userId}/credentials/${credId}`, {}) } catch { /* assignment best-effort */ } }
+  return { revoked: passes.length }
+}
+
 /** List the Brivo groups for a site (used for the Add-User access picker). */
 export async function listBrivoGroups(
   token: string,

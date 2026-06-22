@@ -147,7 +147,6 @@ export async function POST(req: NextRequest) {
           .update({ opportunity_id: data.id, converted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
           .eq('id', lead_id)
         await Promise.all([
-          supabase.from('activities').update({ opportunity_id: data.id }).eq('lead_id', lead_id).is('opportunity_id', null),
           supabase.from('crm_activities').update({ opportunity_id: data.id }).eq('lead_id', lead_id).is('opportunity_id', null),
           supabase.from('attachments').update({ opportunity_id: data.id }).eq('lead_id', lead_id).is('opportunity_id', null),
         ])

@@ -8,6 +8,7 @@ import { SiteSecurity } from "@/components/nexus/SiteSecurity";
 import { SiteDoors } from "@/components/nexus/SiteDoors";
 import { SiteRelays } from "@/components/nexus/SiteRelays";
 import { SiteNetwork } from "@/components/nexus/SiteNetwork";
+import { SitePanels } from "@/components/nexus/SitePanels";
 import { SiteConnections } from "@/components/nexus/SiteConnections";
 
 export function SiteSystems({ siteId, isCorporate, initialTab }: { siteId: string; isCorporate: boolean; initialTab?: string }) {
@@ -16,6 +17,7 @@ export function SiteSystems({ siteId, isCorporate, initialTab }: { siteId: strin
     { key: "doors", label: "🚪 Doors" },
     { key: "relays", label: "🔌 Relays" },
     { key: "network", label: "🌐 Network" },
+    { key: "controllers", label: "🎛 Controllers" },
     ...(isCorporate ? [{ key: "setup", label: "🔑 Setup" }] : []),
   ];
   const [tab, setTab] = useState(initialTab && tabs.some(t => t.key === initialTab) ? initialTab : "security");
@@ -37,6 +39,7 @@ export function SiteSystems({ siteId, isCorporate, initialTab }: { siteId: strin
       {tab === "doors" && <SiteDoors siteId={siteId} />}
       {tab === "relays" && <SiteRelays siteId={siteId} />}
       {tab === "network" && <SiteNetwork siteId={siteId} />}
+      {tab === "controllers" && <SitePanels siteId={siteId} isCorporate={isCorporate} />}
       {tab === "setup" && isCorporate && <SiteConnections siteId={siteId} />}
     </div>
   );

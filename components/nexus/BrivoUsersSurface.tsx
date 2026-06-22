@@ -27,6 +27,20 @@ export function BrivoUsersSurface() {
   const [query, setQuery] = useState('')
   const [addOpen, setAddOpen] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [passId, setPassId] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  async function resendPass(u: BrivoUser) {
+    if (!window.confirm(`Resend a new mobile pass to ${u.firstName} ${u.lastName}? Their old pass stops working.`)) return
+    setPassId(u.id); setNotice(null); setError(null)
+    try {
+      const res = await fetch(`/api/brivo/users/${u.id}/resend-pass`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...bodyRef(ref), email: u.email, name: `${u.firstName} ${u.lastName}`.trim() }) })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok || d.ok === false) throw new Error(d?.error ?? 'Could not resend the pass.')
+      setNotice(`New mobile pass sent to ${u.firstName || 'resident'}${u.email ? ` (${u.email})` : ''} ✓`)
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not resend the pass.') }
+    finally { setPassId(null) }
+  }
 
   useEffect(() => {
     void (async () => {
@@ -95,6 +109,7 @@ export function BrivoUsersSurface() {
         )}
 
         {error && <div className="mb-3 rounded-2xl p-3 text-xs" style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5' }}>{error}</div>}
+        {notice && <div className="mb-3 rounded-2xl p-3 text-xs" style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.35)', color: '#6ee7b7' }}>{notice}</div>}
 
         {sites.length > 0 && (
           <>
@@ -112,7 +127,10 @@ export function BrivoUsersSurface() {
                       </div>
                       <div className="mt-0.5 truncate text-[11px]" style={{ color: 'rgba(255,255,255,0.48)' }}>{[u.unitNumber ? `Unit ${u.unitNumber}` : null, u.email, u.phone].filter(Boolean).join(' · ') || 'No contact info'}</div>
                     </div>
-                    <button type="button" disabled={busyId === u.id} onClick={() => toggleSuspend(u)} className="shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={u.active ? { background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5' } : { background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.35)', color: '#6ee7b7' }}>{busyId === u.id ? '…' : u.active ? 'Suspend' : 'Reactivate'}</button>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <button type="button" disabled={passId === u.id} onClick={() => resendPass(u)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ background: 'rgba(0,200,255,0.12)', border: '1px solid rgba(0,200,255,0.35)', color: '#7dd3fc' }}>{passId === u.id ? '…' : 'Resend pass'}</button>
+                      <button type="button" disabled={busyId === u.id} onClick={() => toggleSuspend(u)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={u.active ? { background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5' } : { background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.35)', color: '#6ee7b7' }}>{busyId === u.id ? '…' : u.active ? 'Suspend' : 'Reactivate'}</button>
+                    </div>
                   </div>
                 ))}
                 {filtered.length === 0 && <div className="rounded-2xl p-4 text-xs" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.45)' }}>{query ? 'No users match your search.' : 'No users at this site yet.'}</div>}

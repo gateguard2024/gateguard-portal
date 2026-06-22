@@ -330,5 +330,28 @@ Where: site panel → **Site Security** card (top of the systems section). Needs
 
 Note: UniFi **Network** uses the controller API key (works if reachable); UniFi **Access** doors need the Access controller reachable from our servers (port 12445) — flag if it can't connect.
 
+## IT-6 — Controllers tab: serials + scan-to-replace  (pushed beta · YYYY-MM-DD)
+Where: site panel → **Site Systems** → 🎛 **Controllers** tab. Needs migration **132**.
+
+- ☐ Corporate sees **"+ Add controller"** → enter model, serial, and door names (comma-separated) → it appears with a "Programmed" badge and the door list.
+- ☐ A live controller shows a **"Replace controller"** button. Clicking it asks for the **new serial** (type or scan) → status flips to **"Replace pending"** and shows `· new: <serial>`.
+- ☐ Corporate then sees **"Confirm swap in Brivo"** → after confirming, the serial updates and status returns to **Live** (door names unchanged).
+- ☐ A dealer/field tech with **doors** access can do the Replace step; they **cannot** add controllers or confirm swaps (corporate only) — those buttons don't show for them.
+- ☐ Replace requests appear on the site **timeline** ("scanned new controller serial …").
+
+## IT-7 — Win → auto-kickoff provisioning  (pushed beta · YYYY-MM-DD)
+The big one: when a deal is **won**, Nexus sets up the site automatically. Needs migration **132**.
+
+- ☐ Open an opportunity and move its stage to **Won**. Then:
+  - ☐ If the opp had no site, a **new site is created** (named from the account; address/contact pulled from the opp) and linked back to the opportunity.
+  - ☐ A **controller appears in the Controllers tab** with status "Requested" and a 🎉 **"Deal won — check the door list"** banner.
+  - ☐ The doors are **pre-filled from the site survey** (gates/doors/entries). If there was no survey, they're filled from the opp's gate counts (e.g. "Vehicle Gate", "Pedestrian Gate"), or left empty to add.
+- ☐ As the **dealer** (or dealer-admin): **Edit door list** lets you fix the names; **Confirm door list ✓** marks it confirmed (green badge). A non-admin needs **doors** access to do this.
+- ☐ **Corporate** → Internal → **"Sites to Provision"** card lists every won site waiting for a controller, with an "Awaiting dealer / Doors confirmed ✓" badge. Clicking one **opens that site straight to the Controllers tab** to enter the serial.
+- ☐ Winning the **same** opp again does **not** create a duplicate site or duplicate controller (idempotent).
+- ☐ A "Deal won — provisioning kicked off" entry appears on the site **timeline**.
+
+Note: the door pre-fill reads whatever the survey recorded; if a survey used unusual device names, the dealer just edits the list before confirming. Programming Brivo itself is still the corporate serial-entry step on the Controllers tab.
+
 ---
 *(new builds appended below as they ship)*

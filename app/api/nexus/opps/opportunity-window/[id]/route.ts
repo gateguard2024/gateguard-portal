@@ -125,10 +125,10 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
         )
       : Promise.resolve(null),
 
-    // Activities (uses dealer_org_id — service role bypasses RLS after opp scope confirmed)
+    // Activities — single canonical table (crm_activities).
     safe(
       supabase
-        .from('activities')
+        .from('crm_activities')
         .select('id, type, subject, body, outcome, due_at, completed_at, created_at')
         .eq('opportunity_id', oppId)
         .order('created_at', { ascending: false })
@@ -172,17 +172,8 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       : Promise.resolve(null),
   ])
 
-  // The Overview composer writes to crm_activities; merge those in so notes,
-  // calls, emails and meetings logged there show on the timeline.
-  const crmActivities = await safe(
-    supabase
-      .from('crm_activities')
-      .select('id, type, subject, body, outcome, due_at, completed_at, created_at')
-      .eq('opportunity_id', oppId)
-      .order('created_at', { ascending: false })
-      .limit(30),
-    [],
-  )
+  // Activity is now a single table (crm_activities) read above — no second source to merge.
+  const crmActivities: unknown[] = []
   const mergedActivities = [...(activities as any[]), ...(crmActivities as any[])] // eslint-disable-line @typescript-eslint/no-explicit-any
     .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')))
 

@@ -240,10 +240,10 @@ export async function executeToolWithRevert(
 
     case 'create_lead': {
       const { data, error } = await supabase
-        .from('crm_leads')
+        .from('leads')
         .insert({
-          name: args.name,
-          company: args.company ?? null,
+          contact_name: args.name,
+          company_name: args.company ?? null,
           email: args.email ?? null,
           phone: args.phone ?? null,
           stage: args.stage ?? 'new',
@@ -259,14 +259,14 @@ export async function executeToolWithRevert(
         success: true,
         message: `Lead "${args.name}" created.`,
         id,
-        revertPayload: { operation: 'delete', table: 'crm_leads', id },
+        revertPayload: { operation: 'delete', table: 'leads', id },
       }
     }
 
     case 'update_lead_stage': {
       const id = args.id as string
       const { data: existing, error: fetchError } = await supabase
-        .from('crm_leads')
+        .from('leads')
         .select('stage')
         .eq('id', id)
         .single()
@@ -275,7 +275,7 @@ export async function executeToolWithRevert(
 
       const prevStage = (existing as { stage: string }).stage
       const { error } = await supabase
-        .from('crm_leads')
+        .from('leads')
         .update({ stage: args.stage })
         .eq('id', id)
 
@@ -287,7 +287,7 @@ export async function executeToolWithRevert(
         id,
         revertPayload: {
           operation: 'update',
-          table: 'crm_leads',
+          table: 'leads',
           id,
           data: { stage: prevStage },
         },
@@ -297,7 +297,7 @@ export async function executeToolWithRevert(
     case 'assign_lead': {
       const id = args.id as string
       const { data: existing, error: fetchError } = await supabase
-        .from('crm_leads')
+        .from('leads')
         .select('assigned_to, assigned_to_name')
         .eq('id', id)
         .single()
@@ -306,7 +306,7 @@ export async function executeToolWithRevert(
 
       const prev = existing as { assigned_to: string | null; assigned_to_name: string | null }
       const { error } = await supabase
-        .from('crm_leads')
+        .from('leads')
         .update({
           assigned_to: args.assigned_to,
           ...(args.assigned_to_name ? { assigned_to_name: args.assigned_to_name } : {}),
@@ -321,7 +321,7 @@ export async function executeToolWithRevert(
         id,
         revertPayload: {
           operation: 'update',
-          table: 'crm_leads',
+          table: 'leads',
           id,
           data: { assigned_to: prev.assigned_to, assigned_to_name: prev.assigned_to_name },
         },
@@ -332,12 +332,12 @@ export async function executeToolWithRevert(
 
     case 'create_opportunity': {
       const { data, error } = await supabase
-        .from('crm_opportunities')
+        .from('opportunities')
         .insert({
           name: args.name,
           account_name: args.account_name,
-          stage: args.stage ?? 'prospect',
-          ...(args.value !== undefined ? { value: args.value } : {}),
+          stage: args.stage ?? 'meet_present',
+          ...(args.value !== undefined ? { amount: args.value } : {}),
           ...(args.notes ? { notes: args.notes } : {}),
         })
         .select('id')
@@ -349,14 +349,14 @@ export async function executeToolWithRevert(
         success: true,
         message: `Opportunity "${args.name}" created.`,
         id,
-        revertPayload: { operation: 'delete', table: 'crm_opportunities', id },
+        revertPayload: { operation: 'delete', table: 'opportunities', id },
       }
     }
 
     case 'update_opportunity_stage': {
       const id = args.id as string
       const { data: existing, error: fetchError } = await supabase
-        .from('crm_opportunities')
+        .from('opportunities')
         .select('stage')
         .eq('id', id)
         .single()
@@ -365,7 +365,7 @@ export async function executeToolWithRevert(
 
       const prevStage = (existing as { stage: string }).stage
       const { error } = await supabase
-        .from('crm_opportunities')
+        .from('opportunities')
         .update({ stage: args.stage })
         .eq('id', id)
 
@@ -377,7 +377,7 @@ export async function executeToolWithRevert(
         id,
         revertPayload: {
           operation: 'update',
-          table: 'crm_opportunities',
+          table: 'opportunities',
           id,
           data: { stage: prevStage },
         },
@@ -387,7 +387,7 @@ export async function executeToolWithRevert(
     case 'mark_opportunity_won': {
       const id = args.id as string
       const { data: existing, error: fetchError } = await supabase
-        .from('crm_opportunities')
+        .from('opportunities')
         .select('stage')
         .eq('id', id)
         .single()
@@ -396,7 +396,7 @@ export async function executeToolWithRevert(
 
       const prevStage = (existing as { stage: string }).stage
       const { error } = await supabase
-        .from('crm_opportunities')
+        .from('opportunities')
         .update({ stage: 'won' })
         .eq('id', id)
 
@@ -408,7 +408,7 @@ export async function executeToolWithRevert(
         id,
         revertPayload: {
           operation: 'update',
-          table: 'crm_opportunities',
+          table: 'opportunities',
           id,
           data: { stage: prevStage },
         },
@@ -418,7 +418,7 @@ export async function executeToolWithRevert(
     case 'mark_opportunity_lost': {
       const id = args.id as string
       const { data: existing, error: fetchError } = await supabase
-        .from('crm_opportunities')
+        .from('opportunities')
         .select('stage')
         .eq('id', id)
         .single()
@@ -427,7 +427,7 @@ export async function executeToolWithRevert(
 
       const prevStage = (existing as { stage: string }).stage
       const { error } = await supabase
-        .from('crm_opportunities')
+        .from('opportunities')
         .update({ stage: 'lost' })
         .eq('id', id)
 
@@ -439,7 +439,7 @@ export async function executeToolWithRevert(
         id,
         revertPayload: {
           operation: 'update',
-          table: 'crm_opportunities',
+          table: 'opportunities',
           id,
           data: { stage: prevStage },
         },

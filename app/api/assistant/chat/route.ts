@@ -405,17 +405,17 @@ async function fetchPortalData(dataType: string, orgId: string | null) {
       }
       case 'leads_open': {
         const { data } = await supabase
-          .from('crm_leads')
-          .select('id, name, company, stage, source, created_at')
-          .not('stage', 'eq', 'closed_lost')
+          .from('leads')
+          .select('id, name:contact_name, company:company_name, stage, source, created_at')
+          .not('stage', 'eq', 'lost')
           .order('created_at', { ascending: false })
           .limit(10)
         return data ?? []
       }
       case 'opportunities_open': {
         const { data } = await supabase
-          .from('crm_opportunities')
-          .select('id, name, account_name, stage, value, updated_at')
+          .from('opportunities')
+          .select('id, name, account_name, stage, value:amount, updated_at')
           .not('stage', 'in', '("won","lost")')
           .order('updated_at', { ascending: false })
           .limit(10)

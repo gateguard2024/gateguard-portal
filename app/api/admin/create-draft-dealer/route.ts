@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
 
   // Create commission config for tiers that need it
   if (COMMISSION_TIERS.has(org_tier)) {
-    await supabase.from('commission_configs').insert({
+    await supabase.from('commission_config').insert({
       org_id:               org.id,
       master_agent_rate:    0.50,
       master_dealer_rate:   0.50,

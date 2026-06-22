@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     let matchedLeadId: string | null = null
     if (!matchedOppId && fromEmail) {
       const { data: lead } = await supabase
-        .from('crm_leads')
+        .from('leads')
         .select('id')
         .eq('email', fromEmail)
         .order('created_at', { ascending: false })

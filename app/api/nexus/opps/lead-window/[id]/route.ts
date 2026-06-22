@@ -185,17 +185,9 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       )
     : []
 
+  // Activity is now a single table (crm_activities). `crmActivities` kept empty
+  // for response-shape compatibility with the lead window UI.
   const activities = await safe(
-    supabase
-      .from('activities')
-      .select('id, type, subject, body, due_at, completed_at, created_at')
-      .eq('lead_id', leadId)
-      .order('created_at', { ascending: false })
-      .limit(20),
-    []
-  )
-
-  const crmActivities = await safe(
     supabase
       .from('crm_activities')
       .select('id, type, subject, body, outcome, due_at, completed_at, created_at')
@@ -204,6 +196,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       .limit(20),
     []
   )
+  const crmActivities: unknown[] = []
 
   const todos = await safe(
     supabase
@@ -299,7 +292,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     }
 
     const { data, error: insertError } = await supabase
-      .from('activities')
+      .from('crm_activities')
       .insert({
         dealer_org_id: lead.org_id,
         created_by: profileId,
@@ -361,7 +354,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     ].filter(Boolean).join('\n')
 
     const { data, error: insertError } = await supabase
-      .from('activities')
+      .from('crm_activities')
       .insert({
         dealer_org_id: lead.org_id,
         created_by: profileId,
@@ -413,7 +406,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     }
 
     // Best-effort activity log for the follow-up
-    void supabase.from('activities').insert({
+    void supabase.from('crm_activities').insert({
       dealer_org_id: lead.org_id,
       created_by: profileId,
       type: 'task',
@@ -470,7 +463,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ success: false, message: updateError.message }, { status: 500 })
     }
 
-    void supabase.from('activities').insert({
+    void supabase.from('crm_activities').insert({
       dealer_org_id: lead.org_id,
       created_by:    profileId,
       type:          'note',
@@ -515,7 +508,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ success: false, message: updateError.message }, { status: 500 })
     }
 
-    void supabase.from('activities').insert({
+    void supabase.from('crm_activities').insert({
       dealer_org_id: lead.org_id,
       created_by: profileId,
       type: 'note',
@@ -645,7 +638,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
 
     // Log conversion activity — awaited: must be committed before response
     const { error: activityError } = await supabase
-      .from('activities')
+      .from('crm_activities')
       .insert({
         dealer_org_id:  lead.org_id,
         created_by:     profileId,
@@ -664,7 +657,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     // Re-link (non-destructive: keep lead_id, add opportunity_id) so every note,
     // call, email and file the lead already had now shows on the opportunity too.
     // Best-effort: a relink failure must never block the conversion.
-    let carried = { activities: 0, crm_activities: 0, attachments: 0 }
+    let carried = { crm_activities: 0, attachments: 0 }
     try {
       const relink = async (table: string) => {
         const { data, error: relinkErr } = await supabase
@@ -675,12 +668,11 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
           .select('id')
         return relinkErr ? 0 : (data?.length ?? 0)
       }
-      const [a, c, at] = await Promise.all([
-        relink('activities'),
+      const [c, at] = await Promise.all([
         relink('crm_activities'),
         relink('attachments'),
       ])
-      carried = { activities: a, crm_activities: c, attachments: at }
+      carried = { crm_activities: c, attachments: at }
     } catch { /* non-blocking */ }
 
     return NextResponse.json({

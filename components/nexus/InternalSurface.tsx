@@ -4,13 +4,14 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { InternalDealerOnboardingBoard } from '@/components/nexus/InternalDealerOnboardingBoard'
 import { IntegrationsConsole } from '@/components/nexus/IntegrationsConsole'
+import { ProvisioningQueue } from '@/components/nexus/ProvisioningQueue'
 import { InternalTrackerBoard } from '@/components/nexus/InternalTrackerBoard'
 import { InternalUsersFeaturesBoard } from '@/components/nexus/InternalUsersFeaturesBoard'
 import { NexusGlassBackButton } from '@/components/nexus/NexusGlassBackButton'
 import { type NexusGlyphKind } from '@/components/nexus/NexusGlyphTile'
 import { NexusActionCard } from '@/components/nexus/NexusActionCard'
 
-type InternalPanel = 'tracker' | 'dealer-onboarding' | 'users-features' | 'integrations' | 'playbooks' | 'training' | null
+type InternalPanel = 'tracker' | 'dealer-onboarding' | 'users-features' | 'integrations' | 'provisioning' | 'playbooks' | 'training' | null
 
 type InternalCard = {
   id: Exclude<InternalPanel, null>
@@ -104,6 +105,7 @@ export function InternalSurface() {
     { id: 'dealer-onboarding', title: 'Dealer Onboarding', subtitle: 'Track NDA, agreements, compliance, approval, and live dealer status.', hex: '#FBBF24', glyph: 'priority', badge: 'Corporate' },
     { id: 'users-features', title: 'Users & Features', subtitle: 'Manage platform users, roles, feature access, and settings.', hex: '#8B5CF6', glyph: 'pipeline', badge: 'Admin' },
     { id: 'integrations', title: 'Site Integrations', subtitle: 'Connect each property’s Brivo, Eagle Eye, Shelly & UniFi logins (corporate setup).', hex: '#00C8FF', glyph: 'job-open', badge: 'Corporate' },
+    { id: 'provisioning', title: 'Sites to Provision', subtitle: 'Won deals waiting for a controller — enter the serial and program Brivo.', hex: '#34D399', glyph: 'priority', badge: 'Corporate' },
     { id: 'playbooks', title: 'Playbooks', subtitle: 'Find internal process, scripts, SOPs, and operating instructions.', hex: '#007CFF', glyph: 'research' },
     { id: 'training', title: 'Training', subtitle: 'Open training, quests, scorecards, and team enablement.', hex: '#34D399', glyph: 'todo' },
   ]
@@ -160,6 +162,12 @@ export function InternalSurface() {
       {activePanel === 'integrations' && (
         <InternalDetailShell title="Site Integrations" subtitle="Corporate setup: connect each property's Brivo, Eagle Eye, Shelly & UniFi logins. Dealers operate doors/cameras at their sites but never see these credentials." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Operations Hub" onClick={() => router.push('/cmms')} /><ActionButton label="Open Dealers" onClick={() => router.push('/admin/dealers')} muted /></>}>
           <IntegrationsConsole />
+        </InternalDetailShell>
+      )}
+
+      {activePanel === 'provisioning' && (
+        <InternalDetailShell title="Sites to Provision" subtitle="When a deal is won, Nexus auto-creates the site and pre-fills its doors from the survey. Open one to enter the controller serial and program Brivo." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Operations Hub" onClick={() => router.push('/cmms')} /></>}>
+          <ProvisioningQueue />
         </InternalDetailShell>
       )}
 

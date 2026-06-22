@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from '@/lib/current-user'
 import { resolveOrgScope, isInScope } from '@/lib/org-scope'
+import { normalizeStage } from '@/lib/pipeline'
+import { kickoffProvisioning } from '@/lib/provisioning'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -95,7 +97,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     ;({ data, error } = await update(dbPayload))
   }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+
+  // Win → auto-kickoff provisioning. Fires only when this PATCH sets the stage to
+  // "won" (the moment of the change), so unrelated edits don't re-trigger it.
+  // kickoffProvisioning is itself idempotent (one kickoff panel per site).
+  let provisioning: Awaited<ReturnType<typeof kickoffProvisioning>> | undefined
+  if (typeof body.stage === 'string' && normalizeStage(body.stage) === 'won') {
+    try { provisioning = await kickoffProvisioning(params.id) }
+    catch (e) { console.error('[opp PATCH] kickoff error:', (e as Error).message) }
+  }
+
+  return NextResponse.json(provisioning ? { ...(data as Record<string, unknown>), provisioning } : data)
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
