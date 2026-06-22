@@ -353,5 +353,17 @@ The big one: when a deal is **won**, Nexus sets up the site automatically. Needs
 
 Note: the door pre-fill reads whatever the survey recorded; if a survey used unusual device names, the dealer just edits the list before confirming. Programming Brivo itself is still the corporate serial-entry step on the Controllers tab.
 
+## IT-8 — Nexus helper fix + Jobs page polish  (pushed beta · YYYY-MM-DD)
+
+**Nexus helper (the failing test):**
+- ☐ Ask the Nexus assistant: "Create a lead named Smoke Test 2, company Test HOA, email t2@example.com" → it now **succeeds** and the lead shows in the Leads list (was failing because of a bad status value).
+
+**Jobs page (Operations Hub):**
+- ☐ Work order **statuses** are now: New · Procurement · Scheduled · In-Progress · Stuck · Complete (check the status dropdown on a job and the board columns).
+- ☐ The **board** shows 5 active columns; **Complete** is a collapsed bar at the bottom — click it to expand the finished jobs. The Work Orders **list** defaults to open jobs (tap the **Done** chip to see completed).
+- ☐ **+ New** work order opens a **popup**. Step 1 = **search and pick a site** (this was broken before — sites now load and are selectable). You can't create until a site is picked. Create it → it appears on the board.
+- ☐ Open a job → **Work to perform** is now an editable box; type a scope, click out, reopen — it saved.
+- ☐ Open a job → **Equipment on site** has a **+ Add equipment** button → popup (what / serial / where) → Add → it shows in the list. (If a job has no site linked, it says to link a site first.)
+
 ---
 *(new builds appended below as they ship)*

@@ -239,6 +239,13 @@ export async function executeToolWithRevert(
     // ── CRM Leads ──────────────────────────────────────────────────────────
 
     case 'create_lead': {
+      // leads.stage is the lead_stage enum: prospect|qualified|proposal|negotiation|won|lost.
+      // Map common synonyms and fall back to 'prospect' so an unknown value never breaks the insert.
+      const LEAD_STAGES = ['prospect', 'qualified', 'proposal', 'negotiation', 'won', 'lost']
+      const rawStage = String(args.stage ?? '').toLowerCase().trim()
+      const stage = LEAD_STAGES.includes(rawStage)
+        ? rawStage
+        : (rawStage === 'new' || rawStage === '' ? 'prospect' : 'prospect')
       const { data, error } = await supabase
         .from('leads')
         .insert({
@@ -246,7 +253,7 @@ export async function executeToolWithRevert(
           company_name: args.company ?? null,
           email: args.email ?? null,
           phone: args.phone ?? null,
-          stage: args.stage ?? 'new',
+          stage,
           source: 'nexus_ai',
           notes: args.notes ?? null,
         })

@@ -26,13 +26,15 @@ type RealWO = { id: string; property?: string; assignedTech?: string | null; ass
 type RealTech = { id: string; name: string };
 
 const JOB_COLUMNS: { key: string; label: string; from: string[]; accent: string }[] = [
-  { key: "New",         label: "New",         from: ["Pending", "open", "New", "Approved"],                                    accent: "#64748b" },
-  { key: "Scheduled",   label: "Scheduled",   from: ["Assigned", "scheduled", "Scheduled"],                                    accent: "#3b82f6" },
-  { key: "In Progress", label: "In Progress", from: ["In Progress", "in_progress", "On Site", "En Route", "Waiting Parts"],    accent: "#f59e0b" },
-  { key: "Done",        label: "Done",        from: ["Done", "completed", "Complete"],                                         accent: "#10b981" },
+  { key: "New",         label: "New",         from: ["Pending", "open", "New", "Approved"],                          accent: "#64748b" },
+  { key: "Procurement", label: "Procurement", from: ["procurement", "Procurement", "Waiting Parts", "Ordered"],      accent: "#a855f7" },
+  { key: "Scheduled",   label: "Scheduled",   from: ["Assigned", "scheduled", "Scheduled"],                          accent: "#3b82f6" },
+  { key: "In Progress", label: "In-Progress", from: ["In Progress", "in_progress", "On Site", "En Route"],           accent: "#f59e0b" },
+  { key: "Stuck",       label: "Stuck",       from: ["stuck", "Stuck", "blocked", "Blocked", "On Hold"],             accent: "#ef4444" },
+  { key: "Done",        label: "Complete",    from: ["Done", "completed", "Complete"],                               accent: "#10b981" },
 ];
 const bucketOf = (s: string) => JOB_COLUMNS.find(c => c.from.includes(s))?.key ?? "New";
-const COL_TO_DB: Record<string, string> = { New: "open", Scheduled: "scheduled", "In Progress": "in_progress", Done: "completed" };
+const COL_TO_DB: Record<string, string> = { New: "open", Procurement: "procurement", Scheduled: "scheduled", "In Progress": "in_progress", Stuck: "stuck", Done: "completed" };
 const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
 
 const card = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: 18 } as const;
@@ -47,6 +49,20 @@ function Badge({ children, tone = "default" }: { children: React.ReactNode; tone
   return <span style={{ padding: "4px 9px", borderRadius: 999, background: bg, border: "1px solid rgba(255,255,255,.1)", fontSize: 11 }}>{children}</span>;
 }
 const num = (v: unknown) => Number(v) || 0;
+
+// Simple centered popup for data entry — keeps forms out of the page flow so
+// each task is a clear, focused step (easy enough for a 5th grader).
+function Modal({ title, onClose, children, maxWidth = 460 }: { title: string; onClose: () => void; children: React.ReactNode; maxWidth?: number }) {
+  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: `min(${maxWidth}px, 100%)`, maxHeight: "88vh", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#070c1c)", border: "1px solid rgba(0,200,255,0.24)", borderRadius: 18, padding: 18, color: "white", boxShadow: "0 30px 80px rgba(0,0,0,0.5)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <h2 style={{ fontSize: 17, margin: 0 }}>{title}</h2>
+        <button onClick={onClose} aria-label="Close" style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.16)", color: "white", borderRadius: 9, width: 30, height: 30, cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
+      </div>
+      {children}
+    </div>
+  </div>;
+}
 const TABS = ["Dashboard", "Work Orders", "Requests", "Calendar", "Locations", "Techs", "Parts", "Procurement", "PM", "Playbooks"] as const;
 type Tab = typeof TABS[number];
 const TAB_HINT: Record<Tab, string> = {
@@ -148,14 +164,28 @@ const WO_FILTERS = [
 ];
 function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen }: { jobs: RealWO[]; techs: RealTech[]; loading: boolean; onCreate: (p: Record<string, unknown>) => void; onUpdate: (id: string, patch: Record<string, unknown>) => void; onOpen: (id: string) => void }) {
   const [showNew, setShowNew] = useState(false);
-  const [form, setForm] = useState({ customer_name: "", title: "", priority: "medium", assignee_id: "", scheduled_date: "" });
+  const [form, setForm] = useState({ site_id: "", customer_name: "", title: "", priority: "medium", assignee_id: "", scheduled_date: "" });
   const [q, setQ] = useState("");
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState("open");
+  // Site picker for the New WO popup.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [sites, setSites] = useState<any[]>([]);
+  const [siteQ, setSiteQ] = useState("");
+  const [sitesLoading, setSitesLoading] = useState(false);
+  useEffect(() => {
+    if (!showNew || sites.length) return;
+    setSitesLoading(true);
+    fetch("/api/sites?limit=300").then(r => r.json())
+      .then(d => setSites(Array.isArray(d) ? d : (d.sites ?? d.records ?? [])))
+      .catch(() => {}).finally(() => setSitesLoading(false));
+  }, [showNew, sites.length]);
+  const siteMatches = sites.filter(s => !siteQ || `${s.name ?? ""} ${s.address ?? ""} ${s.city ?? ""}`.toLowerCase().includes(siteQ.toLowerCase())).slice(0, 30);
+  function resetForm() { setForm({ site_id: "", customer_name: "", title: "", priority: "medium", assignee_id: "", scheduled_date: "" }); setSiteQ(""); }
   function submit() {
     if (!form.customer_name.trim()) return;
     const t = techs.find(x => x.id === form.assignee_id);
-    onCreate({ customer_name: form.customer_name.trim(), title: form.title.trim() || form.customer_name.trim(), priority: form.priority, assignee_id: form.assignee_id || null, assignee_name: t?.name ?? null, scheduled_date: form.scheduled_date || null });
-    setForm({ customer_name: "", title: "", priority: "medium", assignee_id: "", scheduled_date: "" }); setShowNew(false);
+    onCreate({ site_id: form.site_id || null, customer_name: form.customer_name.trim(), title: form.title.trim() || form.customer_name.trim(), priority: form.priority, assignee_id: form.assignee_id || null, assignee_name: t?.name ?? null, scheduled_date: form.scheduled_date || null });
+    resetForm(); setShowNew(false);
   }
   const shown = jobs.filter(w => {
     if (filter === "unassigned" && w.assignedTechId) return false;
@@ -171,16 +201,42 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen }: { jobs
         <h2 style={{ fontSize: 16 }}>Work Orders</h2>
         <button onClick={() => setShowNew(s => !s)} style={btn}>+ New</button>
       </div>
-      {showNew && <div style={{ ...card, marginBottom: 12, display: "grid", gap: 8 }}>
-        <input placeholder="Customer / site *" value={form.customer_name} onChange={e => setForm({ ...form, customer_name: e.target.value })} style={input} />
-        <input placeholder="What needs doing?" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} style={input} />
-        <div style={{ display: "flex", gap: 8 }}>
-          <select value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })} style={{ ...sel, flex: 1 }}>{["low", "medium", "high", "critical"].map(p => <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)} priority</option>)}</select>
-          <select value={form.assignee_id} onChange={e => setForm({ ...form, assignee_id: e.target.value })} style={{ ...sel, flex: 1 }}><option value="">Unassigned</option>{techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+      {showNew && <Modal title="New work order" onClose={() => { resetForm(); setShowNew(false); }}>
+        <div style={{ display: "grid", gap: 10 }}>
+          {/* Step 1: pick the site */}
+          <div>
+            <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginBottom: 4, fontWeight: 600 }}>1. Which site is this for? *</div>
+            {form.site_id
+              ? <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 12, background: "rgba(0,200,255,0.12)", border: "1px solid rgba(0,200,255,0.4)" }}>
+                  <span style={{ fontSize: 14 }}>📍 {form.customer_name}</span>
+                  <button onClick={() => setForm({ ...form, site_id: "", customer_name: "" })} style={{ ...sel, cursor: "pointer" }}>Change</button>
+                </div>
+              : <>
+                  <input placeholder="Search your sites…" value={siteQ} onChange={e => setSiteQ(e.target.value)} style={input} />
+                  <div style={{ maxHeight: 180, overflowY: "auto", marginTop: 6, display: "grid", gap: 4 }}>
+                    {sitesLoading ? <Small>Loading sites…</Small>
+                      : sites.length === 0 ? <Small>No sites found. Add one in the Locations tab first.</Small>
+                      : siteMatches.length === 0 ? <Small>No sites match “{siteQ}”.</Small>
+                      : siteMatches.map(s => <button key={s.id} onClick={() => setForm({ ...form, site_id: s.id, customer_name: s.name || "" })} style={{ textAlign: "left", cursor: "pointer", padding: "8px 10px", borderRadius: 10, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.1)", color: "white" }}>
+                          <div style={{ fontSize: 13.5 }}>{s.name || "Unnamed site"}</div>
+                          {(s.address || s.city) && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>{[s.address, s.city, s.state].filter(Boolean).join(", ")}</div>}
+                        </button>)}
+                  </div>
+                </>}
+          </div>
+          {/* Step 2: what + who + when */}
+          <div>
+            <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginBottom: 4, fontWeight: 600 }}>2. What needs doing?</div>
+            <input placeholder="e.g. Gate motor won't open" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} style={input} />
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <select value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })} style={{ ...sel, flex: 1, padding: 10 }}>{["low", "medium", "high", "critical"].map(p => <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)} priority</option>)}</select>
+            <select value={form.assignee_id} onChange={e => setForm({ ...form, assignee_id: e.target.value })} style={{ ...sel, flex: 1, padding: 10 }}><option value="">Unassigned</option>{techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+          </div>
+          <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 3 }}>Schedule date (shows on Calendar)</div><input type="date" value={form.scheduled_date} onChange={e => setForm({ ...form, scheduled_date: e.target.value })} style={input} /></div>
+          <button onClick={submit} disabled={!form.customer_name.trim()} style={{ ...btn, opacity: form.customer_name.trim() ? 1 : 0.5 }}>{form.site_id ? "Create work order" : "Pick a site first"}</button>
         </div>
-        <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 3 }}>Schedule date (shows on Calendar)</div><input type="date" value={form.scheduled_date} onChange={e => setForm({ ...form, scheduled_date: e.target.value })} style={input} /></div>
-        <button onClick={submit} disabled={!form.customer_name.trim()} style={{ ...btn, opacity: form.customer_name.trim() ? 1 : 0.5 }}>Create work order</button>
-      </div>}
+      </Modal>}
       {/* search + filter chips */}
       <input placeholder="Search WO#, site, tech…" value={q} onChange={e => setQ(e.target.value)} style={{ ...input, padding: 10, marginBottom: 8 }} />
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
@@ -208,9 +264,12 @@ function WORow({ wo, techs, onUpdate, onOpen }: { wo: RealWO; techs: RealTech[];
 }
 
 function Board({ jobs, onOpen }: { jobs: RealWO[]; onOpen: (id: string) => void }) {
+  const [showDone, setShowDone] = useState(false);
+  const activeCols = JOB_COLUMNS.filter(c => c.key !== "Done");
+  const doneItems = jobs.filter(w => bucketOf(w.status) === "Done");
   return <Card><h2 style={{ fontSize: 16, marginBottom: 12 }}>Jobs board</h2>
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 12 }}>
-      {JOB_COLUMNS.map(col => {
+    <div style={{ display: "grid", gridTemplateColumns: `repeat(${activeCols.length}, minmax(0,1fr))`, gap: 12 }}>
+      {activeCols.map(col => {
         const items = jobs.filter(w => bucketOf(w.status) === col.key);
         return <div key={col.key}>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", borderRadius: 12, background: `${col.accent}22`, border: `1px solid ${col.accent}55`, marginBottom: 10 }}><span style={{ fontWeight: 700, fontSize: 13 }}>{col.label}</span><span style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>{items.length}</span></div>
@@ -221,6 +280,18 @@ function Board({ jobs, onOpen }: { jobs: RealWO[]; onOpen: (id: string) => void 
           {items.length === 0 && <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 12, textAlign: "center", padding: "8px 0" }}>—</p>}
         </div>;
       })}
+    </div>
+    {/* Completed jobs stay one click away, but don't take board real estate. */}
+    <div style={{ marginTop: 14 }}>
+      <button onClick={() => setShowDone(s => !s)} style={{ width: "100%", textAlign: "left", cursor: "pointer", padding: "9px 12px", borderRadius: 12, background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.34)", color: "#a7f3d0", fontSize: 13, fontWeight: 700 }}>
+        {showDone ? "▾" : "▸"} Complete <span style={{ color: "rgba(255,255,255,0.5)", fontWeight: 500 }}>({doneItems.length})</span>
+      </button>
+      {showDone && <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+        {doneItems.length === 0 ? <Small>No completed jobs yet.</Small> : doneItems.map(w => <div key={w.id} onClick={() => onOpen(w.id)} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "8px 12px", borderRadius: 10, background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.07)", cursor: "pointer" }}>
+          <span style={{ fontSize: 13 }}>{w.woNumber || w.title || "Work Order"}</span>
+          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>{w.property || "—"}</span>
+        </div>)}
+      </div>}
     </div>
   </Card>;
 }
@@ -1150,6 +1221,9 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   const [pForm, setPForm] = useState({ name: "", qty: "1", unit_cost: "", unit_price: "" });
   const [laborH, setLaborH] = useState("");
   const [partBusy, setPartBusy] = useState(false);
+  const [showAddEq, setShowAddEq] = useState(false);
+  const [eqForm, setEqForm] = useState({ product_name: "", serial_number: "", location_note: "" });
+  const [eqBusy, setEqBusy] = useState(false);
   const load = React.useCallback(() => {
     setLoading(true);
     Promise.all([
@@ -1175,10 +1249,17 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
     fetch(`/api/playbooks`).then(r => r.json()).then(d => setPlaybooks(d.playbooks ?? [])).catch(() => {});
   }, []);
   // equipment on the linked site + that site's service history
-  useEffect(() => {
+  const loadEquip = React.useCallback(() => {
     if (!siteId) { setSiteEquip([]); setSiteHistory([]); return; }
     fetch(`/api/sites/${siteId}`).then(r => r.json()).then(d => { setSiteEquip(d.assets ?? []); setSiteHistory((d.work_orders ?? []).filter((w: { id: string }) => w.id !== id)); }).catch(() => {});
   }, [siteId, id]);
+  useEffect(() => { loadEquip(); }, [loadEquip]);
+  async function addEquipment() {
+    if (!siteId || !eqForm.product_name.trim() || eqBusy) return;
+    setEqBusy(true);
+    await fetch(`/api/sites/${siteId}/assets`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ product_name: eqForm.product_name.trim(), serial_number: eqForm.serial_number.trim() || null, location_note: eqForm.location_note.trim() || null, status: "online" }) }).catch(() => {});
+    setEqBusy(false); setEqForm({ product_name: "", serial_number: "", location_note: "" }); setShowAddEq(false); loadEquip();
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const manualFor = (a: any) => manualMap[String(a.product_id)] || manualMap[String(a.product_name || a.name || "").toLowerCase()] || null;
 
@@ -1264,10 +1345,17 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
           </div>
         </Card>
 
-        {/* Work to perform */}
+        {/* Work to perform — editable so anyone can spell out the scope for the tech. */}
         <Card>
           <h2 style={{ fontSize: 15, marginBottom: 6 }}>Work to perform</h2>
-          <p style={{ color: "rgba(255,255,255,0.82)", fontSize: 14, whiteSpace: "pre-wrap", margin: 0 }}>{wo.description || wo.notes || "No work description yet. Add details so the tech knows exactly what to do."}</p>
+          <textarea
+            key={wo.id}
+            defaultValue={wo.description || wo.notes || ""}
+            placeholder="Type exactly what the tech should do — e.g. Replace the gate motor, test the safety loop, confirm it opens and closes."
+            onBlur={e => { const v = e.target.value.trim(); if (v !== String(wo.description || wo.notes || "")) patchField({ description: v }); }}
+            style={{ ...input, minHeight: 90, resize: "vertical", lineHeight: 1.5 }}
+          />
+          <Small>Tip: changes save when you click out of the box.</Small>
           {wo.priority && <div style={{ marginTop: 8 }}><Badge tone={String(wo.priority).toLowerCase() === "critical" || String(wo.priority).toLowerCase() === "urgent" ? "urgent" : String(wo.priority).toLowerCase() === "high" ? "high" : "default"}>{wo.priority} priority</Badge></div>}
         </Card>
 
@@ -1286,7 +1374,19 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
 
         {/* Equipment on site + manuals */}
         <Card>
-          <h2 style={{ fontSize: 15, marginBottom: 8 }}>Equipment on site ({siteEquip.length})</h2>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <h2 style={{ fontSize: 15, margin: 0 }}>Equipment on site ({siteEquip.length})</h2>
+            {siteId && <button onClick={() => setShowAddEq(true)} style={{ ...sel, cursor: "pointer", padding: "6px 12px" }}>+ Add equipment</button>}
+          </div>
+          {!siteId && <Small>Link this work order to a site to track its equipment.</Small>}
+          {showAddEq && <Modal title="Add equipment to this site" onClose={() => setShowAddEq(false)}>
+            <div style={{ display: "grid", gap: 10 }}>
+              <div><div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginBottom: 4, fontWeight: 600 }}>What is it? *</div><input placeholder="e.g. LiftMaster gate operator" value={eqForm.product_name} onChange={e => setEqForm({ ...eqForm, product_name: e.target.value })} style={input} /></div>
+              <div><div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginBottom: 4, fontWeight: 600 }}>Serial number (optional)</div><input placeholder="Serial / model #" value={eqForm.serial_number} onChange={e => setEqForm({ ...eqForm, serial_number: e.target.value })} style={input} /></div>
+              <div><div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginBottom: 4, fontWeight: 600 }}>Where is it? (optional)</div><input placeholder="e.g. Front gate, Pool entrance" value={eqForm.location_note} onChange={e => setEqForm({ ...eqForm, location_note: e.target.value })} style={input} /></div>
+              <button onClick={addEquipment} disabled={!eqForm.product_name.trim() || eqBusy} style={{ ...btn, opacity: eqForm.product_name.trim() && !eqBusy ? 1 : 0.5 }}>{eqBusy ? "Adding…" : "Add equipment"}</button>
+            </div>
+          </Modal>}
           {siteEquip.length === 0 ? <Small>No equipment recorded for this site yet.</Small> : siteEquip.map((a, i) => { const man = manualFor(a); return <div key={a.id || i} style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", padding: "6px 0", borderBottom: i < siteEquip.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
             <div style={{ fontSize: 14, minWidth: 0 }}>{a.product_name || a.name || "Equipment"}{a.serial_number ? <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}> · {a.serial_number}</span> : ""}{a.location_note ? <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 12 }}> · {a.location_note}</span> : ""}</div>
             <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
