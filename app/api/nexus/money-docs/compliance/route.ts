@@ -65,40 +65,21 @@ export async function GET() {
       })
     }
 
-    let customers = supabase
-      .from('customers')
-      .select('id,status,contract_end,notes')
-      .limit(80)
-    if (!user.isCorporate && user.org_id) customers = customers.eq('dealer_org_id', user.org_id)
-    const customerRows = await customers
-    for (const row of customerRows.data ?? []) {
-      if (row.contract_end) continue
-      items.push({
-        id: `customer-${row.id}`,
-        title: 'Missing Contract End Date',
-        subtitle: row.notes || 'Customer record needs contract date review',
-        status: row.status || 'active',
-        source: 'Customer Contract',
-        date: null,
-        bucket: 'missing',
-        urgency: 'medium',
-      })
-    }
-
-    let properties = supabase
-      .from('properties')
+    // Sites with an unknown status need a review (canonical property table).
+    let sites = supabase
+      .from('sites')
       .select('id,name,status')
       .limit(80)
-    if (!user.isCorporate && user.org_id) properties = properties.eq('org_id', user.org_id)
-    const propertyRows = await properties
-    for (const row of propertyRows.data ?? []) {
+    if (!user.isCorporate && user.org_id) sites = sites.eq('org_id', user.org_id)
+    const siteRows = await sites
+    for (const row of siteRows.data ?? []) {
       if (String(row.status ?? '').toLowerCase() !== 'unknown') continue
       items.push({
-        id: `property-${row.id}`,
-        title: row.name || 'Property Status Unknown',
-        subtitle: 'Property needs status review',
+        id: `site-${row.id}`,
+        title: row.name || 'Site Status Unknown',
+        subtitle: 'Site needs status review',
         status: row.status || 'unknown',
-        source: 'Property',
+        source: 'Site',
         date: null,
         bucket: 'needs_review',
         urgency: 'low',

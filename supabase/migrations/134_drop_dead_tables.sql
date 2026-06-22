@@ -23,8 +23,17 @@ DROP TABLE IF EXISTS public.esign_documents        CASCADE;  -- → document_sig
 DROP TABLE IF EXISTS public.parts_inventory        CASCADE;  -- → inventory_items
 DROP TABLE IF EXISTS public.sensitive_fields       CASCADE;  -- only sensitive_field_access_log is used
 DROP TABLE IF EXISTS public.contact_properties     CASCADE;  -- → contact_links (M:N junction)
-DROP TABLE IF EXISTS public.org_contacts           CASCADE;  -- → contacts (org_id now optional)
 DROP TABLE IF EXISTS public.show_lead_assignments  CASCADE;  -- legacy show_leads system (leads is canonical)
+
+-- ── Section A2 — Legacy parallel CRM model (retired June 2026; never written to) ──
+-- Code in customers-sites search/detail, money-docs compliance/renewals, and the
+-- lead/opp windows was repointed to organizations + sites + contacts.
+DROP TABLE IF EXISTS public.companies          CASCADE;  -- → organizations (the account/tenant hierarchy)
+DROP TABLE IF EXISTS public.customers          CASCADE;  -- → organizations + site lifecycle
+DROP TABLE IF EXISTS public.properties         CASCADE;  -- → sites (the canonical property table)
+DROP TABLE IF EXISTS public.company_properties CASCADE;  -- junction for the retired companies/properties
+-- NOTE: org_contacts is intentionally KEPT — it still backs /api/customers/[id]/contacts.
+--       Merging org_contacts → contacts is a separate follow-up.
 
 -- ── Section B — Feature scaffolding that was never wired to any code ────────
 -- If you intend to build any of these soon, comment out that line instead.

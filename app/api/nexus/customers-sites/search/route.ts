@@ -9,7 +9,9 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-type ResultType = 'company' | 'contact' | 'customer' | 'property' | 'site'
+// Canonical model only: organizations (accounts) + contacts (people) + sites (properties).
+// The old companies/customers/properties tables were retired in the June 2026 audit.
+type ResultType = 'customer' | 'contact' | 'site'
 
 type SearchResult = {
   id: string
@@ -19,6 +21,9 @@ type SearchResult = {
   meta?: string
   href?: string
 }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Row = Record<string, any>
 
 function clean(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -32,46 +37,43 @@ function fullName(first?: string | null, last?: string | null): string {
   return compact([first, last]).replace(' • ', ' ') || 'Unnamed Contact'
 }
 
-function siteAddress(row: Record<string, any>): string {
+function addr(row: Row): string {
   return compact([row.address, row.city, row.state, row.zip])
 }
 
-function applyOrgFilter(query: any, column: string, orgId: string | null, isCorporate: boolean) {
-  if (isCorporate || !orgId) return query
-  return query.eq(column, orgId)
-}
-
-async function searchCompanies(q: string, orgId: string | null, isCorporate: boolean): Promise<SearchResult[]> {
-  let query = supabase
-    .from('companies')
-    .select('id,name,type,website,billing_address,city,state,zip,created_at')
-    .or(`name.ilike.%${q}%,website.ilike.%${q}%,billing_address.ilike.%${q}%,city.ilike.%${q}%,state.ilike.%${q}%`)
-    .order('updated_at', { ascending: false })
-    .limit(8)
-  query = applyOrgFilter(query, 'dealer_org_id', orgId, isCorporate)
-  const { data, error } = await query
+// Account search = the organization hierarchy (the real customer/account record).
+async function searchOrganizations(q: string, orgId: string | null, isCorporate: boolean): Promise<SearchResult[]> {
+  const query = supabase
+    .from('organizations')
+    .select('id,name,tier,status,address,city,state,zip,primary_email,primary_phone')
+    .or(`name.ilike.%${q}%,primary_email.ilike.%${q}%,primary_phone.ilike.%${q}%,city.ilike.%${q}%,state.ilike.%${q}%`)
+    .order('name', { ascending: true })
+    .limit(10)
+  // Org scope: a non-corporate user sees their own org + can't peek across the tree here.
+  const scoped = isCorporate || !orgId ? query : query.eq('id', orgId)
+  const { data, error } = await scoped
   if (error) return []
-  return (data ?? []).map((row: any) => ({
+  return (data ?? []).map((row: Row) => ({
     id: row.id,
-    type: 'company' as const,
-    title: row.name || 'Unnamed Company',
-    subtitle: compact([row.type, siteAddress(row)]) || 'Company record',
-    meta: row.website || undefined,
-    href: `/crm?company=${row.id}`,
+    type: 'customer' as const,
+    title: row.name || 'Unnamed Account',
+    subtitle: compact([row.tier, addr(row)]) || 'Account record',
+    meta: row.primary_email || row.primary_phone || undefined,
+    href: `/operations?org=${row.id}`,
   }))
 }
 
 async function searchContacts(q: string, orgId: string | null, isCorporate: boolean): Promise<SearchResult[]> {
-  let query = supabase
+  const query = supabase
     .from('contacts')
     .select('id,first_name,last_name,email,phone,title,created_at')
     .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%,phone.ilike.%${q}%,title.ilike.%${q}%`)
     .order('created_at', { ascending: false })
     .limit(8)
-  query = applyOrgFilter(query, 'org_id', orgId, isCorporate)
-  const { data, error } = await query
+  const scoped = isCorporate || !orgId ? query : query.eq('org_id', orgId)
+  const { data, error } = await scoped
   if (error) return []
-  return (data ?? []).map((row: any) => ({
+  return (data ?? []).map((row: Row) => ({
     id: row.id,
     type: 'contact' as const,
     title: fullName(row.first_name, row.last_name),
@@ -81,64 +83,21 @@ async function searchContacts(q: string, orgId: string | null, isCorporate: bool
   }))
 }
 
-async function searchCustomers(q: string, orgId: string | null, isCorporate: boolean): Promise<SearchResult[]> {
-  let query = supabase
-    .from('customers')
-    .select('id,status,mrr,contract_start,contract_end,notes,property_id,company_id,created_at')
-    .or(`status.ilike.%${q}%,notes.ilike.%${q}%`)
-    .order('updated_at', { ascending: false })
-    .limit(5)
-  query = applyOrgFilter(query, 'dealer_org_id', orgId, isCorporate)
-  const { data, error } = await query
-  if (error) return []
-  return (data ?? []).map((row: any) => ({
-    id: row.id,
-    type: 'customer' as const,
-    title: `Customer ${row.status ? `(${row.status})` : ''}`.trim(),
-    subtitle: compact([
-      row.mrr != null ? `MRR $${Number(row.mrr).toFixed(0)}` : null,
-      row.contract_end ? `Ends ${row.contract_end}` : null,
-      row.notes,
-    ]) || 'Customer account record',
-    href: `/customers/${row.id}`,
-  }))
-}
-
-async function searchProperties(q: string, orgId: string | null, isCorporate: boolean): Promise<SearchResult[]> {
-  let query = supabase
-    .from('properties')
-    .select('id,name,address,city,state,zip,property_type,unit_count,status,created_at')
-    .or(`name.ilike.%${q}%,address.ilike.%${q}%,city.ilike.%${q}%,state.ilike.%${q}%,property_type.ilike.%${q}%`)
-    .order('updated_at', { ascending: false })
-    .limit(10)
-  query = applyOrgFilter(query, 'org_id', orgId, isCorporate)
-  const { data, error } = await query
-  if (error) return []
-  return (data ?? []).map((row: any) => ({
-    id: row.id,
-    type: 'property' as const,
-    title: row.name || 'Unnamed Property',
-    subtitle: compact([row.property_type, row.unit_count ? `${row.unit_count} units` : null, siteAddress(row)]) || 'Property record',
-    meta: row.status || undefined,
-    href: `/properties/${row.id}`,
-  }))
-}
-
 async function searchSites(q: string, orgId: string | null, isCorporate: boolean): Promise<SearchResult[]> {
-  let query = supabase
+  const query = supabase
     .from('sites')
     .select('id,name,address,city,state,zip,property_type,units,status,primary_contact_name,pm_name,created_at')
     .or(`name.ilike.%${q}%,address.ilike.%${q}%,city.ilike.%${q}%,state.ilike.%${q}%,primary_contact_name.ilike.%${q}%,pm_name.ilike.%${q}%`)
     .order('created_at', { ascending: false })
     .limit(10)
-  query = applyOrgFilter(query, 'org_id', orgId, isCorporate)
-  const { data, error } = await query
+  const scoped = isCorporate || !orgId ? query : query.eq('org_id', orgId)
+  const { data, error } = await scoped
   if (error) return []
-  return (data ?? []).map((row: any) => ({
+  return (data ?? []).map((row: Row) => ({
     id: row.id,
     type: 'site' as const,
     title: row.name || 'Unnamed Site',
-    subtitle: compact([row.property_type, row.units ? `${row.units} units` : null, siteAddress(row)]) || 'Site record',
+    subtitle: compact([row.property_type, row.units ? `${row.units} units` : null, addr(row)]) || 'Site record',
     meta: compact([row.status, row.primary_contact_name || row.pm_name]) || undefined,
     href: `/sites/${row.id}`,
   }))
@@ -160,10 +119,8 @@ export async function GET(req: NextRequest) {
     const wantsProperties = mode === 'all' || mode === 'property'
 
     const groups = await Promise.all([
-      wantsCustomers ? searchCompanies(q, user.org_id, user.isCorporate) : Promise.resolve([]),
+      wantsCustomers ? searchOrganizations(q, user.org_id, user.isCorporate) : Promise.resolve([]),
       wantsCustomers ? searchContacts(q, user.org_id, user.isCorporate) : Promise.resolve([]),
-      wantsCustomers ? searchCustomers(q, user.org_id, user.isCorporate) : Promise.resolve([]),
-      wantsProperties ? searchProperties(q, user.org_id, user.isCorporate) : Promise.resolve([]),
       wantsProperties ? searchSites(q, user.org_id, user.isCorporate) : Promise.resolve([]),
     ])
 

@@ -89,17 +89,8 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
         )
       : Promise.resolve(null),
 
-    // Company
-    opportunity.company_id
-      ? safe(
-          supabase
-            .from('companies')
-            .select('id, name, type, website, billing_address, city, state, zip, notes')
-            .eq('id', opportunity.company_id as string)
-            .single(),
-          null
-        )
-      : Promise.resolve(null),
+    // Company — legacy companies table retired (June 2026 audit); accounts live in organizations.
+    Promise.resolve(null),
 
     // Contact
     opportunity.contact_id
@@ -113,17 +104,8 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
         )
       : Promise.resolve(null),
 
-    // Property
-    opportunity.property_id
-      ? safe(
-          supabase
-            .from('properties')
-            .select('id, name, address, city, state, zip, property_type, unit_count, status')
-            .eq('id', opportunity.property_id as string)
-            .single(),
-          null
-        )
-      : Promise.resolve(null),
+    // Property — legacy properties table retired (June 2026 audit); properties live in sites.
+    Promise.resolve(null),
 
     // Activities — single canonical table (crm_activities).
     safe(

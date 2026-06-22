@@ -374,7 +374,6 @@ export function JobsSurface({ onOpenDispatch }: { onOpenDispatch?: () => void } 
                 <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.54)' }}>Open today’s jobs, handle what needs attention, schedule site work, or review active work.</p>
               </div>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={() => { setOpsTab('Dashboard'); setShowOps(true) }} className="rounded-full px-4 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5" style={{ background: 'linear-gradient(135deg, rgba(52,211,153,0.30), rgba(0,200,255,0.14))', border: '1px solid rgba(52,211,153,0.34)', color: '#bff7e0', boxShadow: '0 0 18px rgba(52,211,153,0.16)' }}>🔧 Operations Hub →</button>
                 <div className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]" style={{ background: 'rgba(52,211,153,0.12)', color: 'rgba(134,239,172,0.96)', border: '1px solid rgba(52,211,153,0.28)', boxShadow: '0 0 18px rgba(52,211,153,0.10)' }}>{busy ? 'Loading…' : 'Field Ops'}</div>
               </div>
             </div>

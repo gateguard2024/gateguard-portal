@@ -77,3 +77,33 @@ Zero code references anywhere.
 
 All code changes are already on `beta` and tsc-clean — they work whether or not
 133/134 have run yet (the repointed tables all pre-exist).
+
+---
+
+## Phase 2 — organizations vs companies (the second fragmentation)
+
+The customer/property concept was split across **five** tables. Three were never
+written to by the app (pure legacy read surfaces):
+
+| Concept | Canonical (kept) | Retired |
+|---|---|---|
+| Account / company | `organizations` | `companies`, `customers` |
+| Property | `sites` | `properties` |
+| Person | `contacts` | — |
+
+**Code repointed** to organizations + sites + contacts:
+`app/api/nexus/customers-sites/search` (now searches organizations/contacts/sites),
+`.../customers-sites/detail` (org/contact/site; legacy `company`→org, `property`→site),
+`.../money-docs/compliance` (properties→sites), `.../money-docs/renewals` (neutralized —
+returns empty until rebuilt on site-lifecycle), and the lead/opp windows (dead
+company/property enrichment removed).
+
+**Dropped** in migration 134: `companies`, `customers`, `properties`, `company_properties`
+(plus `contact_properties`, `show_lead_assignments` from Phase 1).
+
+**Kept, not dropped:** `org_contacts` — still backs `/api/customers/[id]/contacts`.
+It's a fragment of `contacts`; merging the two is a tracked follow-up, not done here.
+
+> The `/customers/[id]` pages still reference the old `customers` notion via the
+> org_contacts routes. Those pages are legacy; retiring them is part of the
+> "hide legacy ops pages" cleanup (task #51), separate from this DB pass.

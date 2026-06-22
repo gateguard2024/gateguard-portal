@@ -112,27 +112,9 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       )
     : null
 
-  const company = leadRecord.company_id
-    ? await safe(
-        supabase
-          .from('companies')
-          .select('id, name, type, primary_contact_id, website, billing_address, city, state, zip, notes, created_at, updated_at')
-          .eq('id', leadRecord.company_id)
-          .single(),
-        null
-      )
-    : leadRecord.company_name
-      ? await safe(
-          supabase
-            .from('companies')
-            .select('id, name, type, primary_contact_id, website, billing_address, city, state, zip, notes, created_at, updated_at')
-            .ilike('name', `%${leadRecord.company_name}%`)
-            .limit(1)
-            .maybeSingle(),
-          null
-        )
-      : null
-
+  // Legacy companies table retired (June 2026 audit); the lead's company is carried
+  // on the lead itself (company_name). Accounts live in organizations.
+  const company = null
   const companyRecord = company as { id?: string; name?: string | null } | null
 
   const contacts = companyRecord?.id
@@ -150,29 +132,12 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       : []
 
   const companyName = companyRecord?.name || leadRecord.company_name || ''
-  const properties = companyRecord?.id
-    ? await safe(
-        supabase
-          .from('company_properties')
-          .select('property_id, properties(id, name, address, city, state, zip, property_type, unit_count, status, created_at, updated_at)')
-          .eq('company_id', companyRecord.id)
-          .limit(8),
-        []
-      )
-    : []
+  // Legacy company_properties + properties tables retired — properties live in sites.
+  const properties: never[] = []
 
   // Sanitize for the .or() filter (addresses often contain commas, which break it).
   const propertySearch = String(leadRecord.location || companyName || '').replace(/[,()%*\\]/g, ' ').replace(/\s+/g, ' ').trim()
-  const directProperties = propertySearch
-    ? await safe(
-        supabase
-          .from('properties')
-          .select('id, name, address, city, state, zip, property_type, unit_count, status, created_at, updated_at')
-          .or(`name.ilike.%${propertySearch}%,address.ilike.%${propertySearch}%`)
-          .limit(8),
-        []
-      )
-    : []
+  const directProperties: never[] = []
 
   const sites = propertySearch
     ? await safe(
