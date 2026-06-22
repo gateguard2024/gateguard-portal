@@ -889,7 +889,7 @@ export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onCl
 
         {/* Site notes & history (events) */}
         <Card>
-          <h2 style={{ fontSize: 15, marginBottom: 8 }}>Notes & history</h2>
+          <h2 style={{ fontSize: 15, marginBottom: 8 }}>Site activity — notes & history</h2>
           <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
             <input placeholder="Add a note about this site…" value={note} onChange={e => setNote(e.target.value)} onKeyDown={e => { if (e.key === "Enter") addNote(); }} style={{ ...input, padding: 9, fontSize: 13 }} />
             <button onClick={addNote} disabled={!note.trim() || busy} style={{ ...btn, opacity: note.trim() && !busy ? 1 : 0.5 }}>Add</button>

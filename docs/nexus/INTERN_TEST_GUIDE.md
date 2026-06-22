@@ -27,7 +27,7 @@ A few plain words you'll see:
 
 # Mission 1 — Add a product and turn on its "AI brain"
 
-**Where to go:** Click **Operations** (bottom of the screen) → click the **Parts** tab.
+**Where to go:** Click **Jobs** (bottom of the screen) → open the **Operations Hub** → click the **Parts** tab.
 
 ### Step 1.1 — Add a product
 - **DO THIS:** Click the **"+ Add product"** button. Type a made-up product name like `Test Camera 123`. In the box that says **"Manual PDF URL"**, paste this:
@@ -156,7 +156,7 @@ Notes: ____________________________________________
 Notes: ____________________________________________
 
 ### Step 5.3 — The job really exists
-- **DO THIS:** Go to **Operations → Work Orders**.
+- **DO THIS:** Go to **Jobs → Operations Hub → Work Orders**.
 - **YOU SHOULD SEE:** A new job with the customer's name and "Install" in the title.
 
 ☐ ✅ Worked  ☐ ❌ Broke
@@ -179,18 +179,18 @@ Notes: ____________________________________________
 
 # Mission 7 — A location's status
 
-**Where to go:** Click **Operations → Locations** → click any location to open it.
+**Where to go:** Click **Jobs → Operations Hub → Locations** → click any location to open it.
 
 ### Step 7.1 — Status badge
 - **DO THIS:** Look near the top of the location panel.
-- **YOU SHOULD SEE:** A small colored label like **Prospect**, **Onboarding**, or **Active**. If it's not active, it should say what's missing (like "To activate: Contract not signed · Deposit not collected").
+- **YOU SHOULD SEE:** A small colored status label (for example **Active**). If it's not active, it should say what's missing (like "To activate: Contract not signed · Deposit not collected").
 
 ☐ ✅ Worked  ☐ ❌ Broke
 Notes: ____________________________________________
 
 ### Step 7.2 — Location history
 - **DO THIS:** Scroll to the bottom of the location panel.
-- **YOU SHOULD SEE:** A **"Site activity"** list (it may be empty for a brand-new location — that's okay, it should say something friendly, not show an error).
+- **YOU SHOULD SEE:** A **"Site activity — notes & history"** section (it may be empty for a brand-new location — that's okay, it should say something friendly, not show an error).
 
 ☐ ✅ Worked  ☐ ❌ Broke
 Notes: ____________________________________________

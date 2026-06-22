@@ -74,7 +74,7 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
 
   const dealName = (opp?.name || opp?.account_name || 'New opportunity') as string
   return (
-    <div style={{ minHeight: '100vh', background: 'radial-gradient(circle at top left, #11183a, #050712 50%)', color: 'white', fontFamily: 'Inter, Arial, sans-serif', padding: 24 }}>
+    <div style={{ minHeight: '100vh', maxHeight: '100vh', overflowY: 'auto', background: 'radial-gradient(circle at top left, #11183a, #050712 50%)', color: 'white', fontFamily: 'Inter, Arial, sans-serif', padding: '24px 24px 160px' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         {onClose && <button onClick={onClose} style={{ marginBottom: 14, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.8)', borderRadius: 999, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>← Back to Sales</button>}
         <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#7DE5FF' }}>Opportunity · {dealName}{opp?.account_name && opp?.name ? ` · ${opp.account_name}` : ''}</div>
@@ -1071,12 +1071,15 @@ function Proposal({ opp, opportunityId, onSaved }: { opp: Record<string, any>; o
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const addProduct = (p: any) => { setItems(it => [...it, { category: p.category || 'Equipment', description: p.name || 'Item', qty: 1, unit_price: priceOf(p), is_recurring: false }]); setQ(''); setResults([]) }
   const addManual = () => {
-    if (!draft.description.trim()) return
-    setItems(it => [...it, { category: 'General', description: draft.description.trim(), qty: Number(draft.qty) || 1, unit_price: Number(draft.unit_price) || 0, is_recurring: draft.is_recurring }])
+    // Allow a line with just a price (default the description) so it's never stuck disabled.
+    const desc = draft.description.trim() || (draft.unit_price ? 'Custom line' : '')
+    if (!desc) return
+    setItems(it => [...it, { category: 'General', description: desc, qty: Number(draft.qty) || 1, unit_price: Number(draft.unit_price) || 0, is_recurring: draft.is_recurring }])
     setDraft({ description: '', qty: '1', unit_price: '', is_recurring: false })
   }
   const removeItem = (i: number) => setItems(it => it.filter((_, idx) => idx !== i))
   const setQty = (i: number, v: string) => setItems(it => it.map((x, idx) => idx === i ? { ...x, qty: Number(v) || 0 } : x))
+  const setPrice = (i: number, v: string) => setItems(it => it.map((x, idx) => idx === i ? { ...x, unit_price: Number(v) || 0 } : x))
 
   const oneTime = items.filter(i => !i.is_recurring).reduce((s, i) => s + i.qty * i.unit_price, 0)
   const mrr = items.filter(i => i.is_recurring).reduce((s, i) => s + i.qty * i.unit_price, 0)
@@ -1166,7 +1169,7 @@ function Proposal({ opp, opportunityId, onSaved }: { opp: Record<string, any>; o
             <input value={draft.qty} onChange={e => setDraft({ ...draft, qty: e.target.value.replace(/[^0-9]/g, '') })} placeholder="Qty" style={{ ...inputStyle, width: 80 }} />
             <input value={draft.unit_price} onChange={e => setDraft({ ...draft, unit_price: e.target.value.replace(/[^0-9.]/g, '') })} placeholder="Price each $" style={{ ...inputStyle, width: 130 }} />
             <button onClick={() => setDraft({ ...draft, is_recurring: !draft.is_recurring })} style={{ ...btn, background: draft.is_recurring ? 'rgba(52,211,153,0.18)' : 'rgba(255,255,255,0.06)', border: `1px solid ${draft.is_recurring ? 'rgba(52,211,153,0.45)' : 'rgba(255,255,255,0.12)'}`, color: draft.is_recurring ? '#6ee7b7' : 'rgba(255,255,255,0.7)' }}>{draft.is_recurring ? '✓ Monthly' : 'One-time'}</button>
-            <button onClick={addManual} disabled={!draft.description.trim()} style={{ ...btn, opacity: draft.description.trim() ? 1 : 0.5 }}>Add line</button>
+            <button onClick={addManual} disabled={!draft.description.trim() && !draft.unit_price} style={{ ...btn, opacity: (draft.description.trim() || draft.unit_price) ? 1 : 0.5 }}>Add line</button>
           </div>
         </div>
       </Card>
@@ -1176,10 +1179,12 @@ function Proposal({ opp, opportunityId, onSaved }: { opp: Record<string, any>; o
         {items.length === 0 ? <Sub>No lines yet — add a product or a custom line above.</Sub> : (
           <div style={{ display: 'grid', gap: 6 }}>
             {items.map((it, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '8px 12px' }}>
-                <span style={{ flex: 1, fontSize: 13 }}>{it.description} {it.is_recurring && <span style={{ color: '#6ee7b7', fontSize: 11 }}>· monthly</span>}</span>
-                <input value={String(it.qty)} onChange={e => setQty(i, e.target.value.replace(/[^0-9]/g, ''))} style={{ ...inputStyle, width: 56, padding: '6px 8px', textAlign: 'center' }} />
-                <span style={{ fontSize: 13, width: 90, textAlign: 'right' }}>{usd(it.qty * it.unit_price)}{it.is_recurring ? '/mo' : ''}</span>
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '8px 12px', flexWrap: 'wrap' }}>
+                <span style={{ flex: 1, minWidth: 120, fontSize: 13 }}>{it.description} {it.is_recurring && <span style={{ color: '#6ee7b7', fontSize: 11 }}>· monthly</span>}</span>
+                <input value={String(it.qty)} onChange={e => setQty(i, e.target.value.replace(/[^0-9]/g, ''))} title="Qty" style={{ ...inputStyle, width: 50, padding: '6px 8px', textAlign: 'center' }} />
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>×&nbsp;$</span>
+                <input value={String(it.unit_price)} onChange={e => setPrice(i, e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0" title="Price each" style={{ ...inputStyle, width: 80, padding: '6px 8px', textAlign: 'right', ...(it.unit_price ? {} : { border: '1px solid rgba(251,191,36,0.6)' }) }} />
+                <span style={{ fontSize: 13, width: 84, textAlign: 'right', fontWeight: 600 }}>{usd(it.qty * it.unit_price)}{it.is_recurring ? '/mo' : ''}</span>
                 <button onClick={() => removeItem(i)} style={{ background: 'none', border: 'none', color: '#fca5a5', cursor: 'pointer', fontSize: 16 }}>×</button>
               </div>
             ))}
@@ -1264,7 +1269,7 @@ function Payment({ opp, opportunityId, onConverted }: { opp: Record<string, any>
   const [paid, setPaid] = useState(false)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(alreadyWon)
-  const [msg, setMsg] = useState<string | null>(alreadyWon ? 'Already converted — the install job is in Operations → Work Orders.' : null)
+  const [msg, setMsg] = useState<string | null>(alreadyWon ? 'Already converted — the install job is in Jobs → Operations Hub → Work Orders.' : null)
   const [err, setErr] = useState(false)
   const canConvert = signed && paid && !busy && !done && !!opportunityId
 
@@ -1302,10 +1307,10 @@ function Payment({ opp, opportunityId, onConverted }: { opp: Record<string, any>
         }).catch(() => {})
       }
       setDone(true)
-      setMsg('Deal closed & install job created ✓ — find it in Operations → Work Orders and on the assigned tech’s phone.')
+      setMsg('Deal closed & install job created ✓ — find it in Jobs → Operations Hub → Work Orders and on the assigned tech’s phone.')
       onConverted?.()
     } catch {
-      setErr(true); setMsg('Stage updated, but the install job could not be created. Open Operations → Work Orders to add it manually.')
+      setErr(true); setMsg('Stage updated, but the install job could not be created. Open Jobs → Operations Hub → Work Orders to add it manually.')
     } finally { setBusy(false) }
   }
 
@@ -1329,12 +1334,15 @@ function Payment({ opp, opportunityId, onConverted }: { opp: Record<string, any>
 
       <Card>
         <H>Convert to install job</H>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px,1fr))', gap: 12, marginBottom: 14 }}>
-          <div style={{ background: 'rgba(0,200,255,0.1)', border: '1px solid rgba(0,200,255,0.3)', borderRadius: 14, padding: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#7DE5FF' }}>→ Closed Won</div><Sub>{acct} moves to Closed Won in the pipeline.</Sub>
+        <Sub>The one green button below does everything. These two boxes just show what will happen — they aren&apos;t buttons.</Sub>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px,1fr))', gap: 12, margin: '12px 0 14px' }}>
+          <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: 16 }}>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 2 }}>What happens · 1</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#7DE5FF' }}>Deal marked Closed Won</div><Sub>{acct} moves to Closed Won in the pipeline.</Sub>
           </div>
-          <div style={{ background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)', borderRadius: 14, padding: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#6ee7b7' }}>→ Install job created</div><Sub>Opens in Operations → Work Orders, linked to this deal.</Sub>
+          <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: 16 }}>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 2 }}>What happens · 2</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#6ee7b7' }}>Install job created</div><Sub>Shows in Jobs → Operations Hub → Work Orders, linked to this deal.</Sub>
           </div>
         </div>
         <button onClick={convert} disabled={!canConvert} style={{ ...btn, width: '100%', padding: 13, background: canConvert ? 'rgba(52,211,153,0.2)' : 'rgba(255,255,255,0.06)', border: `1px solid ${canConvert ? 'rgba(52,211,153,0.5)' : 'rgba(255,255,255,0.12)'}`, color: canConvert ? '#6ee7b7' : 'rgba(255,255,255,0.4)', cursor: canConvert ? 'pointer' : 'not-allowed' }}>
