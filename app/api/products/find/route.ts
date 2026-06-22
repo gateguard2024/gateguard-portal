@@ -81,7 +81,13 @@ export async function POST(req: NextRequest) {
   await Promise.all(tasks)
 
   if (hits.length === 0 && !pageText) {
-    return NextResponse.json({ error: 'No web results. Web search may be unconfigured — paste the product page URL, or add the product manually.', proposed: null, sources: [] })
+    const reason = !process.env.SERPER_API_KEY
+      ? 'Web search isn’t turned on yet (missing SERPER_API_KEY). Paste the product’s page URL here and I’ll read it, or fill the product in by hand below.'
+      : 'No web results for that. Paste the product’s page URL and I’ll read it, or add the product manually below.'
+    return NextResponse.json({ error: reason, proposed: null, sources: [] })
+  }
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return NextResponse.json({ error: 'AI lookup isn’t configured (missing ANTHROPIC_API_KEY). Paste the manual/product URL or add the product manually below.', proposed: null, sources: hits.slice(0, 6).map(h => ({ title: h.title, url: h.url })) })
   }
 
   // Candidate links: anything that looks like a manual PDF.

@@ -967,6 +967,23 @@ function Parts() {
     if (r && r.ok) { setForm({ name: "", brand: "", sku: "", category: "", sell_price: "", manual_url: "", image_url: "" }); setShowNew(false); setMsg(form.manual_url.trim() ? "Added ✓ — run the manual ingest to vectorize its manual + figures." : "Product added ✓"); load(); }
     else setMsg("Couldn't add the product.");
   }
+  // Upload a manual PDF to storage and return its public URL (no binary through Vercel).
+  const [mUploading, setMUploading] = useState<string | null>(null);
+  async function uploadManual(productId: string, file: File): Promise<string | null> {
+    const up = await fetch("/api/kb/upload-url", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ product_id: productId, filename: file.name }) }).then(r => r.json()).catch(() => null);
+    if (!up?.signedUrl) return null;
+    const put = await fetch(up.signedUrl, { method: "PUT", body: file, headers: { "Content-Type": "application/pdf" } }).catch(() => null);
+    return put && put.ok ? (up.publicUrl ?? null) : null;
+  }
+  // Attach a manual to an existing product, then auto-vectorize.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function attachManualToProduct(p: any, file: File) {
+    setMUploading(p.id); setMsg(null);
+    const url = await uploadManual(p.id, file);
+    if (url) { await fetch("/api/products", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: p.id, manual_url: url }) }).catch(() => {}); setMsg(`Manual attached to ${p.name} ✓ — vectorizing now.`); load(); loadCoverage(); }
+    else setMsg("Upload failed — try a smaller PDF or paste the URL.");
+    setMUploading(null);
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cost = (p: any) => num(p.dealer_cost ?? p.unit_cost ?? p.cost);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1000,7 +1017,11 @@ function Parts() {
           <input placeholder="Category (Camera, Gate…)" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} style={{ ...input, flex: 1 }} />
           <input placeholder="Sell price $" value={form.sell_price} onChange={e => setForm({ ...form, sell_price: e.target.value })} style={{ ...input, flex: 1 }} />
         </div>
-        <input placeholder="Manual PDF URL (we'll read it for the AI + diagrams)" value={form.manual_url} onChange={e => setForm({ ...form, manual_url: e.target.value })} style={input} />
+        <input placeholder="Manual PDF URL (or upload below)" value={form.manual_url} onChange={e => setForm({ ...form, manual_url: e.target.value })} style={input} />
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#7DE5FF", cursor: "pointer", background: "rgba(0,200,255,0.08)", border: "1px dashed rgba(0,200,255,0.4)", borderRadius: 10, padding: "8px 12px" }}>
+          {mUploading === "new" ? "Uploading…" : form.manual_url ? "📎 Manual attached ✓ — replace?" : "📎 Upload a manual PDF from your computer"}
+          <input type="file" accept="application/pdf" style={{ display: "none" }} disabled={mUploading === "new"} onChange={async e => { const f = e.target.files?.[0]; if (!f) return; setMUploading("new"); const url = await uploadManual(`intake-${Date.now()}`, f); setMUploading(null); if (url) { setForm(s => ({ ...s, manual_url: url })); setMsg("Manual uploaded ✓ — it'll vectorize after you Add."); } else setMsg("Upload failed — try a smaller PDF or paste a URL."); }} />
+        </label>
         <input placeholder="Image URL (optional)" value={form.image_url} onChange={e => setForm({ ...form, image_url: e.target.value })} style={input} />
         <button onClick={create} disabled={!form.name.trim() || busy} style={{ ...btn, opacity: form.name.trim() && !busy ? 1 : 0.5 }}>{busy ? "Adding…" : "Add to catalog"}</button>
       </div> : <Small>Name is all you need. Add a manual PDF link and it powers the field tool's AI diagnostics, wiring help, and step images.</Small>}
@@ -1031,7 +1052,10 @@ function Parts() {
           {/* AI manual intake: vectorize on demand so the field tool gets diagnostics + diagrams */}
           <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
             {!p.manual_url ? (
-              <Small>No manual linked — add a manual PDF URL to power AI diagnostics.</Small>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "#7DE5FF", cursor: "pointer", background: "rgba(0,200,255,0.08)", border: "1px dashed rgba(0,200,255,0.4)", borderRadius: 9, padding: "5px 11px" }}>
+                {mUploading === p.id ? "Uploading…" : "📎 Add manual PDF"}
+                <input type="file" accept="application/pdf" style={{ display: "none" }} disabled={mUploading === p.id} onChange={e => { const f = e.target.files?.[0]; if (f) attachManualToProduct(p, f); }} />
+              </label>
             ) : state === "queued" ? (
               <Small>Vectorizing manual… this runs in the background. Refresh in a minute.</Small>
             ) : state === "error" ? (

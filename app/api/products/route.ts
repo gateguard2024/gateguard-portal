@@ -171,3 +171,38 @@ export async function POST(req: NextRequest) {
   await fireManualIngest(data)
   return NextResponse.json({ product: data }, { status: 201 })
 }
+
+// PATCH /api/products — update an existing product (e.g. attach a manual_url).
+// Body: { id, manual_url?, name?, brand?, sku?, category?, sell_price?, image_url? }
+// If manual_url is set, kicks off background vectorization.
+export async function PATCH(req: NextRequest) {
+  const { userId } = await auth()
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const body = await req.json().catch(() => ({}))
+  const id = String((body as { id?: string }).id ?? '')
+  if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
+
+  const patch: Record<string, unknown> = {}
+  const b = body as Record<string, unknown>
+  for (const k of ['name', 'brand', 'sku', 'category', 'subcategory', 'manual_url', 'image_url']) {
+    if (b[k] != null) patch[k] = b[k]
+  }
+  if (typeof b.sell_price === 'number') patch.sell_price = b.sell_price
+  if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
+
+  let { data, error } = await serviceDb().from('products').update(patch).eq('id', id).select('*').single()
+  let guard = 0
+  while (error && (error.code === '42703' || error.code === 'PGRST204') && guard < 10) {
+    const m = /Could not find the '([a-z_]+)' column/i.exec(error.message) || /'([a-z_]+)' column/i.exec(error.message)
+    const col = m?.[1]
+    if (!col || !(col in patch)) break
+    delete patch[col]; guard++
+    ;({ data, error } = await serviceDb().from('products').update(patch).eq('id', id).select('*').single())
+  }
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  if (patch.manual_url) {
+    try { await inngest.send({ name: 'kb/manual.ingest', data: { product_id: id, manual_url: patch.manual_url } }) } catch { /* non-fatal */ }
+  }
+  return NextResponse.json({ product: data })
+}
