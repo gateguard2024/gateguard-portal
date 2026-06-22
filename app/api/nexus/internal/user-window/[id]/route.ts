@@ -23,6 +23,7 @@ import {
   normalizeRole, rolePresetAccess, capAccess, canManageOrg, canInviteUser,
   canAssignFeature, type AccessLevel, type SimpleRole,
 } from '@/lib/permissions'
+import { getMemberSystemAccess, setMemberSystemAccess, CAPABILITIES, type Capability } from '@/lib/system-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -160,6 +161,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     const deactivated = await getClerkDeactivated(target.clerk_user_id)
     const name = [target.first_name, target.last_name].filter(Boolean).join(' ') || target.email || 'User'
 
+    // Site Systems access (dealer-admin managed) + the org's sites for the picker.
+    const systemAccess = await getMemberSystemAccess(target.clerk_user_id, target.org_id)
+    const { data: orgSites } = await supabase.from('sites').select('id, name').eq('org_id', target.org_id).order('name').limit(300)
+
     return NextResponse.json({
       success: true,
       user: {
@@ -178,6 +183,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       userOverrides,
       callerCap,
       roles: SIMPLE_ROLES,
+      systemAccess,
+      systemCapabilities: CAPABILITIES,
+      orgSites: orgSites ?? [],
     })
   } catch (error) {
     return NextResponse.json({ success: false, message: error instanceof Error ? error.message : 'Could not load user.' }, { status: 500 })
@@ -311,6 +319,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       // Old-org feature overrides are keyed by org_id and no longer apply — clean them up.
       try { await supabase.from('user_feature_access').delete().eq('clerk_user_id', target.clerk_user_id).eq('org_id', target.org_id) } catch { /* non-fatal */ }
       return NextResponse.json({ success: true, org_id: destOrgId })
+    }
+
+    // ── set Site Systems access (dealer-admin: doors/cameras/relays/door_users) ──
+    if (action === 'set_system_access') {
+      const valid = new Set(CAPABILITIES.map(c => c.key))
+      const capabilities = (Array.isArray(body.capabilities) ? body.capabilities : []).filter((c: string) => valid.has(c as Capability)) as Capability[]
+      const all_sites = body.all_sites === true
+      const site_ids = Array.isArray(body.site_ids) ? body.site_ids.map((s: unknown) => String(s)) : []
+      if (!target.clerk_user_id) return NextResponse.json({ success: false, message: 'User not found.' }, { status: 404 })
+      const { error } = await setMemberSystemAccess(target.clerk_user_id, target.org_id, { capabilities, all_sites, site_ids })
+      if (error) return NextResponse.json({ success: false, message: error }, { status: 500 })
+      return NextResponse.json({ success: true })
     }
 
     return NextResponse.json({ success: false, message: 'Unknown action.' }, { status: 400 })

@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/current-user'
 import { getAllowedBrivoSite, getAllowedVaultBrivoSite } from '@/lib/brivo-scope'
 import { getOrgBrivoToken, getSiteBrivoToken, listBrivoDoors } from '@/lib/brivo'
+import { canOperate } from '@/lib/system-access'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -20,6 +21,7 @@ export async function GET(req: NextRequest) {
     if (siteId) {
       const site = await getAllowedVaultBrivoSite(user, siteId)
       if (!site) return NextResponse.json({ error: 'That site is outside your access (or has no Brivo login set).' }, { status: 403 })
+      if (!(await canOperate(user, siteId, 'doors'))) return NextResponse.json({ error: 'You don’t have door access for this site.' }, { status: 403 })
       ;({ token, apiKey, brivoSiteId } = await getSiteBrivoToken(siteId))
       if (!brivoSiteId) brivoSiteId = site.brivo_site_id
     } else if (orgId) {

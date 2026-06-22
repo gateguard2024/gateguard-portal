@@ -36,11 +36,12 @@ export const VENDOR_FIELDS: Record<SiteVendor, { label: string; fields: VendorFi
     { key: 'auth_key', label: 'Cloud auth key', secret: true },
     { key: 'server', label: 'Cloud server', placeholder: 'e.g. shelly-12-eu.shelly.cloud' },
   ] },
-  unifi:     { label: 'UniFi (Network)', fields: [
-    { key: 'host', label: 'Controller URL', placeholder: 'https://192.168.1.1' },
-    { key: 'username', label: 'Username' },
-    { key: 'password', label: 'Password', secret: true },
-    { key: 'site', label: 'UniFi site', placeholder: 'default' },
+  unifi:     { label: 'UniFi (Network + Access)', fields: [
+    { key: 'host', label: 'Network controller URL', placeholder: 'https://192.168.1.1' },
+    { key: 'api_key', label: 'Network API key', secret: true },
+    { key: 'site', label: 'Network site', placeholder: 'default' },
+    { key: 'access_host', label: 'Access controller URL', placeholder: 'https://<ip>:12445' },
+    { key: 'access_token', label: 'Access API token', secret: true },
   ] },
 }
 

@@ -68,6 +68,19 @@ export function SiteDoors({ siteId }: { siteId: string }) {
     await fetch(`/api/sites/${siteId}/door-cameras`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ door_id: d.id, door_name: d.name, camera_name: camForm.camera_name.trim(), camera_id: camForm.camera_id || null, stream_url: camForm.stream_url.trim() || null, tags }) }).catch(() => {});
     setBusyId(null); setEditId(null); load();
   }
+  // Auto-match: suggest the Eagle Eye camera whose name/tags overlap the door name.
+  function suggestCam(doorName: string) {
+    const words = doorName.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 2);
+    return eeCams.find(c => {
+      const hay = `${c.name} ${(c.tags || []).join(" ")}`.toLowerCase();
+      return words.some(w => hay.includes(w));
+    }) || null;
+  }
+  async function linkSuggested(d: Door, c: { id: string; name: string; tags: string[] }) {
+    setBusyId(d.id);
+    await fetch(`/api/sites/${siteId}/door-cameras`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ door_id: d.id, door_name: d.name, camera_id: c.id, camera_name: c.name, tags: c.tags }) }).catch(() => {});
+    setBusyId(null); load();
+  }
   async function unlinkCam(d: Door) {
     setBusyId(d.id);
     await fetch(`/api/sites/${siteId}/door-cameras?door_id=${d.id}`, { method: "DELETE" }).catch(() => {});
@@ -102,6 +115,7 @@ export function SiteDoors({ siteId }: { siteId: string }) {
                       {cam?.tags && cam.tags.length > 0 && <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 5 }}>
                         {cam.tags.map(t => <span key={t} style={{ fontSize: 10, fontWeight: 600, background: "rgba(124,58,237,0.16)", border: "1px solid rgba(124,58,237,0.4)", color: "#c4b5fd", borderRadius: 999, padding: "2px 8px" }}>{t}</span>)}
                       </div>}
+                      {!cam && !editing && (() => { const s = suggestCam(d.name); return s ? <button onClick={() => linkSuggested(d, s)} disabled={busyId === d.id} style={{ marginTop: 5, fontSize: 11, fontWeight: 600, background: "rgba(52,211,153,0.14)", border: "1px solid rgba(52,211,153,0.4)", color: "#6ee7b7", borderRadius: 8, padding: "3px 9px", cursor: "pointer" }}>💡 Link “{s.name}”?</button> : null; })()}
                     </div>
                     <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                       <button onClick={() => editing ? setEditId(null) : startEdit(d)} style={{ fontSize: 11.5, fontWeight: 600, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.75)", borderRadius: 9, padding: "6px 10px", cursor: "pointer" }}>{cam ? "Camera" : "+ Camera"}</button>

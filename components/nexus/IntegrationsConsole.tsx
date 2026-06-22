@@ -67,7 +67,7 @@ export function IntegrationsConsole() {
           </div>
         )}
 
-      {openSite && <SiteDetailDrawer id={openSite} onClose={() => { setOpenSite(null); load(); }} />}
+      {openSite && <SiteDetailDrawer id={openSite} systemsTab="setup" onClose={() => { setOpenSite(null); load(); }} />}
     </div>
   );
 }

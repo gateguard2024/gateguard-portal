@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/current-user'
 import { getSiteVendorCreds, mergeSiteVendorCreds, markIntegrationTest } from '@/lib/site-integrations'
 import { eagleEyeExchangeCode } from '@/lib/eagle-eye'
+import { verifyState } from '@/lib/crypto-creds'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -18,10 +19,10 @@ export async function GET(req: NextRequest) {
   if (!user.isCorporate) return back(false, 'Corporate only')
 
   const code = req.nextUrl.searchParams.get('code') ?? ''
-  const siteId = req.nextUrl.searchParams.get('state') ?? ''
+  const siteId = verifyState(req.nextUrl.searchParams.get('state') ?? '') ?? ''
   const err = req.nextUrl.searchParams.get('error')
   if (err) return back(false, err)
-  if (!code || !siteId) return back(false, 'Missing code/state')
+  if (!code || !siteId) return back(false, 'Missing or invalid state — start the connect again.')
 
   try {
     const creds = await getSiteVendorCreds(siteId, 'eagle_eye')

@@ -19,6 +19,9 @@ export type UserWindowData = {
   userOverrides: Record<string, AccessLevel>
   callerCap: Record<string, AccessLevel>
   roles: SimpleRole[]
+  systemAccess?: { capabilities: string[]; all_sites: boolean; site_ids: string[] }
+  systemCapabilities?: { key: string; label: string; icon: string }[]
+  orgSites?: { id: string; name: string }[]
 }
 
 const VIOLET = '#8B5CF6'
@@ -55,6 +58,16 @@ export function UserGlassWindow({
   // Move-to-org picker + deactivate (Build 7)
   const [orgs, setOrgs] = useState<{ id: string; name: string; tier_label: string }[]>([])
   const [moveTo, setMoveTo] = useState('')
+  // Site Systems access (dealer-admin)
+  const sysCaps = data.systemCapabilities ?? []
+  const orgSites = data.orgSites ?? []
+  const [caps, setCaps] = useState<Set<string>>(new Set(data.systemAccess?.capabilities ?? []))
+  const [allSites, setAllSites] = useState<boolean>(data.systemAccess?.all_sites ?? false)
+  const [siteIds, setSiteIds] = useState<Set<string>>(new Set(data.systemAccess?.site_ids ?? []))
+  async function saveSystems(nextCaps: Set<string>, nextAll: boolean, nextSites: Set<string>) {
+    setCaps(nextCaps); setAllSites(nextAll); setSiteIds(nextSites)
+    await post({ action: 'set_system_access', capabilities: [...nextCaps], all_sites: nextAll, site_ids: [...nextSites] })
+  }
   useEffect(() => {
     void fetch('/api/nexus/internal/assignable-orgs').then(r => r.json()).then(j => setOrgs(j.orgs ?? [])).catch(() => {})
   }, [])
@@ -181,6 +194,43 @@ export function UserGlassWindow({
               </div>
             </div>
           </Section>
+
+          {/* Site Systems access (dealer-admin assigns who can operate what) */}
+          {sysCaps.length > 0 && (
+            <Section title="Site Systems access" accent="#34d399">
+              <div className="mb-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>What this person can operate at your sites. Admins already have everything.</div>
+              <div className="flex flex-wrap gap-1.5">
+                {sysCaps.map(c => {
+                  const on = caps.has(c.key)
+                  return (
+                    <button key={c.key} type="button" disabled={busy} onClick={() => { const n = new Set(caps); if (on) n.delete(c.key); else n.add(c.key); void saveSystems(n, allSites, siteIds) }}
+                      className="rounded-full px-3 py-1.5 text-[12px] font-semibold disabled:opacity-50"
+                      style={{ background: on ? 'rgba(52,211,153,0.18)' : 'rgba(255,255,255,0.05)', border: `1px solid ${on ? 'rgba(52,211,153,0.45)' : 'rgba(255,255,255,0.12)'}`, color: on ? '#6ee7b7' : 'rgba(255,255,255,0.6)' }}>
+                      {c.icon} {c.label}
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="mt-4 mb-1.5 text-[11px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.4)' }}>Which sites</div>
+              <div className="flex gap-1.5">
+                <button type="button" disabled={busy} onClick={() => void saveSystems(caps, true, siteIds)} className="rounded-lg px-3 py-1.5 text-[11px] font-semibold" style={{ background: allSites ? 'rgba(52,211,153,0.18)' : 'rgba(255,255,255,0.05)', border: `1px solid ${allSites ? 'rgba(52,211,153,0.45)' : 'rgba(255,255,255,0.12)'}`, color: allSites ? '#6ee7b7' : 'rgba(255,255,255,0.6)' }}>All our sites</button>
+                <button type="button" disabled={busy} onClick={() => void saveSystems(caps, false, siteIds)} className="rounded-lg px-3 py-1.5 text-[11px] font-semibold" style={{ background: !allSites ? 'rgba(52,211,153,0.18)' : 'rgba(255,255,255,0.05)', border: `1px solid ${!allSites ? 'rgba(52,211,153,0.45)' : 'rgba(255,255,255,0.12)'}`, color: !allSites ? '#6ee7b7' : 'rgba(255,255,255,0.6)' }}>Pick sites</button>
+              </div>
+              {!allSites && (
+                <div className="mt-2 max-h-44 space-y-1 overflow-y-auto rounded-xl p-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  {orgSites.length === 0 ? <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.4)' }}>No sites in this org yet.</div> : orgSites.map(s => {
+                    const on = siteIds.has(s.id)
+                    return (
+                      <button key={s.id} type="button" disabled={busy} onClick={() => { const n = new Set(siteIds); if (on) n.delete(s.id); else n.add(s.id); void saveSystems(caps, false, n) }} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12px]" style={{ background: on ? 'rgba(52,211,153,0.12)' : 'transparent', color: 'rgba(255,255,255,0.82)' }}>
+                        <span style={{ width: 16, height: 16, borderRadius: 4, background: on ? '#34d399' : 'rgba(255,255,255,0.08)', color: '#06241a', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>{on ? '✓' : ''}</span>
+                        {s.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </Section>
+          )}
 
           {/* Access package preview */}
           <Section title={`What they can see — ${visibleCount} feature${visibleCount === 1 ? '' : 's'}`}>

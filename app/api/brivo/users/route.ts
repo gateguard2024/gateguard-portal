@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/current-user'
 import { getAllowedBrivoSite, getAllowedVaultBrivoSite } from '@/lib/brivo-scope'
 import { getOrgBrivoToken, getSiteBrivoToken, listBrivoUsers, listBrivoGroups, createBrivoUser } from '@/lib/brivo'
+import { canOperate } from '@/lib/system-access'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -15,6 +16,7 @@ async function resolveBrivo(req: NextRequest, body?: Record<string, unknown>) {
   if (siteId) {
     const site = await getAllowedVaultBrivoSite(user, siteId)
     if (!site) return null
+    if (!(await canOperate(user, siteId, 'door_users'))) return null
     const { token, apiKey, brivoSiteId } = await getSiteBrivoToken(siteId)
     return { token, apiKey, brivoSiteId: brivoSiteId || site.brivo_site_id }
   }

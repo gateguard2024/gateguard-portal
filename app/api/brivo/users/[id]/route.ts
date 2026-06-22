@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/current-user'
 import { getAllowedBrivoSite, getAllowedVaultBrivoSite } from '@/lib/brivo-scope'
 import { getOrgBrivoToken, getSiteBrivoToken, setBrivoUserSuspended } from '@/lib/brivo'
+import { canOperate } from '@/lib/system-access'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -19,6 +20,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (siteId) {
       const site = await getAllowedVaultBrivoSite(user, siteId)
       if (!site) return NextResponse.json({ error: 'That site is outside your access.' }, { status: 403 })
+      if (!(await canOperate(user, siteId, 'door_users'))) return NextResponse.json({ error: 'You don’t have door-user access for this site.' }, { status: 403 })
       ;({ token, apiKey } = await getSiteBrivoToken(siteId))
     } else if (orgId) {
       const site = await getAllowedBrivoSite(user, orgId)

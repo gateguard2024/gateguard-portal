@@ -281,5 +281,54 @@ Setup is **corporate-only**. Where (corporate): site → Connections → Eagle E
 
 **Setup prereq (corporate, one-time):** register a confidential client in the Eagle Eye developer portal and set its **redirect URI to** `https://<your-domain>/api/eagle-eye/callback`. Then paste client ID/secret per site.
 
+## IT-2a — Shelly relays (list + toggle)  (pushed beta · YYYY-MM-DD)
+Where: site panel → **Relays / Power (Shelly)** card.
+
+- ☐ For a site with Shelly connected, the card lists that site's relays with ● ON / ○ OFF state.
+- ☐ **Turn ON / Turn OFF** asks to confirm ("…switches the physical relay"); cancel does nothing.
+- ☐ Confirming switches the relay and shows "Turned … ✓ — logged."
+- ☐ The toggle appears in the site **activity timeline** ("relay_toggle") with who + when.
+- ☐ Not-connected sites show a friendly note (dealer: "Contact Gate Guard"; corporate: "add in Connections").
+- ☐ Dealers can operate relays at their sites; setup (auth key) stays corporate-only.
+
+Note: built against Shelly Cloud `/interface/device/list` + `/device/relay/control`. If your Shelly plan differs, those two calls are the spots to adjust.
+
+**Still on the track:** UniFi (controller auth varies — needs your controller type) and **cellular relays** (specify the product/API). Both store creds today; live control is the follow-up.
+
+## IT-3 — Dealer-admin "Site Systems access"  (pushed beta · YYYY-MM-DD)
+**⚠ Run migration 131** (`member_system_access`).
+Where: **Internal/Users → open one of your people → "Site Systems access"** section.
+
+- ☐ The section shows switches: 🚪 Doors · 👥 Door users · 📹 Cameras · 🔌 Relays, plus "All our sites" / "Pick sites".
+- ☐ Turning a switch on/off saves instantly (reopen the user to confirm it stuck).
+- ☐ "Pick sites" shows that org's sites with checkboxes; selections persist.
+- ☐ A **non-admin** dealer user with nothing granted **cannot** unlock doors / view cameras / toggle relays — the cards show "you don't have access" and the API returns 403.
+- ☐ After the admin grants Doors + a site, that user **can** unlock doors at that site only (not at un-granted sites).
+- ☐ **Dealer admins** and **corporate** can operate everything without being granted (no regression).
+- ☐ Granting Cameras lets the user see the Eagle Eye camera list/picker; revoking hides it.
+
+Note: this is real enforcement on the endpoints, not cosmetic. Existing non-admin users start with no system access until their admin turns it on.
+
+## IT-4 — Site Security console (live cameras + door unlock + playback)  (pushed beta · YYYY-MM-DD)
+Where: site panel → **Site Security** card (top of the systems section). Needs Eagle Eye connected + cameras linked to doors.
+
+- ☐ Each door shows a tile with its **mapped camera's live preview** (refreshes every ~5s, "● LIVE" badge).
+- ☐ Doors with no linked camera show a placeholder ("link a camera in the Doors card").
+- ☐ **Unlock** on a tile confirms, unlocks, and logs (same as the Doors card).
+- ☐ **Recording** opens a player that plays the last ~2 min from that camera.
+- ☐ Access-gated: a user without **cameras** capability sees placeholders / no preview; without **doors** can't unlock.
+- ☐ The whole point: a dealer can watch + unlock + review footage here **without opening Eagle Eye**.
+
+**Honest caveat (verify on first live test):** the live preview proxies Eagle Eye's MJPEG feed and the player proxies a recorded MP4 — both use the verified v3 endpoints, but Eagle Eye media auth/URL shapes can vary. If a tile shows "live preview unavailable" or the clip won't load, send me what the `/api/eagle-eye/preview` and `/clip` calls return and it's a one-spot fix in `lib/eagle-eye.ts`.
+
+## IT-5 — UniFi + tabbed Site Systems + auto-match + event playback  (pushed beta · YYYY-MM-DD)
+- ☐ Site panel now shows ONE **"Site Systems"** card with tabs: 🛡 Security · 🚪 Doors · 🔌 Relays · 🌐 Network · (🔑 Setup, corporate only) — no more long stack.
+- ☐ **Network tab**: with UniFi connected, shows connected devices (read) + UniFi Access doors (list + unlock w/ confirm). Needs `network` capability (devices) / `doors` (Access unlock).
+- ☐ **Camera↔door auto-match**: in Doors, a door with no camera shows "💡 Link '<camera>'?" suggesting an Eagle Eye camera whose name/tags match the door — one click links it.
+- ☐ **Event playback**: in Security, each door tile lists recent "🔓 unlocked <time>" with "▶ clip" that opens the player **at that moment** (not just last 2 min).
+- ☐ Dealer-admin **Network** capability switch appears in the user's Site Systems access.
+
+Note: UniFi **Network** uses the controller API key (works if reachable); UniFi **Access** doors need the Access controller reachable from our servers (port 12445) — flag if it can't connect.
+
 ---
 *(new builds appended below as they ship)*

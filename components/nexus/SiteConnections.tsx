@@ -18,8 +18,9 @@ const VENDORS: { vendor: Vendor; label: string; fields: Field[] }[] = [
     { key: "client_id", label: "EEN client ID" }, { key: "client_secret", label: "EEN client secret", secret: true } ] },
   { vendor: "shelly", label: "Shelly · Relays / Power", fields: [
     { key: "auth_key", label: "Cloud auth key", secret: true }, { key: "server", label: "Cloud server", placeholder: "shelly-12-eu.shelly.cloud" } ] },
-  { vendor: "unifi", label: "UniFi · Network", fields: [
-    { key: "host", label: "Controller URL", placeholder: "https://192.168.1.1" }, { key: "username", label: "Username" }, { key: "password", label: "Password", secret: true }, { key: "site", label: "UniFi site", placeholder: "default" } ] },
+  { vendor: "unifi", label: "UniFi · Network + Access", fields: [
+    { key: "host", label: "Network controller URL", placeholder: "https://192.168.1.1" }, { key: "api_key", label: "Network API key", secret: true }, { key: "site", label: "Network site", placeholder: "default" },
+    { key: "access_host", label: "Access controller URL", placeholder: "https://<ip>:12445" }, { key: "access_token", label: "Access API token", secret: true } ] },
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -28,6 +28,24 @@ export function credsKeyConfigured(): boolean {
   return !!process.env.CREDENTIALS_ENC_KEY
 }
 
+// Signed OAuth state — prevents a forged callback from connecting an arbitrary
+// site. Format: "<value>.<hmac>". verifyState returns the value or null.
+export function signState(value: string): string {
+  const mac = crypto.createHmac('sha256', masterKey()).update(value).digest('base64url')
+  return `${value}.${mac}`
+}
+export function verifyState(state: string): string | null {
+  const i = String(state).lastIndexOf('.')
+  if (i < 1) return null
+  const value = state.slice(0, i)
+  const want = crypto.createHmac('sha256', masterKey()).update(value).digest('base64url')
+  const got = state.slice(i + 1)
+  try {
+    if (got.length === want.length && crypto.timingSafeEqual(Buffer.from(got), Buffer.from(want))) return value
+  } catch { /* mismatch */ }
+  return null
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function encryptJson(obj: any): string {
   const iv = crypto.randomBytes(12)

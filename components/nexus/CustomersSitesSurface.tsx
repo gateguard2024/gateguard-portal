@@ -242,7 +242,7 @@ function SimpleSearchBox({ placeholder, mode }: { placeholder: string; mode: 'cu
           <div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.52)' }}>{selected.subtitle}</div>
           <div className="mt-3 flex flex-wrap gap-2">
             {(selected.type === 'site' || selected.type === 'property') && (
-              <button type="button" onClick={() => setManageSiteId(selected.id)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'linear-gradient(135deg, #00C8FF, #007CFF)', color: 'white' }}>Edit details & connections</button>
+              <button type="button" onClick={() => setManageSiteId(selected.id)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'linear-gradient(135deg, #00C8FF, #007CFF)', color: 'white' }}>Open site &amp; systems →</button>
             )}
             <button type="button" onClick={() => openHref(selected.href)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40" disabled={!selected.href} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.92)' }}>Open full page</button>
             <button type="button" onClick={() => void loadDetail(selected)} className="rounded-full px-3 py-1.5 text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.62)' }}>{detailLoading ? 'Loading…' : 'See Overview'}</button>

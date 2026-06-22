@@ -20,8 +20,7 @@ import React, { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { siteActivation, SITE_STATUS_LABELS, SITE_STATUS_COLORS } from "@/lib/site-lifecycle";
 import { ActivityTimeline } from "@/components/nexus/ActivityTimeline";
-import { SiteConnections } from "@/components/nexus/SiteConnections";
-import { SiteDoors } from "@/components/nexus/SiteDoors";
+import { SiteSystems } from "@/components/nexus/SiteSystems";
 
 type RealWO = { id: string; property?: string; assignedTech?: string | null; assignedTechId?: string | null; eta?: string; priority: string; status: string; woNumber?: string | null; title?: string | null };
 type RealTech = { id: string; name: string };
@@ -504,6 +503,7 @@ function Locations() {
   const [sites, setSites] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [openSite, setOpenSite] = useState<string | null>(null);
+  const [openToSetup, setOpenToSetup] = useState(false);   // new sites open on the Setup tab
   // + Add a site (5th-grade simple: name + basics → opens the site to add its keys)
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState({ name: "", address: "", city: "", state: "", units: "" });
@@ -518,7 +518,7 @@ function Locations() {
     const r = await fetch("/api/sites", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(x => x.json()).catch(() => null);
     setBusy(false);
     const newId = r?.site?.id;
-    if (newId) { setForm({ name: "", address: "", city: "", state: "", units: "" }); setShowNew(false); load(); setOpenSite(newId); }
+    if (newId) { setForm({ name: "", address: "", city: "", state: "", units: "" }); setShowNew(false); load(); setOpenToSetup(true); setOpenSite(newId); }
     else setMsg((r && r.error) || "Couldn't create the site.");
   }
   const input = { background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.92)", borderRadius: 10, padding: "9px 11px", width: "100%", fontSize: 13 } as const;
@@ -540,7 +540,7 @@ function Locations() {
     </div>}
   </Card>;
   if (loading) return <>{addBar}<Card><Small>Loading sites…</Small></Card></>;
-  if (sites.length === 0) return <>{addBar}<Card><Small>No sites yet. Tap “+ Add a site” to create your first one.</Small></Card>{openSite && <SiteDetailDrawer id={openSite} onClose={() => { setOpenSite(null); load(); }} />}</>;
+  if (sites.length === 0) return <>{addBar}<Card><Small>No sites yet. Tap “+ Add a site” to create your first one.</Small></Card>{openSite && <SiteDetailDrawer id={openSite} systemsTab={openToSetup ? "setup" : undefined} onClose={() => { setOpenSite(null); setOpenToSetup(false); load(); }} />}</>;
   return <>
     {addBar}
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px,1fr))", gap: 14 }}>
@@ -560,7 +560,7 @@ function Locations() {
         </div>
       </Card>)}
     </div>
-    {openSite && <SiteDetailDrawer id={openSite} onClose={() => { setOpenSite(null); load(); }} />}
+    {openSite && <SiteDetailDrawer id={openSite} systemsTab={openToSetup ? "setup" : undefined} onClose={() => { setOpenSite(null); setOpenToSetup(false); load(); }} />}
   </>;
 }
 
@@ -577,7 +577,7 @@ const SITE_FIELDS: { key: string; label: string; full?: boolean }[] = [
   { key: "access_notes", label: "Access / gate notes", full: true },
 ];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function SiteDetailDrawer({ id, onClose }: { id: string; onClose: () => void }) {
+export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onClose: () => void; systemsTab?: string }) {
   // Credentials are corporate-only; dealers see Doors/cameras but not Connections.
   const { user } = useUser();
   const isCorporate = ((user?.publicMetadata as Record<string, unknown> | undefined)?.org_tier) === "corporate";
@@ -777,11 +777,8 @@ export function SiteDetailDrawer({ id, onClose }: { id: string; onClose: () => v
           </div>)}
         </Card>
 
-        {/* Per-site vendor connections — corporate only (dealers never see keys) */}
-        {isCorporate && <SiteConnections siteId={id} />}
-
-        {/* Brivo doors — list + unlock (logged) */}
-        <SiteDoors siteId={id} />
+        {/* One tabbed panel: Security · Doors · Relays · Network · (Setup, corporate) */}
+        <SiteSystems siteId={id} isCorporate={isCorporate} initialTab={systemsTab} />
 
         {/* Unified activity timeline (#59) */}
         <ActivityTimeline entity="site" id={id} title="Site activity" />

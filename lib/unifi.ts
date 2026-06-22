@@ -197,6 +197,45 @@ export function makeUniFiClient(cfg: UniFiConfig) {
   }
 }
 
+// ─── Per-site (vault) — Network clients + UniFi Access doors ─────────────────
+// Reads this site's own UniFi creds from the encrypted vault.
+//   network: host, api_key, site   ·   access: access_host, access_token
+import { getSiteVendorCreds } from '@/lib/site-integrations'
+
+export async function listSiteUniFiClients(siteId: string): Promise<Array<{ mac: string; name: string; ip: string | null; wired: boolean }>> {
+  const c = await getSiteVendorCreds(siteId, 'unifi')
+  if (!c?.host || !c?.api_key) throw new Error('UniFi Network host + API key are not set for this site.')
+  const client = makeUniFiClient({ host: c.host, apiKey: c.api_key, site: c.site || 'default', residentGroup: 'Residents' })
+  const list = await client.listConnectedClients()
+  return list.map(u => ({ mac: u.mac, name: u.name || u.hostname || u.mac, ip: u.ip ?? null, wired: !!u.is_wired }))
+}
+
+export interface UnifiAccessDoor { id: string; name: string }
+
+async function accessCreds(siteId: string) {
+  const c = await getSiteVendorCreds(siteId, 'unifi')
+  if (!c?.access_host || !c?.access_token) throw new Error('UniFi Access host + token are not set for this site.')
+  return { host: c.access_host.replace(/\/$/, ''), token: c.access_token }
+}
+
+/** UniFi Access: list doors (controller must be reachable from our servers). */
+export async function listUnifiAccessDoors(siteId: string): Promise<UnifiAccessDoor[]> {
+  const { host, token } = await accessCreds(siteId)
+  const res = await fetch(`${host}/api/v1/developer/doors`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal: AbortSignal.timeout(9000) })
+  if (!res.ok) throw new Error(`UniFi Access doors (${res.status})`)
+  const j = await res.json()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = (j.data ?? j.doors ?? []) as any[]
+  return rows.map(d => ({ id: String(d.id ?? d.unique_id ?? ''), name: d.name ?? d.full_name ?? 'Door' }))
+}
+
+/** UniFi Access: unlock a door. */
+export async function unlockUnifiAccessDoor(siteId: string, doorId: string): Promise<void> {
+  const { host, token } = await accessCreds(siteId)
+  const res = await fetch(`${host}/api/v1/developer/doors/${doorId}/unlock`, { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(9000) })
+  if (!res.ok) throw new Error(`UniFi Access unlock (${res.status})`)
+}
+
 // ─── Build config from org row ────────────────────────────────────────────────
 export function uniFiConfigFromOrg(org: {
   unifi_host?:           string | null
