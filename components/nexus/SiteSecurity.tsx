@@ -22,6 +22,7 @@ export function SiteSecurity({ siteId }: { siteId: string }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [allCams, setAllCams] = useState<any[]>([]);   // every Eagle Eye camera on this site
   const [camPage, setCamPage] = useState(0);           // 9-per-page grid pagination
+  const [camErr, setCamErr] = useState<string | null>(null); // why cameras didn't load
   const noPreview = useRef<Set<string>>(new Set());
 
   const load = React.useCallback(() => {
@@ -30,7 +31,7 @@ export function SiteSecurity({ siteId }: { siteId: string }) {
       fetch(`/api/brivo/doors?site_id=${siteId}`).then(r => r.ok ? r.json() : { doors: [] }).catch(() => ({ doors: [] })),
       fetch(`/api/sites/${siteId}/door-cameras`).then(r => r.json()).catch(() => ({ mappings: [] })),
       fetch(`/api/sites/${siteId}`).then(r => r.json()).catch(() => ({ events: [] })),
-      fetch(`/api/eagle-eye/cameras?site_id=${siteId}`).then(r => r.json()).catch(() => ({ cameras: [] })),
+      fetch(`/api/eagle-eye/cameras?site_id=${siteId}`).then(async r => ({ ok: r.ok, body: await r.json().catch(() => ({})) })).catch(() => ({ ok: false, body: { error: "Couldn't reach the camera service." } })),
     ]).then(([d, c, s, cm]) => {
       setDoors(d.doors ?? []);
       const m: Record<string, CamMap> = {};
@@ -38,7 +39,10 @@ export function SiteSecurity({ siteId }: { siteId: string }) {
       setCams(m);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setEvents((s.events ?? []).filter((e: any) => e.event_type === "door_unlock"));
-      setAllCams(Array.isArray(cm?.cameras) ? cm.cameras : []);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const camRes = cm as { ok: boolean; body: any };
+      setAllCams(Array.isArray(camRes.body?.cameras) ? camRes.body.cameras : []);
+      setCamErr(camRes.ok ? null : (camRes.body?.error ?? "Cameras unavailable."));
     }).finally(() => setLoading(false));
   }, [siteId]);
   useEffect(() => { load(); }, [load]);
@@ -137,7 +141,20 @@ export function SiteSecurity({ siteId }: { siteId: string }) {
         );
       })()}
 
-      {!loading && allCams.length === 0 && doors.length > 0 && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginBottom: 12 }}>No cameras yet — finish connecting Eagle Eye in the 🔑 Setup tab (enter credentials, then “Connect Eagle Eye →”).</div>}
+      {!loading && allCams.length === 0 && (() => {
+        const notConnected = !camErr || /not connected|client id|secret|connect eagle/i.test(camErr);
+        return (
+          <div style={{ marginBottom: 14, padding: 12, borderRadius: 12, background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.3)" }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#fcd34d", marginBottom: 4 }}>📹 No cameras showing yet</div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.7)" }}>
+              {notConnected
+                ? "Eagle Eye isn’t connected for this site yet. Enter the client ID/secret in the 🔑 Setup tab, then click “Connect Eagle Eye →” and approve."
+                : `Connected, but couldn’t load cameras: ${camErr}`}
+            </div>
+            <button onClick={() => { window.location.href = `/api/eagle-eye/connect?site_id=${siteId}`; }} style={{ marginTop: 9, fontSize: 12, fontWeight: 600, background: "rgba(52,211,153,0.16)", border: "1px solid rgba(52,211,153,0.4)", color: "#6ee7b7", borderRadius: 9, padding: "7px 14px", cursor: "pointer" }}>Connect Eagle Eye →</button>
+          </div>
+        );
+      })()}
 
       <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.85)", marginBottom: 8 }}>Doors</div>
       {loading ? <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Loading…</div>
