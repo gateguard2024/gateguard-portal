@@ -16,6 +16,18 @@ import { getSiteVendorCreds, mergeSiteVendorCreds } from '@/lib/site-integration
 const EEN_AUTH_BASE = 'https://auth.eagleeyenetworks.com/oauth2'
 export const EEN_SCOPE = 'vms.all'
 
+/**
+ * The OAuth redirect_uri MUST be a single, stable URL that is also registered in
+ * the Eagle Eye application — Vercel preview/deploy origins change per build and
+ * are not registered, which causes "invalid_request: redirect_uri". Prefer an
+ * explicit env (EEN_REDIRECT_BASE) or the app's public URL; only fall back to the
+ * request origin for local dev. The connect + callback routes must use the SAME value.
+ */
+export function eagleEyeRedirectUri(requestOrigin: string): string {
+  const base = (process.env.EEN_REDIRECT_BASE || process.env.NEXT_PUBLIC_APP_URL || requestOrigin).replace(/\/+$/, '')
+  return `${base}/api/eagle-eye/callback`
+}
+
 export function eagleEyeAuthorizeUrl(clientId: string, redirectUri: string, state: string): string {
   const u = new URL(`${EEN_AUTH_BASE}/authorize`)
   u.searchParams.set('client_id', clientId)

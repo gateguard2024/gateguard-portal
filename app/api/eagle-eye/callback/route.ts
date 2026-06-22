@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/current-user'
 import { getSiteVendorCreds, mergeSiteVendorCreds, markIntegrationTest } from '@/lib/site-integrations'
-import { eagleEyeExchangeCode } from '@/lib/eagle-eye'
+import { eagleEyeExchangeCode, eagleEyeRedirectUri } from '@/lib/eagle-eye'
 import { verifyState } from '@/lib/crypto-creds'
 
 export const dynamic = 'force-dynamic'
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   try {
     const creds = await getSiteVendorCreds(siteId, 'eagle_eye')
     if (!creds?.client_id || !creds?.client_secret) return back(false, 'Eagle Eye client not configured')
-    const redirectUri = `${req.nextUrl.origin}/api/eagle-eye/callback`
+    const redirectUri = eagleEyeRedirectUri(req.nextUrl.origin)
     const t = await eagleEyeExchangeCode(creds.client_id, creds.client_secret, code, redirectUri)
     await mergeSiteVendorCreds(siteId, 'eagle_eye', {
       access_token: t.access_token,

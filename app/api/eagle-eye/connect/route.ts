@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/current-user'
 import { getSiteVendorCreds } from '@/lib/site-integrations'
-import { eagleEyeAuthorizeUrl } from '@/lib/eagle-eye'
+import { eagleEyeAuthorizeUrl, eagleEyeRedirectUri } from '@/lib/eagle-eye'
 import { signState } from '@/lib/crypto-creds'
 
 export const dynamic = 'force-dynamic'
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   const creds = await getSiteVendorCreds(siteId, 'eagle_eye')
   if (!creds?.client_id) return NextResponse.json({ error: 'Save the Eagle Eye client ID + secret first.' }, { status: 400 })
 
-  const redirectUri = `${req.nextUrl.origin}/api/eagle-eye/callback`
+  const redirectUri = eagleEyeRedirectUri(req.nextUrl.origin)
   const url = eagleEyeAuthorizeUrl(creds.client_id, redirectUri, signState(siteId))
   return NextResponse.redirect(url)
 }
