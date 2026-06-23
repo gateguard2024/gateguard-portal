@@ -35,7 +35,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 // PATCH /api/maintenance/[id]/checklist — toggle, set outcome, or update an item
 export async function PATCH(req: NextRequest, _ctx: { params: { id: string } }) {
   const body = await req.json()
-  const { item_id, completed, title, outcome, notes, completed_by_name } = body
+  const { item_id, title, outcome, notes, completed_by_name } = body
+  // Accept either `completed` or `is_complete` from clients.
+  const completed = body.completed !== undefined ? body.completed : body.is_complete
 
   if (!item_id) return NextResponse.json({ error: 'item_id required' }, { status: 400 })
 

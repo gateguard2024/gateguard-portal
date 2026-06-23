@@ -1,18 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentUser } from '@/lib/current-user'
+
+export const dynamic = 'force-dynamic'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// POST /api/maintenance/[id]/comments — add a comment
+// POST /api/maintenance/[id]/comments — add a comment (authored by the signed-in user)
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json()
-  const { content, author_name, author_initials } = body
+  const { content } = body
 
   if (!content?.trim()) {
     return NextResponse.json({ error: 'Content required' }, { status: 400 })
+  }
+
+  // Author = the actual logged-in user (never a hardcoded fallback).
+  let authorName = (body.author_name ?? '').trim()
+  let authorInitials = (body.author_initials ?? '').trim()
+  if (!authorName) {
+    try {
+      const user = await getCurrentUser()
+      authorName = user.name || 'Team member'
+      authorInitials = user.initials || authorName.split(/\s+/).map((p: string) => p[0]).join('').slice(0, 2).toUpperCase()
+    } catch { authorName = 'Team member'; authorInitials = 'TM' }
   }
 
   const { data, error } = await supabase
@@ -20,8 +34,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .insert({
       work_order_id:   params.id,
       content:         content.trim(),
-      author_name:     author_name     ?? 'Russel Feldman',
-      author_initials: author_initials ?? 'RF',
+      author_name:     authorName,
+      author_initials: authorInitials || 'TM',
     })
     .select()
     .single()

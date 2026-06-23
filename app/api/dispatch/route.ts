@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
     assignee_id:    assignee_id ?? null,
     assignee_name:  assignee_name ?? null,
     priority,
-    status:         assignee_id ? 'scheduled' : 'open',
+    status:         scheduled_date ? 'scheduled' : 'open',  // New until it actually has a date
     scheduled_date: scheduled_date ?? null,
     notes:          notes ?? null,
     description:    description ?? notes ?? null,

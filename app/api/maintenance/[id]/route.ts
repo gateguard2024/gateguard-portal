@@ -42,7 +42,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       .single(),
     supabase.from('wo_checklist_items').select('*').eq('work_order_id', params.id).order('sort_order'),
     supabase.from('wo_comments').select('*').eq('work_order_id', params.id).order('created_at'),
-    supabase.from('wo_parts_used').select('*').eq('work_order_id', params.id).order('created_at'),
+    supabase.from('work_order_parts').select('*').eq('work_order_id', params.id).order('created_at'),
     supabase.from('work_orders').select('*').eq('parent_wo_id', params.id).order('created_at'),
   ])
 

@@ -1359,7 +1359,15 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function toggleChecklist(item: any) {
     const next = !(item.is_complete || item.completed || item.done);
-    await fetch(`/api/maintenance/${id}/checklist`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item_id: item.id, is_complete: next }) }).catch(() => {});
+    // Optimistic flip so the box ticks instantly, then persist + reload.
+    setChecklist(cs => cs.map(c => c.id === item.id ? { ...c, completed: next, is_complete: next } : c));
+    await fetch(`/api/maintenance/${id}/checklist`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item_id: item.id, completed: next }) }).catch(() => {});
+    load();
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function removeChecklist(item: any) {
+    setChecklist(cs => cs.filter(c => c.id !== item.id));
+    await fetch(`/api/maintenance/${id}/checklist`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item_id: item.id }) }).catch(() => {});
     load();
   }
   async function addComment() {
@@ -1529,10 +1537,13 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
           </div>}
           {checklist.map(c => {
             const done = c.is_complete || c.completed || c.done;
-            return <label key={c.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 0", cursor: "pointer" }}>
-              <input type="checkbox" checked={!!done} onChange={() => toggleChecklist(c)} />
-              <span style={{ textDecoration: done ? "line-through" : "none", color: done ? "rgba(255,255,255,0.45)" : "white", fontSize: 14 }}>{c.title || c.label}</span>
-            </label>;
+            return <div key={c.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 0" }}>
+              <label style={{ display: "flex", gap: 8, alignItems: "center", flex: 1, cursor: "pointer", minWidth: 0 }}>
+                <input type="checkbox" checked={!!done} onChange={() => toggleChecklist(c)} />
+                <span style={{ textDecoration: done ? "line-through" : "none", color: done ? "rgba(255,255,255,0.45)" : "white", fontSize: 14 }}>{c.title || c.label}</span>
+              </label>
+              <button onClick={() => removeChecklist(c)} title="Remove step" style={{ background: "none", border: "none", color: "rgba(252,165,165,0.7)", cursor: "pointer", fontSize: 15, flexShrink: 0 }}>×</button>
+            </div>;
           })}
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
             <input placeholder="Add a step…" value={newItem} onChange={e => setNewItem(e.target.value)} onKeyDown={e => { if (e.key === "Enter") addChecklist(); }} style={{ ...input, padding: 9 }} />

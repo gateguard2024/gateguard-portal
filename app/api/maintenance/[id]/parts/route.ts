@@ -43,6 +43,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const sku               = body.sku ?? body.part_number ?? null
   const qty               = Number(body.qty ?? body.quantity ?? 1)
   const unit_cost         = body.unit_cost != null ? Number(body.unit_cost) : null
+  const unit_price        = body.unit_price != null ? Number(body.unit_price) : null
   const action            = body.action ?? 'used'
   const site_asset_id     = body.site_asset_id ?? null
   const notes             = body.notes?.trim()     || null
@@ -92,22 +93,34 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
   }
 
-  const { data, error } = await supabase
-    .from('work_order_parts')
-    .insert({
-      work_order_id:     params.id,
-      inventory_item_id: inventory_item_id || null,
-      name,
-      sku:               sku?.trim()  || null,
-      qty,
-      unit_cost,
-      action,
-      site_asset_id:     site_asset_id || null,
-      notes,
-      added_by,
-    })
-    .select()
-    .single()
+  const insertRow: Record<string, unknown> = {
+    work_order_id:     params.id,
+    inventory_item_id: inventory_item_id || null,
+    name,
+    sku:               sku?.trim()  || null,
+    qty,
+    unit_cost,
+    unit_price,
+    action,
+    site_asset_id:     site_asset_id || null,
+    notes,
+    added_by,
+  }
+  // Drift-resilient: strip any column this DB doesn't have yet (e.g. unit_price
+  // before migration 135) and retry, so adding a part never silently fails.
+  let data: unknown = null
+  let error: { code?: string; message: string } | null = null
+  for (let i = 0; i < 6; i++) {
+    const res = await supabase.from('work_order_parts').insert(insertRow).select().single()
+    data = res.data; error = res.error
+    if (!error) break
+    if (error.code === '42703' || error.code === 'PGRST204') {
+      const m = /Could not find the '([a-z_]+)' column/i.exec(error.message) || /'([a-z_]+)' column/i.exec(error.message) || /column "?([a-z_]+)"?/i.exec(error.message)
+      const col = m?.[1]
+      if (col && col in insertRow) { delete insertRow[col]; continue }
+    }
+    break
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
