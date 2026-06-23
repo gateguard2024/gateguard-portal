@@ -20,22 +20,23 @@ export async function GET(req: NextRequest) {
   if (!siteId) return NextResponse.json({ error: 'site_id required' }, { status: 400 })
 
   const creds = await getSiteVendorCreds(siteId, 'eagle_eye')
-  if (!creds?.client_id) return NextResponse.json({ error: 'Save the Eagle Eye client ID + secret first.' }, { status: 400 })
-
   const redirectUri = eagleEyeRedirectUri(req.nextUrl.origin)
-  const url = eagleEyeAuthorizeUrl(creds.client_id, redirectUri, signState(siteId))
 
-  // ?debug=1 → show exactly what we're sending so you can register the EXACT
-  // redirect_uri in the Eagle Eye application (this value must match character-for-character).
+  // ?debug=1 → diagnostics, even when creds are missing, so you can see the exact
+  // redirect_uri to register in EEN AND whether this site actually has creds saved.
   if (req.nextUrl.searchParams.get('debug') === '1') {
     return NextResponse.json({
-      redirect_uri: redirectUri,
+      site_id: siteId,
+      site_id_looks_like_uuid: /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(siteId),
+      client_id_present: !!creds?.client_id,
       register_this_in_eagle_eye: redirectUri,
       base_source: process.env.EEN_REDIRECT_BASE ? 'EEN_REDIRECT_BASE' : process.env.NEXT_PUBLIC_APP_URL ? 'NEXT_PUBLIC_APP_URL' : 'request_origin (NOT STABLE — set EEN_REDIRECT_BASE)',
       request_origin: req.nextUrl.origin,
-      authorize_url: url,
-      client_id_present: !!creds.client_id,
+      next_step: !creds?.client_id ? 'No Eagle Eye client_id saved for this site_id. Use the real site UUID and save the client ID/secret on its Setup tab.' : 'Creds OK — register register_this_in_eagle_eye in the EEN app, then connect.',
     })
   }
+
+  if (!creds?.client_id) return NextResponse.json({ error: 'Save the Eagle Eye client ID + secret first.' }, { status: 400 })
+  const url = eagleEyeAuthorizeUrl(creds.client_id, redirectUri, signState(siteId))
   return NextResponse.redirect(url)
 }

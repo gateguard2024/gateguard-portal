@@ -9,6 +9,25 @@ import React, { useEffect, useRef, useState } from "react";
 type Door = { id: string; name: string };
 type CamMap = { door_id: string; camera_id: string | null; camera_name: string; tags?: string[] | null };
 
+// Live camera frame with double-buffering: the new snapshot is preloaded off-screen
+// and only swapped in once it's fully decoded, so the tile never blanks/flickers
+// between refreshes. (Serverless can't hold an open MJPEG stream, so we refresh frames.)
+function LiveCam({ src, alt, onError }: { src: string; alt: string; onError?: () => void }) {
+  const [shown, setShown] = useState(src);
+  useEffect(() => {
+    let cancelled = false;
+    const img = new window.Image();
+    img.onload = () => { if (!cancelled) setShown(src); };
+    img.onerror = () => { if (!cancelled) onError?.(); };
+    img.src = src;
+    return () => { cancelled = true; };
+    // Only re-run when the frame URL changes (tick). onError is stable enough via closure.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src]);
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img alt={alt} src={shown} style={{ width: "100%", height: "100%", objectFit: "cover" }} />;
+}
+
 export function SiteSecurity({ siteId }: { siteId: string }) {
   const [doors, setDoors] = useState<Door[]>([]);
   const [cams, setCams] = useState<Record<string, CamMap>>({});
@@ -67,8 +86,7 @@ export function SiteSecurity({ siteId }: { siteId: string }) {
       <div style={{ background: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, overflow: "hidden" }}>
         <div style={{ position: "relative", aspectRatio: "16/9", background: "#05080f", display: "flex", alignItems: "center", justifyContent: "center" }}>
           {showPreview ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img alt={cam?.camera_name || door.name} src={`/api/eagle-eye/preview?site_id=${siteId}&camera_id=${encodeURIComponent(camId)}&t=${tick}`} onError={() => { noPreview.current.add(camId); setTick(n => n + 1); }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            <LiveCam alt={cam?.camera_name || door.name} src={`/api/eagle-eye/preview?site_id=${siteId}&camera_id=${encodeURIComponent(camId)}&t=${tick}`} onError={() => { noPreview.current.add(camId); setTick(n => n + 1); }} />
           ) : (
             <div style={{ textAlign: "center", color: "rgba(255,255,255,0.4)", fontSize: 12, padding: 10 }}>{cam?.camera_name ? `📹 ${cam.camera_name}` : "No camera linked"}<div style={{ fontSize: 10, marginTop: 4 }}>{camId ? "live preview unavailable" : "link a camera in the Doors card"}</div></div>
           )}
@@ -126,8 +144,7 @@ export function SiteSecurity({ siteId }: { siteId: string }) {
                   <button key={camId || i} onClick={() => camId && setClip({ camId, name, ts: new Date(Date.now() - 120000).toISOString() })} style={{ padding: 0, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, overflow: "hidden", background: "#05080f", cursor: camId ? "pointer" : "default", textAlign: "left" }}>
                     <div style={{ position: "relative", aspectRatio: "16/9", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       {ok ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img alt={name} src={`/api/eagle-eye/preview?site_id=${siteId}&camera_id=${encodeURIComponent(camId)}&t=${tick}`} onError={() => { noPreview.current.add(camId); setTick(n => n + 1); }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        <LiveCam alt={name} src={`/api/eagle-eye/preview?site_id=${siteId}&camera_id=${encodeURIComponent(camId)}&t=${tick}`} onError={() => { noPreview.current.add(camId); setTick(n => n + 1); }} />
                       ) : <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>preview unavailable</div>}
                       {ok && <span style={{ position: "absolute", top: 5, right: 6, fontSize: 8.5, fontWeight: 700, color: "#fca5a5" }}>● LIVE</span>}
                       <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, fontSize: 10.5, color: "#fff", background: "rgba(0,0,0,0.55)", padding: "3px 7px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
