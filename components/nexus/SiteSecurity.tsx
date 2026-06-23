@@ -5,6 +5,7 @@
 // "Recording" button that plays the last minute of footage. Cameras without a
 // door show as live tiles too. All gated by the user's granted capabilities.
 import React, { useEffect, useRef, useState } from "react";
+import { Shield } from "lucide-react";
 
 type Door = { id: string; name: string };
 type CamMap = { door_id: string; camera_id: string | null; camera_name: string; tags?: string[] | null };
@@ -118,7 +119,7 @@ export function SiteSecurity({ siteId }: { siteId: string }) {
 
   return (
     <div style={card}>
-      <div style={{ fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 4 }}>Site Security</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 4 }}><Shield size={17} color="#7DE5FF" /> Site Security</div>
       <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 12 }}>Watch each door, unlock, and pull recent footage — all here, no Eagle Eye needed.</div>
 
       {/* All cameras — 9-up grid, paginated. Shows everything Eagle Eye sees at this site. */}

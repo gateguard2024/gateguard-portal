@@ -4,6 +4,7 @@
 // logged to the site activity timeline (who/when). Operate action; dealers at
 // the site can use it. Setup (auth key) is corporate-only.
 import React, { useEffect, useState } from "react";
+import { Zap } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
 
 type Relay = { id: string; name: string; channel: number; on: boolean | null };
@@ -41,7 +42,7 @@ export function SiteRelays({ siteId }: { siteId: string }) {
   const card = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: 18 } as const;
   return (
     <div style={card}>
-      <div style={{ fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 4 }}>Relays / Power (Shelly)</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 4 }}><Zap size={16} color="#7DE5FF" /> Relays / Power (Shelly)</div>
       <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 12 }}>Switch this site&apos;s Shelly relays. Every change is logged with who &amp; when.</div>
       {loading ? <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Loading relays…</div>
         : note ? <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.6)", background: "rgba(0,200,255,0.07)", border: "1px solid rgba(0,200,255,0.18)", borderRadius: 10, padding: "10px 12px" }}>Shelly isn&apos;t connected for this site yet. {isCorporate ? "Add the auth key + server in Connections above, then Test." : "Contact Gate Guard to set it up for this property."}</div>

@@ -245,6 +245,41 @@ export default function MessagesShell() {
   // Create a new CRM record straight from the email (sender's name + address),
   // then auto-link this thread to it. One tap turns an email into a lead/deal/customer.
   const [creating, setCreating] = useState<string | null>(null);
+
+  // Opportunity from email → open a center popup to name it + add the basics,
+  // instead of auto-typing the name. The deal is only created on submit.
+  const [oppModal, setOppModal] = useState<Conversation | null>(null);
+  const [oppForm, setOppForm] = useState({ name: '', site_name: '', units: '', address: '', systems: '', contact_name: '', contact_email: '' });
+  const [oppBusy, setOppBusy] = useState(false);
+  const openOppModal = (conv: Conversation) => {
+    const who = conv.contact_name || conv.contact_address || '';
+    setOppForm({ name: '', site_name: '', units: '', address: '', systems: '', contact_name: who, contact_email: conv.contact_address || '' });
+    setOppModal(conv);
+  };
+  const submitOpportunity = async () => {
+    if (!oppModal || oppBusy) return;
+    const name = oppForm.name.trim() || (oppForm.site_name.trim() ? `${oppForm.site_name.trim()} — Opportunity` : `${oppForm.contact_name || 'New'} — Opportunity`);
+    setOppBusy(true);
+    try {
+      const r = await fetch('/api/crm/opportunities', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          account_name: oppForm.site_name.trim() || oppForm.contact_name.trim() || name,
+          property_name: oppForm.site_name.trim() || null,
+          property_address: oppForm.address.trim() || null,
+          units: oppForm.units ? Number(oppForm.units) || null : null,
+          contact_name: oppForm.contact_name.trim() || null,
+          contact_email: oppForm.contact_email.trim() || null,
+          notes: oppForm.systems.trim() ? `Systems interested in: ${oppForm.systems.trim()}` : null,
+        }),
+      }).then(r => r.json()).catch(() => ({}));
+      const id = r?.id ?? r?.data?.id ?? null;
+      if (id) await patchLink(oppModal, { linked_type: 'opportunity', linked_id: String(id), linked_label: r?.name ?? name });
+      setOppModal(null);
+    } finally { setOppBusy(false); }
+  };
+
   const createAndLink = async (conv: Conversation, type: 'lead' | 'opportunity' | 'customer' | 'contact') => {
     setCreating(type);
     try {
@@ -555,7 +590,7 @@ export default function MessagesShell() {
                 <div className="text-[11px] font-bold uppercase tracking-wider mb-2" style={textSecondary}>Create from this email</div>
                 <div className="flex flex-col gap-1.5">
                   {([['contact', 'Contact', '#60a5fa'], ['lead', 'Lead', '#f59e0b'], ['opportunity', 'Opportunity', '#818cf8'], ['customer', 'Customer', '#34d399']] as const).map(([type, label, color]) => (
-                    <button key={type} onClick={() => createAndLink(selectedConversation, type)} disabled={creating !== null}
+                    <button key={type} onClick={() => type === 'opportunity' ? openOppModal(selectedConversation) : createAndLink(selectedConversation, type)} disabled={creating !== null}
                       className="w-full px-3 py-2 rounded-lg text-[13px] text-left flex items-center justify-between disabled:opacity-50" style={{ background: '#18181b', border: '1px solid rgba(255,255,255,0.08)' }}>
                       <span className="flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
@@ -574,6 +609,36 @@ export default function MessagesShell() {
               <div className="text-[11px] font-bold uppercase tracking-wider mb-2" style={textSecondary}>Channel</div>
               <span className="px-2 py-1 rounded text-[12px] capitalize" style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.7)' }}>{selectedConversation.channel}</span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* New opportunity from email — center popup to name it + add the basics */}
+      {oppModal && (
+        <div onClick={() => !oppBusy && setOppModal(null)} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: 'min(460px,100%)', maxHeight: '90vh', overflowY: 'auto', background: 'linear-gradient(180deg,#0c1530,#070c1c)', border: '1px solid rgba(129,140,248,0.3)', borderRadius: 18, padding: 18, color: 'white', boxShadow: '0 30px 80px rgba(0,0,0,0.5)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h2 style={{ fontSize: 17, margin: 0 }}>New opportunity</h2>
+              <button onClick={() => setOppModal(null)} aria-label="Close" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.16)', color: 'white', borderRadius: 9, width: 30, height: 30, cursor: 'pointer', fontSize: 16 }}>×</button>
+            </div>
+            {(() => {
+              const inp = { width: '100%', boxSizing: 'border-box' as const, background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.12)', color: 'white', borderRadius: 10, padding: '9px 11px', fontSize: 13.5 };
+              const lbl = { fontSize: 11.5, fontWeight: 600, color: 'rgba(255,255,255,0.6)', marginBottom: 4 };
+              return <div style={{ display: 'grid', gap: 10 }}>
+                <div><div style={lbl}>Deal name (optional — we&apos;ll name it from the site if blank)</div><input value={oppForm.name} onChange={e => setOppForm({ ...oppForm, name: e.target.value })} placeholder="e.g. Stonegate — Gate + Cameras" style={inp} /></div>
+                <div><div style={lbl}>Site / property name</div><input value={oppForm.site_name} onChange={e => setOppForm({ ...oppForm, site_name: e.target.value })} placeholder="The Villages on Riverwalk" style={inp} /></div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ flex: 1 }}><div style={lbl}>Units</div><input value={oppForm.units} onChange={e => setOppForm({ ...oppForm, units: e.target.value.replace(/[^0-9]/g, '') })} placeholder="120" style={inp} /></div>
+                  <div style={{ flex: 2 }}><div style={lbl}>Address</div><input value={oppForm.address} onChange={e => setOppForm({ ...oppForm, address: e.target.value })} placeholder="5327 Riverwalk Dr" style={inp} /></div>
+                </div>
+                <div><div style={lbl}>Systems interested in</div><input value={oppForm.systems} onChange={e => setOppForm({ ...oppForm, systems: e.target.value })} placeholder="Gate operator, cameras, access control" style={inp} /></div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ flex: 1 }}><div style={lbl}>Contact name</div><input value={oppForm.contact_name} onChange={e => setOppForm({ ...oppForm, contact_name: e.target.value })} style={inp} /></div>
+                  <div style={{ flex: 1 }}><div style={lbl}>Contact email</div><input value={oppForm.contact_email} onChange={e => setOppForm({ ...oppForm, contact_email: e.target.value })} style={inp} /></div>
+                </div>
+                <button onClick={submitOpportunity} disabled={oppBusy} style={{ marginTop: 4, background: '#6366f1', color: 'white', border: 0, borderRadius: 12, padding: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: oppBusy ? 0.5 : 1 }}>{oppBusy ? 'Creating…' : 'Create opportunity & link email'}</button>
+              </div>;
+            })()}
           </div>
         </div>
       )}

@@ -5,6 +5,7 @@
 // site event (with the linked camera) so the activity timeline shows who/when
 // and lets you pull the footage.
 import React, { useEffect, useState } from "react";
+import { Key } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
 
 type Door = { id: string; name: string };
@@ -91,7 +92,7 @@ export function SiteDoors({ siteId }: { siteId: string }) {
   const input = { background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.92)", borderRadius: 8, padding: "7px 9px", width: "100%", fontSize: 12.5 } as const;
   return (
     <div style={card}>
-      <div style={{ fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 4 }}>Doors (Brivo)</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 4 }}><Key size={16} color="#7DE5FF" /> Doors (Brivo)</div>
       <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 12 }}>Live from this site&apos;s Brivo account. Link the camera that watches each door, then unlocking is logged with the camera so you can pull footage.</div>
       {loading ? <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Loading doors…</div>
         : note ? <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.6)", background: "rgba(0,200,255,0.07)", border: "1px solid rgba(0,200,255,0.18)", borderRadius: 10, padding: "10px 12px" }}>

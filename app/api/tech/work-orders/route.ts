@@ -38,22 +38,30 @@ export async function GET(req: NextRequest) {
   }
   if (!techId) return NextResponse.json({ work_orders: [], note: 'No tech_id — pass ?tech_id= or use a per-tech code' })
 
-  // WOs assigned to this tech. Match by assignee_id / assigned_to, and also by
-  // assignee_name as a safety net (covers legacy/duplicate technician records where
-  // the assigned id differs from the one the tech signs in as). open/scheduled first.
-  const orParts = [`assignee_id.eq.${techId}`, `assigned_to.eq.${techId}`]
-  if (techName) {
-    const safeName = techName.replace(/[,()*\\]/g, ' ').trim()
-    if (safeName) orParts.push(`assignee_name.ilike.${safeName}`)
-  }
-  const { data: wos, error } = await db
-    .from('work_orders')
-    .select('id, wo_number, title, description, status, priority, scheduled_date, scheduled_time, site_id, customer_name, assignee_id, assigned_to')
-    .or(orParts.join(','))
-    .order('scheduled_date', { ascending: true })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // WOs assigned to this tech. Run two SIMPLE queries and merge — avoids putting a
+  // name (which can contain spaces) inside the same .or() as the ids, which broke
+  // PostgREST's filter parsing and returned nothing.
+  const SEL = 'id, wo_number, title, description, status, priority, scheduled_date, scheduled_time, site_id, customer_name, assignee_id, assignee_name, assigned_to'
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const merged: Record<string, any> = {}
+  let queryErr: string | null = null
 
-  const list = wos ?? []
+  const byId = await db.from('work_orders').select(SEL).or(`assignee_id.eq.${techId},assigned_to.eq.${techId}`).order('scheduled_date', { ascending: true })
+  if (byId.error) queryErr = byId.error.message
+  for (const w of byId.data ?? []) merged[w.id] = w
+
+  if (techName) {
+    const byName = await db.from('work_orders').select(SEL).ilike('assignee_name', techName).order('scheduled_date', { ascending: true })
+    if (!byName.error) for (const w of byName.data ?? []) merged[w.id] = w
+  }
+
+  const list = Object.values(merged)
+  if (queryErr && list.length === 0) return NextResponse.json({ error: queryErr }, { status: 500 })
+
+  // ?debug=1 → see exactly who we resolved + what matched, to diagnose "no jobs".
+  if (new URL(req.url).searchParams.get('debug') === '1') {
+    return NextResponse.json({ resolved_tech_id: techId, resolved_tech_name: techName, matched_count: list.length, by_id_count: (byId.data ?? []).length, sample: list.slice(0, 5).map(w => ({ wo: w.wo_number, assignee_id: w.assignee_id, assignee_name: w.assignee_name, status: w.status })) })
+  }
   const siteIds = [...new Set(list.map(w => w.site_id).filter(Boolean))] as string[]
   const woIds = list.map(w => w.id)
 

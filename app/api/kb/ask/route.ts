@@ -14,6 +14,34 @@ import { isTechAuthed }               from '@/lib/tech-auth'
 export const maxDuration = 60   // Vercel Pro: up to 60s. Prevents silent timeout at step 3-4.
 export const dynamic     = 'force-dynamic'
 
+// Tolerant parse of the model's JSON step. Strips code fences, removes trailing
+// commas, and best-effort closes a truncated object so a slightly malformed or
+// cut-off response never crashes the diagnostic with a raw JSON error.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parseStepJson(raw: string): any {
+  let s = String(raw || '').trim().replace(/```json\s*/gi, '').replace(/```/g, '').trim()
+  const start = s.indexOf('{')
+  if (start > 0) s = s.slice(start)
+  const tryParse = (str: string) => { try { return JSON.parse(str) } catch { return undefined } }
+  // 1) straight up
+  let out = tryParse(s)
+  if (out) return out
+  // 2) to the last closing brace
+  const lastBrace = s.lastIndexOf('}')
+  if (lastBrace > 0) { out = tryParse(s.slice(0, lastBrace + 1)); if (out) return out }
+  // 3) remove trailing commas before } or ]
+  const noTrailing = s.replace(/,\s*([}\]])/g, '$1')
+  out = tryParse(noTrailing); if (out) return out
+  // 4) truncated mid-array/object: drop the dangling fragment + close brackets
+  let t = noTrailing.replace(/,\s*"[^"]*"\s*:?\s*[^,{}\[\]]*$/, '').replace(/,\s*$/, '')
+  const opens = (t.match(/\{/g) || []).length, closes = (t.match(/\}/g) || []).length
+  const aOpen = (t.match(/\[/g) || []).length, aClose = (t.match(/\]/g) || []).length
+  t += ']'.repeat(Math.max(0, aOpen - aClose)) + '}'.repeat(Math.max(0, opens - closes))
+  out = tryParse(t); if (out) return out
+  // 5) safe fallback so the tech still gets guidance, not a crash
+  return { type: 'escalate', text: 'I couldn’t format that step cleanly. Check the manual for this device, or escalate to support and we’ll walk it through.', detail: null }
+}
+
 export async function POST(req: NextRequest) {
   const techOk = await isTechAuthed(req)
   let userId: string | null = null
@@ -145,8 +173,9 @@ ${lines}`
         ).join('\n')
       : ''
 
-    // 4. Claude — fewer tokens needed on later steps (step instructions are short)
-    const maxTokens = historyLen >= 3 ? 450 : 600
+    // 4. Claude — give enough headroom that the JSON step never truncates mid-array
+    // (truncation was surfacing as "Expected ',' or ']'" CONNECTION ERROR).
+    const maxTokens = historyLen >= 3 ? 800 : 1100
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
     const message = await client.messages.create({
@@ -327,10 +356,8 @@ Relevant manual/KB content:\n${context}\n\nWhat is the next diagnostic step?`
     })
 
     const raw   = message.content[0].type === 'text' ? message.content[0].text : ''
-    const match = raw.match(/\{[\s\S]*\}/)
-    if (!match) throw new Error(`No JSON in Claude response: ${raw.slice(0, 200)}`)
-
-    const step = JSON.parse(match[0])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const step = parseStepJson(raw)
 
     // Fill manual_ref from top chunk if Claude didn't set one
     if (!step.manual_ref?.url && chunks[0]?.manual_url) {
