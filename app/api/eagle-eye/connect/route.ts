@@ -24,5 +24,18 @@ export async function GET(req: NextRequest) {
 
   const redirectUri = eagleEyeRedirectUri(req.nextUrl.origin)
   const url = eagleEyeAuthorizeUrl(creds.client_id, redirectUri, signState(siteId))
+
+  // ?debug=1 → show exactly what we're sending so you can register the EXACT
+  // redirect_uri in the Eagle Eye application (this value must match character-for-character).
+  if (req.nextUrl.searchParams.get('debug') === '1') {
+    return NextResponse.json({
+      redirect_uri: redirectUri,
+      register_this_in_eagle_eye: redirectUri,
+      base_source: process.env.EEN_REDIRECT_BASE ? 'EEN_REDIRECT_BASE' : process.env.NEXT_PUBLIC_APP_URL ? 'NEXT_PUBLIC_APP_URL' : 'request_origin (NOT STABLE — set EEN_REDIRECT_BASE)',
+      request_origin: req.nextUrl.origin,
+      authorize_url: url,
+      client_id_present: !!creds.client_id,
+    })
+  }
   return NextResponse.redirect(url)
 }
