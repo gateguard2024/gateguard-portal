@@ -185,7 +185,7 @@ function Dashboard({ jobs, techs, loading, onOpen, onUpdate }: { jobs: RealWO[];
       </div>}
     </Card>
 
-    <Board jobs={jobs} onOpen={onOpen} />
+    <Board jobs={jobs} onOpen={onOpen} onUpdate={onUpdate} />
   </div>;
 }
 
@@ -284,7 +284,7 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen }: { jobs
       </div>
       {loading ? <Small>Loading…</Small> : jobs.length === 0 ? <Small>No work orders yet. Tap “+ New”.</Small> : shown.length === 0 ? <Small>No work orders match.</Small> : shown.map(wo => <WORow key={wo.id} wo={wo} techs={techs} onUpdate={onUpdate} onOpen={onOpen} />)}
     </Card>
-    <Board jobs={jobs} onOpen={onOpen} />
+    <Board jobs={jobs} onOpen={onOpen} onUpdate={onUpdate} />
   </div>;
 }
 
@@ -302,21 +302,37 @@ function WORow({ wo, techs, onUpdate, onOpen }: { wo: RealWO; techs: RealTech[];
   </div>;
 }
 
-function Board({ jobs, onOpen }: { jobs: RealWO[]; onOpen: (id: string) => void }) {
+function Board({ jobs, onOpen, onUpdate }: { jobs: RealWO[]; onOpen: (id: string) => void; onUpdate?: (id: string, patch: Record<string, unknown>) => void }) {
   const [showDone, setShowDone] = useState(false);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overCol, setOverCol] = useState<string | null>(null);
   const activeCols = JOB_COLUMNS.filter(c => c.key !== "Done");
   const doneItems = jobs.filter(w => bucketOf(w.status) === "Done");
-  return <Card><h2 style={{ fontSize: 16, marginBottom: 12 }}>Jobs board</h2>
+  // Drag a card to another column → change its status.
+  const dropTo = (colKey: string) => {
+    const id = dragId; setDragId(null); setOverCol(null);
+    if (!id || !onUpdate) return;
+    const wo = jobs.find(w => w.id === id);
+    if (!wo || bucketOf(wo.status) === colKey) return;
+    onUpdate(id, { status: COL_TO_DB[colKey] });
+  };
+  return <Card><h2 style={{ fontSize: 16, marginBottom: 4 }}>Jobs board</h2>
+    {onUpdate && <p style={{ fontSize: 11.5, color: "rgba(255,255,255,0.4)", margin: "0 0 12px" }}>Tip: drag a card to another column to change its status.</p>}
     <div style={{ display: "grid", gridTemplateColumns: `repeat(${activeCols.length}, minmax(0,1fr))`, gap: 12 }}>
       {activeCols.map(col => {
         const items = jobs.filter(w => bucketOf(w.status) === col.key);
-        return <div key={col.key}>
+        const isOver = overCol === col.key;
+        return <div key={col.key}
+          onDragOver={onUpdate ? (e => { e.preventDefault(); if (overCol !== col.key) setOverCol(col.key); }) : undefined}
+          onDragLeave={onUpdate ? (() => setOverCol(c => c === col.key ? null : c)) : undefined}
+          onDrop={onUpdate ? (e => { e.preventDefault(); dropTo(col.key); }) : undefined}
+          style={{ borderRadius: 12, outline: isOver ? `2px dashed ${col.accent}` : "none", outlineOffset: 3, transition: "outline 0.1s" }}>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", borderRadius: 12, background: `${col.accent}22`, border: `1px solid ${col.accent}55`, marginBottom: 10 }}><span style={{ fontWeight: 700, fontSize: 13 }}>{col.label}</span><span style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>{items.length}</span></div>
-          {items.map(w => <div key={w.id} onClick={() => onOpen(w.id)} style={{ padding: 12, borderRadius: 12, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.08)", marginBottom: 10, cursor: "pointer" }}>
+          {items.map(w => <div key={w.id} draggable={!!onUpdate} onDragStart={onUpdate ? (e => { setDragId(w.id); e.dataTransfer.effectAllowed = "move"; }) : undefined} onDragEnd={() => { setDragId(null); setOverCol(null); }} onClick={() => onOpen(w.id)} style={{ padding: 12, borderRadius: 12, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.08)", marginBottom: 10, cursor: onUpdate ? "grab" : "pointer", opacity: dragId === w.id ? 0.4 : 1 }}>
             <b style={{ fontSize: 13 }}>{w.woNumber || w.title || "Work Order"}</b>
             <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 12, margin: "4px 0" }}>{w.property || "—"}{w.assignedTech ? ` · ${w.assignedTech}` : " · Unassigned"}</p>
           </div>)}
-          {items.length === 0 && <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 12, textAlign: "center", padding: "8px 0" }}>—</p>}
+          {items.length === 0 && <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 12, textAlign: "center", padding: "8px 0" }}>{isOver ? "Drop here" : "—"}</p>}
         </div>;
       })}
     </div>
@@ -1372,6 +1388,16 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
     await fetch(`/api/maintenance/${id}/checklist`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item_id: item.id }) }).catch(() => {});
     load(true);
   }
+  // Reorder a step up/down. Reassigns sequential sort_order so the new order sticks.
+  async function moveStep(idx: number, dir: -1 | 1) {
+    const j = idx + dir;
+    if (j < 0 || j >= checklist.length) return;
+    const next = [...checklist];
+    [next[idx], next[j]] = [next[j], next[idx]];
+    setChecklist(next); // optimistic
+    await Promise.all(next.map((c, i) => fetch(`/api/maintenance/${id}/checklist`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item_id: c.id, sort_order: i }) }).catch(() => {})));
+    load(true);
+  }
   async function addComment() {
     const content = chat.trim(); if (!content) return; setChat("");
     await fetch(`/api/maintenance/${id}/comments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content }) }).catch(() => {});
@@ -1537,13 +1563,18 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
               {playbooks.map(p => <option key={p.id} value={p.id}>{p.title}{p.org_id ? "" : " (global)"} — {(p.steps ?? []).length} steps</option>)}
             </select>
           </div>}
-          {checklist.map(c => {
+          {checklist.map((c, i) => {
             const done = c.is_complete || c.completed || c.done;
+            const arrow = { background: "none", border: "none", color: "rgba(255,255,255,0.45)", cursor: "pointer", fontSize: 12, lineHeight: 1, padding: "0 2px" } as const;
             return <div key={c.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 0" }}>
               <label style={{ display: "flex", gap: 8, alignItems: "center", flex: 1, cursor: "pointer", minWidth: 0 }}>
                 <input type="checkbox" checked={!!done} onChange={() => toggleChecklist(c)} />
                 <span style={{ textDecoration: done ? "line-through" : "none", color: done ? "rgba(255,255,255,0.45)" : "white", fontSize: 14 }}>{c.title || c.label}</span>
               </label>
+              <div style={{ display: "flex", flexDirection: "column", flexShrink: 0 }}>
+                <button onClick={() => moveStep(i, -1)} disabled={i === 0} title="Move up" style={{ ...arrow, opacity: i === 0 ? 0.25 : 1 }}>▲</button>
+                <button onClick={() => moveStep(i, 1)} disabled={i === checklist.length - 1} title="Move down" style={{ ...arrow, opacity: i === checklist.length - 1 ? 0.25 : 1 }}>▼</button>
+              </div>
               <button onClick={() => removeChecklist(c)} title="Remove step" style={{ background: "none", border: "none", color: "rgba(252,165,165,0.7)", cursor: "pointer", fontSize: 15, flexShrink: 0 }}>×</button>
             </div>;
           })}

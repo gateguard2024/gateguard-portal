@@ -35,7 +35,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 // PATCH /api/maintenance/[id]/checklist — toggle, set outcome, or update an item
 export async function PATCH(req: NextRequest, _ctx: { params: { id: string } }) {
   const body = await req.json()
-  const { item_id, title, outcome, notes, completed_by_name } = body
+  const { item_id, title, outcome, notes, completed_by_name, sort_order } = body
   // Accept either `completed` or `is_complete` from clients.
   const completed = body.completed !== undefined ? body.completed : body.is_complete
 
@@ -50,6 +50,7 @@ export async function PATCH(req: NextRequest, _ctx: { params: { id: string } }) 
   if (outcome            !== undefined) update.outcome            = outcome
   if (notes              !== undefined) update.notes              = notes
   if (completed_by_name  !== undefined) update.completed_by_name = completed_by_name
+  if (sort_order         !== undefined) update.sort_order         = sort_order
 
   const { data, error } = await supabase
     .from('wo_checklist_items')
