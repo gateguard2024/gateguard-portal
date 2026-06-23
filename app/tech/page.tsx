@@ -735,6 +735,7 @@ function TechTool() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [scanResult, setScanResult] = useState<any>(null)
   const [allTechs,   setAllTechs]   = useState<{ id: string; name: string; initials: string }[]>([])
+  const [identityDiag, setIdentityDiag] = useState<string | null>(null) // why the tech picker is empty
   const [gpsGranted, setGpsGranted] = useState(false)
 
   // Demo / install mode state
@@ -761,9 +762,10 @@ function TechTool() {
       // `me` → we log straight into THAT person (and overwrite any stale identity a
       // previous tech left on this device). Only the shared global code needs the picker.
       fetch('/api/tech/identity', { headers: { 'x-tech-code': saved } })
-        .then(r => r.json())
-        .then(d => {
+        .then(async r => ({ status: r.status, body: await r.json().catch(() => ({})) }))
+        .then(({ status, body: d }) => {
           setAllTechs(d.technicians ?? [])
+          setIdentityDiag(status === 401 ? 'Your code was not accepted by the tech list (HTTP 401). Update needed.' : status !== 200 ? `Tech list error (HTTP ${status}).` : (d.technicians ?? []).length === 0 ? 'The server returned 0 technicians for this environment.' : null)
           if (d.me?.id) {
             localStorage.setItem('gg_tech_id', d.me.id)
             localStorage.setItem('gg_tech_name', d.me.name || '')
@@ -775,7 +777,7 @@ function TechTool() {
             setScreen('identity')    // global code, first time → pick who you are
           }
         })
-        .catch(() => setScreen(savedTechId ? 'home' : 'identity'))
+        .catch(() => { setIdentityDiag('Could not reach the tech list (network error).'); setScreen(savedTechId ? 'home' : 'identity') })
     }
   }, [])
 
@@ -1030,9 +1032,10 @@ function TechTool() {
       // Resolve identity FROM the code. A per-tech code → log straight in as that
       // person (overriding any identity left by a previous tech on this device).
       fetch('/api/tech/identity', { headers: { 'x-tech-code': code } })
-        .then(r => r.json())
-        .then(d => {
+        .then(async r => ({ status: r.status, body: await r.json().catch(() => ({})) }))
+        .then(({ status, body: d }) => {
           setAllTechs(d.technicians ?? [])
+          setIdentityDiag(status === 401 ? 'Your code was not accepted by the tech list (HTTP 401). Update needed.' : status !== 200 ? `Tech list error (HTTP ${status}).` : (d.technicians ?? []).length === 0 ? 'The server returned 0 technicians for this environment.' : null)
           if (d.me?.id) {
             localStorage.setItem('gg_tech_id', d.me.id)
             localStorage.setItem('gg_tech_name', d.me.name || '')
@@ -1044,7 +1047,7 @@ function TechTool() {
             setScreen('identity')
           }
         })
-        .catch(() => setScreen(savedTechId ? 'home' : 'identity'))
+        .catch(() => { setIdentityDiag('Could not reach the tech list (network error).'); setScreen(savedTechId ? 'home' : 'identity') })
     } else if (res.status === 401) {
       setCodeError(true); setCodeInput('')
     } else {
@@ -1278,7 +1281,10 @@ function TechTool() {
             </button>
           ))}
           {allTechs.length === 0 && (
-            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, textAlign: 'center', padding: 16, fontFamily: 'IBM Plex Sans, system-ui, sans-serif' }}>No techs found — contact your admin</div>
+            <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13, textAlign: 'center', padding: 16, fontFamily: 'IBM Plex Sans, system-ui, sans-serif', lineHeight: 1.6 }}>
+              No techs found — contact your admin
+              {identityDiag && <div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.3)', color: '#fcd34d', fontSize: 12 }}>{identityDiag}</div>}
+            </div>
           )}
         </div>
         <button
