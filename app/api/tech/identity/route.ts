@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient }              from '@supabase/supabase-js'
+import { isTechAuthed, resolveTechByCode } from '@/lib/tech-auth'
 
 function serviceDb() {
   return createClient(
@@ -15,14 +16,9 @@ function serviceDb() {
   )
 }
 
-function isTechAuthed(req: NextRequest): boolean {
-  const code      = req.headers.get('x-tech-code')
-  const validCode = process.env.TECH_ACCESS_CODE
-  return !!(validCode && code && code === validCode)
-}
-
 export async function GET(req: NextRequest) {
-  if (!isTechAuthed(req)) {
+  // Accept the global code OR a per-tech code.
+  if (!(await isTechAuthed(req))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -33,11 +29,16 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json({ technicians: data ?? [] })
+  // `me` = the technician this code belongs to (null for the global code).
+  // The /tech app uses this to log a per-tech code straight into the right
+  // person — no identity picker, and it overrides any stale saved identity.
+  const me = await resolveTechByCode(req.headers.get('x-tech-code'))
+
+  return NextResponse.json({ technicians: data ?? [], me })
 }
 
 export async function POST(req: NextRequest) {
-  if (!isTechAuthed(req)) {
+  if (!(await isTechAuthed(req))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

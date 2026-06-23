@@ -26,14 +26,19 @@ export async function GET(req: NextRequest) {
   const qpTechId = new URL(req.url).searchParams.get('tech_id')
 
   // Resolve which technician this is (id + name; name is a fallback match).
-  let techId = qpTechId
+  // A PER-TECH code is authoritative — it wins over any tech_id the client passes,
+  // which may be stale (left by a previous tech on a shared device). Only fall back
+  // to ?tech_id= for the shared global code (which maps to no specific technician).
+  let techId: string | null = null
   let techName: string | null = null
-  if (techId) {
-    const { data: t } = await db.from('technicians').select('name').eq('id', techId).maybeSingle()
-    techName = (t as { name?: string } | null)?.name ?? null
-  } else if (code) {
+  if (code) {
     const { data: t } = await db.from('technicians').select('id, name').eq('tech_code', code).maybeSingle()
     techId = (t as { id?: string } | null)?.id ?? null
+    techName = (t as { name?: string } | null)?.name ?? null
+  }
+  if (!techId && qpTechId) {
+    techId = qpTechId
+    const { data: t } = await db.from('technicians').select('name').eq('id', techId).maybeSingle()
     techName = (t as { name?: string } | null)?.name ?? null
   }
   if (!techId) return NextResponse.json({ work_orders: [], note: 'No tech_id — pass ?tech_id= or use a per-tech code' })

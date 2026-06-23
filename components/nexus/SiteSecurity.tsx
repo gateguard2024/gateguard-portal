@@ -10,23 +10,35 @@ import { Shield } from "lucide-react";
 type Door = { id: string; name: string };
 type CamMap = { door_id: string; camera_id: string | null; camera_name: string; tags?: string[] | null };
 
-// Live camera frame with double-buffering: the new snapshot is preloaded off-screen
-// and only swapped in once it's fully decoded, so the tile never blanks/flickers
-// between refreshes. (Serverless can't hold an open MJPEG stream, so we refresh frames.)
+// Live camera frame, flicker-free. The preview endpoint sends `Cache-Control: no-store`,
+// so a preloaded <img> can't be reused — the browser re-fetches and the tile blanks.
+// Instead we fetch each frame as a Blob, keep the CURRENT frame on screen until the next
+// blob is fully downloaded, then swap to a local object URL (instant, no network re-fetch).
 function LiveCam({ src, alt, onError }: { src: string; alt: string; onError?: () => void }) {
-  const [shown, setShown] = useState(src);
+  const [url, setUrl] = useState<string | null>(null);
+  const urlRef = useRef<string | null>(null);
   useEffect(() => {
     let cancelled = false;
-    const img = new window.Image();
-    img.onload = () => { if (!cancelled) setShown(src); };
-    img.onerror = () => { if (!cancelled) onError?.(); };
-    img.src = src;
+    fetch(src, { cache: "no-store" })
+      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.blob(); })
+      .then(blob => {
+        if (cancelled || blob.size === 0) { if (!cancelled) onError?.(); return; }
+        const next = URL.createObjectURL(blob);
+        const prev = urlRef.current;
+        urlRef.current = next;
+        setUrl(next);                                  // swap to the freshly-downloaded frame
+        if (prev) setTimeout(() => URL.revokeObjectURL(prev), 1000); // free the old one after paint
+      })
+      .catch(() => { if (!cancelled) onError?.(); });
     return () => { cancelled = true; };
-    // Only re-run when the frame URL changes (tick). onError is stable enough via closure.
+    // Re-run only when the frame URL changes (tick). onError is stable via closure.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src]);
+  // Clean up the last object URL on unmount.
+  useEffect(() => () => { if (urlRef.current) URL.revokeObjectURL(urlRef.current); }, []);
+  if (!url) return <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.3)", fontSize: 11 }}>loading…</div>;
   // eslint-disable-next-line @next/next/no-img-element
-  return <img alt={alt} src={shown} style={{ width: "100%", height: "100%", objectFit: "cover" }} />;
+  return <img alt={alt} src={url} style={{ width: "100%", height: "100%", objectFit: "cover" }} />;
 }
 
 export function SiteSecurity({ siteId }: { siteId: string }) {

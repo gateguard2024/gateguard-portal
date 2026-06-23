@@ -720,6 +720,8 @@ function TechTool() {
   const [myJobs,     setMyJobs]     = useState<any[]>([])
   const [jobsLoading, setJobsLoading] = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [jobsDiag,   setJobsDiag]   = useState<any>(null) // why My Jobs is empty (resolved tech + match counts)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [openJob,    setOpenJob]    = useState<any>(null)
   const [jobHours,   setJobHours]   = useState('')
   const [scanBusy,   setScanBusy]   = useState(false)
@@ -755,16 +757,25 @@ function TechTool() {
     }
     if (saved) {
       setTechCode(saved)
-      // If we know who they are, go home. Otherwise make them pick an identity so
-      // their assigned jobs can be matched (a global code with no identity sees none).
-      if (savedTechId) {
-        setScreen('home')
-      } else {
-        fetch('/api/tech/identity', { headers: { 'x-tech-code': saved } })
-          .then(r => r.json())
-          .then(d => { setAllTechs(d.technicians ?? []); setScreen('identity') })
-          .catch(() => setScreen('home'))
-      }
+      // Always ask the server who this code belongs to. A per-tech code returns
+      // `me` → we log straight into THAT person (and overwrite any stale identity a
+      // previous tech left on this device). Only the shared global code needs the picker.
+      fetch('/api/tech/identity', { headers: { 'x-tech-code': saved } })
+        .then(r => r.json())
+        .then(d => {
+          setAllTechs(d.technicians ?? [])
+          if (d.me?.id) {
+            localStorage.setItem('gg_tech_id', d.me.id)
+            localStorage.setItem('gg_tech_name', d.me.name || '')
+            setTechId(d.me.id); setTechName(d.me.name || '')
+            setScreen('home')
+          } else if (savedTechId) {
+            setScreen('home')        // global code, identity already chosen earlier
+          } else {
+            setScreen('identity')    // global code, first time → pick who you are
+          }
+        })
+        .catch(() => setScreen(savedTechId ? 'home' : 'identity'))
     }
   }, [])
 
@@ -865,10 +876,18 @@ function TechTool() {
   // ── My Jobs (work orders assigned to this tech) — cached for offline view ──
   function loadMyJobs() {
     setJobsLoading(true)
-    const url = techId ? `/api/tech/work-orders?tech_id=${techId}` : '/api/tech/work-orders'
-    fetch(url, { headers: apiHeaders() })
+    const base = techId ? `/api/tech/work-orders?tech_id=${techId}` : '/api/tech/work-orders'
+    fetch(base, { headers: apiHeaders() })
       .then(r => r.json())
-      .then(d => { const list = d.work_orders ?? []; setMyJobs(list); try { localStorage.setItem(GG_JOBS_CACHE, JSON.stringify(list)) } catch { /* ignore */ } })
+      .then(d => {
+        const list = d.work_orders ?? []; setMyJobs(list)
+        try { localStorage.setItem(GG_JOBS_CACHE, JSON.stringify(list)) } catch { /* ignore */ }
+        // If nothing matched, pull the debug payload so the empty state can explain WHY.
+        if (list.length === 0) {
+          const dbgUrl = base + (base.includes('?') ? '&' : '?') + 'debug=1'
+          fetch(dbgUrl, { headers: apiHeaders() }).then(r => r.json()).then(setJobsDiag).catch(() => {})
+        } else { setJobsDiag(null) }
+      })
       .catch(() => { try { setMyJobs(JSON.parse(localStorage.getItem(GG_JOBS_CACHE) || '[]')) } catch { /* ignore */ } })
       .finally(() => setJobsLoading(false))
   }
@@ -1008,15 +1027,24 @@ function TechTool() {
       sessionStorage.setItem('gg_tech_code', code)
       setTechCode(code); setProducts(data.products ?? [])
       const savedTechId = localStorage.getItem('gg_tech_id')
-      if (savedTechId) {
-        setScreen('home')
-      } else {
-        // Fetch tech list and go to identity screen
-        fetch('/api/tech/identity', { headers: { 'x-tech-code': code } })
-          .then(r => r.json())
-          .then(d => { setAllTechs(d.technicians ?? []); setScreen('identity') })
-          .catch(() => setScreen('home')) // graceful fallback
-      }
+      // Resolve identity FROM the code. A per-tech code → log straight in as that
+      // person (overriding any identity left by a previous tech on this device).
+      fetch('/api/tech/identity', { headers: { 'x-tech-code': code } })
+        .then(r => r.json())
+        .then(d => {
+          setAllTechs(d.technicians ?? [])
+          if (d.me?.id) {
+            localStorage.setItem('gg_tech_id', d.me.id)
+            localStorage.setItem('gg_tech_name', d.me.name || '')
+            setTechId(d.me.id); setTechName(d.me.name || '')
+            setScreen('home')
+          } else if (savedTechId) {
+            setScreen('home')
+          } else {
+            setScreen('identity')
+          }
+        })
+        .catch(() => setScreen(savedTechId ? 'home' : 'identity'))
     } else if (res.status === 401) {
       setCodeError(true); setCodeInput('')
     } else {
@@ -1291,7 +1319,17 @@ function TechTool() {
           {!openJob && (jobsLoading ? (
             <div style={{ fontFamily: MONO, fontSize: 11, color: C.textMuted }}>Loading your jobs…</div>
           ) : myJobs.length === 0 ? (
-            <div style={{ fontFamily: MONO, fontSize: 11, color: C.textMuted }}>No jobs assigned to you right now.</div>
+            <div style={{ fontFamily: MONO, fontSize: 11, color: C.textMuted }}>
+              No jobs assigned to you right now.
+              {jobsDiag && (
+                <div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: C.bgCard, border: `1px solid ${C.border}`, lineHeight: 1.6 }}>
+                  <div style={{ color: C.textPrimary, fontWeight: 700, marginBottom: 4 }}>Why is this empty?</div>
+                  <div>You’re seen as: <b style={{ color: C.textPrimary }}>{jobsDiag.resolved_tech_name || jobsDiag.tech_name || '—'}</b>{jobsDiag.resolved_tech_id ? ` (id ${String(jobsDiag.resolved_tech_id).slice(0, 8)}…)` : ' (no tech id resolved)'}</div>
+                  <div>Work orders matched to you: <b style={{ color: C.textPrimary }}>{jobsDiag.matched_count ?? 0}</b></div>
+                  {(jobsDiag.matched_count ?? 0) === 0 && <div style={{ color: C.textMuted, marginTop: 4 }}>A dispatcher needs to assign a work order to this technician in Operations Hub. If jobs were assigned to a different name, they won’t show here.</div>}
+                </div>
+              )}
+            </div>
           ) : myJobs.map((j) => (
             <div key={j.id} onClick={() => openJobDetail(j)} style={{ background: C.bgCard, borderRadius: 14, border: `1px solid ${C.border}`, padding: 14, marginBottom: 12, cursor: 'pointer' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>

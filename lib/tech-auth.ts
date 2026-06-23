@@ -40,3 +40,23 @@ export async function isTechAuthed(req: NextRequest): Promise<boolean> {
 
   return !!data
 }
+
+/**
+ * Resolve WHICH technician a code belongs to.
+ * - A per-tech code (technicians.tech_code) → that technician { id, name, initials }.
+ * - The global TECH_ACCESS_CODE (or unknown) → null (caller must pick an identity).
+ * This is what makes a per-tech login open the right person's jobs, instead of
+ * trusting a stale identity left in the browser by a previous tech.
+ */
+export async function resolveTechByCode(
+  code: string | null
+): Promise<{ id: string; name: string; initials: string | null } | null> {
+  if (!code) return null
+  if (process.env.TECH_ACCESS_CODE && code === process.env.TECH_ACCESS_CODE) return null
+  const { data } = await serviceDb()
+    .from('technicians')
+    .select('id, name, initials')
+    .eq('tech_code', code)
+    .maybeSingle()
+  return (data as { id: string; name: string; initials: string | null } | null) ?? null
+}
