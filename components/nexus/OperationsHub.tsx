@@ -1301,8 +1301,10 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   const [eqForm, setEqForm] = useState({ product_name: "", serial_number: "", location_note: "" });
   const [eqBusy, setEqBusy] = useState(false);
   const [notifyOnChange, setNotifyOnChange] = useState(true);
-  const load = React.useCallback(() => {
-    setLoading(true);
+  // silent=true refreshes data in the background without flashing the whole panel
+  // to "Loading…" — used after every in-drawer action so it doesn't blink/jump.
+  const load = React.useCallback((silent = false) => {
+    if (!silent) setLoading(true);
     Promise.all([
       fetch(`/api/maintenance/${id}`).then(r => r.json()).catch(() => ({})),
       fetch(`/api/maintenance/${id}/time`).then(r => r.json()).catch(() => ({})),
@@ -1312,7 +1314,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
       setChecklist(d.checklist ?? []); setComments(d.comments ?? []);
       setLaborMins(t.totalMins ?? 0); setSiteId(d.work_order?.site_id ?? null);
       setPhotos(ph.photos ?? []);
-    }).finally(() => setLoading(false));
+    }).finally(() => { if (!silent) setLoading(false); });
   }, [id]);
   useEffect(() => { load(); }, [load]);
   // manual links + playbook templates (load once)
@@ -1354,7 +1356,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   async function addChecklist() {
     const title = newItem.trim(); if (!title) return; setNewItem("");
     await fetch(`/api/maintenance/${id}/checklist`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title }) }).catch(() => {});
-    load();
+    load(true);
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function toggleChecklist(item: any) {
@@ -1362,18 +1364,18 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
     // Optimistic flip so the box ticks instantly, then persist + reload.
     setChecklist(cs => cs.map(c => c.id === item.id ? { ...c, completed: next, is_complete: next } : c));
     await fetch(`/api/maintenance/${id}/checklist`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item_id: item.id, completed: next }) }).catch(() => {});
-    load();
+    load(true);
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function removeChecklist(item: any) {
     setChecklist(cs => cs.filter(c => c.id !== item.id));
     await fetch(`/api/maintenance/${id}/checklist`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item_id: item.id }) }).catch(() => {});
-    load();
+    load(true);
   }
   async function addComment() {
     const content = chat.trim(); if (!content) return; setChat("");
     await fetch(`/api/maintenance/${id}/comments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content }) }).catch(() => {});
-    load();
+    load(true);
   }
   async function askAI() {
     const symptom = aiQ.trim(); if (!symptom || aiBusy) return; setAiBusy(true); setAiStep(null);
@@ -1388,7 +1390,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
     if (!pb) return;
     const steps: string[] = (pb.steps ?? []).map((s: unknown) => typeof s === "string" ? s : ((s as { title?: string; text?: string })?.title || (s as { text?: string })?.text || "")).filter(Boolean);
     for (const title of steps) await fetch(`/api/maintenance/${id}/checklist`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title }) }).catch(() => {});
-    load();
+    load(true);
   }
   async function uploadWoPhoto(file: File) {
     if (!file || woUploading) return; setWoUploading(true);
@@ -1399,17 +1401,17 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
         await fetch(`/api/maintenance/${id}/photos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ file_url: up.publicUrl, caption: file.name }) }).catch(() => {});
       }
     } catch (_) { /* ignore */ }
-    setWoUploading(false); load();
+    setWoUploading(false); load(true);
   }
   async function addPart() {
     if (!pForm.name.trim() || partBusy) return; setPartBusy(true);
     await fetch(`/api/maintenance/${id}/parts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: pForm.name.trim(), qty: Number(pForm.qty) || 1, unit_cost: pForm.unit_cost ? Number(pForm.unit_cost) : null, unit_price: pForm.unit_price ? Number(pForm.unit_price) : null }) }).catch(() => {});
-    setPForm({ name: "", qty: "1", unit_cost: "", unit_price: "" }); setShowAddPart(false); setPartBusy(false); load();
+    setPForm({ name: "", qty: "1", unit_cost: "", unit_price: "" }); setShowAddPart(false); setPartBusy(false); load(true);
   }
   async function logLabor() {
     const h = Number(laborH); if (!h || h <= 0 || partBusy) return; setPartBusy(true);
     await fetch(`/api/maintenance/${id}/time`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hours: h }) }).catch(() => {});
-    setLaborH(""); setPartBusy(false); load();
+    setLaborH(""); setPartBusy(false); load(true);
   }
 
   return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.62)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>

@@ -46,7 +46,8 @@ function basic(clientId: string, clientSecret: string) {
 async function tokenRequest(clientId: string, clientSecret: string, body: Record<string, string>): Promise<any> {
   const res = await fetch(`${EEN_AUTH_BASE}/token`, {
     method: 'POST',
-    headers: { Authorization: `Basic ${basic(clientId, clientSecret)}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    // EEN docs require the Accept: application/json header on the token request.
+    headers: { Authorization: `Basic ${basic(clientId, clientSecret)}`, 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
     body: new URLSearchParams(body).toString(),
     signal: AbortSignal.timeout(10000),
   })
@@ -55,7 +56,8 @@ async function tokenRequest(clientId: string, clientSecret: string, body: Record
 }
 
 export async function eagleEyeExchangeCode(clientId: string, clientSecret: string, code: string, redirectUri: string) {
-  return tokenRequest(clientId, clientSecret, { grant_type: 'authorization_code', code, redirect_uri: redirectUri })
+  // scope is required on the authorization_code exchange per EEN docs.
+  return tokenRequest(clientId, clientSecret, { grant_type: 'authorization_code', scope: EEN_SCOPE, code, redirect_uri: redirectUri })
 }
 
 export async function eagleEyeRefresh(clientId: string, clientSecret: string, refreshToken: string) {
