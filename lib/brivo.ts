@@ -369,6 +369,29 @@ export async function unlockBrivoDoor(token: string, apiKey: string, doorId: str
   return { success: true }
 }
 
+// ─── Access events (the Brivo activity / event tracker) ──────────────────────
+export interface BrivoEvent { id: string; occurred: string | null; action: string; actor: string | null; door: string | null }
+
+/** Recent access events for the account behind these creds (each site = own account). */
+export async function listBrivoEvents(token: string, apiKey: string, pageSize = 40): Promise<BrivoEvent[]> {
+  const data = await brivoGet(token, apiKey, '/events', { pageSize: String(pageSize) })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = (data.data ?? data.events ?? []) as any[]
+  return rows.map(e => ({
+    id: String(e.id ?? e.eventId ?? `${e.occurred ?? ''}-${Math.random().toString(36).slice(2, 7)}`),
+    occurred: e.occurred ?? e.occurredTime ?? e.created ?? e.timestamp ?? null,
+    action: e.securityAction?.actionName ?? e.eventType?.name ?? e.action ?? e.actionName ?? e.name ?? 'Access event',
+    actor: e.actor?.name ?? e.user?.name ?? ([e.actor?.firstName, e.actor?.lastName].filter(Boolean).join(' ') || e.credentialHolderName || null),
+    door: e.object?.name ?? e.accessPoint?.name ?? e.door?.name ?? e.objectName ?? null,
+  }))
+}
+
+/** Per-site convenience: recent Brivo access events for a property. */
+export async function listSiteBrivoEvents(siteId: string, pageSize = 40): Promise<BrivoEvent[]> {
+  const { token, apiKey } = await getSiteBrivoToken(siteId)
+  return listBrivoEvents(token, apiKey, pageSize)
+}
+
 // ─── Resident credentials / Brivo Mobile Pass ───────────────────────────────
 // Lets a dealer fix "I didn't get my mobile pass" without logging into Brivo:
 // revoke the old pass + send a fresh one.

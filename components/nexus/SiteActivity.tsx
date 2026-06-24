@@ -24,10 +24,17 @@ export function SiteActivity({ siteId }: { siteId: string }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch(`/api/sites/${siteId}`).then(r => r.json())
-      .then(d => { if (!cancelled) setEvents(Array.isArray(d.events) ? d.events : []); })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false); });
+    // Internal site_events + live Brivo access events, merged newest-first.
+    Promise.all([
+      fetch(`/api/sites/${siteId}`).then(r => r.json()).catch(() => ({})),
+      fetch(`/api/brivo/events?site_id=${siteId}`).then(r => r.json()).catch(() => ({})),
+    ]).then(([s, b]) => {
+      if (cancelled) return;
+      const internal: Ev[] = Array.isArray(s.events) ? s.events : [];
+      const brivo: Ev[] = Array.isArray(b.events) ? b.events : [];
+      const merged = [...internal, ...brivo].sort((a, x) => new Date(x.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+      setEvents(merged);
+    }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [siteId]);
 
