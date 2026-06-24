@@ -72,15 +72,32 @@ export async function listSiteShellyRelays(siteId: string): Promise<ShellyRelay[
     const fullName = (dev?.name as string) || `Shelly ${id.slice(-4)}`
     if (!matchesTag(fullName, tag)) continue            // not this property's device
     const label = areaLabel(fullName, tag)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const relays = (status[id] as any)?.relays as any[] | undefined
-    if (Array.isArray(relays) && relays.length) {
-      relays.forEach((r, i) => out.push({ id, name: relays.length > 1 ? `${label} · CH${i + 1}` : label, channel: i, on: typeof r?.ison === 'boolean' ? r.ison : null }))
-    } else {
-      out.push({ id, name: label, channel: 0, on: null })
-    }
+    const channels = readChannels(status[id])
+    channels.forEach(ch =>
+      out.push({ id, name: channels.length > 1 ? `${label} · CH${ch.channel + 1}` : label, channel: ch.channel, on: ch.on }))
   }
   return out
+}
+
+// Read on/off per channel from a device's cloud status, supporting both generations:
+//   Gen1 (Shelly 1/2.5/etc): { relays: [{ ison: bool }] }
+//   Gen2/Plus/Pro (RPC):     { "switch:0": { output: bool }, "switch:1": {...} }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function readChannels(st: any): { channel: number; on: boolean | null }[] {
+  if (Array.isArray(st?.relays) && st.relays.length) {
+    return st.relays.map((r: { ison?: boolean }, i: number) => ({ channel: i, on: typeof r?.ison === 'boolean' ? r.ison : null }))
+  }
+  if (st && typeof st === 'object') {
+    const switches = Object.keys(st).filter(k => /^switch:\d+$/.test(k)).sort((a, b) => parseInt(a.split(':')[1]) - parseInt(b.split(':')[1]))
+    if (switches.length) {
+      return switches.map(k => {
+        const n = parseInt(k.split(':')[1], 10)
+        const o = st[k]?.output
+        return { channel: n, on: typeof o === 'boolean' ? o : null }
+      })
+    }
+  }
+  return [{ channel: 0, on: null }]   // unknown / offline
 }
 
 /** Turn a relay on or off. */
