@@ -58,7 +58,7 @@ export interface UniFiOverview {
   connected: boolean
   site: { id: string | null; name: string | null }
   console: { name: string | null; model: string | null; public_ip: string | null; version: string | null; uptime_s: number | null } | null
-  internet: { isp: string | null; status: 'up' | 'down' | 'unknown'; public_ip: string | null; download_mbps: number | null; upload_mbps: number | null; latency_ms: number | null; packet_loss_pct: number | null; uptime_pct: number | null }
+  internet: { isp: string | null; status: 'up' | 'down' | 'unknown'; public_ip: string | null; download_mbps: number | null; upload_mbps: number | null; latency_ms: number | null; packet_loss_pct: number | null; uptime_pct: number | null; trend: number[] }
   clients: { wifi: number; wired: number; guest: number; total: number }
   devices: UniFiDevice[]
   health: { total: number; online: number; offline: number }
@@ -72,7 +72,7 @@ export async function getSiteUniFiOverview(siteId: string): Promise<UniFiOvervie
   const creds = await getSiteUniFiCloud(siteId)
   const empty: UniFiOverview = {
     connected: false, site: { id: null, name: null }, console: null,
-    internet: { isp: null, status: 'unknown', public_ip: null, download_mbps: null, upload_mbps: null, latency_ms: null, packet_loss_pct: null, uptime_pct: null },
+    internet: { isp: null, status: 'unknown', public_ip: null, download_mbps: null, upload_mbps: null, latency_ms: null, packet_loss_pct: null, uptime_pct: null, trend: [] },
     clients: { wifi: 0, wired: 0, guest: 0, total: 0 }, devices: [], health: { total: 0, online: 0, offline: 0 },
   }
   if (!creds) return empty
@@ -111,11 +111,14 @@ export async function getSiteUniFiOverview(siteId: string): Promise<UniFiOvervie
 
   // ── Devices + health ────────────────────────────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const devs: any[] = []
+  let devs: any[] = []
   try {
     const raw = await listCloudDevices(creds.apiKey, hostId ?? undefined)
     for (const r of raw) Array.isArray(r?.devices) ? devs.push(...r.devices) : devs.push(r)
   } catch { /* ignore */ }
+  // Only this property's devices: a console can host several sites, so keep devices
+  // that declare our siteId (or carry no site tag, i.e. single-site console).
+  if (creds.siteId) devs = devs.filter(d => { const sid = d.siteId ?? d.site_id ?? d.site; return !sid || sid === creds.siteId })
   const devices: UniFiDevice[] = devs.map(d => ({
     name: d.name ?? d.model ?? 'Device', model: d.model ?? d.shortname ?? null,
     type: d.type ?? d.shortname ?? null,
@@ -129,16 +132,22 @@ export async function getSiteUniFiOverview(siteId: string): Promise<UniFiOvervie
 
   // ── Internet / WAN: prefer ISP metrics; fall back to gateway online ──────────
   let download_mbps: number | null = null, upload_mbps: number | null = null, latency_ms: number | null = null, packet_loss_pct: number | null = null, uptime_pct: number | null = null
+  let trend: number[] = []
   let isp: string | null = site?.ispInfo?.name ?? stats.ispName ?? ispFromHost
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dlOf = (d: any) => num(d?.download_kbps != null ? d.download_kbps / 1000 : null, d?.wan?.download_mbps, d?.downloadMbps, d?.download_mbps)
   try {
     const m = await ispMetrics(creds.apiKey)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rows: any[] = Array.isArray(m) ? m : (m?.metrics ?? m?.sites ?? [])
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const mine = rows.find((r: any) => (r.siteId ?? r.site_id) === (creds.siteId ?? site?.siteId)) ?? rows[0]
-    const p = mine?.periods?.[mine.periods.length - 1]?.data ?? mine?.data ?? mine
-    download_mbps = num(p?.download_kbps && p.download_kbps / 1000, p?.wan?.download_mbps, p?.downloadMbps, p?.download_mbps)
-    upload_mbps = num(p?.upload_kbps && p.upload_kbps / 1000, p?.wan?.upload_mbps, p?.uploadMbps, p?.upload_mbps)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const periods: any[] = mine?.periods ?? mine?.data ?? []
+    trend = periods.map(pp => dlOf(pp?.data ?? pp)).filter((x): x is number => x != null)
+    const p = periods.length ? (periods[periods.length - 1]?.data ?? periods[periods.length - 1]) : (mine?.data ?? mine)
+    download_mbps = dlOf(p)
+    upload_mbps = num(p?.upload_kbps != null ? p.upload_kbps / 1000 : null, p?.wan?.upload_mbps, p?.uploadMbps, p?.upload_mbps)
     latency_ms = num(p?.latency_avg_ms, p?.wan?.latency_ms, p?.latencyMs, p?.avgLatency)
     packet_loss_pct = num(p?.packetLoss, p?.wan?.packet_loss_pct, p?.packet_loss)
     uptime_pct = num(p?.uptime, p?.wan?.uptime_pct, p?.uptimePercentage)
@@ -155,7 +164,7 @@ export async function getSiteUniFiOverview(siteId: string): Promise<UniFiOvervie
     connected: true,
     site: { id: site?.siteId ?? creds.siteId ?? null, name: site?.meta?.name ?? site?.name ?? null },
     console: consoleInfo,
-    internet: { isp, status, public_ip: publicIp, download_mbps, upload_mbps, latency_ms, packet_loss_pct, uptime_pct },
+    internet: { isp, status, public_ip: publicIp, download_mbps, upload_mbps, latency_ms, packet_loss_pct, uptime_pct, trend },
     clients: { wifi, wired, guest, total },
     devices, health: { total: devices.length, online, offline: devices.length - online },
   }

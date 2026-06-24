@@ -7,7 +7,7 @@
 import React, { useEffect, useState } from "react";
 
 type Vendor = "brivo" | "eagle_eye" | "shelly" | "unifi";
-type Field = { key: string; label: string; secret?: boolean; placeholder?: string };
+type Field = { key: string; label: string; secret?: boolean; placeholder?: string; group?: string; advanced?: boolean };
 
 const VENDORS: { vendor: Vendor; label: string; fields: Field[] }[] = [
   { vendor: "brivo", label: "Brivo · Access Control", fields: [
@@ -20,9 +20,14 @@ const VENDORS: { vendor: Vendor; label: string; fields: Field[] }[] = [
     { key: "auth_key", label: "Cloud auth key", secret: true }, { key: "server", label: "Cloud server", placeholder: "shelly-12-eu.shelly.cloud" },
     { key: "device_tag", label: "Property tag in device names", placeholder: "defaults to site name, e.g. Elevate Greene" } ] },
   { vendor: "unifi", label: "UniFi · Network + Access", fields: [
-    { key: "cloud_api_key", label: "Cloud API key (unifi.ui.com)", secret: true }, { key: "cloud_site_id", label: "Cloud site ID", placeholder: "pick from site list after saving key" }, { key: "cloud_host_id", label: "Cloud host ID (optional)" },
-    { key: "host", label: "Local controller URL", placeholder: "https://192.168.1.1" }, { key: "api_key", label: "Local Network API key", secret: true }, { key: "site", label: "Local network site", placeholder: "default" },
-    { key: "access_host", label: "Access controller URL", placeholder: "https://<ip>:12445" }, { key: "access_token", label: "Access API token", secret: true } ] },
+    { key: "cloud_api_key", label: "Cloud API key (unifi.ui.com)", secret: true, group: "Cloud — recommended" },
+    { key: "cloud_site_id", label: "Cloud site ID", placeholder: "use the picker below", group: "Cloud — recommended" },
+    { key: "cloud_host_id", label: "Cloud host ID (optional)", group: "Cloud — recommended", advanced: true },
+    { key: "host", label: "Local controller URL", placeholder: "https://192.168.1.1", group: "Local controller — only if reachable", advanced: true },
+    { key: "api_key", label: "Local Network API key", secret: true, group: "Local controller — only if reachable", advanced: true },
+    { key: "site", label: "Local network site", placeholder: "default", group: "Local controller — only if reachable", advanced: true },
+    { key: "access_host", label: "Access controller URL", placeholder: "https://<ip>:12445", group: "UniFi Access (doors)", advanced: true },
+    { key: "access_token", label: "Access API token", secret: true, group: "UniFi Access (doors)", advanced: true } ] },
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -38,6 +43,7 @@ export function SiteConnections({ siteId }: { siteId: string }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [cloudSites, setCloudSites] = useState<{ site_id: string; name: string; host_id: string | null; host_name: string | null }[]>([]);
   const [loadingSites, setLoadingSites] = useState(false);
+  const [showAdv, setShowAdv] = useState(false);
 
   const load = React.useCallback(() => {
     setLoading(true);
@@ -117,13 +123,15 @@ export function SiteConnections({ siteId }: { siteId: string }) {
                 {s?.last_error && !isOpen && <div style={{ fontSize: 11, color: "#fca5a5", marginTop: 4 }}>{s.last_error}</div>}
                 {isOpen && (
                   <div style={{ display: "grid", gap: 7, marginTop: 10 }}>
-                    {fields.map(f => (
+                    {/* Primary fields */}
+                    {fields.filter(f => !f.advanced).map(f => (
                       <input key={f.key} type={f.secret ? "password" : "text"} autoComplete="new-password"
                         placeholder={f.label + (f.placeholder ? ` (${f.placeholder})` : "")}
                         value={form[f.key] ?? ""} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))} style={input} />
                     ))}
+                    {/* UniFi cloud site picker */}
                     {vendor === "unifi" && (
-                      <div style={{ display: "grid", gap: 6, paddingTop: 4 }}>
+                      <div style={{ display: "grid", gap: 6, paddingTop: 2 }}>
                         <button type="button" onClick={loadUniFiSites} disabled={loadingSites} style={{ justifySelf: "start", fontSize: 12, fontWeight: 600, background: "rgba(125,229,255,0.12)", border: "1px solid rgba(125,229,255,0.35)", color: "#7DE5FF", borderRadius: 9, padding: "7px 12px", cursor: "pointer", opacity: loadingSites ? 0.5 : 1 }}>{loadingSites ? "Loading sites…" : "↻ Load my UniFi sites"}</button>
                         {cloudSites.length > 0 && (
                           <select value={form.cloud_site_id ?? ""} onChange={e => { const s = cloudSites.find(x => x.site_id === e.target.value); setForm(p => ({ ...p, cloud_site_id: e.target.value, cloud_host_id: s?.host_id ?? p.cloud_host_id ?? "" })); }} style={input}>
@@ -132,6 +140,20 @@ export function SiteConnections({ siteId }: { siteId: string }) {
                           </select>
                         )}
                       </div>
+                    )}
+                    {/* Advanced (collapsed): local controller + Access fields */}
+                    {fields.some(f => f.advanced) && (
+                      <>
+                        <button type="button" onClick={() => setShowAdv(v => !v)} style={{ justifySelf: "start", fontSize: 11, color: "rgba(255,255,255,0.5)", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>{showAdv ? "▾ Hide advanced (local controller & Access)" : "▸ Advanced (local controller & Access)"}</button>
+                        {showAdv && fields.filter(f => f.advanced).map((f, idx, arr) => (
+                          <React.Fragment key={f.key}>
+                            {f.group && f.group !== arr[idx - 1]?.group && <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(255,255,255,0.4)", marginTop: 4 }}>{f.group}</div>}
+                            <input type={f.secret ? "password" : "text"} autoComplete="new-password"
+                              placeholder={f.label + (f.placeholder ? ` (${f.placeholder})` : "")}
+                              value={form[f.key] ?? ""} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))} style={input} />
+                          </React.Fragment>
+                        ))}
+                      </>
                     )}
                     <div style={{ display: "flex", gap: 8 }}>
                       <button onClick={() => save(vendor)} disabled={busy || !keyOk} style={{ fontSize: 12, fontWeight: 600, background: "rgba(0,200,255,0.18)", border: "1px solid rgba(0,200,255,0.45)", color: "#7DE5FF", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy || !keyOk ? 0.5 : 1 }}>{busy ? "Saving…" : "Save"}</button>
