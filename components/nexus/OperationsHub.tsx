@@ -98,12 +98,13 @@ function Modal({ title, onClose, children, maxWidth = 460 }: { title: string; on
     </div>
   </div>;
 }
-const TABS = ["Dashboard", "Work Orders", "Schedule", "Requests", "Calendar", "Locations", "Techs", "Parts", "Procurement", "PM", "Playbooks"] as const;
+const TABS = ["Dashboard", "Work Orders", "Schedule", "Analytics", "Requests", "Calendar", "Locations", "Techs", "Parts", "Procurement", "PM", "Playbooks"] as const;
 type Tab = typeof TABS[number];
 const TAB_HINT: Record<Tab, string> = {
   Dashboard: "Snapshot + jobs board",
   "Work Orders": "Create, assign, track",
   Schedule: "Drag jobs onto a tech & day",
+  Analytics: "Utilization + first-time-fix",
   Requests: "Incoming requests → turn into jobs",
   Calendar: "What's scheduled, by day",
   Locations: "Your sites — tap to edit details",
@@ -148,6 +149,7 @@ export function OperationsHub({ embedded, initialTab }: { embedded?: boolean; in
     {page === "Dashboard" && <Dashboard jobs={jobs} techs={techs} loading={loading} onOpen={setOpenId} onUpdate={updateWO} />}
     {page === "Work Orders" && <WorkOrders jobs={jobs} techs={techs} loading={loading} onCreate={createWO} onUpdate={updateWO} onOpen={setOpenId} />}
     {page === "Schedule" && <DispatchBoard jobs={jobs} techs={techs} loading={loading} onOpen={setOpenId} onUpdate={updateWO} />}
+    {page === "Analytics" && <AnalyticsView onOpen={setOpenId} />}
     {page === "Requests" && <Requests onConverted={loadOps} />}
     {page === "Calendar" && <CalendarView onOpenWO={setOpenId} jobs={jobs} />}
     {page === "Locations" && <Locations />}
@@ -718,6 +720,73 @@ const SITE_FIELDS: { key: string; label: string; full?: boolean }[] = [
   { key: "access_notes", label: "Access / gate notes", full: true },
 ];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+/* ── Analytics: tech utilization + re-work / first-time-fix ──────────────── */
+function AnalyticsView({ onOpen }: { onOpen: (id: string) => void }) {
+  const [days, setDays] = useState(30);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { setLoading(true); fetch(`/api/dispatch/analytics?days=${days}`).then(r => r.json()).then(setData).catch(() => {}).finally(() => setLoading(false)); }, [days]);
+  const t = data?.totals ?? {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const perTech: any[] = data?.perTech ?? [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const callbacks: any[] = data?.callbackList ?? [];
+  const utilColor = (p: number) => p >= 80 ? "#34d399" : p >= 50 ? "#fbbf24" : "#f87171";
+  const kpi = (label: string, val: string | number, accent: string) => (
+    <Card><Small>{label}</Small><div style={{ fontSize: 26, fontWeight: 800, color: accent, marginTop: 4 }}>{val}</div></Card>
+  );
+  const rangeBtn = (d: number) => <button key={d} onClick={() => setDays(d)} style={{ ...btn, padding: "5px 12px", background: days === d ? "rgba(0,200,255,0.18)" : "rgba(255,255,255,0.06)", border: days === d ? "1px solid rgba(0,200,255,0.45)" : "1px solid rgba(255,255,255,0.1)", color: days === d ? "#7DE5FF" : "rgba(255,255,255,0.7)" }}>{d}d</button>;
+
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      <div style={{ display: "flex", gap: 6 }}>{[7, 30, 90].map(rangeBtn)}</div>
+      {loading ? <Card><Small>Crunching numbers…</Small></Card> : <>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px,1fr))", gap: 10 }}>
+          {kpi("First-time-fix", t.ftfPct == null ? "—" : `${t.ftfPct}%`, t.ftfPct == null ? "rgba(255,255,255,0.6)" : t.ftfPct >= 90 ? "#34d399" : t.ftfPct >= 75 ? "#fbbf24" : "#f87171")}
+          {kpi("Callbacks / re-work", t.callbacks ?? 0, (t.callbacks ?? 0) === 0 ? "#34d399" : "#f87171")}
+          {kpi("Completed", t.completed ?? 0, "#7DE5FF")}
+          {kpi("Hours logged", t.hours ?? 0, "#7DE5FF")}
+          {kpi("Avg utilization", `${t.avgUtilizationPct ?? 0}%`, utilColor(t.avgUtilizationPct ?? 0))}
+        </div>
+
+        <Card>
+          <h2 style={{ fontSize: 15, marginBottom: 10 }}>Technician utilization</h2>
+          {perTech.length === 0 ? <Small>No technicians yet.</Small> : <div style={{ display: "grid", gap: 8 }}>
+            {perTech.map(tech => (
+              <div key={tech.id} style={{ display: "grid", gridTemplateColumns: "150px 1fr 70px", gap: 10, alignItems: "center" }}>
+                <span style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tech.name}</span>
+                <div>
+                  <div style={{ height: 8, borderRadius: 5, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+                    <div style={{ width: `${Math.min(tech.utilizationPct, 100)}%`, height: "100%", background: utilColor(tech.utilizationPct) }} />
+                  </div>
+                  <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.45)", marginTop: 3 }}>{tech.jobs} jobs · {tech.completed} done · {tech.hours} hrs</div>
+                </div>
+                <span style={{ fontSize: 15, fontWeight: 700, textAlign: "right", color: utilColor(tech.utilizationPct) }}>{tech.utilizationPct}%</span>
+              </div>
+            ))}
+          </div>}
+          <Small>Utilization = hours logged ÷ available (weekdays × 8h) over the period.</Small>
+        </Card>
+
+        {callbacks.length > 0 && (
+          <Card>
+            <h2 style={{ fontSize: 15, marginBottom: 8 }}>Callbacks / re-work ({callbacks.length})</h2>
+            <div style={{ display: "grid", gap: 5 }}>
+              {callbacks.map(c => (
+                <div key={c.id} onClick={() => onOpen(c.id)} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, padding: "7px 10px", background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.22)", borderRadius: 9, cursor: "pointer" }}>
+                  <span style={{ color: "rgba(255,255,255,0.85)" }}>{c.title || c.wo_number || "WO"} <span style={{ color: "rgba(255,255,255,0.45)" }}>· {c.customer_name || ""}</span></span>
+                  <span style={{ color: "rgba(255,255,255,0.45)" }}>{c.assignee_name || "Unassigned"}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+      </>}
+    </div>
+  );
+}
+
 /* ── Dispatch: drag-drop tech × day scheduling board ─────────────────────── */
 function DispatchBoard({ jobs, techs, loading, onOpen, onUpdate }: { jobs: RealWO[]; techs: RealTech[]; loading: boolean; onOpen: (id: string) => void; onUpdate: (id: string, patch: Record<string, unknown>) => void }) {
   const [weekStart, setWeekStart] = useState(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; });
@@ -1580,6 +1649,16 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             <input type="checkbox" checked={notifyOnChange} onChange={e => setNotifyOnChange(e.target.checked)} style={{ width: 15, height: 15 }} />
             📧 Email the tech &amp; customer when I change this job
           </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "rgba(255,255,255,0.7)", cursor: "pointer", marginTop: 8 }}>
+            <input type="checkbox" checked={!!wo.is_callback} onChange={e => patchField({ is_callback: e.target.checked })} style={{ width: 15, height: 15 }} />
+            🔁 This is a callback / re-work (counts against first-time-fix)
+          </label>
+          {wo.is_callback && siteHistory.length > 0 && (
+            <select value={wo.callback_of_id ?? ""} onChange={e => patchField({ callback_of_id: e.target.value || null })} style={{ ...sel, width: "100%", marginTop: 6 }}>
+              <option value="">Link the original job (optional)…</option>
+              {siteHistory.map(h => <option key={h.id} value={h.id}>{h.wo_number || h.title || String(h.id).slice(0, 8)}</option>)}
+            </select>
+          )}
         </Card>
 
         {/* Crew — multiple techs/resources on one job (lead = primary assignee). */}

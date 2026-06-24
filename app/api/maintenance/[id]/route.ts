@@ -119,12 +119,24 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     body.arrived_at = new Date().toISOString()
   }
 
-  const { data, error } = await supabase
-    .from('work_orders')
-    .update({ ...body, updated_at: new Date().toISOString() })
-    .eq('id', params.id)
-    .select()
-    .single()
+  // Drift-resilient update: strip any key that isn't a real column (control flags
+  // like send_notifications, or a new field before its migration runs) and retry,
+  // so a patch never hard-fails on an unknown column.
+  const upd: Record<string, unknown> = { ...body, updated_at: new Date().toISOString() }
+  delete upd.send_notifications; delete upd.notify   // control flags, never columns
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let data: any = null; let error: { code?: string; message: string } | null = null
+  for (let i = 0; i < 8; i++) {
+    const res = await supabase.from('work_orders').update(upd).eq('id', params.id).select().single()
+    data = res.data; error = res.error
+    if (!error) break
+    if (error.code === '42703' || error.code === 'PGRST204') {
+      const m = /Could not find the '([a-z_]+)' column/i.exec(error.message) || /column "?([a-z_]+)"?/i.exec(error.message)
+      const col = m?.[1]
+      if (col && col in upd) { delete upd[col]; continue }
+    }
+    break
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (!data)  return NextResponse.json({ error: 'Not found' }, { status: 404 })
