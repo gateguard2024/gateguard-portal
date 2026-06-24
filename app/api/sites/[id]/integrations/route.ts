@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/current-user'
 import { credsKeyConfigured } from '@/lib/crypto-creds'
-import { SITE_VENDORS, type SiteVendor, listSiteIntegrationStatus, setSiteVendorCreds, deleteSiteVendorCreds, markIntegrationTest, getSiteVendorCreds } from '@/lib/site-integrations'
+import { SITE_VENDORS, type SiteVendor, listSiteIntegrationStatus, mergeSiteVendorCreds, deleteSiteVendorCreds, markIntegrationTest, getSiteVendorCreds } from '@/lib/site-integrations'
 import { getSiteBrivoToken } from '@/lib/brivo'
 
 export const dynamic = 'force-dynamic'
@@ -36,10 +36,10 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   if (!SITE_VENDORS.includes(vendor)) return NextResponse.json({ error: 'Unknown vendor' }, { status: 400 })
   const credentials = body.credentials as Record<string, string>
   if (!credentials || typeof credentials !== 'object') return NextResponse.json({ error: 'credentials object required' }, { status: 400 })
-  // Drop empty values so a partial update never wipes a secret with a blank.
+  // Drop empty values, then MERGE so updating one field never wipes the others.
   const clean: Record<string, string> = {}
   for (const [k, v] of Object.entries(credentials)) if (v != null && String(v).trim() !== '') clean[k] = String(v).trim()
-  const { error } = await setSiteVendorCreds(params.id, vendor, clean)
+  const { error } = await mergeSiteVendorCreds(params.id, vendor, clean)
   if (error) return NextResponse.json({ error }, { status: 500 })
   return NextResponse.json({ ok: true })
 }

@@ -36,6 +36,8 @@ export function SiteConnections({ siteId }: { siteId: string }) {
   const [form, setForm] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [cloudSites, setCloudSites] = useState<{ site_id: string; name: string; host_id: string | null; host_name: string | null }[]>([]);
+  const [loadingSites, setLoadingSites] = useState(false);
 
   const load = React.useCallback(() => {
     setLoading(true);
@@ -76,6 +78,21 @@ export function SiteConnections({ siteId }: { siteId: string }) {
     else setMsg((r && r.error) || "Couldn't remove.");
   }
 
+  // UniFi cloud: save whatever's typed (so the key is stored), then list the account's
+  // sites so the user can pick this property instead of pasting a Cloud site ID.
+  async function loadUniFiSites() {
+    setLoadingSites(true); setMsg(null);
+    try {
+      if (Object.keys(form).length) {
+        await fetch(`/api/sites/${siteId}/integrations`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ vendor: "unifi", credentials: form }) });
+      }
+      const r = await fetch(`/api/unifi/cloud/sites?site_id=${siteId}`).then(x => x.json()).catch(() => null);
+      if (r?.sites?.length) { setCloudSites(r.sites); load(); }
+      else { setCloudSites([]); setMsg(r?.error || "No sites returned for this key. Double-check the Cloud API key."); }
+    } catch { setMsg("Couldn't load sites."); }
+    finally { setLoadingSites(false); }
+  }
+
   const card = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: 18 } as const;
   const input = { background: "rgba(0,0,0,0.28)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.92)", borderRadius: 10, padding: "9px 11px", width: "100%", fontSize: 13 } as const;
 
@@ -105,6 +122,17 @@ export function SiteConnections({ siteId }: { siteId: string }) {
                         placeholder={f.label + (f.placeholder ? ` (${f.placeholder})` : "")}
                         value={form[f.key] ?? ""} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))} style={input} />
                     ))}
+                    {vendor === "unifi" && (
+                      <div style={{ display: "grid", gap: 6, paddingTop: 4 }}>
+                        <button type="button" onClick={loadUniFiSites} disabled={loadingSites} style={{ justifySelf: "start", fontSize: 12, fontWeight: 600, background: "rgba(125,229,255,0.12)", border: "1px solid rgba(125,229,255,0.35)", color: "#7DE5FF", borderRadius: 9, padding: "7px 12px", cursor: "pointer", opacity: loadingSites ? 0.5 : 1 }}>{loadingSites ? "Loading sites…" : "↻ Load my UniFi sites"}</button>
+                        {cloudSites.length > 0 && (
+                          <select value={form.cloud_site_id ?? ""} onChange={e => { const s = cloudSites.find(x => x.site_id === e.target.value); setForm(p => ({ ...p, cloud_site_id: e.target.value, cloud_host_id: s?.host_id ?? p.cloud_host_id ?? "" })); }} style={input}>
+                            <option value="">— pick this property&apos;s UniFi site —</option>
+                            {cloudSites.map(s => <option key={s.site_id} value={s.site_id}>{s.name}{s.host_name ? ` · ${s.host_name}` : ""}</option>)}
+                          </select>
+                        )}
+                      </div>
+                    )}
                     <div style={{ display: "flex", gap: 8 }}>
                       <button onClick={() => save(vendor)} disabled={busy || !keyOk} style={{ fontSize: 12, fontWeight: 600, background: "rgba(0,200,255,0.18)", border: "1px solid rgba(0,200,255,0.45)", color: "#7DE5FF", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy || !keyOk ? 0.5 : 1 }}>{busy ? "Saving…" : "Save"}</button>
                       {s?.configured && vendor !== "eagle_eye" && <button onClick={() => test(vendor)} disabled={busy} style={{ fontSize: 12, fontWeight: 600, background: "rgba(52,211,153,0.16)", border: "1px solid rgba(52,211,153,0.4)", color: "#6ee7b7", borderRadius: 10, padding: "7px 14px", cursor: "pointer", opacity: busy ? 0.5 : 1 }}>Test</button>}

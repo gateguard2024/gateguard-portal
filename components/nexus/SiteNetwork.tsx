@@ -43,13 +43,16 @@ export function SiteNetwork({ siteId }: { siteId: string }) {
   const sub = { fontSize: 12, color: "rgba(255,255,255,0.5)" } as const;
   if (loading) return <div style={sub}>Loading network…</div>;
   const fmt = (n: number | null, unit: string) => n == null ? null : `${n % 1 === 0 ? n : n.toFixed(1)}${unit}`;
+  const upt = (s: number | null) => s == null ? null : s >= 86400 ? `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h` : s >= 3600 ? `${Math.floor(s / 3600)}h` : `${Math.floor(s / 60)}m`;
   return (
     <div style={{ display: "grid", gap: 16 }}>
       {/* Internet / WAN status (UniFi cloud) */}
       {ov && (() => {
         const i = ov.internet || {};
+        const cns = ov.console || {};
         const color = i.status === "up" ? "#34d399" : i.status === "down" ? "#f87171" : "#fbbf24";
-        const stats = [fmt(i.download_mbps, "↓ Mbps"), fmt(i.upload_mbps, "↑ Mbps"), fmt(i.latency_ms, " ms"), fmt(i.uptime_pct, "% up")].filter(Boolean);
+        const stats = [fmt(i.download_mbps, "↓ Mbps"), fmt(i.upload_mbps, "↑ Mbps"), fmt(i.latency_ms, " ms"), fmt(i.packet_loss_pct, "% loss"), fmt(i.uptime_pct, "% up")].filter(Boolean);
+        const consoleLine = [cns.model, i.public_ip || cns.public_ip, cns.version ? `v${cns.version}` : null, upt(cns.uptime_s) ? `up ${upt(cns.uptime_s)}` : null].filter(Boolean);
         return (
           <div style={{ background: "rgba(0,0,0,0.22)", border: `1px solid ${color}33`, borderRadius: 14, padding: 14 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -60,7 +63,8 @@ export function SiteNetwork({ siteId }: { siteId: string }) {
               </div>
               <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>{ov.clients?.total ?? 0} clients</span>
             </div>
-            {stats.length > 0 && <div style={{ display: "flex", gap: 14, marginTop: 8, fontSize: 12, color: "rgba(255,255,255,0.7)" }}>{stats.map((s, n) => <span key={n}>{s}</span>)}</div>}
+            {consoleLine.length > 0 && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", marginTop: 5 }}>{consoleLine.join(" · ")}</div>}
+            {stats.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 8, fontSize: 12, color: "rgba(255,255,255,0.7)" }}>{stats.map((s, n) => <span key={n}>{s}</span>)}</div>}
             <div style={{ display: "flex", gap: 14, marginTop: 8, fontSize: 11.5, color: "rgba(255,255,255,0.5)" }}>
               <span>WiFi {ov.clients?.wifi ?? 0}</span><span>Wired {ov.clients?.wired ?? 0}</span>
               {(ov.clients?.guest ?? 0) > 0 && <span>Guest {ov.clients.guest}</span>}
@@ -71,9 +75,12 @@ export function SiteNetwork({ siteId }: { siteId: string }) {
               <div style={{ display: "grid", gap: 4, marginTop: 10 }}>
                 {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                 {ov.devices.slice(0, 8).map((d: any, n: number) => (
-                  <div key={n} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12, padding: "4px 9px", background: "rgba(0,0,0,0.18)", borderRadius: 8 }}>
-                    <span style={{ color: "rgba(255,255,255,0.82)" }}>{d.name}{d.model ? <span style={{ color: "rgba(255,255,255,0.35)" }}> · {d.model}</span> : null}</span>
-                    <span style={{ fontSize: 10.5, color: d.online ? "#6ee7b7" : "#fca5a5" }}>{d.online ? "● online" : "○ offline"}</span>
+                  <div key={n} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12, padding: "4px 9px", background: "rgba(0,0,0,0.18)", borderRadius: 8 }}>
+                    <span style={{ color: "rgba(255,255,255,0.82)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.name}{d.model ? <span style={{ color: "rgba(255,255,255,0.35)" }}> · {d.model}</span> : null}</span>
+                    <span style={{ display: "flex", gap: 10, alignItems: "center", flexShrink: 0, fontSize: 10.5 }}>
+                      {[d.ip, d.clients != null ? `${d.clients} clients` : null, upt(d.uptime_s) ? `up ${upt(d.uptime_s)}` : null].filter(Boolean).map((x: string, k: number) => <span key={k} style={{ color: "rgba(255,255,255,0.4)" }}>{x}</span>)}
+                      <span style={{ color: d.online ? "#6ee7b7" : "#fca5a5" }}>{d.online ? "● online" : "○ offline"}</span>
+                    </span>
                   </div>
                 ))}
               </div>
