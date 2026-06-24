@@ -26,9 +26,10 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const isDocument   = pathname.startsWith('/document/')
   const isNexus      = pathname === '/' || pathname.startsWith('/opps')
   const isCmms       = pathname.startsWith('/cmms')   // Operations Hub — glass, full-screen
+  const isSchedule   = pathname.startsWith('/schedule') // public booking page — no chrome
   // Proposal + approve pages, signing links, and the public document portal are
   // customer-facing — no sidebar, no portal chrome, no auth wall
-  const isStandalone = isTech || isAria || isSign || isDocument || isNexus || isCmms
+  const isStandalone = isTech || isAria || isSign || isDocument || isNexus || isCmms || isSchedule
     || /^\/quotes\/[^/]+(\/proposal|\/approve)(\/|$)/.test(pathname)
 
   // Standalone: full-screen, no portal chrome

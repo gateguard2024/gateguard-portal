@@ -43,6 +43,11 @@ function isBypassPath(pathname: string): boolean {
     // Client-facing quote pages ONLY — the internal builder (/quotes, /quotes/new,
     // /quotes/[id]) stays behind Clerk. Public = proposal + approve views only.
     (/^\/quotes\/[^/]+\/(proposal|approve)(\/|$)/.test(pathname)) ||
+    // Public booking page (relocated from gateguard.co) — no login; books the sales calendar
+    pathname.startsWith('/schedule') ||
+    pathname.startsWith('/api/schedule') ||
+    // Public "find a dealer" directory — called from gateguard.co contact section
+    pathname.startsWith('/api/dealers/locator') ||
     // Conference landing page — public lead capture
     pathname.startsWith('/show') ||
     // Show lead API — called from public page
