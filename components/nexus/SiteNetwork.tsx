@@ -130,7 +130,7 @@ export function SiteNetwork({ siteId }: { siteId: string }) {
             {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
             {Array.isArray(ov.devices) && ov.devices.length > 0 && (
               <div style={{ display: "grid", gap: 4 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "rgba(255,255,255,0.4)" }}>Devices ({ov.devices.length})</div>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "rgba(255,255,255,0.4)" }}>Network gear ({ov.devices.length})</div>
                 {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                 {ov.devices.slice(0, 12).map((d: any, n: number) => (
                   <div key={n} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12, padding: "5px 10px", background: "rgba(0,0,0,0.18)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 8 }}>
@@ -162,20 +162,22 @@ export function SiteNetwork({ siteId }: { siteId: string }) {
       )}
       {doorNote && doors.length === 0 && <div style={sub}>UniFi Access: {doorNote}</div>}
 
-      {/* Network clients */}
-      <div>
-        <div style={{ fontSize: 13.5, fontWeight: 600, color: "rgba(255,255,255,0.9)", marginBottom: 8 }}>Connected devices {clients.length > 0 && <span style={{ color: "rgba(255,255,255,0.4)", fontWeight: 400 }}>· {clients.length}</span>}</div>
-        {netNote && clients.length === 0 ? <div style={sub}>{netNote}</div>
-          : clients.length === 0 ? <div style={sub}>No connected devices.</div>
-          : <div style={{ display: "grid", gap: 5, maxHeight: 280, overflowY: "auto" }}>
-              {clients.map(c => (
-                <div key={c.mac} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12.5, padding: "6px 10px", background: "rgba(0,0,0,0.18)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 9 }}>
-                  <span style={{ color: "rgba(255,255,255,0.85)" }}>{c.name}</span>
-                  <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>{c.ip || c.mac} · {c.wired ? "wired" : "wifi"}</span>
-                </div>
-              ))}
-            </div>}
-      </div>
+      {/* Connected clients — per-device list comes from the LOCAL controller only */}
+      {clients.length > 0 ? (
+        <div>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: "rgba(255,255,255,0.9)", marginBottom: 8 }}>Connected clients <span style={{ color: "rgba(255,255,255,0.4)", fontWeight: 400 }}>· {clients.length}</span></div>
+          <div style={{ display: "grid", gap: 5, maxHeight: 280, overflowY: "auto" }}>
+            {clients.map(c => (
+              <div key={c.mac} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12.5, padding: "6px 10px", background: "rgba(0,0,0,0.18)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 9 }}>
+                <span style={{ color: "rgba(255,255,255,0.85)" }}>{c.name}</span>
+                <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>{c.ip || c.mac} · {c.wired ? "wired" : "wifi"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : ov ? (
+        <div style={{ ...sub, lineHeight: 1.6 }}>The cloud shows client <b style={{ color: "rgba(255,255,255,0.7)" }}>counts</b> (see Client mix above). The full per-client list (names &amp; IPs) needs the local controller — add it under Advanced in Connections if this site is reachable.</div>
+      ) : netNote ? <div style={sub}>{netNote}</div> : null}
       {msg && <div style={{ fontSize: 12, color: msg.includes("✓") ? "#6ee7b7" : "#fca5a5" }}>{msg}</div>}
     </div>
   );
