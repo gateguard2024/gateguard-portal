@@ -15,15 +15,19 @@ export function SiteNetwork({ siteId }: { siteId: string }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [ov, setOv] = useState<any>(null);   // UniFi cloud overview (internet/WAN + device health)
 
   const load = React.useCallback(() => {
     setLoading(true);
     Promise.all([
       fetch(`/api/unifi/clients?site_id=${siteId}`).then(async r => ({ ok: r.ok, d: await r.json().catch(() => ({})) })),
       fetch(`/api/unifi/access/doors?site_id=${siteId}`).then(async r => ({ ok: r.ok, d: await r.json().catch(() => ({})) })),
-    ]).then(([c, dr]) => {
+      fetch(`/api/unifi/cloud/overview?site_id=${siteId}`).then(async r => ({ ok: r.ok, d: await r.json().catch(() => ({})) })),
+    ]).then(([c, dr, o]) => {
       if (c.ok) setClients(c.d.clients ?? []); else { setNetNote(c.d.error || "Network not connected."); setClients([]); }
       if (dr.ok) setDoors(dr.d.doors ?? []); else { setDoorNote(dr.d.error || "UniFi Access not connected."); setDoors([]); }
+      setOv(o.ok && o.d?.connected ? o.d : null);
     }).finally(() => setLoading(false));
   }, [siteId]);
   useEffect(() => { load(); }, [load]);
@@ -38,8 +42,46 @@ export function SiteNetwork({ siteId }: { siteId: string }) {
 
   const sub = { fontSize: 12, color: "rgba(255,255,255,0.5)" } as const;
   if (loading) return <div style={sub}>Loading network…</div>;
+  const fmt = (n: number | null, unit: string) => n == null ? null : `${n % 1 === 0 ? n : n.toFixed(1)}${unit}`;
   return (
     <div style={{ display: "grid", gap: 16 }}>
+      {/* Internet / WAN status (UniFi cloud) */}
+      {ov && (() => {
+        const i = ov.internet || {};
+        const color = i.status === "up" ? "#34d399" : i.status === "down" ? "#f87171" : "#fbbf24";
+        const stats = [fmt(i.download_mbps, "↓ Mbps"), fmt(i.upload_mbps, "↑ Mbps"), fmt(i.latency_ms, " ms"), fmt(i.uptime_pct, "% up")].filter(Boolean);
+        return (
+          <div style={{ background: "rgba(0,0,0,0.22)", border: `1px solid ${color}33`, borderRadius: 14, padding: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                <span style={{ width: 9, height: 9, borderRadius: "50%", background: color, boxShadow: `0 0 8px ${color}` }} />
+                <span style={{ fontSize: 14, fontWeight: 700, color: "rgba(255,255,255,0.92)" }}>Internet {i.status === "up" ? "Online" : i.status === "down" ? "Offline" : "Status unknown"}</span>
+                {i.isp && <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>· {i.isp}</span>}
+              </div>
+              <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>{ov.clients?.total ?? 0} clients</span>
+            </div>
+            {stats.length > 0 && <div style={{ display: "flex", gap: 14, marginTop: 8, fontSize: 12, color: "rgba(255,255,255,0.7)" }}>{stats.map((s, n) => <span key={n}>{s}</span>)}</div>}
+            <div style={{ display: "flex", gap: 14, marginTop: 8, fontSize: 11.5, color: "rgba(255,255,255,0.5)" }}>
+              <span>WiFi {ov.clients?.wifi ?? 0}</span><span>Wired {ov.clients?.wired ?? 0}</span>
+              {(ov.clients?.guest ?? 0) > 0 && <span>Guest {ov.clients.guest}</span>}
+              <span style={{ marginLeft: "auto", color: ov.health?.offline ? "#fca5a5" : "#6ee7b7" }}>Gear: {ov.health?.online ?? 0}/{ov.health?.total ?? 0} online</span>
+            </div>
+            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+            {Array.isArray(ov.devices) && ov.devices.length > 0 && (
+              <div style={{ display: "grid", gap: 4, marginTop: 10 }}>
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                {ov.devices.slice(0, 8).map((d: any, n: number) => (
+                  <div key={n} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12, padding: "4px 9px", background: "rgba(0,0,0,0.18)", borderRadius: 8 }}>
+                    <span style={{ color: "rgba(255,255,255,0.82)" }}>{d.name}{d.model ? <span style={{ color: "rgba(255,255,255,0.35)" }}> · {d.model}</span> : null}</span>
+                    <span style={{ fontSize: 10.5, color: d.online ? "#6ee7b7" : "#fca5a5" }}>{d.online ? "● online" : "○ offline"}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* UniFi Access doors */}
       {doors.length > 0 && (
         <div>
