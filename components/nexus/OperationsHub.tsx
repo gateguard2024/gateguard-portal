@@ -18,6 +18,9 @@
 //   /api/pm-schedules                   preventive maintenance
 import React, { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
+// Clean line icons (replaces legacy emoji for a calmer, on-brand look).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Printer, X, Truck, MapPin, CheckCircle2, Star, FileText } = require("lucide-react") as any;
 import { siteActivation, SITE_STATUS_LABELS, SITE_STATUS_COLORS } from "@/lib/site-lifecycle";
 import { ActivityTimeline } from "@/components/nexus/ActivityTimeline";
 import { SiteSystems } from "@/components/nexus/SiteSystems";
@@ -1466,6 +1469,10 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   const [phaseForm, setPhaseForm] = useState({ name: "", scheduled_date: "" });
   const [costPhase, setCostPhase] = useState(""); // which visit new labor/parts attach to ("" = whole job)
   const [tab, setTab] = useState<"Overview" | "Scope" | "Execution" | "Activity">("Overview");
+  const [smsBusy, setSmsBusy] = useState(false);
+  const [smsMsg, setSmsMsg] = useState<string | null>(null);
+  const [eta, setEta] = useState("");
+  const [invBusy, setInvBusy] = useState(false);
   // silent=true refreshes data in the background without flashing the whole panel
   // to "Loading…" — used after every in-drawer action so it doesn't blink/jump.
   const load = React.useCallback((silent = false) => {
@@ -1617,12 +1624,31 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
     await fetch(`/api/maintenance/${id}/phases/${phaseId}`, { method: "DELETE" }).catch(() => {});
     load(true);
   }
+  async function notifyCustomer(event: string) {
+    setSmsBusy(true); setSmsMsg(null);
+    const r = await fetch(`/api/maintenance/${id}/notify-customer`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event, tech_eta: event === "in_route" ? (eta || undefined) : undefined }) }).then(x => x.json()).catch(() => null);
+    setSmsBusy(false);
+    setSmsMsg(r?.ok ? `Texted customer ✓ — ${r.sent_to}` : (r?.error || "Couldn't send text."));
+    load(true);
+  }
+  async function createInvoice() {
+    if (invBusy || !wo) return; setInvBusy(true); setSmsMsg(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const lineItems = [
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...parts.map((p: any) => ({ description: p.name, qty: p.qty ?? 1, unit_price: Number(p.unit_price ?? p.unit_cost ?? 0), service_type: "part" })),
+      ...(laborMins > 0 ? [{ description: `Labor — ${Math.round((laborMins / 60) * 10) / 10} hrs`, qty: Math.round((laborMins / 60) * 10) / 10, unit_price: 0, service_type: "labor" }] : []),
+    ];
+    const r = await fetch(`/api/invoices`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ site_id: wo.site_id ?? null, work_order_id: id, line_items: lineItems, notes: `From work order ${wo.wo_number || ""}`.trim() }) }).then(x => x.json()).catch(() => null);
+    setInvBusy(false);
+    setSmsMsg(r?.id || r?.invoice?.id ? "Invoice created ✓ — open Money/Docs to set rates, send & collect payment." : (r?.error || "Couldn't create invoice."));
+  }
 
   return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.62)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
     <div onClick={e => e.stopPropagation()} style={{ width: "min(960px,100%)", maxHeight: "92vh", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#060b1a)", border: "1px solid rgba(0,200,255,0.22)", borderRadius: 18, padding: 22, paddingBottom: 28, color: "white", boxShadow: "0 30px 90px rgba(0,0,0,0.55)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 16 }}>
-        <button onClick={onClose} style={{ ...btn, background: "rgba(255,255,255,0.06)" }}>✕ Close</button>
-        {wo && <button onClick={() => printWorkOrder(wo, siteEquip)} style={{ ...btn, background: "rgba(255,255,255,0.06)" }}>🖨 Print</button>}
+        <button onClick={onClose} style={{ ...btn, background: "transparent", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.75)", display: "inline-flex", alignItems: "center", gap: 6 }}><X size={15} /> Close</button>
+        {wo && <button onClick={() => printWorkOrder(wo, siteEquip)} style={{ ...btn, background: "transparent", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.75)", display: "inline-flex", alignItems: "center", gap: 6 }}><Printer size={15} /> Print</button>}
       </div>
       {loading ? <Small>Loading…</Small> : !wo ? <Small>Couldn’t load this work order.</Small> : <div style={{ display: "grid", gap: 14 }}>
         <div>
@@ -1659,6 +1685,19 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
               {siteHistory.map(h => <option key={h.id} value={h.id}>{h.wo_number || h.title || String(h.id).slice(0, 8)}</option>)}
             </select>
           )}
+        </Card>
+
+        {/* Customer updates — one-tap SMS to the customer (on my way / arrived / done / review) */}
+        <Card>
+          <Small>Text the customer</Small>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
+            <input placeholder="ETA e.g. 2:30 PM" value={eta} onChange={e => setEta(e.target.value)} style={{ ...sel, width: 130 }} />
+            <button onClick={() => notifyCustomer("in_route")} disabled={smsBusy} style={{ ...btn, background: "rgba(0,200,255,0.16)", border: "1px solid rgba(0,200,255,0.4)", color: "#7DE5FF", display: "inline-flex", alignItems: "center", gap: 6 }}><Truck size={14} /> On my way</button>
+            <button onClick={() => notifyCustomer("on_site")} disabled={smsBusy} style={{ ...btn, display: "inline-flex", alignItems: "center", gap: 6 }}><MapPin size={14} /> Arrived</button>
+            <button onClick={() => notifyCustomer("completed")} disabled={smsBusy} style={{ ...btn, display: "inline-flex", alignItems: "center", gap: 6 }}><CheckCircle2 size={14} /> Job done</button>
+            <button onClick={() => notifyCustomer("review_request")} disabled={smsBusy} style={{ ...btn, display: "inline-flex", alignItems: "center", gap: 6 }}><Star size={14} /> Ask for review</button>
+          </div>
+          {smsMsg && !smsMsg.toLowerCase().includes("invoice") && <div style={{ fontSize: 12, color: smsMsg.includes("✓") ? "#6ee7b7" : "#fca5a5", marginTop: 8 }}>{smsMsg}</div>}
         </Card>
 
         {/* Crew — multiple techs/resources on one job (lead = primary assignee). */}
@@ -1802,6 +1841,8 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             <input type="number" step="0.25" placeholder="Hours" value={laborH} onChange={e => setLaborH(e.target.value)} style={{ ...input, padding: 9, width: 110 }} />
             <button onClick={logLabor} disabled={!laborH || partBusy} style={{ ...btn, opacity: laborH && !partBusy ? 1 : 0.5 }}>Log labor</button>
           </div>
+          <button onClick={createInvoice} disabled={invBusy} style={{ ...btn, marginTop: 12, width: "100%", background: "rgba(52,211,153,0.16)", border: "1px solid rgba(52,211,153,0.4)", color: "#6ee7b7", opacity: invBusy ? 0.5 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>{invBusy ? "Creating…" : <><FileText size={14} /> Create invoice from this job</>}</button>
+          {smsMsg && smsMsg.toLowerCase().includes("invoice") && <div style={{ fontSize: 12, color: smsMsg.includes("✓") ? "#6ee7b7" : "#fca5a5", marginTop: 8 }}>{smsMsg}</div>}
         </Card>
 
         {/* Checklist / Playbook steps (was Procedures) */}
