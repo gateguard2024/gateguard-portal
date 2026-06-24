@@ -44,7 +44,8 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         background: isTech ? '#F1F5F9' : isNexus || isAria || isSign || isDocument ? 'transparent' : '#ffffff',
         overscrollBehavior: 'none',
       }}>
-        <AdminLauncher />
+        {/* No admin launcher on the public booking page (prospect-facing) */}
+        {!isSchedule && <AdminLauncher />}
         {children}
       </div>
     )
