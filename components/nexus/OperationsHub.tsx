@@ -98,11 +98,12 @@ function Modal({ title, onClose, children, maxWidth = 460 }: { title: string; on
     </div>
   </div>;
 }
-const TABS = ["Dashboard", "Work Orders", "Requests", "Calendar", "Locations", "Techs", "Parts", "Procurement", "PM", "Playbooks"] as const;
+const TABS = ["Dashboard", "Work Orders", "Schedule", "Requests", "Calendar", "Locations", "Techs", "Parts", "Procurement", "PM", "Playbooks"] as const;
 type Tab = typeof TABS[number];
 const TAB_HINT: Record<Tab, string> = {
   Dashboard: "Snapshot + jobs board",
   "Work Orders": "Create, assign, track",
+  Schedule: "Drag jobs onto a tech & day",
   Requests: "Incoming requests → turn into jobs",
   Calendar: "What's scheduled, by day",
   Locations: "Your sites — tap to edit details",
@@ -146,6 +147,7 @@ export function OperationsHub({ embedded, initialTab }: { embedded?: boolean; in
 
     {page === "Dashboard" && <Dashboard jobs={jobs} techs={techs} loading={loading} onOpen={setOpenId} onUpdate={updateWO} />}
     {page === "Work Orders" && <WorkOrders jobs={jobs} techs={techs} loading={loading} onCreate={createWO} onUpdate={updateWO} onOpen={setOpenId} />}
+    {page === "Schedule" && <DispatchBoard jobs={jobs} techs={techs} loading={loading} onOpen={setOpenId} onUpdate={updateWO} />}
     {page === "Requests" && <Requests onConverted={loadOps} />}
     {page === "Calendar" && <CalendarView onOpenWO={setOpenId} jobs={jobs} />}
     {page === "Locations" && <Locations />}
@@ -716,6 +718,76 @@ const SITE_FIELDS: { key: string; label: string; full?: boolean }[] = [
   { key: "access_notes", label: "Access / gate notes", full: true },
 ];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+/* ── Dispatch: drag-drop tech × day scheduling board ─────────────────────── */
+function DispatchBoard({ jobs, techs, loading, onOpen, onUpdate }: { jobs: RealWO[]; techs: RealTech[]; loading: boolean; onOpen: (id: string) => void; onUpdate: (id: string, patch: Record<string, unknown>) => void }) {
+  const [weekStart, setWeekStart] = useState(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; });
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overCell, setOverCell] = useState<string | null>(null);
+
+  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStart); d.setDate(d.getDate() + i); return d; });
+  const jobDate = (w: RealWO) => (w.eta && /^\d{4}-\d{2}-\d{2}/.test(w.eta)) ? w.eta.slice(0, 10) : null;
+  const rows: RealTech[] = [{ id: "", name: "Unassigned" }, ...techs];
+  const unscheduled = jobs.filter(w => !jobDate(w) && bucketOf(w.status) !== "Done");
+  const navBtn = { ...btn, padding: "6px 12px", background: "rgba(255,255,255,0.06)" } as const;
+
+  const drop = (techId: string, dayIso: string) => {
+    const id = dragId; setDragId(null); setOverCell(null);
+    if (!id) return;
+    const t = techs.find(x => x.id === techId);
+    onUpdate(id, { assignee_id: techId || null, assignee_name: t?.name ?? null, scheduled_date: dayIso, status: "scheduled" });
+  };
+
+  const card = (w: RealWO) => (
+    <div key={w.id} draggable onDragStart={e => { setDragId(w.id); e.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => { setDragId(null); setOverCell(null); }} onClick={() => onOpen(w.id)}
+      style={{ padding: "6px 8px", borderRadius: 8, background: "rgba(0,200,255,0.1)", border: "1px solid rgba(0,200,255,0.28)", marginBottom: 5, cursor: "grab", fontSize: 11.5, opacity: dragId === w.id ? 0.4 : 1 }}>
+      <div style={{ fontWeight: 600, color: "rgba(255,255,255,0.9)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{w.title || w.woNumber || "WO"}</div>
+      {w.property && <div style={{ color: "rgba(255,255,255,0.5)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{w.property}</div>}
+    </div>
+  );
+
+  if (loading) return <Card><Small>Loading schedule…</Small></Card>;
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <button onClick={() => { const d = new Date(weekStart); d.setDate(d.getDate() - 7); setWeekStart(d); }} style={navBtn}>‹</button>
+        <button onClick={() => { const d = new Date(); d.setHours(0, 0, 0, 0); setWeekStart(d); }} style={navBtn}>Today</button>
+        <button onClick={() => { const d = new Date(weekStart); d.setDate(d.getDate() + 7); setWeekStart(d); }} style={navBtn}>›</button>
+        <span style={{ marginLeft: 8, fontSize: 13, color: "rgba(255,255,255,0.6)" }}>{days[0].toLocaleDateString([], { month: "short", day: "numeric" })} – {days[6].toLocaleDateString([], { month: "short", day: "numeric" })}</span>
+      </div>
+
+      {unscheduled.length > 0 && (
+        <div style={{ background: "rgba(255,255,255,0.03)", border: "1px dashed rgba(255,255,255,0.15)", borderRadius: 12, padding: 10 }}>
+          <Small>Unscheduled ({unscheduled.length}) — drag onto a tech &amp; day</Small>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>{unscheduled.map(w => <div key={w.id} style={{ width: 150 }}>{card(w)}</div>)}</div>
+        </div>
+      )}
+
+      <div style={{ overflowX: "auto" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "140px repeat(7, minmax(120px,1fr))", gap: 6, minWidth: 900 }}>
+          <div />
+          {days.map(d => <div key={iso(d)} style={{ textAlign: "center", fontSize: 11.5, fontWeight: 600, color: "rgba(255,255,255,0.6)", padding: "4px 0" }}>{d.toLocaleDateString([], { weekday: "short" })}<div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>{d.toLocaleDateString([], { month: "short", day: "numeric" })}</div></div>)}
+          {rows.map(row => (
+            <React.Fragment key={row.id || "unassigned"}>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: "rgba(255,255,255,0.8)", padding: "8px 6px", display: "flex", alignItems: "center" }}>{row.name}</div>
+              {days.map(d => {
+                const key = `${row.id}|${iso(d)}`;
+                const cell = jobs.filter(w => (w.assignedTechId || "") === row.id && jobDate(w) === iso(d));
+                return (
+                  <div key={key} onDragOver={e => { e.preventDefault(); if (overCell !== key) setOverCell(key); }} onDragLeave={() => setOverCell(c => c === key ? null : c)} onDrop={e => { e.preventDefault(); drop(row.id, iso(d)); }}
+                    style={{ minHeight: 60, background: overCell === key ? "rgba(0,200,255,0.12)" : "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, padding: 5 }}>
+                    {cell.map(card)}
+                  </div>
+                );
+              })}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onClose: () => void; systemsTab?: string }) {
   // Credentials are corporate-only; dealers see Doors/cameras but not Connections.
   const { user } = useUser();
