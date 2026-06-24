@@ -1324,6 +1324,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   const [phases, setPhases] = useState<any[]>([]); // visits / phases
   const [phaseForm, setPhaseForm] = useState({ name: "", scheduled_date: "" });
   const [costPhase, setCostPhase] = useState(""); // which visit new labor/parts attach to ("" = whole job)
+  const [tab, setTab] = useState<"Overview" | "Scope" | "Execution" | "Activity">("Overview");
   // silent=true refreshes data in the background without flashing the whole panel
   // to "Loading…" — used after every in-drawer action so it doesn't blink/jump.
   const load = React.useCallback((silent = false) => {
@@ -1489,6 +1490,14 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
           <Small>{wo.customer_name || wo.site_address || "—"}{wo.scheduled_date ? ` · ${String(wo.scheduled_date).slice(0, 10)}` : ""}</Small>
         </div>
 
+        {/* Tabs — keep every feature one click away in a clean console */}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", position: "sticky", top: 0, zIndex: 2, background: "linear-gradient(180deg,#0c1530,#0c1530ee)", paddingBottom: 4 }}>
+          {(["Overview", "Scope", "Execution", "Activity"] as const).map(tb => (
+            <button key={tb} onClick={() => setTab(tb)} style={{ fontSize: 12.5, fontWeight: 600, padding: "7px 14px", borderRadius: 10, cursor: "pointer", border: tab === tb ? "1px solid rgba(0,200,255,0.5)" : "1px solid rgba(255,255,255,0.1)", background: tab === tb ? "rgba(0,200,255,0.16)" : "rgba(255,255,255,0.04)", color: tab === tb ? "#7DE5FF" : "rgba(255,255,255,0.7)" }}>{tb}</button>
+          ))}
+        </div>
+
+        {tab === "Overview" && (<>
         <Card>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <div style={{ flex: 1, minWidth: 140 }}><Small>Status</Small><select value={bucketOf(wo.status)} onChange={e => patchField({ status: COL_TO_DB[e.target.value] })} style={{ ...sel, width: "100%", marginTop: 4 }}>{JOB_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}</select></div>
@@ -1544,7 +1553,9 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             <button onClick={addPhase} disabled={!phaseForm.name.trim()} style={{ ...btn, background: "rgba(0,200,255,0.18)", border: "1px solid rgba(0,200,255,0.45)", color: "#7DE5FF", opacity: phaseForm.name.trim() ? 1 : 0.5 }}>+ Add visit</button>
           </div>
         </Card>
+        </>)}
 
+        {tab === "Scope" && (<>
         {/* Work to perform — editable so anyone can spell out the scope for the tech. */}
         <Card>
           <h2 style={{ fontSize: 15, marginBottom: 6 }}>Work to perform</h2>
@@ -1595,7 +1606,9 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             </div>
           </div>; })}
         </Card>
+        </>)}
 
+        {tab === "Execution" && (<>
         {/* AI Tech Support */}
         <Card style={{ background: "rgba(0,200,255,0.06)", border: "1px solid rgba(0,200,255,0.22)" }}>
           <h2 style={{ fontSize: 15, marginBottom: 6 }}>🤖 AI Tech Support</h2>
@@ -1690,7 +1703,9 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
           </div>}
           {parts.length === 0 ? <Small>None yet.</Small> : parts.map((p, i) => <p key={p.id || i} style={{ margin: "6px 0" }}>{p.name || "Part"} × {num(p.qty)} <span style={{ color: "#34d399" }}>· {money((num(p.unit_price) - num(p.unit_cost)) * num(p.qty))} margin</span></p>)}
         </Card>
+        </>)}
 
+        {tab === "Activity" && (<>
         {/* Team chat (was Messages) */}
         <Card>
           <h2 style={{ fontSize: 15, marginBottom: 8 }}>Team chat</h2>
@@ -1717,6 +1732,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
         </Card>
 
         {wo.description && <Card><h2 style={{ fontSize: 15 }}>Notes</h2><p style={{ color: "rgba(255,255,255,0.8)", whiteSpace: "pre-wrap" }}>{wo.description}</p></Card>}
+        </>)}
 
         {bucketOf(wo.status) !== "Done" && <div>
           <button onClick={() => canComplete && patchField({ status: "completed" })} disabled={!canComplete} style={{ ...btn, width: "100%", background: canComplete ? "#10b981" : "rgba(255,255,255,0.08)", color: canComplete ? "white" : "rgba(255,255,255,0.45)", padding: 14, fontSize: 15, cursor: canComplete ? "pointer" : "not-allowed" }}>✓ Complete Work Order</button>
