@@ -6,6 +6,7 @@
 // door show as live tiles too. All gated by the user's granted capabilities.
 import React, { useEffect, useRef, useState } from "react";
 import { Shield } from "lucide-react";
+import { useUser } from "@clerk/nextjs";
 
 type Door = { id: string; name: string };
 type CamMap = { door_id: string; camera_id: string | null; camera_name: string; tags?: string[] | null };
@@ -89,6 +90,8 @@ function DoorTile({ door, cam, siteId, tick, busy, onUnlock, events, setClip, no
 }
 
 export function SiteSecurity({ siteId }: { siteId: string }) {
+  const { user } = useUser();
+  const isCorporate = ((user?.publicMetadata as Record<string, unknown> | undefined)?.org_tier) === "corporate";
   const [doors, setDoors] = useState<Door[]>([]);
   const [cams, setCams] = useState<Record<string, CamMap>>({});
   const [loading, setLoading] = useState(true);
@@ -181,7 +184,7 @@ export function SiteSecurity({ siteId }: { siteId: string }) {
         );
       })()}
 
-      {!loading && allCams.length === 0 && (() => {
+      {!loading && allCams.length === 0 && isCorporate && (() => {
         const notConnected = !camErr || /not connected|client id|secret|connect eagle/i.test(camErr);
         return (
           <div style={{ marginBottom: 14, padding: 12, borderRadius: 12, background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.3)" }}>

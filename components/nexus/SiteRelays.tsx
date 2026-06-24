@@ -40,6 +40,9 @@ export function SiteRelays({ siteId }: { siteId: string }) {
   }
 
   const card = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: 18 } as const;
+  // Dealer-facing: if there are no relays to show, hide the whole card (no empty clutter).
+  // Corporate still sees it so they can connect/set up.
+  if (!loading && relays.length === 0 && !isCorporate) return null;
   return (
     <div style={card}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>

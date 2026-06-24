@@ -19,15 +19,10 @@ const VENDORS: { vendor: Vendor; label: string; fields: Field[] }[] = [
   { vendor: "shelly", label: "Shelly · Relays / Power", fields: [
     { key: "auth_key", label: "Cloud auth key", secret: true }, { key: "server", label: "Cloud server", placeholder: "shelly-12-eu.shelly.cloud" },
     { key: "device_tag", label: "Property tag in device names", placeholder: "defaults to site name, e.g. Elevate Greene" } ] },
-  { vendor: "unifi", label: "UniFi · Network + Access", fields: [
-    { key: "cloud_api_key", label: "Cloud API key (unifi.ui.com)", secret: true, group: "Cloud — recommended" },
-    { key: "cloud_site_id", label: "Cloud site ID", placeholder: "use the picker below", group: "Cloud — recommended" },
-    { key: "cloud_host_id", label: "Cloud host ID (optional)", group: "Cloud — recommended", advanced: true },
-    { key: "host", label: "Local controller URL", placeholder: "https://192.168.1.1", group: "Local controller — only if reachable", advanced: true },
-    { key: "api_key", label: "Local Network API key", secret: true, group: "Local controller — only if reachable", advanced: true },
-    { key: "site", label: "Local network site", placeholder: "default", group: "Local controller — only if reachable", advanced: true },
-    { key: "access_host", label: "Access controller URL", placeholder: "https://<ip>:12445", group: "UniFi Access (doors)", advanced: true },
-    { key: "access_token", label: "Access API token", secret: true, group: "UniFi Access (doors)", advanced: true } ] },
+  { vendor: "unifi", label: "UniFi · Network (cloud)", fields: [
+    { key: "cloud_api_key", label: "Cloud API key (unifi.ui.com)", secret: true },
+    { key: "cloud_site_id", label: "Cloud site ID", placeholder: "use the picker below" },
+    { key: "cloud_host_id", label: "Cloud host ID (optional)", advanced: true } ] },
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -144,7 +139,7 @@ export function SiteConnections({ siteId }: { siteId: string }) {
                     {/* Advanced (collapsed): local controller + Access fields */}
                     {fields.some(f => f.advanced) && (
                       <>
-                        <button type="button" onClick={() => setShowAdv(v => !v)} style={{ justifySelf: "start", fontSize: 11, color: "rgba(255,255,255,0.5)", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>{showAdv ? "▾ Hide advanced (local controller & Access)" : "▸ Advanced (local controller & Access)"}</button>
+                        <button type="button" onClick={() => setShowAdv(v => !v)} style={{ justifySelf: "start", fontSize: 11, color: "rgba(255,255,255,0.5)", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>{showAdv ? "▾ Hide optional" : "▸ Optional"}</button>
                         {showAdv && fields.filter(f => f.advanced).map((f, idx, arr) => (
                           <React.Fragment key={f.key}>
                             {f.group && f.group !== arr[idx - 1]?.group && <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(255,255,255,0.4)", marginTop: 4 }}>{f.group}</div>}

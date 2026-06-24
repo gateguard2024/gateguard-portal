@@ -95,6 +95,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const insertRow: Record<string, unknown> = {
     work_order_id:     params.id,
+    phase_id:          body.phase_id ?? null,
     inventory_item_id: inventory_item_id || null,
     name,
     sku:               sku?.trim()  || null,

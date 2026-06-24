@@ -1317,6 +1317,13 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   const [eqForm, setEqForm] = useState({ product_name: "", serial_number: "", location_note: "" });
   const [eqBusy, setEqBusy] = useState(false);
   const [notifyOnChange, setNotifyOnChange] = useState(true);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [crew, setCrew] = useState<any[]>([]);     // additional assigned techs (multi-resource)
+  const [crewPick, setCrewPick] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [phases, setPhases] = useState<any[]>([]); // visits / phases
+  const [phaseForm, setPhaseForm] = useState({ name: "", scheduled_date: "" });
+  const [costPhase, setCostPhase] = useState(""); // which visit new labor/parts attach to ("" = whole job)
   // silent=true refreshes data in the background without flashing the whole panel
   // to "Loading…" — used after every in-drawer action so it doesn't blink/jump.
   const load = React.useCallback((silent = false) => {
@@ -1325,11 +1332,13 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
       fetch(`/api/maintenance/${id}`).then(r => r.json()).catch(() => ({})),
       fetch(`/api/maintenance/${id}/time`).then(r => r.json()).catch(() => ({})),
       fetch(`/api/maintenance/${id}/photos`).then(r => r.json()).catch(() => ({})),
-    ]).then(([d, t, ph]) => {
+      fetch(`/api/maintenance/${id}/crew`).then(r => r.json()).catch(() => ({})),
+      fetch(`/api/maintenance/${id}/phases`).then(r => r.json()).catch(() => ({})),
+    ]).then(([d, t, ph, cr, vs]) => {
       setWo(d.work_order ?? null); setParts(d.parts_used ?? []);
       setChecklist(d.checklist ?? []); setComments(d.comments ?? []);
       setLaborMins(t.totalMins ?? 0); setSiteId(d.work_order?.site_id ?? null);
-      setPhotos(ph.photos ?? []);
+      setPhotos(ph.photos ?? []); setCrew(cr.crew ?? []); setPhases(vs.phases ?? []);
     }).finally(() => { if (!silent) setLoading(false); });
   }, [id]);
   useEffect(() => { load(); }, [load]);
@@ -1431,17 +1440,44 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
   }
   async function addPart() {
     if (!pForm.name.trim() || partBusy) return; setPartBusy(true);
-    await fetch(`/api/maintenance/${id}/parts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: pForm.name.trim(), qty: Number(pForm.qty) || 1, unit_cost: pForm.unit_cost ? Number(pForm.unit_cost) : null, unit_price: pForm.unit_price ? Number(pForm.unit_price) : null }) }).catch(() => {});
+    await fetch(`/api/maintenance/${id}/parts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: pForm.name.trim(), qty: Number(pForm.qty) || 1, unit_cost: pForm.unit_cost ? Number(pForm.unit_cost) : null, unit_price: pForm.unit_price ? Number(pForm.unit_price) : null, phase_id: costPhase || null }) }).catch(() => {});
     setPForm({ name: "", qty: "1", unit_cost: "", unit_price: "" }); setShowAddPart(false); setPartBusy(false); load(true);
   }
   async function logLabor() {
     const h = Number(laborH); if (!h || h <= 0 || partBusy) return; setPartBusy(true);
-    await fetch(`/api/maintenance/${id}/time`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hours: h }) }).catch(() => {});
+    await fetch(`/api/maintenance/${id}/time`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hours: h, phase_id: costPhase || null }) }).catch(() => {});
     setLaborH(""); setPartBusy(false); load(true);
+  }
+  async function addCrew(techId: string, role = "crew") {
+    if (!techId) return; setCrewPick("");
+    await fetch(`/api/maintenance/${id}/crew`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ technician_id: techId, role }) }).catch(() => {});
+    load(true);
+  }
+  async function removeCrew(memberId: string) {
+    setCrew(c => c.filter(x => x.id !== memberId));
+    await fetch(`/api/maintenance/${id}/crew?member_id=${memberId}`, { method: "DELETE" }).catch(() => {});
+    load(true);
+  }
+  async function addPhase() {
+    const name = phaseForm.name.trim(); if (!name) return;
+    await fetch(`/api/maintenance/${id}/phases`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, scheduled_date: phaseForm.scheduled_date || null }) }).catch(() => {});
+    setPhaseForm({ name: "", scheduled_date: "" }); load(true);
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function patchPhase(phaseId: string, body: any) {
+    setPhases(ps => ps.map(p => p.id === phaseId ? { ...p, ...body } : p)); // optimistic
+    await fetch(`/api/maintenance/${id}/phases/${phaseId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => {});
+    load(true);
+  }
+  async function removePhase(phaseId: string) {
+    setPhases(ps => ps.filter(p => p.id !== phaseId));
+    if (costPhase === phaseId) setCostPhase("");
+    await fetch(`/api/maintenance/${id}/phases/${phaseId}`, { method: "DELETE" }).catch(() => {});
+    load(true);
   }
 
   return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.62)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-    <div onClick={e => e.stopPropagation()} style={{ width: "min(720px,100%)", maxHeight: "92vh", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#060b1a)", border: "1px solid rgba(0,200,255,0.22)", borderRadius: 18, padding: 20, paddingBottom: 28, color: "white", boxShadow: "0 30px 90px rgba(0,0,0,0.55)" }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: "min(960px,100%)", maxHeight: "92vh", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#060b1a)", border: "1px solid rgba(0,200,255,0.22)", borderRadius: 18, padding: 22, paddingBottom: 28, color: "white", boxShadow: "0 30px 90px rgba(0,0,0,0.55)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 16 }}>
         <button onClick={onClose} style={{ ...btn, background: "rgba(255,255,255,0.06)" }}>✕ Close</button>
         {wo && <button onClick={() => printWorkOrder(wo, siteEquip)} style={{ ...btn, background: "rgba(255,255,255,0.06)" }}>🖨 Print</button>}
@@ -1463,6 +1499,50 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             <input type="checkbox" checked={notifyOnChange} onChange={e => setNotifyOnChange(e.target.checked)} style={{ width: 15, height: 15 }} />
             📧 Email the tech &amp; customer when I change this job
           </label>
+        </Card>
+
+        {/* Crew — multiple techs/resources on one job (lead = primary assignee). */}
+        <Card>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <Small>Crew on this job</Small>
+            <select value={crewPick} onChange={e => addCrew(e.target.value)} style={{ ...sel, maxWidth: 200 }}>
+              <option value="">+ Add crew…</option>
+              {techs.filter(t => t.id !== wo.assignee_id && !crew.some(c => c.technician?.id === t.id)).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {wo.assignee_name && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, background: "rgba(0,200,255,0.14)", border: "1px solid rgba(0,200,255,0.4)", color: "#7DE5FF", borderRadius: 20, padding: "5px 12px" }}>★ {wo.assignee_name}<span style={{ opacity: 0.6 }}>· lead</span></span>}
+            {crew.map(c => (
+              <span key={c.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.85)", borderRadius: 20, padding: "5px 10px" }}>
+                {c.technician?.name || "Tech"}<span style={{ opacity: 0.55 }}>· {c.role}</span>
+                <button onClick={() => removeCrew(c.id)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", fontSize: 13, padding: 0 }}>✕</button>
+              </span>
+            ))}
+            {!wo.assignee_name && crew.length === 0 && <Small>No one assigned yet — set the lead above, add crew here.</Small>}
+          </div>
+        </Card>
+
+        {/* Visits — multi-day / return trips. Each can be scheduled + status-tracked. */}
+        <Card>
+          <Small>Visits</Small>
+          <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+            {phases.length === 0 && <Small>Single visit so far. Add visits for multi-day jobs or return trips.</Small>}
+            {phases.map(p => (
+              <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "8px 10px" }}>
+                <span style={{ flex: 1, minWidth: 120, fontSize: 13 }}>{p.name}</span>
+                <input type="date" value={p.scheduled_date ? String(p.scheduled_date).slice(0, 10) : ""} onChange={e => patchPhase(p.id, { scheduled_date: e.target.value || null })} style={{ ...sel, width: 150 }} />
+                <select value={p.status} onChange={e => patchPhase(p.id, { status: e.target.value })} style={{ ...sel, width: 140 }}>
+                  {["pending", "in_progress", "complete", "skipped"].map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
+                </select>
+                <button onClick={() => removePhase(p.id)} style={{ ...btn, background: "rgba(248,113,113,0.14)", border: "1px solid rgba(248,113,113,0.4)", color: "#fca5a5" }}>✕</button>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+            <input placeholder="New visit (e.g. Day 2 – Commissioning)" value={phaseForm.name} onChange={e => setPhaseForm(f => ({ ...f, name: e.target.value }))} style={{ ...sel, flex: 1, minWidth: 160 }} />
+            <input type="date" value={phaseForm.scheduled_date} onChange={e => setPhaseForm(f => ({ ...f, scheduled_date: e.target.value }))} style={{ ...sel, width: 150 }} />
+            <button onClick={addPhase} disabled={!phaseForm.name.trim()} style={{ ...btn, background: "rgba(0,200,255,0.18)", border: "1px solid rgba(0,200,255,0.45)", color: "#7DE5FF", opacity: phaseForm.name.trim() ? 1 : 0.5 }}>+ Add visit</button>
+          </div>
         </Card>
 
         {/* Work to perform — editable so anyone can spell out the scope for the tech. */}
@@ -1545,6 +1625,15 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             <div><Small>Parts price</Small><div style={{ fontSize: 16, fontWeight: 700 }}>{money(partsRev)}</div></div>
             <div><Small>Labor logged</Small><div style={{ fontSize: 16, fontWeight: 700 }}>{Math.round((laborMins / 60) * 10) / 10} hrs</div></div>
           </div>
+          {phases.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
+              <Small>Apply new labor / parts to</Small>
+              <select value={costPhase} onChange={e => setCostPhase(e.target.value)} style={{ ...sel, flex: 1 }}>
+                <option value="">Whole job</option>
+                {phases.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
             <input type="number" step="0.25" placeholder="Hours" value={laborH} onChange={e => setLaborH(e.target.value)} style={{ ...input, padding: 9, width: 110 }} />
             <button onClick={logLabor} disabled={!laborH || partBusy} style={{ ...btn, opacity: laborH && !partBusy ? 1 : 0.5 }}>Log labor</button>

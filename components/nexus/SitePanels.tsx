@@ -69,6 +69,8 @@ export function SitePanels({ siteId, isCorporate }: { siteId: string; isCorporat
   const btn = { fontSize: 12, fontWeight: 600, borderRadius: 9, padding: "6px 12px", cursor: "pointer" } as const;
 
   if (loading) return <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Loading controllers…</div>;
+  // Dealer-facing: nothing logged yet → hide (corporate adds these during setup).
+  if (panels.length === 0 && !isCorporate) return null;
   return (
     <div style={{ display: "grid", gap: 10 }}>
       {isCorporate && (

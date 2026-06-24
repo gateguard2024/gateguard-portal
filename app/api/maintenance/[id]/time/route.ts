@@ -53,7 +53,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       const clockIn  = new Date(clockOut.getTime() - directMins * 60000)
       const { data, error } = await supabase
         .from('work_order_time_entries')
-        .insert({ work_order_id: params.id, org_id: orgId, technician_id: techId, technician_name: techName, clock_in: clockIn.toISOString(), clock_out: clockOut.toISOString(), duration_mins: directMins, notes: body.notes ?? null })
+        .insert({ work_order_id: params.id, phase_id: body.phase_id ?? null, org_id: orgId, technician_id: techId, technician_name: techName, clock_in: clockIn.toISOString(), clock_out: clockOut.toISOString(), duration_mins: directMins, notes: body.notes ?? null })
         .select().single()
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
       return NextResponse.json(data, { status: 201 })

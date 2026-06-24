@@ -37,17 +37,11 @@ export const VENDOR_FIELDS: Record<SiteVendor, { label: string; fields: VendorFi
     { key: 'server', label: 'Cloud server', placeholder: 'e.g. shelly-12-eu.shelly.cloud' },
     { key: 'device_tag', label: 'Property tag in device names', placeholder: 'defaults to the site name, e.g. Elevate Greene' },
   ] },
-  unifi:     { label: 'UniFi (Network + Access)', fields: [
-    // Cloud (recommended for remote sites — reaches the console via Ubiquiti's cloud, no public IP)
+  unifi:     { label: 'UniFi (Network · cloud)', fields: [
+    // Cloud only — the portal is cloud-hosted and can't reach an on-prem console IP.
     { key: 'cloud_api_key', label: 'Cloud API key (unifi.ui.com)', secret: true },
-    { key: 'cloud_site_id', label: 'Cloud site ID', placeholder: 'pick from the site list after saving the key' },
+    { key: 'cloud_site_id', label: 'Cloud site ID', placeholder: 'use the picker' },
     { key: 'cloud_host_id', label: 'Cloud host ID (optional)' },
-    // Local (only if the console is reachable from the internet / VPN)
-    { key: 'host', label: 'Local controller URL', placeholder: 'https://192.168.1.1' },
-    { key: 'api_key', label: 'Local Network API key', secret: true },
-    { key: 'site', label: 'Local network site', placeholder: 'default' },
-    { key: 'access_host', label: 'Access controller URL', placeholder: 'https://<ip>:12445' },
-    { key: 'access_token', label: 'Access API token', secret: true },
   ] },
 }
 
