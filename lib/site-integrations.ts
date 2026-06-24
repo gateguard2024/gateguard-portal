@@ -35,6 +35,7 @@ export const VENDOR_FIELDS: Record<SiteVendor, { label: string; fields: VendorFi
   shelly:    { label: 'Shelly (Relays / Power)', fields: [
     { key: 'auth_key', label: 'Cloud auth key', secret: true },
     { key: 'server', label: 'Cloud server', placeholder: 'e.g. shelly-12-eu.shelly.cloud' },
+    { key: 'device_tag', label: 'Property tag in device names', placeholder: 'defaults to the site name, e.g. Elevate Greene' },
   ] },
   unifi:     { label: 'UniFi (Network + Access)', fields: [
     { key: 'host', label: 'Network controller URL', placeholder: 'https://192.168.1.1' },
