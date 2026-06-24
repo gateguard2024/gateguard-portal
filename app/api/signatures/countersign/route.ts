@@ -178,9 +178,10 @@ export async function POST(req: NextRequest) {
     const signerFirst = (sig.signed_name ?? sig.signer_name ?? 'there').split(' ')[0]
     const executedLink = `<p style="margin:18px 0 0;color:#94A3B8;font-size:13px;line-height:1.6;">Executed document: <a href="${certAbsoluteUrl}" style="color:#6B7EFF;">Open final copy</a></p>`
 
+    let clientEmailSent = false
+    let emailWarning: string | null = null
     if (process.env.RESEND_API_KEY) {
-      void (async () => {
-        try {
+      {
           const confirmationHtml = `
 <!DOCTYPE html>
 <html>
@@ -208,26 +209,42 @@ export async function POST(req: NextRequest) {
 </body>
 </html>`
 
-          await resend.emails.send({
-            from: DOCUMENTS_FROM_EMAIL,
-            to: sig.signer_email,
-            replyTo: 'rfeldman@gateguard.co',
-            subject: `Fully Executed: ${docLabel}`,
-            html: confirmationHtml,
-          })
+          // Client copy — awaited so we KNOW whether it was delivered.
+          try {
+            const { error: clientErr } = await resend.emails.send({
+              from: DOCUMENTS_FROM_EMAIL,
+              to: sig.signer_email,
+              replyTo: 'rfeldman@gateguard.co',
+              subject: `Fully Executed: ${docLabel}`,
+              html: confirmationHtml,
+            })
+            if (clientErr) {
+              emailWarning = `Client copy to ${sig.signer_email} failed: ${(clientErr as { message?: string }).message ?? 'unknown error'}`
+              console.error('[countersign] client email failed:', clientErr)
+            } else {
+              clientEmailSent = true
+            }
+          } catch (e) {
+            emailWarning = `Client copy to ${sig.signer_email} failed: ${e instanceof Error ? e.message : 'unknown error'}`
+            console.error('[countersign] client email threw:', e)
+          }
 
-          await resend.emails.send({
-            from: DOCUMENTS_FROM_EMAIL,
-            to: 'rfeldman@gateguard.co',
-            replyTo: 'rfeldman@gateguard.co',
-            subject: `Fully Executed Copy: ${docLabel} — ${sig.signer_company ?? sig.signer_email}`,
-            html: confirmationHtml,
-          })
-        } catch {}
-      })()
+          // Internal copy — best effort, never blocks the client result.
+          try {
+            await resend.emails.send({
+              from: DOCUMENTS_FROM_EMAIL,
+              to: 'rfeldman@gateguard.co',
+              replyTo: 'rfeldman@gateguard.co',
+              subject: `Fully Executed Copy: ${docLabel} — ${sig.signer_company ?? sig.signer_email}`,
+              html: confirmationHtml,
+            })
+          } catch (e) { console.error('[countersign] internal copy failed:', e) }
+      }
+    } else {
+      emailWarning = 'RESEND_API_KEY not set — no executed copy was emailed to the client.'
     }
 
-    return NextResponse.json({ ok: true, executed_at: now, executed_cert_url: certUrl, cert_url: certAbsoluteUrl, storage_warning: stored.warning })
+    return NextResponse.json({ ok: true, executed_at: now, executed_cert_url: certUrl, cert_url: certAbsoluteUrl, client_email_sent: clientEmailSent, email_warning: emailWarning, storage_warning: stored.warning })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error: msg }, { status: 500 })

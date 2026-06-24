@@ -42,8 +42,8 @@ const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
 
 const card = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: 18 } as const;
 const btn = { background: "#6366f1", color: "white", border: 0, borderRadius: 12, padding: "10px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 } as const;
-const input = { width: "100%", boxSizing: "border-box" as const, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.12)", color: "white", borderRadius: 12, padding: 12, fontSize: 14 };
-const sel = { background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.14)", color: "white", borderRadius: 10, padding: "6px 8px", fontSize: 12 } as const;
+const input = { width: "100%", boxSizing: "border-box" as const, background: "rgba(0,0,0,.34)", border: "1px solid rgba(255,255,255,.22)", color: "white", borderRadius: 12, padding: 12, fontSize: 14 };
+const sel = { background: "rgba(0,0,0,.34)", border: "1px solid rgba(255,255,255,.22)", color: "white", borderRadius: 10, padding: "6px 8px", fontSize: 12 } as const;
 const Small = ({ children }: { children: React.ReactNode }) => <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 13 }}>{children}</div>;
 const Big = ({ children, color }: { children: React.ReactNode; color?: string }) => <div style={{ fontSize: 30, fontWeight: 800, color: color ?? "#00C8FF", margin: "6px 0" }}>{children}</div>;
 const Card = ({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) => <div style={{ ...card, ...style }}>{children}</div>;
@@ -1644,8 +1644,8 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
     setSmsMsg(r?.id || r?.invoice?.id ? "Invoice created ✓ — open Money/Docs to set rates, send & collect payment." : (r?.error || "Couldn't create invoice."));
   }
 
-  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.62)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-    <div onClick={e => e.stopPropagation()} style={{ width: "min(960px,100%)", maxHeight: "92vh", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#060b1a)", border: "1px solid rgba(0,200,255,0.22)", borderRadius: 18, padding: 22, paddingBottom: 28, color: "white", boxShadow: "0 30px 90px rgba(0,0,0,0.55)" }}>
+  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.82)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: "min(1100px,100%)", maxHeight: "92vh", overflowY: "auto", background: "linear-gradient(180deg,#0a1228,#05091a)", border: "1px solid rgba(0,200,255,0.22)", borderRadius: 18, padding: 24, paddingBottom: 28, color: "white", boxShadow: "0 30px 90px rgba(0,0,0,0.6)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 16 }}>
         <button onClick={onClose} style={{ ...btn, background: "transparent", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.75)", display: "inline-flex", alignItems: "center", gap: 6 }}><X size={15} /> Close</button>
         {wo && <button onClick={() => printWorkOrder(wo, siteEquip)} style={{ ...btn, background: "transparent", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.75)", display: "inline-flex", alignItems: "center", gap: 6 }}><Printer size={15} /> Print</button>}

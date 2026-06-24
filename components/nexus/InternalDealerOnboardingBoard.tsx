@@ -134,18 +134,12 @@ export function InternalDealerOnboardingBoard() {
     setActionMessage(null)
     try {
       if (!item.contact_email) throw new Error('This dealer needs a contact email before sending.')
-      const payload: Record<string, string | null> = {
-        document_type: kind === 'nda' ? 'nda' : agreementType(item),
-        org_id: item.id,
-        signer_name: item.contact_name || item.title,
-        signer_email: item.contact_email,
-        signer_company: item.title,
-      }
-      const endpoint = ['/api', 'signatures', 'send'].join('/')
-      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      // Uses the maintained NDA/Agreement template + glass /document/[slug] link.
+      const res = await fetch('/api/nexus/internal/dealer-onboarding/send-document', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ org_id: item.id, kind }) })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok || data.ok === false) throw new Error(data?.error ?? data?.message ?? 'Document email failed.')
-      setActionMessage(kind === 'nda' ? 'NDA sent from this glass board.' : 'Agreement sent from this glass board.')
+      if (!res.ok || data.success === false) throw new Error(data?.error ?? data?.message ?? 'Document email failed.')
+      const label = kind === 'nda' ? 'NDA' : 'Agreement'
+      setActionMessage(`${label} sent to ${item.contact_email}.${data.public_url ? ` Signing link: ${data.public_url}` : ''}`)
       await load()
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : 'Could not send document.')
@@ -174,7 +168,11 @@ export function InternalDealerOnboardingBoard() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || data.ok === false) throw new Error(data?.error ?? data?.message ?? `${docLabel} countersign failed.`)
-      setActionMessage(`${docLabel} countersigned. Final copy is being stored and confirmation emails are being sent.`)
+      if (data.email_warning) {
+        setActionMessage(`${docLabel} fully executed, but the client copy could NOT be emailed: ${data.email_warning}${data.cert_url ? ` — share the final copy manually: ${data.cert_url}` : ''}`)
+      } else {
+        setActionMessage(`${docLabel} fully executed. Final copy emailed to ${item.contact_email || 'the client'} and you.${data.cert_url ? ` Final copy: ${data.cert_url}` : ''}`)
+      }
       await load()
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : `Could not countersign ${docLabel}.`)
@@ -287,8 +285,8 @@ export function InternalDealerOnboardingBoard() {
           </div>
 
           <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>NDA</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.nda_status}</div></div>
-            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>Agreement</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.agreement_status}</div></div>
+            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>NDA</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.nda_status}</div>{selected.nda_executed_cert_url && <a href={selected.nda_executed_cert_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[11px] font-semibold" style={{ color: '#7DE5FF' }}>Open final copy →</a>}</div>
+            <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>Agreement</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.agreement_status}</div>{selected.agreement_executed_cert_url && <a href={selected.agreement_executed_cert_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[11px] font-semibold" style={{ color: '#7DE5FF' }}>Open final copy →</a>}</div>
             <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}><div className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.34)' }}>Compliance</div><div className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.78)' }}>{selected.compliance_needed ? 'Needs review' : 'Looks OK'}</div></div>
           </div>
 
