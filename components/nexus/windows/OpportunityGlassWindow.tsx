@@ -78,9 +78,11 @@ function formatMoney(v: unknown): string {
 export function OpportunityGlassWindow({
   data,
   onBack,
+  onRefresh,
 }: {
   data: OpportunityGlassData
   onBack: () => void
+  onRefresh?: () => Promise<void> | void
 }) {
   const opp = data.opportunity ?? {}
   const lead = data.lead
@@ -97,9 +99,51 @@ export function OpportunityGlassWindow({
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
+  // Local overrides so edits show immediately (and persist on save).
+  const [ov, setOv] = useState<AnyRecord>({})
+  const show = (key: string, fallback?: unknown) => (ov[key] !== undefined ? ov[key] : (opp[key] ?? fallback))
+  const [editing, setEditing] = useState(false)
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [f, setF] = useState({
+    site_contact_name: '', site_contact_title: '', site_contact_phone: '', site_contact_email: '',
+    account_name: '', property_address: '', property_city: '', property_state: '', units: '', next_step: '', notes: '',
+  })
+
+  function openEdit() {
+    setF({
+      site_contact_name:  String(show('site_contact_name', contact ? [contact.first_name, contact.last_name].filter(Boolean).join(' ') : '') ?? ''),
+      site_contact_title: String(show('site_contact_title', contact?.title) ?? ''),
+      site_contact_phone: String(show('site_contact_phone', contact?.phone) ?? ''),
+      site_contact_email: String(show('site_contact_email', contact?.email) ?? ''),
+      account_name:       String(show('account_name', company?.name) ?? ''),
+      property_address:   String(show('property_address') ?? ''),
+      property_city:      String(show('property_city') ?? ''),
+      property_state:     String(show('property_state') ?? ''),
+      units:              show('units') ? String(show('units')) : '',
+      next_step:          String(show('next_step') ?? ''),
+      notes:              String(show('notes') ?? ''),
+    })
+    setMsg(null); setEditing(true)
+  }
+
+  async function saveEdit() {
+    const oppId = opp.id as string | undefined
+    if (!oppId) return
+    setSavingEdit(true); setMsg(null)
+    try {
+      const res = await fetch(`/api/nexus/opps/opportunity-window/${oppId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update_details', ...f }) })
+      const result = await res.json().catch(() => ({}))
+      if (!res.ok || result.success === false) throw new Error(result?.message ?? 'Could not save.')
+      setOv(prev => ({ ...prev, ...f, units: f.units ? Number(f.units) : prev.units }))
+      setMsg({ ok: true, text: 'Saved ✓' }); setEditing(false)
+      await onRefresh?.()
+    } catch (e) { setMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not save.' }) } finally { setSavingEdit(false) }
+  }
+
   async function handleAction(action: string) {
     const oppId = opp.id as string | undefined
     if (!oppId) return
+    if (action === 'update_details') { openEdit(); return }
     // Navigation actions — no API call.
     if (action === 'run_aria') { router.push('/aria'); return }
     if (action === 'generate_quote') { router.push(`/quotes/new?opportunity=${oppId}`); return }
@@ -141,8 +185,46 @@ export function OpportunityGlassWindow({
     ? '#fbbf24'
     : '#a5b4ff'
 
+  const editInput = { background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(107,126,255,0.24)', color: 'rgba(255,255,255,0.92)' } as const
+
   return (
     <div className="space-y-4">
+      {editing && (
+        <div className="fixed inset-0 z-[120] overflow-y-auto px-4 py-4 sm:py-8" style={{ background: 'rgba(0,0,0,0.74)', backdropFilter: 'blur(10px)' }}>
+          <div className="mx-auto flex min-h-full w-full max-w-2xl items-start justify-center">
+            <div className="w-full overflow-hidden rounded-[2rem]" style={{ background: 'linear-gradient(180deg, rgba(18,28,52,0.98), rgba(8,14,28,0.98))', border: '1px solid rgba(107,126,255,0.32)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
+              <div className="sticky top-0 z-10 flex items-start justify-between gap-3 p-5" style={{ background: 'linear-gradient(180deg, rgba(18,28,52,0.98), rgba(18,28,52,0.92))', borderBottom: '1px solid rgba(107,126,255,0.18)' }}>
+                <div><div className="text-[10px] uppercase tracking-[0.22em]" style={{ color: 'rgba(190,200,255,0.9)' }}>Edit Opportunity</div><h3 className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>Contact &amp; property details</h3></div>
+                <button type="button" onClick={() => setEditing(false)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
+              </div>
+              <div className="max-h-[calc(100vh-12rem)] overflow-y-auto p-5">
+                <div className="mb-2 text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.5)' }}>Contact</div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <input value={f.site_contact_name} onChange={e => setF({ ...f, site_contact_name: e.target.value })} placeholder="Contact name" className="rounded-xl px-3 py-2 text-sm outline-none" style={editInput} />
+                  <input value={f.site_contact_title} onChange={e => setF({ ...f, site_contact_title: e.target.value })} placeholder="Title" className="rounded-xl px-3 py-2 text-sm outline-none" style={editInput} />
+                  <input value={f.site_contact_phone} onChange={e => setF({ ...f, site_contact_phone: e.target.value })} placeholder="Phone" className="rounded-xl px-3 py-2 text-sm outline-none" style={editInput} />
+                  <input value={f.site_contact_email} onChange={e => setF({ ...f, site_contact_email: e.target.value })} placeholder="Email" className="rounded-xl px-3 py-2 text-sm outline-none" style={editInput} />
+                </div>
+                <div className="mb-2 mt-4 text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.5)' }}>Account &amp; property</div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <input value={f.account_name} onChange={e => setF({ ...f, account_name: e.target.value })} placeholder="Account / company" className="rounded-xl px-3 py-2 text-sm outline-none sm:col-span-2" style={editInput} />
+                  <input value={f.property_address} onChange={e => setF({ ...f, property_address: e.target.value })} placeholder="Address" className="rounded-xl px-3 py-2 text-sm outline-none sm:col-span-2" style={editInput} />
+                  <input value={f.property_city} onChange={e => setF({ ...f, property_city: e.target.value })} placeholder="City" className="rounded-xl px-3 py-2 text-sm outline-none" style={editInput} />
+                  <input value={f.property_state} onChange={e => setF({ ...f, property_state: e.target.value })} placeholder="State" className="rounded-xl px-3 py-2 text-sm outline-none" style={editInput} />
+                  <input value={f.units} onChange={e => setF({ ...f, units: e.target.value })} placeholder="Units" className="rounded-xl px-3 py-2 text-sm outline-none" style={editInput} />
+                  <input value={f.next_step} onChange={e => setF({ ...f, next_step: e.target.value })} placeholder="Next step" className="rounded-xl px-3 py-2 text-sm outline-none" style={editInput} />
+                  <textarea value={f.notes} onChange={e => setF({ ...f, notes: e.target.value })} placeholder="Notes" rows={3} className="rounded-xl px-3 py-2 text-sm outline-none resize-none sm:col-span-2" style={editInput} />
+                </div>
+              </div>
+              <div className="sticky bottom-0 flex justify-end gap-2 p-4" style={{ background: 'linear-gradient(0deg, rgba(8,14,28,0.98), rgba(8,14,28,0.90))', borderTop: '1px solid rgba(107,126,255,0.18)' }}>
+                <button type="button" onClick={() => setEditing(false)} className="rounded-full px-4 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.72)' }}>Cancel</button>
+                <button type="button" disabled={savingEdit} onClick={saveEdit} className="rounded-full px-4 py-2 text-xs disabled:opacity-40" style={{ background: '#6B7EFF', color: 'white' }}>{savingEdit ? 'Saving…' : 'Save Changes'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Header ── */}
       <div className="rounded-[2rem] p-5" style={{ background: 'linear-gradient(145deg, rgba(251,191,36,0.12), rgba(255,255,255,0.035))', border: '1px solid rgba(251,191,36,0.2)', boxShadow: '0 20px 70px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -160,7 +242,7 @@ export function OpportunityGlassWindow({
               {val(opp.name, 'Untitled Opportunity')}
             </h3>
             <div className="mt-2 text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
-              {val(opp.account_name ?? company?.name, 'No account attached')}
+              {val(show('account_name') ?? company?.name, 'No account attached')}
             </div>
           </div>
           <div className="rounded-2xl px-4 py-3 text-right" style={{ background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.08)' }}>
@@ -184,8 +266,8 @@ export function OpportunityGlassWindow({
 
           <Section title="Overview">
             <div className="grid gap-2 text-xs" style={{ color: 'rgba(255,255,255,0.62)' }}>
-              <div>Next Step: {val(opp.next_step, 'Not set')}</div>
-              <div>Notes: {val(opp.notes ?? opp.description, 'No notes yet')}</div>
+              <div>Next Step: {val(show('next_step'), 'Not set')}</div>
+              <div>Notes: {val(show('notes') ?? opp.description, 'No notes yet')}</div>
               <div>Source: {val(opp.source, 'Unknown')}</div>
               <div>Probability: {opp.probability != null ? `${opp.probability}%` : 'Not set'}</div>
               <div>Forecast: {val(opp.forecast_cat, 'Not set')}</div>
@@ -193,20 +275,23 @@ export function OpportunityGlassWindow({
           </Section>
 
           <Section title="People">
-            {contact ? (
+            <div className="mb-2 flex justify-end">
+              <button type="button" onClick={openEdit} className="rounded-full px-3 py-1 text-[10px] font-semibold" style={{ background: 'rgba(107,126,255,0.14)', border: '1px solid rgba(107,126,255,0.3)', color: '#c7d0ff' }}>Edit details</button>
+            </div>
+            {show('site_contact_name') ? (
+              <MiniRow
+                title={val(show('site_contact_name'))}
+                subtitle={[show('site_contact_title'), show('site_contact_phone'), show('site_contact_email')].filter(Boolean).join(' • ')}
+                meta="Site Contact"
+              />
+            ) : contact ? (
               <MiniRow
                 title={[contact.first_name, contact.last_name].filter(Boolean).join(' ') || 'Contact'}
                 subtitle={[contact.title, contact.email, contact.phone].filter(Boolean).join(' • ')}
                 meta="Contact"
               />
-            ) : opp.site_contact_name ? (
-              <MiniRow
-                title={val(opp.site_contact_name)}
-                subtitle={[opp.site_contact_title, opp.site_contact_phone, opp.site_contact_email].filter(Boolean).join(' • ')}
-                meta="Site Contact"
-              />
             ) : (
-              <Empty text="No contact linked yet." />
+              <Empty text="No contact linked yet. Tap Edit details to add one." />
             )}
             {opp.owner_name && (
               <div className="mt-2">
@@ -220,16 +305,16 @@ export function OpportunityGlassWindow({
           </Section>
 
           <Section title="Property">
-            {(opp.property_address || property) ? (
+            {(show('property_address') || property) ? (
               <MiniRow
-                title={val(property?.name ?? opp.property_address, 'Property')}
+                title={val(property?.name ?? show('property_address'), 'Property')}
                 subtitle={[
-                  opp.property_address,
-                  opp.property_city,
-                  opp.property_state,
+                  show('property_address'),
+                  show('property_city'),
+                  show('property_state'),
                   opp.property_zip,
                 ].filter(Boolean).join(', ')}
-                meta={opp.units ? `${opp.units} units` : property?.unit_count ? `${property.unit_count} units` : undefined}
+                meta={show('units') ? `${show('units')} units` : property?.unit_count ? `${property.unit_count} units` : undefined}
               />
             ) : (
               <Empty text="No property linked yet." />

@@ -394,7 +394,7 @@ export function JobGlassWindow({
 
           {parts.length > 0 && (
             <Section title="Parts Used" count={parts.length}>
-              <ListBlock records={parts} emptyText="No parts logged." render={p => <MiniRow title={val(p.part_name, 'Part')} subtitle={p.part_number ? `#${p.part_number}` : undefined} meta={`Qty: ${p.quantity ?? 1}`} />} />
+              <ListBlock records={parts} emptyText="No parts logged." render={p => <MiniRow title={val(p.name, 'Part')} meta={`Qty: ${p.qty ?? 1}`} />} />
             </Section>
           )}
         </div>

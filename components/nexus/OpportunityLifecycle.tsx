@@ -568,6 +568,20 @@ function Survey({ opportunityId, opp }: { opportunityId?: string; opp?: Record<s
         setNotes(sv.notes_raw || '')
         setDevices(Array.isArray(sv.devices) ? sv.devices : [])
         setPhotos(Array.isArray(sv.photos) ? sv.photos : [])
+        // Re-read site counts FRESH from the opportunity so switching tabs (which
+        // remounts this component) shows what was saved — not the stale parent prop.
+        try {
+          const oppRes = await fetch(`/api/crm/opportunities/${opportunityId}`).then(r => r.json()).catch(() => ({}))
+          const sc = (oppRes?.opportunity ?? oppRes?.record ?? oppRes)?.site_counts
+          if (!cancelled && sc && typeof sc === 'object') {
+            setCounts({
+              gates: sc.gates != null ? String(sc.gates) : '',
+              common_doors: sc.common_doors != null ? String(sc.common_doors) : '',
+              common_locks: sc.common_locks != null ? String(sc.common_locks) : '',
+              cameras: sc.cameras != null ? String(sc.cameras) : '',
+            })
+          }
+        } catch { /* keep prop-derived counts */ }
       } finally { if (!cancelled) setLoading(false) }
     })()
     return () => { cancelled = true }

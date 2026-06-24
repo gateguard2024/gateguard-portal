@@ -137,8 +137,8 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     ),
     safe(
       supabase
-        .from('wo_parts_used')
-        .select('id, part_name, part_number, quantity, unit_cost, created_at')
+        .from('work_order_parts')
+        .select('id, name, qty, unit_cost, unit_price, created_at')
         .eq('work_order_id', jobId)
         .limit(20),
       []
@@ -173,9 +173,9 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     safe(
       supabase
         .from('work_order_time_entries')
-        .select('id, tech_name, hours_worked, notes, date_worked, created_at')
+        .select('id, technician_name, duration_mins, notes, clock_in, created_at')
         .eq('work_order_id', jobId)
-        .order('date_worked', { ascending: false })
+        .order('clock_in', { ascending: false })
         .limit(10),
       []
     ),

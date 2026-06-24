@@ -69,7 +69,7 @@ async function getScopedLead(
 
   let query = supabase
     .from('leads')
-    .select('id, org_id, assigned_to, company_name, contact_name, email, phone, property_type, unit_count, location, stage, source, notes, created_at, updated_at, contact_id, company_id, opportunity_id')
+    .select('id, org_id, assigned_to, company_name, contact_name, contact_title, email, phone, property_type, property_name, city, state, unit_count, location, interests, stage, source, notes, created_at, updated_at, contact_id, company_id, opportunity_id')
     .eq('id', leadId)
 
   query = applyOrgScope(query, scope)
@@ -411,20 +411,36 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       if (!isNaN(parsed)) fieldsMap.unit_count = parsed
     }
 
+    // Structured interests — array of selected interest labels (replaces the set).
+    if (Array.isArray(body.interests)) {
+      fieldsMap.interests = (body.interests as unknown[]).map(v => String(v)).filter(Boolean)
+    }
+
     if (Object.keys(fieldsMap).length === 0) {
       return NextResponse.json({ success: false, message: 'No fields provided to update.' }, { status: 400 })
     }
 
     fieldsMap.updated_at = new Date().toISOString()
 
-    const { data: updatedLead, error: updateError } = await supabase
-      .from('leads')
-      .update(fieldsMap)
-      .eq('id', lead.id)
-      .select('id, contact_name, company_name, email, phone, location, property_type, unit_count, notes, source, stage, updated_at')
-      .single()
+    // Drift-resilient: strip a not-yet-migrated column (e.g. interests) and retry.
+    let updatedLead: Record<string, unknown> | null = null
+    let updateError: { message?: string; code?: string } | null = null
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const res = await supabase
+        .from('leads')
+        .update(fieldsMap)
+        .eq('id', lead.id)
+        .select('id, contact_name, company_name, contact_title, email, phone, location, property_type, unit_count, notes, source, stage, updated_at')
+        .single()
+      if (!res.error) { updatedLead = res.data as Record<string, unknown>; updateError = null; break }
+      updateError = res.error
+      const m = res.error.message ?? ''
+      const missing = (res.error.code === '42703' || res.error.code === 'PGRST204') ? (m.match(/column "?([a-z_]+)"?/i)?.[1] || m.match(/'([a-z_]+)'/)?.[1]) : null
+      if (missing && (missing in fieldsMap)) { delete fieldsMap[missing]; continue }
+      break
+    }
 
-    if (updateError) {
+    if (updateError && !updatedLead) {
       return NextResponse.json({ success: false, message: updateError.message }, { status: 500 })
     }
 
@@ -554,34 +570,55 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     const optionalName = clean(body.name)
     const optionalNextStep = clean(body.next_step)
 
-    // Insert opportunity carrying all lead context forward
-    const { data: newOpp, error: oppError } = await supabase
-      .from('opportunities')
-      .insert({
-        dealer_org_id:       lead.org_id,
-        lead_id:             lead.id,
-        contact_id:          lead.contact_id ?? null,
-        company_id:          lead.company_id ?? null,
-        rep_id:              profileId,
-        name:                optionalName || oppName,
-        stage:               'inquiry',
-        notes:               (lead as Record<string, unknown>).notes ?? null,
-        source:              (lead as Record<string, unknown>).source ?? null,
-        account_name:        lead.company_name ?? null,
-        management_co:       lead.company_name ?? null,
-        property_address:    lead.location ?? null,
-        site_contact_name:   lead.contact_name ?? null,
-        site_contact_phone:  (lead as Record<string, unknown>).phone ?? null,
-        site_contact_email:  (lead as Record<string, unknown>).email ?? null,
-        units:               (lead as Record<string, unknown>).unit_count ?? null,
-        next_step:           optionalNextStep || 'Schedule discovery call',
-        assigned_from_lead:  lead.id,
-      })
-      .select('id, name, stage, est_mrr, amount, account_name, next_step, created_at, updated_at')
-      .single()
+    // Insert opportunity carrying ALL lead context forward.
+    const L = lead as Record<string, unknown>
+    const oppPayload: Record<string, unknown> = {
+      dealer_org_id:       lead.org_id,
+      lead_id:             lead.id,
+      contact_id:          lead.contact_id ?? null,
+      company_id:          lead.company_id ?? null,
+      rep_id:              profileId,
+      name:                optionalName || oppName,
+      stage:               'inquiry',
+      notes:               L.notes ?? null,
+      source:              L.source ?? null,
+      account_name:        lead.company_name ?? L.property_name ?? null,
+      management_co:       lead.company_name ?? null,
+      property_address:    L.property_name ? `${L.property_name}${lead.location ? ` — ${lead.location}` : ''}` : lead.location ?? null,
+      property_city:       L.city ?? null,
+      property_state:      L.state ?? null,
+      site_contact_name:   lead.contact_name ?? null,
+      site_contact_title:  L.contact_title ?? null,
+      site_contact_phone:  L.phone ?? null,
+      site_contact_email:  L.email ?? null,
+      units:               L.unit_count ?? null,
+      property_type:       L.property_type ?? null,
+      interests:           L.interests ?? null,
+      next_step:           optionalNextStep || 'Schedule discovery call',
+      assigned_from_lead:  lead.id,
+    }
 
-    if (oppError) {
-      return NextResponse.json({ success: false, message: oppError.message }, { status: 500 })
+    // Drift-resilient insert: if a column doesn't exist yet (pre-migration),
+    // strip it and retry rather than failing the whole conversion.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let newOpp: any = null
+    let oppError: { message?: string; code?: string } | null = null
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const res = await supabase
+        .from('opportunities')
+        .insert(oppPayload)
+        .select('id, name, stage, est_mrr, amount, account_name, next_step, created_at, updated_at')
+        .single()
+      if (!res.error) { newOpp = res.data; oppError = null; break }
+      oppError = res.error
+      const m = res.error.message ?? ''
+      const missing = (res.error.code === '42703' || res.error.code === 'PGRST204') ? (m.match(/column "?([a-z_]+)"?/i)?.[1] || m.match(/'([a-z_]+)' column/i)?.[1]) : null
+      if (missing && missing in oppPayload) { delete oppPayload[missing]; continue }
+      break
+    }
+
+    if (oppError || !newOpp) {
+      return NextResponse.json({ success: false, message: oppError?.message ?? 'Could not create opportunity.' }, { status: 500 })
     }
 
     // Update lead — awaited: lifecycle transition must commit before we respond

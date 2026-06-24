@@ -46,7 +46,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       owner_name, owner_initials, account_name, management_co, owner_entity,
       property_address, property_city, property_state, property_zip,
       site_contact_name, site_contact_title, site_contact_phone, site_contact_email,
-      units, source, assigned_from_lead, site_id
+      units, source, assigned_from_lead, site_id, site_counts, interests, property_type
     `)
     .eq('id', oppId)
   oppQuery = applyOrgScope(oppQuery, scope, 'dealer_org_id')
@@ -171,10 +171,8 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     attachments,
     quote,
     nextBestActions: [
-      { title: 'Run ARIA',          subtitle: 'Research this property or company.',   action: 'run_aria' },
-      { title: 'Generate Quote',    subtitle: 'Start a quote from this opportunity.', action: 'generate_quote' },
+      { title: 'Edit Details',       subtitle: 'Fix contact, property, interests.',   action: 'update_details' },
       { title: 'Schedule Follow-Up', subtitle: 'Create the next touch.',              action: 'schedule_followup' },
-      { title: 'Create Project',    subtitle: 'Turn this into a delivery project.',   action: 'create_project' },
       { title: 'Mark Won',          subtitle: 'Move this opportunity to won.',        action: 'mark_won' },
       { title: 'Mark Lost',         subtitle: 'Close this out with a reason.',        action: 'mark_lost' },
     ],
@@ -241,6 +239,85 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       .eq('opportunity_id', oppId)   // scope: only this opportunity's files
     if (delErr) return NextResponse.json({ success: false, message: delErr.message }, { status: 500 })
     return NextResponse.json({ success: true, message: 'Attachment removed.' })
+  }
+
+  // ── update_details — save contact / property / interests on the opportunity ──
+  if (action === 'update_details') {
+    const map: Record<string, unknown> = {}
+    const set = (key: string, v: unknown) => { const s = typeof v === 'string' ? v.trim() : v; if (s !== undefined && s !== '') map[key] = s }
+    // Contact (the reported save bug) — write the canonical denormalized fields.
+    set('site_contact_name',  body.site_contact_name ?? body.contact_name)
+    set('site_contact_title', body.site_contact_title ?? body.contact_title)
+    set('site_contact_phone', body.site_contact_phone ?? body.phone)
+    set('site_contact_email', body.site_contact_email ?? body.email)
+    // Account / property
+    set('account_name',    body.account_name)
+    set('management_co',   body.management_co)
+    set('property_address', body.property_address ?? body.location)
+    set('property_city',   body.property_city)
+    set('property_state',  body.property_state)
+    set('property_type',   body.property_type)
+    set('next_step',       body.next_step)
+    set('notes',           body.notes)
+    if (body.units !== undefined && body.units !== '') { const n = parseInt(String(body.units), 10); if (!isNaN(n)) map.units = n }
+    if (body.amount !== undefined && body.amount !== '') { const n = Number(body.amount); if (!isNaN(n)) map.amount = n }
+    if (body.est_mrr !== undefined && body.est_mrr !== '') { const n = Number(body.est_mrr); if (!isNaN(n)) map.est_mrr = n }
+    if (Array.isArray(body.interests)) map.interests = (body.interests as unknown[]).map(v => String(v)).filter(Boolean)
+
+    if (Object.keys(map).length === 0) return NextResponse.json({ success: false, message: 'No fields provided to update.' }, { status: 400 })
+    map.updated_at = new Date().toISOString()
+
+    // Drift-resilient: strip a not-yet-migrated column and retry rather than failing.
+    let updated: Record<string, unknown> | null = null
+    let updErr: { message?: string; code?: string } | null = null
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const res = await supabase.from('opportunities').update(map).eq('id', oppId).select('id, updated_at').single()
+      if (!res.error) { updated = res.data as Record<string, unknown>; updErr = null; break }
+      updErr = res.error
+      const m = res.error.message ?? ''
+      const missing = (res.error.code === '42703' || res.error.code === 'PGRST204') ? (m.match(/column "?([a-z_]+)"?/i)?.[1] || m.match(/'([a-z_]+)'/)?.[1]) : null
+      if (missing && (missing in map)) { delete map[missing]; continue }
+      break
+    }
+    if (updErr && !updated) return NextResponse.json({ success: false, message: updErr.message }, { status: 500 })
+
+    void supabase.from('crm_activities').insert({ dealer_org_id: (opp as Record<string, unknown>).dealer_org_id, created_by: profileId, type: 'note', subject: 'Opportunity details updated', body: `Updated: ${Object.keys(map).filter(k => k !== 'updated_at').join(', ')}.`, opportunity_id: oppId })
+    return NextResponse.json({ success: true, message: 'Opportunity details saved.' })
+  }
+
+  // ── mark_won / mark_lost / update_status ────────────────────────────────────
+  if (action === 'mark_won' || action === 'mark_lost' || action === 'update_status') {
+    const stage = action === 'mark_won' ? 'won' : action === 'mark_lost' ? 'lost' : clean(body.stage)
+    if (!stage) return NextResponse.json({ success: false, message: 'No stage provided.' }, { status: 400 })
+    const patch: Record<string, unknown> = { stage, updated_at: new Date().toISOString() }
+    if (action === 'mark_lost' && clean(body.reason)) patch.lost_reason = clean(body.reason)
+    const { error: upErr } = await supabase.from('opportunities').update(patch).eq('id', oppId)
+    if (upErr) {
+      // lost_reason may not exist — retry without it.
+      if (patch.lost_reason) { delete patch.lost_reason; const r2 = await supabase.from('opportunities').update(patch).eq('id', oppId); if (r2.error) return NextResponse.json({ success: false, message: r2.error.message }, { status: 500 }) }
+      else return NextResponse.json({ success: false, message: upErr.message }, { status: 500 })
+    }
+    void supabase.from('crm_activities').insert({ dealer_org_id: (opp as Record<string, unknown>).dealer_org_id, created_by: profileId, type: 'note', subject: `Opportunity ${stage}`, body: `Stage changed to ${stage}.`, opportunity_id: oppId })
+    return NextResponse.json({ success: true, message: `Opportunity marked ${stage}.`, stage })
+  }
+
+  // ── schedule_followup — add a to-do tied to this opportunity ─────────────────
+  if (action === 'schedule_followup') {
+    const title = clean(body.title) || 'Follow up on opportunity'
+    const dueDate = clean(body.due_date)
+    const { data, error: tErr } = await supabase.from('todos').insert({
+      dealer_org_id: (opp as Record<string, unknown>).dealer_org_id,
+      created_by: profileId,
+      type: 'task',
+      title,
+      body: [clean(body.notes), dueDate ? `Due: ${dueDate}` : null].filter(Boolean).join('\n') || null,
+      status: 'open',
+      due_date: dueDate || null,
+      linked_type: 'opportunity',
+      linked_id: oppId,
+    }).select('id, title, due_date').single()
+    if (tErr) return NextResponse.json({ success: false, message: tErr.message }, { status: 500 })
+    return NextResponse.json({ success: true, message: 'Follow-up scheduled.', todo: data })
   }
 
   return NextResponse.json({ success: false, message: 'Unknown opportunity action.' }, { status: 400 })
