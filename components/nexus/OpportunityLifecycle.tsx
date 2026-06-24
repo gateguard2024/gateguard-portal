@@ -139,9 +139,9 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
   useEffect(() => {
     setForm({
       account_name: opp.account_name || company.name || '',
-      contact_name: opp.contact_name || contact.contact_name || contact.name || '',
-      email: opp.contact_email || contact.email || '',
-      phone: opp.contact_phone || contact.phone || '',
+      contact_name: opp.site_contact_name || contact.contact_name || contact.name || '',
+      email: opp.site_contact_email || contact.email || '',
+      phone: opp.site_contact_phone || contact.phone || '',
       property: opp.property_address || property.name || property.address || '',
       owner_name: opp.owner_name || '',
       units: opp.units != null ? String(opp.units) : (contact.unit_count != null ? String(contact.unit_count) : ''),
@@ -160,9 +160,9 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           account_name: form.account_name || null,
-          contact_name: form.contact_name || null,
-          contact_email: form.email || null,
-          contact_phone: form.phone || null,
+          site_contact_name: form.contact_name || null,
+          site_contact_email: form.email || null,
+          site_contact_phone: form.phone || null,
           property_address: form.property || null,
           owner_name: form.owner_name || null,
           units: form.units ? Number(form.units) : null,
@@ -185,7 +185,7 @@ function Overview({ data, opportunityId, onSaved }: { data: Record<string, any> 
   const [actMsg, setActMsg] = useState<string | null>(null)
   const [posting, setPosting] = useState(false)
   // Prefill the email recipient from the deal's contact.
-  useEffect(() => { setActTo(opp.contact_email || contact.email || '') }, [opp.contact_email, contact.email])
+  useEffect(() => { setActTo(opp.site_contact_email || contact.email || '') }, [opp.site_contact_email, contact.email])
 
   const ACT_PLACEHOLDER: Record<string, string> = {
     call: 'Call — what was discussed?',
@@ -1108,7 +1108,7 @@ function Proposal({ opp, opportunityId, onSaved }: { opp: Record<string, any>; o
           title: `${opp?.name || acct} — Proposal`,
           opportunity_id: opportunityId ?? null,
           client_name: acct,
-          client_email: opp?.contact_email ?? opp?.email ?? opp?.client_email ?? null,
+          client_email: opp?.site_contact_email ?? opp?.email ?? opp?.client_email ?? null,
           site_id: opp?.site_id ?? null,
           property_name: opp?.property_name ?? opp?.name ?? null,
           units: opp?.units ?? null,
