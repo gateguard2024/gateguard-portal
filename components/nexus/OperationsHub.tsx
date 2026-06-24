@@ -20,7 +20,7 @@ import React, { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 // Clean line icons (replaces legacy emoji for a calmer, on-brand look).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Printer, X, Truck, MapPin, CheckCircle2, Star, FileText } = require("lucide-react") as any;
+const { Printer, X, Truck, MapPin, CheckCircle2, Star, FileText, Mail, RotateCcw, Key, Lock, Bot, RefreshCw } = require("lucide-react") as any;
 import { siteActivation, SITE_STATUS_LABELS, SITE_STATUS_COLORS } from "@/lib/site-lifecycle";
 import { ActivityTimeline } from "@/components/nexus/ActivityTimeline";
 import { SiteSystems } from "@/components/nexus/SiteSystems";
@@ -145,7 +145,7 @@ export function OperationsHub({ embedded, initialTab }: { embedded?: boolean; in
           background: on ? "linear-gradient(135deg, rgba(0,124,255,0.42), rgba(0,200,255,0.16))" : "rgba(255,255,255,0.02)",
           border: on ? "1px solid rgba(0,200,255,0.42)" : "0.5px solid rgba(255,255,255,0.07)", color: on ? "white" : "rgba(255,255,255,0.5)" }}>{p}</button>;
       })}
-      <button onClick={loadOps} title="Refresh" style={{ ...btn, background: "rgba(255,255,255,0.06)" }}>↻</button>
+      <button onClick={loadOps} title="Refresh" aria-label="Refresh" style={{ ...btn, background: "rgba(255,255,255,0.06)", display: "inline-flex", alignItems: "center" }}><RefreshCw size={15} /></button>
     </div>
     <p style={{ color: "rgba(255,255,255,0.34)", fontSize: 12, marginBottom: 18 }}>{TAB_HINT[page]}</p>
 
@@ -250,7 +250,7 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen }: { jobs
             <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginBottom: 4, fontWeight: 600 }}>1. Which site is this for? *</div>
             {form.site_id
               ? <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 12, background: "rgba(0,200,255,0.12)", border: "1px solid rgba(0,200,255,0.4)" }}>
-                  <span style={{ fontSize: 14 }}>📍 {form.customer_name}</span>
+                  <span style={{ fontSize: 14, display: "inline-flex", alignItems: "center", gap: 4 }}><MapPin size={13} /> {form.customer_name}</span>
                   <button onClick={() => setForm({ ...form, site_id: "", customer_name: "" })} style={{ ...sel, cursor: "pointer" }}>Change</button>
                 </div>
               : <>
@@ -278,7 +278,7 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen }: { jobs
           <div><div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginBottom: 3 }}>Schedule date (shows on Calendar)</div><input type="date" value={form.scheduled_date} onChange={e => setForm({ ...form, scheduled_date: e.target.value })} style={input} /></div>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "rgba(255,255,255,0.8)", cursor: "pointer", padding: "4px 0" }}>
             <input type="checkbox" checked={form.notify} onChange={e => setForm({ ...form, notify: e.target.checked })} style={{ width: 16, height: 16 }} />
-            📧 Email the assigned tech about this job
+            <Mail size={14} /> Email the assigned tech about this job
           </label>
           <button onClick={submit} disabled={!form.customer_name.trim()} style={{ ...btn, opacity: form.customer_name.trim() ? 1 : 0.5 }}>{form.site_id ? "Create work order" : "Pick a site first"}</button>
         </div>
@@ -300,7 +300,7 @@ function WORow({ wo, techs, onUpdate, onOpen }: { wo: RealWO; techs: RealTech[];
   return <div style={{ padding: 12, borderRadius: 12, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.08)", marginBottom: 8 }}>
     <div onClick={() => onOpen(wo.id)} style={{ cursor: "pointer" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><b>{wo.woNumber || wo.title || "Work Order"}</b><Badge tone={wo.priority === "Urgent" ? "urgent" : wo.priority === "High" ? "high" : "default"}>{wo.priority}</Badge></div>
-      <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, margin: "4px 0 8px" }}>{wo.property || "—"}{sched ? ` · 📅 ${sched}` : ""} <span style={{ color: "rgba(255,255,255,0.3)" }}>· tap for detail</span></p>
+      <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, margin: "4px 0 8px" }}>{wo.property || "—"}{sched ? ` · ${sched}` : ""} <span style={{ color: "rgba(255,255,255,0.3)" }}>· tap for detail</span></p>
     </div>
     <div onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       <select value={bucketOf(wo.status)} onChange={e => onUpdate(wo.id, { status: COL_TO_DB[e.target.value] })} style={sel}>{JOB_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}</select>
@@ -946,7 +946,7 @@ export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onCl
   }
   return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,0.62)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
     <div onClick={e => e.stopPropagation()} style={{ width: "min(760px,100%)", maxHeight: "92vh", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#060b1a)", border: "1px solid rgba(0,200,255,0.22)", borderRadius: 18, padding: 20, paddingBottom: 28, color: "white", boxShadow: "0 30px 90px rgba(0,0,0,0.55)" }}>
-      <button onClick={onClose} style={{ ...btn, background: "rgba(255,255,255,0.06)", marginBottom: 16 }}>✕ Close</button>
+      <button onClick={onClose} style={{ ...btn, background: "transparent", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.75)", marginBottom: 16, display: "inline-flex", alignItems: "center", gap: 6 }}><X size={15} /> Close</button>
       {loading ? <Small>Loading…</Small> : !site ? <Small>Couldn’t load this site.</Small> : <div style={{ display: "grid", gap: 14 }}>
         <div>
           <div style={{ fontSize: 11, color: "rgba(0,200,255,0.8)", letterSpacing: "0.1em" }}>SITE</div>
@@ -1036,8 +1036,8 @@ export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onCl
         <Card>
           <h2 style={{ fontSize: 15, marginBottom: 8 }}>Planned service</h2>
           {pm.length === 0 && upcomingWos.length === 0 ? <Small>Nothing scheduled. Set up recurring service in the PM tab.</Small> : <>
-            {pm.map((s, i) => <p key={s.id || i} style={{ margin: "5px 0", fontSize: 14 }}>🔁 {s.title} <span style={{ color: "rgba(255,255,255,0.5)" }}>· every {s.interval_days}d{s.next_due_at ? ` · next ${String(s.next_due_at).slice(0, 10)}` : ""}</span></p>)}
-            {upcomingWos.map((w, i) => <p key={w.id || i} style={{ margin: "5px 0", fontSize: 14 }}>📅 {w.wo_number || w.title || "WO"} <span style={{ color: "rgba(255,255,255,0.5)" }}>· {w.status}{w.scheduled_date ? ` · ${String(w.scheduled_date).slice(0, 10)}` : ""}</span></p>)}
+            {pm.map((s, i) => <p key={s.id || i} style={{ display: "flex", alignItems: "center", gap: 6, margin: "5px 0", fontSize: 14 }}><RotateCcw size={13} style={{ flexShrink: 0, opacity: 0.7 }} /> {s.title} <span style={{ color: "rgba(255,255,255,0.5)" }}>· every {s.interval_days}d{s.next_due_at ? ` · next ${String(s.next_due_at).slice(0, 10)}` : ""}</span></p>)}
+            {upcomingWos.map((w, i) => <p key={w.id || i} style={{ margin: "5px 0", fontSize: 14 }}>{w.wo_number || w.title || "WO"} <span style={{ color: "rgba(255,255,255,0.5)" }}>· {w.status}{w.scheduled_date ? ` · ${String(w.scheduled_date).slice(0, 10)}` : ""}</span></p>)}
           </>}
         </Card>
 
@@ -1650,7 +1650,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
         <button onClick={onClose} style={{ ...btn, background: "transparent", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.75)", display: "inline-flex", alignItems: "center", gap: 6 }}><X size={15} /> Close</button>
         {wo && <button onClick={() => printWorkOrder(wo, siteEquip)} style={{ ...btn, background: "transparent", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.75)", display: "inline-flex", alignItems: "center", gap: 6 }}><Printer size={15} /> Print</button>}
       </div>
-      {loading ? <Small>Loading…</Small> : !wo ? <Small>Couldn’t load this work order.</Small> : <div style={{ display: "grid", gap: 14 }}>
+      {loading ? <Small>Loading…</Small> : !wo ? <Small>Couldn’t load this work order.</Small> : <div style={{ display: "grid", gap: 18 }}>
         <div>
           <div style={{ fontSize: 11, color: "rgba(0,200,255,0.8)", letterSpacing: "0.1em" }}>{wo.wo_number || "WORK ORDER"}</div>
           <h2 style={{ margin: "4px 0", fontSize: 22 }}>{wo.title || "Work order"}</h2>
@@ -1673,11 +1673,11 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
           </div>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "rgba(255,255,255,0.7)", cursor: "pointer", marginTop: 10 }}>
             <input type="checkbox" checked={notifyOnChange} onChange={e => setNotifyOnChange(e.target.checked)} style={{ width: 15, height: 15 }} />
-            📧 Email the tech &amp; customer when I change this job
+            <Mail size={14} style={{ flexShrink: 0 }} /> Email the tech &amp; customer when I change this job
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "rgba(255,255,255,0.7)", cursor: "pointer", marginTop: 8 }}>
             <input type="checkbox" checked={!!wo.is_callback} onChange={e => patchField({ is_callback: e.target.checked })} style={{ width: 15, height: 15 }} />
-            🔁 This is a callback / re-work (counts against first-time-fix)
+            <RotateCcw size={14} style={{ flexShrink: 0 }} /> This is a callback / re-work (counts against first-time-fix)
           </label>
           {wo.is_callback && siteHistory.length > 0 && (
             <select value={wo.callback_of_id ?? ""} onChange={e => patchField({ callback_of_id: e.target.value || null })} style={{ ...sel, width: "100%", marginTop: 6 }}>
@@ -1710,11 +1710,11 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             </select>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {wo.assignee_name && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, background: "rgba(0,200,255,0.14)", border: "1px solid rgba(0,200,255,0.4)", color: "#7DE5FF", borderRadius: 20, padding: "5px 12px" }}>★ {wo.assignee_name}<span style={{ opacity: 0.6 }}>· lead</span></span>}
+            {wo.assignee_name && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, background: "rgba(0,200,255,0.14)", border: "1px solid rgba(0,200,255,0.4)", color: "#7DE5FF", borderRadius: 20, padding: "5px 12px" }}><Star size={12} /> {wo.assignee_name}<span style={{ opacity: 0.6 }}>· lead</span></span>}
             {crew.map(c => (
               <span key={c.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.85)", borderRadius: 20, padding: "5px 10px" }}>
                 {c.technician?.name || "Tech"}<span style={{ opacity: 0.55 }}>· {c.role}</span>
-                <button onClick={() => removeCrew(c.id)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", fontSize: 13, padding: 0 }}>✕</button>
+                <button onClick={() => removeCrew(c.id)} aria-label="Remove crew member" style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", padding: 0, display: "inline-flex", alignItems: "center" }}><X size={13} /></button>
               </span>
             ))}
             {!wo.assignee_name && crew.length === 0 && <Small>No one assigned yet — set the lead above, add crew here.</Small>}
@@ -1733,7 +1733,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
                 <select value={p.status} onChange={e => patchPhase(p.id, { status: e.target.value })} style={{ ...sel, width: 140 }}>
                   {["pending", "in_progress", "complete", "skipped"].map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
                 </select>
-                <button onClick={() => removePhase(p.id)} style={{ ...btn, background: "rgba(248,113,113,0.14)", border: "1px solid rgba(248,113,113,0.4)", color: "#fca5a5" }}>✕</button>
+                <button onClick={() => removePhase(p.id)} aria-label="Remove visit" style={{ ...btn, background: "rgba(248,113,113,0.14)", border: "1px solid rgba(248,113,113,0.4)", color: "#fca5a5", display: "inline-flex", alignItems: "center" }}><X size={13} /></button>
               </div>
             ))}
           </div>
@@ -1769,7 +1769,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             {(wo.site_contact_name || wo.site_contact_phone) && <div><Small>On-site contact</Small><div style={{ fontSize: 13 }}>{wo.site_contact_name || "—"}{wo.site_contact_phone ? ` · ${wo.site_contact_phone}` : ""}</div></div>}
             {(wo.site_pm_name || wo.site_pm_phone) && <div><Small>Property manager</Small><div style={{ fontSize: 13 }}>{wo.site_pm_name || "—"}{wo.site_pm_phone ? ` · ${wo.site_pm_phone}` : ""}</div></div>}
           </div>
-          {wo.site_access_notes && <div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.28)" }}><Small>🔑 Access / gate notes</Small><div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", marginTop: 2 }}>{wo.site_access_notes}</div></div>}
+          {wo.site_access_notes && <div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.28)" }}><Small><span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Key size={12} /> Access / gate notes</span></Small><div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", marginTop: 2 }}>{wo.site_access_notes}</div></div>}
           {siteHistory.length > 0 && <div style={{ marginTop: 10 }}><Small>Past work at this site ({siteHistory.length})</Small>{siteHistory.slice(0, 5).map((w, i) => <p key={w.id || i} style={{ margin: "4px 0", fontSize: 13 }}>{w.wo_number || w.title || "WO"} <span style={{ color: "rgba(255,255,255,0.45)" }}>· {w.status}{w.scheduled_date ? ` · ${String(w.scheduled_date).slice(0, 10)}` : ""}</span></p>)}</div>}
         </Card>
 
@@ -1792,7 +1792,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             <div style={{ fontSize: 14, minWidth: 0 }}>{a.product_name || a.name || "Equipment"}{a.serial_number ? <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}> · {a.serial_number}</span> : ""}{a.location_note ? <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 12 }}> · {a.location_note}</span> : ""}</div>
             <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
               {a.status && <Badge tone={a.status === "offline" ? "urgent" : "good"}>{a.status}</Badge>}
-              {man && <a href={man} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "#7dd3fc", textDecoration: "none", padding: "3px 8px", borderRadius: 8, border: "1px solid rgba(125,211,252,0.3)" }}>📄 Manual</a>}
+              {man && <a href={man} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "#7dd3fc", textDecoration: "none", padding: "3px 8px", borderRadius: 8, border: "1px solid rgba(125,211,252,0.3)", display: "inline-flex", alignItems: "center", gap: 4 }}><FileText size={11} /> Manual</a>}
             </div>
           </div>; })}
         </Card>
@@ -1801,7 +1801,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
         {tab === "Execution" && (<>
         {/* AI Tech Support */}
         <Card style={{ background: "rgba(0,200,255,0.06)", border: "1px solid rgba(0,200,255,0.22)" }}>
-          <h2 style={{ fontSize: 15, marginBottom: 6 }}>🤖 AI Tech Support</h2>
+          <h2 style={{ fontSize: 15, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}><Bot size={16} /> AI Tech Support</h2>
           <Small>Describe the symptom — get guided, manual-backed steps.</Small>
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
             <input placeholder="e.g. Gate won't open, motor hums" value={aiQ} onChange={e => setAiQ(e.target.value)} onKeyDown={e => { if (e.key === "Enter") askAI(); }} style={{ ...input, padding: 9 }} />
@@ -1812,7 +1812,7 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
             <div style={{ fontSize: 14, fontWeight: 600, margin: "4px 0" }}>{aiStep.text}</div>
             {aiStep.detail && <div style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>{aiStep.detail}</div>}
             {aiStep.expected && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginTop: 4 }}>Expected: {aiStep.expected}{aiStep.unit ? ` ${aiStep.unit}` : ""}</div>}
-            {aiStep.manual_ref?.url && <a href={aiStep.manual_ref.url} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 6, fontSize: 12, color: "#7dd3fc" }}>📄 Manual{aiStep.manual_ref.page ? ` p.${aiStep.manual_ref.page}` : ""}</a>}
+            {aiStep.manual_ref?.url && <a href={aiStep.manual_ref.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 6, fontSize: 12, color: "#7dd3fc" }}><FileText size={12} /> Manual{aiStep.manual_ref.page ? ` p.${aiStep.manual_ref.page}` : ""}</a>}
           </div>}
         </Card>
 
@@ -1927,8 +1927,8 @@ function JobDetailDrawer({ id, techs, onClose, onUpdate }: { id: string; techs: 
         </>)}
 
         {bucketOf(wo.status) !== "Done" && <div>
-          <button onClick={() => canComplete && patchField({ status: "completed" })} disabled={!canComplete} style={{ ...btn, width: "100%", background: canComplete ? "#10b981" : "rgba(255,255,255,0.08)", color: canComplete ? "white" : "rgba(255,255,255,0.45)", padding: 14, fontSize: 15, cursor: canComplete ? "pointer" : "not-allowed" }}>✓ Complete Work Order</button>
-          {!canComplete && <p style={{ fontSize: 12, color: "#fbbf24", textAlign: "center", marginTop: 8 }}>🔒 {completeBlockReason}</p>}
+          <button onClick={() => canComplete && patchField({ status: "completed" })} disabled={!canComplete} style={{ ...btn, width: "100%", background: canComplete ? "#10b981" : "rgba(255,255,255,0.08)", color: canComplete ? "white" : "rgba(255,255,255,0.45)", padding: 14, fontSize: 15, cursor: canComplete ? "pointer" : "not-allowed", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}><CheckCircle2 size={17} /> Complete Work Order</button>
+          {!canComplete && <p style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12, color: "#fbbf24", textAlign: "center", marginTop: 8 }}><Lock size={12} /> {completeBlockReason}</p>}
         </div>}
       </div>}
     </div>
