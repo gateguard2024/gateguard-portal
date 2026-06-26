@@ -2218,14 +2218,37 @@ export default function OpportunityDetailPage() {
 
               {opp.stage === "won" ? (
                 <>
-                  <Link
-                    href={`/projects?new=1&opp_id=${opp.id}&opp_name=${encodeURIComponent(opp.name ?? '')}&site_id=${opp.site_id ?? ''}&site_name=${encodeURIComponent(opp.account_name ?? '')}&value=${opp.amount ?? ''}`}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[#6B7EFF]/10 transition-colors text-sm border border-[#6B7EFF]/30"
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        // One canonical job store = work_orders (visible to Operations Hub,
+                        // dispatch, calendar, and the tech app). Carry the deal forward.
+                        const o = opp as unknown as Record<string, unknown>
+                        const r = await fetch('/api/dispatch', {
+                          method: 'POST', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            customer_name: opp.account_name || opp.name || 'New job',
+                            title: `${opp.name || opp.account_name || 'Install'} — Install`,
+                            job_type: 'Install',
+                            priority: 'normal',
+                            opportunity_id: opp.id,
+                            site_id: opp.site_id ?? null,
+                            description: (o.description as string) || (o.scope as string) || `Install from won opportunity: ${opp.name ?? ''}`,
+                            notify: false,
+                          }),
+                        })
+                        const j = await r.json().catch(() => ({}))
+                        if (r.ok) { window.location.href = j?.id ? `/maintenance/${j.id}` : '/cmms?tab=jobs' }
+                        else alert(j?.error || 'Could not create job')
+                      } catch { alert('Could not create job') }
+                    }}
+                    className="w-full text-left flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[#6B7EFF]/10 transition-colors text-sm border border-[#6B7EFF]/30"
                   >
                     <Wrench size={14} className="text-[#6B7EFF]" />
                     <span className="text-[#6B7EFF] font-semibold">Create Job</span>
                     <Plus size={11} className="text-[#6B7EFF] ml-auto" />
-                  </Link>
+                  </button>
                   <Link
                     href="/maintenance"
                     className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-accent transition-colors text-sm"

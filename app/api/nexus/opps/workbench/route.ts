@@ -111,7 +111,7 @@ export async function GET(req: NextRequest) {
   if (q) {
     if (!user.canViewCRM) {
       const term = escapeLike(q)
-      let ownSearchQ = supabase.from('leads').select('id, contact_name, company_name, stage, source, notes, created_at, updated_at, email, phone, location, opportunity_id')
+      let ownSearchQ = supabase.from('leads').select('id, contact_name, company_name, stage, source, notes, created_at, updated_at, email, phone, location, opportunity_id').is('deleted_at', null)
       ownSearchQ = applyOrgScope(ownSearchQ, scope)
       const leads = await safe(
         ownSearchQ
@@ -125,11 +125,11 @@ export async function GET(req: NextRequest) {
     }
 
     const term = escapeLike(q)
-    let leadsQ = supabase.from('leads').select('id, contact_name, company_name, stage, source, notes, created_at, updated_at, email, phone, location, opportunity_id')
+    let leadsQ = supabase.from('leads').select('id, contact_name, company_name, stage, source, notes, created_at, updated_at, email, phone, location, opportunity_id').is('deleted_at', null)
     leadsQ = applyOrgScope(leadsQ, scope)
     const leads = await safe(leadsQ.or(`contact_name.ilike.%${term}%,company_name.ilike.%${term}%,location.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%,notes.ilike.%${term}%`).order('updated_at', { ascending: false }).limit(10), [])
 
-    let oppsQ = supabase.from('opportunities').select('id, name, account_name, management_co, stage, amount, est_mrr, next_step, notes, created_at, updated_at')
+    let oppsQ = supabase.from('opportunities').select('id, name, account_name, management_co, stage, amount, est_mrr, next_step, notes, created_at, updated_at').is('deleted_at', null)
     oppsQ = applyOrgScope(oppsQ, scope, 'dealer_org_id')
     const opportunities = await safe(oppsQ.or(`name.ilike.%${term}%,account_name.ilike.%${term}%,management_co.ilike.%${term}%,property_address.ilike.%${term}%,notes.ilike.%${term}%`).order('updated_at', { ascending: false }).limit(10), [])
 

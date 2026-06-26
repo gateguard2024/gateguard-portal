@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
       .select('id, contact_name, company_name, property_name, email, phone, property_type, contact_title, unit_count, location, city, state, stage, source, notes, assigned_dealer, opportunity_id, created_at')
       .is('opportunity_id', null)          // hide leads already converted to an opportunity
       .is('lost_at', null)
+      .is('deleted_at', null)              // hide soft-deleted (in Deleted Items)
       .order('created_at', { ascending: false })
 
     if (!scope.all && scope.ids.length > 0) {

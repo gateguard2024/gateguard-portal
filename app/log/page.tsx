@@ -74,7 +74,13 @@ export default function QuickLogPage() {
     try {
       const r = await fetch('/api/capture', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       if (!r.ok) throw new Error()
+      const d = await r.json().catch(() => ({}))
       setMsg('Logged ✓'); setText(''); setKind(''); void load()
+      // Best-effort AI tagging — refine kind/about in the background, then refresh.
+      const capId = d?.capture?.id
+      if (capId && !payload.kind) {
+        fetch(`/api/capture/${capId}/tag`, { method: 'POST' }).then(() => setTimeout(() => { void load() }, 300)).catch(() => {})
+      }
     } catch {
       // Offline → queue it so nothing is ever lost.
       let queue: unknown[] = []

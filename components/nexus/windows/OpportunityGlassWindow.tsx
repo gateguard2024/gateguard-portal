@@ -388,6 +388,24 @@ export function OpportunityGlassWindow({
                   </button>
                 ))
               )}
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={async () => {
+                  const oppId = opp.id as string | undefined
+                  if (!oppId || !confirm('Move this opportunity to Deleted Items?')) return
+                  try {
+                    const r = await fetch('/api/trash', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ table: 'opportunities', ids: [oppId], action: 'delete' }) })
+                    if (r.ok) { await onRefresh?.(); onBack() }
+                    else { const d = await r.json().catch(() => ({})); setMsg({ ok: false, text: d.error || 'Could not delete' }) }
+                  } catch { setMsg({ ok: false, text: 'Could not delete' }) }
+                }}
+                className="w-full rounded-2xl p-3 text-left transition-all hover:-translate-y-0.5 disabled:opacity-50"
+                style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.22)', color: '#fca5a5' }}
+              >
+                <div className="text-xs font-semibold">Delete opportunity</div>
+                <div className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.42)' }}>Move to Deleted Items — you can restore it.</div>
+              </button>
             </div>
           </Section>
 

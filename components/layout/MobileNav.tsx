@@ -25,7 +25,7 @@ const { Flame, Hash, Menu, Phone, Crosshair, Building2, BarChart3, ArrowRightLef
 const PRIMARY_TABS = [
   { id: 'home',     href: '/',              icon: LayoutDashboard, label: 'Home'     },
   { id: 'feed',     href: '/feed',          icon: Flame,           label: 'Feed'     },
-  { id: 'messages', href: '/communications',icon: Hash,            label: 'Messages' },
+  { id: 'messages', href: '/messages',      icon: Hash,            label: 'Messages' },
   { id: 'tech',     href: '/tech',          icon: Zap,             label: 'Tech'     },
   { id: 'more',     href: null,             icon: Menu,            label: 'More'     },
 ]
@@ -47,7 +47,6 @@ const MORE_SECTIONS = [
     items: [
       { label: 'ARIA',    href: '/aria',    icon: Crosshair },
       { label: 'TRINITY', href: '/trinity', icon: Phone     },
-      { label: 'Reports', href: '/reports', icon: BarChart3 },
     ],
   },
   {

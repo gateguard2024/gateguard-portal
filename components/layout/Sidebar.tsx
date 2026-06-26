@@ -15,7 +15,7 @@ import {
   ClipboardCheck, Building2, DollarSign,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, Tv: Satellite, Flame, Hash, Ruler, PenTool, MousePointer, FileSignature, HardHat, Trophy, Briefcase } = require("lucide-react") as any;
+const { ArrowRightLeft, UserCog, LogOut, CheckSquare, CalendarDays, FolderOpen, AlertOctagon, BarChart3: BarChart3Icon, Tv: Satellite, Flame, Hash, Ruler, PenTool, MousePointer, FileSignature, HardHat, Trophy, Briefcase, Trash2 } = require("lucide-react") as any;
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useUser, useClerk, useSession } from "@clerk/nextjs";
@@ -52,6 +52,7 @@ const NAV_SECTIONS: NavSection[] = [
     directLink: true,
     items: [
       { label: "Dashboard", href: "/", icon: LayoutDashboard, description: "Command center — KPIs, alerts, activity" },
+      { label: "Quick Log", href: "/log", icon: Phone, description: "Capture calls, to-dos & ideas — add to your phone home screen" },
     ],
   },
   {
@@ -79,6 +80,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Billing",          href: "/billing",   icon: CreditCard,description: "Invoices and payments" },
       { label: "Expenses",         href: "/expenses",  icon: DollarSign,description: "Expense tracking" },
       { label: "Revenue",          href: "/revenue",   icon: TrendingUp,description: "MRR/ARR dashboard" },
+      { label: "Deleted Items",    href: "/trash",     icon: Trash2,    description: "Restore or permanently delete records" },
     ],
   },
   {
@@ -88,7 +90,6 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Documents",         href: "/documents",         icon: FileText,    description: "Agreements, permits, certificates & legal docs" },
       { label: "Renewals",          href: "/renewals",          icon: Repeat,      description: "Contract renewals and alerts" },
-      { label: "Vendor Compliance", href: "/vendor-compliance", icon: ShieldCheck, description: "Vendor permits, certs, expiry alerts" },
     ],
   },
   {
@@ -157,7 +158,6 @@ const NAV_SECTIONS: NavSection[] = [
     color: "#6B7EFF",
     items: [
       { label: "Nexus Tracker",     href: "/tracker",        icon: ClipboardList, description: "Bug & enhancement tracker", badge: "Beta" },
-      { label: "Playbooks",        href: "/playbooks",      icon: BookOpen, description: "Internal playbooks and SOPs" },
       { label: "Co-Op Pool",       href: "/marketing/coop", icon: Users,    description: "Shared lead pool" },
       { label: "Customer Portals", href: "/portal",         icon: Globe,    description: "Property manager view" },
     ],

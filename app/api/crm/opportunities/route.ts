@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
       .from('opportunities')
       .select('*')
       .not('stage', 'in', '("dead")')
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
 
     // ── Org isolation ──────────────────────────────────────────────
