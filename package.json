@@ -33,7 +33,7 @@
     "next": "14.2.0",
     "next-themes": "^0.3.0",
     "nodemailer": "^6.9.14",
-    "openai": "^4.0.0",
+    "openai": "^6.45.0",
     "pdf-parse": "^1.1.1",
     "pdfkit": "^0.18.0",
     "postcss": "^8",
