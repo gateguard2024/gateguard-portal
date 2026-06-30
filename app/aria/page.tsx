@@ -16,6 +16,7 @@ void BarChart3; void Edit2;
 import { cn } from "@/lib/utils";
 import { TopBar } from "@/components/layout/TopBar";
 import { supabase } from "@/lib/supabase";
+import { AriaCaseFile } from "@/components/nexus/AriaCaseFile";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -3475,6 +3476,7 @@ export default function ARIAPage() {
             <div className="flex flex-col h-full overflow-hidden">
               <DetailHeader p={prospect} />
               <div className="flex-1 overflow-y-auto p-6 lg:p-8">
+                <div className="mb-6"><AriaCaseFile prospect={prospect as unknown as Record<string, unknown>} social={socialResults} /></div>
                 {activeTab === 'property' && <PropertyTab p={prospect} />}
                 {activeTab === 'proptech' && <PropTechTab p={prospect} />}
                 {activeTab === 'dm'       && <DMTab p={prospect} />}
@@ -3611,6 +3613,7 @@ export default function ARIAPage() {
                 ))}
               </div>
               <div className="p-4">
+                <div className="mb-5"><AriaCaseFile prospect={prospect as unknown as Record<string, unknown>} social={socialResults} /></div>
                 {activeTab === 'property' && <PropertyTab p={prospect} />}
                 {activeTab === 'proptech' && <PropTechTab p={prospect} />}
                 {activeTab === 'dm'       && <DMTab p={prospect} />}

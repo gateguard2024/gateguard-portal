@@ -589,20 +589,18 @@ async function geocodeAddress(address: string, city: string, state: string): Pro
 
 async function fccBroadbandLookup(lat: number, lng: number): Promise<string[]> {
   try {
-    const res = await fetch(
-      'https://broadbandmap.fcc.gov/api/public/map/listAvailability',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'User-Agent': 'GateGuard-ARIA/7.0' },
-        body: JSON.stringify({
-          latitude: parseFloat(lat.toFixed(6)),
-          longitude: parseFloat(lng.toFixed(6)),
-          unit: 'location',
-          limit_to_isp: 'N',
-        }),
-        signal: AbortSignal.timeout(6000),
-      }
-    )
+    const la = parseFloat(lat.toFixed(6)), lo = parseFloat(lng.toFixed(6))
+    const base = 'https://broadbandmap.fcc.gov/api/public/map/listAvailability'
+    const headers = { 'Content-Type': 'application/json', 'User-Agent': 'GateGuard-ARIA/7.0' }
+    // POST first; if the endpoint rejects the method (405), retry as GET with query params.
+    let res = await fetch(base, {
+      method: 'POST', headers,
+      body: JSON.stringify({ latitude: la, longitude: lo, unit: 'location', limit_to_isp: 'N' }),
+      signal: AbortSignal.timeout(6000),
+    })
+    if (!res.ok && (res.status === 405 || res.status === 404)) {
+      res = await fetch(`${base}?latitude=${la}&longitude=${lo}&unit=location`, { method: 'GET', headers, signal: AbortSignal.timeout(6000) })
+    }
     if (!res.ok) return []
     const data = await res.json()
     const providers: Array<{ brand_name: string; technology: string }> = data?.results ?? data?.availability ?? data?.data ?? []
