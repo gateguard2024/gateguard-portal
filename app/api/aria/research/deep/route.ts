@@ -2535,6 +2535,22 @@ export async function POST(req: NextRequest) {
       ownership: { owner_type: p2Final.owner_type, acquisition_year: p2Final.acquisition_year },
     })
 
+    // v10 CHECKPOINT 3 — persist the full proptech stack + pain signals before synthesis.
+    checkpoint({ property: {
+      name: property_name, address, city, state,
+      proptech: {
+        gate_operators: p3Final.proptech.gate_operators,
+        access_control: p3Final.proptech.access_control,
+        intercoms: p3Final.proptech.intercoms,
+        cameras: p3Final.proptech.cameras,
+        smart_locks: p3Final.proptech.smart_locks,
+        resident_apps: p3Final.proptech.resident_apps,
+        package_solutions: p3Final.proptech.package_solutions,
+        tech_generation: p3Final.proptech.tech_generation,
+      },
+      pain_signals: p3Final.pain_signals,
+    } })
+
     // v9: Check quality gates — required field checklist before synthesis
     const qualityGates = checkQualityGates(p1, p2Final, p3Final)
 
