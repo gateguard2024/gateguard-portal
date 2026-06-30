@@ -2198,6 +2198,16 @@ export async function POST(req: NextRequest) {
     const rawQuery: string = raw.property_name || raw.query || ''
     if (!rawQuery) return NextResponse.json({ error: 'property_name or query required' }, { status: 400 })
 
+    // v10: the UI filter chips (All / ISP / Cable / Gate & Access / Cameras) — now
+    // actually consumed to bias the searches instead of being silently ignored.
+    const searchFocus = String(raw.search_focus ?? raw.searchFocus ?? 'all').toLowerCase()
+    const focusEmphasis = (name: string) =>
+      /isp|internet/.test(searchFocus) ? `${name} bulk internet ISP provider exclusive agreement`
+      : /cable|video/.test(searchFocus) ? `${name} bulk TV cable video provider agreement`
+      : /gate|access/.test(searchFocus) ? `${name} gate operator access control intercom system`
+      : /camera/.test(searchFocus) ? `${name} security cameras surveillance system brand`
+      : null
+
     // v9 — initialize in-pipeline cost tracker
     const costTracker = new CostTracker()
 
@@ -2263,7 +2273,9 @@ export async function POST(req: NextRequest) {
       // v8: Every search is a durable case file — create the run record first
       searchRunId = await createSearchRun(userId, null, rawQuery, classification.type, null)
 
-      const candidateResult = await runPhase1B(rawQuery, classification, anthropic)
+      // v10: bias criteria candidate discovery toward the selected focus chip.
+      const focusedQuery = focusEmphasis('') ? `${rawQuery} — prioritize ${searchFocus}` : rawQuery
+      const candidateResult = await runPhase1B(focusedQuery, classification, anthropic)
 
       // v8 Ticket 4: enrich top-3 candidates with lightweight Serper+Haiku pass
       // Runs in parallel (3 searches + 3 Haiku calls) — adds ~2-4s, zero blocking
@@ -2275,6 +2287,17 @@ export async function POST(req: NextRequest) {
       const candidateIds = (searchRunId && enrichedCandidates.length > 0)
         ? await saveCandidatesToDB(searchRunId, enrichedCandidates)
         : []
+
+      // v10: Persist criteria-discovered properties durably to the intel DB too —
+      // so selecting one later promotes a saved case file instead of re-searching.
+      for (const c of enrichedCandidates) {
+        const cc = c as unknown as Record<string, unknown>
+        if (cc.name) checkpoint({ property: {
+          name: cc.name, address: cc.address ?? '', city: cc.city ?? '', state: cc.state ?? '',
+          units: cc.units ?? null, year_built: cc.year_built ?? null,
+          class: cc.property_class ?? null, management_company: cc.management_company ?? null,
+        } })
+      }
 
       // v8: Save Phase 1B source evidence — raw search results with URLs (non-blocking)
       if (searchRunId && candidateResult.raw_results?.length) {
@@ -2337,6 +2360,13 @@ export async function POST(req: NextRequest) {
     const mgmt = p1.confirmed_management || existingRecord?.management_company || classification.mgmt_hint || ''
     const owner = p1.confirmed_owner || existingRecord?.owner_entity || ''
     const website = p1.confirmed_website || ''
+
+    // v10: bias the named-property deep searches toward the selected focus chip.
+    if (focusEmphasis(property_name)) {
+      const emph = focusEmphasis(`${property_name} ${city} ${state}`.trim())!
+      if (/isp|internet|cable|video/.test(searchFocus)) rewritten.isp_search = emph
+      else rewritten.proptech_search = emph
+    }
 
     // Log Phase 1A amenity findings — these are gold (listing page verified)
     if (p1.listing_isp) console.log(`[aria] Phase1A amenity ISP: ${p1.listing_isp}`)
