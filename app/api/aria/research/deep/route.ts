@@ -2242,6 +2242,22 @@ export async function POST(req: NextRequest) {
     let searchRunId: string | null = null
     const runStart = Date.now()
 
+    // v10: Per-step persistence. Each phase saves what it found to Supabase
+    // immediately (additive merge-upsert), so a later failure never drops the
+    // earlier steps' data — and re-runs build on what's already saved.
+    const checkpoint = (partial: Record<string, unknown>) => {
+      void (async () => {
+        try {
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+          await fetch(`${baseUrl}/api/aria/properties`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-service-key': process.env.ARIA_SERVICE_KEY ?? '' },
+            body: JSON.stringify({ prospects: [partial] }),
+          })
+        } catch { /* non-blocking — never let a checkpoint break the run */ }
+      })()
+    }
+
     // ── PHASE 1B: Prospecting (city/criteria/contract queries) ────────────────
     if (classification.type !== 'specific_property') {
       // v8: Every search is a durable case file — create the run record first
@@ -2354,6 +2370,14 @@ export async function POST(req: NextRequest) {
         evidence: `Listed as amenity on property listing page (${p1.listing_url || 'listing site'})`,
       }]
     }
+
+    // v10 CHECKPOINT 1 — persist property identity + listing-verified connectivity
+    // the moment Phase 1A lands, before any further (failure-prone) steps run.
+    checkpoint({ property: {
+      name: property_name, address, city, state,
+      management_company: mgmt || null, owner_entity: owner || null,
+      isp_providers: listingVerifiedIsps, video_providers: listingVerifiedVideos,
+    } })
 
     if (existingRecord?.times_researched) {
       console.log(`[aria] Re-searching known property: ${property_name} (researched ${existingRecord.times_researched}x)`)
@@ -2468,6 +2492,17 @@ export async function POST(req: NextRequest) {
       }
     }
     const p2Final = p2FinalConnectivity
+
+    // v10 CHECKPOINT 2 — persist connectivity + ownership before (failure-prone) synthesis.
+    checkpoint({
+      property: {
+        name: property_name, address, city, state,
+        isp_providers: p2Final.isp_providers, video_providers: p2Final.video_providers,
+        bulk_agreements: p2Final.bulk_agreements, roe_detected: p2Final.roe_detected,
+        roe_providers: p2Final.roe_providers, roe_expiry_year: p2Final.roe_expiry_year,
+      },
+      ownership: { owner_type: p2Final.owner_type, acquisition_year: p2Final.acquisition_year },
+    })
 
     // v9: Check quality gates — required field checklist before synthesis
     const qualityGates = checkQualityGates(p1, p2Final, p3Final)
