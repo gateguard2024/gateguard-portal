@@ -23,11 +23,13 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { createClient } from '@supabase/supabase-js'
 
 export const maxDuration = 30
 export const dynamic = 'force-dynamic'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+const supaSocial = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
 // ─── Serper with time filter ──────────────────────────────────────────────────
 
@@ -295,7 +297,32 @@ Rules:
       type:           n.type          || 'confirmation',
     })).filter(n => n.note.length > 10)
 
-    return NextResponse.json({ social_posts, cross_reference_notes, property_phone })
+    // v10: persist to the property so social/community survives reloads + accumulates
+    // across runs (union — never drop previously-found posts). Return the merged set
+    // so the rep always sees everything ever found, not just this run.
+    let outPosts = social_posts
+    try {
+      const { data: rows } = await supaSocial.from('aria_properties')
+        .select('id, social_posts').ilike('property_name', property_name).limit(1)
+      const row = rows?.[0] as { id: string; social_posts?: unknown[] } | undefined
+      if (row) {
+        const prev = Array.isArray(row.social_posts) ? row.social_posts : []
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const key = (p: any) => `${p?.quote ?? ''}|${p?.url ?? ''}`
+        const seen = new Set(prev.map(key))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const merged = [...prev as any[], ...social_posts.filter(p => !seen.has(key(p)))]
+        outPosts = merged as typeof social_posts
+        await supaSocial.from('aria_properties').update({
+          social_posts: merged,
+          community_notes: cross_reference_notes,
+          property_phone: property_phone || null,
+          social_updated_at: new Date().toISOString(),
+        }).eq('id', row.id)
+      }
+    } catch { /* best-effort — never block the response */ }
+
+    return NextResponse.json({ social_posts: outPosts, cross_reference_notes, property_phone })
 
   } catch (err) {
     console.error('[ARIA Social]', err)

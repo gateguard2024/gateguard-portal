@@ -2405,6 +2405,7 @@ export async function POST(req: NextRequest) {
     // the moment Phase 1A lands, before any further (failure-prone) steps run.
     checkpoint({ property: {
       name: property_name, address, city, state,
+      units: p1.confirmed_units ?? null, year_built: p1.confirmed_year_built ?? null,
       management_company: mgmt || null, owner_entity: owner || null,
       isp_providers: listingVerifiedIsps, video_providers: listingVerifiedVideos,
     } })
