@@ -456,7 +456,7 @@ async function tavilySearch(
   try {
     const res = await fetch('https://api.tavily.com/search', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.TAVILY_API_KEY}` },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${(process.env.TAVILY_API_KEY || '').trim()}` },
       body: JSON.stringify({
         query, search_depth: depth, max_results: maxResults,
         include_answer: false, include_raw_content: rawContent, include_images: false,
@@ -485,7 +485,7 @@ async function serperSearch(
     if (tbs) body.tbs = tbs
     const res = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-KEY': process.env.SERPER_API_KEY },
+      headers: { 'Content-Type': 'application/json', 'X-API-KEY': (process.env.SERPER_API_KEY || '').trim() },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(5000),
     })
@@ -511,7 +511,7 @@ async function serperSearchKG(query: string, maxResults = 5, source = 'serper'):
   try {
     const res = await fetch('https://google.serper.dev/search', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-KEY': process.env.SERPER_API_KEY },
+      headers: { 'Content-Type': 'application/json', 'X-API-KEY': (process.env.SERPER_API_KEY || '').trim() },
       body: JSON.stringify({ q: query, num: maxResults, gl: 'us', hl: 'en' }),
       signal: AbortSignal.timeout(5000),
     })
@@ -628,7 +628,7 @@ async function apolloEnrichPerson(name: string, domain: string): Promise<ApolloE
   try {
     const res = await fetch('https://api.apollo.io/api/v1/people/match', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.APOLLO_API_KEY}` },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${(process.env.APOLLO_API_KEY || '').trim()}` },
       body: JSON.stringify({ name, domain, reveal_personal_emails: true }),
       signal: AbortSignal.timeout(4000),
     })
@@ -654,7 +654,7 @@ async function ninjapearValidatePerson(firstName: string, lastName: string, empl
   try {
     const params = new URLSearchParams({ first_name: firstName, last_name: lastName, employer_website: employerWebsite })
     const res = await fetch(`https://nubela.co/api/v1/employee/profile?${params}`, {
-      headers: { Authorization: `Bearer ${process.env.NINJAPEAR_API_KEY}` },
+      headers: { Authorization: `Bearer ${(process.env.NINJAPEAR_API_KEY || '').trim()}` },
       signal: AbortSignal.timeout(4000),
     })
     if (!res.ok) return null

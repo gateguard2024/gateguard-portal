@@ -40,7 +40,7 @@ async function serperSocial(query: string, num = 6): Promise<SerperResult[]> {
   try {
     const res = await fetch('https://google.serper.dev/search', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-KEY': process.env.SERPER_API_KEY },
+      headers: { 'Content-Type': 'application/json', 'X-API-KEY': (process.env.SERPER_API_KEY || '').trim() },
       body: JSON.stringify({
         q: query,
         num,
@@ -66,7 +66,7 @@ async function serperNews(query: string, num = 4): Promise<SerperResult[]> {
   try {
     const res = await fetch('https://google.serper.dev/news', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-KEY': process.env.SERPER_API_KEY },
+      headers: { 'Content-Type': 'application/json', 'X-API-KEY': (process.env.SERPER_API_KEY || '').trim() },
       body: JSON.stringify({ q: query, num, gl: 'us', hl: 'en', tbs: 'qdr:m6' }),
       signal: AbortSignal.timeout(5000),
     })

@@ -30,7 +30,7 @@ async function rawTavily(query: string, maxResults = 5, depth = 'basic', rawCont
   try {
     const res = await fetch('https://api.tavily.com/search', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.TAVILY_API_KEY}` },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${(process.env.TAVILY_API_KEY || '').trim()}` },
       body: JSON.stringify({ query, search_depth: depth, max_results: maxResults, include_answer: false, include_raw_content: rawContent, include_images: false }),
       signal: AbortSignal.timeout(10000),
     })
@@ -45,7 +45,7 @@ async function rawSerper(query: string, maxResults = 5, type: 'search' | 'news' 
     const endpoint = type === 'news' ? 'https://google.serper.dev/news' : 'https://google.serper.dev/search'
     const res = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-KEY': process.env.SERPER_API_KEY },
+      headers: { 'Content-Type': 'application/json', 'X-API-KEY': (process.env.SERPER_API_KEY || '').trim() },
       body: JSON.stringify({ q: query, num: maxResults, gl: 'us', hl: 'en' }),
       signal: AbortSignal.timeout(8000),
     })
@@ -97,7 +97,7 @@ async function rawApollo(name: string, domain: string) {
   try {
     const res = await fetch('https://api.apollo.io/api/v1/people/match', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.APOLLO_API_KEY}` },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${(process.env.APOLLO_API_KEY || '').trim()}` },
       body: JSON.stringify({ name, domain, reveal_personal_emails: true }),
       signal: AbortSignal.timeout(10000),
     })
