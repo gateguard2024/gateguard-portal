@@ -1127,20 +1127,33 @@ AMENITY/TECHNOLOGY RULES (look especially in ===AMENITY PAGES===):
   const cleanIsp = rawIsp && !ISP_SERVICE_DESCRIPTIONS.has(rawIsp.toLowerCase().trim()) ? rawIsp : null
   const cleanCable = rawCable && !VIDEO_SERVICE_DESCRIPTIONS.has(rawCable.toLowerCase().trim()) ? rawCable : null
 
-  // Deterministic reconciliation — scoped to THIS property's own listing page.
-  //  - rxA reads only the amenity raw-content (apartments.com/rentcafe page for this
-  //    property), so its numbers belong to this property, not the RADCO portfolio's
-  //    other communities in the press blob (that's what produced the wrong 1792).
-  //  - An explicit total on the property's own page ("564-unit") is most trustworthy;
-  //    then its bedroom-sum; then the LLM value; then, only as a last resort, a lone
-  //    total anywhere in the wider text.
-  const rxA = unitsFromText(amenitySnippets)
-  const rxAll = unitsFromText(combinedSnippets)
+  // Deterministic reconciliation — read units from text that is ONLY about THIS
+  // property. We build that text from EVERY source result whose title/body mentions
+  // the property's full name, then run the extractor on it. This avoids both failure
+  // modes we hit before: amenity-only (blank when that one fetch misses) and
+  // whole-blob (contaminated by the owner's OTHER communities → the wrong 1792).
+  const scopeTokens = (extracted.confirmed_name || query || '').toLowerCase().split(/\s+/).filter(w => w.length > 2)
+  const propertyScopedText = [...allResults, ...amenityResults]
+    .filter(r => {
+      if (scopeTokens.length === 0) return false
+      const t = `${r.title || ''} ${r.raw_content || r.content || ''}`.toLowerCase()
+      return scopeTokens.every(tok => t.includes(tok))
+    })
+    .map(r => (r.raw_content || r.content || '').slice(0, 4000))
+    .join('\n\n')
+
+  const rxScoped  = unitsFromText(propertyScopedText)  // this property, all sources
+  const rxAmenity = unitsFromText(amenitySnippets)     // this property's listing page
   let finalUnits = extracted.confirmed_units ?? null
-  if (rxA.single != null) finalUnits = rxA.single
-  else if (rxA.sum != null) finalUnits = rxA.sum
-  else if (finalUnits == null && rxAll.single != null) finalUnits = rxAll.single
-  const yearBackstop = extracted.confirmed_year_built == null ? regexYearBuiltBackstop(combinedSnippets) : null
+  if (rxScoped.single != null)       finalUnits = rxScoped.single   // explicit "564 units" on a Radius page
+  else if (rxScoped.sum != null)     finalUnits = rxScoped.sum      // 291+273 on a Radius page
+  else if (rxAmenity.single != null) finalUnits = rxAmenity.single
+  else if (rxAmenity.sum != null)    finalUnits = rxAmenity.sum
+  else if (finalUnits == null) {                                    // last resort: lone total anywhere
+    const rxAll = unitsFromText(combinedSnippets)
+    if (rxAll.single != null) finalUnits = rxAll.single
+  }
+  const yearBackstop = extracted.confirmed_year_built == null ? regexYearBuiltBackstop(propertyScopedText || combinedSnippets) : null
 
   return {
     ...blank,

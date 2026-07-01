@@ -118,6 +118,51 @@ async function rawApollo(name: string, domain: string) {
   } catch (e: any) { return { error: e.message, person: null } }
 }
 
+// ─── Full-content fetch helpers (NOT truncated) — for the units diagnostic ─────
+async function rawTavilyFull(query: string, maxResults = 4, rawContent = false) {
+  if (!process.env.TAVILY_API_KEY) return { results: [] as Array<{ title: string; url: string; text: string }> }
+  try {
+    const res = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${(process.env.TAVILY_API_KEY || '').trim()}` },
+      body: JSON.stringify({ query, search_depth: 'advanced', max_results: maxResults, include_answer: false, include_raw_content: rawContent, include_images: false }),
+      signal: AbortSignal.timeout(12000),
+    })
+    const data = await res.json()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return { results: (data.results ?? []).map((r: any) => ({ title: r.title, url: r.url, text: (r.raw_content || r.content || '').slice(0, 6000) })) }
+  } catch { return { results: [] } }
+}
+async function rawSerperFull(query: string, maxResults = 6, type: 'search' | 'news' = 'search') {
+  if (!process.env.SERPER_API_KEY) return { results: [] as Array<{ title: string; url: string; text: string }>, answerBox: null as unknown }
+  try {
+    const endpoint = type === 'news' ? 'https://google.serper.dev/news' : 'https://google.serper.dev/search'
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-KEY': (process.env.SERPER_API_KEY || '').trim() },
+      body: JSON.stringify({ q: query, num: maxResults, gl: 'us', hl: 'en' }),
+      signal: AbortSignal.timeout(9000),
+    })
+    const data = await res.json()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const items = type === 'news' ? (data.news ?? []) : (data.organic ?? [])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return { answerBox: data.answerBox ?? data.knowledgeGraph ?? null, results: items.map((r: any) => ({ title: r.title, url: r.link, text: (r.snippet || '') })) }
+  } catch { return { results: [], answerBox: null } }
+}
+function unitsFromTextDiag(text: string): { sum: number | null; single: number | null } {
+  const out = { sum: null as number | null, single: null as number | null }
+  if (!text) return out
+  const inRange = (n: number) => n >= 20 && n <= 3000
+  const bed = [...text.matchAll(/(\d{2,4})\s*(?:-|\s)?(?:one|two|three|four|1|2|3|4)[\s-]*bed(?:room)?s?\b/gi)].map(m => parseInt(m[1], 10)).filter(n => !isNaN(n) && n >= 20 && n < 3000)
+  if (bed.length >= 2 && bed.length <= 4) { const s = bed.reduce((a, b) => a + b, 0); if (inRange(s)) out.sum = s }
+  const pats = [/total\s+units?\s*[:\-]?\s*(\d{2,4})/gi, /(\d{2,4})[\s-]*unit\b/gi, /(\d{2,4})\s+apartment\s+homes\b/gi, /(\d{2,4})\s+residences\b/gi]
+  const v = new Set<number>()
+  for (const re of pats) { for (const m of text.matchAll(re)) { const n = parseInt(m[1], 10); if (!isNaN(n) && inRange(n)) v.add(n) } }
+  if (v.size === 1) out.single = [...v][0]
+  return out
+}
+
 // ─── Route ────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -239,6 +284,36 @@ export async function POST(req: NextRequest) {
       linkedin_pm: { query: 'Wharf 7 Charleston community manager linkedin', ...linkedinPM },
       linkedin_regional: { query: 'Greystar Charleston regional manager linkedin', ...linkedinRegional },
       key_check: 'Does /people/match return email + phone for confirmed names? Compare with old /mixed_people/search (was 403).',
+    }
+  }
+
+  // ── UNITS: ground truth for the unit count (query-driven) ──────────────────────
+  if (run('units')) {
+    report.steps_run.push('units')
+    const [listing, unitCount, press, amenity] = await Promise.all([
+      rawTavilyFull(`"${query}" apartments site:apartments.com OR site:rentcafe.com OR site:zillow.com OR site:apartmentlist.com`, 4, true),
+      rawSerperFull(`"${query}" apartments "total units" OR "unit count" OR "floor plans" OR "apartment homes" -"available units"`, 6),
+      rawSerperFull(`"${query}" apartments "apartment homes" OR units completed OR opened OR built`, 5, 'news'),
+      rawTavilyFull(`"${query}" apartments amenities internet cable intercom gate access`, 2, true),
+    ])
+    const tokens = query.toLowerCase().split(/\s+/).filter((w: string) => w.length > 2)
+    const all = [...listing.results, ...unitCount.results, ...press.results, ...amenity.results]
+    const scoped = all.filter(r => tokens.every((t: string) => `${r.title || ''} ${r.text || ''}`.toLowerCase().includes(t)))
+    const scopedText = scoped.map(r => r.text || '').join('\n')
+    const allText = all.map(r => r.text || '').join('\n')
+    report.units = {
+      description: 'UNIT COUNT ground truth — is the number actually in the fetched text?',
+      total_results: all.length,
+      property_scoped_results: scoped.length,
+      serper_answer_box: unitCount.answerBox ?? null,
+      regex_on_scoped_text: unitsFromTextDiag(scopedText),
+      regex_on_all_text: unitsFromTextDiag(allText),
+      contains_word_unit_in_scoped: /\bunit/i.test(scopedText),
+      raw_unit_number_mentions_scoped: [...scopedText.matchAll(/(\d{2,4})[\s-]*unit/gi)].map(m => m[1]).slice(0, 25),
+      raw_bedroom_mentions_scoped: [...scopedText.matchAll(/(\d{2,4})\s*(?:-|\s)?(?:one|two|three|four|1|2|3|4)[\s-]*bed[a-z]*/gi)].map(m => m[0]).slice(0, 25),
+      scoped_excerpts: scoped.map(r => ({ title: r.title, url: r.url, excerpt: (r.text || '').slice(0, 900) })),
+      unscoped_titles: all.filter(r => !scoped.includes(r)).map(r => r.title).slice(0, 10),
+      diagnosis: 'If raw_unit_number_mentions_scoped or bedroom mentions contain the real count → extraction is the fix. If empty but property_scoped_results>0 → the number is not in the snippets (need deeper fetch/better query). If property_scoped_results=0 → the property name is not matching source text.',
     }
   }
 

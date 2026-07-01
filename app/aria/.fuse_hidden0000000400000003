@@ -1215,8 +1215,8 @@ export default function ARIAPage() {
             <span className="text-[10px] text-slate-400">{formatAge(s.created_at)}</span>
             <span className="text-[10px] text-slate-300">·</span>
             <span className="text-[10px] text-slate-400 font-medium">{prospects.length} targets</span>
-            {alreadyImported && <span className="text-[9px] font-bold text-emerald-300">imported</span>}
-            {expDays <= 3 && <span className="text-[9px] text-amber-500 font-bold">{expDays}d</span>}
+            {alreadyImported && <span className="text-[9px] font-bold text-emerald-300">✓ imported</span>}
+            {expDays <= 3 && <span className="text-[9px] text-amber-500 font-bold">⚠ {expDays}d</span>}
           </div>
         </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0">
@@ -1484,7 +1484,7 @@ export default function ARIAPage() {
           <Package size={14} className="text-[#6B7EFF]" />
           <span className="text-xs font-bold text-[#6B7EFF]">View PropTech Architecture →</span>
           {p.property?.proptech?.sara_signals && (
-            <span className="ml-auto text-[9px] font-bold px-2 py-0.5 rounded-md bg-purple-400/10 text-purple-300 border border-purple-400/20">SARA Opportunity</span>
+            <span className="ml-auto text-[9px] font-bold px-2 py-0.5 rounded-md bg-purple-400/10 text-purple-300 border border-purple-400/20">🎯 SARA Opportunity</span>
           )}
         </div>
 
@@ -1598,7 +1598,7 @@ export default function ARIAPage() {
                   {/* Gatekeeper tip tooltip */}
                   {dm.gatekeeper_tip && (
                     <div className="hidden group-hover:block absolute z-50 left-0 bottom-full mb-2 w-72 bg-slate-900 text-white text-[10px] leading-relaxed rounded-xl p-3 shadow-xl border border-slate-700/60">
-                      <p className="text-[8px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Gatekeeper Strategy</p>
+                      <p className="text-[8px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">📞 Gatekeeper Strategy</p>
                       <p className="text-slate-200">{dm.gatekeeper_tip}</p>
                     </div>
                   )}
@@ -1653,7 +1653,7 @@ export default function ARIAPage() {
                   ] as {label:string; met:boolean}[]).map(row => (
                     <div key={row.label} className="flex items-center gap-1.5">
                       <span className={`text-[9px] ${dm.color} opacity-70`}>{row.label}</span>
-                      <span className={`text-[9px] font-bold ${row.met ? dm.color : 'text-slate-300'}`}>{row.met ? '' : '–'}</span>
+                      <span className={`text-[9px] font-bold ${row.met ? dm.color : 'text-slate-300'}`}>{row.met ? '✓' : '–'}</span>
                     </div>
                   ))}
                 </div>
@@ -1714,7 +1714,7 @@ export default function ARIAPage() {
               {/* Gatekeeper tip — visible on hover when phone is office line */}
               {p.decision_maker?.gatekeeper_tip && (
                 <div className="hidden group-hover:block absolute z-50 right-0 top-full mt-2 w-80 bg-slate-900 text-white text-[10px] leading-relaxed rounded-xl p-3 shadow-xl border border-slate-700/60">
-                  <p className="text-[8px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Gatekeeper Strategy</p>
+                  <p className="text-[8px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">📞 Gatekeeper Strategy</p>
                   <p className="text-slate-200">{p.decision_maker.gatekeeper_tip}</p>
                 </div>
               )}
@@ -2022,7 +2022,7 @@ export default function ARIAPage() {
             <div className="flex items-center gap-2 mb-4">
               <Zap size={15} className="text-[#6B7EFF]" />
               <p className="text-xs font-bold uppercase tracking-widest text-[#6B7EFF]">AI Recommendations</p>
-              {pt.sara_signals && <span className="ml-auto text-[9px] font-bold px-2 py-0.5 rounded-md bg-purple-400/10 text-purple-300 border border-purple-400/20">SARA Opportunity</span>}
+              {pt.sara_signals && <span className="ml-auto text-[9px] font-bold px-2 py-0.5 rounded-md bg-purple-400/10 text-purple-300 border border-purple-400/20">🎯 SARA Opportunity</span>}
             </div>
 
             {hasDisplacementTargets && (
@@ -2131,7 +2131,7 @@ export default function ARIAPage() {
                     <ul className="space-y-1">
                       {(p as Prospect).pitch_strategy!.avoid!.map((a: string, i: number) => (
                         <li key={i} className="text-xs text-slate-300 flex items-start gap-1.5">
-                          <span className="text-red-400 mt-0.5"></span>{a}
+                          <span className="text-red-400 mt-0.5">✗</span>{a}
                         </li>
                       ))}
                     </ul>
@@ -2512,7 +2512,7 @@ export default function ARIAPage() {
                       {plat.name}
                     </span>
                     {isTech && (
-                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-rose-400/10 text-rose-300 border border-rose-400/30">Tech Complaint</span>
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-rose-400/10 text-rose-300 border border-rose-400/30">⚡ Tech Complaint</span>
                     )}
                     <span className="text-[10px] text-slate-400">
                       {sig.date && sig.date !== 'unknown' ? sig.date : 'Date unknown'}
@@ -2597,7 +2597,7 @@ export default function ARIAPage() {
                         <span className="text-[10px] font-bold px-2.5 py-1 rounded-full border bg-[#6B7EFF]/10 text-[#4F46E5] border-[#6B7EFF]/25">
                           {post.platform}
                         </span>
-                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-blue-400/10 text-blue-300 border border-blue-400/30">Social Search</span>
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-blue-400/10 text-blue-300 border border-blue-400/30">📡 Social Search</span>
                         <span className="text-[10px] text-slate-400">
                           {post.date && post.date !== 'unknown' ? post.date : 'Date unknown'}
                         </span>
@@ -3157,7 +3157,7 @@ export default function ARIAPage() {
                 className={cn("text-[11px] px-4 py-2 rounded-xl font-bold capitalize transition-all shadow-sm",
                   dbFilter === f ? "bg-[#6B7EFF] text-white" : "bg-[#131B2E] text-slate-300 border border-white/10 hover:bg-[#0F1830]"
                 )}>
-                {f === 'expiring' ? 'Expiring' : f === 'sara' ? 'SARA' : f === 'critical' ? 'Critical' : 'All'}
+                {f === 'expiring' ? '📅 Expiring' : f === 'sara' ? '🎯 SARA' : f === 'critical' ? '🔴 Critical' : 'All'}
               </button>
             ))}
           </div>
@@ -3233,13 +3233,13 @@ export default function ARIAPage() {
                   <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-white/10">
                     {dbSelected.management_company && <span className="text-[10px] font-bold px-3 py-1 rounded-lg border border-white/10 text-slate-300 bg-[#0F1830] shadow-sm">{dbSelected.management_company}</span>}
                     {dbSelected.owner_entity && <span className="text-[10px] font-bold px-3 py-1 rounded-lg border border-blue-400/30 bg-blue-400/10 text-blue-300 shadow-sm">{dbSelected.owner_entity}</span>}
-                    {dbSelected.sara_signals && <span className="text-[10px] px-3 py-1 rounded-lg bg-purple-400/10 text-purple-300 border border-purple-400/20 font-bold shadow-sm">SARA Bridge</span>}
+                    {dbSelected.sara_signals && <span className="text-[10px] px-3 py-1 rounded-lg bg-purple-400/10 text-purple-300 border border-purple-400/20 font-bold shadow-sm">🎯 SARA Bridge</span>}
                     {dbSelected.contract_expiry_year && (
                       <span className={cn("text-[10px] px-3 py-1 rounded-lg border font-bold shadow-sm",
                         dbSelected.contract_expiry_year <= new Date().getFullYear() + 1
                           ? "bg-rose-400/10 border-rose-400/30 text-rose-300"
                           : "bg-amber-400/10 border-amber-400/30 text-amber-300"
-                      )}>Contract exp. ~{dbSelected.contract_expiry_year}</span>
+                      )}>📅 Contract exp. ~{dbSelected.contract_expiry_year}</span>
                     )}
                   </div>
                 </div>
