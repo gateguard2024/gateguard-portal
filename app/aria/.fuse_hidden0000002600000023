@@ -1212,7 +1212,7 @@ export default function ARIAPage() {
         <div className="flex-1 min-w-0 cursor-pointer" onClick={() => restoreSearch(s)}>
           <p className="text-[11px] font-bold text-slate-200 leading-tight truncate">{s.query}</p>
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-            <span className="text-[10px] text-slate-400">{formatAge(s.created_at)}</span>
+            <span className="text-[10px] text-slate-400 font-mono">{formatAge(s.created_at)}</span>
             <span className="text-[10px] text-slate-300">·</span>
             <span className="text-[10px] text-slate-400 font-medium">{prospects.length} targets</span>
             {alreadyImported && <span className="text-[9px] font-bold text-emerald-300">✓ imported</span>}
@@ -2607,7 +2607,7 @@ export default function ARIAPage() {
                     {post.tech_mentioned?.length > 0 && (
                       <div className="flex flex-wrap gap-1 mb-3">
                         {post.tech_mentioned.map((t, j) => (
-                          <span key={j} className="text-[9px] px-2 py-0.5 rounded-md bg-[#131B2E] text-slate-300 border border-white/10">{t}</span>
+                          <span key={j} className="text-[9px] px-2 py-0.5 rounded-md bg-[#131B2E] text-slate-300 border border-white/10 font-mono">{t}</span>
                         ))}
                       </div>
                     )}
@@ -2757,7 +2757,7 @@ export default function ARIAPage() {
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
               <span className="text-rose-500">[PAIN_ANGLES]</span> Top Vulnerability Signals
             </p>
-            <div className="bg-[#0B1220] rounded-xl p-4 text-[11px] leading-relaxed overflow-x-auto">
+            <div className="bg-slate-900 rounded-xl p-4 text-[11px] leading-relaxed overflow-x-auto">
               {sq.pain_angles.slice(0, 6).map((sig, i) => (
                 <div key={i} className="flex items-start gap-3 mb-2 last:mb-0">
                   <span className="text-[#6B7EFF] shrink-0">[{i+1}]</span>
@@ -2862,7 +2862,7 @@ export default function ARIAPage() {
               <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-[#6B7EFF] to-[#A78BFA]" />
               <div className="flex items-start justify-between mb-4">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B7EFF] flex items-center gap-1.5">
-                  6-Month Outreach Plan
+                  <span className="font-mono">[CAMPAIGN]</span> 6-Month Outreach Plan
                 </p>
                 <div className="flex items-center gap-2 flex-wrap justify-end">
                   {plan.primary_channel && (
@@ -3136,7 +3136,7 @@ export default function ARIAPage() {
             )}
             <Globe size={16} className="text-[#6B7EFF]" />
             <h2 className="text-base font-bold text-slate-100 tracking-tight">Intelligence Database</h2>
-            <span className="text-[10px] px-2 py-1 rounded-md bg-[#6B7EFF]/10 border border-[#6B7EFF]/20 text-[#6B7EFF] font-bold">{dbTotal} logged</span>
+            <span className="text-[10px] px-2 py-1 rounded-md bg-[#6B7EFF]/10 border border-[#6B7EFF]/20 text-[#6B7EFF] font-bold font-mono">{dbTotal} logged</span>
             <button onClick={() => setDbView(false)} className="ml-auto p-1.5 rounded-lg hover:bg-[#131B2E] text-slate-400 hover:text-slate-200 transition-colors" title="Close Intel DB">
               <X size={14} />
             </button>

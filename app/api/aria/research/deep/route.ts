@@ -573,6 +573,20 @@ async function haikusExtract<T>(prompt: string, snippets: string, maxTokens: num
 async function geocodeAddress(address: string, city: string, state: string): Promise<{ lat: number; lng: number } | null> {
   const query = [address, city, state].filter(Boolean).join(', ')
   if (!query) return null
+  // 1) US Census geocoder first — most accurate for US street addresses, and it shares
+  //    the same block grid the FCC Broadband Map uses, so FCC availability hits improve.
+  try {
+    const res = await fetch(
+      `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=${encodeURIComponent(query)}&benchmark=Public_AR_Current&format=json`,
+      { signal: AbortSignal.timeout(5000) }
+    )
+    if (res.ok) {
+      const data = await res.json()
+      const m = data?.result?.addressMatches?.[0]?.coordinates
+      if (m && m.y && m.x) return { lat: parseFloat(m.y), lng: parseFloat(m.x) }
+    }
+  } catch { /* fall through to Nominatim */ }
+  // 2) Nominatim (OSM) fallback — global, handles community names when the street match fails.
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
@@ -611,6 +625,45 @@ async function fccBroadbandLookup(lat: number, lng: number): Promise<string[]> {
         .filter(Boolean)
     )]
   } catch { return [] }
+}
+
+// ─── Bulk-agreement reverse lookup ───────────────────────────────────────────
+// Bulk/ROE deals are rarely stated in general search, but an MDU ISP that serves a
+// property almost always LISTS that property (on their own site) or ANNOUNCED the
+// partnership (press). So for each candidate ISP we search '"<isp>" "<property>"'.
+// A hit on the provider's own domain, or the two names tied together with bulk
+// language, is a high-confidence confirmation of an in-building/bulk agreement.
+interface BulkConfirmation { provider: string; evidence: string; source_url: string }
+async function confirmBulkViaProviderList(
+  propertyName: string, city: string, candidateIsps: string[]
+): Promise<BulkConfirmation[]> {
+  const confirmed: BulkConfirmation[] = []
+  const top = [...new Set(candidateIsps.map(s => s.trim()).filter(Boolean))].slice(0, 3)
+  if (!propertyName || top.length === 0) return confirmed
+  const pn = propertyName.toLowerCase()
+  const pnCompact = pn.replace(/[^a-z0-9]/g, '')
+  const results = await Promise.all(top.map(isp =>
+    serperSearch(`"${isp}" "${propertyName}" ${city} bulk OR included OR "managed wifi" OR partner OR property`, 4, 'bulk-confirm')
+      .then(rs => ({ isp, rs })).catch(() => ({ isp, rs: [] as Array<{ url?: string; title?: string; content?: string }> }))
+  ))
+  for (const { isp, rs } of results) {
+    const ispCompact = isp.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const hit = rs.find(r => {
+      const url = (r.url || '').toLowerCase()
+      const text = `${r.title || ''} ${r.content || ''}`.toLowerCase()
+      const onProviderSite = ispCompact.length > 3 && url.replace(/[^a-z0-9]/g, '').includes(ispCompact)
+      const tiedTogether = text.includes(pn) && text.includes(isp.toLowerCase())
+      // Provider's own page naming this property, OR both names + bulk language together.
+      return (onProviderSite && (text.includes(pn) || url.includes(pnCompact)))
+        || (tiedTogether && /(bulk|included|managed wifi|managed wi-fi|partner|serves|exclusive|provider|resident)/.test(text))
+    })
+    if (hit) confirmed.push({
+      provider: isp,
+      evidence: `Confirmed: ${isp} lists/announced service at ${propertyName}`,
+      source_url: hit.url || '',
+    })
+  }
+  return confirmed
 }
 
 // ─── Apollo People Enrichment ─────────────────────────────────────────────────
@@ -1283,7 +1336,7 @@ interface Phase2Result {
   isp_providers: string[]
   video_providers: string[]
   bulk_detected: boolean
-  bulk_agreements: Array<{ provider: string; service_type: string; agreement_type: string; confidence: string; evidence: string; expiry_estimate?: string }>
+  bulk_agreements: Array<{ provider: string; service_type: string; agreement_type: string; confidence: string; evidence: string; expiry_estimate?: string; source_url?: string }>
   fcc_providers: string[]
   roe_detected: boolean
   roe_providers: string[]
@@ -1555,6 +1608,36 @@ SOURCE AUTHORITY + TAGS: Each snippet starts with [AUTH:N][source-tag][domain]. 
     if (!result.isp_providers.some(p => p.toLowerCase().includes(isp))) {
       result.isp_providers.push(displayName)
       // Do NOT push to bulk_agreements — no direct property-level evidence
+    }
+  }
+
+  // ── Reverse-lookup confirmation: turn "suspected" MDU ISPs into confirmed bulk ──
+  // Candidates = MDU-specialist ISPs surfaced by FCC, city search, or Haiku extraction.
+  // A hit on the provider's own site / press = a real in-building bulk agreement.
+  const bulkCandidates = [...new Set([
+    ...fccProviders.filter(p => [...KNOWN_MDU_BULK_ISPS].some(m => p.toLowerCase().includes(m))),
+    ...cityConfirmedIsps,
+    ...result.isp_providers.filter(p => [...KNOWN_MDU_BULK_ISPS].some(m => p.toLowerCase().includes(m))),
+  ])]
+  if (bulkCandidates.length > 0) {
+    const confirmations = await confirmBulkViaProviderList(confirmedName, confirmedCity, bulkCandidates)
+    for (const c of confirmations) {
+      result.bulk_detected = true
+      if (!result.isp_providers.some(p => p.toLowerCase() === c.provider.toLowerCase())) {
+        result.isp_providers.unshift(c.provider)
+      }
+      // Replace any weaker internet bulk entry for the same provider with a confirmed one.
+      result.bulk_agreements = result.bulk_agreements.filter(
+        a => !(a.service_type === 'internet' && a.provider?.toLowerCase() === c.provider.toLowerCase())
+      )
+      result.bulk_agreements.push({
+        provider: c.provider,
+        service_type: 'internet',
+        agreement_type: 'bulk',
+        confidence: 'confirmed',
+        evidence: c.evidence,
+        source_url: c.source_url,
+      })
     }
   }
 
