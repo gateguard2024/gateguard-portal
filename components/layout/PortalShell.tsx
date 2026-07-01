@@ -29,21 +29,23 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const isSchedule   = pathname.startsWith('/schedule') // public booking page — no chrome
   const isLog        = pathname.startsWith('/log')      // Quick Log — phone-first PWA capture
   const isTrash      = pathname.startsWith('/trash')    // Deleted Items — glass recycle bin
+  const isDesignStudio = pathname.startsWith('/design/studio') // rebuilt design tool — glass, full-screen
   // Proposal + approve pages, signing links, and the public document portal are
   // customer-facing — no sidebar, no portal chrome, no auth wall
-  const isStandalone = isTech || isAria || isSign || isDocument || isNexus || isCmms || isSchedule || isLog
+  const isStandalone = isTech || isAria || isSign || isDocument || isNexus || isCmms || isSchedule || isLog || isDesignStudio
     || /^\/quotes\/[^/]+(\/proposal|\/approve)(\/|$)/.test(pathname)
+  const isFullGlass = isAria || isDesignStudio  // 100dvh flex-column, own internal scroll
 
   // Standalone: full-screen, no portal chrome
   if (isStandalone) {
     return (
       <div style={{
         minHeight: '100dvh',
-        height: isAria ? '100dvh' : undefined,
-        display: isAria ? 'flex' : undefined,
-        flexDirection: isAria ? 'column' : undefined,
-        overflow: isAria ? 'hidden' : undefined,
-        background: isTech ? '#F1F5F9' : isNexus || isAria || isSign || isDocument ? 'transparent' : '#ffffff',
+        height: isFullGlass ? '100dvh' : undefined,
+        display: isFullGlass ? 'flex' : undefined,
+        flexDirection: isFullGlass ? 'column' : undefined,
+        overflow: isFullGlass ? 'hidden' : undefined,
+        background: isTech ? '#F1F5F9' : isNexus || isFullGlass || isSign || isDocument ? 'transparent' : '#ffffff',
         overscrollBehavior: 'none',
       }}>
         {/* No admin launcher on the public booking page (prospect-facing) */}
