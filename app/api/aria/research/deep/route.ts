@@ -916,6 +916,52 @@ interface Phase1Result {
   listing_bulk_detected: boolean       // "internet included" or "tech fee" on listing
 }
 
+// Deterministic backstop extractors — run over the SAME raw text Phase 1 fetched
+// when the LLM extraction returns null. Same input → same output every time, so the
+// result is consistent across re-runs (unlike a single nondeterministic Haiku call).
+// Conservative by design: when the evidence is ambiguous it returns null rather than
+// guess the wrong property's number.
+function regexUnitsBackstop(text: string): number | null {
+  if (!text) return null
+  const inRange = (n: number) => n >= 20 && n <= 3000
+  // 1) Bedroom breakdown = SUM (highly specific, rarely collides across properties).
+  //    Only count per-bedroom totals >= 20 so stray "2 bedroom floor plan" is ignored.
+  const bedMatches = [...text.matchAll(/(\d{2,4})\s*(?:-|\s)?(?:one|two|three|four|1|2|3|4)[\s-]*bed(?:room)?s?\b/gi)]
+    .map(m => parseInt(m[1], 10))
+    .filter(n => !isNaN(n) && n >= 20 && n < 3000)
+  if (bedMatches.length >= 2) {
+    const sum = bedMatches.reduce((a, b) => a + b, 0)
+    if (inRange(sum)) return sum
+  }
+  // 2) Explicit total-unit phrasings — collect DISTINCT sane values. Use it only when
+  //    a single value appears; multiple distinct counts = likely other properties in
+  //    the text → stay null (avoids the "wrong-property unit count" failure mode).
+  const patterns = [
+    /total\s+units?\s*[:\-]?\s*(\d{2,4})/gi,
+    /(\d{2,4})[\s-]*unit\b/gi,
+    /(\d{2,4})\s+apartment\s+homes\b/gi,
+    /(\d{2,4})\s+residences\b/gi,
+  ]
+  const vals = new Set<number>()
+  for (const re of patterns) {
+    for (const m of text.matchAll(re)) {
+      const n = parseInt(m[1], 10)
+      if (!isNaN(n) && inRange(n)) vals.add(n)
+    }
+  }
+  if (vals.size === 1) return [...vals][0]
+  return null
+}
+function regexYearBuiltBackstop(text: string): number | null {
+  if (!text) return null
+  const years = [...text.matchAll(/(?:built|opened|completed|constructed|established)(?:\s+in)?\s*[:\-]?\s*((?:19|20)\d{2})/gi)]
+    .concat([...text.matchAll(/year\s+built\s*[:\-]?\s*((?:19|20)\d{2})/gi)])
+    .map(m => parseInt(m[1], 10))
+    .filter(n => !isNaN(n) && n >= 1900 && n <= new Date().getFullYear())
+  // Built in phases → earliest year (matches the LLM prompt rule)
+  return years.length ? Math.min(...years) : null
+}
+
 async function runPhase1A(query: string, client: Anthropic): Promise<Phase1Result> {
   const blank: Phase1Result = {
     confirmed_name: null, confirmed_address: null, confirmed_city: null, confirmed_state: null,
@@ -1019,9 +1065,16 @@ AMENITY/TECHNOLOGY RULES (look especially in ===AMENITY PAGES===):
   const cleanIsp = rawIsp && !ISP_SERVICE_DESCRIPTIONS.has(rawIsp.toLowerCase().trim()) ? rawIsp : null
   const cleanCable = rawCable && !VIDEO_SERVICE_DESCRIPTIONS.has(rawCable.toLowerCase().trim()) ? rawCable : null
 
+  // Deterministic backstop: if the LLM missed units / year, recover them from the same
+  // raw text it just read. Only fills gaps — never overrides a value the LLM found.
+  const unitsBackstop = extracted.confirmed_units == null ? regexUnitsBackstop(combinedSnippets) : null
+  const yearBackstop  = extracted.confirmed_year_built == null ? regexYearBuiltBackstop(combinedSnippets) : null
+
   return {
     ...blank,
     ...extracted,
+    confirmed_units:      extracted.confirmed_units ?? unitsBackstop,
+    confirmed_year_built: extracted.confirmed_year_built ?? yearBackstop,
     listing_isp: cleanIsp,
     listing_cable: cleanCable,
     listing_proptech: normStrArr(extracted.listing_proptech),
