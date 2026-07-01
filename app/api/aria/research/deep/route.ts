@@ -1888,11 +1888,13 @@ confidence: 0-100
 source_key: which source snippet this came from — e.g. "P1", "P2", "P3", "W1", "W2", or "listing" for listing-confirmed brands
 inferred: true if NOT directly named (confidence < 60), false if named in text
 
-For INFERRED brands with no name found:
-- Unnamed gate system: LiftMaster (60% market share) → confidence 40, inferred true
-- Unnamed intercom: ButterflyMX (most common modern) → confidence 35, inferred true
+For INFERRED brands with no name found, DEFAULT TO DoorKing for gate + access/intercom
+(it is the baseline assumption for gated multifamily). Only infer a different brand if a
+review, social post, or amenity text actually names or strongly implies it:
+- Unnamed gate operator: DoorKing → confidence 40, inferred true
+- Unnamed access control / intercom: DoorKing → confidence 35, inferred true (use ButterflyMX ONLY if "app", "smartphone entry", or a modern-intercom signal appears in the text)
 - Unnamed cameras: Avigilon or Verkada (Class A) → confidence 35, inferred true
-Only infer ONE brand per unnamed category.${listingProptechCtx}`,
+Only infer ONE brand per unnamed category. NEVER default to ButterflyMX for a gate.${listingProptechCtx}`,
           proptechSnippets, 800, client)
       : Promise.resolve(null),
   ])

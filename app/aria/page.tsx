@@ -2047,8 +2047,8 @@ export default function ARIAPage() {
               <div className="space-y-2">
                 <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Secondary Angles</p>
                 {p.pitch_strategy.secondary_hooks.slice(0, 3).map((hook, i) => (
-                  <div key={i} className="flex items-start gap-2.5 text-xs text-slate-300">
-                    <span className="font-bold text-[#6B7EFF] mt-0.5 shrink-0">[{i+2}]</span>
+                  <div key={i} className="flex items-start gap-2.5 text-[13px] text-slate-200">
+                    <span className="shrink-0 mt-0.5 w-4 h-4 rounded-full bg-[#6B7EFF]/15 text-[#a9b4ff] text-[10px] font-bold flex items-center justify-center">{i+1}</span>
                     <span className="font-medium leading-relaxed">{hook}</span>
                   </div>
                 ))}
@@ -2056,11 +2056,14 @@ export default function ARIAPage() {
             )}
 
             {p.pitch_strategy?.avoid && p.pitch_strategy.avoid.length > 0 && (
-              <div className="mt-4 pt-3 border-t border-white/10">
-                <p className="text-[9px] font-bold uppercase tracking-widest text-rose-500 mb-2">Avoid Mentioning</p>
-                <div className="flex flex-wrap gap-1.5">
+              <div className="mt-4 rounded-xl bg-rose-500/[0.07] border border-rose-400/20 p-4">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-rose-300 mb-2.5">Don&rsquo;t bring up</p>
+                <div className="space-y-2">
                   {p.pitch_strategy.avoid.map((a, i) => (
-                    <span key={i} className="text-[10px] px-2 py-0.5 rounded-md bg-rose-400/10 text-rose-300 border border-rose-400/20 font-medium">{a}</span>
+                    <div key={i} className="flex items-start gap-2.5 text-[13px] text-slate-200 leading-relaxed">
+                      <X size={14} className="text-rose-400 shrink-0 mt-0.5" />
+                      <span className="font-medium">{a}</span>
+                    </div>
                   ))}
                 </div>
               </div>
