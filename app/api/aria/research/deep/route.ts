@@ -112,18 +112,23 @@ interface GroundTruth {
 async function groundTruthExtract(name: string, city: string, state: string): Promise<GroundTruth | null> {
   if (!name) return null
   const geo = [city, state].filter(Boolean).join(', ')
-  const [q1, q2, q3, q4, q5] = await Promise.all([
-    serperSearch(`${name} ${geo} how many units address last sale owner and leasing office phone`, 8, 'gt-facts'),
-    serperSearch(`${name} ${geo} internet and video providers access control gates cameras intercom proptech`, 8, 'gt-tech'),
+  // Read FULL PAGE CONTENT (Tavily advanced + raw_content), not snippets — the unit
+  // count and providers live in the page body, which short snippets omit. This is what
+  // lets a human's Google search win: the AI reads the whole page.
+  const [facts, tech, listing, people] = await Promise.all([
+    tavilySearch(`${name} ${geo} apartments number of units year built owner last sale leasing office phone`, 5, 'gt-facts', 'advanced', true),
+    tavilySearch(`${name} ${geo} apartments internet cable TV provider access control gate camera intercom amenities`, 5, 'gt-tech', 'advanced', true),
+    tavilySearch(`${name} ${geo} site:apartments.com OR site:rentcafe.com units floor plans year built`, 4, 'gt-listing', 'advanced', true),
     serperSearch(`${name} ${geo} property manager regional manager owner linkedin email phone`, 8, 'gt-people'),
-    // Listing sites carry the most structured facts (units, year built, amenities incl. providers).
-    serperSearch(`${name} ${geo} apartments.com OR rentcafe.com units "year built" amenities internet`, 8, 'gt-listing'),
-    // Bulk / included-utilities signal (bulk internet or cable agreement).
-    serperSearch(`${name} ${geo} "internet included" OR "bulk" OR "wifi included" OR "cable included" residents utilities`, 6, 'gt-bulk'),
   ])
-  const all = [...q1, ...q2, ...q3, ...q4, ...q5].filter(r => (r.content || '').length > 20)
-  if (all.length === 0) return null
-  const snippets = deduplicateByUrl(all).slice(0, 40).map((r, i) => `[${i + 1}] ${r.title}\n${r.content}\n${r.url}`).join('\n\n')
+  const pageResults = deduplicateByUrl([...facts, ...tech, ...listing]).filter(r => (r.raw_content || r.content || '').length > 40)
+  if (pageResults.length === 0 && people.length === 0) return null
+  const pages = pageResults.slice(0, 8)
+    .map((r, i) => `[PAGE ${i + 1}] ${r.title} — ${r.url}\n${(r.raw_content || r.content || '').slice(0, 3500)}`)
+    .join('\n\n---\n\n')
+  const peopleSnippets = people.filter(r => (r.content || '').length > 20).slice(0, 8)
+    .map((r, i) => `[PERSON RESULT ${i + 1}] ${r.title}\n${r.content}\n${r.url}`).join('\n\n')
+  const snippets = `FULL PROPERTY PAGES:\n${pages}\n\nPEOPLE / MANAGEMENT RESULTS:\n${peopleSnippets}`
   try {
     const msg = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
@@ -2825,9 +2830,11 @@ export async function POST(req: NextRequest) {
     try {
       const gt = gtResult
       if (gt) {
-        if (p1.confirmed_units == null && gt.units != null) p1.confirmed_units = gt.units
-        if (p1.confirmed_year_built == null && gt.year_built != null) p1.confirmed_year_built = gt.year_built
-        if (!p1.confirmed_phone && gt.phone) p1.confirmed_phone = gt.phone
+        // Ground-truth read the full pages, so it WINS over the fragile Phase-1
+        // extractors for the scalar facts (fixes "71" beating the real 564).
+        if (gt.units != null) p1.confirmed_units = gt.units
+        if (gt.year_built != null) p1.confirmed_year_built = gt.year_built
+        if (gt.phone) p1.confirmed_phone = gt.phone
         if (gt.isp_providers.length)   p2Final.isp_providers   = [...new Set([...p2Final.isp_providers, ...gt.isp_providers])]
         if (gt.video_providers.length) p2Final.video_providers = [...new Set([...p2Final.video_providers, ...gt.video_providers])]
         if (!p2Final.owner_entity && gt.owner) p2Final.owner_entity = gt.owner
