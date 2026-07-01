@@ -92,6 +92,75 @@ function meterSerper()                         { meter()?.addSerper() }
 function meterTavily(credits: number)          { meter()?.addTavily(credits) }
 function meterApollo()                         { meter()?.addApollo() }
 function meterHaiku(inTok: number, outTok: number)  { meter()?.addHaiku(inTok, outTok) }
+function meterSonnet(inTok: number, outTok: number) { meter()?.addSonnet(inTok, outTok) }
+
+// ─── Ground-truth extract — read raw Google results with Sonnet (like an AI Overview) ─
+// The rest of the pipeline pre-digests each source through narrow Haiku prompts, so
+// Sonnet never sees the raw snippets and can't recover what those extractors miss.
+// This runs the same broad natural-language queries a human would Google, hands the
+// FULL organic snippets to Sonnet, and lets it extract the whole record in one pass.
+// Used as an authoritative fill for the core fields (units, phone, ISP/video, proptech,
+// contacts) so the property card matches what a Google search plainly shows.
+interface GroundTruth {
+  units: number | null; year_built: number | null; phone: string | null
+  owner: string | null; management: string | null; last_sale: string | null
+  isp_providers: string[]; video_providers: string[]
+  proptech: { access_control: string[]; gate_operators: string[]; cameras: string[]; intercoms: string[] }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  contacts: { name: string; title: string; email: string; phone: string; linkedin: string }[]
+}
+async function groundTruthExtract(name: string, city: string, state: string): Promise<GroundTruth | null> {
+  if (!name) return null
+  const geo = [city, state].filter(Boolean).join(', ')
+  const [q1, q2, q3, q4, q5] = await Promise.all([
+    serperSearch(`${name} ${geo} how many units address last sale owner and leasing office phone`, 8, 'gt-facts'),
+    serperSearch(`${name} ${geo} internet and video providers access control gates cameras intercom proptech`, 8, 'gt-tech'),
+    serperSearch(`${name} ${geo} property manager regional manager owner linkedin email phone`, 8, 'gt-people'),
+    // Listing sites carry the most structured facts (units, year built, amenities incl. providers).
+    serperSearch(`${name} ${geo} apartments.com OR rentcafe.com units "year built" amenities internet`, 8, 'gt-listing'),
+    // Bulk / included-utilities signal (bulk internet or cable agreement).
+    serperSearch(`${name} ${geo} "internet included" OR "bulk" OR "wifi included" OR "cable included" residents utilities`, 6, 'gt-bulk'),
+  ])
+  const all = [...q1, ...q2, ...q3, ...q4, ...q5].filter(r => (r.content || '').length > 20)
+  if (all.length === 0) return null
+  const snippets = deduplicateByUrl(all).slice(0, 40).map((r, i) => `[${i + 1}] ${r.title}\n${r.content}\n${r.url}`).join('\n\n')
+  try {
+    const msg = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1600,
+      messages: [{ role: 'user', content: `You are reading Google search results for the multifamily property "${name}"${geo ? ` in ${geo}` : ''}. Extract ONLY facts about THIS property — ignore other properties that appear. Return ONLY valid JSON:
+{"units":null,"year_built":null,"phone":null,"owner":null,"management":null,"last_sale":null,"isp_providers":[],"video_providers":[],"proptech":{"access_control":[],"gate_operators":[],"cameras":[],"intercoms":[]},"contacts":[{"name":"","title":"","email":"","phone":"","linkedin":""}]}
+Rules:
+- units = TOTAL residential unit count. If given as a bedroom breakdown (e.g. "291 one-bedroom and 273 two-bedroom"), SUM them (=564).
+- phone = leasing office phone in (xxx) xxx-xxxx form.
+- isp_providers / video_providers = COMPANY NAMES only (AT&T Fiber, Spectrum, DirecTV, Dish). Never service descriptions ("High-speed internet", "Cable TV").
+- proptech = brand names only (ButterflyMX, DoorKing, Brivo, Verkada, SmartRent...). Empty arrays if none named.
+- contacts = named people tied to this property/owner (property manager, regional, owner/exec) with any email/phone/linkedin found.
+- Use null / [] when a field isn't present for THIS property. Do not invent.
+
+RESULTS:
+${snippets}` }],
+    })
+    meterSonnet(msg.usage?.input_tokens ?? 0, msg.usage?.output_tokens ?? 0)
+    const text = msg.content[0]?.type === 'text' ? msg.content[0].text : '{}'
+    const m = text.match(/\{[\s\S]*\}/)
+    if (!m) return null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const p: any = JSON.parse(m[0])
+    const toInt = (v: unknown) => (typeof v === 'number' ? v : (parseInt(String(v ?? ''), 10) || null))
+    return {
+      units: toInt(p.units), year_built: toInt(p.year_built),
+      phone: normStr(p.phone), owner: normStr(p.owner), management: normStr(p.management), last_sale: normStr(p.last_sale),
+      isp_providers: normStrArr(p.isp_providers), video_providers: normStrArr(p.video_providers),
+      proptech: {
+        access_control: normStrArr(p.proptech?.access_control), gate_operators: normStrArr(p.proptech?.gate_operators),
+        cameras: normStrArr(p.proptech?.cameras), intercoms: normStrArr(p.proptech?.intercoms),
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      contacts: Array.isArray(p.contacts) ? p.contacts.filter((c: any) => c?.name).map((c: any) => ({ name: String(c.name), title: String(c.title || ''), email: String(c.email || ''), phone: String(c.phone || ''), linkedin: String(c.linkedin || '') })) : [],
+    }
+  } catch { return null }
+}
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -2746,6 +2815,31 @@ export async function POST(req: NextRequest) {
       }
     }
     const p2Final = p2FinalConnectivity
+
+    // ── Ground-truth pass: Sonnet reads raw Google results and fills what the narrow
+    // extractors missed — authoritative for the core facts a Google search shows plainly
+    // (units, phone, ISP/video, proptech, contacts). Runs before synthesis + assembly so
+    // both the narrative and the card benefit. Fills gaps / unions arrays only; never blanks.
+    try {
+      const gt = await groundTruthExtract(property_name, city, state)
+      if (gt) {
+        if (p1.confirmed_units == null && gt.units != null) p1.confirmed_units = gt.units
+        if (p1.confirmed_year_built == null && gt.year_built != null) p1.confirmed_year_built = gt.year_built
+        if (!p1.confirmed_phone && gt.phone) p1.confirmed_phone = gt.phone
+        if (gt.isp_providers.length)   p2Final.isp_providers   = [...new Set([...p2Final.isp_providers, ...gt.isp_providers])]
+        if (gt.video_providers.length) p2Final.video_providers = [...new Set([...p2Final.video_providers, ...gt.video_providers])]
+        if (!p2Final.owner_entity && gt.owner) p2Final.owner_entity = gt.owner
+        if (gt.last_sale && !p2Final.last_sale_date) p2Final.last_sale_date = gt.last_sale
+        p3Final.proptech.access_control = [...new Set([...(p3Final.proptech.access_control ?? []), ...gt.proptech.access_control])]
+        p3Final.proptech.gate_operators = [...new Set([...(p3Final.proptech.gate_operators ?? []), ...gt.proptech.gate_operators])]
+        p3Final.proptech.cameras        = [...new Set([...(p3Final.proptech.cameras ?? []), ...gt.proptech.cameras])]
+        p3Final.proptech.intercoms      = [...new Set([...(p3Final.proptech.intercoms ?? []), ...gt.proptech.intercoms])]
+        for (const c of gt.contacts) {
+          if (!c.name || p3Final.contacts.some(x => x.name?.toLowerCase() === c.name.toLowerCase())) continue
+          p3Final.contacts.push({ name: c.name, title: c.title, company: mgmt || '', role_type: /regional|vp|director/i.test(c.title) ? 'regional_manager' : /owner|ceo|principal|cfo/i.test(c.title) ? 'owner' : 'property_manager', email: c.email, phone: c.phone, linkedin: c.linkedin })
+        }
+      }
+    } catch { /* best-effort; never block synthesis */ }
 
     // v10 CHECKPOINT 2 — persist connectivity + ownership before (failure-prone) synthesis.
     checkpoint({

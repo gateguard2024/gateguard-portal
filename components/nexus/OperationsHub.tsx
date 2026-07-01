@@ -884,6 +884,7 @@ export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onCl
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState<string | null>(null);
   // + new work order from this site
   const [showNewWo, setShowNewWo] = useState(false);
   const [woTitle, setWoTitle] = useState("");
@@ -919,14 +920,16 @@ export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onCl
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function uploadPhoto(file: File) {
-    if (!file || uploading) return; setUploading(true);
+    if (!file || uploading) return; setUploading(true); setUploadErr(null);
     try {
-      const up = await fetch(`/api/sites/${id}/photo-upload-url`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename: file.name }) }).then(r => r.json());
-      if (up?.signedUrl) {
-        await fetch(up.signedUrl, { method: "PUT", headers: { "Content-Type": file.type || "image/jpeg" }, body: file });
-        await fetch(`/api/events`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event_type: "as_built", title: file.name, description: up.publicUrl, site_id: id }) }).catch(() => {});
-      }
-    } catch (_) { /* ignore */ }
+      // One-shot server upload: file → storage + site_events row in a single request.
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`/api/sites/${id}/asbuilt`, { method: "POST", body: fd });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e?.error || `Upload failed (${res.status})`); }
+    } catch (err) {
+      setUploadErr(err instanceof Error ? err.message : "Upload failed");
+    }
     setUploading(false); load();
   }
   async function createWorkOrder() {
@@ -1022,13 +1025,18 @@ export function SiteDetailDrawer({ id, onClose, systemsTab }: { id: string; onCl
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <h2 style={{ fontSize: 15 }}>As-builts & photos ({photos.length})</h2>
             <label style={{ ...btn, padding: "6px 12px", display: "inline-block" }}>{uploading ? "Uploading…" : "+ Upload"}
-              <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadPhoto(f); e.target.value = ""; }} />
+              <input type="file" accept="image/*,application/pdf,.pdf,.dwg,.png,.jpg,.jpeg,.webp" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadPhoto(f); e.target.value = ""; }} />
             </label>
           </div>
-          {photos.length === 0 ? <Small>No drawings or photos yet. Upload an as-built or site photo.</Small> : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px,1fr))", gap: 8 }}>
-            {photos.map((p, i) => <a key={p.id || i} href={p.description} target="_blank" rel="noreferrer" title={p.title} style={{ display: "block", borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)" }}>
-              <img src={p.description} alt={p.title || "Site photo"} style={{ width: "100%", height: 90, objectFit: "cover", display: "block" }} />
-            </a>)}
+          {uploadErr && <div style={{ marginBottom: 8, fontSize: 12, color: "#FCA5A5", background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.3)", borderRadius: 8, padding: "8px 10px" }}>Upload failed: {uploadErr}</div>}
+          {photos.length === 0 ? <Small>No drawings or photos yet. Upload an as-built or site photo (image or PDF).</Small> : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px,1fr))", gap: 8 }}>
+            {photos.map((p, i) => { const isImg = /\.(png|jpe?g|webp|gif)(\?|$)/i.test(String(p.description || "")); return (
+              <a key={p.id || i} href={p.description} target="_blank" rel="noreferrer" title={p.title} style={{ display: "block", borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)" }}>
+                {isImg
+                  ? <img src={p.description} alt={p.title || "Site photo"} style={{ width: "100%", height: 90, objectFit: "cover", display: "block" }} />
+                  : <div style={{ width: "100%", height: 90, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.7)", fontSize: 11, padding: 6, textAlign: "center" }}><span style={{ fontSize: 20 }}>📄</span><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>{p.title || "Document"}</span></div>}
+              </a>
+            ); })}
           </div>}
         </Card>
 
