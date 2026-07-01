@@ -60,6 +60,7 @@ export function AriaCaseFile({ prospect, social, propertyId, fresh, busy, onSave
   const [notes, setNotes] = useState<string>(prospect?.sales_notes ?? '')
   const [saving, setSaving] = useState(false)
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
+  const [showDetail, setShowDetail] = useState(false)
 
   const bulkInternet = bulk.find(b => (b.service_type ?? '').includes('internet'))
   const bulkVideo = bulk.find(b => (b.service_type ?? '').includes('video'))
@@ -190,6 +191,49 @@ export function AriaCaseFile({ prospect, social, propertyId, fresh, busy, onSave
           </div>
         </Card>
       </div>
+
+      {/* Full detail — professor-depth on demand, same dark glass */}
+      <div style={{ padding: '0 22px 4px' }}>
+        <button onClick={() => setShowDetail(v => !v)} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: CARD, border: `1px dashed ${showDetail ? 'rgba(107,126,255,0.5)' : '#2A3A5C'}`, borderRadius: 12, padding: '12px 14px', cursor: 'pointer', color: TXT, textAlign: 'left' }}>
+          <span><span style={{ fontSize: 13, fontWeight: 500 }}>Full detail</span><span style={{ display: 'block', fontSize: 11, color: MUT, marginTop: 1 }}>Owner chain, connectivity, full tech stack, every source.</span></span>
+          <span style={{ fontSize: 18, color: MUT, transform: showDetail ? 'rotate(180deg)' : 'none' }}>⌄</span>
+        </button>
+      </div>
+
+      {showDetail && (
+        <div style={{ padding: '10px 22px 4px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 12 }}>
+          <Card icon={UserCheck} title="Contact chain">
+            {(chain.length ? chain : [dm]).filter(c => c && c.name).map((c, i) => (
+              <div key={i} style={{ padding: '7px 0', borderBottom: i < chain.length - 1 ? `1px solid ${LINE}` : 'none' }}>
+                <div style={{ fontSize: 13 }}>{val(c.name, 'Unknown')} {c.title && <span style={{ color: MUT }}>· {c.title}</span>}</div>
+                <div style={{ fontSize: 11, color: MUT, marginTop: 2 }}>{[c.email, c.phone].filter(Boolean).join(' · ') || 'No contact info'}</div>
+              </div>
+            ))}
+            {!chain.length && !dm.name && <div style={{ fontSize: 13, color: MUT }}>No data found</div>}
+          </Card>
+
+          <Card icon={Wifi} title="Connectivity detail">
+            <Row k="Internet" v={(p.isp_providers ?? []).join(', ') || 'No data found'} />
+            <Row k="Video" v={(p.video_providers ?? []).join(', ') || 'No data found'} />
+            <Row k="ROE detected" v={p.roe_detected ? 'Yes' : 'No data found'} />
+            {bulk.length > 0 && bulk.map((b, i) => <Row key={i} k={`Bulk · ${b.service_type ?? '—'}`} v={`${val(b.provider)}${b.expiry_estimate ? ` · ends ${b.expiry_estimate}` : ''}`} color={AMBER} />)}
+          </Card>
+
+          <Card icon={ShieldCheck} title="Full tech stack">
+            {[['Gate', pt.gate_operators], ['Access', pt.access_control], ['Intercom', pt.intercoms], ['Camera', pt.cameras], ['Smart lock', pt.smart_locks], ['Resident app', pt.resident_apps], ['Package', pt.package_solutions]].map(([label, arr]) => (
+              <Row key={label as string} k={label as string} v={((arr as string[]) ?? []).join(', ') || 'No data found'} />
+            ))}
+            {inferred.map((inf, i) => <Row key={`i${i}`} k={`${inf.category?.replace('_', ' ')} (suspected)`} v={`${inf.name} ~${Math.round(Number(inf.confidence_pct) || 0)}%`} color={AMBER} />)}
+          </Card>
+
+          <Card icon={MessageSquare} title={`Community — all signals (${[...pains, ...posts].length})`}>
+            {[...pains, ...posts].length === 0 ? <div style={{ fontSize: 13, color: MUT }}>No data found</div> :
+              [...pains, ...posts].slice(0, 12).map((x, i) => (
+                <div key={i} style={{ fontSize: 12.5, lineHeight: 1.45, color: '#CBD5E1', marginBottom: 7 }}>“{val(x.quote, '')}” <span style={{ color: '#64748B' }}>· {val(x.platform || x.source, 'web')}{x.severity ? ` · ${x.severity}` : ''}</span></div>
+              ))}
+          </Card>
+        </div>
+      )}
 
       {/* Map */}
       {p.lat && p.lng && (

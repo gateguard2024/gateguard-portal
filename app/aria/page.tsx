@@ -262,7 +262,7 @@ type ViewMode = 'idle' | 'running' | 'candidates' | 'result';
 
 /* ─── DM Contact Score (1-10) ──────────────────────────────── */
 function computeDmScore(prospect: Prospect | null): { score: number; label: string; color: string; bg: string } {
-  if (!prospect) return { score: 0, label: 'No data', color: 'text-slate-400', bg: 'bg-slate-100 border-slate-200' }
+  if (!prospect) return { score: 0, label: 'No data', color: 'text-slate-400', bg: 'bg-[#131B2E] border-white/10' }
   const chain = prospect.decision_maker_chain ?? []
   const phone = prospect.property?.phone
   let score = 0
@@ -536,14 +536,14 @@ const SIGNAL_ICONS: Record<string, React.ElementType> = {
 const SIGNAL_SEVERITY: Record<string, { bg: string; border: string; text: string; badge: string }> = {
   high:   { bg: "bg-rose-50/50",   border: "border-rose-200",   text: "text-rose-600",   badge: "bg-rose-100 text-rose-600" },
   medium: { bg: "bg-amber-50/50", border: "border-amber-200", text: "text-amber-600", badge: "bg-amber-100 text-amber-600" },
-  low:    { bg: "bg-slate-50/50",  border: "border-slate-200",  text: "text-slate-600",  badge: "bg-slate-100 text-slate-600" },
+  low:    { bg: "bg-[#0F1830]/50",  border: "border-white/10",  text: "text-slate-300",  badge: "bg-[#131B2E] text-slate-300" },
 };
 
 const URGENCY_PILL: Record<string, string> = {
   critical: "bg-rose-100 text-rose-700",
   high:     "bg-orange-100 text-orange-700",
   medium:   "bg-amber-100 text-amber-700",
-  low:      "bg-slate-100 text-slate-700",
+  low:      "bg-[#131B2E] text-slate-200",
 };
 
 type DetailTab = 'property' | 'proptech' | 'dm' | 'intel' | 'social' | 'scout';
@@ -561,10 +561,10 @@ function ScoreGauge({ score }: { score: number }) {
   return (
     <div className="flex items-center gap-4">
       <div className="flex-1">
-        <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden shadow-inner">
+        <div className="h-2.5 bg-[#131B2E] rounded-full overflow-hidden shadow-inner">
           <div className="h-full rounded-full transition-all duration-1000 relative"
             style={{ width: `${pct}%`, background: `linear-gradient(90deg, #6B7EFF, ${color})` }}>
-              <div className="absolute inset-0 bg-white/20 w-full h-full" style={{ animation: 'shimmer 2s infinite' }} />
+              <div className="absolute inset-0 bg-[#ffffff]/[0.06] w-full h-full" style={{ animation: 'shimmer 2s infinite' }} />
             </div>
         </div>
       </div>
@@ -1038,14 +1038,14 @@ export default function ARIAPage() {
           "hidden lg:flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-bold border transition-all shadow-sm",
           dbView
             ? "bg-[#6B7EFF] text-white border-[#6B7EFF]"
-            : "bg-white text-slate-600 border-slate-200 hover:border-[#6B7EFF]/50"
+            : "bg-[#131B2E] text-slate-300 border-white/10 hover:border-[#6B7EFF]/50"
         )}
       >
         <Globe size={11} />
         Intel DB
         {dbTotal > 0 && (
           <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-md",
-            dbView ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500")}>
+            dbView ? "bg-[#ffffff]/[0.06] text-white" : "bg-[#131B2E] text-slate-400")}>
             {dbTotal}
           </span>
         )}
@@ -1070,14 +1070,14 @@ export default function ARIAPage() {
         </div>
       )}
       {usageStats && !dbView && (
-        <div className="hidden lg:flex items-center gap-3 mr-2 text-xs text-slate-500">
+        <div className="hidden lg:flex items-center gap-3 mr-2 text-xs text-slate-400">
           <span className="flex items-center gap-1">
             <TrendingUp size={11} className="text-[#6B7EFF]" />
-            <span className="font-bold text-slate-700">{usageStats.my_searches.total}</span> mine
+            <span className="font-bold text-slate-200">{usageStats.my_searches.total}</span> mine
           </span>
           {usageStats.corporate_total > 0 && (
             <span className="flex items-center gap-1">
-              <span className="font-bold text-slate-700">{usageStats.corporate_total}</span> network
+              <span className="font-bold text-slate-200">{usageStats.corporate_total}</span> network
             </span>
           )}
         </div>
@@ -1111,9 +1111,9 @@ export default function ARIAPage() {
         </>
       )}
       {/* v9 Credit balance chip */}
-      <div className="hidden lg:flex items-center gap-2 pl-2 border-l border-slate-200/60">
+      <div className="hidden lg:flex items-center gap-2 pl-2 border-l border-white/10">
         {creditBalance === null ? (
-          <div className="h-7 w-20 bg-slate-100 rounded-lg animate-pulse" />
+          <div className="h-7 w-20 bg-[#131B2E] rounded-lg animate-pulse" />
         ) : creditBalance >= 100 ? (
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold border"
             style={{ background: 'rgba(107,126,255,0.06)', borderColor: 'rgba(107,126,255,0.2)', color: '#5B6EE8' }}>
@@ -1145,8 +1145,8 @@ export default function ARIAPage() {
         className={cn(
           "w-full text-left p-3.5 rounded-xl transition-all duration-300 mb-3 relative overflow-hidden group",
           isActive
-            ? "bg-white shadow-[0_8px_30px_rgb(107,126,255,0.12)] border border-[#6B7EFF]/20"
-            : "bg-white/60 border border-slate-200/60 hover:bg-white hover:shadow-sm hover:border-slate-300"
+            ? "bg-[#131B2E] shadow-[0_8px_30px_rgb(107,126,255,0.12)] border border-[#6B7EFF]/20"
+            : "bg-[#131B2E]/70 border border-white/10 hover:bg-[#131B2E] hover:shadow-sm hover:border-slate-300"
         )}
       >
         {isActive && (
@@ -1162,7 +1162,7 @@ export default function ARIAPage() {
             {score}
           </div>
           <div className="flex-1 min-w-0 pt-0.5">
-            <p className={cn("text-xs font-bold leading-tight truncate transition-colors", isActive ? "text-[#6B7EFF]" : "text-slate-800")}>
+            <p className={cn("text-xs font-bold leading-tight truncate transition-colors", isActive ? "text-[#6B7EFF]" : "text-slate-100")}>
               {p.property?.name}
             </p>
             <p className="text-[10px] text-slate-400 mt-0.5 truncate flex items-center gap-1">
@@ -1173,7 +1173,7 @@ export default function ARIAPage() {
         
         <div className="flex flex-wrap gap-1.5 mt-2 pl-11">
           {p.property?.units && (
-            <span className="text-[9px] font-mono px-2 py-0.5 rounded-md bg-slate-100/80 text-slate-500 border border-slate-200/50">{p.property.units} U</span>
+            <span className="text-[9px] font-mono px-2 py-0.5 rounded-md bg-[#131B2E]/80 text-slate-400 border border-white/10/50">{p.property.units} U</span>
           )}
           {(() => {
             const dm = computeDmScore(p as Prospect)
@@ -1203,13 +1203,13 @@ export default function ARIAPage() {
     const prospects = s.results?.prospects ?? [];
     const expDays = daysUntil(s.expires_at);
     return (
-      <div className="flex items-start gap-2 p-2.5 rounded-lg hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200/60 group transition-all mb-1">
+      <div className="flex items-start gap-2 p-2.5 rounded-lg hover:bg-[#131B2E] hover:shadow-sm border border-transparent hover:border-white/10 group transition-all mb-1">
         <div className="flex-1 min-w-0 cursor-pointer" onClick={() => restoreSearch(s)}>
-          <p className="text-[11px] font-bold text-slate-700 leading-tight truncate">{s.query}</p>
+          <p className="text-[11px] font-bold text-slate-200 leading-tight truncate">{s.query}</p>
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
             <span className="text-[10px] text-slate-400 font-mono">{formatAge(s.created_at)}</span>
             <span className="text-[10px] text-slate-300">·</span>
-            <span className="text-[10px] text-slate-500 font-medium">{prospects.length} targets</span>
+            <span className="text-[10px] text-slate-400 font-medium">{prospects.length} targets</span>
             {alreadyImported && <span className="text-[9px] font-bold text-emerald-600">✓ imported</span>}
             {expDays <= 3 && <span className="text-[9px] text-amber-500 font-bold">⚠ {expDays}d</span>}
           </div>
@@ -1240,7 +1240,7 @@ export default function ARIAPage() {
     const score = p.profile?.buy_score ?? 0;
     
     return (
-      <div className="bg-white/80 backdrop-blur-xl border-b border-slate-200/60 sticky top-0 z-10">
+      <div className="bg-[#131B2E]/90 backdrop-blur-xl border-b border-white/10 sticky top-0 z-10">
         <div className="px-6 pt-6 pb-4">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -1248,18 +1248,18 @@ export default function ARIAPage() {
                 <Shield size={14} className="text-[#6B7EFF]" />
                 <span className="text-[10px] font-bold uppercase tracking-widest text-[#6B7EFF]">Target Acquired</span>
               </div>
-              <h2 className="text-xl font-bold text-slate-900 tracking-tight">{p.property?.name}</h2>
+              <h2 className="text-xl font-bold text-slate-100 tracking-tight">{p.property?.name}</h2>
               <p className="text-xs text-slate-400 mt-0.5 font-medium">{p.property?.address?.split(',').slice(-2).join(',').trim()}</p>
             </div>
             
             <div className="flex flex-col items-end">
-              <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-2xl p-2 pr-4 shadow-sm">
+              <div className="flex items-center gap-3 bg-[#0F1830] border border-white/10 rounded-2xl p-2 pr-4 shadow-sm">
                  <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-mono font-bold shadow-inner" style={scoreBg(score)}>
                     {score}
                  </div>
                  <div className="flex flex-col">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Buy Score</span>
-                    <span className="text-xs font-bold text-slate-800 capitalize">{p.profile?.urgency || 'medium'} Urgency</span>
+                    <span className="text-xs font-bold text-slate-100 capitalize">{p.profile?.urgency || 'medium'} Urgency</span>
                  </div>
               </div>
             </div>
@@ -1284,8 +1284,8 @@ export default function ARIAPage() {
                   className={cn(
                     "px-4 py-2.5 text-xs font-bold transition-all relative rounded-t-lg",
                     isActive
-                      ? "text-[#6B7EFF] bg-white border-t border-l border-r border-slate-200/60 shadow-[0_-4px_6px_-1px_rgb(0,0,0,0.02)]"
-                      : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                      ? "text-[#6B7EFF] bg-[#131B2E] border-t border-l border-r border-white/10 shadow-[0_-4px_6px_-1px_rgb(0,0,0,0.02)]"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-[#0F1830]"
                   )}
                 >
                   <div className="flex items-center gap-2">
@@ -1297,7 +1297,7 @@ export default function ARIAPage() {
                       <span className="flex items-center justify-center h-4 w-4 text-[10px] text-white bg-emerald-500 rounded-full shadow-sm"><Check size={10}/></span>
                     )}
                   </div>
-                  {isActive && <div className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-white z-10" />}
+                  {isActive && <div className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-[#131B2E] z-10" />}
                 </button>
               );
             })}
@@ -1311,7 +1311,7 @@ export default function ARIAPage() {
   function PropertyTab({ p }: { p: Prospect }) {
     return (
       <div className="grid grid-cols-2 gap-5 max-w-5xl animate-in fade-in slide-in-from-bottom-2 duration-500">
-        <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
+        <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
           <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Property Telemetry</p>
           <div className="space-y-3">
             {[
@@ -1323,15 +1323,15 @@ export default function ARIAPage() {
             ].map(({ label, val }) => (
               <div key={label} className="flex items-center justify-between text-xs">
                 <span className="text-slate-400">{label}</span>
-                <span className={`font-bold capitalize ${val != null && val !== '' && val !== 'null' ? 'text-slate-800' : 'text-slate-300'}`}>
+                <span className={`font-bold capitalize ${val != null && val !== '' && val !== 'null' ? 'text-slate-100' : 'text-slate-300'}`}>
                   {val != null && val !== '' && val !== 'null' ? String(val) : '—'}
                 </span>
               </div>
             ))}
-            <div className="pt-3 border-t border-slate-100 space-y-2">
+            <div className="pt-3 border-t border-white/10 space-y-2">
               <div>
                 <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Management</p>
-                <p className="text-xs font-bold text-slate-700 mt-1">{p.property?.management_company || '—'}</p>
+                <p className="text-xs font-bold text-slate-200 mt-1">{p.property?.management_company || '—'}</p>
               </div>
               {p.property?.phone && (
                 <div>
@@ -1347,12 +1347,12 @@ export default function ARIAPage() {
               )}
               <div>
                 <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Owner entity</p>
-                <p className="text-[11px] text-slate-500 mt-1">{p.property?.owner_entity || '—'}</p>
+                <p className="text-[11px] text-slate-400 mt-1">{p.property?.owner_entity || '—'}</p>
               </div>
               {p.ownership?.dnb_duns && p.ownership.dnb_duns !== 'unknown' && (
                 <div>
                   <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">D&B DUNS</p>
-                  <p className="font-mono text-[11px] text-slate-600 mt-1 flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded w-fit border border-slate-100">
+                  <p className="font-mono text-[11px] text-slate-300 mt-1 flex items-center gap-1.5 bg-[#0F1830] px-2 py-1 rounded w-fit border border-white/10">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
                     {p.ownership.dnb_duns}
                   </p>
@@ -1362,7 +1362,7 @@ export default function ARIAPage() {
           </div>
         </div>
 
-        <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
+        <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
           <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Financial &amp; Connectivity</p>
           {p.ownership && (
             <div className="space-y-3 mb-4">
@@ -1375,13 +1375,13 @@ export default function ARIAPage() {
               ].filter(x => x.val).map(({ label, val }) => (
                 <div key={label} className="flex items-center justify-between text-xs">
                   <span className="text-slate-400">{label}</span>
-                  <span className="font-bold text-slate-800 capitalize text-right max-w-[140px] truncate">{val}</span>
+                  <span className="font-bold text-slate-100 capitalize text-right max-w-[140px] truncate">{val}</span>
                 </div>
               ))}
             </div>
           )}
 
-          <div className="border-t border-slate-100 pt-4">
+          <div className="border-t border-white/10 pt-4">
             <div className="flex items-center gap-2 mb-3">
               <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Connectivity Hub</p>
               {p.property?._fcc_verified
@@ -1433,7 +1433,7 @@ export default function ARIAPage() {
                       urgency === 'soon'     ? 'bg-amber-50/40 border-amber-300' :
                       a.agreement_type === 'exclusive' ? 'bg-amber-50/30 border-amber-200/60' :
                       a.agreement_type === 'bulk'      ? 'bg-emerald-50/30 border-emerald-200/60' :
-                                                         'bg-slate-50/50 border-slate-200/60'
+                                                         'bg-[#0F1830]/50 border-white/10'
                     )}>
                       {urgency === 'critical' && (
                         <div className="flex items-center gap-1.5 text-[9px] font-bold text-red-600 mb-1.5">
@@ -1448,21 +1448,21 @@ export default function ARIAPage() {
                         </div>
                       )}
                       <div className="flex items-center justify-between gap-1 mb-1">
-                        <span className="text-xs font-bold text-slate-800">{a.provider}</span>
+                        <span className="text-xs font-bold text-slate-100">{a.provider}</span>
                         <span className={cn("text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-md",
                           a.agreement_type === 'exclusive' ? 'bg-amber-100 text-amber-700' :
                           a.agreement_type === 'bulk'      ? 'bg-emerald-100 text-emerald-700' :
-                                                             'bg-slate-200 text-slate-600'
+                                                             'bg-slate-200 text-slate-300'
                         )}>{a.agreement_type}</span>
                       </div>
-                      <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-medium">
+                      <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium">
                         <span className="capitalize">{a.service_type}</span>
                         {a.expiry_estimate && a.expiry_estimate !== 'unknown' && (
                           <><span>·</span>
                           <span className={cn("font-bold px-1 rounded",
                             urgency === 'critical' ? 'text-red-600 bg-red-50' :
                             urgency === 'soon'     ? 'text-amber-600 bg-amber-50' :
-                                                     'text-slate-500 bg-slate-100'
+                                                     'text-slate-400 bg-[#131B2E]'
                           )}>Exp: {a.expiry_estimate}</span></>
                         )}
                       </div>
@@ -1485,11 +1485,11 @@ export default function ARIAPage() {
 
         {/* ── Location + Street View ─────────────────────────────────────────── */}
         {p.property?.address && (
-          <div className="col-span-2 bg-white/80 rounded-2xl border border-slate-200/60 overflow-hidden shadow-sm">
-            <div className="px-5 pt-4 pb-3 flex items-center justify-between border-b border-slate-100">
+          <div className="col-span-2 bg-[#131B2E]/90 rounded-2xl border border-white/10 overflow-hidden shadow-sm">
+            <div className="px-5 pt-4 pb-3 flex items-center justify-between border-b border-white/10">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Location</p>
-                <p className="text-sm font-bold text-slate-800 mt-0.5 flex items-center gap-1.5">
+                <p className="text-sm font-bold text-slate-100 mt-0.5 flex items-center gap-1.5">
                   <MapPin size={12} className="text-[#6B7EFF] shrink-0" />
                   {p.property.address}
                 </p>
@@ -1545,8 +1545,8 @@ export default function ARIAPage() {
       owner:            { label: 'Owner / PE',     bg: 'bg-purple-50/80', text: 'text-purple-700', border: 'border-purple-200/60' },
       asset_manager:    { label: 'Asset Manager',  bg: 'bg-[#6B7EFF]/5', text: 'text-[#6B7EFF]', border: 'border-[#6B7EFF]/20' },
       regional_manager: { label: 'Regional VP',    bg: 'bg-emerald-50/80', text: 'text-emerald-700', border: 'border-emerald-200/60' },
-      property_manager: { label: 'Property Mgr',  bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200/60' },
-      unknown:          { label: 'Contact',        bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200/60' },
+      property_manager: { label: 'Property Mgr',  bg: 'bg-[#0F1830]', text: 'text-slate-300', border: 'border-white/10' },
+      unknown:          { label: 'Contact',        bg: 'bg-[#0F1830]', text: 'text-slate-300', border: 'border-white/10' },
     };
 
     // Separate chain into property-level (pm, regional) vs ownership-level (owner, asset)
@@ -1559,7 +1559,7 @@ export default function ARIAPage() {
     const ContactCard = ({ dm, idx }: { dm: DecisionMakerChainItem; idx: number }) => {
       const meta = roleMeta[dm.role_type] ?? roleMeta.unknown;
       return (
-        <div className={cn("rounded-xl border p-4 bg-white shadow-sm transition-all hover:shadow-md", meta.border)}>
+        <div className={cn("rounded-xl border p-4 bg-[#131B2E] shadow-sm transition-all hover:shadow-md", meta.border)}>
           <div className="flex items-start gap-3">
             <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[10px] shrink-0 shadow-sm"
               style={{ background: dm.role_type === 'owner' ? 'linear-gradient(135deg, #7C3AED, #5B21B6)' : dm.role_type === 'asset_manager' ? 'linear-gradient(135deg, #6B7EFF, #3B4FCC)' : 'linear-gradient(135deg, #10B981, #059669)' }}>
@@ -1567,23 +1567,23 @@ export default function ARIAPage() {
             </div>
             <div className="flex-1 min-w-0 pt-0.5">
               <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                <p className="text-sm font-bold text-slate-900 truncate">{dm.name || 'Unknown'}</p>
+                <p className="text-sm font-bold text-slate-100 truncate">{dm.name || 'Unknown'}</p>
                 <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-md border shadow-sm", meta.bg, meta.text, meta.border)}>{meta.label}</span>
               </div>
-              <p className="text-xs font-medium text-slate-500 truncate">{dm.title}</p>
+              <p className="text-xs font-medium text-slate-400 truncate">{dm.title}</p>
               <p className="text-[10px] text-slate-400 truncate mt-0.5">{dm.company}</p>
             </div>
           </div>
           {(dm.top_email_format || dm.email || dm.phone) && (
-            <div className="mt-3 pt-3 border-t border-slate-100 space-y-1.5">
+            <div className="mt-3 pt-3 border-t border-white/10 space-y-1.5">
               {(dm.top_email_format || dm.email) && (
-                <p className="font-mono text-[10px] text-slate-600 bg-slate-50 px-2 py-1 rounded w-fit border border-slate-100">{dm.top_email_format || dm.email}</p>
+                <p className="font-mono text-[10px] text-slate-300 bg-[#0F1830] px-2 py-1 rounded w-fit border border-white/10">{dm.top_email_format || dm.email}</p>
               )}
               {dm.phone && (
                 <div className="group relative">
                   <div className="flex items-center gap-1.5">
                     <Phone size={11} className={dm.phone_source === 'office_main' ? 'text-amber-400 shrink-0' : 'text-emerald-500 shrink-0'} />
-                    <span className={`font-mono text-[10px] font-bold ${dm.phone_source === 'office_main' ? 'text-amber-700' : 'text-slate-700'}`}>{dm.phone}</span>
+                    <span className={`font-mono text-[10px] font-bold ${dm.phone_source === 'office_main' ? 'text-amber-700' : 'text-slate-200'}`}>{dm.phone}</span>
                     {dm.phone_source === 'office_main' && (
                       <span className="text-[8px] font-bold uppercase text-amber-600 bg-amber-50 border border-amber-200/60 px-1.5 py-0.5 rounded">
                         Office · Ask for {dm.name?.split(' ')[0]}
@@ -1602,10 +1602,10 @@ export default function ARIAPage() {
             </div>
           )}
           {dm.dm_hooks && dm.dm_hooks.length > 0 && dm.dm_hooks[0] !== 'no recent social activity found' && (
-            <div className="mt-3 space-y-1.5 bg-slate-50/50 p-3 rounded-lg border border-slate-100">
+            <div className="mt-3 space-y-1.5 bg-[#0F1830]/50 p-3 rounded-lg border border-white/10">
               <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">AI Hooks ({dm.dm_hooks.length})</p>
               {(dm.dm_hooks || []).map((hook, hi) => (
-                <p key={hi} className="text-[10px] text-slate-600 leading-relaxed font-medium">
+                <p key={hi} className="text-[10px] text-slate-300 leading-relaxed font-medium">
                   <span className={cn("font-bold mr-1.5", meta.text)}>↳</span>{hook}
                 </p>
               ))}
@@ -1657,7 +1657,7 @@ export default function ARIAPage() {
           })()}
 
         {/* Primary contact card + CRM import */}
-        <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
+        <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
           <div className="flex items-center justify-between mb-4">
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Primary Contact</p>
             {savedSearchId && !crmImported && !importResult[savedSearchId] && (
@@ -1679,21 +1679,21 @@ export default function ARIAPage() {
               {getInitials(p.decision_maker?.name)}
             </div>
             <div>
-              <p className="text-base font-bold text-slate-900 tracking-tight">{p.decision_maker?.name || '—'}</p>
-              <p className="text-xs font-medium text-slate-500 mt-0.5">{p.decision_maker?.title || 'Contact pending'}</p>
+              <p className="text-base font-bold text-slate-100 tracking-tight">{p.decision_maker?.name || '—'}</p>
+              <p className="text-xs font-medium text-slate-400 mt-0.5">{p.decision_maker?.title || 'Contact pending'}</p>
               <p className="text-[11px] text-slate-400">{p.decision_maker?.company || p.property?.management_company || '—'}</p>
             </div>
           </div>
-          <div className="space-y-3 text-xs border-t border-slate-100 pt-4 bg-slate-50/50 -mx-5 px-5 -mb-5 pb-5 rounded-b-2xl">
+          <div className="space-y-3 text-xs border-t border-white/10 pt-4 bg-[#0F1830]/50 -mx-5 px-5 -mb-5 pb-5 rounded-b-2xl">
             <div>
               <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Verified Email Route</p>
-              <p className="font-mono text-slate-800 text-[11px] break-all bg-white px-2 py-1 rounded border border-slate-200/60 w-fit shadow-sm">
+              <p className="font-mono text-slate-100 text-[11px] break-all bg-[#131B2E] px-2 py-1 rounded border border-white/10 w-fit shadow-sm">
                 {p.decision_maker?.top_email_format || p.decision_maker?.email || 'N/A'}
               </p>
             </div>
             <div className="group relative">
               <div className="flex items-center justify-between">
-                <span className="text-slate-500 font-medium">
+                <span className="text-slate-400 font-medium">
                   {p.decision_maker?.phone_source === 'office_main' ? (
                     <span className="flex items-center gap-1">
                       <span>📞</span>
@@ -1702,7 +1702,7 @@ export default function ARIAPage() {
                     </span>
                   ) : 'Direct Line'}
                 </span>
-                <span className={`font-mono font-bold text-xs ${p.decision_maker?.phone_source === 'office_main' ? 'text-amber-700' : 'text-slate-700'}`}>
+                <span className={`font-mono font-bold text-xs ${p.decision_maker?.phone_source === 'office_main' ? 'text-amber-700' : 'text-slate-200'}`}>
                   {p.decision_maker?.phone || 'N/A'}
                 </span>
               </div>
@@ -1715,8 +1715,8 @@ export default function ARIAPage() {
               )}
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-slate-500 font-medium">Estimated Tenure</span>
-              <span className="text-slate-800 font-bold bg-white px-2 py-0.5 rounded border border-slate-200/60 shadow-sm">{p.decision_maker?.tenure_years || 0}y</span>
+              <span className="text-slate-400 font-medium">Estimated Tenure</span>
+              <span className="text-slate-100 font-bold bg-[#131B2E] px-2 py-0.5 rounded border border-white/10 shadow-sm">{p.decision_maker?.tenure_years || 0}y</span>
             </div>
             {p.decision_maker?.linkedin_slug && (
               <div className="pt-2">
@@ -1731,11 +1731,11 @@ export default function ARIAPage() {
 
         {/* Property-Level Contacts */}
         {propertyContacts.length > 0 && (
-          <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
+          <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-2 h-2 rounded-full bg-emerald-400" />
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Property Level</p>
-              <span className="text-[9px] font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md ml-auto">{propertyContacts.length} contacts</span>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Property Level</p>
+              <span className="text-[9px] font-mono text-slate-400 bg-[#131B2E] px-2 py-0.5 rounded-md ml-auto">{propertyContacts.length} contacts</span>
             </div>
             <p className="text-[10px] text-slate-400 mb-3 font-medium">On-site management: property managers, regional VPs — your primary outreach targets</p>
             <div className="space-y-3">
@@ -1746,14 +1746,14 @@ export default function ARIAPage() {
 
         {/* Ownership-Level Contacts */}
         {ownershipContacts.length > 0 && (
-          <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
+          <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-2 h-2 rounded-full bg-purple-400" />
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Ownership Level</p>
-              <span className="text-[9px] font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md ml-auto">{ownershipContacts.length} contacts</span>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Ownership Level</p>
+              <span className="text-[9px] font-mono text-slate-400 bg-[#131B2E] px-2 py-0.5 rounded-md ml-auto">{ownershipContacts.length} contacts</span>
             </div>
             <p className="text-[10px] text-slate-400 mb-3 font-medium">
-              {p.ownership?.owner_entity && <span className="font-bold text-slate-600">{p.ownership.owner_entity}</span>}
+              {p.ownership?.owner_entity && <span className="font-bold text-slate-300">{p.ownership.owner_entity}</span>}
               {p.ownership?.portfolio_size && <span> · {p.ownership.portfolio_size} portfolio</span>}
               {' '}— asset managers, PE principals, key budget decision makers
             </p>
@@ -1765,10 +1765,10 @@ export default function ARIAPage() {
 
         {/* Fallback: show all if not separated */}
         {propertyContacts.length === 0 && ownershipContacts.length === 0 && chain.length > 0 && (
-          <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
+          <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
             <div className="flex items-center gap-2 mb-4">
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Corporate Hierarchy</p>
-              <span className="ml-auto text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">{chain.length} Nodes</span>
+              <span className="ml-auto text-[10px] font-mono text-slate-400 bg-[#131B2E] px-2 py-0.5 rounded-md">{chain.length} Nodes</span>
             </div>
             <div className="space-y-3">
               {chain.map((dm, idx) => <ContactCard key={idx} dm={dm} idx={idx} />)}
@@ -1793,7 +1793,7 @@ export default function ARIAPage() {
           urgency === 'critical' ? 'bg-red-50/40 border-red-300 ring-1 ring-red-200' :
           urgency === 'soon'     ? 'bg-amber-50/40 border-amber-300' :
           a.agreement_type === 'exclusive' ? 'bg-amber-50/30 border-amber-200/60' :
-          a.agreement_type === 'bulk' ? 'bg-emerald-50/30 border-emerald-200/60' : 'bg-slate-50 border-slate-200/60'
+          a.agreement_type === 'bulk' ? 'bg-emerald-50/30 border-emerald-200/60' : 'bg-[#0F1830] border-white/10'
         )}>
           {/* Urgency banner — shown only when expiry is actionable */}
           {urgency === 'critical' && (
@@ -1812,15 +1812,15 @@ export default function ARIAPage() {
             </div>
           )}
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-bold text-slate-900">{a.provider}</span>
+            <span className="text-sm font-bold text-slate-100">{a.provider}</span>
             <div className="flex items-center gap-2">
               <span className={cn("text-[9px] font-bold uppercase px-2 py-0.5 rounded-md",
                 a.confidence === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
-                a.confidence === 'high' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-600'
+                a.confidence === 'high' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-300'
               )}>{a.confidence}</span>
               <span className={cn("text-[9px] font-bold uppercase px-2 py-0.5 rounded-md",
                 a.agreement_type === 'exclusive' ? 'bg-amber-100 text-amber-700' :
-                a.agreement_type === 'bulk' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+                a.agreement_type === 'bulk' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-300'
               )}>{a.agreement_type}</span>
             </div>
           </div>
@@ -1828,12 +1828,12 @@ export default function ARIAPage() {
             <div className="flex items-center gap-1.5 mt-1">
               <Clock size={12} className={urgency === 'critical' ? 'text-red-500' : urgency === 'soon' ? 'text-amber-500' : 'text-slate-400'} />
               <span className={cn("text-xs font-bold",
-                urgency === 'critical' ? 'text-red-700' : urgency === 'soon' ? 'text-amber-700' : 'text-slate-600'
+                urgency === 'critical' ? 'text-red-700' : urgency === 'soon' ? 'text-amber-700' : 'text-slate-300'
               )}>Est. expiry: {a.expiry_estimate}</span>
             </div>
           )}
           {a.source_snippet && (
-            <p className="text-[10px] text-slate-500 mt-2 leading-relaxed italic border-t border-slate-100 pt-2">&ldquo;{a.source_snippet.slice(0, 120)}...&rdquo;</p>
+            <p className="text-[10px] text-slate-400 mt-2 leading-relaxed italic border-t border-white/10 pt-2">&ldquo;{a.source_snippet.slice(0, 120)}...&rdquo;</p>
           )}
         </div>
       );
@@ -1866,15 +1866,15 @@ export default function ARIAPage() {
       <div className="space-y-6 max-w-5xl animate-in fade-in slide-in-from-bottom-2 duration-500">
 
         {/* Video / Cable — always shown */}
-        <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
+        <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
           <div className="flex items-center gap-2 mb-4">
             <Globe size={15} className="text-violet-500" />
-            <p className="text-xs font-bold uppercase tracking-widest text-slate-700">Cable / Video</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-200">Cable / Video</p>
             {hasVideoAgreements
               ? <span className="ml-auto text-[10px] font-mono bg-violet-50 text-violet-600 border border-violet-100 px-2 py-0.5 rounded-md">{videoAgreements.length} agreement{videoAgreements.length !== 1 ? 's' : ''} detected</span>
               : (p.property?.video_providers?.length
                   ? <span className="ml-auto text-[10px] font-mono bg-violet-50/60 text-violet-500 border border-violet-100 px-2 py-0.5 rounded-md">{p.property.video_providers.length} provider{p.property.video_providers.length !== 1 ? 's' : ''}</span>
-                  : <span className="ml-auto text-[10px] font-mono text-slate-400 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md">No data found</span>)
+                  : <span className="ml-auto text-[10px] font-mono text-slate-400 bg-[#0F1830] border border-white/10 px-2 py-0.5 rounded-md">No data found</span>)
             }
           </div>
           {hasVideoAgreements ? (
@@ -1882,7 +1882,7 @@ export default function ARIAPage() {
               {videoAgreements.map((a, i) => <AgreementCard key={i} a={a} />)}
               {/* Also show raw video providers beneath agreements if any */}
               {(p.property?.video_providers ?? []).length > 0 && (
-                <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+                <div className="flex flex-wrap gap-2 pt-2 border-t border-white/10">
                   {(p.property!.video_providers!).map(v => (
                     <span key={v} className="text-[11px] px-3 py-1.5 rounded-lg font-bold border bg-violet-50/80 text-violet-700 border-violet-200/60 shadow-sm">{v}</span>
                   ))}
@@ -1896,7 +1896,7 @@ export default function ARIAPage() {
               ))}
             </div>
           ) : (
-            <div className="flex items-center gap-2.5 py-3 px-4 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div className="flex items-center gap-2.5 py-3 px-4 rounded-xl bg-[#0F1830] border border-white/10/80">
               <Globe size={14} className="text-slate-300 shrink-0" />
               <p className="text-xs text-slate-400 italic">No cable or video provider data found for this property</p>
             </div>
@@ -1904,10 +1904,10 @@ export default function ARIAPage() {
         </div>
 
         {/* Internet / ISP — always shown */}
-        <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
+        <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
           <div className="flex items-center gap-2 mb-4">
             <Wifi size={15} className="text-emerald-500" />
-            <p className="text-xs font-bold uppercase tracking-widest text-slate-700">Internet / ISP</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-200">Internet / ISP</p>
             <div className="flex items-center gap-2 ml-auto">
               {p.property?._fcc_verified
                 ? <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-100 text-emerald-600">FCC Verified</span>
@@ -1915,7 +1915,7 @@ export default function ARIAPage() {
               {hasInternetAgreements
                 ? <span className="text-[10px] font-mono bg-emerald-50 text-emerald-600 border border-emerald-100 px-2 py-0.5 rounded-md">{internetAgreements.length} agreement{internetAgreements.length !== 1 ? 's' : ''} detected</span>
                 : (!p.property?.isp_providers?.length &&
-                    <span className="text-[10px] font-mono text-slate-400 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md">No data found</span>)
+                    <span className="text-[10px] font-mono text-slate-400 bg-[#0F1830] border border-white/10 px-2 py-0.5 rounded-md">No data found</span>)
               }
             </div>
           </div>
@@ -1924,7 +1924,7 @@ export default function ARIAPage() {
               {internetAgreements.map((a, i) => <AgreementCard key={i} a={a} />)}
               {/* Also show raw ISP providers beneath agreements */}
               {(p.property?.isp_providers ?? []).length > 0 && (
-                <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+                <div className="flex flex-wrap gap-2 pt-2 border-t border-white/10">
                   {(p.property!.isp_providers!).map(v => (
                     <span key={v} className={cn("text-[11px] px-3 py-1.5 rounded-lg font-bold border shadow-sm",
                       p.property?._fcc_verified ? "bg-emerald-50/80 text-emerald-700 border-emerald-200/60" : "bg-blue-50/80 text-blue-700 border-blue-200/60"
@@ -1942,7 +1942,7 @@ export default function ARIAPage() {
               ))}
             </div>
           ) : (
-            <div className="flex items-center gap-2.5 py-3 px-4 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div className="flex items-center gap-2.5 py-3 px-4 rounded-xl bg-[#0F1830] border border-white/10/80">
               <Wifi size={14} className="text-slate-300 shrink-0" />
               <p className="text-xs text-slate-400 italic">No internet provider data found for this property</p>
             </div>
@@ -1951,10 +1951,10 @@ export default function ARIAPage() {
 
         {/* Gates & Access Control */}
         {(pt.gate_operators?.length || pt.access_control?.length || pt.intercoms?.length) && (
-          <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
+          <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
             <div className="flex items-center gap-2 mb-4">
               <Shield size={15} className="text-orange-500" />
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-700">Gates &amp; Access Control</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-200">Gates &amp; Access Control</p>
               {pt.tech_generation && (
                 <span className={cn("ml-auto text-[9px] font-bold px-2 py-0.5 rounded-md capitalize",
                   pt.tech_generation === 'legacy' ? 'bg-rose-50 text-rose-600 border border-rose-100' :
@@ -1982,28 +1982,28 @@ export default function ARIAPage() {
 
         {/* Cameras & Security */}
         {pt.cameras?.length && (
-          <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
+          <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
             <div className="flex items-center gap-2 mb-4">
-              <Radio size={15} className="text-slate-500" />
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-700">Cameras &amp; Security</p>
+              <Radio size={15} className="text-slate-400" />
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-200">Cameras &amp; Security</p>
             </div>
-            <TechCategory label="Camera Systems" emoji="📷" items={pt.cameras} chipClass="bg-slate-50/80 text-slate-700 border-slate-200/60" />
+            <TechCategory label="Camera Systems" emoji="📷" items={pt.cameras} chipClass="bg-[#0F1830]/80 text-slate-200 border-white/10" />
           </div>
         )}
 
         {/* SmartRent & other tech */}
         {(pt.smart_locks?.length || pt.resident_apps?.length || pt.package_solutions?.length) && (
-          <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
+          <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
             <div className="flex items-center gap-2 mb-4">
               <Package size={15} className="text-indigo-500" />
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-700">SmartRent &amp; Other Tech</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-200">SmartRent &amp; Other Tech</p>
               {(pt.resident_apps?.some((a: string) => a.toLowerCase().includes('smartrent')) || pt.smart_locks?.some((a: string) => a.toLowerCase().includes('smartrent'))) && (
-                <span className="ml-auto text-[9px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 border border-indigo-100">SmartRent Detected</span>
+                <span className="ml-auto text-[9px] font-bold px-2 py-0.5 rounded-md bg-[#141d3a] text-indigo-600 border border-white/10">SmartRent Detected</span>
               )}
             </div>
             <div className="space-y-4">
               <TechCategory label="Smart Locks" emoji="🔒" items={pt.smart_locks} chipClass="bg-emerald-50/80 text-emerald-700 border-emerald-200/60" />
-              <TechCategory label="Resident App" emoji="📱" items={pt.resident_apps} chipClass="bg-indigo-50/80 text-indigo-700 border-indigo-200/60" />
+              <TechCategory label="Resident App" emoji="📱" items={pt.resident_apps} chipClass="bg-[#141d3a]/80 text-indigo-700 border-indigo-200/60" />
               <TechCategory label="Package Solutions" emoji="📦" items={pt.package_solutions} chipClass="bg-amber-50/80 text-amber-700 border-amber-200/60" />
             </div>
           </div>
@@ -2011,7 +2011,7 @@ export default function ARIAPage() {
 
         {/* AI Recommendations */}
         {(hasDisplacementTargets || p.pitch_strategy || pt.sara_signals) && (
-          <div className="bg-white rounded-2xl border border-[#6B7EFF]/20 p-5 shadow-sm relative overflow-hidden">
+          <div className="bg-[#131B2E] rounded-2xl border border-[#6B7EFF]/20 p-5 shadow-sm relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-[#6B7EFF] to-[#A78BFA]" />
             <div className="flex items-center gap-2 mb-4">
               <Zap size={15} className="text-[#6B7EFF]" />
@@ -2021,10 +2021,10 @@ export default function ARIAPage() {
 
             {hasDisplacementTargets && (
               <div className="mb-4">
-                <p className="text-[10px] font-bold text-slate-500 mb-2 flex items-center gap-1.5"><Target size={11} className="text-rose-500" /> GateGuard Displacement Targets</p>
+                <p className="text-[10px] font-bold text-slate-400 mb-2 flex items-center gap-1.5"><Target size={11} className="text-rose-500" /> GateGuard Displacement Targets</p>
                 <div className="flex flex-wrap gap-2">
                   {(pt.displacement_targets || []).map((t: string) => (
-                    <span key={t} className="text-[11px] px-3 py-1.5 rounded-lg font-bold bg-white text-rose-600 border border-rose-200 shadow-sm">{t}</span>
+                    <span key={t} className="text-[11px] px-3 py-1.5 rounded-lg font-bold bg-[#131B2E] text-rose-600 border border-rose-200 shadow-sm">{t}</span>
                   ))}
                 </div>
               </div>
@@ -2041,7 +2041,7 @@ export default function ARIAPage() {
               <div className="space-y-2">
                 <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Secondary Angles</p>
                 {p.pitch_strategy.secondary_hooks.slice(0, 3).map((hook, i) => (
-                  <div key={i} className="flex items-start gap-2.5 text-xs text-slate-600">
+                  <div key={i} className="flex items-start gap-2.5 text-xs text-slate-300">
                     <span className="font-mono font-bold text-[#6B7EFF] mt-0.5 shrink-0">[{i+2}]</span>
                     <span className="font-medium leading-relaxed">{hook}</span>
                   </div>
@@ -2050,7 +2050,7 @@ export default function ARIAPage() {
             )}
 
             {p.pitch_strategy?.avoid && p.pitch_strategy.avoid.length > 0 && (
-              <div className="mt-4 pt-3 border-t border-slate-100">
+              <div className="mt-4 pt-3 border-t border-white/10">
                 <p className="text-[9px] font-bold uppercase tracking-widest text-rose-500 mb-2">Avoid Mentioning</p>
                 <div className="flex flex-wrap gap-1.5">
                   {p.pitch_strategy.avoid.map((a, i) => (
@@ -2062,18 +2062,18 @@ export default function ARIAPage() {
 
             {/* Social evidence footnotes from Engine 2 cross-reference */}
             {(socialResults?.cross_reference_notes?.length ?? 0) > 0 && (
-              <div className="mt-4 pt-3 border-t border-slate-100">
+              <div className="mt-4 pt-3 border-t border-white/10">
                 <p className="text-[9px] font-bold uppercase tracking-widest text-[#6B7EFF] mb-2 flex items-center gap-1">
                   <Globe size={9} /> Social Evidence
                 </p>
                 <div className="space-y-1.5">
                   {(socialResults!.cross_reference_notes).map((n, i) => (
-                    <div key={i} className="flex items-start gap-2 text-[10px] text-slate-600">
+                    <div key={i} className="flex items-start gap-2 text-[10px] text-slate-300">
                       <span className={cn("shrink-0 mt-0.5 font-bold px-1.5 py-0.5 rounded text-[9px] border",
                         n.type === 'confirmation'  ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                         n.type === 'contradiction' ? 'bg-red-50 text-red-700 border-red-200' :
                         n.type === 'new_finding'   ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                                     'bg-slate-100 text-slate-600 border-slate-200'
+                                                     'bg-[#131B2E] text-slate-300 border-white/10'
                       )}>{n.provider}</span>
                       <span className="font-medium leading-relaxed">{n.note}</span>
                     </div>
@@ -2086,45 +2086,45 @@ export default function ARIAPage() {
 
           {/* ── Cold Call Script ──────────────────────────── */}
           {(p as Prospect | undefined)?.pitch_strategy?.primary_hook && (
-            <div className="bg-white/80 rounded-2xl border border-indigo-100/60 p-5 shadow-sm backdrop-blur-sm">
+            <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
               <div className="flex items-center gap-2 mb-4">
                 <span className="text-base">📞</span>
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-700">Cold Call Script</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-slate-200">Cold Call Script</p>
                 <span className="ml-auto text-[9px] font-bold px-2 py-0.5 rounded-full bg-brand-100 text-brand-600 border border-brand-200">AI-generated</span>
               </div>
               <div className="space-y-3 text-sm">
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <div className="p-3 bg-[#0F1830] rounded-xl border border-white/10">
                   <p className="text-[10px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">Opening</p>
-                  <p className="text-slate-700 leading-relaxed">
+                  <p className="text-slate-200 leading-relaxed">
                     {`"Hi, may I speak with ${(p as Prospect).decision_maker?.name || (p as Prospect).decision_maker_chain?.[0]?.name || 'the property manager'}? This is [your name] from GateGuard — we work with ${(p as Prospect).property.management_company || 'multifamily communities'} to modernize access and security systems."`}
                   </p>
                 </div>
                 <div className="p-3 bg-brand-50/60 rounded-xl border border-brand-100">
                   <p className="text-[10px] font-bold uppercase text-brand-500 mb-1.5 tracking-wider">Your Hook</p>
-                  <p className="text-slate-700 leading-relaxed">{`"${(p as Prospect).pitch_strategy!.primary_hook}"`}</p>
+                  <p className="text-slate-200 leading-relaxed">{`"${(p as Prospect).pitch_strategy!.primary_hook}"`}</p>
                 </div>
                 {(p as Prospect).pain_signals?.[0]?.quote && (
                   <div className="p-3 bg-red-50/60 rounded-xl border border-red-100">
                     <p className="text-[10px] font-bold uppercase text-red-500 mb-1.5 tracking-wider">Pain Signal Reference</p>
-                    <p className="text-slate-700 leading-relaxed italic">{`"I noticed residents have mentioned issues — one review said: '${(p as Prospect).pain_signals[0].quote.slice(0, 120)}…' — is that something your team is tracking?"`}</p>
+                    <p className="text-slate-200 leading-relaxed italic">{`"I noticed residents have mentioned issues — one review said: '${(p as Prospect).pain_signals[0].quote.slice(0, 120)}…' — is that something your team is tracking?"`}</p>
                   </div>
                 )}
                 {(p as Prospect).scout_queue?.connectivity?.roe_expiry_year && (
                   <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-100">
                     <p className="text-[10px] font-bold uppercase text-amber-600 mb-1.5 tracking-wider">Contract Angle</p>
-                    <p className="text-slate-700 leading-relaxed">{`"I also know your bulk agreement is coming up around ${(p as Prospect).scout_queue!.connectivity.roe_expiry_year} — we like to start conversations 90 days before renewal so you can compare options without pressure."`}</p>
+                    <p className="text-slate-200 leading-relaxed">{`"I also know your bulk agreement is coming up around ${(p as Prospect).scout_queue!.connectivity.roe_expiry_year} — we like to start conversations 90 days before renewal so you can compare options without pressure."`}</p>
                   </div>
                 )}
                 <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-100">
                   <p className="text-[10px] font-bold uppercase text-emerald-600 mb-1.5 tracking-wider">Close / CTA</p>
-                  <p className="text-slate-700 leading-relaxed">{`"Would it make sense to schedule a quick 15-minute call — I can walk you through what we've done for similar ${(p as Prospect).property.units ? (p as Prospect).property.units + '-unit' : 'comparable'} communities and you can tell me if it's even relevant for you."`}</p>
+                  <p className="text-slate-200 leading-relaxed">{`"Would it make sense to schedule a quick 15-minute call — I can walk you through what we've done for similar ${(p as Prospect).property.units ? (p as Prospect).property.units + '-unit' : 'comparable'} communities and you can tell me if it's even relevant for you."`}</p>
                 </div>
                 {((p as Prospect).pitch_strategy?.avoid?.length ?? 0) > 0 && (
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  <div className="p-3 bg-[#0F1830] rounded-xl border border-white/10">
                     <p className="text-[10px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">Things to Avoid</p>
                     <ul className="space-y-1">
                       {(p as Prospect).pitch_strategy!.avoid!.map((a: string, i: number) => (
-                        <li key={i} className="text-xs text-slate-600 flex items-start gap-1.5">
+                        <li key={i} className="text-xs text-slate-300 flex items-start gap-1.5">
                           <span className="text-red-400 mt-0.5">✗</span>{a}
                         </li>
                       ))}
@@ -2145,18 +2145,18 @@ export default function ARIAPage() {
               </div>
               <div className="space-y-3">
                 {((p as Prospect).property.inferred_proptech ?? []).map((item: InferredProptech, idx: number) => (
-                  <div key={idx} className="flex items-start gap-3 p-3 bg-white/80 rounded-xl border border-amber-100">
+                  <div key={idx} className="flex items-start gap-3 p-3 bg-[#131B2E]/90 rounded-xl border border-amber-100">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="text-sm font-semibold text-slate-800">{item.name}</span>
+                        <span className="text-sm font-semibold text-slate-100">{item.name}</span>
                         <span className="text-[10px] text-amber-600 font-medium capitalize">{item.category.replace(/_/g, ' ')}</span>
                       </div>
-                      <p className="text-[11px] text-slate-500 leading-relaxed">{item.reason}</p>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">{item.reason}</p>
                     </div>
                     <div className={`shrink-0 text-center px-2 py-1 rounded-lg border ${
                       item.confidence_pct >= 80 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
                       item.confidence_pct >= 60 ? 'bg-amber-50 border-amber-200 text-amber-700' :
-                      'bg-slate-50 border-slate-200 text-slate-600'
+                      'bg-[#0F1830] border-white/10 text-slate-300'
                     }`}>
                       <p className="text-sm font-black">{item.confidence_pct}%</p>
                       <p className="text-[9px] font-medium">confidence</p>
@@ -2193,7 +2193,7 @@ export default function ARIAPage() {
       <div className="space-y-6 max-w-4xl animate-in fade-in slide-in-from-bottom-2 duration-500">
 
         {/* AI Synthesis Block */}
-        <div className="ai-border-glow active bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+        <div className="ai-border-glow active bg-[#131B2E] rounded-2xl p-6 shadow-sm border border-white/10">
           <div className="flex items-center gap-2 mb-5">
             <Cpu size={16} className="text-[#A78BFA]" />
             <h3 className="text-xs font-bold uppercase tracking-widest text-[#A78BFA]">ARIA Synthesis</h3>
@@ -2207,43 +2207,43 @@ export default function ARIAPage() {
           <div className="grid grid-cols-2 gap-x-8 gap-y-6">
             <div className="space-y-1.5">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Target size={12}/> Primary Vulnerability</p>
-              <p className="text-sm text-slate-800 leading-relaxed font-medium">{p.profile?.primary_concern || 'None detected'}</p>
+              <p className="text-sm text-slate-100 leading-relaxed font-medium">{p.profile?.primary_concern || 'None detected'}</p>
             </div>
 
             <div className="space-y-1.5">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Clock size={12}/> Contract Window</p>
-              <p className={`text-sm leading-relaxed font-medium ${p.profile?.contract_window ? 'text-slate-800' : 'text-slate-300'}`}>
+              <p className={`text-sm leading-relaxed font-medium ${p.profile?.contract_window ? 'text-slate-100' : 'text-slate-300'}`}>
                 {p.profile?.contract_window || 'Not detected'}
               </p>
             </div>
 
             <div className="space-y-1.5">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Globe size={12}/> Incumbent Vendor</p>
-              <p className={`text-sm leading-relaxed font-medium ${p.profile?.current_vendor ? 'text-slate-800' : 'text-slate-300'}`}>
+              <p className={`text-sm leading-relaxed font-medium ${p.profile?.current_vendor ? 'text-slate-100' : 'text-slate-300'}`}>
                 {p.profile?.current_vendor || 'Not detected'}
               </p>
             </div>
 
             <div className="space-y-1.5">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Users size={12}/> Comm Style</p>
-              <p className="text-sm text-slate-800 leading-relaxed font-medium capitalize">{p.profile?.communication_style?.replace(/-/g, " ") || 'Email'}</p>
+              <p className="text-sm text-slate-100 leading-relaxed font-medium capitalize">{p.profile?.communication_style?.replace(/-/g, " ") || 'Email'}</p>
             </div>
 
             {p.buying_trends && (
-              <div className="col-span-2 space-y-1.5 pt-2 border-t border-slate-100">
+              <div className="col-span-2 space-y-1.5 pt-2 border-t border-white/10">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><TrendingUp size={12}/> Buying Trends</p>
-                <p className="text-sm text-slate-700 leading-relaxed font-medium">{p.buying_trends}</p>
+                <p className="text-sm text-slate-200 leading-relaxed font-medium">{p.buying_trends}</p>
               </div>
             )}
 
             {p.behavioral_profile && Object.keys(p.behavioral_profile).length > 0 && (
-              <div className="col-span-2 space-y-2 pt-2 border-t border-slate-100">
+              <div className="col-span-2 space-y-2 pt-2 border-t border-white/10">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Users size={12}/> Behavioral Profile</p>
                 <div className="grid grid-cols-2 gap-x-6 gap-y-3">
                   {Object.entries(p.behavioral_profile).map(([key, val]) => (
                     <div key={key}>
                       <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">{key.replace(/_/g, ' ')}</p>
-                      <p className="text-xs font-medium text-slate-700 leading-relaxed">{String(val)}</p>
+                      <p className="text-xs font-medium text-slate-200 leading-relaxed">{String(val)}</p>
                     </div>
                   ))}
                 </div>
@@ -2257,8 +2257,8 @@ export default function ARIAPage() {
           <div className="flex items-center justify-between mb-4 px-1">
             <div className="flex items-center gap-2">
               <Radio size={16} className="text-rose-500" />
-              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-700">Intent Signals</h3>
-              <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">Last 6 months</span>
+              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-200">Intent Signals</h3>
+              <span className="text-[9px] font-bold text-slate-400 bg-[#131B2E] px-2 py-0.5 rounded-md">Last 6 months</span>
             </div>
             <div className="flex items-center gap-2">
               {hiddenCount > 0 && (
@@ -2267,7 +2267,7 @@ export default function ARIAPage() {
                   {showOlder ? 'Hide older' : `+${hiddenCount} older`}
                 </button>
               )}
-              <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-1 rounded-md">
+              <span className="text-[10px] font-mono text-slate-400 bg-[#131B2E] px-2 py-1 rounded-md">
                 {filteredSignals.length} total
               </span>
             </div>
@@ -2284,10 +2284,10 @@ export default function ARIAPage() {
                 const Icon = SIGNAL_ICONS[sig.signal_type] || AlertCircle;
                 const sev = SIGNAL_SEVERITY[sig.severity] ?? SIGNAL_SEVERITY.low;
                 return (
-                  <div key={i} className={cn("rounded-xl border bg-white shadow-sm p-4 relative overflow-hidden group", sev.border)}>
+                  <div key={i} className={cn("rounded-xl border bg-[#131B2E] shadow-sm p-4 relative overflow-hidden group", sev.border)}>
                     <div className={cn("absolute left-0 top-0 bottom-0 w-1", sev.bg)} />
                     <div className="flex items-start gap-4">
-                      <div className={cn("p-2 rounded-lg bg-slate-50 border", sev.text, sev.border.replace('200', '100'))}>
+                      <div className={cn("p-2 rounded-lg bg-[#0F1830] border", sev.text, sev.border.replace('200', '100'))}>
                          <Icon size={16} />
                       </div>
                       <div className="flex-1 min-w-0">
@@ -2296,7 +2296,7 @@ export default function ARIAPage() {
                           <span className="text-[10px] font-mono text-slate-400">• {sig.date}</span>
                           <span className={cn("ml-auto text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm border", sev.badge, sev.border.replace('200','100'))}>{sig.severity} Alert</span>
                         </div>
-                        <p className="text-sm text-slate-700 leading-relaxed font-medium">&ldquo;{sig.quote}&rdquo;</p>
+                        <p className="text-sm text-slate-200 leading-relaxed font-medium">&ldquo;{sig.quote}&rdquo;</p>
                         {sig.url && (
                           <a href={sig.url} target="_blank" rel="noopener noreferrer"
                             className="mt-1.5 inline-flex items-center gap-1 text-[9px] font-mono text-slate-400 hover:text-[#6B7EFF] transition-colors truncate max-w-xs">
@@ -2329,11 +2329,11 @@ export default function ARIAPage() {
     if (url.includes('reddit')     || src.includes('reddit'))     return { name: 'Reddit',         bg: 'bg-orange-50',  text: 'text-orange-700', border: 'border-orange-200/60' };
     if (url.includes('google')     || src.includes('google'))     return { name: 'Google Reviews',  bg: 'bg-blue-50',    text: 'text-blue-700',   border: 'border-blue-200/60'   };
     if (url.includes('yelp')       || src.includes('yelp'))       return { name: 'Yelp',            bg: 'bg-rose-50',    text: 'text-rose-700',   border: 'border-rose-200/60'   };
-    if (url.includes('facebook')   || src.includes('facebook'))   return { name: 'Facebook',        bg: 'bg-indigo-50',  text: 'text-indigo-700', border: 'border-indigo-200/60' };
-    if (url.includes('twitter')    || url.includes('x.com') || src.includes('twitter')) return { name: 'Twitter/X', bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-200/60' };
+    if (url.includes('facebook')   || src.includes('facebook'))   return { name: 'Facebook',        bg: 'bg-[#141d3a]',  text: 'text-indigo-700', border: 'border-indigo-200/60' };
+    if (url.includes('twitter')    || url.includes('x.com') || src.includes('twitter')) return { name: 'Twitter/X', bg: 'bg-[#131B2E]', text: 'text-slate-200', border: 'border-white/10' };
     if (url.includes('apartments') || src.includes('listing'))    return { name: 'Apartments.com',  bg: 'bg-red-50',     text: 'text-red-700',    border: 'border-red-200/60'    };
     if (url.includes('rentcafe')   || url.includes('rent.com') || url.includes('apartmentlist')) return { name: 'Listing Site', bg: 'bg-violet-50', text: 'text-violet-700', border: 'border-violet-200/60' };
-    return { name: 'Resident Review', bg: 'bg-slate-100', text: 'text-slate-600', border: 'border-slate-200/60' };
+    return { name: 'Resident Review', bg: 'bg-[#131B2E]', text: 'text-slate-300', border: 'border-white/10' };
   }
 
   const TECH_SIGNAL_TYPES = new Set([
@@ -2396,7 +2396,7 @@ export default function ARIAPage() {
       return (
         <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
           <MessageSquare size={32} className="opacity-20" />
-          <p className="text-sm font-bold text-slate-500">No signals found for this property</p>
+          <p className="text-sm font-bold text-slate-400">No signals found for this property</p>
           <p className="text-xs font-medium text-center max-w-xs">Run a fresh ARIA search — social searches, listing reviews, and pain signals populate here.</p>
         </div>
       );
@@ -2410,7 +2410,7 @@ export default function ARIAPage() {
         {/* Header */}
         <div className="flex items-start justify-between px-1">
           <div>
-            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+            <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
               <MessageSquare size={15} className="text-rose-500" />
               Community Temperature
             </h3>
@@ -2420,7 +2420,7 @@ export default function ARIAPage() {
             {techPosts.length > 0 && (
               <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-rose-50 text-rose-600 border border-rose-200/60">{techPosts.length} tech complaints</span>
             )}
-            <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">{totalCount} total</span>
+            <span className="text-[10px] font-mono text-slate-400 bg-[#131B2E] px-2 py-1 rounded-md border border-white/10">{totalCount} total</span>
             {socialLoading && (
               <span className="flex items-center gap-1 text-[10px] text-[#6B7EFF] font-bold">
                 <Loader2 size={11} className="animate-spin" /> Social search…
@@ -2439,7 +2439,7 @@ export default function ARIAPage() {
             </div>
             <button
               onClick={() => { navigator.clipboard.writeText(propPhone); }}
-              className="p-1.5 rounded-lg bg-white border border-emerald-200 text-emerald-600 hover:bg-emerald-50 transition-colors"
+              className="p-1.5 rounded-lg bg-[#131B2E] border border-emerald-200 text-emerald-600 hover:bg-emerald-50 transition-colors"
               title="Copy phone number"
             >
               <Copy size={12} />
@@ -2459,7 +2459,7 @@ export default function ARIAPage() {
                   note.type === 'confirmation'  ? 'bg-emerald-50/80 border-emerald-200/60 text-emerald-900' :
                   note.type === 'contradiction' ? 'bg-red-50/80 border-red-200/60 text-red-900' :
                   note.type === 'new_finding'   ? 'bg-amber-50/80 border-amber-200/60 text-amber-900' :
-                                                  'bg-white border-slate-200/60 text-slate-800'
+                                                  'bg-[#131B2E] border-white/10 text-slate-100'
                 )}>
                   <span className="shrink-0 mt-0.5 font-bold text-[10px] px-1.5 py-0.5 rounded-md border"
                     style={{ background: note.type === 'confirmation' ? '#D1FAE5' : note.type === 'contradiction' ? '#FEE2E2' : note.type === 'new_finding' ? '#FEF3C7' : '#F1F5F9',
@@ -2494,7 +2494,7 @@ export default function ARIAPage() {
             ? sig.quote.slice(0, QUOTE_PREVIEW_LEN) + '…'
             : sig.quote;
           return (
-            <div key={i} className={cn("rounded-2xl bg-white shadow-sm overflow-hidden relative border", sev.border)}>
+            <div key={i} className={cn("rounded-2xl bg-[#131B2E] shadow-sm overflow-hidden relative border", sev.border)}>
               {/* Severity stripe */}
               <div className={cn("absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl", sev.bg)} />
 
@@ -2514,7 +2514,7 @@ export default function ARIAPage() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider border", sev.badge, sev.border.replace('200','100'))}>{sig.severity}</span>
-                    <div className={cn("p-1.5 rounded-lg bg-white border", sev.text, sev.border.replace('200','100'))}>
+                    <div className={cn("p-1.5 rounded-lg bg-[#131B2E] border", sev.text, sev.border.replace('200','100'))}>
                       <Icon size={13} />
                     </div>
                   </div>
@@ -2523,7 +2523,7 @@ export default function ARIAPage() {
                 {/* The quote — styled as a social post, collapsible if long */}
                 <blockquote className="relative pl-5">
                   <span className="absolute left-0 top-[-4px] text-3xl leading-none text-slate-200 font-serif select-none" aria-hidden>&ldquo;</span>
-                  <p className="text-sm text-slate-800 leading-relaxed font-medium">{displayText}</p>
+                  <p className="text-sm text-slate-100 leading-relaxed font-medium">{displayText}</p>
                 </blockquote>
                 {isLong && (
                   <button
@@ -2537,7 +2537,7 @@ export default function ARIAPage() {
                 {/* Source link */}
                 {sig.url && (
                   <a href={sig.url} target="_blank" rel="noopener noreferrer"
-                    className="mt-4 flex items-center gap-1.5 text-[10px] font-mono text-slate-400 hover:text-[#6B7EFF] transition-colors border-t border-slate-100 pt-3 group">
+                    className="mt-4 flex items-center gap-1.5 text-[10px] font-mono text-slate-400 hover:text-[#6B7EFF] transition-colors border-t border-white/10 pt-3 group">
                     <ExternalLink size={10} className="shrink-0 group-hover:text-[#6B7EFF]" />
                     <span className="truncate">{sig.url.replace(/^https?:\/\//, '')}</span>
                   </a>
@@ -2579,11 +2579,11 @@ export default function ARIAPage() {
               const SEV_COLORS = {
                 high:   { bg: 'bg-red-400',    border: 'border-red-200',   badge: 'bg-red-50 text-red-600',      text: 'text-red-500' },
                 medium: { bg: 'bg-amber-400',  border: 'border-amber-200', badge: 'bg-amber-50 text-amber-600',  text: 'text-amber-500' },
-                low:    { bg: 'bg-slate-300',  border: 'border-slate-200', badge: 'bg-slate-100 text-slate-500', text: 'text-slate-400' },
+                low:    { bg: 'bg-slate-300',  border: 'border-white/10', badge: 'bg-[#131B2E] text-slate-400', text: 'text-slate-400' },
               };
               const sc = SEV_COLORS[post.severity] ?? SEV_COLORS.low;
               return (
-                <div key={i} className={cn("rounded-2xl bg-white shadow-sm overflow-hidden relative border mb-4", sc.border)}>
+                <div key={i} className={cn("rounded-2xl bg-[#131B2E] shadow-sm overflow-hidden relative border mb-4", sc.border)}>
                   <div className={cn("absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl", sc.bg)} />
                   <div className="p-5 pl-6">
                     <div className="flex items-start justify-between gap-3 mb-4">
@@ -2602,7 +2602,7 @@ export default function ARIAPage() {
                     {post.tech_mentioned?.length > 0 && (
                       <div className="flex flex-wrap gap-1 mb-3">
                         {post.tech_mentioned.map((t, j) => (
-                          <span key={j} className="text-[9px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200 font-mono">{t}</span>
+                          <span key={j} className="text-[9px] px-2 py-0.5 rounded-md bg-[#131B2E] text-slate-300 border border-white/10 font-mono">{t}</span>
                         ))}
                       </div>
                     )}
@@ -2617,7 +2617,7 @@ export default function ARIAPage() {
                         <div>
                           <blockquote className="relative pl-5">
                             <span className="absolute left-0 top-[-4px] text-3xl leading-none text-slate-200 font-serif select-none" aria-hidden>&ldquo;</span>
-                            <p className="text-sm text-slate-800 leading-relaxed font-medium">{displayText}</p>
+                            <p className="text-sm text-slate-100 leading-relaxed font-medium">{displayText}</p>
                           </blockquote>
                           {isLong && (
                             <button
@@ -2633,7 +2633,7 @@ export default function ARIAPage() {
 
                     {post.url && (
                       <a href={post.url} target="_blank" rel="noopener noreferrer"
-                        className="mt-4 flex items-center gap-1.5 text-[10px] font-mono text-slate-400 hover:text-[#6B7EFF] transition-colors border-t border-slate-100 pt-3 group">
+                        className="mt-4 flex items-center gap-1.5 text-[10px] font-mono text-slate-400 hover:text-[#6B7EFF] transition-colors border-t border-white/10 pt-3 group">
                         <ExternalLink size={10} className="shrink-0 group-hover:text-[#6B7EFF]" />
                         <span className="truncate">{post.url.replace(/^https?:\/\//, '')}</span>
                       </a>
@@ -2673,11 +2673,11 @@ export default function ARIAPage() {
       <div className="space-y-5 max-w-4xl animate-in fade-in slide-in-from-bottom-2 duration-500">
 
         {/* Header bar */}
-        <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
-          <div className="bg-slate-50/50 border-b border-slate-100 px-6 py-4 flex items-center justify-between">
+        <div className="bg-[#131B2E] rounded-2xl border border-white/10 shadow-sm overflow-hidden">
+          <div className="bg-[#0F1830]/50 border-b border-white/10 px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Zap size={16} className="text-emerald-500" />
-              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-700">SCOUT Context Queue</h3>
+              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-200">SCOUT Context Queue</h3>
             </div>
             <span className="text-[10px] font-mono text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100">Status: Ready</span>
           </div>
@@ -2690,12 +2690,12 @@ export default function ARIAPage() {
               </span>
             </div>
             <span className={cn("text-[11px] font-bold px-3 py-1.5 rounded-lg uppercase tracking-wide border",
-              URGENCY_PILL[sb?.contract_window_urgency ?? ''] || "bg-slate-100 text-slate-600 border-slate-200")}>
+              URGENCY_PILL[sb?.contract_window_urgency ?? ''] || "bg-[#131B2E] text-slate-300 border-white/10")}>
               {sb?.contract_window_urgency || 'medium'} urgency
             </span>
             <div className="ml-auto flex items-center gap-2">
               <button onClick={copyPayload}
-                className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold shadow-sm transition-colors">
+                className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-white/10 text-slate-300 hover:bg-[#0F1830] font-bold shadow-sm transition-colors">
                 <Copy size={12} /> {copied ? "Copied!" : "Copy JSON"}
               </button>
             </div>
@@ -2704,7 +2704,7 @@ export default function ARIAPage() {
 
         {/* Property context block */}
         {sq?.property && (
-          <div className="bg-white rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+          <div className="bg-[#131B2E] rounded-2xl border border-white/10 p-5 shadow-sm">
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
               <span className="font-mono text-[#6B7EFF]">[PROPERTY]</span> Identity Context
             </p>
@@ -2719,7 +2719,7 @@ export default function ARIAPage() {
               ].filter(r => r.val).map(({ label, val }) => (
                 <div key={label}>
                   <p className="text-slate-400 text-[9px] uppercase font-bold">{label}</p>
-                  <p className="font-bold text-slate-800 mt-0.5 truncate">{String(val)}</p>
+                  <p className="font-bold text-slate-100 mt-0.5 truncate">{String(val)}</p>
                 </div>
               ))}
             </div>
@@ -2728,7 +2728,7 @@ export default function ARIAPage() {
 
         {/* Connectivity context */}
         {sq?.connectivity && (sq.connectivity.isp_providers?.length || sq.connectivity.bulk_detected) && (
-          <div className="bg-white rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+          <div className="bg-[#131B2E] rounded-2xl border border-white/10 p-5 shadow-sm">
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
               <span className="font-mono text-emerald-600">[CONNECTIVITY]</span> Internet Signal
             </p>
@@ -2748,7 +2748,7 @@ export default function ARIAPage() {
 
         {/* Pain angles */}
         {sq?.pain_angles && sq.pain_angles.length > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+          <div className="bg-[#131B2E] rounded-2xl border border-white/10 p-5 shadow-sm">
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
               <span className="font-mono text-rose-500">[PAIN_ANGLES]</span> Top Vulnerability Signals
             </p>
@@ -2757,7 +2757,7 @@ export default function ARIAPage() {
                 <div key={i} className="flex items-start gap-3 mb-2 last:mb-0">
                   <span className="text-[#6B7EFF] shrink-0">[{i+1}]</span>
                   <span className={sig.severity === 'high' ? 'text-rose-300' : sig.severity === 'medium' ? 'text-amber-300' : 'text-slate-400'}>
-                    <span className="text-slate-500">{sig.type}:</span> {sig.quote}
+                    <span className="text-slate-400">{sig.type}:</span> {sig.quote}
                   </span>
                 </div>
               ))}
@@ -2767,7 +2767,7 @@ export default function ARIAPage() {
 
         {/* PropTech context */}
         {sq?.proptech && (sq.proptech.gate_operators?.length || sq.proptech.access_control?.length) && (
-          <div className="bg-white rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+          <div className="bg-[#131B2E] rounded-2xl border border-white/10 p-5 shadow-sm">
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
               <span className="font-mono text-orange-500">[PROPTECH]</span> Gate &amp; Access Stack
             </p>
@@ -2776,7 +2776,7 @@ export default function ARIAPage() {
                 <span key={t} className="text-[11px] px-3 py-1.5 rounded-lg font-bold bg-orange-50 text-orange-700 border border-orange-200/60">{t}</span>
               ))}
               {sq.proptech.tech_generation && (
-                <span className="text-[11px] px-3 py-1.5 rounded-lg font-bold bg-slate-100 text-slate-600 border border-slate-200 capitalize">{sq.proptech.tech_generation} gen</span>
+                <span className="text-[11px] px-3 py-1.5 rounded-lg font-bold bg-[#131B2E] text-slate-300 border border-white/10 capitalize">{sq.proptech.tech_generation} gen</span>
               )}
             </div>
           </div>
@@ -2784,18 +2784,18 @@ export default function ARIAPage() {
 
         {/* Contact chain */}
         {sq?.contact_chain && sq.contact_chain.length > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+          <div className="bg-[#131B2E] rounded-2xl border border-white/10 p-5 shadow-sm">
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
               <span className="font-mono text-violet-500">[CONTACTS]</span> Outreach Chain ({sq.contact_chain.length} nodes)
             </p>
             <div className="space-y-2">
               {sq.contact_chain.slice(0, 4).map((c, i) => (
-                <div key={i} className="flex items-center gap-3 text-xs bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
+                <div key={i} className="flex items-center gap-3 text-xs bg-[#0F1830] px-3 py-2 rounded-lg border border-white/10">
                   <span className="font-mono text-[#6B7EFF] text-[10px]">[{i+1}]</span>
-                  <span className="font-bold text-slate-900">{c.name || '—'}</span>
-                  <span className="text-slate-500 capitalize">{(c.role_type || 'unknown').replace('_', ' ')}</span>
+                  <span className="font-bold text-slate-100">{c.name || '—'}</span>
+                  <span className="text-slate-400 capitalize">{(c.role_type || 'unknown').replace('_', ' ')}</span>
                   {(c.top_email_format || c.email) && (
-                    <span className="ml-auto font-mono text-slate-500 text-[10px]">{c.top_email_format || c.email}</span>
+                    <span className="ml-auto font-mono text-slate-400 text-[10px]">{c.top_email_format || c.email}</span>
                   )}
                 </div>
               ))}
@@ -2815,7 +2815,7 @@ export default function ARIAPage() {
 
         {/* Behavioral Profile (from scout_queue) */}
         {sq?.behavioral_profile && Object.keys(sq.behavioral_profile).length > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+          <div className="bg-[#131B2E] rounded-2xl border border-white/10 p-5 shadow-sm">
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
               <span className="font-mono text-violet-500">[PROFILE]</span> Behavioral Intelligence
             </p>
@@ -2823,7 +2823,7 @@ export default function ARIAPage() {
               {Object.entries(sq.behavioral_profile).map(([key, val]) => (
                 <div key={key}>
                   <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">{key.replace(/_/g, ' ')}</p>
-                  <p className="text-xs font-medium text-slate-700">{String(val)}</p>
+                  <p className="text-xs font-medium text-slate-200">{String(val)}</p>
                 </div>
               ))}
             </div>
@@ -2832,7 +2832,7 @@ export default function ARIAPage() {
 
         {/* Objection Flags */}
         {sq?.objection_flags && Object.values(sq.objection_flags).some(Boolean) && (
-          <div className="bg-white rounded-2xl border border-rose-200/60 p-5 shadow-sm">
+          <div className="bg-[#131B2E] rounded-2xl border border-rose-200/60 p-5 shadow-sm">
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
               <span className="font-mono text-rose-500">[OBJECTIONS]</span> Flags to Prepare For
             </p>
@@ -2853,7 +2853,7 @@ export default function ARIAPage() {
           const months = ([1,2,3,4,5,6] as const).map(n => ({ n, data: plan[`month_${n}` as keyof OutreachPlan] as OutreachMonth | undefined })).filter(m => m.data);
           if (months.length === 0) return null;
           return (
-            <div className="bg-white rounded-2xl border border-[#6B7EFF]/20 p-5 shadow-sm relative overflow-hidden">
+            <div className="bg-[#131B2E] rounded-2xl border border-[#6B7EFF]/20 p-5 shadow-sm relative overflow-hidden">
               <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-[#6B7EFF] to-[#A78BFA]" />
               <div className="flex items-start justify-between mb-4">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B7EFF] flex items-center gap-1.5">
@@ -2864,7 +2864,7 @@ export default function ARIAPage() {
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#6B7EFF]/10 text-[#6B7EFF] border border-[#6B7EFF]/20 capitalize">{plan.primary_channel}</span>
                   )}
                   {plan.total_touches != null && (
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">{plan.total_touches} touches</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-[#131B2E] text-slate-300 border border-white/10">{plan.total_touches} touches</span>
                   )}
                   {plan.expected_close_quarter && (
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100">Close: {plan.expected_close_quarter}</span>
@@ -2873,15 +2873,15 @@ export default function ARIAPage() {
               </div>
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
                 {months.map(({ n, data }) => data && (
-                  <div key={n} className="rounded-xl border border-slate-200/60 p-3 bg-slate-50/50 hover:bg-white hover:shadow-sm transition-all">
+                  <div key={n} className="rounded-xl border border-white/10 p-3 bg-[#0F1830]/50 hover:bg-[#131B2E] hover:shadow-sm transition-all">
                     <div className="flex items-center gap-1.5 mb-2">
                       <span className="text-[9px] font-mono font-bold text-white bg-[#6B7EFF] px-1.5 py-0.5 rounded">M{n}</span>
-                      <span className="text-[11px] font-bold text-slate-800 leading-tight">{data.theme}</span>
+                      <span className="text-[11px] font-bold text-slate-100 leading-tight">{data.theme}</span>
                     </div>
                     {(data.actions || []).length > 0 && (
                       <ul className="space-y-1 mb-2">
                         {(data.actions || []).map((action, ai) => (
-                          <li key={ai} className="text-[10px] text-slate-600 flex items-start gap-1">
+                          <li key={ai} className="text-[10px] text-slate-300 flex items-start gap-1">
                             <span className="text-[#6B7EFF] shrink-0 mt-0.5 font-bold">›</span>
                             <span>{action}</span>
                           </li>
@@ -2895,9 +2895,9 @@ export default function ARIAPage() {
                 ))}
               </div>
               {plan.key_milestone && (
-                <div className="pt-3 border-t border-slate-100 flex items-start gap-2">
+                <div className="pt-3 border-t border-white/10 flex items-start gap-2">
                   <Target size={13} className="text-amber-500 shrink-0 mt-0.5" />
-                  <p className="text-xs font-medium text-slate-700"><span className="font-bold text-amber-700">Key Milestone:</span> {plan.key_milestone}</p>
+                  <p className="text-xs font-medium text-slate-200"><span className="font-bold text-amber-700">Key Milestone:</span> {plan.key_milestone}</p>
                 </div>
               )}
             </div>
@@ -2906,22 +2906,22 @@ export default function ARIAPage() {
 
         {/* Outreach Sequence — individual touches */}
         {sq?.outreach_sequence && sq.outreach_sequence.length > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-200/60 p-5 shadow-sm">
+          <div className="bg-[#131B2E] rounded-2xl border border-white/10 p-5 shadow-sm">
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
               <span className="font-mono text-emerald-600">[SEQUENCE]</span> Recommended Touch Sequence ({sq.outreach_sequence.length} touches)
             </p>
             <div className="space-y-2">
               {sq.outreach_sequence.map((touch, i) => (
-                <div key={i} className="flex items-start gap-3 bg-slate-50 rounded-xl p-3 border border-slate-100">
+                <div key={i} className="flex items-start gap-3 bg-[#0F1830] rounded-xl p-3 border border-white/10">
                   <div className="w-6 h-6 rounded-full bg-[#6B7EFF] flex items-center justify-center text-white text-[10px] font-mono font-bold shrink-0">
                     {touch.touch ?? i+1}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-[10px] font-bold text-slate-700 capitalize">{(touch.channel || 'email').replace('_', ' ')}</span>
-                      {touch.timing && <span className="text-[9px] font-mono text-slate-400 bg-white px-1.5 py-0.5 rounded border border-slate-100">{touch.timing}</span>}
+                      <span className="text-[10px] font-bold text-slate-200 capitalize">{(touch.channel || 'email').replace('_', ' ')}</span>
+                      {touch.timing && <span className="text-[9px] font-mono text-slate-400 bg-[#131B2E] px-1.5 py-0.5 rounded border border-white/10">{touch.timing}</span>}
                     </div>
-                    <p className="text-[11px] text-slate-600 leading-relaxed">{touch.message}</p>
+                    <p className="text-[11px] text-slate-300 leading-relaxed">{touch.message}</p>
                   </div>
                 </div>
               ))}
@@ -2931,16 +2931,16 @@ export default function ARIAPage() {
 
         {/* Key data points fallback from scout_brief */}
         {!sq && sb?.key_data_points && sb.key_data_points.length > 0 && (
-          <div className="bg-slate-50/80 rounded-xl p-6 border border-slate-200/60 shadow-inner relative overflow-hidden">
+          <div className="bg-[#0F1830]/80 rounded-xl p-6 border border-white/10 shadow-inner relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#6B7EFF] to-[#A78BFA]" />
-            <p className="text-[10px] font-bold text-slate-500 mb-4 uppercase tracking-widest flex items-center gap-2">
+            <p className="text-[10px] font-bold text-slate-400 mb-4 uppercase tracking-widest flex items-center gap-2">
               <Cpu size={12} className="text-[#6B7EFF]"/> Key Intel
             </p>
             <div className="space-y-4">
               {sb.key_data_points.map((point, i) => (
                 <div key={i} className="flex items-start gap-3">
                   <span className="text-[11px] font-mono font-bold text-[#6B7EFF] mt-0.5">[{i + 1}]</span>
-                  <p className="text-[13px] font-medium text-slate-700 leading-relaxed">{point}</p>
+                  <p className="text-[13px] font-medium text-slate-200 leading-relaxed">{point}</p>
                 </div>
               ))}
             </div>
@@ -2979,11 +2979,11 @@ export default function ARIAPage() {
       return (
         <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3 px-8 text-center">
           <Search size={32} className="opacity-20" />
-          <p className="text-sm font-bold text-slate-500">No matching properties found</p>
+          <p className="text-sm font-bold text-slate-400">No matching properties found</p>
           <p className="text-xs font-medium">Try a more specific query — include a city, state, or property name.</p>
           <button
             onClick={() => { setCandidates([]); setQueryInterpretation(''); setViewMode('idle'); }}
-            className="mt-3 flex items-center gap-1.5 text-xs px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold transition-colors"
+            className="mt-3 flex items-center gap-1.5 text-xs px-4 py-2 rounded-lg border border-white/10 text-slate-300 hover:bg-[#0F1830] font-bold transition-colors"
           >
             <ArrowLeft size={12} /> New Search
           </button>
@@ -2993,22 +2993,22 @@ export default function ARIAPage() {
 
     return (
       <div className="flex flex-col h-full overflow-hidden">
-        <div className="bg-white border-b border-slate-200/60 px-6 py-4 shadow-sm z-10">
+        <div className="bg-[#131B2E] border-b border-white/10 px-6 py-4 shadow-sm z-10">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <button
                   onClick={() => { setCandidates([]); setQueryInterpretation(''); setViewMode('idle'); }}
-                  className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 hover:text-slate-800 transition-colors"
+                  className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 hover:text-slate-100 transition-colors"
                 >
                   <ArrowLeft size={12} /> New Search
                 </button>
               </div>
-              <h2 className="text-base font-bold text-slate-900 tracking-tight">
+              <h2 className="text-base font-bold text-slate-100 tracking-tight">
                 Found {candidates.length} {candidates.length === 1 ? 'property' : 'properties'} matching your search
               </h2>
               {queryInterpretation && (
-                <p className="text-xs text-slate-500 mt-1 font-medium">{queryInterpretation}</p>
+                <p className="text-xs text-slate-400 mt-1 font-medium">{queryInterpretation}</p>
               )}
             </div>
           </div>
@@ -3021,7 +3021,7 @@ export default function ARIAPage() {
               return (
                 <div
                   key={`${c.name}-${i}`}
-                  className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:border-[#6B7EFF] hover:shadow-md transition-all duration-200 relative group"
+                  className="bg-[#131B2E] rounded-xl border border-white/10 p-5 shadow-sm hover:border-[#6B7EFF] hover:shadow-md transition-all duration-200 relative group"
                 >
                   <div className="absolute top-4 right-4">
                     <div
@@ -3033,8 +3033,8 @@ export default function ARIAPage() {
                   </div>
 
                   <div className="pr-12">
-                    <h3 className="text-lg font-bold text-slate-900 leading-tight">{c.name}</h3>
-                    <p className="text-sm text-slate-500 mt-1 flex items-center gap-1.5">
+                    <h3 className="text-lg font-bold text-slate-100 leading-tight">{c.name}</h3>
+                    <p className="text-sm text-slate-400 mt-1 flex items-center gap-1.5">
                       <MapPin size={12} className="shrink-0 opacity-70" />
                       <span className="truncate">
                         {[c.address, c.city, c.state].filter(Boolean).join(', ') || `${c.city || ''}, ${c.state || ''}`}
@@ -3044,17 +3044,17 @@ export default function ARIAPage() {
 
                   <div className="flex flex-wrap items-center gap-1.5 mt-3">
                     {c.units && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#131B2E] text-slate-300 border border-white/10">
                         {c.units} units
                       </span>
                     )}
                     {c.year_built && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#131B2E] text-slate-300 border border-white/10">
                         {c.year_built}
                       </span>
                     )}
                     {c.property_class && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#141d3a] text-indigo-700 border border-white/10">
                         Class {c.property_class}
                       </span>
                     )}
@@ -3063,7 +3063,7 @@ export default function ARIAPage() {
                   {c.management_company && (
                     <div className="flex items-center gap-1.5 mt-3 text-xs">
                       <Building2 size={11} className="text-slate-400" />
-                      <span className="font-bold text-slate-700">{c.management_company}</span>
+                      <span className="font-bold text-slate-200">{c.management_company}</span>
                     </div>
                   )}
 
@@ -3071,7 +3071,7 @@ export default function ARIAPage() {
                     <div className="flex items-center gap-1.5 mt-2 text-xs flex-wrap">
                       <Wifi size={11} className="text-emerald-500" />
                       {c.isp_signal && (
-                        <span className="font-medium text-slate-700">{c.isp_signal}</span>
+                        <span className="font-medium text-slate-200">{c.isp_signal}</span>
                       )}
                       {c.bulk_detected && (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -3109,47 +3109,47 @@ export default function ARIAPage() {
   // ── Intelligence DB panel ─────────────────────────────────────────────────
   function IntelDBPanel() {
     const STAGES: Record<string, { label: string; color: string }> = {
-      prospect:    { label: 'Prospect',     color: 'bg-slate-100 text-slate-600' },
+      prospect:    { label: 'Prospect',     color: 'bg-[#131B2E] text-slate-300' },
       contacted:   { label: 'Contacted',    color: 'bg-blue-100 text-blue-700' },
       proposal:    { label: 'Proposal',     color: 'bg-violet-100 text-violet-700' },
       negotiation: { label: 'Negotiating',  color: 'bg-amber-100 text-amber-700' },
       won:         { label: 'Won',          color: 'bg-emerald-100 text-emerald-700' },
       lost:        { label: 'Lost',         color: 'bg-rose-100 text-rose-600' },
-      'no-contact':{ label: 'No contact',   color: 'bg-slate-100 text-slate-400' },
+      'no-contact':{ label: 'No contact',   color: 'bg-[#131B2E] text-slate-400' },
     };
 
     return (
-      <div className="flex flex-col h-full overflow-hidden bg-white/50">
-        <div className="bg-white border-b border-slate-200/60 px-6 py-4 shadow-sm z-10">
+      <div className="flex flex-col h-full overflow-hidden bg-[#0F1830]/70">
+        <div className="bg-[#131B2E] border-b border-white/10 px-6 py-4 shadow-sm z-10">
           <div className="flex items-center gap-3 mb-3">
             {(isDone || candidates.length > 0) && (
               <button onClick={() => setDbView(false)}
-                className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 hover:text-[#6B7EFF] transition-colors -ml-1 mr-1">
+                className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 hover:text-[#6B7EFF] transition-colors -ml-1 mr-1">
                 <ArrowLeft size={13} />
                 Back
               </button>
             )}
             <Globe size={16} className="text-[#6B7EFF]" />
-            <h2 className="text-base font-bold text-slate-900 tracking-tight">Intelligence Database</h2>
+            <h2 className="text-base font-bold text-slate-100 tracking-tight">Intelligence Database</h2>
             <span className="text-[10px] px-2 py-1 rounded-md bg-[#6B7EFF]/10 border border-[#6B7EFF]/20 text-[#6B7EFF] font-bold font-mono">{dbTotal} logged</span>
-            <button onClick={() => setDbView(false)} className="ml-auto p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors" title="Close Intel DB">
+            <button onClick={() => setDbView(false)} className="ml-auto p-1.5 rounded-lg hover:bg-[#131B2E] text-slate-400 hover:text-slate-200 transition-colors" title="Close Intel DB">
               <X size={14} />
             </button>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200/60 rounded-xl px-3 py-2 focus-within:border-[#6B7EFF]/50 focus-within:bg-white transition-colors shadow-inner">
+            <div className="flex-1 flex items-center gap-2 bg-[#0F1830] border border-white/10 rounded-xl px-3 py-2 focus-within:border-[#6B7EFF]/50 focus-within:bg-[#131B2E] transition-colors shadow-inner">
               <Search size={14} className="text-slate-400 shrink-0" />
               <input
                 value={dbSearch}
                 onChange={e => { setDbSearch(e.target.value); loadDbProperties(e.target.value, dbFilter); }}
                 placeholder="Search telemetry..."
-                className="flex-1 text-xs font-medium bg-transparent text-slate-800 placeholder:text-slate-400 outline-none"
+                className="flex-1 text-xs font-medium bg-transparent text-slate-100 placeholder:text-slate-400 outline-none"
               />
             </div>
             {(['all','critical','expiring','sara'] as const).map(f => (
               <button key={f} onClick={() => { setDbFilter(f); loadDbProperties(dbSearch, f); }}
                 className={cn("text-[11px] px-4 py-2 rounded-xl font-bold capitalize transition-all shadow-sm",
-                  dbFilter === f ? "bg-[#6B7EFF] text-white" : "bg-white text-slate-600 border border-slate-200/60 hover:bg-slate-50"
+                  dbFilter === f ? "bg-[#6B7EFF] text-white" : "bg-[#131B2E] text-slate-300 border border-white/10 hover:bg-[#0F1830]"
                 )}>
                 {f === 'expiring' ? '📅 Expiring' : f === 'sara' ? '🎯 SARA' : f === 'critical' ? '🔴 Critical' : 'All'}
               </button>
@@ -3158,7 +3158,7 @@ export default function ARIAPage() {
         </div>
 
         <div className="flex-1 flex overflow-hidden">
-          <div className="w-80 border-r border-slate-200/60 bg-slate-50/30 overflow-y-auto shrink-0">
+          <div className="w-80 border-r border-white/10 bg-[#0F1830]/30 overflow-y-auto shrink-0">
             {dbLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 size={20} className="text-[#6B7EFF] animate-spin" />
@@ -3166,7 +3166,7 @@ export default function ARIAPage() {
             ) : dbProps.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3 px-4 text-center">
                 <Globe size={32} className="opacity-20" />
-                <p className="text-sm font-bold text-slate-500">No properties in DB</p>
+                <p className="text-sm font-bold text-slate-400">No properties in DB</p>
                 <p className="text-xs font-medium">Run ARIA to begin populating telemetry.</p>
               </div>
             ) : (
@@ -3179,16 +3179,16 @@ export default function ARIAPage() {
                       className={cn(
                         "w-full text-left p-3.5 rounded-xl border mb-2 transition-all group",
                         dbSelected?.id === p.id 
-                           ? "border-[#6B7EFF]/50 bg-white shadow-md relative overflow-hidden" 
-                           : "border-slate-200/60 bg-white/60 hover:bg-white hover:border-slate-300 hover:shadow-sm"
+                           ? "border-[#6B7EFF]/50 bg-[#131B2E] shadow-md relative overflow-hidden" 
+                           : "border-white/10 bg-[#131B2E]/70 hover:bg-[#131B2E] hover:border-slate-300 hover:shadow-sm"
                       )}>
                       {dbSelected?.id === p.id && <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#6B7EFF]" />}
                       <div className="flex items-start gap-3">
                         <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-mono font-bold shrink-0 shadow-sm"
                           style={scoreBg(p.buy_score ?? 0)}>{p.buy_score ?? '?'}</div>
                         <div className="flex-1 min-w-0 pt-0.5">
-                          <p className="text-[11px] font-bold text-slate-900 truncate leading-tight">{p.property_name}</p>
-                          <p className="text-[9px] font-medium text-slate-500 truncate mt-0.5">{(p.address ?? '').split(',').slice(0,2).join(',')}</p>
+                          <p className="text-[11px] font-bold text-slate-100 truncate leading-tight">{p.property_name}</p>
+                          <p className="text-[9px] font-medium text-slate-400 truncate mt-0.5">{(p.address ?? '').split(',').slice(0,2).join(',')}</p>
                           <div className="flex items-center gap-1 mt-2 flex-wrap">
                             <span className={cn("text-[8px] font-bold px-1.5 py-0.5 rounded-md", stageInfo.color)}>{stageInfo.label}</span>
                             {p.sara_signals && <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-600 border border-purple-100">SARA</span>}
@@ -3210,11 +3210,11 @@ export default function ARIAPage() {
               </div>
             ) : (
               <div className="space-y-5 max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-500">
-                <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm">
+                <div className="bg-[#131B2E] rounded-2xl border border-white/10 p-6 shadow-sm">
                   <div className="flex items-start gap-4">
                     <div>
-                      <h3 className="text-lg font-bold text-slate-900 tracking-tight">{dbSelected.property_name}</h3>
-                      <p className="text-xs font-medium text-slate-500 mt-1 flex items-center gap-1.5">
+                      <h3 className="text-lg font-bold text-slate-100 tracking-tight">{dbSelected.property_name}</h3>
+                      <p className="text-xs font-medium text-slate-400 mt-1 flex items-center gap-1.5">
                         <MapPin size={12} /> {dbSelected.address}
                       </p>
                     </div>
@@ -3224,8 +3224,8 @@ export default function ARIAPage() {
                       <span className="text-[10px] font-mono text-slate-400">Updated {formatAge(dbSelected.last_researched_at)}</span>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-slate-100">
-                    {dbSelected.management_company && <span className="text-[10px] font-bold px-3 py-1 rounded-lg border border-slate-200/60 text-slate-600 bg-slate-50 shadow-sm">{dbSelected.management_company}</span>}
+                  <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-white/10">
+                    {dbSelected.management_company && <span className="text-[10px] font-bold px-3 py-1 rounded-lg border border-white/10 text-slate-300 bg-[#0F1830] shadow-sm">{dbSelected.management_company}</span>}
                     {dbSelected.owner_entity && <span className="text-[10px] font-bold px-3 py-1 rounded-lg border border-blue-200/60 bg-blue-50/50 text-blue-700 shadow-sm">{dbSelected.owner_entity}</span>}
                     {dbSelected.sara_signals && <span className="text-[10px] px-3 py-1 rounded-lg bg-purple-50 text-purple-700 border border-purple-100 font-bold shadow-sm">🎯 SARA Bridge</span>}
                     {dbSelected.contract_expiry_year && (
@@ -3239,20 +3239,20 @@ export default function ARIAPage() {
                 </div>
 
                 {/* Sales notes & Update */}
-                <div className="bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm relative overflow-hidden">
+                <div className="bg-[#131B2E] rounded-2xl border border-white/10 p-6 shadow-sm relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-1 h-full bg-[#6B7EFF]" />
                   <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Pipeline Control</p>
                   <div className="flex items-center gap-3 mb-4">
-                    <p className="text-xs font-bold text-slate-600 shrink-0">CRM Stage:</p>
+                    <p className="text-xs font-bold text-slate-300 shrink-0">CRM Stage:</p>
                     <select
                       value={noteStage || dbSelected.sales_stage || 'prospect'}
                       onChange={e => setNoteStage(e.target.value)}
-                      className="text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 text-slate-800 bg-slate-50 outline-none focus:border-[#6B7EFF] focus:bg-white transition-colors cursor-pointer shadow-sm"
+                      className="text-xs font-bold border border-white/10 rounded-xl px-3 py-2 text-slate-100 bg-[#0F1830] outline-none focus:border-[#6B7EFF] focus:bg-[#131B2E] transition-colors cursor-pointer shadow-sm"
                     >
                       {Object.entries(STAGES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                     </select>
                     {dbSelected.last_contacted_at && (
-                      <span className="text-[10px] font-mono text-slate-400 ml-auto bg-slate-50 px-2 py-1 rounded border border-slate-100">Last contact: {formatAge(dbSelected.last_contacted_at)}</span>
+                      <span className="text-[10px] font-mono text-slate-400 ml-auto bg-[#0F1830] px-2 py-1 rounded border border-white/10">Last contact: {formatAge(dbSelected.last_contacted_at)}</span>
                     )}
                   </div>
                   <textarea
@@ -3260,7 +3260,7 @@ export default function ARIAPage() {
                     onChange={e => setNoteText(e.target.value)}
                     placeholder="Input human intelligence, meeting notes, or disposition details..."
                     rows={4}
-                    className="w-full text-sm font-medium border border-slate-200/60 rounded-xl px-4 py-3 text-slate-800 placeholder:text-slate-400 resize-none outline-none focus:border-[#6B7EFF] focus:ring-2 focus:ring-[#6B7EFF]/20 transition-all shadow-inner mb-4"
+                    className="w-full text-sm font-medium border border-white/10 rounded-xl px-4 py-3 text-slate-100 placeholder:text-slate-400 resize-none outline-none focus:border-[#6B7EFF] focus:ring-2 focus:ring-[#6B7EFF]/20 transition-all shadow-inner mb-4"
                   />
                   <div className="flex items-center gap-3">
                     <button
@@ -3273,7 +3273,7 @@ export default function ARIAPage() {
                     </button>
                     <button
                       onClick={() => { setQuery(dbSelected.property_name); setDbView(false); setPhase(0); setResults(null); setSavedSearchId(null); setPendingRerun(true); }}
-                      className="flex items-center gap-2 text-xs px-5 py-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-bold transition-all shadow-sm"
+                      className="flex items-center gap-2 text-xs px-5 py-2.5 rounded-lg border border-white/10 text-slate-300 hover:bg-[#0F1830] hover:text-slate-100 font-bold transition-all shadow-sm"
                     >
                       <RefreshCw size={14} /> Fetch Latest Intel
                     </button>
@@ -3297,7 +3297,7 @@ export default function ARIAPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col min-h-full" style={{ background: '#F8FAFC' }}>
+    <div className="flex flex-col min-h-full" style={{ background: '#0B1728' }}>
       <TopBar
         title="ARIA"
         subtitle="Account Research Intelligence Agent"
@@ -3310,7 +3310,7 @@ export default function ARIAPage() {
         {/* Left panel — v9 glassmorphism */}
         <div className="flex flex-col shrink-0" style={{
           width: 280,
-          background: 'rgba(248,250,252,0.85)',
+          background: 'rgba(11,23,40,0.85)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           borderRight: '1px solid rgba(107,126,255,0.1)',
@@ -3324,7 +3324,7 @@ export default function ARIAPage() {
                 onChange={e => setQuery(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && !isRunning && runARIA()}
                 placeholder="Property, area, or company..."
-                className="flex-1 bg-transparent text-xs font-medium text-slate-800 placeholder:text-slate-400 outline-none"
+                className="flex-1 bg-transparent text-xs font-medium text-slate-100 placeholder:text-slate-400 outline-none"
                 disabled={isRunning}
               />
               {isRunning && <Loader2 size={12} className="text-[#6B7EFF] animate-spin shrink-0" />}
@@ -3344,7 +3344,7 @@ export default function ARIAPage() {
                 className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all ${
                   searchFocus === f.key
                     ? 'bg-[#6B7EFF] text-white border-[#6B7EFF]'
-                    : 'bg-white/10 text-slate-400 border-white/20 hover:border-[#6B7EFF]/60 hover:text-white'
+                    : 'bg-[#ffffff]/[0.05] text-slate-400 border-white/20 hover:border-[#6B7EFF]/60 hover:text-white'
                 }`}
               >
                 {f.label}
@@ -3392,7 +3392,7 @@ export default function ARIAPage() {
                 ))}
                 <button
                   onClick={() => { setPhase(0); setResults(null); setQuery(""); setSavedSearchId(null); setCandidates([]); setQueryInterpretation(''); setViewMode('idle'); }}
-                  className="w-full mt-4 py-2.5 text-[11px] font-bold text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                  className="w-full mt-4 py-2.5 text-[11px] font-bold text-slate-400 hover:text-slate-100 hover:bg-[#131B2E] rounded-lg transition-colors flex items-center justify-center gap-1.5"
                 >
                   <ArrowLeft size={12} /> Clear Session
                 </button>
@@ -3410,10 +3410,10 @@ export default function ARIAPage() {
                       <button
                         key={run.id}
                         onClick={() => { setQuery(run.query); inputRef.current?.focus(); }}
-                        className="block w-full text-left px-3 py-2 rounded-xl mb-1 border border-transparent hover:bg-white hover:border-slate-200/60 hover:shadow-sm transition-all group"
+                        className="block w-full text-left px-3 py-2 rounded-xl mb-1 border border-transparent hover:bg-[#131B2E] hover:border-white/10 hover:shadow-sm transition-all group"
                       >
                         <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className="text-[11px] font-semibold text-slate-700 truncate flex-1 group-hover:text-[#6B7EFF]">
+                          <span className="text-[11px] font-semibold text-slate-200 truncate flex-1 group-hover:text-[#6B7EFF]">
                             {run.primary_property?.name ?? run.query}
                           </span>
                           {run.has_intel_cache && (
@@ -3441,7 +3441,7 @@ export default function ARIAPage() {
                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-2 mb-3">Suggested Operations</p>
                     {EXAMPLE_QUERIES.map((q, i) => (
                       <button key={i} onClick={() => { setQuery(q); inputRef.current?.focus(); }}
-                        className="block w-full text-left text-[11px] font-medium px-3 py-2.5 rounded-xl text-slate-500 hover:bg-white hover:text-[#6B7EFF] hover:shadow-sm border border-transparent hover:border-slate-200/60 transition-all leading-snug mb-1.5">
+                        className="block w-full text-left text-[11px] font-medium px-3 py-2.5 rounded-xl text-slate-400 hover:bg-[#131B2E] hover:text-[#6B7EFF] hover:shadow-sm border border-transparent hover:border-white/10 transition-all leading-snug mb-1.5">
                         {q}
                       </button>
                     ))}
@@ -3453,7 +3453,7 @@ export default function ARIAPage() {
         </div>
 
         {/* Right panel — v9 glass */}
-        <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'linear-gradient(160deg, rgba(248,250,252,0.98) 0%, rgba(243,244,255,0.96) 100%)' }}>
+        <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'linear-gradient(160deg, rgba(11,23,40,0.98) 0%, rgba(243,244,255,0.96) 100%)' }}>
           {dbView ? (
             <IntelDBPanel />
 ) : isRunning ? (
@@ -3462,13 +3462,13 @@ export default function ARIAPage() {
   <CandidateGrid />
 ) : error ? (
             <div className="flex items-center justify-center h-full">
-              <div className="max-w-md bg-white border border-rose-200/60 rounded-2xl p-6 flex items-start gap-4 shadow-sm">
+              <div className="max-w-md bg-[#131B2E] border border-rose-200/60 rounded-2xl p-6 flex items-start gap-4 shadow-sm">
                 <div className="p-2 bg-rose-50 rounded-lg">
                   <AlertCircle size={20} className="text-rose-500" />
                 </div>
                 <div>
-                  <p className="text-base font-bold text-slate-900 mb-1">Telemetry Error</p>
-                  <p className="text-sm font-medium text-slate-500 leading-relaxed">{error}</p>
+                  <p className="text-base font-bold text-slate-100 mb-1">Telemetry Error</p>
+                  <p className="text-sm font-medium text-slate-400 leading-relaxed">{error}</p>
                 </div>
               </div>
             </div>
@@ -3507,7 +3507,7 @@ export default function ARIAPage() {
                     Search any property, management company, or market — ARIA will profile it.
                   </p>
                 </div>
-                <div className="flex items-center gap-6 mt-2 pt-5 border-t border-white/10 text-[11px] font-bold text-slate-500">
+                <div className="flex items-center gap-6 mt-2 pt-5 border-t border-white/10 text-[11px] font-bold text-slate-400">
                   <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> FCC Broadband</span>
                   <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#6B7EFF]" /> SEC EDGAR</span>
                   <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-purple-400" /> 14 Sources</span>
@@ -3520,16 +3520,16 @@ export default function ARIAPage() {
 
       {/* ── Mobile layout ───────────────────────────────────────────────── */}
       <div className="lg:hidden flex flex-col flex-1" style={{ paddingBottom: '56px' }}>
-        <div className="bg-white/80 backdrop-blur-md border-b border-slate-200/60 p-4 sticky top-0 z-20">
+        <div className="bg-[#131B2E]/90 backdrop-blur-md border-b border-white/10 p-4 sticky top-0 z-20">
           <div className="flex gap-2">
-            <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200/60 rounded-xl px-3 py-2.5 shadow-inner">
+            <div className="flex-1 flex items-center gap-2 bg-[#0F1830] border border-white/10 rounded-xl px-3 py-2.5 shadow-inner">
               <Search size={14} className="text-slate-400 shrink-0" />
               <input
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && !isRunning && runARIA()}
                 placeholder="Property or area..."
-                className="flex-1 bg-transparent text-xs font-medium text-slate-800 placeholder:text-slate-400 outline-none"
+                className="flex-1 bg-transparent text-xs font-medium text-slate-100 placeholder:text-slate-400 outline-none"
                 disabled={isRunning}
               />
             </div>
@@ -3560,13 +3560,13 @@ export default function ARIAPage() {
                   <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-1 mb-3">{(results.prospects || []).length} targets found</p>
                   {(results.prospects || []).map((p, i) => (
                     <button key={i} onClick={() => { setSelectedProspect(i); setMobileTab('property'); }}
-                      className="w-full text-left p-4 rounded-xl border border-slate-200/60 bg-white shadow-sm mb-3">
+                      className="w-full text-left p-4 rounded-xl border border-white/10 bg-[#131B2E] shadow-sm mb-3">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-mono font-bold shadow-sm"
                           style={scoreBg(p.profile?.buy_score ?? 0)}>{p.profile?.buy_score ?? 0}</div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-slate-900 truncate">{p.property?.name}</p>
-                          <p className="text-[10px] font-medium text-slate-500 truncate mt-0.5">{p.property?.address?.split(',').slice(0,2).join(',')}</p>
+                          <p className="text-sm font-bold text-slate-100 truncate">{p.property?.name}</p>
+                          <p className="text-[10px] font-medium text-slate-400 truncate mt-0.5">{p.property?.address?.split(',').slice(0,2).join(',')}</p>
                         </div>
                         <ChevronRight size={16} className="text-slate-300" />
                       </div>
@@ -3585,7 +3585,7 @@ export default function ARIAPage() {
                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-1 mb-2">Suggested Operations</p>
                     {EXAMPLE_QUERIES.map((q, i) => (
                       <button key={i} onClick={() => setQuery(q)}
-                        className="block w-full text-left text-xs font-medium px-4 py-3 rounded-xl border border-slate-200/60 bg-white shadow-sm text-slate-600 hover:text-[#6B7EFF] transition-all mb-2">
+                        className="block w-full text-left text-xs font-medium px-4 py-3 rounded-xl border border-white/10 bg-[#131B2E] shadow-sm text-slate-300 hover:text-[#6B7EFF] transition-all mb-2">
                         {q}
                       </button>
                     ))}
@@ -3595,14 +3595,14 @@ export default function ARIAPage() {
             </div>
           ) : prospect ? (
             <div>
-              <div className="bg-white border-b border-slate-200/60 p-4 sticky top-0 z-10">
-                <button onClick={() => setMobileTab('list')} className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 mb-3">
+              <div className="bg-[#131B2E] border-b border-white/10 p-4 sticky top-0 z-10">
+                <button onClick={() => setMobileTab('list')} className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-slate-100 mb-3">
                   <ArrowLeft size={14} /> Return to list
                 </button>
-                <p className="text-lg font-bold text-slate-900 tracking-tight">{prospect.property?.name}</p>
-                <p className="text-xs font-medium text-slate-500 mt-0.5">{prospect.property?.address}</p>
+                <p className="text-lg font-bold text-slate-100 tracking-tight">{prospect.property?.name}</p>
+                <p className="text-xs font-medium text-slate-400 mt-0.5">{prospect.property?.address}</p>
               </div>
-              <div className="bg-white border-b border-slate-200/60 flex overflow-x-auto no-scrollbar">
+              <div className="bg-[#131B2E] border-b border-white/10 flex overflow-x-auto no-scrollbar">
                 {(['property', 'proptech', 'dm', 'intel', 'social', 'scout'] as DetailTab[]).map(tab => (
                   <button key={tab} onClick={() => setActiveTab(tab)}
                     className={cn("whitespace-nowrap px-5 py-3 text-xs font-bold capitalize border-b-2 transition-colors",
@@ -3623,7 +3623,7 @@ export default function ARIAPage() {
           ) : null}
         </div>
 
-        <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-slate-200/60 flex z-30 pb-safe" style={{ height: 64 }}>
+        <div className="fixed bottom-0 left-0 right-0 bg-[#131B2E]/90 backdrop-blur-md border-t border-white/10 flex z-30 pb-safe" style={{ height: 64 }}>
           {([
             { key: 'list',     label: 'Leads',    icon: LayoutList },
             { key: 'property', label: 'Property', icon: Building2 },

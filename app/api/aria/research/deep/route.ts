@@ -992,7 +992,9 @@ IDENTITY RULES:
 - confirmed_address: full street address if found
 - confirmed_city + confirmed_state: REQUIRED if any geo context exists
 - confirmed_units: LOOK HARD in ALL sections including ===AMENITY PAGES=== — patterns: "312 units", "312-unit", "Total Units: 312", "312 Apartments for Rent", "312 apartment homes", "312 homes", "Showing X of 312", "312 floor plans", "312 residences", "N studio to", "View 312 floor plans", "312 available". Also scan amenity pages for "X units" near top of page or in page title. If you find the number anywhere, return it — do not return null just because the first snippet doesn't mention it.
-- confirmed_year_built: from "built YYYY", "Year Built: YYYY", "opened YYYY", "completed YYYY", "constructed YYYY", "established YYYY"
+  · CRITICAL — this property ONLY: search results often mention OTHER properties (different names/cities, e.g. a portfolio owner's other communities). ONLY use a unit count that clearly refers to THIS property (matching confirmed_name/address). Ignore unit counts attached to any other property name.
+  · BEDROOM BREAKDOWN = SUM: if the count is given as a bedroom split (e.g. "291 one-bedroom and 273 two-bedroom units", "291 1BR / 273 2BR"), ADD them for the total (that example = 564). Prefer this explicit total over a smaller/partial number.
+- confirmed_year_built: from "built YYYY", "Year Built: YYYY", "opened YYYY", "completed YYYY", "constructed YYYY", "established YYYY". If built in phases ("built in 1985 and 1989"), return the EARLIEST year (1985).
 - confirmed_management: company managing day-to-day operations
 - confirmed_owner: investor/developer/owner entity
 - confirmed_website: official property URL (NOT apartments.com/zillow)
