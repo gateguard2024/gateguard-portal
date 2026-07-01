@@ -12,7 +12,7 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { LayoutList, ArrowLeft, BarChart3, Edit2, Camera } = require("lucide-react") as any;
 // Silence "unused" warnings — kept for downstream visual refinements
-void BarChart3; void Edit2;
+void BarChart3; void Edit2; void LayoutList; void User;
 import { cn } from "@/lib/utils";
 import { TopBar } from "@/components/layout/TopBar";
 import { supabase } from "@/lib/supabase";
@@ -3302,6 +3302,7 @@ export default function ARIAPage() {
         title="ARIA"
         subtitle="Account Research Intelligence Agent"
         actions={topbarActions}
+        background="#0B1728"
       />
 
       {/* ── Desktop split layout ────────────────────────────────────────── */}
@@ -3315,8 +3316,8 @@ export default function ARIAPage() {
           WebkitBackdropFilter: 'blur(20px)',
           borderRight: '1px solid rgba(107,126,255,0.1)',
         }}>
-          <div className="p-4 border-b" style={{ borderColor: 'rgba(107,126,255,0.08)', background: 'rgba(255,255,255,0.6)', backdropFilter: 'blur(16px)' }}>
-            <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 mb-3 transition-all focus-within:ring-2 focus-within:ring-[#6B7EFF]/15" style={{ background: 'rgba(255,255,255,0.85)', border: '1px solid rgba(107,126,255,0.15)', backdropFilter: 'blur(8px)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.04)' }}>
+          <div className="p-4 border-b" style={{ borderColor: 'rgba(107,126,255,0.08)', background: 'rgba(11,23,40,0.6)', backdropFilter: 'blur(16px)' }}>
+            <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 mb-3 transition-all focus-within:ring-2 focus-within:ring-[#6B7EFF]/15" style={{ background: 'rgba(15,24,48,0.9)', border: '1px solid rgba(107,126,255,0.2)', backdropFilter: 'blur(8px)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.2)' }}>
               <Search size={14} className="text-slate-400 shrink-0" />
               <input
                 ref={inputRef}
@@ -3519,7 +3520,7 @@ export default function ARIAPage() {
       </div>
 
       {/* ── Mobile layout ───────────────────────────────────────────────── */}
-      <div className="lg:hidden flex flex-col flex-1" style={{ paddingBottom: '56px' }}>
+      <div className="lg:hidden flex flex-col flex-1" style={{ paddingBottom: '16px' }}>
         <div className="bg-[#131B2E]/90 backdrop-blur-md border-b border-white/10 p-4 sticky top-0 z-20">
           <div className="flex gap-2">
             <div className="flex-1 flex items-center gap-2 bg-[#0F1830] border border-white/10 rounded-xl px-3 py-2.5 shadow-inner">
@@ -3621,33 +3622,6 @@ export default function ARIAPage() {
               </div>
             </div>
           ) : null}
-        </div>
-
-        <div className="fixed bottom-0 left-0 right-0 bg-[#131B2E]/90 backdrop-blur-md border-t border-white/10 flex z-30 pb-safe" style={{ height: 64 }}>
-          {([
-            { key: 'list',     label: 'Leads',    icon: LayoutList },
-            { key: 'property', label: 'Property', icon: Building2 },
-            { key: 'dm',       label: 'Contact',  icon: User },
-            { key: 'scout',    label: 'SCOUT',    icon: Send },
-          ] as { key: string; label: string; icon: React.ElementType }[]).map(tab => {
-            const Icon = tab.icon;
-            const isMobileActive = (tab.key === 'list' ? mobileTab === 'list' : activeTab === tab.key && mobileTab !== 'list');
-            return (
-              <button key={tab.key}
-                onClick={() => {
-                  if (tab.key === 'list') { setMobileTab('list'); }
-                  else {
-                    setActiveTab(tab.key as DetailTab);
-                    if (isDone && prospect) setMobileTab(tab.key as any);
-                  }
-                }}
-                className={cn("flex-1 flex flex-col items-center justify-center gap-1 transition-colors",
-                  isMobileActive ? "text-[#6B7EFF]" : "text-slate-400")}>
-                <Icon size={20} />
-                <span className="text-[10px] font-bold">{tab.label}</span>
-              </button>
-            );
-          })}
         </div>
       </div>
 

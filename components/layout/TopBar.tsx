@@ -12,9 +12,12 @@ interface TopBarProps {
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;
+  /** Override header background (defaults to the site stone-black). Pass a page's
+   *  glass color so the bar blends into a dark section instead of clashing. */
+  background?: string;
 }
 
-export function TopBar({ title, subtitle, actions }: TopBarProps) {
+export function TopBar({ title, subtitle, actions, background = '#1c1917' }: TopBarProps) {
   const router = useRouter();
   const { user } = useUser();
 
@@ -92,7 +95,7 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
   ];
 
   return (
-    <header className="h-16 border-b border-white/[0.07] flex items-center px-6 gap-4 sticky top-0 z-30" style={{ background: '#1c1917' }}>
+    <header className="h-16 border-b border-white/[0.07] flex items-center px-6 gap-4 sticky top-0 z-30" style={{ background }}>
       {/* Title */}
       {!searchOpen && (
         <div className="flex-1 min-w-0">

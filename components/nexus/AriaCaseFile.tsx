@@ -108,7 +108,7 @@ export function AriaCaseFile({ prospect, social, propertyId, fresh, busy, onSave
   const tCam = techField(pt.cameras, ['camera'])
 
   return (
-    <div style={{ background: BG, border: `1px solid ${LINE}`, borderRadius: 20, overflow: 'hidden', color: TXT, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif' }}>
+    <div style={{ background: BG, border: `1px solid ${LINE}`, borderRadius: 20, overflow: 'hidden', color: TXT, fontFamily: 'inherit' }}>
       {/* Header */}
       <div style={{ padding: '20px 22px', borderBottom: `1px solid ${LINE}`, background: '#0C1426' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: BRAND }}>ARIA case file</div>
