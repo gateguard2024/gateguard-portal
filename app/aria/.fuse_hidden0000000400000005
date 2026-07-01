@@ -642,8 +642,6 @@ export default function ARIAPage() {
   // values. Real UI renders after mount. Fixes React #418/#423/#425.
   const [mounted, setMounted]               = useState(false);
   useEffect(() => { setMounted(true); }, []);
-  // Lets the user cancel an in-flight search.
-  const abortRef = useRef<AbortController | null>(null);
   const [socialLoading, setSocialLoading]   = useState(false);
   const [cacheStatus, setCacheStatus]       = useState<'fresh' | 'stale' | 're-enriching' | null>(null);
   const [cacheAgeHours, setCacheAgeHours]   = useState<number | null>(null);
@@ -778,14 +776,10 @@ export default function ARIAPage() {
     // ── Full pipeline (cache miss) ─────────────────────────────────────────
     setPhase(1);
 
-    const controller = new AbortController();
-    abortRef.current = controller;
-
     const apiPromise = fetch('/api/aria/research/deep', {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query: query.trim(), search_focus: searchFocus !== 'all' ? searchFocus : undefined }),
-      signal: controller.signal,
     }).then(async r => {
       const text = await r.text();
       try { return JSON.parse(text); }
@@ -793,11 +787,9 @@ export default function ARIAPage() {
     });
 
     for (let p = 1; p <= 4; p++) {
-      if (controller.signal.aborted) return;   // user hit Stop
       setPhase(p);
       await sleep(PHASE_DURATIONS[p]);
     }
-    if (controller.signal.aborted) return;
 
     setPhase(5);
     setSynthStep(0);
@@ -837,24 +829,11 @@ export default function ARIAPage() {
       }
     } catch (e: any) {
       clearInterval(synthInterval);
-      // User cancelled — reset quietly, no error banner.
-      if (e?.name === 'AbortError' || controller.signal.aborted) { setViewMode('idle'); setPhase(0); return; }
       setError(e.message || "Research failed — check API configuration and try again");
       setViewMode('idle');
       setPhase(0);
-    } finally {
-      abortRef.current = null;
     }
-  }, [query, phase, searchFocus]);
-
-  // Cancel an in-flight search.
-  const stopARIA = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    setViewMode('idle');
-    setPhase(0);
-    setError(null);
-  }, []);
+  }, [query, phase]);
 
   // Drill into a specific candidate from the candidate grid
   const searchCandidate = useCallback((c: Candidate) => {
@@ -1181,7 +1160,7 @@ export default function ARIAPage() {
         
         <div className="flex items-start gap-3 mb-2">
           <div className={cn(
-            "w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0 shadow-sm transition-transform",
+            "w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-mono font-bold shrink-0 shadow-sm transition-transform",
             isActive ? "scale-110" : "group-hover:scale-105"
           )}
             style={scoreBg(score)}>
@@ -1199,7 +1178,7 @@ export default function ARIAPage() {
         
         <div className="flex flex-wrap gap-1.5 mt-2 pl-11">
           {p.property?.units && (
-            <span className="text-[9px] px-2 py-0.5 rounded-md bg-[#131B2E]/80 text-slate-400 border border-white/10">{p.property.units} U</span>
+            <span className="text-[9px] font-mono px-2 py-0.5 rounded-md bg-[#131B2E]/80 text-slate-400 border border-white/10">{p.property.units} U</span>
           )}
           {(() => {
             const dm = computeDmScore(p as Prospect)
@@ -1280,7 +1259,7 @@ export default function ARIAPage() {
             
             <div className="flex flex-col items-end">
               <div className="flex items-center gap-3 bg-[#0F1830] border border-white/10 rounded-2xl p-2 pr-4 shadow-sm">
-                 <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-bold shadow-inner" style={scoreBg(score)}>
+                 <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-mono font-bold shadow-inner" style={scoreBg(score)}>
                     {score}
                  </div>
                  <div className="flex flex-col">
@@ -1317,7 +1296,7 @@ export default function ARIAPage() {
                   <div className="flex items-center gap-2">
                     {tab.label}
                     {tab.badge != null && (
-                      <span className="flex items-center justify-center h-4 min-w-[16px] px-1 text-[9px] text-white bg-rose-500 rounded-full shadow-sm">{tab.badge}</span>
+                      <span className="flex items-center justify-center h-4 min-w-[16px] px-1 text-[9px] font-mono text-white bg-rose-500 rounded-full shadow-sm">{tab.badge}</span>
                     )}
                     {tab.greenBadge && (
                       <span className="flex items-center justify-center h-4 w-4 text-[10px] text-white bg-emerald-500 rounded-full shadow-sm"><Check size={10}/></span>
@@ -1378,7 +1357,7 @@ export default function ARIAPage() {
               {p.ownership?.dnb_duns && p.ownership.dnb_duns !== 'unknown' && (
                 <div>
                   <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">D&B DUNS</p>
-                  <p className="text-[11px] text-slate-300 mt-1 flex items-center gap-1.5 bg-[#0F1830] px-2 py-1 rounded w-fit border border-white/10">
+                  <p className="font-mono text-[11px] text-slate-300 mt-1 flex items-center gap-1.5 bg-[#0F1830] px-2 py-1 rounded w-fit border border-white/10">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
                     {p.ownership.dnb_duns}
                   </p>
@@ -1417,7 +1396,7 @@ export default function ARIAPage() {
 
             {/* ISP — always visible */}
             <div className="mb-3">
-              <p className="text-[9px] text-slate-400 mb-1.5">Internet / ISP</p>
+              <p className="text-[9px] font-mono text-slate-400 mb-1.5">Internet / ISP</p>
               {(p.property?.isp_providers ?? []).length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
                   {(p.property!.isp_providers!).map((isp: string) => (
@@ -1435,7 +1414,7 @@ export default function ARIAPage() {
 
             {/* Video — always visible */}
             <div className="mb-3">
-              <p className="text-[9px] text-slate-400 mb-1.5">Cable / Video</p>
+              <p className="text-[9px] font-mono text-slate-400 mb-1.5">Cable / Video</p>
               {(p.property?.video_providers ?? []).length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
                   {(p.property!.video_providers!).map((vid: string) => (
@@ -1450,7 +1429,7 @@ export default function ARIAPage() {
             {/* Bulk agreements — prominent when present, with expiry urgency */}
             {(p.property?.bulk_agreements ?? []).length > 0 && (
               <div className="space-y-2 mt-1">
-                <p className="text-[9px] text-slate-400 mb-1.5">Bulk / Exclusive Agreements</p>
+                <p className="text-[9px] font-mono text-slate-400 mb-1.5">Bulk / Exclusive Agreements</p>
                 {(p.property!.bulk_agreements!).map((a: BulkAgreement & { evidence?: string }, i: number) => {
                   const urgency = getExpiryUrgency(a.expiry_estimate);
                   return (
@@ -2120,7 +2099,7 @@ export default function ARIAPage() {
               <div className="flex items-center gap-2 mb-4">
                 <Phone size={15} className="text-[#6B7EFF]" />
                 <p className="text-xs font-bold uppercase tracking-widest text-slate-200">Cold Call Script</p>
-                <span className="ml-auto text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#6B7EFF]/15 text-[#a9b4ff] border border-[#6B7EFF]/30">AI-generated</span>
+                <span className="ml-auto text-[9px] font-bold px-2 py-0.5 rounded-full bg-brand-100 text-brand-600 border border-brand-200">AI-generated</span>
               </div>
               <div className="space-y-3 text-sm">
                 <div className="p-3 bg-[#0F1830] rounded-xl border border-white/10">
@@ -2129,8 +2108,8 @@ export default function ARIAPage() {
                     {`"Hi, may I speak with ${(p as Prospect).decision_maker?.name || (p as Prospect).decision_maker_chain?.[0]?.name || 'the property manager'}? This is [your name] from GateGuard — we work with ${(p as Prospect).property.management_company || 'multifamily communities'} to modernize access and security systems."`}
                   </p>
                 </div>
-                <div className="p-3 bg-[#6B7EFF]/10 rounded-xl border border-[#6B7EFF]/25">
-                  <p className="text-[10px] font-bold uppercase text-[#a9b4ff] mb-1.5 tracking-wider">Your Hook</p>
+                <div className="p-3 bg-brand-50/60 rounded-xl border border-brand-100">
+                  <p className="text-[10px] font-bold uppercase text-brand-500 mb-1.5 tracking-wider">Your Hook</p>
                   <p className="text-slate-200 leading-relaxed">{`"${(p as Prospect).pitch_strategy!.primary_hook}"`}</p>
                 </div>
                 {(p as Prospect).pain_signals?.[0]?.quote && (
@@ -2479,7 +2458,7 @@ export default function ARIAPage() {
 
         {/* Cross-reference notes from Engine 2 */}
         {e2Notes.length > 0 && (
-          <div className="rounded-2xl bg-gradient-to-br from-[#141d3a] to-[#131B2E] border border-blue-400/20 p-4 shadow-sm">
+          <div className="rounded-2xl bg-gradient-to-br from-blue-50/60 to-indigo-50/40 border border-blue-400/30 p-4 shadow-sm">
             <p className="text-[9px] font-bold uppercase tracking-widest text-blue-300 mb-3 flex items-center gap-1.5">
               <Zap size={10} /> AI Cross-Reference — Engine 1 × Social Search
             </p>
@@ -2492,9 +2471,9 @@ export default function ARIAPage() {
                                                   'bg-[#131B2E] border-white/10 text-slate-100'
                 )}>
                   <span className="shrink-0 mt-0.5 font-bold text-[10px] px-1.5 py-0.5 rounded-md border"
-                    style={{ background: note.type === 'confirmation' ? 'rgba(52,211,153,0.15)' : note.type === 'contradiction' ? 'rgba(248,113,113,0.15)' : note.type === 'new_finding' ? 'rgba(251,191,36,0.15)' : 'rgba(255,255,255,0.06)',
-                             color: note.type === 'confirmation' ? '#6EE7B7' : note.type === 'contradiction' ? '#FCA5A5' : note.type === 'new_finding' ? '#FBBF24' : '#94A3B8',
-                             borderColor: note.type === 'confirmation' ? 'rgba(52,211,153,0.35)' : note.type === 'contradiction' ? 'rgba(248,113,113,0.35)' : note.type === 'new_finding' ? 'rgba(251,191,36,0.35)' : 'rgba(255,255,255,0.12)',
+                    style={{ background: note.type === 'confirmation' ? '#D1FAE5' : note.type === 'contradiction' ? '#FEE2E2' : note.type === 'new_finding' ? '#FEF3C7' : '#F1F5F9',
+                             color: note.type === 'confirmation' ? '#065F46' : note.type === 'contradiction' ? '#991B1B' : note.type === 'new_finding' ? '#92400E' : '#475569',
+                             borderColor: note.type === 'confirmation' ? '#A7F3D0' : note.type === 'contradiction' ? '#FECACA' : note.type === 'new_finding' ? '#FDE68A' : '#CBD5E1',
                            }}>
                     {note.provider}
                   </span>
@@ -3396,22 +3375,16 @@ export default function ARIAPage() {
                 </button>
                 <p className="text-[9px] text-center text-slate-400 font-medium">100 credits / search · Starting at $5</p>
               </div>
-            ) : isRunning ? (
-              <button
-                onClick={stopARIA}
-                className="w-full py-2.5 rounded-xl text-white text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm hover:opacity-90"
-                style={{ background: 'linear-gradient(135deg, #b91c1c, #ef4444)' }}
-              >
-                <X size={13} /> Stop search
-              </button>
             ) : (
               <button
                 onClick={runARIA}
-                disabled={!query.trim()}
+                disabled={isRunning || !query.trim()}
                 className="w-full py-2.5 rounded-xl text-white text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-sm hover:opacity-90"
-                style={{ background: "linear-gradient(135deg, #0d2150 0%, #1a3a7c 45%, #6B7EFF 100%)" }}
+                style={{ background: isRunning ? "#94a3b8" : "linear-gradient(135deg, #0d2150 0%, #1a3a7c 45%, #6B7EFF 100%)" }}
               >
-                <Zap size={12} /> Launch ARIA <span className="opacity-60 font-medium text-[10px]">· 100 credits</span>
+                {isRunning
+                  ? <><Loader2 size={12} className="animate-spin" /> Synchronizing...</>
+                  : <><Zap size={12} /> Launch ARIA <span className="opacity-60 font-medium text-[10px]">· 100 credits</span></>}
               </button>
             )}
           </div>
@@ -3571,19 +3544,11 @@ export default function ARIAPage() {
                 disabled={isRunning}
               />
             </div>
-            {isRunning ? (
-              <button onClick={stopARIA}
-                className="px-4 py-2.5 rounded-xl text-white text-xs font-bold flex items-center gap-1 shadow-sm"
-                style={{ background: "linear-gradient(135deg, #b91c1c, #ef4444)" }}>
-                <X size={14} /> Stop
-              </button>
-            ) : (
-              <button onClick={runARIA} disabled={!query.trim()}
-                className="px-4 py-2.5 rounded-xl text-white text-xs font-bold flex items-center gap-1 disabled:opacity-50 shadow-sm"
-                style={{ background: "linear-gradient(135deg, #0d2150 0%, #1a3a7c 45%, #6B7EFF 100%)" }}>
-                <Zap size={14} />
-              </button>
-            )}
+            <button onClick={runARIA} disabled={isRunning || !query.trim()}
+              className="px-4 py-2.5 rounded-xl text-white text-xs font-bold flex items-center gap-1 disabled:opacity-50 shadow-sm"
+              style={{ background: isRunning ? "#94a3b8" : "linear-gradient(135deg, #0d2150 0%, #1a3a7c 45%, #6B7EFF 100%)" }}>
+              {isRunning ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+            </button>
           </div>
         </div>
 
