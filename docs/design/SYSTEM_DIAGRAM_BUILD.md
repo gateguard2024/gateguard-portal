@@ -22,6 +22,30 @@ result as a site's as-built.
 - **Callouts**: IP address, "Program to 192.168.1.x", port labels, N.C./COM.
 - **Export** PNG/PDF and **save as the site's as-built**.
 
+## Canvas backgrounds & imports (Phase 1)
+Every drawing starts by choosing a background, and it can be swapped later without
+losing placed devices (elements store relative coordinates):
+- **Satellite map** — Mapbox aerial by property address (NEXT_PUBLIC_MAPBOX_TOKEN already set).
+- **Floor plan image** (PNG/JPG) and **Import PDF** (page rendered to canvas) — via the
+  reliable server-side upload (`.upload()`), not signed-URL client PUT.
+- **Blank** — pure system diagram (Flint River style).
+- **Set scale** — drag a line on a known dimension + type the real distance so coverage
+  cones and measurements are true-to-size.
+- **Many layouts per site** — the Design record holds multiple drawings (Camera Layout,
+  Network Layout…), each with its own background, elements, status, and BOM.
+
+## Benchmark: System Surveyor parity (what "professional + easy" means)
+The tool must match these System Surveyor capabilities, tuned to GateGuard's kit:
+- **Categorized icon library** — network / access / cameras / power, symbol-first with
+  optional product photo per device.
+- **Area of coverage** — camera FOV cones + range on the canvas (port existing floor-plan cone geometry).
+- **Photo mode** — annotate site photos (circle / box / arrow / text, color, timestamp).
+  This is the existing background-image tool, matured — kept, not replaced.
+- **Secure sharing** — scoped, expiring guest links (view or edit) reusing the public
+  document-portal + token infrastructure already built.
+- **Polished export** — zones + wiring + coverage render to a clean PDF/PNG sheet
+  (the Flint River standard) and save as the site's as-built.
+
 ## Phases
 - **Phase 1 (task #191)** — Component library + zone frames + colored connectors on
   the existing Fabric canvas, as a new "System Diagram" mode. Background-image mode
