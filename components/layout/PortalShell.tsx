@@ -30,11 +30,12 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const isLog        = pathname.startsWith('/log')      // Quick Log — phone-first PWA capture
   const isTrash      = pathname.startsWith('/trash')    // Deleted Items — glass recycle bin
   const isDesignStudio = pathname.startsWith('/design/studio') // rebuilt design tool — glass, full-screen
+  const isDesignCanvas = pathname.startsWith('/design/floor-plans') // evolved design tool — full-screen, own rail
   // Proposal + approve pages, signing links, and the public document portal are
   // customer-facing — no sidebar, no portal chrome, no auth wall
-  const isStandalone = isTech || isAria || isSign || isDocument || isNexus || isCmms || isSchedule || isLog || isDesignStudio
+  const isStandalone = isTech || isAria || isSign || isDocument || isNexus || isCmms || isSchedule || isLog || isDesignStudio || isDesignCanvas
     || /^\/quotes\/[^/]+(\/proposal|\/approve)(\/|$)/.test(pathname)
-  const isFullGlass = isAria || isDesignStudio  // 100dvh flex-column, own internal scroll
+  const isFullGlass = isAria || isDesignStudio || isDesignCanvas  // 100dvh flex-column, own internal scroll
 
   // Standalone: full-screen, no portal chrome
   if (isStandalone) {

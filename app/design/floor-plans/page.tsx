@@ -429,11 +429,12 @@ export default function FloorPlansPage() {
       const gs = 24;
       const svgStr = `<svg width="${gs}" height="${gs}" xmlns="http://www.w3.org/2000/svg"><path d="M ${gs} 0 L 0 0 0 ${gs}" fill="none" stroke="#e2e8f0" stroke-width="0.5"/></svg>`;
       const gridUrl = "data:image/svg+xml;base64," + btoa(svgStr);
-      fabric.util.loadImage(gridUrl, (img: HTMLImageElement) => {
+      // Fabric v6: loadImage is Promise-based and setBackgroundColor was removed.
+      fabric.util.loadImage(gridUrl).then((img: HTMLImageElement) => {
         if (!fc) return;
-        const pattern = new fabric.Pattern({ source: img, repeat: "repeat" });
-        fc.setBackgroundColor(pattern, () => fc?.renderAll());
-      });
+        fc.backgroundColor = new fabric.Pattern({ source: img, repeat: "repeat" });
+        fc.requestRenderAll();
+      }).catch(() => {});
 
       // Events
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -460,8 +461,10 @@ export default function FloorPlansPage() {
 
     const onResize = () => {
       if (canvasRef.current && canvasContainerRef.current) {
-        canvasRef.current.setWidth(canvasContainerRef.current.offsetWidth);
-        canvasRef.current.setHeight(canvasContainerRef.current.offsetHeight);
+        canvasRef.current.setDimensions({
+          width: canvasContainerRef.current.offsetWidth,
+          height: canvasContainerRef.current.offsetHeight,
+        });
         canvasRef.current.renderAll();
       }
     };
@@ -479,7 +482,7 @@ export default function FloorPlansPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function onMouseDown(opt: any, fc: any, fabric: any) {
     const mode = toolModeRef.current;
-    const ptr = fc.getPointer(opt.e);
+    const ptr = typeof fc.getScenePoint === "function" ? fc.getScenePoint(opt.e) : fc.getPointer(opt.e);
 
     if (scaleModeRef.current) {
       const pts = [...(scaleLinePoints), { x: ptr.x, y: ptr.y }];
@@ -522,7 +525,7 @@ export default function FloorPlansPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function onMouseMove(opt: any, fc: any, fabric: any) {
     if (toolModeRef.current !== "cable" || cablePointsRef.current.length === 0) return;
-    const ptr = fc.getPointer(opt.e);
+    const ptr = typeof fc.getScenePoint === "function" ? fc.getScenePoint(opt.e) : fc.getPointer(opt.e);
 
     if (previewLineRef.current) { fc.remove(previewLineRef.current); previewLineRef.current = null; }
 
@@ -768,12 +771,14 @@ export default function FloorPlansPage() {
       const fabric = fabricModule as any;
       const fc = canvasRef.current;
       if (!fc) return;
+      // Fabric v6: fromURL returns a Promise; backgroundImage is a property.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      fabric.Image.fromURL(dataUrl, (img: any) => {
+      fabric.Image.fromURL(dataUrl).then((img: any) => {
         img.set({ selectable: false, evented: false, opacity: 0.6 });
-        img.scaleToWidth(fc.width ?? 1200);
-        fc.setBackgroundImage(img, fc.renderAll.bind(fc));
-      });
+        img.scaleToWidth(fc.getWidth?.() ?? fc.width ?? 1200);
+        fc.backgroundImage = img;
+        fc.requestRenderAll();
+      }).catch(() => {});
     };
     reader.readAsDataURL(file);
     e.target.value = "";
