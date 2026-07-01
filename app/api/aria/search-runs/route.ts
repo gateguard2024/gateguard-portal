@@ -43,11 +43,9 @@ export async function GET(req: NextRequest) {
       .from('aria_search_runs')
       .select(`
         id,
-        query,
-        mode,
+        query:raw_query,
         status,
         engine_version,
-        search_type,
         selected_candidate_id,
         created_at,
         completed_at,
@@ -58,7 +56,7 @@ export async function GET(req: NextRequest) {
           address,
           city,
           state,
-          score,
+          score:confidence_score,
           rank_position,
           status
         )
@@ -100,10 +98,10 @@ export async function GET(req: NextRequest) {
       return {
         id: run.id,
         query: run.query,
-        mode: run.mode,
+        mode: run.mode ?? null,
         status: run.status,
         engine_version: run.engine_version,
-        search_type: run.search_type,
+        search_type: run.search_type ?? null,
         created_at: run.created_at,
         completed_at: run.completed_at,
         candidate_count: run.candidate_count ?? candidates.length,

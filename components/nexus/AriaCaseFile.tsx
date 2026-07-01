@@ -75,18 +75,21 @@ export function AriaCaseFile({ prospect, social, propertyId, fresh, busy, onSave
 
   const sentiment = pains.some(x => x.severity === 'high') ? { t: 'Frustrated', c: RED } : pains.length ? { t: 'Mixed', c: AMBER } : { t: 'Quiet', c: MUT }
 
-  // Decision-maker score (1–10) = how complete the contact chain is.
-  // 1-3 phone · 3-5 onsite name · 5-7 senior mgmt · 7-9 ownership · 9-10 full chain.
-  const hasPhone = !!(dm.phone || p.phone)
-  const hasName = !!dm.name
-  const hasSenior = !!(dm.title && /regional|senior|director|\bvp\b|principal|asset|owner|president|ceo/i.test(dm.title))
-  const hasOwner = !!(own.owner_entity || p.owner_entity)
+  // Decision-maker score (0–10) — SAME additive formula as the list cards so the
+  // number never disagrees: phone 3 · onsite PM 2 · regional/asset 2 · owner 2 · email 1.
+  const chain: Any[] = prospect?.decision_maker_chain ?? []
+  const rawPhone = dm.phone || p.phone
+  const hasPhone = !!rawPhone && rawPhone !== 'No data found' && String(rawPhone).length > 5
+  const hasPM = chain.some(c => c.role_type === 'property_manager' && c.name && c.name !== 'Unknown') || (!!dm.name && !chain.length)
+  const hasSenior = chain.some(c => ['regional_manager', 'asset_manager'].includes(c.role_type) && c.name && c.name !== 'Unknown')
+  const hasOwner = (!!own.owner_entity && own.owner_entity !== 'Unknown') || !!p.owner_entity || chain.some(c => c.role_type === 'owner' && c.name && c.name !== 'Unknown')
+  const hasEmail = (!!dm.email && dm.email.includes('@')) || chain.some(c => c.email && c.email.includes('@'))
   let dmScore = 0
-  if (hasPhone) dmScore = 3
-  if (hasName) dmScore = Math.max(dmScore, 5)
-  if (hasSenior) dmScore = Math.max(dmScore, 7)
-  if (hasOwner) dmScore = Math.max(dmScore, 9)
-  if (hasPhone && hasName && hasOwner) dmScore = 10
+  if (hasPhone) dmScore += 3
+  if (hasPM) dmScore += 2
+  if (hasSenior) dmScore += 2
+  if (hasOwner) dmScore += 2
+  if (hasEmail) dmScore += 1
   const dmColor = dmScore >= 7 ? GREEN : dmScore >= 4 ? AMBER : RED
   const chip = (ok: boolean, label: string) => <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 999, background: ok ? 'rgba(52,211,153,0.14)' : 'rgba(255,255,255,0.05)', border: `1px solid ${ok ? 'rgba(52,211,153,0.4)' : LINE}`, color: ok ? GREEN : MUT }}>{ok ? '✓' : '–'} {label}</span>
 
@@ -140,9 +143,9 @@ export function AriaCaseFile({ prospect, social, propertyId, fresh, busy, onSave
           <Row k="Contract ends" v={val(contractEnd)} color={GREEN} />
         </Card>
 
-        <Card icon={UserCheck} title="Who to call" right={<span style={{ fontSize: 12, fontWeight: 500, color: BG, background: dmColor, borderRadius: 999, padding: '3px 9px' }} title="Decision-maker data score">{dmScore || 1} / 10</span>}>
+        <Card icon={UserCheck} title="Who to call" right={<span style={{ fontSize: 12, fontWeight: 500, color: BG, background: dmColor, borderRadius: 999, padding: '3px 9px' }} title="Decision-maker data score">{dmScore} / 10</span>}>
           <div style={{ fontSize: 14 }}>{val(dm.name, 'No contact found')} {dm.title && <span style={{ color: MUT }}>· {dm.title}</span>}</div>
-          <div style={{ display: 'flex', gap: 5, marginTop: 8, flexWrap: 'wrap' }}>{chip(hasPhone, 'phone')}{chip(hasName, 'onsite')}{chip(hasSenior, 'mgmt')}{chip(hasOwner, 'owner')}</div>
+          <div style={{ display: 'flex', gap: 5, marginTop: 8, flexWrap: 'wrap' }}>{chip(hasPhone, 'phone')}{chip(hasPM, 'onsite')}{chip(hasSenior, 'mgmt')}{chip(hasOwner, 'owner')}</div>
           <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
             {dm.phone && <a href={`tel:${dm.phone}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, background: TILE, border: `1px solid ${LINE}`, borderRadius: 8, padding: '6px 9px', color: '#C7D0FF', textDecoration: 'none' }}><Phone size={13} /> Call</a>}
             {dm.email && <a href={`mailto:${dm.email}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, background: TILE, border: `1px solid ${LINE}`, borderRadius: 8, padding: '6px 9px', color: '#C7D0FF', textDecoration: 'none' }}><Mail size={13} /> Email</a>}

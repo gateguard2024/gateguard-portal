@@ -3476,8 +3476,7 @@ export default function ARIAPage() {
             <div className="flex flex-col h-full overflow-hidden">
               <DetailHeader p={prospect} />
               <div className="flex-1 overflow-y-auto p-6 lg:p-8">
-                <div className="mb-6"><AriaCaseFile prospect={prospect as unknown as Record<string, unknown>} social={socialResults} /></div>
-                {activeTab === 'property' && <PropertyTab p={prospect} />}
+                {activeTab === 'property' && <AriaCaseFile prospect={prospect as unknown as Record<string, unknown>} social={socialResults} />}
                 {activeTab === 'proptech' && <PropTechTab p={prospect} />}
                 {activeTab === 'dm'       && <DMTab p={prospect} />}
                 {activeTab === 'intel'    && <IntelTab p={prospect} />}
@@ -3613,8 +3612,7 @@ export default function ARIAPage() {
                 ))}
               </div>
               <div className="p-4">
-                <div className="mb-5"><AriaCaseFile prospect={prospect as unknown as Record<string, unknown>} social={socialResults} /></div>
-                {activeTab === 'property' && <PropertyTab p={prospect} />}
+                {activeTab === 'property' && <AriaCaseFile prospect={prospect as unknown as Record<string, unknown>} social={socialResults} />}
                 {activeTab === 'proptech' && <PropTechTab p={prospect} />}
                 {activeTab === 'dm'       && <DMTab p={prospect} />}
                 {activeTab === 'intel'    && <IntelTab p={prospect} />}
