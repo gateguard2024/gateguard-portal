@@ -921,21 +921,28 @@ interface Phase1Result {
 // result is consistent across re-runs (unlike a single nondeterministic Haiku call).
 // Conservative by design: when the evidence is ambiguous it returns null rather than
 // guess the wrong property's number.
-function regexUnitsBackstop(text: string): number | null {
-  if (!text) return null
+// Returns two signals from the raw text:
+//   sum    = bedroom-breakdown total (e.g. "291 one-bed + 273 two-bed" = 564). HIGH
+//            confidence: it's the property's own explicit unit mix, so it OVERRIDES a
+//            suspicious LLM number.
+//   single = a single explicit total-unit phrasing ("Total Units: 312", "312-unit").
+//            MEDIUM confidence: used only to fill a gap when the LLM returned nothing.
+// Both are null when the evidence is absent or ambiguous (multiple distinct counts →
+// likely other properties in the text), so we never guess the wrong property's number.
+function unitsFromText(text: string): { sum: number | null; single: number | null } {
+  const out = { sum: null as number | null, single: null as number | null }
+  if (!text) return out
   const inRange = (n: number) => n >= 20 && n <= 3000
-  // 1) Bedroom breakdown = SUM (highly specific, rarely collides across properties).
-  //    Only count per-bedroom totals >= 20 so stray "2 bedroom floor plan" is ignored.
+  // Bedroom breakdown = SUM. Only per-bedroom totals >= 20 so stray "2 bedroom floor
+  // plan" mentions are ignored. Require 2+ so it's a real mix, not one stray number.
   const bedMatches = [...text.matchAll(/(\d{2,4})\s*(?:-|\s)?(?:one|two|three|four|1|2|3|4)[\s-]*bed(?:room)?s?\b/gi)]
     .map(m => parseInt(m[1], 10))
     .filter(n => !isNaN(n) && n >= 20 && n < 3000)
   if (bedMatches.length >= 2) {
-    const sum = bedMatches.reduce((a, b) => a + b, 0)
-    if (inRange(sum)) return sum
+    const s = bedMatches.reduce((a, b) => a + b, 0)
+    if (inRange(s)) out.sum = s
   }
-  // 2) Explicit total-unit phrasings — collect DISTINCT sane values. Use it only when
-  //    a single value appears; multiple distinct counts = likely other properties in
-  //    the text → stay null (avoids the "wrong-property unit count" failure mode).
+  // Explicit total phrasings — collect DISTINCT sane values; only trust a lone value.
   const patterns = [
     /total\s+units?\s*[:\-]?\s*(\d{2,4})/gi,
     /(\d{2,4})[\s-]*unit\b/gi,
@@ -949,8 +956,8 @@ function regexUnitsBackstop(text: string): number | null {
       if (!isNaN(n) && inRange(n)) vals.add(n)
     }
   }
-  if (vals.size === 1) return [...vals][0]
-  return null
+  if (vals.size === 1) out.single = [...vals][0]
+  return out
 }
 function regexYearBuiltBackstop(text: string): number | null {
   if (!text) return null
@@ -1065,15 +1072,21 @@ AMENITY/TECHNOLOGY RULES (look especially in ===AMENITY PAGES===):
   const cleanIsp = rawIsp && !ISP_SERVICE_DESCRIPTIONS.has(rawIsp.toLowerCase().trim()) ? rawIsp : null
   const cleanCable = rawCable && !VIDEO_SERVICE_DESCRIPTIONS.has(rawCable.toLowerCase().trim()) ? rawCable : null
 
-  // Deterministic backstop: if the LLM missed units / year, recover them from the same
-  // raw text it just read. Only fills gaps — never overrides a value the LLM found.
-  const unitsBackstop = extracted.confirmed_units == null ? regexUnitsBackstop(combinedSnippets) : null
-  const yearBackstop  = extracted.confirmed_year_built == null ? regexYearBuiltBackstop(combinedSnippets) : null
+  // Deterministic reconciliation over the SAME raw text the LLM read:
+  //  - bedroom-sum (rx.sum) is the property's explicit unit mix → OVERRIDES the LLM
+  //    even when the LLM returned a (wrong) number. This fixes "71 instead of 564".
+  //  - a lone total phrasing (rx.single) only fills a gap when the LLM found nothing.
+  // Because it's rule-based, the same page yields the same number on every run.
+  const rx = unitsFromText(combinedSnippets)
+  let finalUnits = extracted.confirmed_units ?? null
+  if (rx.sum != null) finalUnits = rx.sum
+  else if (finalUnits == null && rx.single != null) finalUnits = rx.single
+  const yearBackstop = extracted.confirmed_year_built == null ? regexYearBuiltBackstop(combinedSnippets) : null
 
   return {
     ...blank,
     ...extracted,
-    confirmed_units:      extracted.confirmed_units ?? unitsBackstop,
+    confirmed_units:      finalUnits,
     confirmed_year_built: extracted.confirmed_year_built ?? yearBackstop,
     listing_isp: cleanIsp,
     listing_cable: cleanCable,

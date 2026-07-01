@@ -637,6 +637,11 @@ export default function ARIAPage() {
   const [queryInterpretation, setQueryInterpretation] = useState('');
   const [viewMode, setViewMode]             = useState<ViewMode>('idle');
   const [socialResults, setSocialResults]   = useState<SocialSearchResult | null>(null);
+  // Mount gate — SSR and the first client render both output a stable placeholder so
+  // there's no hydration mismatch from time-relative text (formatAge) or Date-based
+  // values. Real UI renders after mount. Fixes React #418/#423/#425.
+  const [mounted, setMounted]               = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const [socialLoading, setSocialLoading]   = useState(false);
   const [cacheStatus, setCacheStatus]       = useState<'fresh' | 'stale' | 're-enriching' | null>(null);
   const [cacheAgeHours, setCacheAgeHours]   = useState<number | null>(null);
@@ -3296,13 +3301,14 @@ export default function ARIAPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
+  if (!mounted) return <div className="flex flex-col min-h-full" style={{ background: '#0B1728', minHeight: '100vh' }} />;
+
   return (
     <div className="flex flex-col min-h-full" style={{ background: '#0B1728' }}>
       <TopBar
         title="ARIA"
         subtitle="Account Research Intelligence Agent"
         actions={topbarActions}
-        background="#0B1728"
       />
 
       {/* ── Desktop split layout ────────────────────────────────────────── */}
@@ -3544,7 +3550,7 @@ export default function ARIAPage() {
 
         <div className="flex-1 overflow-y-auto">
           {isRunning ? (
-            <div className="p-4"><PipelinePanel phase={phase} synthStep={synthStep} /></div>
+            <div className="h-full min-h-[75vh]"><PipelinePanel phase={phase} synthStep={synthStep} /></div>
           ) : viewMode === 'candidates' ? (
             <CandidateGrid />
           ) : error ? (
