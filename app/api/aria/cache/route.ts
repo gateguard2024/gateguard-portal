@@ -246,6 +246,17 @@ export async function GET(req: NextRequest) {
     const row = await findCachedProperty(query)
     if (!row) return NextResponse.json({ hit: false, reason: 'not_found' })
 
+    // Empty-record guard: a cached row that never captured the core facts (units, ISP,
+    // contact) is worse than no cache — it shows "No data found" forever and hides every
+    // engine improvement. Treat it as a miss so the full pipeline re-runs and re-enriches.
+    const hasCore = (row.units != null)
+      || ((row.isp_providers?.length ?? 0) > 0)
+      || ((row.video_providers?.length ?? 0) > 0)
+      || !!row.dm_name
+      || ((row.gate_operators?.length ?? 0) > 0)
+      || ((row.access_control?.length ?? 0) > 0)
+    if (!hasCore) return NextResponse.json({ hit: false, reason: 'empty_cache' })
+
     // Freshness check
     const lastResearched = row.last_researched_at ? new Date(row.last_researched_at) : null
     const ageMs = lastResearched ? Date.now() - lastResearched.getTime() : Infinity

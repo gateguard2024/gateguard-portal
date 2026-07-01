@@ -140,7 +140,7 @@ Rules:
 
 RESULTS:
 ${snippets}` }],
-    })
+    }, { timeout: 22000 })
     meterSonnet(msg.usage?.input_tokens ?? 0, msg.usage?.output_tokens ?? 0)
     const text = msg.content[0]?.type === 'text' ? msg.content[0].text : '{}'
     const m = text.match(/\{[\s\S]*\}/)
@@ -2716,12 +2716,14 @@ export async function POST(req: NextRequest) {
 
     // ── PHASES 2 + 3 in parallel (+ mdu_providers DB fetch) ──────────────────
     // IMP-4: pass rewritten queries to both Phase 2 and Phase 3 for intent-specific searches
-    const [p2Raw, p3] = await Promise.all([
+    const [p2Raw, p3, gtResult] = await Promise.all([
       fetchMduProviders().then(dbProviders =>
         runPhase2(property_name, address, city, state, mgmt, coords, anthropic, dbProviders, rewritten)
       ),
       // Pass Phase 1A listing data + rewritten queries into Phase 3
       runPhase3(property_name, city, state, mgmt, owner, website, anthropic, p1.listing_proptech, rewritten),
+      // Ground-truth pass runs CONCURRENTLY (no added serial latency) — merged in after.
+      groundTruthExtract(property_name, city, state).catch(() => null),
     ])
 
     // Merge Phase 2 with DB+listing seed — user-verified DB > listing-verified > AI
@@ -2821,7 +2823,7 @@ export async function POST(req: NextRequest) {
     // (units, phone, ISP/video, proptech, contacts). Runs before synthesis + assembly so
     // both the narrative and the card benefit. Fills gaps / unions arrays only; never blanks.
     try {
-      const gt = await groundTruthExtract(property_name, city, state)
+      const gt = gtResult
       if (gt) {
         if (p1.confirmed_units == null && gt.units != null) p1.confirmed_units = gt.units
         if (p1.confirmed_year_built == null && gt.year_built != null) p1.confirmed_year_built = gt.year_built
