@@ -3301,10 +3301,10 @@ export default function ARIAPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  if (!mounted) return <div className="flex flex-col min-h-full" style={{ background: '#0B1728', minHeight: '100vh' }} />;
+  if (!mounted) return <div className="flex flex-col h-full" style={{ background: '#0B1728', minHeight: '100dvh' }} />;
 
   return (
-    <div className="flex flex-col min-h-full" style={{ background: '#0B1728' }}>
+    <div className="flex flex-col h-full" style={{ background: '#0B1728', minHeight: '100dvh' }}>
       <TopBar
         title="ARIA"
         subtitle="Account Research Intelligence Agent"
@@ -3460,7 +3460,7 @@ export default function ARIAPage() {
         </div>
 
         {/* Right panel — v9 glass */}
-        <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'linear-gradient(160deg, rgba(11,23,40,0.98) 0%, rgba(243,244,255,0.96) 100%)' }}>
+        <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'radial-gradient(ellipse at 50% 0%, #131B2E 0%, #0B1728 60%)' }}>
           {dbView ? (
             <IntelDBPanel />
 ) : isRunning ? (

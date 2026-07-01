@@ -938,7 +938,9 @@ function unitsFromText(text: string): { sum: number | null; single: number | nul
   const bedMatches = [...text.matchAll(/(\d{2,4})\s*(?:-|\s)?(?:one|two|three|four|1|2|3|4)[\s-]*bed(?:room)?s?\b/gi)]
     .map(m => parseInt(m[1], 10))
     .filter(n => !isNaN(n) && n >= 20 && n < 3000)
-  if (bedMatches.length >= 2) {
+  // Require 2-4 bedroom types (a single property has 1BR/2BR/3BR/4BR). More than 4
+  // means multiple properties' mixes are in the text → summing would contaminate.
+  if (bedMatches.length >= 2 && bedMatches.length <= 4) {
     const s = bedMatches.reduce((a, b) => a + b, 0)
     if (inRange(s)) out.sum = s
   }
@@ -1072,15 +1074,19 @@ AMENITY/TECHNOLOGY RULES (look especially in ===AMENITY PAGES===):
   const cleanIsp = rawIsp && !ISP_SERVICE_DESCRIPTIONS.has(rawIsp.toLowerCase().trim()) ? rawIsp : null
   const cleanCable = rawCable && !VIDEO_SERVICE_DESCRIPTIONS.has(rawCable.toLowerCase().trim()) ? rawCable : null
 
-  // Deterministic reconciliation over the SAME raw text the LLM read:
-  //  - bedroom-sum (rx.sum) is the property's explicit unit mix → OVERRIDES the LLM
-  //    even when the LLM returned a (wrong) number. This fixes "71 instead of 564".
-  //  - a lone total phrasing (rx.single) only fills a gap when the LLM found nothing.
-  // Because it's rule-based, the same page yields the same number on every run.
-  const rx = unitsFromText(combinedSnippets)
+  // Deterministic reconciliation — scoped to THIS property's own listing page.
+  //  - rxA reads only the amenity raw-content (apartments.com/rentcafe page for this
+  //    property), so its numbers belong to this property, not the RADCO portfolio's
+  //    other communities in the press blob (that's what produced the wrong 1792).
+  //  - An explicit total on the property's own page ("564-unit") is most trustworthy;
+  //    then its bedroom-sum; then the LLM value; then, only as a last resort, a lone
+  //    total anywhere in the wider text.
+  const rxA = unitsFromText(amenitySnippets)
+  const rxAll = unitsFromText(combinedSnippets)
   let finalUnits = extracted.confirmed_units ?? null
-  if (rx.sum != null) finalUnits = rx.sum
-  else if (finalUnits == null && rx.single != null) finalUnits = rx.single
+  if (rxA.single != null) finalUnits = rxA.single
+  else if (rxA.sum != null) finalUnits = rxA.sum
+  else if (finalUnits == null && rxAll.single != null) finalUnits = rxAll.single
   const yearBackstop = extracted.confirmed_year_built == null ? regexYearBuiltBackstop(combinedSnippets) : null
 
   return {
