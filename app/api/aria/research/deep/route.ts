@@ -13,6 +13,7 @@
  * Total: ~26-30s for specific_property | ~7-10s for candidate list
  */
 
+import { AsyncLocalStorage } from 'async_hooks'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import Anthropic from '@anthropic-ai/sdk'
@@ -29,27 +30,68 @@ export const dynamic = 'force-dynamic'
 
 const ARIA_ENGINE_VERSION = 'v9.0'
 
-// ─── v9: CostTracker ──────────────────────────────────────────────────────────
-// Tracks API spend in-pipeline. Gates supervisor loop and Sonnet call.
+// ─── CostTracker — real per-search API spend (accurate list prices) ────────────
+// Every external call records into the request's tracker via AsyncLocalStorage, so
+// we get the TRUE cost of a search (call counts + token usage), not an estimate.
+// Unit prices are list prices as of build; override via env to match your plan.
 // Hard cap: ARIA_COST_CAP_CENTS env var (default 50 = $0.50)
 const COST_CAP_CENTS = parseInt(process.env.ARIA_COST_CAP_CENTS ?? '50', 10)
 const CREDITS_PER_SEARCH = 100  // atomic deduction from credit_balances
 
-class CostTracker {
-  private items: { label: string; cents: number }[] = []
-  get totalCents() { return this.items.reduce((s, i) => s + i.cents, 0) }
-  add(label: string, cents: number) { this.items.push({ label, cents }) }
-  isOverCap() { return this.totalCents >= COST_CAP_CENTS }
-  // ~$0.001 per Haiku output token; Serper = 0.1¢ per call; Tavily = ~0.3¢
-  addHaiku(outputTokens: number) { this.add('haiku', Math.ceil(outputTokens * 0.001)) }
-  addSerper() { this.add('serper', 1) }
-  addTavily() { this.add('tavily', 3) }
-  addSonnet(inputTokens: number, outputTokens: number) {
-    this.add('sonnet_in', Math.ceil(inputTokens * 0.003))
-    this.add('sonnet_out', Math.ceil(outputTokens * 0.015))
-  }
-  summary() { return `$${(this.totalCents / 100).toFixed(3)} (${this.items.map(i => i.label).join('+')})` }
+const PRICE = {
+  serperCents:          parseFloat(process.env.ARIA_PRICE_SERPER_CENTS         ?? '0.1'),    // $0.001 / search
+  tavilyCentsPerCredit: parseFloat(process.env.ARIA_PRICE_TAVILY_CENTS_CREDIT  ?? '0.8'),    // $0.008 / credit (advanced=2, basic=1)
+  apolloCents:          parseFloat(process.env.ARIA_PRICE_APOLLO_CENTS         ?? '3'),      // ~$0.03 / match
+  haikuInPerTok:        parseFloat(process.env.ARIA_PRICE_HAIKU_IN             ?? '0.0001'), // $1 / M input
+  haikuOutPerTok:       parseFloat(process.env.ARIA_PRICE_HAIKU_OUT            ?? '0.0005'), // $5 / M output
+  sonnetInPerTok:       parseFloat(process.env.ARIA_PRICE_SONNET_IN            ?? '0.0003'), // $3 / M input
+  sonnetOutPerTok:      parseFloat(process.env.ARIA_PRICE_SONNET_OUT           ?? '0.0015'), // $15 / M output
 }
+
+class CostTracker {
+  serperCalls = 0
+  tavilyCredits = 0
+  apolloCalls = 0
+  haikuInTok = 0; haikuOutTok = 0; haikuCalls = 0
+  sonnetInTok = 0; sonnetOutTok = 0; sonnetCalls = 0
+
+  addSerper() { this.serperCalls += 1 }
+  addTavily(credits = 1) { this.tavilyCredits += credits }
+  addApollo() { this.apolloCalls += 1 }
+  addHaiku(inputTokens = 0, outputTokens = 0) { this.haikuCalls += 1; this.haikuInTok += inputTokens; this.haikuOutTok += outputTokens }
+  addSonnet(inputTokens: number, outputTokens: number) { this.sonnetCalls += 1; this.sonnetInTok += inputTokens; this.sonnetOutTok += outputTokens }
+
+  get totalCents(): number {
+    return (
+      this.serperCalls   * PRICE.serperCents +
+      this.tavilyCredits * PRICE.tavilyCentsPerCredit +
+      this.apolloCalls   * PRICE.apolloCents +
+      this.haikuInTok    * PRICE.haikuInPerTok  + this.haikuOutTok  * PRICE.haikuOutPerTok +
+      this.sonnetInTok   * PRICE.sonnetInPerTok + this.sonnetOutTok * PRICE.sonnetOutPerTok
+    )
+  }
+  isOverCap() { return this.totalCents >= COST_CAP_CENTS }
+
+  breakdown() {
+    return {
+      total_cents: Math.round(this.totalCents * 100) / 100,
+      serper:  { calls: this.serperCalls,   cents: Math.round(this.serperCalls * PRICE.serperCents * 100) / 100 },
+      tavily:  { credits: this.tavilyCredits, cents: Math.round(this.tavilyCredits * PRICE.tavilyCentsPerCredit * 100) / 100 },
+      apollo:  { calls: this.apolloCalls,   cents: Math.round(this.apolloCalls * PRICE.apolloCents * 100) / 100 },
+      haiku:   { calls: this.haikuCalls, in_tokens: this.haikuInTok, out_tokens: this.haikuOutTok, cents: Math.round((this.haikuInTok * PRICE.haikuInPerTok + this.haikuOutTok * PRICE.haikuOutPerTok) * 100) / 100 },
+      sonnet:  { calls: this.sonnetCalls, in_tokens: this.sonnetInTok, out_tokens: this.sonnetOutTok, cents: Math.round((this.sonnetInTok * PRICE.sonnetInPerTok + this.sonnetOutTok * PRICE.sonnetOutPerTok) * 100) / 100 },
+    }
+  }
+  summary() { return `$${(this.totalCents / 100).toFixed(3)} — serper×${this.serperCalls} tavily×${this.tavilyCredits}cr haiku×${this.haikuCalls} sonnet×${this.sonnetCalls} apollo×${this.apolloCalls}` }
+}
+
+// Request-scoped tracker — helpers read it via getStore(), set once per request.
+const costALS = new AsyncLocalStorage<CostTracker>()
+const meter = () => costALS.getStore()
+function meterSerper()                         { meter()?.addSerper() }
+function meterTavily(credits: number)          { meter()?.addTavily(credits) }
+function meterApollo()                         { meter()?.addApollo() }
+function meterHaiku(inTok: number, outTok: number)  { meter()?.addHaiku(inTok, outTok) }
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -94,6 +136,9 @@ async function completeSearchRun(
     quality_gates_passed?: Record<string, boolean>
     selected_candidate_id?: string | null
     duration_ms?: number
+    cost_cents?: number
+    cost_points?: number
+    cost_breakdown?: Record<string, unknown>
   } = {}
 ): Promise<void> {
   if (!runId) return
@@ -465,6 +510,7 @@ async function tavilySearch(
     })
     if (!res.ok) return []
     const data = await res.json()
+    meterTavily(depth === 'advanced' ? 2 : 1)
     return (data.results ?? []).map((r: TavilyResult) => ({ ...r, source }))
   } catch { return [] }
 }
@@ -491,6 +537,7 @@ async function serperSearch(
     })
     if (!res.ok) return []
     const data = await res.json()
+    meterSerper()
     const items = type === 'news' ? (data.news ?? []) : (data.organic ?? [])
     return items.slice(0, maxResults).map((r: any) => ({
       title: r.title ?? '',
@@ -517,6 +564,7 @@ async function serperSearchKG(query: string, maxResults = 5, source = 'serper'):
     })
     if (!res.ok) return []
     const data = await res.json()
+    meterSerper()
     const results: TavilyResult[] = []
 
     // Knowledge Graph — Google's business card (has phone, address, website for known entities)
@@ -561,6 +609,7 @@ async function haikusExtract<T>(prompt: string, snippets: string, maxTokens: num
       max_tokens: maxTokens,
       messages: [{ role: 'user', content: `${prompt}\n\nSEARCH RESULTS:\n${snippets}` }],
     })
+    meterHaiku(msg.usage?.input_tokens ?? 0, msg.usage?.output_tokens ?? 0)
     const text = msg.content[0]?.type === 'text' ? msg.content[0].text : '{}'
     const match = text.match(/\{[\s\S]+\}/)
     if (match) return JSON.parse(match[0]) as T
@@ -684,6 +733,7 @@ async function apolloEnrichPerson(name: string, domain: string): Promise<ApolloE
       signal: AbortSignal.timeout(4000),
     })
     if (!res.ok) return null
+    meterApollo()
     const data = await res.json()
     const p = data?.person
     if (!p) return null
@@ -877,6 +927,7 @@ Return JSON:
 }`,
       }],
     })
+    meterHaiku(msg.usage?.input_tokens ?? 0, msg.usage?.output_tokens ?? 0)
     const text = msg.content[0]?.type === 'text' ? msg.content[0].text : '{}'
     const match = text.match(/\{[\s\S]*\}/)
     const parsed = JSON.parse(match?.[0] ?? '{}') as Partial<RewrittenQuery>
@@ -2378,8 +2429,10 @@ export async function POST(req: NextRequest) {
       : /camera/.test(searchFocus) ? `${name} security cameras surveillance system brand`
       : null
 
-    // v9 — initialize in-pipeline cost tracker
+    // Initialize in-pipeline cost tracker (COGS / money-out) and make it the
+    // request-scoped store so every API helper records into it via AsyncLocalStorage.
     const costTracker = new CostTracker()
+    costALS.enterWith(costTracker)
 
     // ── v9: Credit pre-gate (blocking, atomic) ───────────────────────────────
     // Deducts CREDITS_PER_SEARCH before any work begins. Returns 402 if insufficient.
@@ -3115,12 +3168,18 @@ ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, 
       }).select('id').single()
       if (searchRow?.id) savedSearchId = searchRow.id
 
-      // v8: Complete the search run record with full stats + org_id
+      // v8: Complete the search run record with full stats + org_id + real COGS.
+      // cost_cents = actual $ spend (money-out, for corporate money-in/out reporting).
+      // cost_points = cents × 2  ($1 = 200 credits ⇒ 1¢ = 2 credits/points).
       if (searchRunId) {
+        const costCents = Math.round(costTracker.totalCents * 100) / 100
         void completeSearchRun(searchRunId, 'complete', {
           candidate_count: 1,
           quality_gates_passed: qualityGates,
           duration_ms: Date.now() - runStart,
+          cost_cents: costCents,
+          cost_points: Math.round(costCents * 2),
+          cost_breakdown: costTracker.breakdown(),
         })
         void supabaseDeep
           .from('aria_search_runs')
