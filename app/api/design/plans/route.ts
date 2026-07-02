@@ -1,6 +1,10 @@
 /**
- * GET  /api/design/plans — list floor plans for the org
- * POST /api/design/plans — create a new floor plan
+ * GET  /api/design/plans           — list floor plans for the org (optionally ?site_id=)
+ * POST /api/design/plans           — create a new floor plan for a site_id
+ *
+ * Uses ONLY floor_plans + floor_plan_devices. Wires/zones are stored as
+ * floor_plan_devices rows (device_type '__wire__' / '__zone__') so device_count
+ * is derived from the real element count (excluding those helper rows).
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -17,57 +21,58 @@ function serviceDb() {
   )
 }
 
-// GET /api/design/plans
-export async function GET(_req: NextRequest) {
+// GET /api/design/plans[?site_id=UUID]
+export async function GET(req: NextRequest) {
   const user = await getCurrentUser()
-  if (!user.id || user.id === 'system') {
+  if (!user.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const scope = await resolveOrgScope(user)
   const db = serviceDb()
+  const siteId = new URL(req.url).searchParams.get('site_id')
 
   let query = db
     .from('floor_plans')
     .select(`
-      id, name, level, org_id, site_id, status, created_at, updated_at,
-      floor_plan_devices(id),
-      floor_plan_connections(id)
+      id, name, level, org_id, site_id, status, file_url, file_type, created_at, updated_at,
+      floor_plan_devices(id, device_type)
     `)
     .order('updated_at', { ascending: false })
 
-  if (!scope.all && scope.ids.length > 0) {
-    query = query.in('org_id', scope.ids)
-  }
+  if (siteId) query = query.eq('site_id', siteId)
+  if (!scope.all && scope.ids.length > 0) query = query.in('org_id', scope.ids)
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Flatten counts
-  const plans = (data ?? []).map((p: Record<string, unknown>) => ({
-    ...(p as Record<string, unknown>),
-    device_count: Array.isArray(p.floor_plan_devices) ? p.floor_plan_devices.length : 0,
-    connection_count: Array.isArray(p.floor_plan_connections) ? p.floor_plan_connections.length : 0,
-    floor_plan_devices: undefined,
-    floor_plan_connections: undefined,
-  }))
+  const plans = (data ?? []).map((p: Record<string, unknown>) => {
+    const rows = Array.isArray(p.floor_plan_devices)
+      ? (p.floor_plan_devices as Array<{ device_type: string | null }>)
+      : []
+    const deviceCount = rows.filter(
+      (r) => r.device_type !== '__wire__' && r.device_type !== '__zone__'
+    ).length
+    return {
+      ...(p as Record<string, unknown>),
+      device_count: deviceCount,
+      element_count: rows.length,
+      floor_plan_devices: undefined,
+    }
+  })
 
   return NextResponse.json({ plans })
 }
 
-// POST /api/design/plans
+// POST /api/design/plans  { site_id, name?, level?, status?, file_type? }
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser()
-  if (!user.id || user.id === 'system') {
+  if (!user.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const body = await req.json()
-  const { name, level, site_id } = body
-
-  if (!name) {
-    return NextResponse.json({ error: 'name is required' }, { status: 400 })
-  }
+  const body = await req.json().catch(() => ({}))
+  const { site_id, name, level, status, file_type } = body
 
   const db = serviceDb()
   const org_id = user.isCorporate ? (body.org_id ?? null) : (user.org_id ?? null)
@@ -75,11 +80,13 @@ export async function POST(req: NextRequest) {
   const { data, error } = await db
     .from('floor_plans')
     .insert({
-      name,
-      level:   level ?? 'Level 1',
+      name: name ?? 'New Design',
+      level: level ?? 'Level 1',
       org_id,
       site_id: site_id ?? null,
-      status:  'draft',
+      status: status ?? 'floor_plan',
+      file_type: file_type ?? 'blank',
+      created_by: user.id,
     })
     .select()
     .single()
