@@ -368,8 +368,8 @@ function EditorInner() {
   const devKeyRef = useRef<string | null>(null);
   devKeyRef.current = devKey;
 
-  const [wireKind, setWireKind] = useState<WireKind>("network");
-  const wireKindRef = useRef<WireKind>("network");
+  const [wireKind, setWireKind] = useState<WireKind | null>(null);
+  const wireKindRef = useRef<WireKind | null>(null);
   wireKindRef.current = wireKind;
   const [showWirePicker, setShowWirePicker] = useState(false);
   const [showLegend, setShowLegend] = useState(true);
@@ -670,7 +670,7 @@ function EditorInner() {
     if (!fc || !fabric) return;
     if (!url) {
       fc.backgroundImage = undefined;
-      fc.backgroundColor = "#0E1A30";
+      fc.backgroundColor = "#FFFFFF";
       fc.renderAll();
       return;
     }
@@ -844,6 +844,7 @@ function EditorInner() {
     }
 
     if (mode === "wire") {
+      if (!wireKindRef.current) { setShowWirePicker(true); return; } // pick a wire type first
       if (wirePtsRef.current.length === 0) {
         wirePtsRef.current = [{ x: p.x, y: p.y }];
       } else {
@@ -869,7 +870,7 @@ function EditorInner() {
     const fc = fcRef.current;
     const fabric = fabricRef.current;
     if (!fc || !fabric) return;
-    if (toolRef.current !== "wire" || wirePtsRef.current.length === 0) return;
+    if (toolRef.current !== "wire" || wirePtsRef.current.length === 0 || !wireKindRef.current) return;
     const p = scenePoint(opt);
     if (wirePreviewRef.current) { fc.remove(wirePreviewRef.current); wirePreviewRef.current = null; }
     const from = wirePtsRef.current[0];
@@ -1445,7 +1446,6 @@ function EditorInner() {
               </button>
             )}
             {toolBtn("select", MousePointer, "Select")}
-            {toolBtn("wire", Zap, "Wire")}
             {toolBtn("fov", Camera, "Camera / FOV")}
             {toolBtn("zone", Type, "Area box (one or many)")}
             {toolBtn("scale", Ruler, "Set scale")}
@@ -1465,13 +1465,13 @@ function EditorInner() {
                 title="Choose wire type"
                 className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[11px]"
                 style={{
-                  backgroundColor: tool === "wire" ? `${WIRE_COLORS[wireKind]}22` : CARD,
-                  border: `1px solid ${tool === "wire" ? WIRE_COLORS[wireKind] : BORDER}`,
+                  backgroundColor: tool === "wire" && wireKind ? `${WIRE_COLORS[wireKind]}22` : CARD,
+                  border: `1px solid ${tool === "wire" && wireKind ? WIRE_COLORS[wireKind] : BORDER}`,
                   color: TEXT,
                 }}
               >
-                <span className="w-3.5 h-1 rounded-full" style={{ backgroundColor: WIRE_COLORS[wireKind] }} />
-                {WIRE_SHORT[wireKind]}
+                <Zap size={13} style={{ color: wireKind ? WIRE_COLORS[wireKind] : MUTED }} />
+                {wireKind ? WIRE_SHORT[wireKind] : "Select wire"}
                 <ChevronDown size={12} style={{ color: MUTED }} />
               </button>
               {showWirePicker && (
