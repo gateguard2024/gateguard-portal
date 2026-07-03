@@ -55,7 +55,7 @@ async function loadScopedPlan(id: string) {
   return { db, plan, user }
 }
 
-// GET /api/design/plans/[id]
+// GET /api/design/plans/[id]  → { plan (with .site), devices }
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const res = await loadScopedPlan(params.id)
   if ('error' in res) return NextResponse.json({ error: res.error }, { status: res.status })
@@ -69,7 +69,43 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json({ plan, devices: devices ?? [] })
+  // Attach the plan's property (for PDF title block). Best-effort — never fails the request.
+  let site: Record<string, unknown> | null = null
+  if (plan.site_id) {
+    const { data: s } = await db
+      .from('sites')
+      .select('id, name, address, city, state, zip')
+      .eq('id', plan.site_id)
+      .maybeSingle()
+    site = s ?? null
+  }
+
+  return NextResponse.json({ plan: { ...plan, site }, devices: devices ?? [] })
+}
+
+// PATCH /api/design/plans/[id]  { status?, name? }
+// Lightweight plan-meta update that does NOT touch devices (used by stage Promote).
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const res = await loadScopedPlan(params.id)
+  if ('error' in res) return NextResponse.json({ error: res.error }, { status: res.status })
+
+  const { db, plan } = res
+  const body = await req.json().catch(() => ({}))
+
+  const VALID_STAGES = ['floor_plan', 'system_design', 'as_built']
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  if (typeof body.status === 'string' && VALID_STAGES.includes(body.status)) patch.status = body.status
+  if (typeof body.name === 'string') patch.name = body.name
+
+  const { data: updated, error } = await db
+    .from('floor_plans')
+    .update(patch)
+    .eq('id', plan.id)
+    .select()
+    .single()
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  return NextResponse.json({ plan: updated })
 }
 
 // PUT /api/design/plans/[id]  { name?, level?, status?, file_url?, file_type?, devices: [...] }

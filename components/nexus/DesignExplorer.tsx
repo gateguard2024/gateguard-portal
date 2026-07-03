@@ -56,6 +56,16 @@ function stageOf(status: string): Stage {
   if (s.includes('system') || s.includes('design')) return 'system_design';
   return 'floor_plan';
 }
+const STAGE_RANK: Record<Stage, number> = { floor_plan: 0, system_design: 1, as_built: 2 };
+// Highest stage any drawing under a property has reached.
+function highestStage(plans: { status: string }[]): Stage {
+  let best: Stage = 'floor_plan';
+  for (const p of plans) {
+    const st = stageOf(p.status);
+    if (STAGE_RANK[st] > STAGE_RANK[best]) best = st;
+  }
+  return best;
+}
 function relTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);
@@ -262,6 +272,19 @@ export default function DesignExplorer() {
                       </span>
                     </div>
                   </div>
+                  {(() => {
+                    const hs = highestStage(g.plans);
+                    const hc = STAGE_COLOR[hs];
+                    return (
+                      <span
+                        title="Highest stage reached"
+                        className="text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide shrink-0 self-start"
+                        style={{ backgroundColor: `${hc}22`, color: hc, border: `1px solid ${hc}55` }}
+                      >
+                        {STAGE_LABEL[hs]}
+                      </span>
+                    );
+                  })()}
                 </div>
 
                 <div className="flex flex-col gap-2">

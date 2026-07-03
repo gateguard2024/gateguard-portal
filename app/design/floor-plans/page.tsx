@@ -23,6 +23,7 @@ import { Plus, X, Download, Trash2, Loader2, MapPin } from "lucide-react";
 const {
   Ruler, MousePointer, Zap, Camera, Type, Minus, ChevronDown, ChevronRight,
   BarChart3, Upload, Image: ImageIcon, Map: MapIcon, Layers, Printer, GitBranch, Save,
+  Stamp: StampIcon,
 } = require("lucide-react") as any;
 
 // ── Theme ───────────────────────────────────────────────────────────────────
@@ -72,23 +73,165 @@ const DEVICE_TYPES: DeviceTypeDef[] = [
 const DEVICE_CATEGORIES = Array.from(new Set(DEVICE_TYPES.map((d) => d.category)));
 const DEVICE_BY_KEY: Record<string, DeviceTypeDef> = Object.fromEntries(DEVICE_TYPES.map((d) => [d.key, d]));
 
-// ── Wire colors ──────────────────────────────────────────────────────────────
-type WireKind = "power" | "data" | "access" | "signal";
+// ── Starter templates ────────────────────────────────────────────────────────
+// A template is a predefined set of devices + wires placed at sensible canvas
+// percentages. Applying one just builds those elements on the current plan
+// (nothing is persisted until the user hits Save). Coordinates are % of canvas.
+interface TplDevice { key: string; xPct: number; yPct: number; label?: string; price?: number; }
+interface TplWire { from: [number, number]; to: [number, number]; kind: WireKind; }
+interface DesignTemplate {
+  id: string; name: string; blurb: string;
+  devices: TplDevice[]; wires: TplWire[];
+}
+const DESIGN_TEMPLATES: DesignTemplate[] = [
+  {
+    id: "gated_mdu",
+    name: "Gated MDU",
+    blurb: "Gate operator, entry callbox, 2 cameras & a PoE switch at the entrance.",
+    devices: [
+      { key: "liftmaster", xPct: 40, yPct: 55, price: 3200 },
+      { key: "dk1835", xPct: 30, yPct: 42, price: 1450 },
+      { key: "camera_lpr", xPct: 46, yPct: 40, price: 890 },
+      { key: "camera_bullet", xPct: 55, yPct: 62, price: 320 },
+      { key: "usw_24poe", xPct: 62, yPct: 50, price: 780 },
+      { key: "loop_det", xPct: 44, yPct: 62, price: 140 },
+    ],
+    wires: [
+      { from: [62, 50], to: [46, 40], kind: "camera" },  // switch → LPR cam
+      { from: [62, 50], to: [55, 62], kind: "camera" },  // switch → bullet cam
+      { from: [62, 50], to: [30, 42], kind: "network" }, // switch → callbox
+      { from: [30, 42], to: [40, 55], kind: "relay" },   // callbox → operator (open trigger)
+      { from: [44, 62], to: [40, 55], kind: "loop" },    // loop → operator
+    ],
+  },
+  {
+    id: "access_door",
+    name: "Access-Controlled Door",
+    blurb: "Brivo controller, card reader, REX, door contact & mag lock on one opening.",
+    devices: [
+      { key: "brivo_300", xPct: 30, yPct: 45, price: 1100 },
+      { key: "reader", xPct: 50, yPct: 40, price: 260 },
+      { key: "rex", xPct: 50, yPct: 55, price: 90 },
+      { key: "door_contact", xPct: 58, yPct: 47, price: 40 },
+      { key: "mag_lock", xPct: 55, yPct: 47, price: 210 },
+    ],
+    wires: [
+      { from: [30, 45], to: [50, 40], kind: "reader" }, // ACS → reader
+      { from: [30, 45], to: [50, 55], kind: "reader" }, // ACS → REX (input)
+      { from: [30, 45], to: [58, 47], kind: "reader" }, // ACS → door contact (input)
+      { from: [30, 45], to: [55, 47], kind: "relay" },  // ACS → mag lock (lock release)
+    ],
+  },
+  {
+    id: "camera_ring",
+    name: "Perimeter Camera Ring",
+    blurb: "Four cameras around the property fed by a central PoE switch.",
+    devices: [
+      { key: "usw_24poe", xPct: 50, yPct: 50, price: 780 },
+      { key: "camera_bullet", xPct: 25, yPct: 25, price: 320 },
+      { key: "camera_bullet", xPct: 75, yPct: 25, price: 320 },
+      { key: "camera_dome", xPct: 25, yPct: 75, price: 380 },
+      { key: "camera_ptz", xPct: 75, yPct: 75, price: 1200 },
+    ],
+    wires: [
+      { from: [50, 50], to: [25, 25], kind: "camera" },
+      { from: [50, 50], to: [75, 25], kind: "camera" },
+      { from: [50, 50], to: [25, 75], kind: "camera" },
+      { from: [50, 50], to: [75, 75], kind: "camera" },
+    ],
+  },
+];
+
+
+// ── Wire types (colored by SEGMENT ROLE — what the run connects, not voltage) ──
+// 12-color cap. Voltage / gauge / PoE / cable type live as per-wire attributes in
+// the inspector, so the diagram stays readable while every line keeps full detail.
+type WireKind =
+  | "line_power" | "device_power"     // Power
+  | "motor_motor" | "motor_barrier"   // Gate mechanics
+  | "safety" | "loop"                 // Detection & safety
+  | "reader" | "relay"                // Entry & access
+  | "network" | "camera" | "intercom" | "backhaul"; // Comms & video
 const WIRE_COLORS: Record<WireKind, string> = {
-  power: "#EF4444", data: "#3B82F6", access: "#22C55E", signal: "#94A3B8",
+  line_power: "#EF4444", device_power: "#F59E0B",
+  motor_motor: "#7C3AED", motor_barrier: "#EC4899",
+  safety: "#FACC15", loop: "#84CC16",
+  reader: "#14B8A6", relay: "#10B981",
+  network: "#3B82F6", camera: "#06B6D4", intercom: "#8B5CF6", backhaul: "#64748B",
 };
 const WIRE_LABELS: Record<WireKind, string> = {
-  power: "Power / PoE", data: "Data", access: "Access / Relay", signal: "Signal",
+  line_power: "Line power in", device_power: "Head-end → device power",
+  motor_motor: "Motor ↔ motor", motor_barrier: "Motor → barrier",
+  safety: "Safety devices", loop: "Detection loops",
+  reader: "Reader / keypad / callbox", relay: "Relay / trigger / lock",
+  network: "Network / data", camera: "Camera → NVR",
+  intercom: "Intercom / callbox A/V", backhaul: "Backhaul (fiber / cell / PtP)",
 };
+// Short chip label for the toolbar/legend where space is tight.
+const WIRE_SHORT: Record<WireKind, string> = {
+  line_power: "Line power", device_power: "Device power",
+  motor_motor: "Motor↔Motor", motor_barrier: "Motor→Barrier",
+  safety: "Safety", loop: "Loops",
+  reader: "Reader", relay: "Relay / lock",
+  network: "Network", camera: "Camera", intercom: "Intercom", backhaul: "Backhaul",
+};
+// Grouped for the picker + legend so it reads like a tech thinks about a job.
+const WIRE_GROUPS: { group: string; kinds: WireKind[] }[] = [
+  { group: "Power", kinds: ["line_power", "device_power"] },
+  { group: "Gate mechanics", kinds: ["motor_motor", "motor_barrier"] },
+  { group: "Detection & safety", kinds: ["safety", "loop"] },
+  { group: "Entry & access", kinds: ["reader", "relay"] },
+  { group: "Comms & video", kinds: ["network", "camera", "intercom", "backhaul"] },
+];
+const WIRE_KINDS: WireKind[] = WIRE_GROUPS.flatMap((g) => g.kinds);
+// Per-wire detail (color = role; these attributes keep the full spec on click).
+interface WireAttrs { cable?: string; gauge?: string; lengthFt?: number; poe?: boolean; voltage?: string; }
+// Map the legacy 4-kind vocabulary onto the new segment roles so old plans render.
+const LEGACY_WIRE_MAP: Record<string, WireKind> = {
+  power: "device_power", data: "network", access: "reader", signal: "loop",
+};
+function normWireKind(k: string): WireKind {
+  if ((WIRE_COLORS as Record<string, string>)[k]) return k as WireKind;
+  return LEGACY_WIRE_MAP[k] ?? "network";
+}
+// Common cable choices for the wire inspector dropdown.
+const CABLE_OPTIONS = ["", "CAT6", "CAT5e", "Fiber", "16/2", "18/6", "22/4", "22/2 shielded", "RG6 coax", "12 AWG", "14 AWG"];
 
 type ToolMode = "select" | "device" | "wire" | "fov" | "zone" | "scale";
+
+// ── Stage / lifecycle ────────────────────────────────────────────────────────
+interface SiteInfo {
+  id: string; name: string; address?: string | null;
+  city?: string | null; state?: string | null; zip?: string | null;
+}
+const STAGE_ORDER = ["floor_plan", "system_design", "as_built"] as const;
+type Stage = (typeof STAGE_ORDER)[number];
+const STAGE_LABEL: Record<Stage, string> = {
+  floor_plan: "Floor Plan", system_design: "System Design", as_built: "As-Built",
+};
+const STAGE_COLOR: Record<Stage, string> = {
+  floor_plan: BRAND, system_design: CYAN, as_built: "#34D399",
+};
+function normStage(status: string): Stage {
+  const st = (status ?? "").toLowerCase();
+  if (st.includes("as") && st.includes("built")) return "as_built";
+  if (st.includes("system") || st.includes("design")) return "system_design";
+  return "floor_plan";
+}
+function nextStage(status: string): Stage | null {
+  const i = STAGE_ORDER.indexOf(normStage(status));
+  return i >= 0 && i < STAGE_ORDER.length - 1 ? STAGE_ORDER[i + 1] : null;
+}
 
 // ── Element data packed into notes JSON ──────────────────────────────────────
 interface ElemMeta {
   manufacturer?: string; model?: string; price?: number; qty?: number; status?: string;
   fov?: { angle: number; range: number; direction: number };
   zone?: { name: string };
-  wire?: { kind: WireKind; from: [number, number]; to: [number, number] };
+  wire?: {
+    kind: WireKind; from: [number, number]; to: [number, number];
+    cable?: string; gauge?: string; lengthFt?: number; poe?: boolean; voltage?: string;
+  };
   freeNotes?: string;
 }
 
@@ -113,9 +256,38 @@ function parseMeta(notes?: string | null): ElemMeta {
   try { return JSON.parse(notes) as ElemMeta; } catch { return { freeNotes: notes }; }
 }
 
-// ── Canvas constant size (persistence is percentage-based, so px is arbitrary) ─
-const CANVAS_W = 1600;
-const CANVAS_H = 1000;
+// ── Sheet size — locked to ARCH 24"w × 18"h (4:3). Persistence is percentage-
+// based, so pixels are arbitrary as long as the ratio is 24:18. ──────────────
+const SHEET_W_IN = 24;
+const SHEET_H_IN = 18;
+const CANVAS_W = 1632;                       // 68 px / inch
+const CANVAS_H = (CANVAS_W * SHEET_H_IN) / SHEET_W_IN; // 1224 → true 4:3
+
+// ── GateGuard corporate identity (FIXED — not editable in the title block) ─────
+const GG_CORP = {
+  name: "Gate Guard",
+  tagline: "Security & Access Control Systems",
+  address: "3423 Piedmont Rd NE, Atlanta, GA 30305",
+  phone: "(844) 428-3374",
+  web: "gateguard.co",
+  logo: "/logo.png",
+};
+
+// ── Title-block fields (EDITABLE — the "non-corporate" items) ──────────────────
+interface TitleBlock {
+  dealerName: string; dealerAddress: string;
+  projectName: string; projectAddress: string;
+  sheetTitle: string; sheetNumber: string; sheetTotal: string;
+  revision: string; date: string; drawnBy: string;
+  scale: string; projectNumber: string;
+}
+const emptyTitleBlock = (): TitleBlock => ({
+  dealerName: "", dealerAddress: "",
+  projectName: "", projectAddress: "",
+  sheetTitle: "System Design", sheetNumber: "1", sheetTotal: "1",
+  revision: "A", date: new Date().toISOString().slice(0, 10), drawnBy: "",
+  scale: 'As noted', projectNumber: "",
+});
 
 function EditorInner() {
   const params = useSearchParams();
@@ -131,7 +303,10 @@ function EditorInner() {
 
   const [planName, setPlanName] = useState("Design");
   const [planStatus, setPlanStatus] = useState<string>("floor_plan");
+  const [planSite, setPlanSite] = useState<SiteInfo | null>(null);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
+  const [promoting, setPromoting] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
@@ -144,9 +319,15 @@ function EditorInner() {
   const devKeyRef = useRef<string | null>(null);
   devKeyRef.current = devKey;
 
-  const [wireKind, setWireKind] = useState<WireKind>("data");
-  const wireKindRef = useRef<WireKind>("data");
+  const [wireKind, setWireKind] = useState<WireKind>("network");
+  const wireKindRef = useRef<WireKind>("network");
   wireKindRef.current = wireKind;
+  const [showWirePicker, setShowWirePicker] = useState(false);
+  const [showLegend, setShowLegend] = useState(true);
+  const [titleBlock, setTitleBlock] = useState<TitleBlock>(emptyTitleBlock);
+  const [showTitleBlock, setShowTitleBlock] = useState(false);
+  const titleBlockRef = useRef<TitleBlock>(titleBlock);
+  titleBlockRef.current = titleBlock;
 
   const [expandedCat, setExpandedCat] = useState<Record<string, boolean>>({ Cameras: true });
   const [showLibrary, setShowLibrary] = useState(true);
@@ -207,7 +388,7 @@ function EditorInner() {
           label: d.label ?? "Wire",
           x_pct: (d.from[0] / CANVAS_W) * 100,
           y_pct: (d.from[1] / CANVAS_H) * 100,
-          notes: JSON.stringify({ wire: { kind: d.wireKind, from: d.from, to: d.to } } as ElemMeta),
+          notes: JSON.stringify({ wire: { kind: d.wireKind, from: d.from, to: d.to, ...(d.wireAttrs ?? {}) } } as ElemMeta),
         });
       } else if (d.kind === "zone") {
         const c = o.getCenterPoint();
@@ -223,20 +404,29 @@ function EditorInner() {
         });
       }
     });
+    // Title-block (editable non-corporate fields) rides along as one special row.
+    rows.push({
+      device_type: "__titleblock__",
+      label: "Title Block",
+      x_pct: 0,
+      y_pct: 0,
+      notes: JSON.stringify({ freeNotes: JSON.stringify(titleBlockRef.current) } as ElemMeta),
+    });
     return rows;
   }, []);
 
   // ── Draw helpers ───────────────────────────────────────────────────────────
   const drawWireObject = useCallback(
-    (from: [number, number], to: [number, number], kind: WireKind, label?: string) => {
+    (from: [number, number], to: [number, number], rawKind: WireKind, label?: string, attrs?: WireAttrs) => {
       const fc = fcRef.current;
       const fabric = fabricRef.current;
       if (!fc || !fabric) return;
+      const kind = normWireKind(rawKind);
       const pts = orthPath({ x: from[0], y: from[1] }, { x: to[0], y: to[1] });
       const line = new fabric.Polyline(pts, {
         stroke: WIRE_COLORS[kind], strokeWidth: 2.5, fill: "transparent", objectCaching: false,
       });
-      line.data = { kind: "wire", id: genId(), wireKind: kind, from, to, label: label ?? WIRE_LABELS[kind] };
+      line.data = { kind: "wire", id: genId(), wireKind: kind, from, to, label: label ?? WIRE_LABELS[kind], wireAttrs: attrs ?? {} };
       fc.add(line);
       bumpBom();
     },
@@ -340,11 +530,13 @@ function EditorInner() {
       const fc = fcRef.current;
       if (!fc) return;
       for (const row of devices) {
+        if (row.device_type === "__titleblock__") continue; // handled in loadPlan
         const meta = parseMeta(row.notes);
         const px = (row.x_pct / 100) * CANVAS_W;
         const py = (row.y_pct / 100) * CANVAS_H;
         if (row.device_type === "__wire__" && meta.wire) {
-          drawWireObject(meta.wire.from, meta.wire.to, meta.wire.kind, row.label);
+          const { kind, from, to, ...attrs } = meta.wire;
+          drawWireObject(from, to, kind, row.label, attrs);
         } else if (row.device_type === "__zone__") {
           let w = 240, h = 160;
           try {
@@ -370,13 +562,32 @@ function EditorInner() {
       if (res.ok) {
         const json = await res.json();
         const plan = json.plan;
+        const site: SiteInfo | null = plan?.site ?? null;
         if (plan) {
           setPlanName(plan.name ?? "Design");
           setPlanStatus(plan.status ?? "floor_plan");
+          setPlanSite(site);
           setFileUrl(plan.file_url ?? null);
           await applyBackground(plan.file_url ?? null);
         }
-        if (Array.isArray(json.devices)) loadDevices(json.devices as RawDeviceRow[]);
+        // Title block: load saved fields, else seed sensible defaults from the site.
+        const rows: RawDeviceRow[] = Array.isArray(json.devices) ? json.devices : [];
+        const tbRow = rows.find((r) => r.device_type === "__titleblock__");
+        let tb = emptyTitleBlock();
+        if (tbRow) {
+          try {
+            const meta = parseMeta(tbRow.notes);
+            if (meta.freeNotes) tb = { ...tb, ...(JSON.parse(meta.freeNotes) as Partial<TitleBlock>) };
+          } catch { /* keep defaults */ }
+        }
+        if (site) {
+          const addr = [site.address, [site.city, site.state].filter(Boolean).join(", "), site.zip].filter(Boolean).join(", ");
+          if (!tb.projectName) tb.projectName = site.name ?? "";
+          if (!tb.projectAddress) tb.projectAddress = addr;
+        }
+        if (!tb.sheetTitle && plan?.name) tb.sheetTitle = plan.name;
+        setTitleBlock(tb);
+        if (rows.length) loadDevices(rows);
       }
     } catch {
       /* ignore */
@@ -571,6 +782,181 @@ function EditorInner() {
     }
   };
 
+  // ── Stage promotion (Floor Plan → System Design → As-Built) ────────────────
+  const promoteStage = async () => {
+    if (!planId) { setSaveMsg("No plan id"); return; }
+    const next = nextStage(planStatus);
+    if (!next) return;
+    setPromoting(true);
+    try {
+      const res = await fetch(`/api/design/plans/${planId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: next }),
+      });
+      const json = await res.json();
+      if (res.ok && json.plan) {
+        setPlanStatus(json.plan.status ?? next);
+        setSaveMsg(`Promoted to ${STAGE_LABEL[next]}`);
+      } else {
+        setSaveMsg(json.error || "Promote failed");
+      }
+    } catch {
+      setSaveMsg("Network error");
+    }
+    setPromoting(false);
+    setTimeout(() => setSaveMsg(null), 3500);
+  };
+
+  // ── Starter templates ──────────────────────────────────────────────────────
+  const applyTemplate = (tpl: DesignTemplate) => {
+    const fc = fcRef.current;
+    if (!fc) return;
+    for (const d of tpl.devices) {
+      const x = (d.xPct / 100) * CANVAS_W;
+      const y = (d.yPct / 100) * CANVAS_H;
+      const meta: ElemMeta = { qty: 1, price: d.price ?? 0, status: "Proposed" };
+      const g = buildDevice(x, y, d.key, meta);
+      if (g && d.label) g.data.label = d.label;
+    }
+    for (const w of tpl.wires) {
+      const from: [number, number] = [(w.from[0] / 100) * CANVAS_W, (w.from[1] / 100) * CANVAS_H];
+      const to: [number, number] = [(w.to[0] / 100) * CANVAS_W, (w.to[1] / 100) * CANVAS_H];
+      drawWireObject(from, to, w.kind);
+    }
+    fc.renderAll();
+    bumpBom();
+    setShowTemplates(false);
+    setSaveMsg(`Placed "${tpl.name}" template — Save to keep`);
+    setTimeout(() => setSaveMsg(null), 4000);
+  };
+
+  // ── Full-sheet PDF export (print-to-PDF, Flint River style) ─────────────────
+  const exportPdf = () => {
+    const fc = fcRef.current;
+    if (!fc) return;
+    const img = fc.toDataURL({ format: "png", multiplier: 2 });
+
+    const tb = titleBlock;
+    const stage = STAGE_LABEL[normStage(planStatus)];
+    const v = (s: string, f = "—") => escapeHtml(s && s.trim() ? s : f);
+
+    // BOM rows from live canvas state.
+    const bomRows = bom.rows;
+    const grand = bom.total;
+    const bomHtml = bomRows.length
+      ? bomRows.map((r) => `
+        <tr>
+          <td class="l">${escapeHtml(r.label)}</td>
+          <td class="c">${r.qty}</td>
+          <td class="r">${r.total ? "$" + r.total.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "—"}</td>
+        </tr>`).join("")
+      : `<tr><td colspan="3" class="c muted">No devices placed.</td></tr>`;
+
+    // Wiring legend grouped by segment role.
+    const legendHtml = WIRE_GROUPS.map((g) => `
+      <div class="leggrp">${escapeHtml(g.group)}</div>
+      ${g.kinds.map((k) => `<span class="leg"><span class="sw" style="background:${WIRE_COLORS[k]}"></span>${escapeHtml(WIRE_LABELS[k])}</span>`).join("")}`).join("");
+
+    // Small title-block field cell.
+    const fcell = (label: string, value: string) =>
+      `<div class="fc"><div class="fl">${escapeHtml(label)}</div><div class="fv">${value}</div></div>`;
+
+    const html = `<!doctype html><html><head><meta charset="utf-8"/>
+<title>${v(tb.sheetTitle, "System Design")} — ${v(tb.projectName)}</title>
+<style>
+  @page { size: ${SHEET_W_IN}in ${SHEET_H_IN}in; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: Inter, Arial, sans-serif; color: #0f172a; }
+  .outer { width: ${SHEET_W_IN}in; height: ${SHEET_H_IN}in; padding: 0.25in; }
+  .inner { width: 100%; height: 100%; border: 2.5px solid #0f172a; display: flex; }
+  .draw { flex: 1 1 auto; border-right: 2.5px solid #0f172a; display: flex; align-items: center;
+    justify-content: center; overflow: hidden; background: #0E1A30; padding: 0.12in; }
+  .draw img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .tb { width: 4in; flex: 0 0 4in; display: flex; flex-direction: column; }
+  .corp { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 2.5px solid #0f172a; }
+  .corp img { height: 40px; width: auto; }
+  .corp .nm { font-size: 17px; font-weight: 800; line-height: 1; }
+  .corp .tl { font-size: 9.5px; color: #475569; margin-top: 2px; }
+  .row { padding: 6px 12px; border-bottom: 1px solid #cbd5e1; }
+  .rl { font-size: 8.5px; letter-spacing: .06em; text-transform: uppercase; color: #64748b; }
+  .rv { font-size: 13px; font-weight: 600; line-height: 1.2; }
+  .ra { font-size: 10px; color: #475569; margin-top: 1px; }
+  .sheetitle { padding: 9px 12px; border-bottom: 2.5px solid #0f172a; background: #eef1ff; }
+  .sheetitle .t { font-size: 20px; font-weight: 800; line-height: 1.1; }
+  .sheetitle .st { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: #4f46e5; margin-top: 2px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 2.5px solid #0f172a; }
+  .fc { padding: 5px 12px; border-top: 1px solid #cbd5e1; }
+  .fc:nth-child(odd) { border-right: 1px solid #cbd5e1; }
+  .fl { font-size: 8px; letter-spacing: .05em; text-transform: uppercase; color: #64748b; }
+  .fv { font-size: 12px; font-weight: 600; }
+  .sect { padding: 8px 12px; border-bottom: 1px solid #cbd5e1; }
+  .sect h4 { margin: 0 0 5px; font-size: 9px; text-transform: uppercase; letter-spacing: .05em; color: #475569; }
+  .leggrp { font-size: 8px; text-transform: uppercase; letter-spacing: .05em; color: #94a3b8; margin: 4px 0 2px; }
+  .leg { display: flex; align-items: center; gap: 6px; font-size: 10px; margin-bottom: 2px; }
+  .sw { width: 16px; height: 3px; border-radius: 2px; display: inline-block; flex: none; }
+  table { width: 100%; border-collapse: collapse; font-size: 10px; }
+  th { text-align: left; color: #475569; font-weight: 600; border-bottom: 1px solid #cbd5e1; padding: 2px 3px; }
+  td { padding: 2px 3px; border-bottom: 1px solid #eef2f7; }
+  td.c { text-align: center; } td.r { text-align: right; } td.l { text-align: left; }
+  td.muted { color: #94a3b8; }
+  .grand { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700;
+    padding: 5px 3px 0; border-top: 1.5px solid #0f172a; margin-top: 3px; }
+  .spacer { flex: 1 1 auto; }
+  .foot { padding: 5px 12px; border-top: 2.5px solid #0f172a; font-size: 8px; color: #64748b;
+    display: flex; justify-content: space-between; }
+</style></head>
+<body onload="setTimeout(function(){window.print();}, 400)">
+  <div class="outer"><div class="inner">
+    <div class="draw"><img src="${img}"/></div>
+    <div class="tb">
+      <div class="corp">
+        <img src="${GG_CORP.logo}" alt="Gate Guard"/>
+        <div>
+          <div class="nm">${escapeHtml(GG_CORP.name)}</div>
+          <div class="tl">${escapeHtml(GG_CORP.tagline)}</div>
+          <div class="tl">${escapeHtml(GG_CORP.address)}</div>
+          <div class="tl">${escapeHtml(GG_CORP.phone)} · ${escapeHtml(GG_CORP.web)}</div>
+        </div>
+      </div>
+      <div class="row"><div class="rl">Dealer</div><div class="rv">${v(tb.dealerName)}</div>${tb.dealerAddress ? `<div class="ra">${escapeHtml(tb.dealerAddress)}</div>` : ""}</div>
+      <div class="row"><div class="rl">Project / Site</div><div class="rv">${v(tb.projectName)}</div>${tb.projectAddress ? `<div class="ra">${escapeHtml(tb.projectAddress)}</div>` : ""}</div>
+      <div class="sheetitle"><div class="t">${v(tb.sheetTitle, "System Design")}</div><div class="st">${escapeHtml(stage)}</div></div>
+      <div class="grid">
+        ${fcell("Scale", v(tb.scale, "As noted"))}
+        ${fcell("Date", v(tb.date))}
+        ${fcell("Drawn By", v(tb.drawnBy))}
+        ${fcell("Rev", v(tb.revision, "A"))}
+        ${fcell("Project No.", v(tb.projectNumber))}
+        ${fcell("Sheet", `${v(tb.sheetNumber, "1")} of ${v(tb.sheetTotal, "1")}`)}
+      </div>
+      <div class="sect">
+        <h4>Wiring Legend</h4>
+        ${legendHtml}
+      </div>
+      <div class="sect">
+        <h4>Bill of Materials</h4>
+        <table>
+          <thead><tr><th>Device</th><th style="text-align:center">Qty</th><th style="text-align:right">Total</th></tr></thead>
+          <tbody>${bomHtml}</tbody>
+        </table>
+        <div class="grand"><span>Est. Total</span><span>${grand ? "$" + grand.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "—"}</span></div>
+      </div>
+      <div class="spacer"></div>
+      <div class="foot"><span>${SHEET_W_IN}" × ${SHEET_H_IN}" · ${escapeHtml(GG_CORP.web)}</span><span>${escapeHtml(tb.date || "")}</span></div>
+    </div>
+  </div></div>
+</body></html>`;
+
+    const w = window.open("", "_blank");
+    if (!w) { alert("Pop-up blocked — allow pop-ups to export the PDF sheet."); return; }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+  };
+
   // ── Background setters ─────────────────────────────────────────────────────
   const setBlankBackground = async () => {
     setFileUrl(null);
@@ -652,6 +1038,23 @@ function EditorInner() {
     selected.data[field] = value;
     setInspectorTick((t) => t + 1);
   };
+  // Change a placed wire's segment role — recolors the line in place.
+  const patchSelectedWire = (kind: WireKind) => {
+    const fc = fcRef.current;
+    if (!selected?.data || selected.data.kind !== "wire") return;
+    selected.data.wireKind = kind;
+    if (!selected.data.label || WIRE_KINDS.some((k) => selected.data.label === WIRE_LABELS[k])) {
+      selected.data.label = WIRE_LABELS[kind];
+    }
+    selected.set({ stroke: WIRE_COLORS[kind] });
+    fc?.renderAll();
+    setInspectorTick((t) => t + 1);
+  };
+  const patchSelectedWireAttrs = (patch: Partial<WireAttrs>) => {
+    if (!selected?.data || selected.data.kind !== "wire") return;
+    selected.data.wireAttrs = { ...(selected.data.wireAttrs ?? {}), ...patch };
+    setInspectorTick((t) => t + 1);
+  };
 
   // Re-render camera cone after AOC change.
   const rebuildSelectedCone = () => {
@@ -723,22 +1126,48 @@ function EditorInner() {
           className="bg-transparent text-sm font-semibold outline-none min-w-0 w-48"
           style={{ color: TEXT }}
         />
-        <select
-          value={planStatus}
-          onChange={(e) => setPlanStatus(e.target.value)}
-          className="text-xs rounded-lg px-2 py-1.5 outline-none"
-          style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT }}
+        <div
+          className="flex items-center gap-1.5 rounded-lg px-2 py-1"
+          style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}` }}
+          title="Design stage"
         >
-          <option value="floor_plan">Floor Plan</option>
-          <option value="system_design">System Design</option>
-          <option value="as_built">As-Built</option>
-        </select>
+          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: STAGE_COLOR[normStage(planStatus)] }} />
+          <select
+            value={normStage(planStatus)}
+            onChange={(e) => setPlanStatus(e.target.value)}
+            className="text-xs bg-transparent outline-none"
+            style={{ color: TEXT }}
+          >
+            <option value="floor_plan">Floor Plan</option>
+            <option value="system_design">System Design</option>
+            <option value="as_built">As-Built</option>
+          </select>
+        </div>
+        {nextStage(planStatus) && (
+          <button
+            onClick={promoteStage}
+            disabled={promoting}
+            title={`Promote to ${STAGE_LABEL[nextStage(planStatus)!]}`}
+            className="text-xs font-semibold flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 disabled:opacity-50"
+            style={{ backgroundColor: `${STAGE_COLOR[nextStage(planStatus)!]}22`, border: `1px solid ${STAGE_COLOR[nextStage(planStatus)!]}`, color: STAGE_COLOR[nextStage(planStatus)!] }}
+          >
+            {promoting ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />}
+            Promote → {STAGE_LABEL[nextStage(planStatus)!]}
+          </button>
+        )}
         <button
           onClick={() => setShowBgModal(true)}
           className="text-xs flex items-center gap-1.5 rounded-lg px-3 py-1.5"
           style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: MUTED }}
         >
           <ImageIcon size={13} /> Background
+        </button>
+        <button
+          onClick={() => setShowTitleBlock(true)}
+          className="text-xs flex items-center gap-1.5 rounded-lg px-3 py-1.5"
+          style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: MUTED }}
+        >
+          <StampIcon size={13} /> Title Block
         </button>
 
         <div className="flex-1" />
@@ -747,8 +1176,8 @@ function EditorInner() {
         <button onClick={exportPng} className="text-xs flex items-center gap-1.5 rounded-lg px-3 py-1.5" style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: MUTED }}>
           <Download size={13} /> PNG
         </button>
-        <button onClick={printSheet} className="text-xs flex items-center gap-1.5 rounded-lg px-3 py-1.5" style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: MUTED }}>
-          <Printer size={13} /> Print
+        <button onClick={exportPdf} className="text-xs flex items-center gap-1.5 rounded-lg px-3 py-1.5" style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: MUTED }}>
+          <Printer size={13} /> Export PDF
         </button>
         <button onClick={() => setShowBom((s) => !s)} className="text-xs flex items-center gap-1.5 rounded-lg px-3 py-1.5" style={{ backgroundColor: showBom ? BRAND : PANEL, border: `1px solid ${showBom ? BRAND : BORDER}`, color: showBom ? "#0B1728" : MUTED }}>
           <BarChart3 size={13} /> BOM
@@ -824,23 +1253,60 @@ function EditorInner() {
             {toolBtn("fov", Camera, "Camera / FOV")}
             {toolBtn("zone", Type, "Zone frame")}
             {toolBtn("scale", Ruler, "Set scale")}
+            <button
+              onClick={() => setShowTemplates(true)}
+              title="Insert a starter template"
+              className="h-10 px-3 rounded-lg flex items-center gap-1.5 text-xs font-medium transition-colors"
+              style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: MUTED }}
+            >
+              <Layers size={15} /> Template
+            </button>
             <div className="w-px h-6 mx-1" style={{ backgroundColor: BORDER }} />
-            {(Object.keys(WIRE_COLORS) as WireKind[]).map((k) => (
+            {/* Wire-type picker — one control, opens a grouped popover (12 segment roles) */}
+            <div className="relative">
               <button
-                key={k}
-                onClick={() => { setWireKind(k); setTool("wire"); }}
-                title={WIRE_LABELS[k]}
-                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px]"
+                onClick={() => { setShowWirePicker((s) => !s); }}
+                title="Choose wire type"
+                className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[11px]"
                 style={{
-                  backgroundColor: wireKind === k && tool === "wire" ? `${WIRE_COLORS[k]}22` : CARD,
-                  border: `1px solid ${wireKind === k && tool === "wire" ? WIRE_COLORS[k] : BORDER}`,
+                  backgroundColor: tool === "wire" ? `${WIRE_COLORS[wireKind]}22` : CARD,
+                  border: `1px solid ${tool === "wire" ? WIRE_COLORS[wireKind] : BORDER}`,
                   color: TEXT,
                 }}
               >
-                <span className="w-3 h-1 rounded-full" style={{ backgroundColor: WIRE_COLORS[k] }} />
-                {WIRE_LABELS[k].split(" ")[0]}
+                <span className="w-3.5 h-1 rounded-full" style={{ backgroundColor: WIRE_COLORS[wireKind] }} />
+                {WIRE_SHORT[wireKind]}
+                <ChevronDown size={12} style={{ color: MUTED }} />
               </button>
-            ))}
+              {showWirePicker && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setShowWirePicker(false)} />
+                  <div className="absolute left-0 top-full mt-1 z-40 w-60 rounded-xl p-2 shadow-xl"
+                    style={{ backgroundColor: CARD, border: `1px solid ${BORDER}` }}>
+                    {WIRE_GROUPS.map((g) => (
+                      <div key={g.group} className="mb-1.5 last:mb-0">
+                        <div className="text-[9px] font-semibold uppercase tracking-wider px-1.5 pb-1" style={{ color: MUTED }}>{g.group}</div>
+                        {g.kinds.map((k) => (
+                          <button
+                            key={k}
+                            onClick={() => { setWireKind(k); setTool("wire"); setShowWirePicker(false); }}
+                            className="w-full flex items-center gap-2 px-1.5 py-1.5 rounded-lg text-left text-[11px] transition-colors hover:brightness-125"
+                            style={{
+                              backgroundColor: wireKind === k ? `${WIRE_COLORS[k]}22` : "transparent",
+                              border: `1px solid ${wireKind === k ? WIRE_COLORS[k] : "transparent"}`,
+                              color: TEXT,
+                            }}
+                          >
+                            <span className="w-4 h-1 rounded-full shrink-0" style={{ backgroundColor: WIRE_COLORS[k] }} />
+                            {WIRE_LABELS[k]}
+                          </button>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
             <div className="flex-1" />
             {pxPerFt && <span className="text-[11px]" style={{ color: CYAN }}>Scale: {pxPerFt.toFixed(1)} px/ft</span>}
             {selected && (
@@ -858,21 +1324,44 @@ function EditorInner() {
               </div>
             )}
             <div className="p-6 inline-block">
-              <div style={{ boxShadow: "0 10px 40px rgba(0,0,0,0.5)", borderRadius: 8, overflow: "hidden", border: `1px solid ${BORDER}` }}>
+              <div className="relative" style={{ boxShadow: "0 10px 40px rgba(0,0,0,0.5)", borderRadius: 8, overflow: "hidden", border: `1px solid ${BORDER}`, width: CANVAS_W, height: CANVAS_H }}>
                 <canvas ref={canvasElRef} />
+                {canvasReady && (
+                  <SheetFrame
+                    tb={titleBlock}
+                    stage={STAGE_LABEL[normStage(planStatus)]}
+                    onEdit={() => setShowTitleBlock(true)}
+                  />
+                )}
               </div>
             </div>
 
-            {/* Legend */}
-            <div className="fixed bottom-6 left-72 rounded-xl px-3 py-2 flex flex-col gap-1 z-20"
-              style={{ backgroundColor: "rgba(19,27,46,0.9)", border: `1px solid ${BORDER}`, backdropFilter: "blur(6px)" }}>
-              <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: MUTED }}>Wire Legend</span>
-              {(Object.keys(WIRE_COLORS) as WireKind[]).map((k) => (
-                <div key={k} className="flex items-center gap-2 text-[11px]" style={{ color: TEXT }}>
-                  <span className="w-4 h-0.5 rounded" style={{ backgroundColor: WIRE_COLORS[k] }} />
-                  {WIRE_LABELS[k]}
+            {/* Legend — grouped, collapsible (12 segment roles) */}
+            <div className="fixed bottom-6 left-72 rounded-xl px-3 py-2 z-20 max-w-[220px]"
+              style={{ backgroundColor: "rgba(19,27,46,0.92)", border: `1px solid ${BORDER}`, backdropFilter: "blur(6px)" }}>
+              <button
+                onClick={() => setShowLegend((s) => !s)}
+                className="w-full flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide"
+                style={{ color: MUTED }}
+              >
+                {showLegend ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                Wire Legend
+              </button>
+              {showLegend && (
+                <div className="mt-1.5 flex flex-col gap-1.5">
+                  {WIRE_GROUPS.map((g) => (
+                    <div key={g.group}>
+                      <div className="text-[8px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: MUTED }}>{g.group}</div>
+                      {g.kinds.map((k) => (
+                        <div key={k} className="flex items-center gap-2 text-[10.5px] leading-tight py-px" style={{ color: TEXT }}>
+                          <span className="w-4 h-0.5 rounded shrink-0" style={{ backgroundColor: WIRE_COLORS[k] }} />
+                          {WIRE_LABELS[k]}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
@@ -888,6 +1377,8 @@ function EditorInner() {
               onLabel={patchSelectedLabel}
               onMeta={patchSelectedMeta}
               onField={patchSelectedField}
+              onWireKind={patchSelectedWire}
+              onWireAttrs={patchSelectedWireAttrs}
               onRebuildCone={rebuildSelectedCone}
             />
           ) : (
@@ -949,6 +1440,47 @@ function EditorInner() {
         </div>
       )}
 
+      {/* Title-block editor */}
+      {showTitleBlock && (
+        <TitleBlockModal
+          tb={titleBlock}
+          onSave={(t) => setTitleBlock(t)}
+          onClose={() => setShowTitleBlock(false)}
+        />
+      )}
+
+      {/* Templates modal */}
+      {showTemplates && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.6)" }} onClick={() => setShowTemplates(false)}>
+          <div className="w-full max-w-lg rounded-2xl p-5" style={{ backgroundColor: CARD, border: `1px solid ${BORDER}` }} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-sm font-semibold" style={{ color: TEXT }}>Starter templates</h2>
+              <button onClick={() => setShowTemplates(false)} style={{ color: MUTED }}><X size={18} /></button>
+            </div>
+            <p className="text-[11px] mb-4" style={{ color: MUTED }}>Drops a common layout onto the canvas. Elements are placed but not saved until you hit Save.</p>
+            <div className="flex flex-col gap-2">
+              {DESIGN_TEMPLATES.map((tpl) => (
+                <button
+                  key={tpl.id}
+                  onClick={() => applyTemplate(tpl)}
+                  className="flex items-start gap-3 rounded-xl px-4 py-3 text-left transition-colors hover:brightness-125"
+                  style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}` }}
+                >
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${CYAN}22`, border: `1px solid ${CYAN}55` }}>
+                    <Layers size={16} style={{ color: CYAN }} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium" style={{ color: TEXT }}>{tpl.name}</div>
+                    <div className="text-[11px] mt-0.5" style={{ color: MUTED }}>{tpl.blurb}</div>
+                    <div className="text-[10px] mt-1" style={{ color: MUTED }}>{tpl.devices.length} devices · {tpl.wires.length} wires</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Scale dialog */}
       {showScaleDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.6)" }}>
@@ -969,19 +1501,23 @@ function EditorInner() {
 
 // ── Inspector panel ──────────────────────────────────────────────────────────
 function Inspector({
-  selected, onLabel, onMeta, onField, onRebuildCone,
+  selected, onLabel, onMeta, onField, onWireKind, onWireAttrs, onRebuildCone,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   selected: any;
   onLabel: (v: string) => void;
   onMeta: (p: Partial<ElemMeta>) => void;
   onField: (f: "condition" | "action", v: string) => void;
+  onWireKind: (k: WireKind) => void;
+  onWireAttrs: (p: Partial<WireAttrs>) => void;
   onRebuildCone: () => void;
 }) {
   const d = selected.data;
   const meta: ElemMeta = d.meta ?? {};
   const isDevice = d.kind === "device";
   const isCam = isDevice && d.isCam;
+  const isWire = d.kind === "wire";
+  const wa: WireAttrs = d.wireAttrs ?? {};
 
   const field = (label: string, node: React.ReactNode) => (
     <div className="mb-3">
@@ -1062,6 +1598,53 @@ function Inspector({
         </>
       )}
 
+      {isWire && (
+        <>
+          {field("Wire type", (
+            <select
+              defaultValue={d.wireKind}
+              onChange={(e) => onWireKind(e.target.value as WireKind)}
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+              style={inputStyle}
+            >
+              {WIRE_GROUPS.map((g) => (
+                <optgroup key={g.group} label={g.group}>
+                  {g.kinds.map((k) => <option key={k} value={k}>{WIRE_LABELS[k]}</option>)}
+                </optgroup>
+              ))}
+            </select>
+          ))}
+          <div className="flex items-center gap-2 mb-3 text-[11px]" style={{ color: MUTED }}>
+            <span className="w-5 h-1 rounded-full" style={{ backgroundColor: WIRE_COLORS[normWireKind(d.wireKind)] }} />
+            Color shown on the diagram
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {field("Cable", (
+              <select defaultValue={wa.cable ?? ""} onChange={(e) => onWireAttrs({ cable: e.target.value })} className="w-full px-2 py-2 rounded-lg text-sm outline-none" style={inputStyle}>
+                {CABLE_OPTIONS.map((c) => <option key={c} value={c}>{c || "—"}</option>)}
+              </select>
+            ))}
+            {field("Gauge / pair", (
+              <input defaultValue={wa.gauge ?? ""} onBlur={(e) => onWireAttrs({ gauge: e.target.value })} placeholder="e.g. 18/2" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {field("Length (ft)", (
+              <input type="number" min={0} defaultValue={wa.lengthFt ?? ""} onBlur={(e) => onWireAttrs({ lengthFt: parseInt(e.target.value) || 0 })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+            ))}
+            {field("Voltage", (
+              <input defaultValue={wa.voltage ?? ""} onBlur={(e) => onWireAttrs({ voltage: e.target.value })} placeholder="e.g. 24VDC" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+            ))}
+          </div>
+          {field("", (
+            <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: TEXT }}>
+              <input type="checkbox" defaultChecked={!!wa.poe} onChange={(e) => onWireAttrs({ poe: e.target.checked })} />
+              PoE (power over this run)
+            </label>
+          ))}
+        </>
+      )}
+
       {field("Notes", (
         <textarea defaultValue={meta.freeNotes ?? ""} onBlur={(e) => onMeta({ freeNotes: e.target.value })} rows={3} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle} />
       ))}
@@ -1111,7 +1694,135 @@ function BomPanel({ bom }: { bom: { rows: { label: string; qty: number; price: n
   );
 }
 
+// ── Architect sheet frame + right-side title block (on-screen overlay) ─────────
+function SheetFrame({ tb, stage, onEdit }: { tb: TitleBlock; stage: string; onEdit: () => void }) {
+  const line = "rgba(255,255,255,0.42)";
+  const faint = "rgba(255,255,255,0.16)";
+  const tbW = 250; // title-block column width in px
+  const val = (s: string, fallback = "—") => (s && s.trim() ? s : fallback);
+
+  const cell = (label: string, value: string) => (
+    <div style={{ borderTop: `1px solid ${faint}`, padding: "5px 8px" }}>
+      <div style={{ fontSize: 8, letterSpacing: "0.06em", textTransform: "uppercase", color: MUTED }}>{label}</div>
+      <div style={{ fontSize: 11, color: TEXT, fontWeight: 600, lineHeight: 1.2, marginTop: 1 }}>{value}</div>
+    </div>
+  );
+
+  return (
+    <div className="absolute inset-0" style={{ pointerEvents: "none" }}>
+      {/* Architect double border */}
+      <div className="absolute" style={{ inset: 10, border: `2px solid ${line}`, borderRadius: 2 }} />
+      <div className="absolute" style={{ inset: 15, border: `1px solid ${faint}`, borderRadius: 1 }} />
+
+      {/* Right-side title block column (click to edit) */}
+      <div
+        onClick={onEdit}
+        title="Click to edit title block"
+        style={{
+          pointerEvents: "auto", cursor: "pointer",
+          position: "absolute", top: 15, bottom: 15, right: 15, width: tbW,
+          borderLeft: `2px solid ${line}`,
+          background: "rgba(9,17,31,0.9)", backdropFilter: "blur(2px)",
+          display: "flex", flexDirection: "column",
+        }}
+      >
+        {/* Corporate header — FIXED */}
+        <div style={{ padding: "9px 8px", display: "flex", alignItems: "center", gap: 8, borderBottom: `2px solid ${line}` }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={GG_CORP.logo} alt="Gate Guard" style={{ height: 26, width: "auto", objectFit: "contain" }} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: TEXT, lineHeight: 1 }}>{GG_CORP.name}</div>
+            <div style={{ fontSize: 8, color: MUTED, lineHeight: 1.25, marginTop: 2 }}>{GG_CORP.tagline}</div>
+            <div style={{ fontSize: 8, color: MUTED, lineHeight: 1.25 }}>{GG_CORP.phone} · {GG_CORP.web}</div>
+          </div>
+        </div>
+
+        {/* Dealer + Project — editable */}
+        {cell("Dealer", val(tb.dealerName))}
+        {tb.dealerAddress ? <div style={{ padding: "0 8px 5px", fontSize: 9, color: MUTED }}>{tb.dealerAddress}</div> : null}
+        {cell("Project / Site", val(tb.projectName))}
+        {tb.projectAddress ? <div style={{ padding: "0 8px 5px", fontSize: 9, color: MUTED }}>{tb.projectAddress}</div> : null}
+
+        {/* Sheet title + stage */}
+        <div style={{ borderTop: `2px solid ${line}`, padding: "7px 8px", background: "rgba(107,126,255,0.08)" }}>
+          <div style={{ fontSize: 8, letterSpacing: "0.06em", textTransform: "uppercase", color: MUTED }}>Sheet Title</div>
+          <div style={{ fontSize: 14, color: TEXT, fontWeight: 700, lineHeight: 1.15 }}>{val(tb.sheetTitle, "System Design")}</div>
+          <div style={{ fontSize: 9, color: CYAN, marginTop: 2, textTransform: "uppercase", letterSpacing: "0.05em" }}>{stage}</div>
+        </div>
+
+        {/* Fielded grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderTop: `2px solid ${line}` }}>
+          <div style={{ borderRight: `1px solid ${faint}` }}>{cell("Scale", val(tb.scale, "As noted"))}</div>
+          <div>{cell("Date", val(tb.date))}</div>
+          <div style={{ borderRight: `1px solid ${faint}` }}>{cell("Drawn By", val(tb.drawnBy))}</div>
+          <div>{cell("Rev", val(tb.revision, "A"))}</div>
+          <div style={{ borderRight: `1px solid ${faint}` }}>{cell("Project No.", val(tb.projectNumber))}</div>
+          <div>{cell("Sheet", `${val(tb.sheetNumber, "1")} of ${val(tb.sheetTotal, "1")}`)}</div>
+        </div>
+
+        <div style={{ flex: 1 }} />
+        <div style={{ borderTop: `1px solid ${faint}`, padding: "4px 8px", fontSize: 8, color: MUTED, textAlign: "right" }}>
+          {SHEET_W_IN}" × {SHEET_H_IN}" · Click to edit
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Title-block edit modal (the "non-corporate items") ─────────────────────────
+function TitleBlockModal({ tb, onSave, onClose }: { tb: TitleBlock; onSave: (t: TitleBlock) => void; onClose: () => void }) {
+  const [draft, setDraft] = useState<TitleBlock>(tb);
+  const set = (k: keyof TitleBlock, v: string) => setDraft((d) => ({ ...d, [k]: v }));
+  const inputStyle = { backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT };
+  // Rendered as a function call (not <F/>) so inputs keep focus while typing.
+  const F = (label: string, k: keyof TitleBlock, ph?: string, col = 1) => (
+    <div key={k} style={{ gridColumn: `span ${col}` }}>
+      <label className="text-[11px] font-medium block mb-1" style={{ color: MUTED }}>{label}</label>
+      <input value={draft[k]} onChange={(e) => set(k, e.target.value)} placeholder={ph}
+        className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.6)" }} onClick={onClose}>
+      <div className="w-full max-w-lg rounded-2xl p-5" style={{ backgroundColor: CARD, border: `1px solid ${BORDER}` }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-sm font-semibold" style={{ color: TEXT }}>Edit title block</h2>
+          <button onClick={onClose} style={{ color: MUTED }}><X size={18} /></button>
+        </div>
+        <p className="text-[11px] mb-4" style={{ color: MUTED }}>
+          Gate Guard's logo and company info are fixed. Everything below is yours to edit for this sheet.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          {F("Dealer name", "dealerName", "ABC Security LLC", 2)}
+          {F("Dealer address", "dealerAddress", "123 Main St, City, ST", 2)}
+          {F("Project / site name", "projectName", "Stonegate Apartments", 2)}
+          {F("Project / site address", "projectAddress", "456 Park Ave, City, ST", 2)}
+          {F("Sheet title", "sheetTitle", "System Design", 2)}
+          {F("Sheet number", "sheetNumber", "1")}
+          {F("Total sheets", "sheetTotal", "1")}
+          {F("Revision", "revision", "A")}
+          {F("Date", "date", "2026-07-01")}
+          {F("Drawn by", "drawnBy", "Initials")}
+          {F("Scale", "scale", "As noted")}
+          {F("Project number", "projectNumber", "GG-1042", 2)}
+        </div>
+        <div className="flex gap-2 mt-5">
+          <button onClick={onClose} className="flex-1 text-xs rounded-lg py-2.5" style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: MUTED }}>Cancel</button>
+          <button onClick={() => { onSave(draft); onClose(); }} className="flex-1 text-xs font-semibold rounded-lg py-2.5" style={{ backgroundColor: BRAND, color: "#0B1728" }}>Apply</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Geometry / util (pure, no refs) ──────────────────────────────────────────
+function escapeHtml(s: string): string {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
 function orthPath(a: { x: number; y: number }, b: { x: number; y: number }) {
   const midX = (a.x + b.x) / 2;
   return [
