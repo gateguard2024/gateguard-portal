@@ -38,7 +38,7 @@ const CYAN = "#7DE5FF";
 
 // ── Device library (GateGuard kit) ──────────────────────────────────────────
 interface DeviceTypeDef {
-  key: string; label: string; color: string; category: string; abbr: string; isCam?: boolean;
+  key: string; label: string; color: string; category: string; abbr: string; isCam?: boolean; isBoard?: boolean;
 }
 const DEVICE_TYPES: DeviceTypeDef[] = [
   { key: "dk6050", label: "DK 6050", color: "#F59E0B", category: "Gate Operators", abbr: "DK" },
@@ -69,7 +69,53 @@ const DEVICE_TYPES: DeviceTypeDef[] = [
   { key: "motion", label: "Motion Sensor", color: "#EF4444", category: "Sensors", abbr: "PIR" },
   { key: "mag_lock", label: "Mag Lock", color: "#64748B", category: "Locks", abbr: "MAG" },
   { key: "strike", label: "Electric Strike", color: "#64748B", category: "Locks", abbr: "STRK" },
+  // Added from the Flint River reference sheet ─────────────────────────────────
+  { key: "slide_board", label: "Slide Operator Board", color: "#F59E0B", category: "Gate Operators", abbr: "SLIDE", isBoard: true },
+  { key: "single_door_ctrl", label: "Single Door Controller", color: "#10B981", category: "Access Control", abbr: "SDC", isBoard: true },
+  { key: "pte", label: "Push-to-Exit (PTE)", color: "#10B981", category: "Access Control", abbr: "PTE", isBoard: true },
+  { key: "knox_box", label: "Knox Box", color: "#8B5CF6", category: "Entry Systems", abbr: "KNOX" },
+  { key: "unifi_gateway", label: "UniFi Gateway", color: "#0891B2", category: "Networking", abbr: "UDM" },
+  { key: "usw_8poe", label: "UniFi 8-Port PoE Switch", color: "#0891B2", category: "Networking", abbr: "SW8" },
+  { key: "switch_4", label: "4-Port Switch", color: "#0891B2", category: "Networking", abbr: "SW4" },
+  { key: "nanostation", label: "NanoStation (USIP NSM5)", color: "#0891B2", category: "Networking", abbr: "NSM5" },
+  { key: "ext_mesh", label: "Ext. Mesh AP", color: "#0891B2", category: "Networking", abbr: "MESH" },
+  { key: "poe_inserter", label: "PoE Inserter", color: "#0891B2", category: "Networking", abbr: "PoE", isBoard: true },
+  { key: "pwr_24v", label: "24V PWR Inserter", color: "#EF4444", category: "Power", abbr: "24V", isBoard: true },
+  { key: "xfmr_24vdc", label: "24V DC Transformer", color: "#EF4444", category: "Power", abbr: "XFMR" },
+  { key: "mag_lock_board", label: "Mag Lock (wiring)", color: "#64748B", category: "Locks", abbr: "MAG+", isBoard: true },
 ];
+
+// ── Board terminal maps (Detail mode) ─────────────────────────────────────────
+// Named terminals per board device. A conductor of a multi-conductor cable can
+// be landed on one of these when a wire is expanded into conductors.
+const BOARD_TERMINALS: Record<string, string[]> = {
+  single_door_ctrl: ["AC IN 1", "AC IN 2", "BATT+", "BATT−", "LOCK+", "LOCK−", "REX", "GND", "RDR PWR", "RDR GND", "RDR D0", "RDR D1", "AUX N.O.", "AUX COM", "AUX N.C."],
+  slide_board: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"],
+  poe_inserter: ["POE IN", "DATA / LAN", "POE OUT"],
+  pwr_24v: ["24V IN", "GND IN", "24V OUT", "GND OUT"],
+  mag_lock_board: ["+", "−"],
+  pte: ["N.O.", "COM", "N.C."],
+};
+// Every terminal name across boards — used as a suggestion list for conductors.
+const ALL_TERMINALS = Array.from(new Set(Object.values(BOARD_TERMINALS).flat().concat(["+", "−", "COM", "N.O.", "N.C.", "D0", "D1", "PWR", "GND", "SHIELD"])));
+
+// ── Conductors (Detail mode) ──────────────────────────────────────────────────
+// A single wire (a cable) can be expanded into its individual conductors.
+interface Conductor { label: string; color: string; term?: string }
+// Standard conductor color palette (electrician-familiar).
+const CONDUCTOR_PALETTE = ["#EF4444", "#111827", "#F8FAFC", "#22C55E", "#3B82F6", "#F59E0B", "#8B5CF6", "#F97316", "#78716C", "#EC4899"];
+// Sensible default conductor sets per cable type — one click to populate.
+const CABLE_CONDUCTORS: Record<string, Conductor[]> = {
+  "16/2": [{ label: "+", color: "#EF4444" }, { label: "−", color: "#111827" }],
+  "18/6": [
+    { label: "+", color: "#EF4444" }, { label: "−", color: "#111827" }, { label: "N.O.", color: "#22C55E" },
+    { label: "COM", color: "#3B82F6" }, { label: "N.C.", color: "#F59E0B" }, { label: "GND", color: "#78716C" },
+  ],
+  "22/4": [{ label: "D0", color: "#22C55E" }, { label: "D1", color: "#F8FAFC" }, { label: "PWR", color: "#EF4444" }, { label: "GND", color: "#111827" }],
+  "22/2 shielded": [{ label: "A", color: "#EF4444" }, { label: "B", color: "#111827" }, { label: "SHIELD", color: "#78716C" }],
+  "CAT6": [{ label: "Data (PoE)", color: "#3B82F6" }],
+  "CAT5e": [{ label: "Data (PoE)", color: "#3B82F6" }],
+};
 const DEVICE_CATEGORIES = Array.from(new Set(DEVICE_TYPES.map((d) => d.category)));
 const DEVICE_BY_KEY: Record<string, DeviceTypeDef> = Object.fromEntries(DEVICE_TYPES.map((d) => [d.key, d]));
 
@@ -185,7 +231,10 @@ const WIRE_GROUPS: { group: string; kinds: WireKind[] }[] = [
 ];
 const WIRE_KINDS: WireKind[] = WIRE_GROUPS.flatMap((g) => g.kinds);
 // Per-wire detail (color = role; these attributes keep the full spec on click).
-interface WireAttrs { cable?: string; gauge?: string; lengthFt?: number; poe?: boolean; voltage?: string; }
+interface WireAttrs {
+  cable?: string; gauge?: string; lengthFt?: number; poe?: boolean; voltage?: string;
+  showConductors?: boolean; conductors?: Conductor[];
+}
 // Map the legacy 4-kind vocabulary onto the new segment roles so old plans render.
 const LEGACY_WIRE_MAP: Record<string, WireKind> = {
   power: "device_power", data: "network", access: "reader", signal: "loop",
@@ -329,6 +378,14 @@ function EditorInner() {
   const titleBlockRef = useRef<TitleBlock>(titleBlock);
   titleBlockRef.current = titleBlock;
 
+  // Global device product images (device key → public URL). Preloaded into an
+  // HTMLImageElement cache so buildDevice can render them synchronously.
+  const [symbols, setSymbols] = useState<Record<string, string>>({});
+  const symbolsRef = useRef<Record<string, string>>({});
+  symbolsRef.current = symbols;
+  const imgCacheRef = useRef<Record<string, HTMLImageElement>>({});
+  const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+
   const [expandedCat, setExpandedCat] = useState<Record<string, boolean>>({ Cameras: true });
   const [showLibrary, setShowLibrary] = useState(true);
   const [showBom, setShowBom] = useState(false);
@@ -422,12 +479,32 @@ function EditorInner() {
       const fabric = fabricRef.current;
       if (!fc || !fabric) return;
       const kind = normWireKind(rawKind);
-      const pts = orthPath({ x: from[0], y: from[1] }, { x: to[0], y: to[1] });
-      const line = new fabric.Polyline(pts, {
-        stroke: WIRE_COLORS[kind], strokeWidth: 2.5, fill: "transparent", objectCaching: false,
-      });
-      line.data = { kind: "wire", id: genId(), wireKind: kind, from, to, label: label ?? WIRE_LABELS[kind], wireAttrs: attrs ?? {} };
-      fc.add(line);
+      const a: WireAttrs = attrs ?? {};
+      const conductors = a.conductors ?? [];
+      const fan = !!a.showConductors && conductors.length > 0;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let obj: any;
+      if (fan) {
+        // Detail mode: fan the cable into its individual conductors (parallel strands).
+        const paths = conductorPaths({ x: from[0], y: from[1] }, { x: to[0], y: to[1] }, conductors.length, 3.2);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const strands: any[] = paths.map((p, i) =>
+          new fabric.Polyline(p, {
+            stroke: conductors[i].color || WIRE_COLORS[kind],
+            strokeWidth: 1.6, fill: "transparent", objectCaching: false,
+            stroke_lineCap: "round",
+          })
+        );
+        obj = new fabric.Group(strands, { objectCaching: false });
+      } else {
+        const pts = orthPath({ x: from[0], y: from[1] }, { x: to[0], y: to[1] });
+        obj = new fabric.Polyline(pts, {
+          stroke: WIRE_COLORS[kind], strokeWidth: 2.5, fill: "transparent", objectCaching: false,
+        });
+      }
+      obj.data = { kind: "wire", id: genId(), wireKind: kind, from, to, label: label ?? WIRE_LABELS[kind], wireAttrs: a };
+      fc.add(obj);
       bumpBom();
     },
     [bumpBom]
@@ -439,11 +516,11 @@ function EditorInner() {
     if (!fc || !fabric) return;
     const rect = new fabric.Rect({
       left: cx, top: cy, width: w, height: h, originX: "center", originY: "center",
-      fill: "rgba(125,229,255,0.04)", stroke: CYAN, strokeWidth: 1.5, strokeDashArray: [6, 4], rx: 8, ry: 8,
+      fill: "rgba(15,23,42,0.015)", stroke: "#334155", strokeWidth: 1.5, rx: 4, ry: 4,
     });
     const txt = new fabric.Text(name, {
-      left: cx, top: cy - h / 2 - 12, originX: "center", originY: "center",
-      fontSize: 12, fontFamily: "Inter, sans-serif", fill: CYAN,
+      left: cx, top: cy - h / 2 + 14, originX: "center", originY: "center",
+      fontSize: 15, fontWeight: "600", fontFamily: "Inter, sans-serif", fill: "#0f172a",
     });
     const group = new fabric.Group([rect, txt], { left: cx, top: cy, originX: "center", originY: "center" });
     group.data = { kind: "zone", id: genId(), label: name };
@@ -469,20 +546,33 @@ function EditorInner() {
         if (cone) parts.push(cone);
       }
 
-      const circle = new fabric.Circle({
-        radius: 18, fill: dt.color + "33", stroke: dt.color, strokeWidth: 2,
-        originX: "center", originY: "center",
-      });
-      const abbr = new fabric.Text(dt.abbr, {
-        fontSize: 8, fontWeight: "700", fontFamily: "IBM Plex Mono, monospace",
-        fill: "#F8FAFC", originX: "center", originY: "center",
-      });
+      // Product image (if one has been uploaded for this device type) — else the
+      // color-coded badge. Image element is preloaded so this stays synchronous.
+      const imgEl = imgCacheRef.current[key];
+      if (imgEl && imgEl.complete && imgEl.naturalWidth > 0) {
+        const target = 52;
+        const s = target / Math.max(imgEl.naturalWidth, imgEl.naturalHeight);
+        const pic = new fabric.Image(imgEl, {
+          originX: "center", originY: "center", scaleX: s, scaleY: s, left: 0, top: 0,
+        });
+        parts.push(pic);
+      } else {
+        const circle = new fabric.Circle({
+          radius: 18, fill: dt.color + "22", stroke: dt.color, strokeWidth: 2,
+          originX: "center", originY: "center",
+        });
+        const abbr = new fabric.Text(dt.abbr, {
+          fontSize: 8, fontWeight: "700", fontFamily: "IBM Plex Mono, monospace",
+          fill: dt.color, originX: "center", originY: "center",
+        });
+        parts.push(circle, abbr);
+      }
       const labelTxt = new fabric.Text(dt.label, {
-        fontSize: 9, fontFamily: "Inter, sans-serif", fill: "#F8FAFC",
-        originX: "center", originY: "center", top: 26,
-        backgroundColor: "rgba(11,23,40,0.75)", padding: 2,
+        fontSize: 9, fontWeight: "600", fontFamily: "Inter, sans-serif", fill: "#0f172a",
+        originX: "center", originY: "center", top: imgEl ? 34 : 26,
+        backgroundColor: "rgba(255,255,255,0.82)", padding: 2,
       });
-      parts.push(circle, abbr, labelTxt);
+      parts.push(labelTxt);
 
       const group = new fabric.Group(parts, {
         left: x, top: y, originX: "center", originY: "center",
@@ -490,7 +580,7 @@ function EditorInner() {
       group.data = {
         kind: "device", id: genId(), deviceTypeKey: key, label: dt.label,
         condition: condition ?? "good", action: action ?? "new_install",
-        isCam: dt.isCam ?? false,
+        isCam: dt.isCam ?? false, isBoard: dt.isBoard ?? false,
         meta: {
           qty: 1, price: 0, status: "Proposed", ...meta,
           fov: dt.isCam ? (meta.fov ?? defaultFov(key)) : undefined,
@@ -501,6 +591,77 @@ function EditorInner() {
     },
     []
   );
+
+  // ── Device product images ──────────────────────────────────────────────────
+  const loadSymbolImage = useCallback(
+    (key: string, url: string) =>
+      new Promise<void>((resolve) => {
+        const img = new window.Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => { imgCacheRef.current[key] = img; resolve(); };
+        img.onerror = () => resolve();
+        img.src = url;
+      }),
+    []
+  );
+
+  // Redraw every placed device of a given type (used after an image uploads).
+  const refreshDevicesOfType = useCallback((key: string) => {
+    const fc = fcRef.current;
+    if (!fc) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const targets = fc.getObjects().filter((o: any) => o.data?.kind === "device" && o.data.deviceTypeKey === key);
+    for (const o of targets) {
+      const c = o.getCenterPoint();
+      const meta = { ...(o.data.meta || {}) };
+      const cond = o.data.condition, act = o.data.action, label = o.data.label;
+      fc.remove(o);
+      const g = buildDevice(c.x, c.y, key, meta, cond, act);
+      if (g) g.data.label = label;
+    }
+    fc.requestRenderAll();
+    bumpBom();
+  }, [buildDevice, bumpBom]);
+
+  const uploadSymbol = useCallback(async (key: string, file: File) => {
+    setUploadingKey(key);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("key", key);
+      const res = await fetch("/api/design/symbols", { method: "POST", body: fd });
+      const json = await res.json();
+      if (res.ok && json.url) {
+        setSymbols((s) => ({ ...s, [key]: json.url }));
+        await loadSymbolImage(key, json.url);
+        refreshDevicesOfType(key);
+      } else {
+        alert(json.error || "Upload failed");
+      }
+    } catch {
+      alert("Upload failed");
+    }
+    setUploadingKey(null);
+  }, [loadSymbolImage, refreshDevicesOfType]);
+
+  // Fetch the shared symbol library on mount + preload each image.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/design/symbols", { cache: "no-store" });
+        const json = await res.json();
+        if (!active || !json?.symbols) return;
+        setSymbols(json.symbols);
+        await Promise.all(
+          Object.entries(json.symbols).map(([k, u]) => loadSymbolImage(k, u as string))
+        );
+        if (!active) return;
+        Object.keys(json.symbols).forEach((k) => refreshDevicesOfType(k));
+      } catch { /* ignore */ }
+    })();
+    return () => { active = false; };
+  }, [loadSymbolImage, refreshDevicesOfType]);
 
   // ── Background ─────────────────────────────────────────────────────────────
   const applyBackground = useCallback(async (url: string | null) => {
@@ -603,7 +764,7 @@ function EditorInner() {
       if (disposed || !canvasElRef.current) return;
       fabricRef.current = fabric;
       const fc = new fabric.Canvas(canvasElRef.current, {
-        backgroundColor: "#0E1A30",
+        backgroundColor: "#FFFFFF",
         selection: true,
         preserveObjectStacking: true,
       });
@@ -697,7 +858,7 @@ function EditorInner() {
 
     if (mode === "zone") {
       if (opt.target) return;
-      drawZoneObject(p.x, p.y, 240, 160, "New Zone");
+      drawZoneObject(p.x, p.y, 320, 220, "New Area");
       fc.renderAll();
       return;
     }
@@ -853,10 +1014,16 @@ function EditorInner() {
         </tr>`).join("")
       : `<tr><td colspan="3" class="c muted">No devices placed.</td></tr>`;
 
-    // Wiring legend grouped by segment role.
-    const legendHtml = WIRE_GROUPS.map((g) => `
-      <div class="leggrp">${escapeHtml(g.group)}</div>
-      ${g.kinds.map((k) => `<span class="leg"><span class="sw" style="background:${WIRE_COLORS[k]}"></span>${escapeHtml(WIRE_LABELS[k])}</span>`).join("")}`).join("");
+    // Wiring legend — only the segment roles actually placed on the drawing.
+    const usedKinds = bom.wireKinds;
+    const legendHtml = usedKinds.length
+      ? WIRE_GROUPS.map((g) => {
+          const used = g.kinds.filter((k) => usedKinds.includes(k));
+          if (!used.length) return "";
+          return `<div class="leggrp">${escapeHtml(g.group)}</div>` +
+            used.map((k) => `<span class="leg"><span class="sw" style="background:${WIRE_COLORS[k]}"></span>${escapeHtml(WIRE_LABELS[k])}</span>`).join("");
+        }).join("")
+      : `<div style="font-size:10px;color:#94a3b8">No wires placed.</div>`;
 
     // Small title-block field cell.
     const fcell = (label: string, value: string) =>
@@ -872,7 +1039,7 @@ function EditorInner() {
   .outer { width: ${SHEET_W_IN}in; height: ${SHEET_H_IN}in; padding: 0.25in; }
   .inner { width: 100%; height: 100%; border: 2.5px solid #0f172a; display: flex; }
   .draw { flex: 1 1 auto; border-right: 2.5px solid #0f172a; display: flex; align-items: center;
-    justify-content: center; overflow: hidden; background: #0E1A30; padding: 0.12in; }
+    justify-content: center; overflow: hidden; background: #ffffff; padding: 0.12in; }
   .draw img { max-width: 100%; max-height: 100%; object-fit: contain; }
   .tb { width: 4in; flex: 0 0 4in; display: flex; flex-direction: column; }
   .corp { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 2.5px solid #0f172a; }
@@ -1055,6 +1222,19 @@ function EditorInner() {
     selected.data.wireAttrs = { ...(selected.data.wireAttrs ?? {}), ...patch };
     setInspectorTick((t) => t + 1);
   };
+  // Redraw the selected wire (single line ↔ fanned conductors) after a change
+  // to its conductor set. Mirrors rebuildSelectedCone for cameras.
+  const rebuildSelectedWire = () => {
+    const fc = fcRef.current;
+    if (!fc || !selected?.data || selected.data.kind !== "wire") return;
+    const { from, to, wireKind, label, wireAttrs } = selected.data;
+    fc.remove(selected);
+    drawWireObject(from, to, wireKind, label, wireAttrs);
+    const objs = fc.getObjects();
+    const g = objs[objs.length - 1];
+    if (g) { fc.setActiveObject(g); setSelected(g); }
+    fc.requestRenderAll();
+  };
 
   // Re-render camera cone after AOC change.
   const rebuildSelectedCone = () => {
@@ -1076,14 +1256,15 @@ function EditorInner() {
   const bom = React.useMemo(() => {
     void bomTick;
     const fc = fcRef.current;
-    if (!fc) return { rows: [] as { label: string; qty: number; price: number; total: number }[], total: 0, wires: 0, zones: 0 };
+    if (!fc) return { rows: [] as { label: string; qty: number; price: number; total: number }[], total: 0, wires: 0, zones: 0, wireKinds: [] as WireKind[] };
     const acc: Record<string, { label: string; qty: number; price: number; total: number }> = {};
     let wires = 0, zones = 0;
+    const usedWire = new Set<WireKind>();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     fc.getObjects().forEach((o: any) => {
       const d = o.data;
       if (!d) return;
-      if (d.kind === "wire") { wires++; return; }
+      if (d.kind === "wire") { wires++; usedWire.add(normWireKind(d.wireKind)); return; }
       if (d.kind === "zone") { zones++; return; }
       if (d.kind !== "device") return;
       const meta: ElemMeta = d.meta ?? {};
@@ -1096,7 +1277,7 @@ function EditorInner() {
     });
     const rows = Object.values(acc).sort((a, b) => b.qty - a.qty);
     const total = rows.reduce((s, r) => s + r.total, 0);
-    return { rows, total, wires, zones };
+    return { rows, total, wires, zones, wireKinds: Array.from(usedWire) };
   }, [bomTick]);
 
   // ── UI ───────────────────────────────────────────────────────────────────
@@ -1214,21 +1395,36 @@ function EditorInner() {
                     {open && (
                       <div className="pl-2 flex flex-col gap-1 mt-1">
                         {items.map((d) => (
-                          <button
-                            key={d.key}
-                            onClick={() => chooseDevice(d.key)}
-                            className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-colors hover:brightness-125"
-                            style={{
-                              backgroundColor: devKey === d.key ? `${d.color}22` : PANEL,
-                              border: `1px solid ${devKey === d.key ? d.color : BORDER}`,
-                            }}
-                          >
-                            <span className="w-6 h-6 rounded-full flex items-center justify-center text-[7px] font-bold shrink-0"
-                              style={{ backgroundColor: d.color + "33", border: `1.5px solid ${d.color}`, color: TEXT }}>
-                              {d.abbr}
-                            </span>
-                            <span className="text-[11px] truncate" style={{ color: TEXT }}>{d.label}</span>
-                          </button>
+                          <div key={d.key} className="flex items-center gap-1">
+                            <button
+                              onClick={() => chooseDevice(d.key)}
+                              className="flex-1 min-w-0 flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-colors hover:brightness-125"
+                              style={{
+                                backgroundColor: devKey === d.key ? `${d.color}22` : PANEL,
+                                border: `1px solid ${devKey === d.key ? d.color : BORDER}`,
+                              }}
+                            >
+                              {symbols[d.key] ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={symbols[d.key]} alt="" className="w-6 h-6 object-contain rounded shrink-0" style={{ backgroundColor: "#fff" }} />
+                              ) : (
+                                <span className="w-6 h-6 rounded-full flex items-center justify-center text-[7px] font-bold shrink-0"
+                                  style={{ backgroundColor: d.color + "33", border: `1.5px solid ${d.color}`, color: TEXT }}>
+                                  {d.abbr}
+                                </span>
+                              )}
+                              <span className="text-[11px] truncate" style={{ color: TEXT }}>{d.label}</span>
+                            </button>
+                            <label
+                              title={symbols[d.key] ? "Replace image" : "Upload product image"}
+                              className="w-7 h-7 flex items-center justify-center rounded-lg cursor-pointer shrink-0"
+                              style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: symbols[d.key] ? "#34D399" : MUTED }}
+                            >
+                              {uploadingKey === d.key ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
+                              <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden"
+                                onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadSymbol(d.key, f); e.currentTarget.value = ""; }} />
+                            </label>
+                          </div>
                         ))}
                       </div>
                     )}
@@ -1251,7 +1447,7 @@ function EditorInner() {
             {toolBtn("select", MousePointer, "Select")}
             {toolBtn("wire", Zap, "Wire")}
             {toolBtn("fov", Camera, "Camera / FOV")}
-            {toolBtn("zone", Type, "Zone frame")}
+            {toolBtn("zone", Type, "Area box (one or many)")}
             {toolBtn("scale", Ruler, "Set scale")}
             <button
               onClick={() => setShowTemplates(true)}
@@ -1348,19 +1544,27 @@ function EditorInner() {
                 Wire Legend
               </button>
               {showLegend && (
-                <div className="mt-1.5 flex flex-col gap-1.5">
-                  {WIRE_GROUPS.map((g) => (
-                    <div key={g.group}>
-                      <div className="text-[8px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: MUTED }}>{g.group}</div>
-                      {g.kinds.map((k) => (
-                        <div key={k} className="flex items-center gap-2 text-[10.5px] leading-tight py-px" style={{ color: TEXT }}>
-                          <span className="w-4 h-0.5 rounded shrink-0" style={{ backgroundColor: WIRE_COLORS[k] }} />
-                          {WIRE_LABELS[k]}
+                bom.wireKinds.length === 0 ? (
+                  <div className="mt-1.5 text-[10px]" style={{ color: MUTED }}>Add wires to build the legend.</div>
+                ) : (
+                  <div className="mt-1.5 flex flex-col gap-1.5">
+                    {WIRE_GROUPS.map((g) => {
+                      const used = g.kinds.filter((k) => bom.wireKinds.includes(k));
+                      if (used.length === 0) return null;
+                      return (
+                        <div key={g.group}>
+                          <div className="text-[8px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: MUTED }}>{g.group}</div>
+                          {used.map((k) => (
+                            <div key={k} className="flex items-center gap-2 text-[10.5px] leading-tight py-px" style={{ color: TEXT }}>
+                              <span className="w-4 h-0.5 rounded shrink-0" style={{ backgroundColor: WIRE_COLORS[k] }} />
+                              {WIRE_LABELS[k]}
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
+                      );
+                    })}
+                  </div>
+                )
               )}
             </div>
           </div>
@@ -1379,6 +1583,7 @@ function EditorInner() {
               onField={patchSelectedField}
               onWireKind={patchSelectedWire}
               onWireAttrs={patchSelectedWireAttrs}
+              onWireRebuild={rebuildSelectedWire}
               onRebuildCone={rebuildSelectedCone}
             />
           ) : (
@@ -1501,7 +1706,7 @@ function EditorInner() {
 
 // ── Inspector panel ──────────────────────────────────────────────────────────
 function Inspector({
-  selected, onLabel, onMeta, onField, onWireKind, onWireAttrs, onRebuildCone,
+  selected, onLabel, onMeta, onField, onWireKind, onWireAttrs, onWireRebuild, onRebuildCone,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   selected: any;
@@ -1510,14 +1715,18 @@ function Inspector({
   onField: (f: "condition" | "action", v: string) => void;
   onWireKind: (k: WireKind) => void;
   onWireAttrs: (p: Partial<WireAttrs>) => void;
+  onWireRebuild: () => void;
   onRebuildCone: () => void;
 }) {
   const d = selected.data;
   const meta: ElemMeta = d.meta ?? {};
   const isDevice = d.kind === "device";
   const isCam = isDevice && d.isCam;
+  const isBoardDev = isDevice && d.isBoard;
+  const boardTerminals: string[] = isBoardDev ? (BOARD_TERMINALS[d.deviceTypeKey] ?? []) : [];
   const isWire = d.kind === "wire";
   const wa: WireAttrs = d.wireAttrs ?? {};
+  const conductors: Conductor[] = wa.conductors ?? [];
 
   const field = (label: string, node: React.ReactNode) => (
     <div className="mb-3">
@@ -1531,7 +1740,7 @@ function Inspector({
     <div className="flex-1 overflow-y-auto p-4">
       <div className="flex items-center gap-2 mb-4">
         <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ backgroundColor: `${BRAND}22`, color: BRAND }}>
-          {d.kind === "device" ? "Element" : d.kind === "wire" ? "Wire" : "Zone"}
+          {d.kind === "device" ? "Element" : d.kind === "wire" ? "Wire" : "Area"}
         </span>
       </div>
 
@@ -1598,6 +1807,18 @@ function Inspector({
         </>
       )}
 
+      {isBoardDev && boardTerminals.length > 0 && (
+        <div className="mt-2 pt-3 border-t" style={{ borderColor: BORDER }}>
+          <div className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: CYAN }}>Board Terminals</div>
+          <div className="flex flex-wrap gap-1">
+            {boardTerminals.map((t) => (
+              <span key={t} className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT }}>{t}</span>
+            ))}
+          </div>
+          <p className="text-[10px] mt-2" style={{ color: MUTED }}>Land a wire’s conductors on these when you expand it (select the wire → Show conductors).</p>
+        </div>
+      )}
+
       {isWire && (
         <>
           {field("Wire type", (
@@ -1642,6 +1863,45 @@ function Inspector({
               PoE (power over this run)
             </label>
           ))}
+
+          {/* Detail mode: expand this cable into its individual conductors */}
+          <div className="mt-2 pt-3 border-t" style={{ borderColor: BORDER }}>
+            <label className="flex items-center gap-2 text-sm cursor-pointer mb-2" style={{ color: TEXT }}>
+              <input type="checkbox" checked={!!wa.showConductors}
+                onChange={(e) => { onWireAttrs({ showConductors: e.target.checked }); onWireRebuild(); }} />
+              Show conductors (Detail)
+            </label>
+            {wa.showConductors && (
+              <>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  <button
+                    onClick={() => { const list = [...conductors, { label: `C${conductors.length + 1}`, color: CONDUCTOR_PALETTE[conductors.length % CONDUCTOR_PALETTE.length] }]; onWireAttrs({ conductors: list }); onWireRebuild(); }}
+                    className="text-[11px] rounded-lg px-2 py-1" style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT }}>+ Conductor</button>
+                  {wa.cable && CABLE_CONDUCTORS[wa.cable] && (
+                    <button
+                      onClick={() => { onWireAttrs({ conductors: CABLE_CONDUCTORS[wa.cable as string].map((c) => ({ ...c })), showConductors: true }); onWireRebuild(); }}
+                      className="text-[11px] rounded-lg px-2 py-1" style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: CYAN }}>Auto-fill from {wa.cable}</button>
+                  )}
+                </div>
+                <datalist id="term-list">{ALL_TERMINALS.map((t) => <option key={t} value={t} />)}</datalist>
+                <div className="flex flex-col gap-1.5">
+                  {conductors.map((c, i) => (
+                    <div key={i} className="flex items-center gap-1.5">
+                      <button title="Cycle color"
+                        onClick={() => { const idx = CONDUCTOR_PALETTE.indexOf(c.color); const next = CONDUCTOR_PALETTE[(idx + 1) % CONDUCTOR_PALETTE.length]; const list = conductors.map((x, j) => j === i ? { ...x, color: next } : x); onWireAttrs({ conductors: list }); onWireRebuild(); }}
+                        className="w-5 h-5 rounded shrink-0" style={{ backgroundColor: c.color, border: `1px solid ${BORDER}` }} />
+                      <input defaultValue={c.label} onBlur={(e) => { const list = conductors.map((x, j) => j === i ? { ...x, label: e.target.value } : x); onWireAttrs({ conductors: list }); }}
+                        placeholder="Label" className="w-14 px-2 py-1 rounded text-[11px] outline-none" style={inputStyle} />
+                      <input list="term-list" defaultValue={c.term ?? ""} onBlur={(e) => { const list = conductors.map((x, j) => j === i ? { ...x, term: e.target.value } : x); onWireAttrs({ conductors: list }); }}
+                        placeholder="Terminal" className="flex-1 min-w-0 px-2 py-1 rounded text-[11px] outline-none" style={inputStyle} />
+                      <button onClick={() => { const list = conductors.filter((_, j) => j !== i); onWireAttrs({ conductors: list }); onWireRebuild(); }} style={{ color: MUTED }}><X size={13} /></button>
+                    </div>
+                  ))}
+                  {conductors.length === 0 && <p className="text-[10px]" style={{ color: MUTED }}>Add conductors, or Auto-fill from the cable type.</p>}
+                </div>
+              </>
+            )}
+          </div>
         </>
       )}
 
@@ -1688,7 +1948,7 @@ function BomPanel({ bom }: { bom: { rows: { label: string; qty: number; price: n
       </div>
       <div className="mt-3 flex gap-3 text-[11px]" style={{ color: MUTED }}>
         <span className="flex items-center gap-1"><GitBranch size={12} /> {bom.wires} wires</span>
-        <span className="flex items-center gap-1"><Layers size={12} /> {bom.zones} zones</span>
+        <span className="flex items-center gap-1"><Layers size={12} /> {bom.zones} areas</span>
       </div>
     </div>
   );
@@ -1696,15 +1956,15 @@ function BomPanel({ bom }: { bom: { rows: { label: string; qty: number; price: n
 
 // ── Architect sheet frame + right-side title block (on-screen overlay) ─────────
 function SheetFrame({ tb, stage, onEdit }: { tb: TitleBlock; stage: string; onEdit: () => void }) {
-  const line = "rgba(255,255,255,0.42)";
-  const faint = "rgba(255,255,255,0.16)";
+  const line = "#0f172a";     // dark architect border on the white sheet
+  const faint = "#cbd5e1";
   const tbW = 250; // title-block column width in px
   const val = (s: string, fallback = "—") => (s && s.trim() ? s : fallback);
 
   const cell = (label: string, value: string) => (
     <div style={{ borderTop: `1px solid ${faint}`, padding: "5px 8px" }}>
-      <div style={{ fontSize: 8, letterSpacing: "0.06em", textTransform: "uppercase", color: MUTED }}>{label}</div>
-      <div style={{ fontSize: 11, color: TEXT, fontWeight: 600, lineHeight: 1.2, marginTop: 1 }}>{value}</div>
+      <div style={{ fontSize: 8, letterSpacing: "0.06em", textTransform: "uppercase", color: "#64748b" }}>{label}</div>
+      <div style={{ fontSize: 11, color: "#0f172a", fontWeight: 600, lineHeight: 1.2, marginTop: 1 }}>{value}</div>
     </div>
   );
 
@@ -1722,7 +1982,7 @@ function SheetFrame({ tb, stage, onEdit }: { tb: TitleBlock; stage: string; onEd
           pointerEvents: "auto", cursor: "pointer",
           position: "absolute", top: 15, bottom: 15, right: 15, width: tbW,
           borderLeft: `2px solid ${line}`,
-          background: "rgba(9,17,31,0.9)", backdropFilter: "blur(2px)",
+          background: "#ffffff",
           display: "flex", flexDirection: "column",
         }}
       >
@@ -1731,23 +1991,23 @@ function SheetFrame({ tb, stage, onEdit }: { tb: TitleBlock; stage: string; onEd
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={GG_CORP.logo} alt="Gate Guard" style={{ height: 26, width: "auto", objectFit: "contain" }} />
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: TEXT, lineHeight: 1 }}>{GG_CORP.name}</div>
-            <div style={{ fontSize: 8, color: MUTED, lineHeight: 1.25, marginTop: 2 }}>{GG_CORP.tagline}</div>
-            <div style={{ fontSize: 8, color: MUTED, lineHeight: 1.25 }}>{GG_CORP.phone} · {GG_CORP.web}</div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#0f172a", lineHeight: 1 }}>{GG_CORP.name}</div>
+            <div style={{ fontSize: 8, color: "#64748b", lineHeight: 1.25, marginTop: 2 }}>{GG_CORP.tagline}</div>
+            <div style={{ fontSize: 8, color: "#64748b", lineHeight: 1.25 }}>{GG_CORP.phone} · {GG_CORP.web}</div>
           </div>
         </div>
 
         {/* Dealer + Project — editable */}
         {cell("Dealer", val(tb.dealerName))}
-        {tb.dealerAddress ? <div style={{ padding: "0 8px 5px", fontSize: 9, color: MUTED }}>{tb.dealerAddress}</div> : null}
+        {tb.dealerAddress ? <div style={{ padding: "0 8px 5px", fontSize: 9, color: "#64748b" }}>{tb.dealerAddress}</div> : null}
         {cell("Project / Site", val(tb.projectName))}
-        {tb.projectAddress ? <div style={{ padding: "0 8px 5px", fontSize: 9, color: MUTED }}>{tb.projectAddress}</div> : null}
+        {tb.projectAddress ? <div style={{ padding: "0 8px 5px", fontSize: 9, color: "#64748b" }}>{tb.projectAddress}</div> : null}
 
         {/* Sheet title + stage */}
-        <div style={{ borderTop: `2px solid ${line}`, padding: "7px 8px", background: "rgba(107,126,255,0.08)" }}>
-          <div style={{ fontSize: 8, letterSpacing: "0.06em", textTransform: "uppercase", color: MUTED }}>Sheet Title</div>
-          <div style={{ fontSize: 14, color: TEXT, fontWeight: 700, lineHeight: 1.15 }}>{val(tb.sheetTitle, "System Design")}</div>
-          <div style={{ fontSize: 9, color: CYAN, marginTop: 2, textTransform: "uppercase", letterSpacing: "0.05em" }}>{stage}</div>
+        <div style={{ borderTop: `2px solid ${line}`, padding: "7px 8px", background: "#eef1ff" }}>
+          <div style={{ fontSize: 8, letterSpacing: "0.06em", textTransform: "uppercase", color: "#64748b" }}>Sheet Title</div>
+          <div style={{ fontSize: 14, color: "#0f172a", fontWeight: 700, lineHeight: 1.15 }}>{val(tb.sheetTitle, "System Design")}</div>
+          <div style={{ fontSize: 9, color: "#4f46e5", marginTop: 2, textTransform: "uppercase", letterSpacing: "0.05em" }}>{stage}</div>
         </div>
 
         {/* Fielded grid */}
@@ -1761,7 +2021,7 @@ function SheetFrame({ tb, stage, onEdit }: { tb: TitleBlock; stage: string; onEd
         </div>
 
         <div style={{ flex: 1 }} />
-        <div style={{ borderTop: `1px solid ${faint}`, padding: "4px 8px", fontSize: 8, color: MUTED, textAlign: "right" }}>
+        <div style={{ borderTop: `1px solid ${faint}`, padding: "4px 8px", fontSize: 8, color: "#64748b", textAlign: "right" }}>
           {SHEET_W_IN}" × {SHEET_H_IN}" · Click to edit
         </div>
       </div>
@@ -1831,6 +2091,22 @@ function orthPath(a: { x: number; y: number }, b: { x: number; y: number }) {
     { x: midX, y: b.y },
     { x: b.x, y: b.y },
   ];
+}
+
+// Parallel offset copies of the orth path — one strand per conductor, so a
+// multi-conductor cable reads as a ribbon of colored wires in Detail mode.
+function conductorPaths(a: { x: number; y: number }, b: { x: number; y: number }, n: number, spacing: number) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const px = -dy / len, py = dx / len; // unit perpendicular
+  const base = orthPath(a, b);
+  const mid = (n - 1) / 2;
+  const out: { x: number; y: number }[][] = [];
+  for (let i = 0; i < n; i++) {
+    const off = (i - mid) * spacing;
+    out.push(base.map((pt) => ({ x: pt.x + px * off, y: pt.y + py * off })));
+  }
+  return out;
 }
 
 function defaultFov(key: string): { angle: number; range: number; direction: number } {
