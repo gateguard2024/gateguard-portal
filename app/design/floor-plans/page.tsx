@@ -277,6 +277,7 @@ function nextStage(status: string): Stage | null {
 // ── Element data packed into notes JSON ──────────────────────────────────────
 interface ElemMeta {
   manufacturer?: string; model?: string; price?: number; qty?: number; status?: string; color?: string;
+  cost?: number; msrp?: number; imageUrl?: string; productId?: string;
   fov?: { angle: number; range: number; direction: number };
   zone?: { name: string };
   wire?: {
@@ -551,9 +552,9 @@ function EditorInner() {
         if (cone) parts.push(cone);
       }
 
-      // Product image (if one has been uploaded for this device type) — else the
-      // color-coded badge. Image element is preloaded so this stays synchronous.
-      const imgEl = imgCacheRef.current[key];
+      // Product image: prefer a per-instance catalog image (meta.imageUrl), then
+      // the uploaded type image, else the color-coded badge. Preloaded → sync.
+      const imgEl = (meta.imageUrl && imgCacheRef.current[meta.imageUrl]) || imgCacheRef.current[key];
       if (imgEl && imgEl.complete && imgEl.naturalWidth > 0) {
         const target = 52;
         const s = target / Math.max(imgEl.naturalWidth, imgEl.naturalHeight);
@@ -1269,17 +1270,54 @@ function EditorInner() {
     selected.data.meta = { ...(selected.data.meta ?? {}), color };
     rebuildSelectedDevice();
   };
-  // Fill manufacturer / model / price from a picked catalog product.
+  // Auto-find a product photo (Serper → re-host) and put it on the device.
+  const autoFindImage = async () => {
+    if (!selected?.data || selected.data.kind !== "device") return;
+    const meta: ElemMeta = selected.data.meta ?? {};
+    const name = (meta.model || selected.data.label || "").trim();
+    const brand = (meta.manufacturer || "").trim();
+    if (!name && !brand) { setSaveMsg("Add a model or manufacturer first"); setTimeout(() => setSaveMsg(null), 2500); return; }
+    setSaveMsg("Finding image…");
+    try {
+      const res = await fetch("/api/products/find-image", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, brand, id: meta.productId }),
+      });
+      const json = await res.json();
+      if (res.ok && json.url) {
+        selected.data.meta = { ...(selected.data.meta ?? {}), imageUrl: json.url };
+        await loadSymbolImage(json.url, json.url);
+        rebuildSelectedDevice();
+        setSaveMsg("Image added ✓");
+      } else {
+        setSaveMsg(json.error || "No image found");
+      }
+    } catch { setSaveMsg("Find image failed"); }
+    setTimeout(() => setSaveMsg(null), 3000);
+  };
+
+  // Fill manufacturer / model / price / cost / image from a picked catalog product.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const patchSelectedProduct = (prod: any) => {
+  const patchSelectedProduct = async (prod: any) => {
     if (!selected?.data || selected.data.kind !== "device") return;
     const patch: Partial<ElemMeta> = {};
-    if (prod.brand) patch.manufacturer = prod.brand;
+    if (prod.id) patch.productId = String(prod.id);
+    if (prod.brand && String(prod.brand).trim()) patch.manufacturer = prod.brand;
     if (prod.name) patch.model = prod.name;
-    if (typeof prod.sell_price === "number") patch.price = prod.sell_price;
+    if (typeof prod.sell_price === "number" && prod.sell_price > 0) patch.price = prod.sell_price;
+    if (typeof prod.dealer_cost === "number" && prod.dealer_cost > 0) patch.cost = prod.dealer_cost;
+    if (typeof prod.msrp === "number" && prod.msrp > 0) patch.msrp = prod.msrp;
+    const img = prod.image_url && String(prod.image_url).trim() ? String(prod.image_url).trim() : "";
+    if (img) patch.imageUrl = img;
     selected.data.meta = { ...(selected.data.meta ?? {}), ...patch };
-    setInspectorTick((t) => t + 1);
-    bumpBom();
+    if (img) {
+      await loadSymbolImage(img, img);   // cache the product photo by its URL
+      rebuildSelectedDevice();           // redraw so the image shows on the device
+    } else {
+      setInspectorTick((t) => t + 1);
+      bumpBom();
+      void autoFindImage();              // no catalog image → auto-find one
+    }
   };
 
   // ── BOM ────────────────────────────────────────────────────────────────────
@@ -1616,6 +1654,7 @@ function EditorInner() {
               onRebuildCone={rebuildSelectedDevice}
               onColor={patchSelectedColor}
               onProduct={patchSelectedProduct}
+              onFindImage={autoFindImage}
             />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-center px-6" style={{ color: MUTED }}>
@@ -1814,7 +1853,7 @@ function ProductPicker({ category, manufacturer, model, onPick }: {
 }
 
 function Inspector({
-  selected, onLabel, onMeta, onField, onWireKind, onWireAttrs, onWireRebuild, onRebuildCone, onColor, onProduct,
+  selected, onLabel, onMeta, onField, onWireKind, onWireAttrs, onWireRebuild, onRebuildCone, onColor, onProduct, onFindImage,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   selected: any;
@@ -1828,6 +1867,7 @@ function Inspector({
   onColor: (c: string | undefined) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onProduct: (p: any) => void;
+  onFindImage: () => void;
 }) {
   const d = selected.data;
   const meta: ElemMeta = d.meta ?? {};
@@ -1869,6 +1909,20 @@ function Inspector({
               onPick={onProduct}
             />
           ))}
+          {field("Product image", (
+            <div className="flex items-center gap-2">
+              {meta.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={meta.imageUrl} alt="" className="w-9 h-9 object-contain rounded" style={{ backgroundColor: "#fff", border: `1px solid ${BORDER}` }} />
+              ) : (
+                <span className="text-[11px]" style={{ color: MUTED }}>None yet</span>
+              )}
+              <button onClick={onFindImage}
+                className="text-[11px] rounded-lg px-2 py-1.5" style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: CYAN }}>
+                🔍 Find image online
+              </button>
+            </div>
+          ))}
           {field("Manufacturer", (
             <input defaultValue={meta.manufacturer ?? ""} onBlur={(e) => onMeta({ manufacturer: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
           ))}
@@ -1893,6 +1947,14 @@ function Inspector({
             ))}
             {field("Unit price ($)", (
               <input type="number" min={0} step="0.01" defaultValue={meta.price ?? 0} onBlur={(e) => onMeta({ price: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {field("Dealer cost ($)", (
+              <input type="number" min={0} step="0.01" defaultValue={meta.cost ?? ""} onBlur={(e) => onMeta({ cost: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+            ))}
+            {field("MSRP ($)", (
+              <input type="number" min={0} step="0.01" defaultValue={meta.msrp ?? ""} onBlur={(e) => onMeta({ msrp: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
             ))}
           </div>
           {field("Status", (
