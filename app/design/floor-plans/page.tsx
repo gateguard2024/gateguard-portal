@@ -118,6 +118,8 @@ const CABLE_CONDUCTORS: Record<string, Conductor[]> = {
 };
 const DEVICE_CATEGORIES = Array.from(new Set(DEVICE_TYPES.map((d) => d.category)));
 const DEVICE_BY_KEY: Record<string, DeviceTypeDef> = Object.fromEntries(DEVICE_TYPES.map((d) => [d.key, d]));
+// Palette for recoloring a placed device (e.g. interior vs exterior vs new/existing).
+const DEVICE_COLOR_SWATCHES = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#06B6D4", "#0891B2", "#64748B", "#111827"];
 
 // ── Starter templates ────────────────────────────────────────────────────────
 // A template is a predefined set of devices + wires placed at sensible canvas
@@ -274,7 +276,7 @@ function nextStage(status: string): Stage | null {
 
 // ── Element data packed into notes JSON ──────────────────────────────────────
 interface ElemMeta {
-  manufacturer?: string; model?: string; price?: number; qty?: number; status?: string;
+  manufacturer?: string; model?: string; price?: number; qty?: number; status?: string; color?: string;
   fov?: { angle: number; range: number; direction: number };
   zone?: { name: string };
   wire?: {
@@ -530,19 +532,22 @@ function EditorInner() {
 
   // ── Build a device group on canvas ─────────────────────────────────────────
   const buildDevice = useCallback(
-    (x: number, y: number, key: string, meta: ElemMeta, condition?: string, action?: string) => {
+    (x: number, y: number, key: string, meta: ElemMeta, condition?: string, action?: string, labelOverride?: string) => {
       const fc = fcRef.current;
       const fabric = fabricRef.current;
       if (!fc || !fabric) return null;
       const dt = DEVICE_BY_KEY[key];
       if (!dt) return null;
 
+      const color = meta.color || dt.color;   // per-device color override
+      const label = labelOverride ?? dt.label; // per-device rename
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const parts: any[] = [];
 
       if (dt.isCam) {
         const fov = meta.fov ?? defaultFov(key);
-        const cone = buildCone(fabric, fov, dt.color, pxPerFtRef.current);
+        const cone = buildCone(fabric, fov, color, pxPerFtRef.current);
         if (cone) parts.push(cone);
       }
 
@@ -558,27 +563,28 @@ function EditorInner() {
         parts.push(pic);
       } else {
         const circle = new fabric.Circle({
-          radius: 18, fill: dt.color + "22", stroke: dt.color, strokeWidth: 2,
+          radius: 18, fill: color + "22", stroke: color, strokeWidth: 2,
           originX: "center", originY: "center",
         });
         const abbr = new fabric.Text(dt.abbr, {
           fontSize: 8, fontWeight: "700", fontFamily: "IBM Plex Mono, monospace",
-          fill: dt.color, originX: "center", originY: "center",
+          fill: color, originX: "center", originY: "center",
         });
         parts.push(circle, abbr);
       }
-      const labelTxt = new fabric.Text(dt.label, {
+      const labelTxt = new fabric.Text(label, {
         fontSize: 9, fontWeight: "600", fontFamily: "Inter, sans-serif", fill: "#0f172a",
         originX: "center", originY: "center", top: imgEl ? 34 : 26,
         backgroundColor: "rgba(255,255,255,0.82)", padding: 2,
       });
+      labelTxt.data = { role: "label" };
       parts.push(labelTxt);
 
       const group = new fabric.Group(parts, {
         left: x, top: y, originX: "center", originY: "center",
       });
       group.data = {
-        kind: "device", id: genId(), deviceTypeKey: key, label: dt.label,
+        kind: "device", id: genId(), deviceTypeKey: key, label,
         condition: condition ?? "good", action: action ?? "new_install",
         isCam: dt.isCam ?? false, isBoard: dt.isBoard ?? false,
         meta: {
@@ -616,8 +622,7 @@ function EditorInner() {
       const meta = { ...(o.data.meta || {}) };
       const cond = o.data.condition, act = o.data.action, label = o.data.label;
       fc.remove(o);
-      const g = buildDevice(c.x, c.y, key, meta, cond, act);
-      if (g) g.data.label = label;
+      buildDevice(c.x, c.y, key, meta, cond, act, label);
     }
     fc.requestRenderAll();
     bumpBom();
@@ -706,7 +711,7 @@ function EditorInner() {
           } catch { /* keep defaults */ }
           drawZoneObject(px, py, w, h, row.label);
         } else {
-          buildDevice(px, py, row.device_type, meta, row.condition ?? undefined, row.action ?? undefined);
+          buildDevice(px, py, row.device_type, meta, row.condition ?? undefined, row.action ?? undefined, row.label);
         }
       }
       fc.renderAll();
@@ -1199,6 +1204,12 @@ function EditorInner() {
   const patchSelectedLabel = (label: string) => {
     if (!selected?.data) return;
     selected.data.label = label;
+    // Update the on-canvas label text immediately (device groups only).
+    if (selected.data.kind === "device" && typeof selected.getObjects === "function") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const lbl = selected.getObjects().find((o: any) => o.data?.role === "label");
+      if (lbl) { lbl.set({ text: label }); fcRef.current?.requestRenderAll(); }
+    }
     setInspectorTick((t) => t + 1);
   };
   const patchSelectedField = (field: "condition" | "action", value: string) => {
@@ -1237,20 +1248,38 @@ function EditorInner() {
     fc.requestRenderAll();
   };
 
-  // Re-render camera cone after AOC change.
-  const rebuildSelectedCone = () => {
+  // Rebuild the selected device in place (after a camera AOC or color change),
+  // preserving its center, meta, condition/action and custom label.
+  const rebuildSelectedDevice = () => {
     const fc = fcRef.current;
     const fabric = fabricRef.current;
-    if (!fc || !fabric || !selected?.data || selected.data.kind !== "device" || !selected.data.isCam) return;
+    if (!fc || !fabric || !selected?.data || selected.data.kind !== "device") return;
     const c = selected.getCenterPoint();
     const key = selected.data.deviceTypeKey;
     const meta: ElemMeta = { ...selected.data.meta };
     const condition = selected.data.condition, action = selected.data.action;
     const label = selected.data.label;
     fc.remove(selected);
-    const g = buildDevice(c.x, c.y, key, meta, condition, action);
-    if (g) { g.data.label = label; fc.setActiveObject(g); setSelected(g); }
+    const g = buildDevice(c.x, c.y, key, meta, condition, action, label);
+    if (g) { fc.setActiveObject(g); setSelected(g); }
     fc.renderAll();
+  };
+  const patchSelectedColor = (color: string | undefined) => {
+    if (!selected?.data || selected.data.kind !== "device") return;
+    selected.data.meta = { ...(selected.data.meta ?? {}), color };
+    rebuildSelectedDevice();
+  };
+  // Fill manufacturer / model / price from a picked catalog product.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const patchSelectedProduct = (prod: any) => {
+    if (!selected?.data || selected.data.kind !== "device") return;
+    const patch: Partial<ElemMeta> = {};
+    if (prod.brand) patch.manufacturer = prod.brand;
+    if (prod.name) patch.model = prod.name;
+    if (typeof prod.sell_price === "number") patch.price = prod.sell_price;
+    selected.data.meta = { ...(selected.data.meta ?? {}), ...patch };
+    setInspectorTick((t) => t + 1);
+    bumpBom();
   };
 
   // ── BOM ────────────────────────────────────────────────────────────────────
@@ -1584,7 +1613,9 @@ function EditorInner() {
               onWireKind={patchSelectedWire}
               onWireAttrs={patchSelectedWireAttrs}
               onWireRebuild={rebuildSelectedWire}
-              onRebuildCone={rebuildSelectedCone}
+              onRebuildCone={rebuildSelectedDevice}
+              onColor={patchSelectedColor}
+              onProduct={patchSelectedProduct}
             />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-center px-6" style={{ color: MUTED }}>
@@ -1705,8 +1736,85 @@ function EditorInner() {
 }
 
 // ── Inspector panel ──────────────────────────────────────────────────────────
+// ── Catalog product picker (searches the global products DB) ──────────────────
+function ProductPicker({ category, manufacturer, model, onPick }: {
+  category: string; manufacturer: string; model: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onPick: (p: any) => void;
+}) {
+  const [q, setQ] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [results, setResults] = useState<any[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [addMsg, setAddMsg] = useState<string | null>(null);
+  const [addBusy, setAddBusy] = useState(false);
+
+  useEffect(() => {
+    const term = q.trim();
+    if (term.length < 2) { setResults([]); return; }
+    setLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/products?q=${encodeURIComponent(term)}&limit=8`);
+        const json = await res.json();
+        setResults(Array.isArray(json.products) ? json.products : []);
+      } catch { setResults([]); }
+      setLoading(false);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  const addToCatalog = async () => {
+    const name = (model || q).trim();
+    if (!name) { setAddMsg("Enter a model first"); setTimeout(() => setAddMsg(null), 2500); return; }
+    setAddBusy(true); setAddMsg(null);
+    try {
+      const res = await fetch("/api/products", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, brand: manufacturer || undefined, category: category || "Custom" }),
+      });
+      const json = await res.json();
+      setAddMsg(res.ok ? "Added to catalog ✓" : (json.error || "Failed"));
+    } catch { setAddMsg("Failed"); }
+    setAddBusy(false);
+    setTimeout(() => setAddMsg(null), 2500);
+  };
+
+  const inputStyle = { backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT };
+  return (
+    <div className="relative">
+      <input value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
+        placeholder="Search products…" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+      {open && q.trim().length >= 2 && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 right-0 top-full mt-1 z-40 rounded-lg overflow-hidden max-h-56 overflow-y-auto" style={{ backgroundColor: CARD, border: `1px solid ${BORDER}` }}>
+            {loading && <div className="px-3 py-2 text-[11px]" style={{ color: MUTED }}>Searching…</div>}
+            {!loading && results.length === 0 && <div className="px-3 py-2 text-[11px]" style={{ color: MUTED }}>No matches — use “Add” below.</div>}
+            {results.map((p) => (
+              <button key={p.id} onClick={() => { onPick(p); setOpen(false); setQ(""); }}
+                className="w-full text-left px-3 py-2 transition-colors hover:brightness-125" style={{ borderBottom: `1px solid ${BORDER}`, backgroundColor: PANEL }}>
+                <div className="text-[12px] font-medium" style={{ color: TEXT }}>{p.brand ? p.brand + " · " : ""}{p.name}</div>
+                <div className="text-[10px]" style={{ color: MUTED }}>{p.category ?? ""}{typeof p.sell_price === "number" ? ` · $${p.sell_price}` : ""}</div>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      <div className="flex items-center gap-2 mt-1.5">
+        <button onClick={addToCatalog} disabled={addBusy}
+          className="text-[11px] rounded-lg px-2 py-1 disabled:opacity-50" style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: CYAN }}>
+          {addBusy ? "Adding…" : "+ Add current to catalog"}
+        </button>
+        {addMsg && <span className="text-[10px]" style={{ color: MUTED }}>{addMsg}</span>}
+      </div>
+    </div>
+  );
+}
+
 function Inspector({
-  selected, onLabel, onMeta, onField, onWireKind, onWireAttrs, onWireRebuild, onRebuildCone,
+  selected, onLabel, onMeta, onField, onWireKind, onWireAttrs, onWireRebuild, onRebuildCone, onColor, onProduct,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   selected: any;
@@ -1717,6 +1825,9 @@ function Inspector({
   onWireAttrs: (p: Partial<WireAttrs>) => void;
   onWireRebuild: () => void;
   onRebuildCone: () => void;
+  onColor: (c: string | undefined) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onProduct: (p: any) => void;
 }) {
   const d = selected.data;
   const meta: ElemMeta = d.meta ?? {};
@@ -1750,11 +1861,31 @@ function Inspector({
 
       {isDevice && (
         <>
+          {field("Product (from catalog)", (
+            <ProductPicker
+              category={DEVICE_BY_KEY[d.deviceTypeKey]?.category ?? ""}
+              manufacturer={meta.manufacturer ?? ""}
+              model={meta.model ?? ""}
+              onPick={onProduct}
+            />
+          ))}
           {field("Manufacturer", (
             <input defaultValue={meta.manufacturer ?? ""} onBlur={(e) => onMeta({ manufacturer: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
           ))}
           {field("Model #", (
             <input defaultValue={meta.model ?? ""} onBlur={(e) => onMeta({ model: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+          ))}
+          {field("Color on drawing", (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {DEVICE_COLOR_SWATCHES.map((c) => (
+                <button key={c} title={c} onClick={() => onColor(c)}
+                  className="w-6 h-6 rounded-full"
+                  style={{ backgroundColor: c, border: meta.color === c ? `2px solid #fff` : `1px solid ${BORDER}`, boxShadow: meta.color === c ? `0 0 0 1px ${c}` : "none" }} />
+              ))}
+              <button title="Reset to default" onClick={() => onColor(undefined)}
+                className="w-6 h-6 rounded-full flex items-center justify-center text-[9px]"
+                style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: MUTED }}>×</button>
+            </div>
           ))}
           <div className="grid grid-cols-2 gap-2">
             {field("Qty", (
