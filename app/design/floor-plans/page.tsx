@@ -24,6 +24,7 @@ const {
   Ruler, MousePointer, Zap, Camera, Type, Minus, ChevronDown, ChevronRight,
   BarChart3, Upload, Image: ImageIcon, Map: MapIcon, Layers, Printer, GitBranch, Save,
   Stamp: StampIcon, Square, Circle: CircleIcon, ArrowUpToLine, ArrowDownToLine,
+  Frame,
 } = require("lucide-react") as any;
 
 // ── Theme ───────────────────────────────────────────────────────────────────
@@ -259,7 +260,7 @@ function normWireKind(k: string): WireKind {
 // Common cable choices for the wire inspector dropdown.
 const CABLE_OPTIONS = ["", "CAT6", "CAT5e", "Fiber", "16/2", "18/6", "22/4", "22/2 shielded", "RG6 coax", "12 AWG", "14 AWG"];
 
-type ToolMode = "select" | "device" | "wire" | "fov" | "zone" | "scale" | "shape";
+type ToolMode = "select" | "device" | "wire" | "fov" | "zone" | "scale" | "shape" | "text";
 type ShapeType = "rect" | "ellipse" | "line";
 const SHAPE_FILL_SWATCHES = ["rgba(107,126,255,0.10)", "rgba(16,185,129,0.12)", "rgba(245,158,11,0.14)", "rgba(239,68,68,0.12)", "rgba(139,92,246,0.12)", "rgba(15,23,42,0.06)"];
 const SHAPE_STROKE_SWATCHES = ["#334155", "#6B7EFF", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#0f172a"];
@@ -292,6 +293,7 @@ function nextStage(status: string): Stage | null {
 interface ElemMeta {
   manufacturer?: string; model?: string; price?: number; qty?: number; status?: string; color?: string;
   cost?: number; msrp?: number; imageUrl?: string; productId?: string;
+  textEl?: { content: string; fontSize: number; fill: string };
   fov?: { angle: number; range: number; direction: number };
   zone?: { name: string };
   wire?: {
@@ -455,7 +457,7 @@ function EditorInner() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     fc.getObjects().forEach((o: any) => {
       const d = o.data;
-      if (!d || d.kind === "grid" || d.kind === "bg" || d.kind === "wirehandle" || d.kind === "terminal") return;
+      if (!d || d.kind === "grid" || d.kind === "bg" || d.kind === "wirehandle" || d.kind === "terminal" || d.kind === "poebadge") return;
       if (d.kind === "shape") {
         const c = o.getCenterPoint();
         rows.push({
@@ -473,6 +475,18 @@ function EditorInner() {
               strokeWidth: o.strokeWidth,
               opacity: o.opacity ?? 1,
             },
+          } as ElemMeta),
+        });
+        return;
+      }
+      if (d.kind === "text") {
+        rows.push({
+          device_type: "__text__",
+          label: (o.text ?? "Text").slice(0, 120),
+          x_pct: (o.left / CANVAS_W) * 100,
+          y_pct: (o.top / CANVAS_H) * 100,
+          notes: JSON.stringify({
+            textEl: { content: o.text ?? "", fontSize: o.fontSize ?? 16, fill: o.fill ?? "#0f172a" },
           } as ElemMeta),
         });
         return;
@@ -598,6 +612,20 @@ function EditorInner() {
       obj.set({ hasControls: false, lockScalingX: true, lockScalingY: true, lockRotation: true, selectable: true });
       obj.data = { kind: "wire", id: genId(), wireKind: kind, from, to, label: label ?? WIRE_LABELS[kind], wireAttrs: a };
       fc.add(obj);
+      // PoE indicator — a small ⚡PoE tag at the run's midpoint.
+      if (a.poe) {
+        const tag = a.voltage ? `⚡ PoE ${a.voltage}` : "⚡ PoE";
+        const badge = new fabric.Text(tag, {
+          left: (from[0] + to[0]) / 2, top: (from[1] + to[1]) / 2 - 9,
+          originX: "center", originY: "center", fontSize: 8, fontWeight: "700",
+          fontFamily: "Inter, sans-serif", fill: "#0f172a",
+          backgroundColor: "rgba(250,204,21,0.92)", padding: 1,
+          selectable: false, evented: false,
+        });
+        badge.data = { kind: "poebadge", wireId: obj.data.id };
+        fc.add(badge);
+        fc.bringObjectToFront(badge);
+      }
       bumpBom();
     },
     [bumpBom]
@@ -934,6 +962,17 @@ function EditorInner() {
           const im = meta.image;
           // Fire-and-forget async load; positions/scale applied inside insertImage.
           void insertImage(im.url, im.w, im.h, im.opacity, px, py);
+        } else if (row.device_type === "__text__") {
+          const te = meta.textEl;
+          const fabric = fabricRef.current;
+          if (fabric) {
+            const t = new fabric.IText(te?.content ?? row.label ?? "Text", {
+              left: px, top: py, originX: "left", originY: "top",
+              fontSize: te?.fontSize ?? 16, fontFamily: "Inter, sans-serif", fill: te?.fill ?? "#0f172a",
+            });
+            t.data = { kind: "text", id: genId() };
+            fc.add(t);
+          }
         } else if (row.device_type === "__zone__") {
           let w = 240, h = 160;
           try {
@@ -1083,6 +1122,7 @@ function EditorInner() {
               wire.data.wireAttrs = { ...(wire.data.wireAttrs || {}), [movedEnd === "from" ? "fromTerm" : "toTerm"]: snap.name };
             }
             const { from, to, wireKind, label, wireAttrs } = wire.data;
+            if (wire.data.id) removePoeBadgeFor(wire.data.id);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const beforeIds = new Set(fc.getObjects().map((x: any) => x?.data?.id).filter(Boolean));
             fc.remove(wire);
@@ -1154,6 +1194,15 @@ function EditorInner() {
     for (const t of kill) fc.remove(t);
   }
 
+  // Remove the PoE badge belonging to a wire.
+  function removePoeBadgeFor(wireId: string) {
+    const fc = fcRef.current;
+    if (!fc || !wireId) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const kill = (fc.getObjects() as any[]).filter((t) => t.data?.kind === "poebadge" && t.data.wireId === wireId);
+    for (const t of kill) fc.remove(t);
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function onMouseDown(opt: any) {
     const fc = fcRef.current;
@@ -1186,6 +1235,13 @@ function EditorInner() {
 
     if (mode === "wire") {
       if (!wireKindRef.current) { setShowWirePicker(true); return; } // pick a wire type first
+      // Click an existing line (when not mid-draw) → select it to edit, don't start a new one.
+      if (wirePtsRef.current.length === 0 && opt.target?.data?.kind === "wire") {
+        fc.setActiveObject(opt.target);
+        setSelected(opt.target);
+        fc.requestRenderAll();
+        return;
+      }
       const snap = nearestTerminal(p.x, p.y);            // snap endpoints to terminals
       const pt = snap ? { x: snap.x, y: snap.y } : { x: p.x, y: p.y };
       if (wirePtsRef.current.length === 0) {
@@ -1219,6 +1275,24 @@ function EditorInner() {
       fc.renderAll();
       return;
     }
+
+    if (mode === "text") {
+      if (opt.target) return;
+      const t = new fabric.IText("Text", {
+        left: p.x, top: p.y, originX: "left", originY: "top",
+        fontSize: 16, fontFamily: "Inter, sans-serif", fill: "#0f172a",
+      });
+      t.data = { kind: "text", id: genId() };
+      fc.add(t);
+      fc.setActiveObject(t);
+      setSelected(t);
+      t.enterEditing?.();          // start typing immediately
+      t.selectAll?.();
+      setTool("select");
+      fc.renderAll();
+      bumpBom();
+      return;
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1246,6 +1320,7 @@ function EditorInner() {
     if (!fc || !selected) return;
     clearWireHandles();               // remove any transient endpoint handles first
     if (selected.data?.kind === "device" && selected.data.id) removeTerminalsFor(selected.data.id);
+    if (selected.data?.kind === "wire" && selected.data.id) removePoeBadgeFor(selected.data.id);
     fc.remove(selected);              // works for wires, shapes, images, devices, zones
     fc.discardActiveObject();
     setSelected(null);
@@ -1277,6 +1352,14 @@ function EditorInner() {
   const patchSelectedImage = (patch: { opacity?: number }) => {
     const fc = fcRef.current;
     if (!fc || !selected || selected.data?.kind !== "image") return;
+    selected.set(patch);
+    fc.requestRenderAll();
+    setInspectorTick((t) => t + 1);
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const patchSelectedText = (patch: Record<string, any>) => {
+    const fc = fcRef.current;
+    if (!fc || !selected || selected.data?.kind !== "text") return;
     selected.set(patch);
     fc.requestRenderAll();
     setInspectorTick((t) => t + 1);
@@ -1622,10 +1705,11 @@ function EditorInner() {
     const fc = fcRef.current;
     if (!fc || !selected?.data || selected.data.kind !== "wire") return;
     const { from, to, wireKind, label, wireAttrs } = selected.data;
+    if (selected.data.id) removePoeBadgeFor(selected.data.id);
     fc.remove(selected);
     drawWireObject(from, to, wireKind, label, wireAttrs);
-    const objs = fc.getObjects();
-    const g = objs[objs.length - 1];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const g = (fc.getObjects() as any[]).filter((x) => x.data?.kind === "wire").pop();
     if (g) { fc.setActiveObject(g); setSelected(g); }
     fc.requestRenderAll();
   };
@@ -1896,7 +1980,8 @@ function EditorInner() {
             )}
             {toolBtn("select", MousePointer, "Select")}
             {toolBtn("fov", Camera, "Camera / FOV")}
-            {toolBtn("zone", Type, "Area box (one or many)")}
+            {toolBtn("text", Type, "Text label")}
+            {toolBtn("zone", Frame, "Area box (one or many)")}
             {toolBtn("shape", Square, "Shape")}
             {/* Shape-type picker — only meaningful in Shape mode */}
             <div className="flex items-center gap-1 rounded-lg p-0.5" style={{ backgroundColor: CARD, border: `1px solid ${BORDER}` }}>
@@ -2070,6 +2155,7 @@ function EditorInner() {
               onFindImage={autoFindImage}
               onShape={patchSelectedShape}
               onImage={patchSelectedImage}
+              onText={patchSelectedText}
               onLayer={changeLayer}
             />
           ) : (
@@ -2271,7 +2357,7 @@ function ProductPicker({ category, manufacturer, model, onPick }: {
 
 function Inspector({
   selected, onLabel, onMeta, onField, onWireKind, onWireAttrs, onWireRebuild, onRebuildCone, onColor, onProduct, onFindImage,
-  onShape, onImage, onLayer,
+  onShape, onImage, onText, onLayer,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   selected: any;
@@ -2289,6 +2375,8 @@ function Inspector({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onShape: (patch: Record<string, any>) => void;
   onImage: (patch: { opacity?: number }) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onText: (patch: Record<string, any>) => void;
   onLayer: (dir: "front" | "back") => void;
 }) {
   const d = selected.data;
@@ -2300,6 +2388,7 @@ function Inspector({
   const isWire = d.kind === "wire";
   const isShape = d.kind === "shape";
   const isImage = d.kind === "image";
+  const isText = d.kind === "text";
   const wa: WireAttrs = d.wireAttrs ?? {};
   const conductors: Conductor[] = wa.conductors ?? [];
   // Prioritize the terminals of the board this cable is snapped to.
@@ -2491,8 +2580,8 @@ function Inspector({
           </div>
           {field("", (
             <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: TEXT }}>
-              <input type="checkbox" defaultChecked={!!wa.poe} onChange={(e) => onWireAttrs({ poe: e.target.checked })} />
-              PoE (power over this run)
+              <input type="checkbox" defaultChecked={!!wa.poe} onChange={(e) => { onWireAttrs({ poe: e.target.checked }); onWireRebuild(); }} />
+              PoE (power over this run) — shows a ⚡PoE tag on the line
             </label>
           ))}
 
@@ -2602,7 +2691,41 @@ function Inspector({
         </>
       )}
 
-      {!isImage && field("Notes", (
+      {isText && (
+        <>
+          {field("Text", (
+            <textarea defaultValue={selected.text ?? ""} onChange={(e) => onText({ text: e.target.value })} rows={2}
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle} />
+          ))}
+          <div className="grid grid-cols-2 gap-2">
+            {field("Font size", (
+              <input type="number" min={6} step={1} defaultValue={selected.fontSize ?? 16}
+                onChange={(e) => onText({ fontSize: Math.max(6, parseFloat(e.target.value) || 16) })}
+                className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+            ))}
+            {field("Color", (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {["#0f172a", "#EF4444", "#3B82F6", "#10B981", "#F59E0B", "#8B5CF6", "#ffffff"].map((c) => (
+                  <button key={c} title={c} onClick={() => onText({ fill: c })}
+                    className="w-6 h-6 rounded-full"
+                    style={{ backgroundColor: c, border: selected.fill === c ? `2px solid #fff` : `1px solid ${BORDER}` }} />
+                ))}
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] mb-3" style={{ color: MUTED }}>Double-click the text on the canvas to edit it inline.</p>
+          <div className="flex items-center gap-2">
+            <button onClick={() => onLayer("front")} className="flex-1 text-[11px] flex items-center justify-center gap-1 rounded-lg py-2" style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT }}>
+              <ArrowUpToLine size={13} /> Bring to front
+            </button>
+            <button onClick={() => onLayer("back")} className="flex-1 text-[11px] flex items-center justify-center gap-1 rounded-lg py-2" style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT }}>
+              <ArrowDownToLine size={13} /> Send to back
+            </button>
+          </div>
+        </>
+      )}
+
+      {!isImage && !isText && field("Notes", (
         <textarea defaultValue={meta.freeNotes ?? ""} onBlur={(e) => onMeta({ freeNotes: e.target.value })} rows={3} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle} />
       ))}
     </div>
