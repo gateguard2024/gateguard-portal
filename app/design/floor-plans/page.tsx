@@ -23,7 +23,7 @@ import { Plus, X, Download, Trash2, Loader2, MapPin } from "lucide-react";
 const {
   Ruler, MousePointer, Zap, Camera, Type, Minus, ChevronDown, ChevronRight,
   BarChart3, Upload, Image: ImageIcon, Map: MapIcon, Layers, Printer, GitBranch, Save,
-  Stamp: StampIcon,
+  Stamp: StampIcon, Square, Circle: CircleIcon, ArrowUpToLine, ArrowDownToLine,
 } = require("lucide-react") as any;
 
 // ── Theme ───────────────────────────────────────────────────────────────────
@@ -98,6 +98,16 @@ const BOARD_TERMINALS: Record<string, string[]> = {
 };
 // Every terminal name across boards — used as a suggestion list for conductors.
 const ALL_TERMINALS = Array.from(new Set(Object.values(BOARD_TERMINALS).flat().concat(["+", "−", "COM", "N.O.", "N.C.", "D0", "D1", "PWR", "GND", "SHIELD"])));
+
+// Terminal dot layout — a vertical strip to the right of a board's marker.
+// dx/dy are offsets (px) from the device center; used to place snap targets.
+function terminalLayout(key: string): { name: string; dx: number; dy: number }[] {
+  const names = BOARD_TERMINALS[key];
+  if (!names || names.length === 0) return [];
+  const gap = 9, dx = 26;
+  const startY = -((names.length - 1) * gap) / 2;
+  return names.map((name, i) => ({ name, dx, dy: startY + i * gap }));
+}
 
 // ── Conductors (Detail mode) ──────────────────────────────────────────────────
 // A single wire (a cable) can be expanded into its individual conductors.
@@ -236,6 +246,7 @@ const WIRE_KINDS: WireKind[] = WIRE_GROUPS.flatMap((g) => g.kinds);
 interface WireAttrs {
   cable?: string; gauge?: string; lengthFt?: number; poe?: boolean; voltage?: string;
   showConductors?: boolean; conductors?: Conductor[];
+  fromTerm?: string; toTerm?: string;   // terminals this cable's ends land on
 }
 // Map the legacy 4-kind vocabulary onto the new segment roles so old plans render.
 const LEGACY_WIRE_MAP: Record<string, WireKind> = {
@@ -248,7 +259,10 @@ function normWireKind(k: string): WireKind {
 // Common cable choices for the wire inspector dropdown.
 const CABLE_OPTIONS = ["", "CAT6", "CAT5e", "Fiber", "16/2", "18/6", "22/4", "22/2 shielded", "RG6 coax", "12 AWG", "14 AWG"];
 
-type ToolMode = "select" | "device" | "wire" | "fov" | "zone" | "scale";
+type ToolMode = "select" | "device" | "wire" | "fov" | "zone" | "scale" | "shape";
+type ShapeType = "rect" | "ellipse" | "line";
+const SHAPE_FILL_SWATCHES = ["rgba(107,126,255,0.10)", "rgba(16,185,129,0.12)", "rgba(245,158,11,0.14)", "rgba(239,68,68,0.12)", "rgba(139,92,246,0.12)", "rgba(15,23,42,0.06)"];
+const SHAPE_STROKE_SWATCHES = ["#334155", "#6B7EFF", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#0f172a"];
 
 // ── Stage / lifecycle ────────────────────────────────────────────────────────
 interface SiteInfo {
@@ -284,6 +298,9 @@ interface ElemMeta {
     kind: WireKind; from: [number, number]; to: [number, number];
     cable?: string; gauge?: string; lengthFt?: number; poe?: boolean; voltage?: string;
   };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  shape?: { type: ShapeType; w: number; h: number; fill: any; stroke: any; strokeWidth: number; opacity: number };
+  image?: { url: string; w: number; h: number; opacity: number };
   freeNotes?: string;
 }
 
@@ -371,6 +388,14 @@ function EditorInner() {
   const devKeyRef = useRef<string | null>(null);
   devKeyRef.current = devKey;
 
+  const [shapeType, setShapeType] = useState<ShapeType>("rect");
+  const shapeTypeRef = useRef<ShapeType>("rect");
+  shapeTypeRef.current = shapeType;
+
+  // Transient wire endpoint drag handles (never persisted).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const wireHandlesRef = useRef<any[]>([]);
+
   const [wireKind, setWireKind] = useState<WireKind | null>(null);
   const wireKindRef = useRef<WireKind | null>(null);
   wireKindRef.current = wireKind;
@@ -400,6 +425,7 @@ function EditorInner() {
 
   // wire drawing points (scene coords)
   const wirePtsRef = useRef<{ x: number; y: number }[]>([]);
+  const wireFromTermRef = useRef<string | undefined>(undefined);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const wirePreviewRef = useRef<any>(null);
 
@@ -429,7 +455,46 @@ function EditorInner() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     fc.getObjects().forEach((o: any) => {
       const d = o.data;
-      if (!d || d.kind === "grid" || d.kind === "bg") return;
+      if (!d || d.kind === "grid" || d.kind === "bg" || d.kind === "wirehandle" || d.kind === "terminal") return;
+      if (d.kind === "shape") {
+        const c = o.getCenterPoint();
+        rows.push({
+          device_type: "__shape__",
+          label: d.shapeType,
+          x_pct: (c.x / CANVAS_W) * 100,
+          y_pct: (c.y / CANVAS_H) * 100,
+          notes: JSON.stringify({
+            shape: {
+              type: d.shapeType,
+              w: (o.width ?? 0) * (o.scaleX ?? 1),
+              h: (o.height ?? 0) * (o.scaleY ?? 1),
+              fill: o.fill,
+              stroke: o.stroke,
+              strokeWidth: o.strokeWidth,
+              opacity: o.opacity ?? 1,
+            },
+          } as ElemMeta),
+        });
+        return;
+      }
+      if (d.kind === "image") {
+        const c = o.getCenterPoint();
+        rows.push({
+          device_type: "__image__",
+          label: "Image",
+          x_pct: (c.x / CANVAS_W) * 100,
+          y_pct: (c.y / CANVAS_H) * 100,
+          notes: JSON.stringify({
+            image: {
+              url: d.imageUrl,
+              w: (o.width ?? 0) * (o.scaleX ?? 1),
+              h: (o.height ?? 0) * (o.scaleY ?? 1),
+              opacity: o.opacity ?? 1,
+            },
+          } as ElemMeta),
+        });
+        return;
+      }
       if (d.kind === "device") {
         const c = o.getCenterPoint();
         rows.push({
@@ -491,21 +556,46 @@ function EditorInner() {
       if (fan) {
         // Detail mode: fan the cable into its individual conductors (parallel strands).
         const paths = conductorPaths({ x: from[0], y: from[1] }, { x: to[0], y: to[1] }, conductors.length, 3.2);
+        // Map terminal name → dot position for the board near this cable's `to` end,
+        // so a conductor with an assigned terminal lands exactly on that dot.
+        const termMap: Record<string, [number, number]> = {};
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const strands: any[] = paths.map((p, i) =>
-          new fabric.Polyline(p, {
-            stroke: conductors[i].color || WIRE_COLORS[kind],
-            strokeWidth: 1.6, fill: "transparent", objectCaching: false,
-            stroke_lineCap: "round",
-          })
-        );
-        obj = new fabric.Group(strands, { objectCaching: false });
+        for (const t of fc.getObjects() as any[]) {
+          if (t.data?.kind === "terminal" && !t.data.isLabel) {
+            if (Math.hypot(t.left - to[0], t.top - to[1]) < 70) termMap[t.data.name] = [t.left, t.top];
+          }
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const strands: any[] = [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dots: any[] = [];
+        paths.forEach((p, i) => {
+          const c = conductors[i];
+          const dot = c.term ? termMap[c.term] : null;
+          // If this conductor is assigned to a terminal on the board, route it to
+          // that dot; otherwise keep the parallel-offset strand.
+          const pts = dot ? orthPath({ x: p[0].x, y: p[0].y }, { x: dot[0], y: dot[1] }) : p;
+          strands.push(new fabric.Polyline(pts, {
+            stroke: c.color || WIRE_COLORS[kind],
+            strokeWidth: 1.6, fill: "transparent", objectCaching: false, stroke_lineCap: "round",
+          }));
+          if (dot) {
+            dots.push(new fabric.Circle({
+              left: dot[0], top: dot[1], radius: 2.2, fill: c.color || WIRE_COLORS[kind],
+              originX: "center", originY: "center",
+            }));
+          }
+        });
+        obj = new fabric.Group([...strands, ...dots], { objectCaching: false });
       } else {
         const pts = orthPath({ x: from[0], y: from[1] }, { x: to[0], y: to[1] });
         obj = new fabric.Polyline(pts, {
           stroke: WIRE_COLORS[kind], strokeWidth: 2.5, fill: "transparent", objectCaching: false,
         });
       }
+      // Lock scaling/rotation so grabbing a corner never distorts the wire.
+      // Endpoint editing is done via dedicated handle circles instead.
+      obj.set({ hasControls: false, lockScalingX: true, lockScalingY: true, lockRotation: true, selectable: true });
       obj.data = { kind: "wire", id: genId(), wireKind: kind, from, to, label: label ?? WIRE_LABELS[kind], wireAttrs: a };
       fc.add(obj);
       bumpBom();
@@ -530,6 +620,114 @@ function EditorInner() {
     fc.add(group);
     fc.sendObjectToBack(group);
   }, []);
+
+  // ── Wire endpoint handles ───────────────────────────────────────────────────
+  const clearWireHandles = useCallback(() => {
+    const fc = fcRef.current;
+    if (fc) { for (const h of wireHandlesRef.current) fc.remove(h); }
+    wireHandlesRef.current = [];
+  }, []);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const showWireHandles = useCallback((wireObj: any) => {
+    const fc = fcRef.current;
+    const fabric = fabricRef.current;
+    if (!fc || !fabric || !wireObj?.data) return;
+    clearWireHandles();
+    const from = wireObj.data.from as [number, number];
+    const to = wireObj.data.to as [number, number];
+    if (!Array.isArray(from) || !Array.isArray(to)) return;
+    const mk = (end: "from" | "to", pt: [number, number]) => {
+      const h = new fabric.Circle({
+        left: pt[0], top: pt[1], radius: 6, fill: "#fff", stroke: BRAND, strokeWidth: 2,
+        originX: "center", originY: "center", hasControls: false, hasBorders: false,
+      });
+      h.data = { kind: "wirehandle", end, wireId: wireObj.data.id };
+      fc.add(h);
+      fc.bringObjectToFront(h);
+      return h;
+    };
+    wireHandlesRef.current = [mk("from", from), mk("to", to)];
+  }, [clearWireHandles]);
+
+  // ── Draw an insertable shape (rect / ellipse / line) ────────────────────────
+  const drawShapeObject = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (cx: number, cy: number, type: ShapeType, opts?: Partial<{ w: number; h: number; fill: any; stroke: any; strokeWidth: number; opacity: number }>) => {
+      const fc = fcRef.current;
+      const fabric = fabricRef.current;
+      if (!fc || !fabric) return null;
+      const fill = opts?.fill ?? "rgba(107,126,255,0.10)";
+      const stroke = opts?.stroke ?? "#334155";
+      const strokeWidth = opts?.strokeWidth ?? 2;
+      const opacity = opts?.opacity ?? 1;
+      const w = opts?.w ?? (type === "ellipse" ? 160 : 160);
+      const h = opts?.h ?? (type === "ellipse" ? 100 : 100);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let obj: any;
+      if (type === "rect") {
+        obj = new fabric.Rect({
+          left: cx, top: cy, width: w, height: h, originX: "center", originY: "center",
+          fill, stroke, strokeWidth, opacity, rx: 4, ry: 4,
+        });
+      } else if (type === "ellipse") {
+        obj = new fabric.Ellipse({
+          left: cx, top: cy, rx: w / 2, ry: h / 2, originX: "center", originY: "center",
+          fill, stroke, strokeWidth, opacity,
+        });
+      } else {
+        obj = new fabric.Line([cx - 80, cy, cx + 80, cy], {
+          stroke, strokeWidth, opacity, originX: "center", originY: "center",
+        });
+      }
+      obj.data = { kind: "shape", id: genId(), shapeType: type };
+      fc.add(obj);
+      bumpBom();
+      return obj;
+    },
+    [bumpBom]
+  );
+
+  // ── Insert a resizable image tile (data-URL, self-contained) ────────────────
+  const insertImage = useCallback(async (dataUrl: string, w?: number, h?: number, opacity?: number, cx?: number, cy?: number) => {
+    const fc = fcRef.current;
+    const fabric = fabricRef.current;
+    if (!fc || !fabric) return null;
+    try {
+      const img = await fabric.Image.fromURL(dataUrl, { crossOrigin: "anonymous" });
+      const natW = img.width || 1, natH = img.height || 1;
+      let scaleX: number, scaleY: number;
+      if (w && h) {
+        scaleX = w / natW; scaleY = h / natH;
+      } else {
+        const s = 320 / Math.max(natW, natH);
+        scaleX = s; scaleY = s;
+      }
+      img.set({
+        left: cx ?? CANVAS_W / 2, top: cy ?? CANVAS_H / 2, originX: "center", originY: "center",
+        scaleX, scaleY, opacity: opacity ?? 1,
+      });
+      img.data = { kind: "image", id: genId(), imageUrl: dataUrl };
+      fc.add(img);
+      bumpBom();
+      return img;
+    } catch {
+      return null;
+    }
+  }, [bumpBom]);
+
+  // File-picker → data URL → insertImage at canvas center.
+  const onInsertImageFile = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = String(reader.result || "");
+      if (!dataUrl) return;
+      const img = await insertImage(dataUrl);
+      const fc = fcRef.current;
+      if (fc && img) { fc.setActiveObject(img); setSelected(img); fc.requestRenderAll(); }
+    };
+    reader.readAsDataURL(file);
+  }, [insertImage]);
 
   // ── Build a device group on canvas ─────────────────────────────────────────
   const buildDevice = useCallback(
@@ -594,6 +792,26 @@ function EditorInner() {
         },
       };
       fc.add(group);
+
+      // Board devices get labeled terminal dots (separate, non-selectable objects
+      // so wire endpoints can snap to them). They track the device on move.
+      if (dt.isBoard) {
+        const layout = terminalLayout(key);
+        group.data.terminals = layout;
+        for (const t of layout) {
+          const dot = new fabric.Circle({
+            left: x + t.dx, top: y + t.dy, radius: 2.6, fill: color, stroke: "#0f172a", strokeWidth: 0.5,
+            originX: "center", originY: "center", selectable: false, evented: false,
+          });
+          dot.data = { kind: "terminal", deviceId: group.data.id, name: t.name, dx: t.dx, dy: t.dy };
+          const lbl = new fabric.Text(t.name, {
+            left: x + t.dx + 5, top: y + t.dy, fontSize: 6, fontFamily: "Inter, sans-serif", fill: "#334155",
+            originX: "left", originY: "center", selectable: false, evented: false,
+          });
+          lbl.data = { kind: "terminal", deviceId: group.data.id, isLabel: true, dx: t.dx + 5, dy: t.dy };
+          fc.add(dot); fc.add(lbl);
+        }
+      }
       return group;
     },
     []
@@ -622,6 +840,9 @@ function EditorInner() {
       const c = o.getCenterPoint();
       const meta = { ...(o.data.meta || {}) };
       const cond = o.data.condition, act = o.data.action, label = o.data.label;
+      // Remove this device's old terminal dots before rebuilding (buildDevice re-adds them).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const term of (fc.getObjects() as any[]).filter((t) => t.data?.kind === "terminal" && t.data.deviceId === o.data.id)) fc.remove(term);
       fc.remove(o);
       buildDevice(c.x, c.y, key, meta, cond, act, label);
     }
@@ -704,6 +925,15 @@ function EditorInner() {
         if (row.device_type === "__wire__" && meta.wire) {
           const { kind, from, to, ...attrs } = meta.wire;
           drawWireObject(from, to, kind, row.label, attrs);
+        } else if (row.device_type === "__shape__" && meta.shape) {
+          const s = meta.shape;
+          drawShapeObject(px, py, s.type, {
+            w: s.w, h: s.h, fill: s.fill, stroke: s.stroke, strokeWidth: s.strokeWidth, opacity: s.opacity,
+          });
+        } else if (row.device_type === "__image__" && meta.image) {
+          const im = meta.image;
+          // Fire-and-forget async load; positions/scale applied inside insertImage.
+          void insertImage(im.url, im.w, im.h, im.opacity, px, py);
         } else if (row.device_type === "__zone__") {
           let w = 240, h = 160;
           try {
@@ -718,7 +948,7 @@ function EditorInner() {
       fc.renderAll();
       bumpBom();
     },
-    [buildDevice, drawWireObject, drawZoneObject, bumpBom]
+    [buildDevice, drawWireObject, drawZoneObject, drawShapeObject, insertImage, bumpBom]
   );
 
   const loadPlan = useCallback(async () => {
@@ -777,14 +1007,94 @@ function EditorInner() {
       fc.setDimensions({ width: CANVAS_W, height: CANVAS_H });
       fcRef.current = fc;
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const isSingleLineWire = (o: any) =>
+        !!o?.data && o.data.kind === "wire" && Array.isArray(o.data.from) && Array.isArray(o.data.to)
+        && typeof o.getObjects !== "function";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const onSelect = (e: any) => {
+        const sel = e.selected?.[0] ?? null;
+        // Selecting a transient endpoint handle must NOT change the inspector
+        // target or tear down the handles — just let the drag proceed.
+        if (sel?.data?.kind === "wirehandle") return;
+        setSelected(sel);
+        setInspectorTick((t) => t + 1);
+        if (sel && isSingleLineWire(sel)) showWireHandles(sel);
+        else clearWireHandles();
+      };
+
       fc.on("mouse:down", (opt: unknown) => onMouseDown(opt));
       fc.on("mouse:move", (opt: unknown) => onMouseMove(opt));
+      fc.on("selection:created", onSelect);
+      fc.on("selection:updated", onSelect);
+      fc.on("selection:cleared", () => {
+        // Don't tear down handles if a handle just became the active object.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const active: any = typeof fc.getActiveObject === "function" ? fc.getActiveObject() : null;
+        if (active?.data?.kind === "wirehandle") return;
+        setSelected(null);
+        clearWireHandles();
+      });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      fc.on("selection:created", (e: any) => { setSelected(e.selected?.[0] ?? null); setInspectorTick((t) => t + 1); });
+      fc.on("object:moving", (e: any) => {
+        const o = e.target;
+        // Board device moved → drag its terminal dots/labels along with it.
+        if (o?.data?.kind === "device" && o.data.isBoard) {
+          const c = o.getCenterPoint();
+          const id = o.data.id;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          for (const t of fc.getObjects() as any[]) {
+            if (t.data?.kind === "terminal" && t.data.deviceId === id) {
+              t.set({ left: c.x + t.data.dx, top: c.y + t.data.dy });
+              t.setCoords();
+            }
+          }
+          fc.requestRenderAll();
+          return;
+        }
+        if (!o?.data || o.data.kind !== "wirehandle") return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const wire: any = fc.getObjects().find((x: any) => x.data?.kind === "wire" && x.data.id === o.data.wireId);
+        if (!wire) return;
+        wire.data[o.data.end] = [o.left, o.top];
+        const from = wire.data.from as [number, number];
+        const to = wire.data.to as [number, number];
+        if (typeof wire.set === "function") {
+          wire.set({ points: orthPath({ x: from[0], y: from[1] }, { x: to[0], y: to[1] }), dirty: true });
+          wire.setCoords();
+        }
+        fc.requestRenderAll();
+      });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      fc.on("selection:updated", (e: any) => { setSelected(e.selected?.[0] ?? null); setInspectorTick((t) => t + 1); });
-      fc.on("selection:cleared", () => setSelected(null));
-      fc.on("object:modified", () => bumpBom());
+      fc.on("object:modified", (e: any) => {
+        const o = e?.target;
+        if (o?.data?.kind === "wirehandle") {
+          // Rebuild the wire cleanly from its updated endpoints so the polyline
+          // geometry + bounding box are always correct, then re-show handles.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const wire: any = fc.getObjects().find((x: any) => x.data?.kind === "wire" && x.data.id === o.data.wireId);
+          if (wire && typeof wire.getObjects !== "function") {
+            // Snap the dragged end to the nearest board terminal, if close.
+            const movedEnd = o.data.end as "from" | "to";
+            const pt = wire.data[movedEnd] as [number, number];
+            const snap = nearestTerminal(pt[0], pt[1]);
+            if (snap) {
+              wire.data[movedEnd] = [snap.x, snap.y];
+              wire.data.wireAttrs = { ...(wire.data.wireAttrs || {}), [movedEnd === "from" ? "fromTerm" : "toTerm"]: snap.name };
+            }
+            const { from, to, wireKind, label, wireAttrs } = wire.data;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const beforeIds = new Set(fc.getObjects().map((x: any) => x?.data?.id).filter(Boolean));
+            fc.remove(wire);
+            drawWireObject(from, to, wireKind, label, wireAttrs);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const fresh: any = fc.getObjects().find((x: any) => x.data?.kind === "wire" && !beforeIds.has(x.data.id));
+            if (fresh) { fc.setActiveObject(fresh); setSelected(fresh); showWireHandles(fresh); }
+            fc.requestRenderAll();
+          }
+        }
+        bumpBom();
+      });
 
       setCanvasReady(true);
       await loadPlan();
@@ -819,6 +1129,31 @@ function EditorInner() {
     return typeof fc.getScenePoint === "function" ? fc.getScenePoint(opt.e) : fc.getPointer(opt.e);
   }
 
+  // Nearest board terminal dot to a point (within threshold px), for snapping.
+  function nearestTerminal(x: number, y: number, threshold = 12): { x: number; y: number; name: string } | null {
+    const fc = fcRef.current;
+    if (!fc) return null;
+    let best: { x: number; y: number; name: string } | null = null;
+    let bestD = threshold;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const t of fc.getObjects() as any[]) {
+      if (t.data?.kind === "terminal" && !t.data.isLabel) {
+        const d = Math.hypot(t.left - x, t.top - y);
+        if (d <= bestD) { bestD = d; best = { x: t.left, y: t.top, name: t.data.name }; }
+      }
+    }
+    return best;
+  }
+
+  // Remove the terminal dots/labels belonging to a device.
+  function removeTerminalsFor(deviceId: string) {
+    const fc = fcRef.current;
+    if (!fc || !deviceId) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const kill = (fc.getObjects() as any[]).filter((t) => t.data?.kind === "terminal" && t.data.deviceId === deviceId);
+    for (const t of kill) fc.remove(t);
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function onMouseDown(opt: any) {
     const fc = fcRef.current;
@@ -851,12 +1186,19 @@ function EditorInner() {
 
     if (mode === "wire") {
       if (!wireKindRef.current) { setShowWirePicker(true); return; } // pick a wire type first
+      const snap = nearestTerminal(p.x, p.y);            // snap endpoints to terminals
+      const pt = snap ? { x: snap.x, y: snap.y } : { x: p.x, y: p.y };
       if (wirePtsRef.current.length === 0) {
-        wirePtsRef.current = [{ x: p.x, y: p.y }];
+        wirePtsRef.current = [pt];
+        wireFromTermRef.current = snap?.name;
       } else {
         const from = wirePtsRef.current[0];
-        drawWireObject([from.x, from.y], [p.x, p.y], wireKindRef.current);
+        const attrs: WireAttrs = {};
+        if (wireFromTermRef.current) attrs.fromTerm = wireFromTermRef.current;
+        if (snap?.name) attrs.toTerm = snap.name;
+        drawWireObject([from.x, from.y], [pt.x, pt.y], wireKindRef.current, undefined, attrs);
         wirePtsRef.current = [];
+        wireFromTermRef.current = undefined;
         if (wirePreviewRef.current) { fc.remove(wirePreviewRef.current); wirePreviewRef.current = null; }
         fc.renderAll();
       }
@@ -866,6 +1208,14 @@ function EditorInner() {
     if (mode === "zone") {
       if (opt.target) return;
       drawZoneObject(p.x, p.y, 320, 220, "New Area");
+      fc.renderAll();
+      return;
+    }
+
+    if (mode === "shape") {
+      if (opt.target) return;
+      const s = drawShapeObject(p.x, p.y, shapeTypeRef.current);
+      if (s) { fc.setActiveObject(s); setSelected(s); }
       fc.renderAll();
       return;
     }
@@ -894,12 +1244,43 @@ function EditorInner() {
   function deleteSelected() {
     const fc = fcRef.current;
     if (!fc || !selected) return;
-    fc.remove(selected);
+    clearWireHandles();               // remove any transient endpoint handles first
+    if (selected.data?.kind === "device" && selected.data.id) removeTerminalsFor(selected.data.id);
+    fc.remove(selected);              // works for wires, shapes, images, devices, zones
     fc.discardActiveObject();
     setSelected(null);
     fc.renderAll();
     bumpBom();
   }
+
+  // Layer order for shapes / images (harmless for devices too).
+  const changeLayer = (dir: "front" | "back") => {
+    const fc = fcRef.current;
+    if (!fc || !selected) return;
+    if (dir === "front") fc.bringObjectToFront(selected);
+    else fc.sendObjectToBack(selected);
+    fc.requestRenderAll();
+  };
+
+  // Live-patch a shape's fabric props (fill/stroke/strokeWidth/opacity).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const patchSelectedShape = (patch: Record<string, any>) => {
+    const fc = fcRef.current;
+    if (!fc || !selected || selected.data?.kind !== "shape") return;
+    selected.set(patch);
+    fc.requestRenderAll();
+    setInspectorTick((t) => t + 1);
+    bumpBom();
+  };
+
+  // Live-patch an image's opacity.
+  const patchSelectedImage = (patch: { opacity?: number }) => {
+    const fc = fcRef.current;
+    if (!fc || !selected || selected.data?.kind !== "image") return;
+    selected.set(patch);
+    fc.requestRenderAll();
+    setInspectorTick((t) => t + 1);
+  };
 
   const chooseDevice = (key: string) => {
     setDevKey(key);
@@ -1260,6 +1641,7 @@ function EditorInner() {
     const meta: ElemMeta = { ...selected.data.meta };
     const condition = selected.data.condition, action = selected.data.action;
     const label = selected.data.label;
+    if (selected.data.id) removeTerminalsFor(selected.data.id);
     fc.remove(selected);
     const g = buildDevice(c.x, c.y, key, meta, condition, action, label);
     if (g) { fc.setActiveObject(g); setSelected(g); }
@@ -1331,10 +1713,10 @@ function EditorInner() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     fc.getObjects().forEach((o: any) => {
       const d = o.data;
-      if (!d) return;
+      if (!d || d.kind === "wirehandle") return;   // transient UI, never counted
       if (d.kind === "wire") { wires++; usedWire.add(normWireKind(d.wireKind)); return; }
       if (d.kind === "zone") { zones++; return; }
-      if (d.kind !== "device") return;
+      if (d.kind !== "device") return;             // shapes + images excluded from BOM
       const meta: ElemMeta = d.meta ?? {};
       const key = d.label + "|" + (meta.model ?? "");
       const qty = Number(meta.qty ?? 1) || 1;
@@ -1515,7 +1897,38 @@ function EditorInner() {
             {toolBtn("select", MousePointer, "Select")}
             {toolBtn("fov", Camera, "Camera / FOV")}
             {toolBtn("zone", Type, "Area box (one or many)")}
+            {toolBtn("shape", Square, "Shape")}
+            {/* Shape-type picker — only meaningful in Shape mode */}
+            <div className="flex items-center gap-1 rounded-lg p-0.5" style={{ backgroundColor: CARD, border: `1px solid ${BORDER}` }}>
+              {([
+                ["rect", Square, "Rectangle"],
+                ["ellipse", CircleIcon, "Ellipse"],
+                ["line", Minus, "Line"],
+              ] as [ShapeType, React.ElementType, string][]).map(([st, Icon, title]) => (
+                <button
+                  key={st}
+                  onClick={() => { setShapeType(st); setTool("shape"); setDevKey(null); }}
+                  title={title}
+                  className="w-7 h-7 rounded-md flex items-center justify-center transition-colors"
+                  style={{
+                    backgroundColor: shapeType === st && tool === "shape" ? BRAND : "transparent",
+                    color: shapeType === st && tool === "shape" ? "#0B1728" : MUTED,
+                  }}
+                >
+                  <Icon size={13} />
+                </button>
+              ))}
+            </div>
             {toolBtn("scale", Ruler, "Set scale")}
+            <label
+              title="Insert a resizable image"
+              className="w-10 h-10 rounded-lg flex items-center justify-center cursor-pointer transition-colors"
+              style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: MUTED }}
+            >
+              <ImageIcon size={17} />
+              <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) onInsertImageFile(f); e.currentTarget.value = ""; }} />
+            </label>
             <button
               onClick={() => setShowTemplates(true)}
               title="Insert a starter template"
@@ -1655,6 +2068,9 @@ function EditorInner() {
               onColor={patchSelectedColor}
               onProduct={patchSelectedProduct}
               onFindImage={autoFindImage}
+              onShape={patchSelectedShape}
+              onImage={patchSelectedImage}
+              onLayer={changeLayer}
             />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-center px-6" style={{ color: MUTED }}>
@@ -1669,10 +2085,11 @@ function EditorInner() {
       {showBgModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.6)" }} onClick={() => !bgUploading && setShowBgModal(false)}>
           <div className="w-full max-w-md rounded-2xl p-5" style={{ backgroundColor: CARD, border: `1px solid ${BORDER}` }} onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-1">
               <h2 className="text-sm font-semibold" style={{ color: TEXT }}>Choose background</h2>
               <button onClick={() => !bgUploading && setShowBgModal(false)} style={{ color: MUTED }}><X size={18} /></button>
             </div>
+            <p className="text-[11px] mb-4" style={{ color: MUTED }}>The background is fit to the sheet. To resize/move an image, use Insert image instead.</p>
             <div className="flex flex-col gap-2">
               <button onClick={setBlankBackground} disabled={bgUploading} className="flex items-center gap-3 rounded-xl px-4 py-3 text-left disabled:opacity-50" style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}` }}>
                 <Minus size={16} style={{ color: MUTED }} />
@@ -1854,6 +2271,7 @@ function ProductPicker({ category, manufacturer, model, onPick }: {
 
 function Inspector({
   selected, onLabel, onMeta, onField, onWireKind, onWireAttrs, onWireRebuild, onRebuildCone, onColor, onProduct, onFindImage,
+  onShape, onImage, onLayer,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   selected: any;
@@ -1868,6 +2286,10 @@ function Inspector({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onProduct: (p: any) => void;
   onFindImage: () => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onShape: (patch: Record<string, any>) => void;
+  onImage: (patch: { opacity?: number }) => void;
+  onLayer: (dir: "front" | "back") => void;
 }) {
   const d = selected.data;
   const meta: ElemMeta = d.meta ?? {};
@@ -1876,8 +2298,20 @@ function Inspector({
   const isBoardDev = isDevice && d.isBoard;
   const boardTerminals: string[] = isBoardDev ? (BOARD_TERMINALS[d.deviceTypeKey] ?? []) : [];
   const isWire = d.kind === "wire";
+  const isShape = d.kind === "shape";
+  const isImage = d.kind === "image";
   const wa: WireAttrs = d.wireAttrs ?? {};
   const conductors: Conductor[] = wa.conductors ?? [];
+  // Prioritize the terminals of the board this cable is snapped to.
+  const connectedBoardTerms: string[] = (() => {
+    const t = wa.toTerm || wa.fromTerm;
+    if (!t) return [];
+    for (const names of Object.values(BOARD_TERMINALS)) if (names.includes(t)) return names;
+    return [];
+  })();
+  const termOptions = connectedBoardTerms.length
+    ? [...connectedBoardTerms, ...ALL_TERMINALS.filter((x) => !connectedBoardTerms.includes(x))]
+    : ALL_TERMINALS;
 
   const field = (label: string, node: React.ReactNode) => (
     <div className="mb-3">
@@ -1891,7 +2325,7 @@ function Inspector({
     <div className="flex-1 overflow-y-auto p-4">
       <div className="flex items-center gap-2 mb-4">
         <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ backgroundColor: `${BRAND}22`, color: BRAND }}>
-          {d.kind === "device" ? "Element" : d.kind === "wire" ? "Wire" : "Area"}
+          {d.kind === "device" ? "Element" : d.kind === "wire" ? "Wire" : d.kind === "shape" ? "Shape" : d.kind === "image" ? "Image" : "Area"}
         </span>
       </div>
 
@@ -2032,6 +2466,11 @@ function Inspector({
             <span className="w-5 h-1 rounded-full" style={{ backgroundColor: WIRE_COLORS[normWireKind(d.wireKind)] }} />
             Color shown on the diagram
           </div>
+          {(wa.fromTerm || wa.toTerm) && (
+            <div className="mb-3 text-[11px] rounded-lg px-2 py-1.5" style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT }}>
+              Lands on: <span style={{ color: CYAN }}>{wa.fromTerm ?? "—"}</span> → <span style={{ color: CYAN }}>{wa.toTerm ?? "—"}</span>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-2">
             {field("Cable", (
               <select defaultValue={wa.cable ?? ""} onChange={(e) => onWireAttrs({ cable: e.target.value })} className="w-full px-2 py-2 rounded-lg text-sm outline-none" style={inputStyle}>
@@ -2076,7 +2515,7 @@ function Inspector({
                       className="text-[11px] rounded-lg px-2 py-1" style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: CYAN }}>Auto-fill from {wa.cable}</button>
                   )}
                 </div>
-                <datalist id="term-list">{ALL_TERMINALS.map((t) => <option key={t} value={t} />)}</datalist>
+                <datalist id="term-list">{termOptions.map((t) => <option key={t} value={t} />)}</datalist>
                 <div className="flex flex-col gap-1.5">
                   {conductors.map((c, i) => (
                     <div key={i} className="flex items-center gap-1.5">
@@ -2098,7 +2537,72 @@ function Inspector({
         </>
       )}
 
-      {field("Notes", (
+      {isShape && (
+        <>
+          {d.shapeType !== "line" && field("Fill", (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {SHAPE_FILL_SWATCHES.map((c) => (
+                <button key={c} title={c} onClick={() => onShape({ fill: c })}
+                  className="w-6 h-6 rounded"
+                  style={{ backgroundColor: c, border: selected.fill === c ? `2px solid #fff` : `1px solid ${BORDER}` }} />
+              ))}
+              <button title="Transparent" onClick={() => onShape({ fill: "transparent" })}
+                className="w-6 h-6 rounded flex items-center justify-center text-[9px]"
+                style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: MUTED }}>∅</button>
+            </div>
+          ))}
+          {field("Border color", (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {SHAPE_STROKE_SWATCHES.map((c) => (
+                <button key={c} title={c} onClick={() => onShape({ stroke: c })}
+                  className="w-6 h-6 rounded-full"
+                  style={{ backgroundColor: c, border: selected.stroke === c ? `2px solid #fff` : `1px solid ${BORDER}` }} />
+              ))}
+            </div>
+          ))}
+          <div className="grid grid-cols-2 gap-2">
+            {field("Border width", (
+              <input type="number" min={0} step={1} defaultValue={selected.strokeWidth ?? 2}
+                onChange={(e) => onShape({ strokeWidth: Math.max(0, parseFloat(e.target.value) || 0) })}
+                className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+            ))}
+            {field(`Opacity (${(selected.opacity ?? 1).toFixed(2)})`, (
+              <input type="range" min={0} max={1} step={0.05} defaultValue={selected.opacity ?? 1}
+                onChange={(e) => onShape({ opacity: parseFloat(e.target.value) })}
+                className="w-full" />
+            ))}
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            <button onClick={() => onLayer("front")} className="flex-1 text-[11px] flex items-center justify-center gap-1 rounded-lg py-2" style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT }}>
+              <ArrowUpToLine size={13} /> Bring to front
+            </button>
+            <button onClick={() => onLayer("back")} className="flex-1 text-[11px] flex items-center justify-center gap-1 rounded-lg py-2" style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT }}>
+              <ArrowDownToLine size={13} /> Send to back
+            </button>
+          </div>
+        </>
+      )}
+
+      {isImage && (
+        <>
+          {field(`Opacity (${(selected.opacity ?? 1).toFixed(2)})`, (
+            <input type="range" min={0} max={1} step={0.05} defaultValue={selected.opacity ?? 1}
+              onChange={(e) => onImage({ opacity: parseFloat(e.target.value) })}
+              className="w-full" />
+          ))}
+          <p className="text-[10px] mb-3" style={{ color: MUTED }}>Drag the corner handles on the canvas to resize this image.</p>
+          <div className="flex items-center gap-2">
+            <button onClick={() => onLayer("front")} className="flex-1 text-[11px] flex items-center justify-center gap-1 rounded-lg py-2" style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT }}>
+              <ArrowUpToLine size={13} /> Bring to front
+            </button>
+            <button onClick={() => onLayer("back")} className="flex-1 text-[11px] flex items-center justify-center gap-1 rounded-lg py-2" style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT }}>
+              <ArrowDownToLine size={13} /> Send to back
+            </button>
+          </div>
+        </>
+      )}
+
+      {!isImage && field("Notes", (
         <textarea defaultValue={meta.freeNotes ?? ""} onBlur={(e) => onMeta({ freeNotes: e.target.value })} rows={3} className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle} />
       ))}
     </div>
