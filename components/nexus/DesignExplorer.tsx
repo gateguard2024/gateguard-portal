@@ -16,7 +16,12 @@ const MUTED = '#94A3B8';
 const BRAND = '#6B7EFF';
 const CYAN = '#7DE5FF';
 
-type Stage = 'floor_plan' | 'system_design' | 'as_built';
+// Drawing types (stored in floor_plans.status). Association to a site is site_id.
+const DRAWING_TYPES = [
+  'floor_plan', 'system_design', 'as_built', 'riser', 'site_survey',
+  'network', 'wiring_detail', 'general', 'proposal',
+] as const;
+type Stage = (typeof DRAWING_TYPES)[number];
 
 interface Site {
   id: string;
@@ -41,30 +46,27 @@ interface SiteGroup {
 }
 
 const STAGE_LABEL: Record<Stage, string> = {
-  floor_plan: 'Floor Plan',
-  system_design: 'System Design',
-  as_built: 'As-Built',
+  floor_plan: 'Floor Plan', system_design: 'System Design', as_built: 'As-Built',
+  riser: 'Riser Diagram', site_survey: 'Site Survey', network: 'Network Diagram',
+  wiring_detail: 'Wiring Detail', general: 'General Drawing', proposal: 'Proposal / Concept',
 };
 const STAGE_COLOR: Record<Stage, string> = {
-  floor_plan: BRAND,
-  system_design: CYAN,
-  as_built: '#34D399',
+  floor_plan: BRAND, system_design: CYAN, as_built: '#34D399',
+  riser: '#F59E0B', site_survey: '#EC4899', network: '#0891B2',
+  wiring_detail: '#8B5CF6', general: '#94A3B8', proposal: '#F97316',
 };
 function stageOf(status: string): Stage {
-  const s = (status ?? '').toLowerCase();
+  const s = (status ?? '').toLowerCase().replace(/[\s-]+/g, '_');
+  if ((DRAWING_TYPES as readonly string[]).includes(s)) return s as Stage;
   if (s.includes('as') && s.includes('built')) return 'as_built';
   if (s.includes('system') || s.includes('design')) return 'system_design';
+  if (s.includes('riser')) return 'riser';
+  if (s.includes('survey')) return 'site_survey';
+  if (s.includes('network')) return 'network';
+  if (s.includes('wir')) return 'wiring_detail';
+  if (s.includes('proposal') || s.includes('concept')) return 'proposal';
+  if (s.includes('general')) return 'general';
   return 'floor_plan';
-}
-const STAGE_RANK: Record<Stage, number> = { floor_plan: 0, system_design: 1, as_built: 2 };
-// Highest stage any drawing under a property has reached.
-function highestStage(plans: { status: string }[]): Stage {
-  let best: Stage = 'floor_plan';
-  for (const p of plans) {
-    const st = stageOf(p.status);
-    if (STAGE_RANK[st] > STAGE_RANK[best]) best = st;
-  }
-  return best;
 }
 function relTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -87,6 +89,8 @@ export default function DesignExplorer() {
   const [showNew, setShowNew] = useState(false);
   const [creating, setCreating] = useState<string | null>(null);
   const [newName, setNewName] = useState('New Design');
+  const [newType, setNewType] = useState<Stage>('floor_plan');
+  const [presetSite, setPresetSite] = useState<Site | null>(null);
   const [pickerQuery, setPickerQuery] = useState('');
 
   const load = useCallback(async () => {
@@ -156,7 +160,7 @@ export default function DesignExplorer() {
       const res = await fetch('/api/design/plans', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ site_id: site.id, name: newName || 'New Design', status: 'floor_plan' }),
+        body: JSON.stringify({ site_id: site.id, name: newName || 'New Design', status: newType }),
       });
       const json = await res.json();
       if (res.ok && json.plan?.id) {
@@ -209,7 +213,7 @@ export default function DesignExplorer() {
           />
         </div>
         <button
-          onClick={() => setShowNew(true)}
+          onClick={() => { setPresetSite(null); setShowNew(true); }}
           className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold shrink-0"
           style={{ backgroundColor: BRAND, color: '#0B1728' }}
         >
@@ -238,7 +242,7 @@ export default function DesignExplorer() {
               Start a system diagram or floor plan for one of your properties.
             </p>
             <button
-              onClick={() => setShowNew(true)}
+              onClick={() => { setPresetSite(null); setShowNew(true); }}
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold"
               style={{ backgroundColor: BRAND, color: '#0B1728' }}
             >
@@ -272,19 +276,13 @@ export default function DesignExplorer() {
                       </span>
                     </div>
                   </div>
-                  {(() => {
-                    const hs = highestStage(g.plans);
-                    const hc = STAGE_COLOR[hs];
-                    return (
-                      <span
-                        title="Highest stage reached"
-                        className="text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide shrink-0 self-start"
-                        style={{ backgroundColor: `${hc}22`, color: hc, border: `1px solid ${hc}55` }}
-                      >
-                        {STAGE_LABEL[hs]}
-                      </span>
-                    );
-                  })()}
+                  <span
+                    title="Drawings for this property"
+                    className="text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide shrink-0 self-start"
+                    style={{ backgroundColor: `${CYAN}22`, color: CYAN, border: `1px solid ${CYAN}55` }}
+                  >
+                    {g.plans.length} drawing{g.plans.length === 1 ? '' : 's'}
+                  </span>
                 </div>
 
                 <div className="flex flex-col gap-2">
@@ -320,20 +318,11 @@ export default function DesignExplorer() {
                 </div>
 
                 <button
-                  onClick={() => {
-                    setNewName('New Design');
-                    createDesign(g.site);
-                  }}
-                  disabled={creating === g.site.id}
-                  className="mt-3 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-medium transition-colors hover:brightness-125 disabled:opacity-50"
+                  onClick={() => { setPresetSite(g.site); setNewName('New Drawing'); setNewType('general'); setShowNew(true); }}
+                  className="mt-3 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-medium transition-colors hover:brightness-125"
                   style={{ backgroundColor: 'transparent', border: `1px dashed ${BORDER}`, color: MUTED }}
                 >
-                  {creating === g.site.id ? (
-                    <Loader2 size={13} className="animate-spin" />
-                  ) : (
-                    <Plus size={13} />
-                  )}
-                  Add drawing
+                  <Plus size={13} /> Add drawing
                 </button>
               </div>
             ))}
@@ -358,67 +347,80 @@ export default function DesignExplorer() {
               style={{ borderColor: BORDER }}
             >
               <h2 className="text-sm font-semibold" style={{ color: TEXT }}>
-                New design — choose a property
+                {presetSite ? `New drawing — ${presetSite.name}` : 'New drawing — choose a property'}
               </h2>
               <button onClick={() => !creating && setShowNew(false)} style={{ color: MUTED }}>
                 <X size={18} />
               </button>
             </div>
             <div className="px-5 pt-4">
-              <label className="text-[11px] font-medium" style={{ color: MUTED }}>
-                Drawing name
-              </label>
+              <label className="text-[11px] font-medium" style={{ color: MUTED }}>Drawing name</label>
               <input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 className="w-full mt-1 mb-3 px-3 py-2 rounded-lg text-sm outline-none"
                 style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT }}
               />
-              <div className="relative">
-                <Search
-                  size={14}
-                  className="absolute left-3 top-1/2 -translate-y-1/2"
-                  style={{ color: MUTED }}
-                />
-                <input
-                  value={pickerQuery}
-                  onChange={(e) => setPickerQuery(e.target.value)}
-                  placeholder="Search properties…"
-                  className="w-full pl-9 pr-3 py-2 rounded-lg text-sm outline-none"
-                  style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT }}
-                />
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto px-5 py-3 flex flex-col gap-1.5">
-              {pickerSites.length === 0 ? (
-                <p className="text-xs text-center py-8" style={{ color: MUTED }}>
-                  No properties found.
-                </p>
-              ) : (
-                pickerSites.map((s) => (
-                  <button
-                    key={s.id}
-                    disabled={!!creating}
-                    onClick={() => createDesign(s)}
-                    className="w-full text-left rounded-lg px-3 py-2.5 flex items-center gap-3 transition-colors hover:brightness-125 disabled:opacity-50"
-                    style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}` }}
-                  >
-                    <Building2 size={15} style={{ color: CYAN }} />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium truncate" style={{ color: TEXT }}>
-                        {s.name}
-                      </div>
-                      <div className="text-[11px] truncate" style={{ color: MUTED }}>
-                        {[s.address, s.city, s.state].filter(Boolean).join(', ') || 'No address'}
-                      </div>
-                    </div>
-                    {creating === s.id && (
-                      <Loader2 size={14} className="animate-spin" style={{ color: BRAND }} />
-                    )}
-                  </button>
-                ))
+              <label className="text-[11px] font-medium" style={{ color: MUTED }}>Drawing type</label>
+              <select
+                value={newType}
+                onChange={(e) => setNewType(e.target.value as Stage)}
+                className="w-full mt-1 mb-3 px-3 py-2 rounded-lg text-sm outline-none"
+                style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT }}
+              >
+                {DRAWING_TYPES.map((t) => <option key={t} value={t}>{STAGE_LABEL[t]}</option>)}
+              </select>
+              {!presetSite && (
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: MUTED }} />
+                  <input
+                    value={pickerQuery}
+                    onChange={(e) => setPickerQuery(e.target.value)}
+                    placeholder="Search properties…"
+                    className="w-full pl-9 pr-3 py-2 rounded-lg text-sm outline-none"
+                    style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT }}
+                  />
+                </div>
               )}
             </div>
+            {presetSite ? (
+              <div className="px-5 py-4">
+                <button
+                  disabled={!!creating}
+                  onClick={() => createDesign(presetSite)}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50"
+                  style={{ backgroundColor: BRAND, color: '#0B1728' }}
+                >
+                  {creating ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
+                  Create drawing
+                </button>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto px-5 py-3 flex flex-col gap-1.5">
+                {pickerSites.length === 0 ? (
+                  <p className="text-xs text-center py-8" style={{ color: MUTED }}>No properties found.</p>
+                ) : (
+                  pickerSites.map((s) => (
+                    <button
+                      key={s.id}
+                      disabled={!!creating}
+                      onClick={() => createDesign(s)}
+                      className="w-full text-left rounded-lg px-3 py-2.5 flex items-center gap-3 transition-colors hover:brightness-125 disabled:opacity-50"
+                      style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}` }}
+                    >
+                      <Building2 size={15} style={{ color: CYAN }} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium truncate" style={{ color: TEXT }}>{s.name}</div>
+                        <div className="text-[11px] truncate" style={{ color: MUTED }}>
+                          {[s.address, s.city, s.state].filter(Boolean).join(', ') || 'No address'}
+                        </div>
+                      </div>
+                      {creating === s.id && <Loader2 size={14} className="animate-spin" style={{ color: BRAND }} />}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
