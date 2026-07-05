@@ -24,7 +24,7 @@ const {
   Ruler, MousePointer, Zap, Camera, Type, Minus, ChevronDown, ChevronRight,
   BarChart3, Upload, Image: ImageIcon, Map: MapIcon, Layers, Printer, GitBranch, Save,
   Stamp: StampIcon, Square, Circle: CircleIcon, ArrowUpToLine, ArrowDownToLine,
-  Frame,
+  Frame, Grid3X3,
 } = require("lucide-react") as any;
 
 // ── Theme ───────────────────────────────────────────────────────────────────
@@ -248,6 +248,7 @@ interface WireAttrs {
   cable?: string; gauge?: string; lengthFt?: number; poe?: boolean; voltage?: string;
   showConductors?: boolean; conductors?: Conductor[];
   fromTerm?: string; toTerm?: string;   // terminals this cable's ends land on
+  points?: [number, number][];          // multipoint path (straight segments, editable)
 }
 // Map the legacy 4-kind vocabulary onto the new segment roles so old plans render.
 const LEGACY_WIRE_MAP: Record<string, WireKind> = {
@@ -403,6 +404,7 @@ function EditorInner() {
   wireKindRef.current = wireKind;
   const [showWirePicker, setShowWirePicker] = useState(false);
   const [showLegend, setShowLegend] = useState(true);
+  const [showGrid, setShowGrid] = useState(false);   // faint layout dot grid (never prints)
   const [titleBlock, setTitleBlock] = useState<TitleBlock>(emptyTitleBlock);
   const [showTitleBlock, setShowTitleBlock] = useState(false);
   const titleBlockRef = useRef<TitleBlock>(titleBlock);
@@ -565,30 +567,37 @@ function EditorInner() {
       const conductors = a.conductors ?? [];
       const fan = !!a.showConductors && conductors.length > 0;
 
+      // Multipoint path: straight segments through user-placed points. Falls back
+      // to a simple [from,to] line for older 2-point wires.
+      const path: { x: number; y: number }[] =
+        a.points && a.points.length >= 2
+          ? a.points.map((p) => ({ x: p[0], y: p[1] }))
+          : [{ x: from[0], y: from[1] }, { x: to[0], y: to[1] }];
+      const pFrom = path[0];
+      const pTo = path[path.length - 1];
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let obj: any;
       if (fan) {
         // Detail mode: fan the cable into its individual conductors (parallel strands).
-        const paths = conductorPaths({ x: from[0], y: from[1] }, { x: to[0], y: to[1] }, conductors.length, 3.2);
-        // Map terminal name → dot position for the board near this cable's `to` end,
-        // so a conductor with an assigned terminal lands exactly on that dot.
+        // Map terminal name → dot position for the board near this cable's `to` end.
         const termMap: Record<string, [number, number]> = {};
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         for (const t of fc.getObjects() as any[]) {
           if (t.data?.kind === "terminal" && !t.data.isLabel) {
-            if (Math.hypot(t.left - to[0], t.top - to[1]) < 70) termMap[t.data.name] = [t.left, t.top];
+            if (Math.hypot(t.left - pTo.x, t.top - pTo.y) < 70) termMap[t.data.name] = [t.left, t.top];
           }
         }
+        const mid = (conductors.length - 1) / 2;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const strands: any[] = [];
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const dots: any[] = [];
-        paths.forEach((p, i) => {
-          const c = conductors[i];
+        conductors.forEach((c, i) => {
+          const off = (i - mid) * 3.2;
+          const offPts = offsetPolyline(path, off);       // parallel strand along the path
           const dot = c.term ? termMap[c.term] : null;
-          // If this conductor is assigned to a terminal on the board, route it to
-          // that dot; otherwise keep the parallel-offset strand.
-          const pts = dot ? orthPath({ x: p[0].x, y: p[0].y }, { x: dot[0], y: dot[1] }) : p;
+          const pts = dot ? [...offPts.slice(0, -1), { x: dot[0], y: dot[1] }] : offPts;
           strands.push(new fabric.Polyline(pts, {
             stroke: c.color || WIRE_COLORS[kind],
             strokeWidth: 1.6, fill: "transparent", objectCaching: false, stroke_lineCap: "round",
@@ -602,21 +611,28 @@ function EditorInner() {
         });
         obj = new fabric.Group([...strands, ...dots], { objectCaching: false });
       } else {
-        const pts = orthPath({ x: from[0], y: from[1] }, { x: to[0], y: to[1] });
-        obj = new fabric.Polyline(pts, {
+        obj = new fabric.Polyline(path, {
           stroke: WIRE_COLORS[kind], strokeWidth: 2.5, fill: "transparent", objectCaching: false,
         });
       }
       // Lock scaling/rotation so grabbing a corner never distorts the wire.
-      // Endpoint editing is done via dedicated handle circles instead.
+      // Vertex editing is done via dedicated handle circles instead.
       obj.set({ hasControls: false, lockScalingX: true, lockScalingY: true, lockRotation: true, selectable: true });
-      obj.data = { kind: "wire", id: genId(), wireKind: kind, from, to, label: label ?? WIRE_LABELS[kind], wireAttrs: a };
+      const pointsArr: [number, number][] = path.map((p) => [p.x, p.y]);
+      obj.data = {
+        kind: "wire", id: genId(), wireKind: kind,
+        from: pointsArr[0], to: pointsArr[pointsArr.length - 1], points: pointsArr,
+        label: label ?? WIRE_LABELS[kind], wireAttrs: { ...a, points: pointsArr },
+      };
       fc.add(obj);
-      // PoE indicator — a small ⚡PoE tag at the run's midpoint.
+      // PoE indicator — a small ⚡PoE tag near the middle of the run.
       if (a.poe) {
+        const m = Math.floor((path.length - 1) / 2);
+        const mx = (path[m].x + path[m + 1].x) / 2;
+        const my = (path[m].y + path[m + 1].y) / 2;
         const tag = a.voltage ? `⚡ PoE ${a.voltage}` : "⚡ PoE";
         const badge = new fabric.Text(tag, {
-          left: (from[0] + to[0]) / 2, top: (from[1] + to[1]) / 2 - 9,
+          left: mx, top: my - 9,
           originX: "center", originY: "center", fontSize: 8, fontWeight: "700",
           fontFamily: "Inter, sans-serif", fill: "#0f172a",
           backgroundColor: "rgba(250,204,21,0.92)", padding: 1,
@@ -662,20 +678,21 @@ function EditorInner() {
     const fabric = fabricRef.current;
     if (!fc || !fabric || !wireObj?.data) return;
     clearWireHandles();
-    const from = wireObj.data.from as [number, number];
-    const to = wireObj.data.to as [number, number];
-    if (!Array.isArray(from) || !Array.isArray(to)) return;
-    const mk = (end: "from" | "to", pt: [number, number]) => {
+    const points = (wireObj.data.points as [number, number][])
+      || (Array.isArray(wireObj.data.from) && Array.isArray(wireObj.data.to) ? [wireObj.data.from, wireObj.data.to] : null);
+    if (!Array.isArray(points)) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handles: any[] = points.map((pt, index) => {
       const h = new fabric.Circle({
         left: pt[0], top: pt[1], radius: 6, fill: "#fff", stroke: BRAND, strokeWidth: 2,
         originX: "center", originY: "center", hasControls: false, hasBorders: false,
       });
-      h.data = { kind: "wirehandle", end, wireId: wireObj.data.id };
+      h.data = { kind: "wirehandle", index, wireId: wireObj.data.id };
       fc.add(h);
       fc.bringObjectToFront(h);
       return h;
-    };
-    wireHandlesRef.current = [mk("from", from), mk("to", to)];
+    });
+    wireHandlesRef.current = handles;
   }, [clearWireHandles]);
 
   // ── Draw an insertable shape (rect / ellipse / line) ────────────────────────
@@ -918,6 +935,14 @@ function EditorInner() {
     return () => { active = false; };
   }, [loadSymbolImage, refreshDevicesOfType]);
 
+  // Grid on a blank sheet → make the Fabric bg transparent so the CSS dot grid
+  // (on the wrapper) shows through. With a background image, keep it opaque.
+  useEffect(() => {
+    const fc = fcRef.current;
+    if (!fc || !canvasReady) return;
+    if (!fileUrl) { fc.backgroundColor = showGrid ? "transparent" : "#FFFFFF"; fc.renderAll(); }
+  }, [showGrid, fileUrl, canvasReady]);
+
   // ── Background ─────────────────────────────────────────────────────────────
   const applyBackground = useCallback(async (url: string | null) => {
     const fc = fcRef.current;
@@ -1064,6 +1089,7 @@ function EditorInner() {
 
       fc.on("mouse:down", (opt: unknown) => onMouseDown(opt));
       fc.on("mouse:move", (opt: unknown) => onMouseMove(opt));
+      fc.on("mouse:dblclick", () => { if (toolRef.current === "wire") finishWire(); });
       fc.on("selection:created", onSelect);
       fc.on("selection:updated", onSelect);
       fc.on("selection:cleared", () => {
@@ -1095,11 +1121,15 @@ function EditorInner() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const wire: any = fc.getObjects().find((x: any) => x.data?.kind === "wire" && x.data.id === o.data.wireId);
         if (!wire) return;
-        wire.data[o.data.end] = [o.left, o.top];
-        const from = wire.data.from as [number, number];
-        const to = wire.data.to as [number, number];
+        const pts: [number, number][] = wire.data.points || [wire.data.from, wire.data.to];
+        const idx = o.data.index as number;
+        if (idx == null || !pts[idx]) return;
+        pts[idx] = [o.left, o.top];
+        wire.data.points = pts;
+        wire.data.from = pts[0];
+        wire.data.to = pts[pts.length - 1];
         if (typeof wire.set === "function") {
-          wire.set({ points: orthPath({ x: from[0], y: from[1] }, { x: to[0], y: to[1] }), dirty: true });
+          wire.set({ points: pts.map((p) => ({ x: p[0], y: p[1] })), dirty: true });
           wire.setCoords();
         }
         fc.requestRenderAll();
@@ -1113,15 +1143,19 @@ function EditorInner() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const wire: any = fc.getObjects().find((x: any) => x.data?.kind === "wire" && x.data.id === o.data.wireId);
           if (wire && typeof wire.getObjects !== "function") {
-            // Snap the dragged end to the nearest board terminal, if close.
-            const movedEnd = o.data.end as "from" | "to";
-            const pt = wire.data[movedEnd] as [number, number];
-            const snap = nearestTerminal(pt[0], pt[1]);
-            if (snap) {
-              wire.data[movedEnd] = [snap.x, snap.y];
-              wire.data.wireAttrs = { ...(wire.data.wireAttrs || {}), [movedEnd === "from" ? "fromTerm" : "toTerm"]: snap.name };
+            const pts: [number, number][] = wire.data.points || [wire.data.from, wire.data.to];
+            const idx = o.data.index as number;
+            // Snap an END vertex (first/last) to the nearest board terminal, if close.
+            if (pts[idx] && (idx === 0 || idx === pts.length - 1)) {
+              const snap = nearestTerminal(pts[idx][0], pts[idx][1]);
+              if (snap) {
+                pts[idx] = [snap.x, snap.y];
+                wire.data.wireAttrs = { ...(wire.data.wireAttrs || {}), [idx === 0 ? "fromTerm" : "toTerm"]: snap.name };
+              }
             }
-            const { from, to, wireKind, label, wireAttrs } = wire.data;
+            const wireKind = wire.data.wireKind, label = wire.data.label;
+            const wireAttrs = { ...(wire.data.wireAttrs || {}), points: pts };
+            const from = pts[0], to = pts[pts.length - 1];
             if (wire.data.id) removePoeBadgeFor(wire.data.id);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const beforeIds = new Set(fc.getObjects().map((x: any) => x?.data?.id).filter(Boolean));
@@ -1155,7 +1189,8 @@ function EditorInner() {
         if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
         deleteSelected();
       }
-      if (e.key === "Escape") { setTool("select"); setDevKey(null); }
+      if (e.key === "Enter" && toolRef.current === "wire" && wirePtsRef.current.length >= 2) { finishWire(); }
+      if (e.key === "Escape") { cancelWire(); setTool("select"); setDevKey(null); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -1203,6 +1238,37 @@ function EditorInner() {
     for (const t of kill) fc.remove(t);
   }
 
+  // Finish the in-progress multipoint line (double-click / Enter).
+  function finishWire() {
+    const fc = fcRef.current;
+    if (!fc) return;
+    // Dedupe consecutive near-equal points (a double-click adds a duplicate).
+    const raw = wirePtsRef.current;
+    const buf = raw.filter((pt, i) => i === 0 || Math.hypot(pt.x - raw[i - 1].x, pt.y - raw[i - 1].y) > 3);
+    if (buf.length >= 2 && wireKindRef.current) {
+      const points: [number, number][] = buf.map((pt) => [pt.x, pt.y]);
+      const last = buf[buf.length - 1];
+      const snapLast = nearestTerminal(last.x, last.y);
+      if (snapLast) points[points.length - 1] = [snapLast.x, snapLast.y];
+      const attrs: WireAttrs = { points };
+      if (wireFromTermRef.current) attrs.fromTerm = wireFromTermRef.current;
+      if (snapLast?.name) attrs.toTerm = snapLast.name;
+      drawWireObject(points[0], points[points.length - 1], wireKindRef.current, undefined, attrs);
+    }
+    wirePtsRef.current = [];
+    wireFromTermRef.current = undefined;
+    if (wirePreviewRef.current) { fc.remove(wirePreviewRef.current); wirePreviewRef.current = null; }
+    fc.renderAll();
+  }
+
+  // Abandon the in-progress line (Escape).
+  function cancelWire() {
+    const fc = fcRef.current;
+    wirePtsRef.current = [];
+    wireFromTermRef.current = undefined;
+    if (fc && wirePreviewRef.current) { fc.remove(wirePreviewRef.current); wirePreviewRef.current = null; fc.renderAll(); }
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function onMouseDown(opt: any) {
     const fc = fcRef.current;
@@ -1242,22 +1308,11 @@ function EditorInner() {
         fc.requestRenderAll();
         return;
       }
+      // Multipoint: every click drops a corner point. Double-click finishes the line.
       const snap = nearestTerminal(p.x, p.y);            // snap endpoints to terminals
       const pt = snap ? { x: snap.x, y: snap.y } : { x: p.x, y: p.y };
-      if (wirePtsRef.current.length === 0) {
-        wirePtsRef.current = [pt];
-        wireFromTermRef.current = snap?.name;
-      } else {
-        const from = wirePtsRef.current[0];
-        const attrs: WireAttrs = {};
-        if (wireFromTermRef.current) attrs.fromTerm = wireFromTermRef.current;
-        if (snap?.name) attrs.toTerm = snap.name;
-        drawWireObject([from.x, from.y], [pt.x, pt.y], wireKindRef.current, undefined, attrs);
-        wirePtsRef.current = [];
-        wireFromTermRef.current = undefined;
-        if (wirePreviewRef.current) { fc.remove(wirePreviewRef.current); wirePreviewRef.current = null; }
-        fc.renderAll();
-      }
+      if (wirePtsRef.current.length === 0) wireFromTermRef.current = snap?.name;
+      wirePtsRef.current = [...wirePtsRef.current, pt];
       return;
     }
 
@@ -1303,8 +1358,8 @@ function EditorInner() {
     if (toolRef.current !== "wire" || wirePtsRef.current.length === 0 || !wireKindRef.current) return;
     const p = scenePoint(opt);
     if (wirePreviewRef.current) { fc.remove(wirePreviewRef.current); wirePreviewRef.current = null; }
-    const from = wirePtsRef.current[0];
-    const pts = orthPath({ x: from.x, y: from.y }, p);
+    // Preview the straight multipoint path so far, plus a rubber-band to the cursor.
+    const pts = [...wirePtsRef.current, { x: p.x, y: p.y }];
     const line = new fabric.Polyline(pts, {
       stroke: WIRE_COLORS[wireKindRef.current], strokeWidth: 2.5, fill: "transparent",
       strokeDashArray: [5, 4], selectable: false, evented: false,
@@ -1391,10 +1446,22 @@ function EditorInner() {
     setTimeout(() => setSaveMsg(null), 3500);
   };
 
+  // Export snapshot with a guaranteed white background (so the layout dot grid,
+  // which lives on the wrapper not the canvas, never appears in exports/prints).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const whiteSnapshot = (opts: any): string => {
+    const fc = fcRef.current;
+    const prev = fc.backgroundColor;
+    fc.backgroundColor = "#FFFFFF"; fc.renderAll();
+    const url = fc.toDataURL(opts);
+    fc.backgroundColor = prev; fc.renderAll();
+    return url;
+  };
+
   const exportPng = () => {
     const fc = fcRef.current;
     if (!fc) return;
-    const url = fc.toDataURL({ format: "png", multiplier: 1.5 });
+    const url = whiteSnapshot({ format: "png", multiplier: 1.5 });
     const a = document.createElement("a");
     a.href = url; a.download = `${planName.replace(/\s+/g, "_")}.png`; a.click();
   };
@@ -1402,7 +1469,7 @@ function EditorInner() {
   const printSheet = () => {
     const fc = fcRef.current;
     if (!fc) return;
-    const url = fc.toDataURL({ format: "png", multiplier: 2 });
+    const url = whiteSnapshot({ format: "png", multiplier: 2 });
     const w = window.open("");
     if (w) {
       w.document.write(
@@ -1467,7 +1534,7 @@ function EditorInner() {
   const exportPdf = () => {
     const fc = fcRef.current;
     if (!fc) return;
-    const img = fc.toDataURL({ format: "png", multiplier: 2 });
+    const img = whiteSnapshot({ format: "png", multiplier: 2 });
 
     const tb = titleBlock;
     const stage = STAGE_LABEL[normStage(planStatus)];
@@ -2005,6 +2072,14 @@ function EditorInner() {
               ))}
             </div>
             {toolBtn("scale", Ruler, "Set scale")}
+            <button
+              onClick={() => setShowGrid((g) => !g)}
+              title="Toggle layout dot grid (never prints)"
+              className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors"
+              style={{ backgroundColor: showGrid ? BRAND : PANEL, border: `1px solid ${showGrid ? BRAND : BORDER}`, color: showGrid ? "#0B1728" : MUTED }}
+            >
+              <Grid3X3 size={16} />
+            </button>
             <label
               title="Insert a resizable image"
               className="w-10 h-10 rounded-lg flex items-center justify-center cursor-pointer transition-colors"
@@ -2085,7 +2160,13 @@ function EditorInner() {
               </div>
             )}
             <div className="p-6 inline-block">
-              <div className="relative" style={{ boxShadow: "0 10px 40px rgba(0,0,0,0.5)", borderRadius: 8, overflow: "hidden", border: `1px solid ${BORDER}`, width: CANVAS_W, height: CANVAS_H }}>
+              <div className="relative" style={{
+                boxShadow: "0 10px 40px rgba(0,0,0,0.5)", borderRadius: 8, overflow: "hidden",
+                border: `1px solid ${BORDER}`, width: CANVAS_W, height: CANVAS_H,
+                backgroundColor: "#ffffff",
+                backgroundImage: showGrid ? "radial-gradient(circle, rgba(15,23,42,0.16) 1px, transparent 1px)" : undefined,
+                backgroundSize: showGrid ? "24px 24px" : undefined,
+              }}>
                 <canvas ref={canvasElRef} />
                 {canvasReady && (
                   <SheetFrame
@@ -2903,31 +2984,16 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
-function orthPath(a: { x: number; y: number }, b: { x: number; y: number }) {
-  const midX = (a.x + b.x) / 2;
-  return [
-    { x: a.x, y: a.y },
-    { x: midX, y: a.y },
-    { x: midX, y: b.y },
-    { x: b.x, y: b.y },
-  ];
-}
-
-// Parallel offset copies of the orth path — one strand per conductor, so a
-// multi-conductor cable reads as a ribbon of colored wires in Detail mode.
-function conductorPaths(a: { x: number; y: number }, b: { x: number; y: number }, n: number, spacing: number) {
+// Offset a polyline perpendicular to its overall direction — used to fan a
+// multi-conductor cable into parallel strands along a multipoint path.
+function offsetPolyline(pts: { x: number; y: number }[], offset: number) {
+  const a = pts[0], b = pts[pts.length - 1];
   const dx = b.x - a.x, dy = b.y - a.y;
   const len = Math.hypot(dx, dy) || 1;
-  const px = -dy / len, py = dx / len; // unit perpendicular
-  const base = orthPath(a, b);
-  const mid = (n - 1) / 2;
-  const out: { x: number; y: number }[][] = [];
-  for (let i = 0; i < n; i++) {
-    const off = (i - mid) * spacing;
-    out.push(base.map((pt) => ({ x: pt.x + px * off, y: pt.y + py * off })));
-  }
-  return out;
+  const px = -dy / len, py = dx / len;
+  return pts.map((p) => ({ x: p.x + px * offset, y: p.y + py * offset }));
 }
+
 
 function defaultFov(key: string): { angle: number; range: number; direction: number } {
   if (key.includes("fisheye")) return { angle: 360, range: 30, direction: 0 };
