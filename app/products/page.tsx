@@ -19,6 +19,20 @@ import type { Column } from '@/components/ui/DataTable';
 
 type ProductCategory = "Camera" | "Access Control" | "Gate Operator" | "Callbox / Intercom" | "Network" | "Wire & Hardware" | "Labor";
 
+// ─── Design metadata (shared with the drawing tool via products.design_meta) ──
+// One catalog record drives drawings, quotes and invoices. The GENERAL photo is
+// products.image_url; the WIRING/terminal image is design_meta.wiringImageUrl.
+interface Terminal { name: string; dx: number; dy: number }
+interface DesignMeta {
+  role?: string;          // camera | board | gateway | reader | switch | power | ...
+  abbr?: string;          // short badge shown when no image (e.g. "SDC")
+  color?: string;         // marker / accent color
+  isBoard?: boolean;      // shows a terminal strip in detail view
+  wiringImageUrl?: string;// terminal/wiring image (detail view)
+  terminals?: Terminal[]; // terminal positions relative to the device center
+  defaultCable?: string;  // default cable spec for runs to this device
+}
+
 interface Product {
   id: string;
   sku: string;
@@ -37,6 +51,7 @@ interface Product {
   tags: string[];
   fieldService: boolean;
   manualUrl: string;
+  designMeta: DesignMeta;
 }
 
 // ─── Error helper — Supabase errors are plain objects, not Error instances ────
@@ -73,6 +88,7 @@ const fromDb = (row: any): Product => ({
   tags:         row.tags ?? [],
   fieldService: row.field_service ?? false,
   manualUrl:    row.manual_url ?? "",
+  designMeta:   (row.design_meta && typeof row.design_meta === "object") ? row.design_meta : {},
 });
 
 const toDb = (p: Omit<Product, "id">) => ({
@@ -92,6 +108,7 @@ const toDb = (p: Omit<Product, "id">) => ({
   tags:          p.tags,
   field_service: p.fieldService,
   manual_url:    p.manualUrl,
+  design_meta:   p.designMeta ?? {},
 });
 
 // ─── Brand color palette for placeholders ─────────────────────────────────────
@@ -149,8 +166,8 @@ function ProductImage({ product, size = 40, className }: { product: Product; siz
 // ─── Seed Data ────────────────────────────────────────────────────────────────
 // Used only on first load when the DB table is empty.
 // tags / fieldService / manualUrl are optional here; defaults filled at seed time.
-type SeedProduct = Omit<Product,"id"|"tags"|"fieldService"|"manualUrl"> & {
-  tags?: string[]; fieldService?: boolean; manualUrl?: string;
+type SeedProduct = Omit<Product,"id"|"tags"|"fieldService"|"manualUrl"|"designMeta"> & {
+  tags?: string[]; fieldService?: boolean; manualUrl?: string; designMeta?: DesignMeta;
 };
 
 const SEED: SeedProduct[] = [
@@ -244,6 +261,11 @@ const SEED: SeedProduct[] = [
 
 const CATEGORIES: ProductCategory[] = ["Camera","Access Control","Gate Operator","Callbox / Intercom","Network","Wire & Hardware","Labor"];
 
+// ─── Design tool metadata options ─────────────────────────────────────────────
+const DESIGN_ROLES = ["","camera","board","gateway","reader","switch","power","intercom","gate","sensor","lock","network","other"];
+const DESIGN_CABLES = ["","110V 12/2","240V 12/3","16/2","18/2","18/6","22/4","22/2 shielded","CAT6","CAT5e"];
+const DESIGN_COLORS = ["#6B7EFF","#10B981","#F59E0B","#EF4444","#8B5CF6","#EC4899","#0891B2","#64748B","#111827"];
+
 const CAT_COLORS: Record<string, string> = {
   "Camera":             "bg-blue-100 text-blue-700",
   "Access Control":     "bg-emerald-100 text-emerald-700",
@@ -262,6 +284,7 @@ const emptyProduct = (): Omit<Product,"id"> => ({
   sku:"", name:"", brand:"GateGuard", category:"Camera", subcategory:"",
   description:"", specs:"", msrp:0, dealerCost:0, sellPrice:0,
   adiSku:"", imageUrl:"", active:true, tags:[], fieldService:false, manualUrl:"",
+  designMeta:{},
 });
 
 const fmt$ = (n: number) => n > 0 ? `$${n.toLocaleString()}` : "—";
@@ -316,6 +339,7 @@ function ProductModal({ product, onSave, onClose, saving }: { product:Partial<Pr
     imageUrl:product.imageUrl??"", active:product.active??true,
     tags:product.tags??[], fieldService:product.fieldService??false,
     manualUrl:product.manualUrl??"",
+    designMeta:product.designMeta??{},
   });
   const [tagInput,      setTagInput]      = useState("");
   const [uploadingPdf,  setUploadingPdf]  = useState(false);
@@ -323,8 +347,60 @@ function ProductModal({ product, onSave, onClose, saving }: { product:Partial<Pr
   const [pdfStatus,     setPdfStatus]     = useState<string|null>(null);
   const pdfRef = useRef<HTMLInputElement>(null);
 
-  const set = (k:keyof typeof form, v:string|number|boolean|string[])=>setForm(p=>({...p,[k]:v}));
+  const set = (k:keyof typeof form, v:string|number|boolean|string[]|DesignMeta)=>setForm(p=>({...p,[k]:v}));
   const m = calcMargin(form.dealerCost, form.sellPrice);
+
+  // ── Design section state ──────────────────────────────────────────────────
+  const design = form.designMeta;
+  const setD = (k:keyof DesignMeta, v:string|boolean|Terminal[]|undefined)=>set("designMeta",{...form.designMeta,[k]:v});
+  const [showDesign, setShowDesign] = useState<boolean>(
+    !!(product.designMeta && (product.designMeta.role || product.designMeta.isBoard || product.designMeta.wiringImageUrl))
+  );
+  const [imgBusy,   setImgBusy]   = useState<""|"general"|"wiring"|"find-general"|"find-wiring">("");
+  const [imgStatus, setImgStatus] = useState<string|null>(null);
+  const genRef  = useRef<HTMLInputElement>(null);
+  const wireRef = useRef<HTMLInputElement>(null);
+
+  const uploadImage = async (file: File, kind:"general"|"wiring") => {
+    setImgBusy(kind); setImgStatus(`Uploading ${kind} image…`);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("kind", kind);
+      if (product.id && product.id !== "new") fd.append("id", product.id);
+      fd.append("name", `${form.brand} ${form.name}`.trim());
+      const res = await fetch("/api/products/upload-image", { method:"POST", body: fd });
+      const d = await res.json().catch(()=>({error:`HTTP ${res.status}`}));
+      if (!res.ok) throw new Error(d.error ?? "Upload failed");
+      if (kind === "general") set("imageUrl", d.url as string); else setD("wiringImageUrl", d.url as string);
+      setImgStatus(`✅ ${kind==="general"?"Product":"Wiring"} image uploaded`);
+    } catch(e){ setImgStatus(`❌ ${e instanceof Error?e.message:"Upload failed"}`); }
+    finally { setImgBusy(""); }
+  };
+
+  const findImage = async (kind:"general"|"wiring") => {
+    setImgBusy(`find-${kind}`); setImgStatus(`🔍 Searching for ${kind} image…`);
+    try {
+      const searchName = kind === "wiring" ? `${form.name} wiring diagram terminals` : form.name;
+      const res = await fetch("/api/products/find-image", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          name: searchName, brand: form.brand,
+          id: (kind==="general" && product.id && product.id!=="new") ? product.id : undefined,
+        }),
+      });
+      const d = await res.json().catch(()=>({error:`HTTP ${res.status}`}));
+      if (!res.ok) throw new Error(d.error ?? "Search failed");
+      if (kind === "general") set("imageUrl", d.url as string); else setD("wiringImageUrl", d.url as string);
+      setImgStatus(`✅ Found ${kind==="general"?"product":"wiring"} image`);
+    } catch(e){ setImgStatus(`❌ ${e instanceof Error?e.message:"Search failed"}`); }
+    finally { setImgBusy(""); }
+  };
+
+  const terminals = design.terminals ?? [];
+  const addTerminal    = () => setD("terminals", [...terminals, { name:"", dx:-30, dy:(terminals.length*16)-((terminals.length)*8) }]);
+  const setTerminal    = (i:number, patch:Partial<Terminal>) => setD("terminals", terminals.map((t,idx)=>idx===i?{...t,...patch}:t));
+  const removeTerminal = (i:number) => setD("terminals", terminals.filter((_,idx)=>idx!==i));
 
   const addTag = (raw: string) => {
     const tag = raw.trim().toLowerCase().replace(/[^a-z0-9-_]/g,"");
@@ -517,6 +593,148 @@ function ProductModal({ product, onSave, onClose, saving }: { product:Partial<Pr
             {form.manualUrl&&<a href={form.manualUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-600 hover:underline mt-1 inline-block">View current manual →</a>}
           </Field>
 
+          {/* ── Design section ─────────────────────────────────────────────── */}
+          <div className="border border-border rounded-xl overflow-hidden">
+            <button
+              type="button"
+              onClick={()=>setShowDesign(v=>!v)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Layers size={15} className="text-blue-600"/>
+                <span className="text-sm font-semibold">Design &amp; Wiring</span>
+                <span className="text-[10px] text-muted-foreground">— how this shows on system drawings</span>
+              </div>
+              <span className="text-xs text-muted-foreground">{showDesign?"Hide":"Set up"}</span>
+            </button>
+
+            {showDesign && (
+              <div className="p-4 space-y-4 bg-white">
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Drawing Role">
+                    <select value={design.role??""} onChange={e=>setD("role",e.target.value)} className={iCls}>
+                      {DESIGN_ROLES.map(r=><option key={r} value={r}>{r===""?"— none —":r}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Badge / Abbreviation">
+                    <input value={design.abbr??""} onChange={e=>setD("abbr",e.target.value)} placeholder="e.g. SDC, CAM, GW" className={iCls}/>
+                  </Field>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Marker Color">
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={design.color??"#6B7EFF"} onChange={e=>setD("color",e.target.value)}
+                        className="h-9 w-10 rounded-lg border border-border cursor-pointer bg-white p-0.5"/>
+                      <div className="flex flex-wrap gap-1">
+                        {DESIGN_COLORS.map(c=>(
+                          <button key={c} type="button" onClick={()=>setD("color",c)}
+                            className={cn("w-5 h-5 rounded-full border-2 transition-transform hover:scale-110", design.color===c?"border-slate-800":"border-white shadow")}
+                            style={{background:c}} title={c}/>
+                        ))}
+                      </div>
+                    </div>
+                  </Field>
+                  <Field label="Default Cable">
+                    <select value={design.defaultCable??""} onChange={e=>setD("defaultCable",e.target.value)} className={iCls}>
+                      {DESIGN_CABLES.map(c=><option key={c} value={c}>{c===""?"— none —":c}</option>)}
+                    </select>
+                  </Field>
+                </div>
+
+                {/* Board toggle */}
+                <div className="flex items-center gap-3">
+                  <button type="button" onClick={()=>setD("isBoard",!design.isBoard)}
+                    className={cn("relative inline-flex h-6 w-11 items-center rounded-full transition-colors",design.isBoard?"bg-blue-600":"bg-slate-200")}>
+                    <span className={cn("inline-block h-4 w-4 rounded-full bg-white shadow transition-transform",design.isBoard?"translate-x-6":"translate-x-1")}/>
+                  </button>
+                  <span className="text-sm font-medium">This is a board / panel</span>
+                  <span className="text-[10px] text-muted-foreground">(shows a terminal strip in detail drawings)</span>
+                </div>
+
+                {/* Two images: general + wiring */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* General image */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-foreground">Product Image <span className="text-[10px] text-muted-foreground">(overview)</span></label>
+                    <div className="border border-border rounded-lg p-2 bg-slate-50 flex flex-col items-center gap-2">
+                      {form.imageUrl
+                        ? <img src={form.imageUrl} alt="general" className="w-20 h-20 object-contain rounded bg-white border border-border"/>
+                        : <div className="w-20 h-20 rounded bg-white border border-dashed border-border flex items-center justify-center text-[10px] text-muted-foreground">none</div>}
+                      <div className="flex gap-1.5 w-full">
+                        <input ref={genRef} type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f)uploadImage(f,"general");}}/>
+                        <button type="button" onClick={()=>genRef.current?.click()} disabled={imgBusy!==""}
+                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-blue-600 text-white text-[11px] font-semibold hover:bg-blue-700 disabled:opacity-50">
+                          {imgBusy==="general"?<Loader2 size={11} className="animate-spin"/>:<Upload size={11}/>}Upload
+                        </button>
+                        <button type="button" onClick={()=>findImage("general")} disabled={imgBusy!==""||!form.name}
+                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-violet-600 text-white text-[11px] font-semibold hover:bg-violet-700 disabled:opacity-50">
+                          {imgBusy==="find-general"?<Loader2 size={11} className="animate-spin"/>:<span>🔍</span>}Find
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Wiring image */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-foreground">Wiring / Terminal Image <span className="text-[10px] text-muted-foreground">(detail)</span></label>
+                    <div className="border border-border rounded-lg p-2 bg-slate-50 flex flex-col items-center gap-2">
+                      {design.wiringImageUrl
+                        ? <img src={design.wiringImageUrl} alt="wiring" className="w-20 h-20 object-contain rounded bg-white border border-border"/>
+                        : <div className="w-20 h-20 rounded bg-white border border-dashed border-border flex items-center justify-center text-[10px] text-muted-foreground">none</div>}
+                      <div className="flex gap-1.5 w-full">
+                        <input ref={wireRef} type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f)uploadImage(f,"wiring");}}/>
+                        <button type="button" onClick={()=>wireRef.current?.click()} disabled={imgBusy!==""}
+                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-blue-600 text-white text-[11px] font-semibold hover:bg-blue-700 disabled:opacity-50">
+                          {imgBusy==="wiring"?<Loader2 size={11} className="animate-spin"/>:<Upload size={11}/>}Upload
+                        </button>
+                        <button type="button" onClick={()=>findImage("wiring")} disabled={imgBusy!==""||!form.name}
+                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-violet-600 text-white text-[11px] font-semibold hover:bg-violet-700 disabled:opacity-50">
+                          {imgBusy==="find-wiring"?<Loader2 size={11} className="animate-spin"/>:<span>🔍</span>}Find
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {imgStatus&&(
+                  <p className={cn("text-xs px-2 py-1 rounded-lg",
+                    imgStatus.startsWith("✅")?"bg-emerald-50 text-emerald-700 border border-emerald-200":
+                    imgStatus.startsWith("❌")?"bg-red-50 text-red-700 border border-red-200":
+                    "bg-amber-50 text-amber-700 border border-amber-200"
+                  )}>{imgStatus}</p>
+                )}
+
+                {/* Terminal map (boards only) */}
+                {design.isBoard && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-medium text-foreground">Terminal Map <span className="text-[10px] text-muted-foreground">(screws wires land on)</span></label>
+                      <button type="button" onClick={addTerminal} className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-semibold text-slate-700">
+                        <Plus size={11}/>Add terminal
+                      </button>
+                    </div>
+                    {terminals.length===0 && <p className="text-[11px] text-muted-foreground italic">No terminals yet. Add the labeled screws on this board (e.g. LOCK+, GND, RS485−). Position is where the dot sits relative to the device center.</p>}
+                    {terminals.length>0 && (
+                      <div className="space-y-1.5">
+                        <div className="grid grid-cols-[1fr_64px_64px_28px] gap-2 px-1 text-[10px] font-medium text-muted-foreground">
+                          <span>Name</span><span>X offset</span><span>Y offset</span><span/>
+                        </div>
+                        {terminals.map((t,i)=>(
+                          <div key={i} className="grid grid-cols-[1fr_64px_64px_28px] gap-2 items-center">
+                            <input value={t.name} onChange={e=>setTerminal(i,{name:e.target.value})} placeholder="LOCK+" className="px-2 py-1 text-xs border border-border rounded-lg bg-white focus:outline-none focus:border-blue-500"/>
+                            <input type="number" value={t.dx} onChange={e=>setTerminal(i,{dx:Number(e.target.value)})} className="px-2 py-1 text-xs border border-border rounded-lg bg-white focus:outline-none focus:border-blue-500"/>
+                            <input type="number" value={t.dy} onChange={e=>setTerminal(i,{dy:Number(e.target.value)})} className="px-2 py-1 text-xs border border-border rounded-lg bg-white focus:outline-none focus:border-blue-500"/>
+                            <button type="button" onClick={()=>removeTerminal(i)} className="p-1 rounded-lg hover:bg-red-50 text-red-500"><Trash2 size={13}/></button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Toggles */}
           <div className="flex items-center gap-6 pt-1">
             <div className="flex items-center gap-3">
@@ -571,7 +789,7 @@ function ImportModal({ onImport, onClose, saving }: { onImport:(rows:Omit<Produc
         sellPrice:Number(c[9]?.replace(/[^0-9.]/g,""))||0,
         adiSku:c[10]??"", imageUrl:c[11]??"",
         active:c[12]?.toLowerCase()!=="n",
-        tags:[], fieldService:false, manualUrl:"" });
+        tags:[], fieldService:false, manualUrl:"", designMeta:{} });
     }
     if (!rows.length) { setError("No valid rows found."); return; }
     setPreview(rows);
@@ -665,7 +883,7 @@ export default function ProductsPage() {
 
       if (!data || data.length === 0) {
         // First run — seed the table
-        const seedRows = SEED.map(p => toDb({ tags:[], fieldService:false, manualUrl:"", ...p }));
+        const seedRows = SEED.map(p => toDb({ tags:[], fieldService:false, manualUrl:"", designMeta:{}, ...p }));
         const { data: inserted, error: seedErr } = await supabase
           .from("products")
           .upsert(seedRows, { onConflict: "sku" })

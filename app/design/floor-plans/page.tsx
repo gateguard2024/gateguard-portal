@@ -338,6 +338,9 @@ function normStage(status: string): Stage {
 interface ElemMeta {
   manufacturer?: string; model?: string; price?: number; qty?: number; status?: string; color?: string;
   cost?: number; msrp?: number; imageUrl?: string; productId?: string;
+  // Pulled from products.design_meta when a catalog product is bound (single source of truth).
+  role?: string; isBoard?: boolean; terminals?: { name: string; dx: number; dy: number }[];
+  wiringImageUrl?: string; defaultCable?: string;
   textEl?: { content: string; fontSize: number; fill: string };
   fov?: { angle: number; range: number; direction: number };
   zone?: { name: string };
@@ -566,6 +569,7 @@ function EditorInner() {
       if (d.kind === "device") {
         const c = o.getCenterPoint();
         rows.push({
+          product_id: d.meta?.productId ? String(d.meta.productId) : null,
           device_type: d.deviceTypeKey,
           label: d.label,
           icon_key: d.deviceTypeKey,
@@ -888,7 +892,7 @@ function EditorInner() {
       group.data = {
         kind: "device", id: genId(), deviceTypeKey: key, label,
         condition: condition ?? "good", action: action ?? "new_install",
-        isCam: dt.isCam ?? false, isBoard: dt.isBoard ?? false,
+        isCam: dt.isCam ?? false, isBoard: meta.isBoard ?? dt.isBoard ?? false,
         meta: {
           qty: 1, price: 0, status: "Proposed", ...meta,
           fov: dt.isCam ? (meta.fov ?? defaultFov(key)) : undefined,
@@ -898,9 +902,12 @@ function EditorInner() {
 
       // Board devices get labeled terminal dots (separate, non-selectable objects
       // so wire endpoints can snap to them). They track the device on move.
-      if (dt.isBoard) {
-        // Use the saved terminal layout for this board type if one exists, else default.
-        const layout = boardTermsRef.current[key] ?? terminalLayout(key);
+      if (group.data.isBoard) {
+        // Terminal layout precedence: this product's own map (from products.design_meta)
+        // → saved layout for the board type → default computed layout.
+        const layout = (meta.terminals && meta.terminals.length > 0)
+          ? meta.terminals
+          : (boardTermsRef.current[key] ?? terminalLayout(key));
         group.data.terminals = layout;
         for (const t of layout) {
           const dot = new fabric.Circle({
@@ -1953,14 +1960,29 @@ function EditorInner() {
     if (typeof prod.msrp === "number" && prod.msrp > 0) patch.msrp = prod.msrp;
     const img = prod.image_url && String(prod.image_url).trim() ? String(prod.image_url).trim() : "";
     if (img) patch.imageUrl = img;
+
+    // Pull the product's design metadata so the catalog record drives the drawing symbol.
+    const dm = (prod.design_meta && typeof prod.design_meta === "object") ? prod.design_meta : null;
+    if (dm) {
+      if (typeof dm.color === "string" && dm.color) patch.color = dm.color;
+      if (typeof dm.role === "string" && dm.role) patch.role = dm.role;
+      if (typeof dm.isBoard === "boolean") patch.isBoard = dm.isBoard;
+      if (Array.isArray(dm.terminals) && dm.terminals.length > 0) patch.terminals = dm.terminals;
+      if (typeof dm.wiringImageUrl === "string" && dm.wiringImageUrl) patch.wiringImageUrl = dm.wiringImageUrl;
+      if (typeof dm.defaultCable === "string" && dm.defaultCable) patch.defaultCable = dm.defaultCable;
+    }
     selected.data.meta = { ...(selected.data.meta ?? {}), ...patch };
+    // Board-ness can flip based on the product → keep the group flag in sync before rebuild.
+    if (dm && typeof dm.isBoard === "boolean") selected.data.isBoard = dm.isBoard;
     if (img) {
       await loadSymbolImage(img, img);   // cache the product photo by its URL
       rebuildSelectedDevice();           // redraw so the image shows on the device
     } else {
-      setInspectorTick((t) => t + 1);
-      bumpBom();
-      void autoFindImage();              // no catalog image → auto-find one
+      // No catalog image: still redraw so design_meta (color / board / terminals)
+      // takes effect immediately, then auto-find a product photo in the background.
+      if (dm) rebuildSelectedDevice();
+      else { setInspectorTick((t) => t + 1); bumpBom(); }
+      void autoFindImage();
     }
   };
 
