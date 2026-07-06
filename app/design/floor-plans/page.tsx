@@ -445,6 +445,12 @@ function EditorInner() {
   const imgCacheRef = useRef<Record<string, HTMLImageElement>>({});
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
 
+  // Per-board terminal position overrides (global) + which board is being edited.
+  const boardTermsRef = useRef<Record<string, { name: string; dx: number; dy: number }[]>>({});
+  const [editTermDevId, setEditTermDevId] = useState<string | null>(null);
+  const editTermDevIdRef = useRef<string | null>(null);
+  editTermDevIdRef.current = editTermDevId;
+
   const [expandedCat, setExpandedCat] = useState<Record<string, boolean>>({ Cameras: true });
   const [showLibrary, setShowLibrary] = useState(true);
   const [showBom, setShowBom] = useState(false);
@@ -870,7 +876,8 @@ function EditorInner() {
       // Board devices get labeled terminal dots (separate, non-selectable objects
       // so wire endpoints can snap to them). They track the device on move.
       if (dt.isBoard) {
-        const layout = terminalLayout(key);
+        // Use the saved terminal layout for this board type if one exists, else default.
+        const layout = boardTermsRef.current[key] ?? terminalLayout(key);
         group.data.terminals = layout;
         for (const t of layout) {
           const dot = new fabric.Circle({
@@ -882,7 +889,7 @@ function EditorInner() {
             left: x + t.dx + 5, top: y + t.dy, fontSize: 6, fontFamily: "Inter, sans-serif", fill: "#334155",
             originX: "left", originY: "center", selectable: false, evented: false,
           });
-          lbl.data = { kind: "terminal", deviceId: group.data.id, isLabel: true, dx: t.dx + 5, dy: t.dy };
+          lbl.data = { kind: "terminal", deviceId: group.data.id, name: t.name, isLabel: true, dx: t.dx + 5, dy: t.dy };
           fc.add(dot); fc.add(lbl);
         }
       }
@@ -964,6 +971,21 @@ function EditorInner() {
     return () => { active = false; };
   }, [loadSymbolImage, refreshDevicesOfType]);
 
+  // Load saved board terminal layouts, then refresh any placed boards to use them.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/design/terminals", { cache: "no-store" });
+        const json = await res.json();
+        if (!active || !json?.layouts) return;
+        boardTermsRef.current = json.layouts;
+        DEVICE_TYPES.filter((d) => d.isBoard).forEach((d) => refreshDevicesOfType(d.key));
+      } catch { /* ignore */ }
+    })();
+    return () => { active = false; };
+  }, [refreshDevicesOfType]);
+
   // Grid on a blank sheet → make the Fabric bg transparent so the CSS dot grid
   // (on the wrapper) shows through. With a background image, keep it opaque.
   useEffect(() => {
@@ -971,6 +993,13 @@ function EditorInner() {
     if (!fc || !canvasReady) return;
     if (!fileUrl) { fc.backgroundColor = showGrid ? "transparent" : "#FFFFFF"; fc.renderAll(); }
   }, [showGrid, fileUrl, canvasReady]);
+
+  // Leaving the wire tool abandons any half-drawn line so it can't get stuck
+  // and hijack later clicks.
+  useEffect(() => {
+    if (tool !== "wire") cancelWire();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tool]);
 
   // ── Background ─────────────────────────────────────────────────────────────
   const applyBackground = useCallback(async (url: string | null) => {
@@ -1109,7 +1138,7 @@ function EditorInner() {
         const sel = e.selected?.[0] ?? null;
         // Selecting a transient endpoint handle must NOT change the inspector
         // target or tear down the handles — just let the drag proceed.
-        if (sel?.data?.kind === "wirehandle") return;
+        if (sel?.data?.kind === "wirehandle" || sel?.data?.kind === "terminal") return;
         setSelected(sel);
         setInspectorTick((t) => t + 1);
         if (sel && isSingleLineWire(sel)) showWireHandles(sel);
@@ -1132,6 +1161,20 @@ function EditorInner() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       fc.on("object:moving", (e: any) => {
         const o = e.target;
+        // Editing terminals → drag one dot; recompute its offset from the board center.
+        if (o?.data?.kind === "terminal" && !o.data.isLabel && editTermDevIdRef.current && o.data.deviceId === editTermDevIdRef.current) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const dev = (fc.getObjects() as any[]).find((x) => x.data?.kind === "device" && x.data.id === o.data.deviceId);
+          if (dev) {
+            const c = dev.getCenterPoint();
+            o.data.dx = o.left - c.x; o.data.dy = o.top - c.y;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const lbl = (fc.getObjects() as any[]).find((x) => x.data?.kind === "terminal" && x.data.isLabel && x.data.deviceId === o.data.deviceId && x.data.name === o.data.name);
+            if (lbl) { lbl.set({ left: o.left + 5, top: o.top }); lbl.data.dx = o.data.dx + 5; lbl.data.dy = o.data.dy; lbl.setCoords(); }
+          }
+          fc.requestRenderAll();
+          return;
+        }
         // Board device moved → drag its terminal dots/labels along with it.
         if (o?.data?.kind === "device" && o.data.isBoard) {
           const c = o.getCenterPoint();
@@ -1347,10 +1390,14 @@ function EditorInner() {
 
     if (mode === "wire") {
       if (!wireKindRef.current) { setShowWirePicker(true); return; } // pick a wire type first
-      // Click an existing line (when not mid-draw) → select it to edit, don't start a new one.
+      // Never hijack a vertex-handle drag — that's how you edit an existing line.
+      if (opt.target?.data?.kind === "wirehandle") return;
+      // Click an existing line (when not mid-draw) → select it + show its vertex
+      // handles so you can drag the corners. Do NOT start a new line.
       if (wirePtsRef.current.length === 0 && opt.target?.data?.kind === "wire") {
         fc.setActiveObject(opt.target);
         setSelected(opt.target);
+        showWireHandles(opt.target);
         fc.requestRenderAll();
         return;
       }
@@ -1891,6 +1938,51 @@ function EditorInner() {
     }
   };
 
+  // ── Terminal wiring: drag each terminal dot onto the real board screws ───────
+  const enterTerminalEdit = () => {
+    if (!selected?.data || selected.data.kind !== "device" || !selected.data.isBoard) return;
+    const fc = fcRef.current;
+    if (!fc) return;
+    const id = selected.data.id;
+    setEditTermDevId(id);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const t of fc.getObjects() as any[]) {
+      if (t.data?.kind === "terminal" && t.data.deviceId === id && !t.data.isLabel) {
+        t.set({ selectable: true, evented: true, radius: 4.5, fill: BRAND, stroke: "#fff", strokeWidth: 1 });
+        t.setCoords();
+        fc.bringObjectToFront(t);
+      }
+    }
+    fc.discardActiveObject();
+    setSaveMsg("Drag the blue dots onto the board's terminals, then Save.");
+    fc.requestRenderAll();
+  };
+
+  const saveTerminalEdit = async () => {
+    const fc = fcRef.current;
+    if (!fc || !editTermDevId) { setEditTermDevId(null); return; }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dev = (fc.getObjects() as any[]).find((o) => o.data?.kind === "device" && o.data.id === editTermDevId);
+    if (!dev) { setEditTermDevId(null); return; }
+    const key = dev.data.deviceTypeKey;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const terminals = (fc.getObjects() as any[])
+      .filter((t) => t.data?.kind === "terminal" && t.data.deviceId === editTermDevId && !t.data.isLabel)
+      .map((t) => ({ name: t.data.name, dx: Math.round(t.data.dx), dy: Math.round(t.data.dy) }));
+    setSaveMsg("Saving terminal layout…");
+    try {
+      const res = await fetch("/api/design/terminals", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, terminals }),
+      });
+      if (res.ok) { boardTermsRef.current[key] = terminals; setSaveMsg("Terminal layout saved ✓"); }
+      else { const j = await res.json(); setSaveMsg(j.error || "Save failed"); }
+    } catch { setSaveMsg("Save failed"); }
+    setEditTermDevId(null);
+    refreshDevicesOfType(key);   // rebuild every instance with the saved layout (locked)
+    setTimeout(() => setSaveMsg(null), 3000);
+  };
+
   // ── BOM ────────────────────────────────────────────────────────────────────
   const bom = React.useMemo(() => {
     void bomTick;
@@ -2337,6 +2429,9 @@ function EditorInner() {
                 onImage={patchSelectedImage}
                 onText={patchSelectedText}
                 onLayer={changeLayer}
+                onEnterTerminalEdit={enterTerminalEdit}
+                onSaveTerminalEdit={saveTerminalEdit}
+                editingTerminals={!!editTermDevId && selected?.data?.id === editTermDevId}
               />
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center text-center px-6" style={{ color: MUTED }}>
@@ -2548,7 +2643,7 @@ function ProductPicker({ category, manufacturer, model, onPick }: {
 
 function Inspector({
   selected, onLabel, onMeta, onField, onWireKind, onWireAttrs, onWireRebuild, onRebuildCone, onColor, onProduct, onFindImage,
-  onShape, onImage, onText, onLayer,
+  onShape, onImage, onText, onLayer, onEnterTerminalEdit, onSaveTerminalEdit, editingTerminals,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   selected: any;
@@ -2569,6 +2664,9 @@ function Inspector({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onText: (patch: Record<string, any>) => void;
   onLayer: (dir: "front" | "back") => void;
+  onEnterTerminalEdit: () => void;
+  onSaveTerminalEdit: () => void;
+  editingTerminals: boolean;
 }) {
   const d = selected.data;
   const meta: ElemMeta = d.meta ?? {};
@@ -2723,6 +2821,20 @@ function Inspector({
             ))}
           </div>
           <p className="text-[10px] mt-2" style={{ color: MUTED }}>Land a wire’s conductors on these when you expand it (select the wire → Show conductors).</p>
+          <div className="mt-2">
+            {editingTerminals ? (
+              <button onClick={onSaveTerminalEdit}
+                className="w-full text-[11px] font-semibold rounded-lg py-2" style={{ backgroundColor: "#34D399", color: "#0B1728" }}>
+                Save terminal layout
+              </button>
+            ) : (
+              <button onClick={onEnterTerminalEdit}
+                className="w-full text-[11px] rounded-lg py-2" style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: CYAN }}>
+                ✎ Position terminals on the board
+              </button>
+            )}
+            <p className="text-[9px] mt-1" style={{ color: MUTED }}>Drag each blue dot onto the real screw on the board image, then Save. Applies to every {DEVICE_BY_KEY[d.deviceTypeKey]?.label ?? "board"}.</p>
+          </div>
         </div>
       )}
 
