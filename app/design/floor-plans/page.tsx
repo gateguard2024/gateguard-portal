@@ -90,7 +90,11 @@ const DEVICE_TYPES: DeviceTypeDef[] = [
 // Named terminals per board device. A conductor of a multi-conductor cable can
 // be landed on one of these when a wire is expanded into conductors.
 const BOARD_TERMINALS: Record<string, string[]> = {
-  single_door_ctrl: ["AC IN 1", "AC IN 2", "BATT+", "BATT−", "LOCK+", "LOCK−", "REX", "GND", "RDR PWR", "RDR GND", "RDR D0", "RDR D1", "AUX N.O.", "AUX COM", "AUX N.C."],
+  // Left strip = Power/Data, right strip = Relay/Inputs (real board terminals).
+  single_door_ctrl: [
+    "SW GND", "12V OUT·pwr", "GND·pwr", "12V IN", "RS485−", "RS485+", "GND·data", "12V OUT·data",
+    "N/C", "COM", "N/O", "GND·relay", "DSM", "REX", "AUX", "GND·in",
+  ],
   slide_board: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"],
   poe_inserter: ["POE IN", "DATA / LAN", "POE OUT"],
   pwr_24v: ["24V IN", "GND IN", "24V OUT", "GND OUT"],
@@ -105,9 +109,21 @@ const ALL_TERMINALS = Array.from(new Set(Object.values(BOARD_TERMINALS).flat().c
 function terminalLayout(key: string): { name: string; dx: number; dy: number }[] {
   const names = BOARD_TERMINALS[key];
   if (!names || names.length === 0) return [];
-  const gap = 9, dx = 26;
+  const gap = 9;
+  // Boards with many terminals default to two strips (left/right) like a real board.
+  if (names.length > 8) {
+    const half = Math.ceil(names.length / 2);
+    const rightCount = names.length - half;
+    const leftStartY = -((half - 1) * gap) / 2;
+    const rightStartY = -((rightCount - 1) * gap) / 2;
+    return names.map((name, i) =>
+      i < half
+        ? { name, dx: -30, dy: leftStartY + i * gap }
+        : { name, dx: 30, dy: rightStartY + (i - half) * gap }
+    );
+  }
   const startY = -((names.length - 1) * gap) / 2;
-  return names.map((name, i) => ({ name, dx, dy: startY + i * gap }));
+  return names.map((name, i) => ({ name, dx: 26, dy: startY + i * gap }));
 }
 
 // ── Conductors (Detail mode) ──────────────────────────────────────────────────
@@ -639,8 +655,14 @@ function EditorInner() {
           }));
           if (dot) {
             dots.push(new fabric.Circle({
-              left: dot[0], top: dot[1], radius: 2.2, fill: c.color || WIRE_COLORS[kind],
-              originX: "center", originY: "center",
+              left: dot[0], top: dot[1], radius: 2.4, fill: c.color || WIRE_COLORS[kind],
+              stroke: "#0f172a", strokeWidth: 0.4, originX: "center", originY: "center",
+            }));
+            // Break-out label — which conductor lands here.
+            dots.push(new fabric.Text(c.label || "", {
+              left: dot[0] + 4, top: dot[1] - 4, fontSize: 5.5, fontFamily: "Inter, sans-serif",
+              fill: c.color === C_WHITE ? "#334155" : (c.color || WIRE_COLORS[kind]),
+              originX: "left", originY: "center",
             }));
           }
         });
@@ -885,11 +907,14 @@ function EditorInner() {
             originX: "center", originY: "center", selectable: false, evented: false,
           });
           dot.data = { kind: "terminal", deviceId: group.data.id, name: t.name, dx: t.dx, dy: t.dy };
+          // Label on the outer side of the strip (left-strip labels go left).
+          const leftSide = t.dx < 0;
+          const lblDx = leftSide ? t.dx - 5 : t.dx + 5;
           const lbl = new fabric.Text(t.name, {
-            left: x + t.dx + 5, top: y + t.dy, fontSize: 6, fontFamily: "Inter, sans-serif", fill: "#334155",
-            originX: "left", originY: "center", selectable: false, evented: false,
+            left: x + lblDx, top: y + t.dy, fontSize: 6, fontFamily: "Inter, sans-serif", fill: "#334155",
+            originX: leftSide ? "right" : "left", originY: "center", selectable: false, evented: false,
           });
-          lbl.data = { kind: "terminal", deviceId: group.data.id, name: t.name, isLabel: true, dx: t.dx + 5, dy: t.dy };
+          lbl.data = { kind: "terminal", deviceId: group.data.id, name: t.name, isLabel: true, dx: lblDx, dy: t.dy };
           fc.add(dot); fc.add(lbl);
         }
       }
@@ -1170,7 +1195,7 @@ function EditorInner() {
             o.data.dx = o.left - c.x; o.data.dy = o.top - c.y;
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const lbl = (fc.getObjects() as any[]).find((x) => x.data?.kind === "terminal" && x.data.isLabel && x.data.deviceId === o.data.deviceId && x.data.name === o.data.name);
-            if (lbl) { lbl.set({ left: o.left + 5, top: o.top }); lbl.data.dx = o.data.dx + 5; lbl.data.dy = o.data.dy; lbl.setCoords(); }
+            if (lbl) { const side = o.data.dx < 0 ? -5 : 5; lbl.set({ left: o.left + side, top: o.top }); lbl.data.dx = o.data.dx + side; lbl.data.dy = o.data.dy; lbl.setCoords(); }
           }
           fc.requestRenderAll();
           return;
@@ -2892,8 +2917,20 @@ function Inspector({
           <div className="mt-2 pt-3 border-t" style={{ borderColor: BORDER }}>
             <label className="flex items-center gap-2 text-sm cursor-pointer mb-2" style={{ color: TEXT }}>
               <input type="checkbox" checked={!!wa.showConductors}
-                onChange={(e) => { onWireAttrs({ showConductors: e.target.checked }); onWireRebuild(); }} />
-              Show conductors (Detail)
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  if (on && conductors.length === 0) {
+                    // Populate immediately so the break-out is visible right away.
+                    const preset = wa.cable && CABLE_CONDUCTORS[wa.cable]
+                      ? CABLE_CONDUCTORS[wa.cable].map((c) => ({ ...c }))
+                      : [{ label: "+", color: C_RED }, { label: "−", color: C_BLACK }];
+                    onWireAttrs({ showConductors: true, conductors: preset });
+                  } else {
+                    onWireAttrs({ showConductors: on });
+                  }
+                  onWireRebuild();
+                }} />
+              Break out conductors (show each wire)
             </label>
             {wa.showConductors && (
               <>
