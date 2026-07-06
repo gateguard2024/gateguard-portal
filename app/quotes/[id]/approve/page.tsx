@@ -628,6 +628,9 @@ function QuoteApprovePage({ params }: { params: { id: string } }) {
                         <div style={{ width: 22, height: 22, borderRadius: 7, border: `2px solid ${included ? BLUE : BORDER}`, background: included ? BLUE : WHITE, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s' }}>
                           {included && <Check size={12} color={WHITE} strokeWidth={3} />}
                         </div>
+                        {item.image_url && (
+                          <img src={item.image_url} alt="" style={{ width: 34, height: 34, objectFit: 'contain', borderRadius: 6, background: WHITE, flexShrink: 0 }} />
+                        )}
                         <div style={{ flex: 1 }}>
                           <p style={{ fontSize: 14, fontWeight: 600, color: TEXT, margin: '0 0 1px' }}>{item.description}</p>
                           {item.notes && <p style={{ fontSize: 11, color: MUTED, margin: 0 }}>{item.notes}</p>}

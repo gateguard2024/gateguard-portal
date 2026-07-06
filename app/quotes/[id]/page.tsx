@@ -172,7 +172,7 @@ function ItemForm({ quoteId, item, onSaved, onClose }: ItemFormProps) {
   const [saving, setSaving]               = useState(false);
   const [err,    setErr]                  = useState('');
   const [productSearch, setProductSearch] = useState('');
-  const [products, setProducts]           = useState<Array<{ id: string; name: string; sku: string; list_price: number }>>([]);
+  const [products, setProducts]           = useState<Array<{ id: string; name: string; sku: string; list_price?: number; sell_price?: number; msrp?: number; brand?: string; image_url?: string | null }>>([]);
   const [showProducts, setShowProducts]   = useState(false);
   const [saveToProducts, setSaveToProducts] = useState(false);
 
@@ -191,6 +191,7 @@ function ItemForm({ quoteId, item, onSaved, onClose }: ItemFormProps) {
     notes:                item?.notes                ?? '',
     is_recurring:         item?.is_recurring         ?? false,
     product_id:           item?.product_id           ?? null as string | null,
+    image_url:            item?.image_url            ?? null as string | null,
     line_discount_percent: item?.line_discount_percent ?? 0,
   });
 
@@ -289,15 +290,19 @@ function ItemForm({ quoteId, item, onSaved, onClose }: ItemFormProps) {
                       onClick={() => {
                         set('description', p.name);
                         set('sku', p.sku ?? '');
-                        set('unit_price', p.list_price ?? 0);
+                        set('unit_price', p.sell_price ?? p.list_price ?? p.msrp ?? 0);
                         set('product_id', p.id);
+                        set('image_url', p.image_url ?? null);
                         setProductSearch(p.name);
                         setShowProducts(false);
                       }}
-                      className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors flex items-center justify-between"
+                      className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors flex items-center gap-2.5"
                     >
-                      <span className="text-xs font-medium text-gray-800">{p.name}</span>
-                      <span className="text-xs text-gray-400 font-mono">${fmt(p.list_price ?? 0)}</span>
+                      {p.image_url
+                        ? <img src={p.image_url} alt="" className="w-7 h-7 object-contain rounded bg-white border border-gray-100 shrink-0" />
+                        : <span className="w-7 h-7 rounded bg-gray-100 border border-gray-100 shrink-0 flex items-center justify-center text-[9px] font-semibold text-gray-400">{(p.brand ?? p.name ?? '?').slice(0,2).toUpperCase()}</span>}
+                      <span className="flex-1 min-w-0 text-xs font-medium text-gray-800 truncate">{p.name}</span>
+                      <span className="text-xs text-gray-400 font-mono shrink-0">${fmt(p.sell_price ?? p.list_price ?? p.msrp ?? 0)}</span>
                     </button>
                   ))}
                 </div>
@@ -532,6 +537,9 @@ function ItemRow({ item, onEdit, onDelete, onToggle, deleting }: ItemRowProps) {
             >
               {item.is_included && <Check size={8} className="text-white" />}
             </button>
+          )}
+          {item.image_url && (
+            <img src={item.image_url} alt="" className="shrink-0 w-8 h-8 object-contain rounded bg-white border border-gray-100" />
           )}
           <div className="min-w-0">
             <p className={cn('text-sm text-gray-800', !item.is_optional && 'font-medium')}>{item.description}</p>

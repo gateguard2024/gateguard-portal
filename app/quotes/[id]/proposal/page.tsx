@@ -27,6 +27,7 @@ interface LineItem {
   unit?: string;
   sku?: string;
   model_number?: string;
+  imageUrl?: string | null;
 }
 
 interface Attachment {
@@ -620,7 +621,14 @@ function ProposalPage() {
                 <tbody className="divide-y divide-gray-100">
                   {totals.setupItems.map(item => (
                     <tr key={item.id}>
-                      <td className="px-6 py-3 text-sm text-gray-800">{item.description}</td>
+                      <td className="px-6 py-3 text-sm text-gray-800">
+                        <div className="flex items-center gap-3">
+                          {item.imageUrl && (
+                            <img src={item.imageUrl} alt="" className="shrink-0 w-10 h-10 object-contain rounded bg-white border border-gray-100" />
+                          )}
+                          <span>{item.description}</span>
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-sm text-right text-gray-500">{item.qty}</td>
                       <td className="px-4 py-3 text-sm text-right text-gray-500">
                         {item.unitPrice === 0 ? <span className="text-emerald-600 font-medium">Included</span> : formatCurrency(item.unitPrice)}

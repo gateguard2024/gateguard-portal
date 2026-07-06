@@ -48,7 +48,7 @@ export async function GET(
     id: string; description: string; qty: number; unit_price: number;
     is_recurring: boolean; section_name?: string; is_optional?: boolean;
     is_included?: boolean; unit?: string; sku?: string; model_number?: string;
-    package_tier?: string; item_type?: string; notes?: string;
+    package_tier?: string; item_type?: string; notes?: string; image_url?: string | null;
   }) => ({
     id:           i.id,
     description:  i.description,
@@ -64,6 +64,7 @@ export async function GET(
     model_number: i.model_number,
     package_tier: i.package_tier,
     item_type:    i.item_type,
+    imageUrl:     i.image_url ?? null,
   }))
 
   // Fetch org info for "Prepared by"
