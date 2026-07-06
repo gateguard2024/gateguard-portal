@@ -17,7 +17,7 @@
  * Wires = device_type '__wire__', zones = device_type '__zone__'.
  */
 import React, { useEffect, useRef, useState, useCallback, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, X, Download, Trash2, Loader2, MapPin } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const {
@@ -407,6 +407,7 @@ const emptyTitleBlock = (): TitleBlock => ({
 
 function EditorInner() {
   const params = useSearchParams();
+  const router = useRouter();
   const planId = params.get("plan");
 
   const canvasElRef = useRef<HTMLCanvasElement | null>(null);
@@ -2121,6 +2122,14 @@ function EditorInner() {
     <div className="h-full flex flex-col" style={{ backgroundColor: BG, color: TEXT }}>
       {/* Top bar */}
       <div className="flex items-center gap-3 px-4 py-3 border-b shrink-0" style={{ borderColor: BORDER }}>
+        <button
+          onClick={() => router.push("/")}
+          title="Back to dashboard"
+          className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs transition-colors"
+          style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: MUTED }}
+        >
+          <ChevronLeft size={15} /> Dashboard
+        </button>
         <Layers size={18} style={{ color: CYAN }} />
         <input
           value={planName}
