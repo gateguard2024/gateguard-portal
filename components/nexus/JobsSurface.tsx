@@ -355,7 +355,7 @@ export function JobsSurface({ onOpenDispatch }: { onOpenDispatch?: () => void } 
     <section className="mt-9 w-full max-w-5xl">
       {/* Operations Hub — opens inline (no page jump), seamless inside the Jobs tab. */}
       {showOps && (
-        <div className="fixed inset-0 z-[95] overflow-y-auto px-4 py-5 sm:py-6" style={{ background: 'radial-gradient(ellipse at 50% -8%, rgba(0,124,255,0.12), transparent 55%), linear-gradient(180deg, #0a1430 0%, #060b1a 60%, #04060f 100%)', backdropFilter: 'blur(8px)' }}>
+        <div className="fixed inset-0 z-[95] overflow-y-auto px-4 py-5 sm:py-6" style={{ background: 'radial-gradient(ellipse at 50% -8%, rgba(0,124,255,0.12), transparent 55%), linear-gradient(180deg, #0a1430 0%, #060b1a 60%, #04060f 100%)', backdropFilter: 'blur(8px)', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
           <div className="mx-auto w-full max-w-6xl">
             <NexusGlassBackButton label="Back to Jobs" onClick={() => setShowOps(false)} />
             <div className="mt-4"><OperationsHub embedded initialTab={opsTab} /></div>

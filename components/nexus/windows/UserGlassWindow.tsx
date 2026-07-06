@@ -141,7 +141,7 @@ export function UserGlassWindow({
 
         {msg && <div className="mb-3 rounded-2xl p-3 text-xs" style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', color: '#fca5a5' }}>{msg}</div>}
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           {/* Role picker */}
           <Section title="Job / Role">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">

@@ -92,7 +92,7 @@ function printWorkOrder(wo: any, equip: any[]) {
 // each task is a clear, focused step (easy enough for a 5th grader).
 function Modal({ title, onClose, children, maxWidth = 460 }: { title: string; onClose: () => void; children: React.ReactNode; maxWidth?: number }) {
   return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-    <div onClick={e => e.stopPropagation()} style={{ width: `min(${maxWidth}px, 100%)`, maxHeight: "88vh", overflowY: "auto", background: "linear-gradient(180deg,#0c1530,#070c1c)", border: "1px solid rgba(0,200,255,0.24)", borderRadius: 18, padding: 18, color: "white", boxShadow: "0 30px 80px rgba(0,0,0,0.5)" }}>
+    <div onClick={e => e.stopPropagation()} style={{ width: `min(${maxWidth}px, 100%)`, maxHeight: "88vh", overflowY: "auto", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", background: "linear-gradient(180deg,#0c1530,#070c1c)", border: "1px solid rgba(0,200,255,0.24)", borderRadius: 18, padding: 18, color: "white", boxShadow: "0 30px 80px rgba(0,0,0,0.5)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <h2 style={{ fontSize: 17, margin: 0 }}>{title}</h2>
         <button onClick={onClose} aria-label="Close" style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.16)", color: "white", borderRadius: 9, width: 30, height: 30, cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>

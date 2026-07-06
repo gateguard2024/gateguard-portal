@@ -18,11 +18,13 @@ type StepId =
   | 'call-review'
   | 'workbench'
 
+type PanelTarget = 'new-opp' | 'existing-opp' | 'rough-calc'
 type FlowAction =
   | { kind: 'next'; stepId: StepId }
   | { kind: 'route'; href: string }
   | { kind: 'assistant'; prompt: string; scope: string }
   | { kind: 'workbench'; focus?: WorkbenchFocus }
+  | { kind: 'panel'; panel: PanelTarget }
 
 type FlowCard = {
   title: string
@@ -134,9 +136,9 @@ const STEPS: Record<Exclude<StepId, 'call-source' | 'call-name' | 'call-property
     title: 'What should happen with this deal?',
     subtitle: 'Start the deal, quote it, or schedule the next touch.',
     cards: [
-      { title: 'New Deal', subtitle: 'Create an opportunity from scratch.', hex: '#007CFF', action: { kind: 'assistant', prompt: 'Create a new opportunity. Ask for account, deal name, value, and stage one at a time.', scope: 'opps_leads' } },
-      { title: 'Generate Quote', subtitle: 'Start a quote or proposal.', hex: '#fbbf24', action: { kind: 'route', href: '/quotes/new' } },
-      { title: 'Follow-Up', subtitle: 'Make sure the deal does not stall.', hex: '#00C8FF', action: { kind: 'assistant', prompt: 'Schedule a follow-up for this opportunity. Ask what account or deal it is for.', scope: 'opps_leads' } },
+      { title: 'New Deal', subtitle: 'Create an opportunity from scratch.', hex: '#007CFF', action: { kind: 'panel', panel: 'new-opp' } },
+      { title: 'Generate Quote', subtitle: 'Start a quote or proposal.', hex: '#fbbf24', action: { kind: 'panel', panel: 'rough-calc' } },
+      { title: 'Follow-Up', subtitle: 'Make sure the deal does not stall.', hex: '#00C8FF', action: { kind: 'panel', panel: 'existing-opp' } },
     ],
   },
 }
@@ -445,7 +447,7 @@ function RecordList({ records, emptyText, onLeadClick, onOpportunityClick, leadW
   )
 }
 
-export function ActionFlowSurface({ activeTab, initialView }: { activeTab: NexusTabId | null; initialView?: 'capture-lead' | 'leads' | 'opportunities' }) {
+export function ActionFlowSurface({ activeTab, initialView, onOpenPanel }: { activeTab: NexusTabId | null; initialView?: 'capture-lead' | 'leads' | 'opportunities'; onOpenPanel?: (panel: PanelTarget) => void }) {
   const router = useRouter()
   const [stepId, setStepId] = useState<StepId>(initialView === 'capture-lead' ? 'call-source' : 'start')
   const [draft, setDraft] = useState<InboundLeadDraft>(EMPTY_DRAFT)
@@ -602,6 +604,12 @@ export function ActionFlowSurface({ activeTab, initialView }: { activeTab: Nexus
     }
     if (action.kind === 'route') {
       router.push(action.href)
+      return
+    }
+    if (action.kind === 'panel') {
+      // Open a real working glass panel (fixes the dead-end assistant prompts).
+      if (onOpenPanel) onOpenPanel(action.panel)
+      else router.push('/opps')
       return
     }
     setBusy(true)

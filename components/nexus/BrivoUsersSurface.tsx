@@ -175,7 +175,7 @@ function AddBrivoUser({ siteRef, siteName, groups, onClose, onAdded }: { siteRef
           </div>
           <button type="button" onClick={onClose} className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>✕</button>
         </div>
-        <div className="space-y-3 overflow-y-auto pr-1">
+        <div className="space-y-3 overflow-y-auto pr-1" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
           {err && <div className="rounded-2xl p-3 text-xs" style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5' }}>{err}</div>}
           <div className="grid grid-cols-2 gap-2">
             <input value={first} onChange={e => setFirst(e.target.value)} placeholder="First name" className="rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle} />

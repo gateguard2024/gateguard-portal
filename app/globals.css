@@ -169,3 +169,23 @@ nav a.bg-brand-400\/10 {
   pointer-events: none;
   display: block;
 }
+
+/* ===================================================
+   Nexus modal / pop-up scroll containment
+   Fixes: pop-up content running below the fold scrolls
+   the page BEHIND it instead of the pop-up. Any element
+   that both scrolls and overlays must contain overscroll
+   so the scroll chain never reaches <body>.
+   =================================================== */
+.nexus-modal-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Defensive net for existing Nexus overlays: any full-screen
+   fixed overlay that scrolls should not chain to the body. */
+[role="dialog"],
+[aria-modal="true"] {
+  overscroll-behavior: contain;
+}

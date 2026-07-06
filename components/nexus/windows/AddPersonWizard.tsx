@@ -125,7 +125,7 @@ export function AddPersonWizard({ onClose, onDone }: { onClose: () => void; onDo
           <button type="button" onClick={onClose} className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>✕</button>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
           {result && (
             <div className="rounded-2xl p-3 text-xs" style={{ background: result.ok ? 'rgba(52,211,153,0.12)' : 'rgba(248,113,113,0.12)', border: `1px solid ${result.ok ? 'rgba(52,211,153,0.35)' : 'rgba(248,113,113,0.35)'}`, color: result.ok ? '#6ee7b7' : '#fca5a5' }}>
               {result.message}

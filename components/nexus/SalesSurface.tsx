@@ -12,7 +12,7 @@ import { PricingCalculator } from '@/components/nexus/PricingCalculator'
 import { OpportunityLifecycle } from '@/components/nexus/OpportunityLifecycle'
 
 type GroupId = 'leads' | 'opportunities' | 'quotes' | 'research'
-type PanelId = 'new-opp' | 'existing-opp' | 'new-lead-flow' | 'leads-workbench' | 'rough-calc'
+type PanelId = 'new-opp' | 'existing-opp' | 'new-lead-flow' | 'leads-workbench' | 'opps-workbench' | 'rough-calc'
 
 type SalesItem = {
   title: string
@@ -48,6 +48,7 @@ const GROUPS: SalesGroup[] = [
   {
     id: 'opportunities', title: 'Opportunities', subtitle: 'The deals you are actively working.', hex: '#007CFF', glyph: 'pipeline',
     items: [
+      { title: 'Work Opportunities', subtitle: 'See and work all your open deals in one list.', glyph: 'pipeline', panel: 'opps-workbench' },
       { title: 'New Opportunity', subtitle: 'Start a deal from an existing lead or customer.', glyph: 'pipeline', panel: 'new-opp' },
       { title: 'Existing Opportunity', subtitle: 'Pick a deal you own or can see, and work it.', glyph: 'pipeline', panel: 'existing-opp' },
       { title: 'Site Surveys', subtitle: 'Open a deal and capture its site survey.', glyph: 'research', stageJump: 1 },
@@ -191,10 +192,10 @@ export function SalesSurface() {
         )}
       </div>
 
-      {(activePanel === 'new-lead-flow' || activePanel === 'leads-workbench') && (
+      {(activePanel === 'new-lead-flow' || activePanel === 'leads-workbench' || activePanel === 'opps-workbench') && (
         <SalesDetailShell
-          title={activePanel === 'new-lead-flow' ? 'Add New Lead' : 'Your Leads'}
-          subtitle={activePanel === 'new-lead-flow' ? 'Capture a new lead — phone, walk-in, outbound, or website.' : 'Work your open leads and follow-ups.'}
+          title={activePanel === 'new-lead-flow' ? 'Add New Lead' : activePanel === 'opps-workbench' ? 'Your Opportunities' : 'Your Leads'}
+          subtitle={activePanel === 'new-lead-flow' ? 'Capture a new lead — phone, walk-in, outbound, or website.' : activePanel === 'opps-workbench' ? 'Work all your open deals in one place.' : 'Work your open leads and follow-ups.'}
           onClose={() => setActivePanel(null)}
           actions={<>
             <ActionButton label="New Quote" onClick={() => router.push('/quotes/new')} />
@@ -202,7 +203,11 @@ export function SalesSurface() {
             <ActionButton label="Site Survey" onClick={() => router.push('/survey')} />
           </>}
         >
-          <ActionFlowSurface activeTab="opps" initialView={activePanel === 'new-lead-flow' ? 'capture-lead' : 'leads'} />
+          <ActionFlowSurface
+            activeTab="opps"
+            initialView={activePanel === 'new-lead-flow' ? 'capture-lead' : activePanel === 'opps-workbench' ? 'opportunities' : 'leads'}
+            onOpenPanel={(p) => setActivePanel(p)}
+          />
         </SalesDetailShell>
       )}
 

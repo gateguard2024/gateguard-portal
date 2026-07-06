@@ -148,7 +148,7 @@ export default function InvoicesBoard() {
               <div><div className="text-xs font-medium uppercase tracking-wider mb-1" style={textSecondary}>Invoice Details</div><div className="text-xl font-semibold" style={textPrimary}>{selectedInvoice.invoice_number}</div></div>
               <button onClick={() => setSelectedInvoiceId(null)} className="p-2 rounded-full hover:bg-white/10 transition-colors" style={textSecondary}><X size={20} /></button>
             </div>
-            <div className="p-5 flex flex-col gap-5 overflow-y-auto max-h-[60vh]">
+            <div className="p-5 flex flex-col gap-5 overflow-y-auto max-h-[60vh]" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
               <div className="flex items-center justify-between p-4 rounded-2xl" style={glassPanel}>
                 <div><div className="text-xs mb-1" style={textSecondary}>Total Amount</div><div className="text-3xl font-semibold" style={textPrimary}>{formatCurrency(selectedInvoice.amount)}</div></div>
                 <div className="flex flex-col items-end gap-1">

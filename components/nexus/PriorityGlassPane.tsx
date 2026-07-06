@@ -66,7 +66,7 @@ export function PriorityGlassPane({
   }
 
   return (
-    <div className="fixed inset-0 z-[95] overflow-y-auto bg-black/70 px-4 py-6 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[95] overflow-y-auto bg-black/70 px-4 py-6 backdrop-blur-sm" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
       <div className="mx-auto w-full max-w-2xl rounded-[2rem] p-5 shadow-2xl"
         style={{ background: 'radial-gradient(circle at 16% 0%, rgba(0,124,255,0.16), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.97), rgba(3,9,22,0.97))', border: '1px solid rgba(0,200,255,0.22)', backdropFilter: 'blur(28px)' }}>
         <button type="button" onClick={onBack} className="mb-3 text-[11px]" style={{ color: 'rgba(125,229,255,0.86)' }}>← Back to priorities</button>
@@ -97,6 +97,7 @@ export function PriorityGlassPane({
             </button>
           )}
           <button type="button" disabled={busy} onClick={() => act({ action: 'mark_done' }, 'Marked done.')} className="rounded-2xl px-4 py-2.5 text-sm font-semibold disabled:opacity-50" style={{ background: 'rgba(52,211,153,0.16)', border: '1px solid rgba(52,211,153,0.4)', color: '#6ee7b7' }}>Mark done</button>
+          <button type="button" disabled={busy} onClick={() => act({ action: 'snooze', days: 1 }, 'Snoozed to tomorrow.')} className="rounded-2xl px-4 py-2.5 text-sm font-semibold disabled:opacity-50" style={{ background: 'rgba(251,191,36,0.14)', border: '1px solid rgba(251,191,36,0.4)', color: '#fcd34d' }}>Snooze +1 day</button>
           {isJob && (
             <button type="button" disabled={busy} onClick={() => setNoteOpen(o => !o)} className="rounded-2xl px-4 py-2.5 text-sm font-semibold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)' }}>Add note</button>
           )}

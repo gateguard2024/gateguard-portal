@@ -52,7 +52,7 @@ export function ExistingOpportunityFlow({ onClose, onOpen }: { onClose: () => vo
       <div className="mx-auto flex h-[calc(100dvh-3rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[2rem] p-5 shadow-2xl"
         style={{ background: 'radial-gradient(circle at 16% 0%, rgba(0,124,255,0.16), transparent 34%), linear-gradient(180deg, rgba(8,18,34,0.97), rgba(3,9,22,0.97))', border: '1px solid rgba(0,200,255,0.22)', backdropFilter: 'blur(28px)' }}>
         {windowData ? (
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
             <OpportunityGlassWindow data={windowData as Parameters<typeof OpportunityGlassWindow>[0]['data']} onBack={() => setWindowData(null)} />
           </div>
         ) : (

@@ -119,6 +119,39 @@ export default function CalendarViews() {
 
   const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+
+  // Sync calendar — pull/push Google Calendar via the existing sync endpoint.
+  async function handleSyncCalendar() {
+    if (syncing) return;
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const res = await fetch('/api/calendar/google/sync', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSyncMsg(data?.error || data?.message || 'Connect Google Calendar first.');
+      } else {
+        setSyncMsg('Calendar synced.');
+        // Refresh the current month after a successful sync.
+        const start = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString();
+        const end = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).toISOString();
+        setEvents(await loadEvents(start, end, scope));
+      }
+    } catch {
+      setSyncMsg('Could not sync calendar.');
+    } finally {
+      setSyncing(false);
+      setTimeout(() => setSyncMsg(null), 4000);
+    }
+  }
+
+  // Find time — jump to this week's Week view so open slots are visible.
+  function handleFindTime() {
+    setCurrentDate(new Date());
+    setView('Week');
+  }
   // Load events when period/scope changes
   useEffect(() => {
     setIsLoading(true);
@@ -341,8 +374,8 @@ export default function CalendarViews() {
     const cat = CATEGORIES[selectedEvent.category];
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-        <div className="w-full max-w-sm rounded-3xl overflow-hidden flex flex-col relative" style={{ backgroundColor: 'rgba(30,30,30,0.9)', border: '1px solid rgba(255,255,255,0.1)' }}>
-          <div className="p-5 flex flex-col gap-4">
+        <div className="w-full max-w-sm rounded-3xl overflow-hidden flex flex-col relative max-h-[85dvh]" style={{ backgroundColor: 'rgba(30,30,30,0.9)', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <div className="p-5 flex flex-col gap-4 overflow-y-auto" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
             <div className="flex justify-between items-start">
               <div className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider" style={{ backgroundColor: `${cat.color}20`, color: cat.color }}>
                 {cat.label}
@@ -400,13 +433,13 @@ export default function CalendarViews() {
     };
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-        <div className="w-full max-w-md rounded-3xl flex flex-col relative" style={{ backgroundColor: 'rgba(30,30,30,0.95)', border: '1px solid rgba(255,255,255,0.1)' }}>
+        <div className="w-full max-w-md rounded-3xl flex flex-col relative max-h-[85dvh] overflow-hidden" style={{ backgroundColor: 'rgba(30,30,30,0.95)', border: '1px solid rgba(255,255,255,0.1)' }}>
           <div className="p-5 border-b flex justify-between items-center" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
             <h3 className="text-lg font-medium" style={textPrimary}>Add Event</h3>
             <button onClick={() => setIsAddModalOpen(false)} className="p-1 rounded-full hover:bg-white/10" style={textSecondary}><X size={18} /></button>
           </div>
 
-          <form onSubmit={handleSave} className="p-5 flex flex-col gap-4">
+          <form onSubmit={handleSave} className="p-5 flex flex-col gap-4 overflow-y-auto" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
             <div>
               <input name="titleStr" type="text" placeholder="Event title" required className="w-full bg-transparent border-b border-white/10 outline-none px-2 py-2 text-lg placeholder:text-white/30" style={textPrimary} />
             </div>
@@ -489,6 +522,30 @@ export default function CalendarViews() {
             <ChevronDown size={14} className="absolute right-2 pointer-events-none" />
           </div>
           <button
+            onClick={handleFindTime}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors hover:bg-white/10"
+            style={textSecondary}
+            title="Jump to this week to spot open slots"
+          >
+            Find time
+          </button>
+          <button
+            onClick={() => setView('Week')}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors hover:bg-white/10"
+            style={textSecondary}
+          >
+            View week
+          </button>
+          <button
+            onClick={handleSyncCalendar}
+            disabled={syncing}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors hover:bg-white/10 disabled:opacity-50"
+            style={textSecondary}
+            title="Sync with Google Calendar"
+          >
+            {syncing ? 'Syncing…' : 'Sync calendar'}
+          </button>
+          <button
             onClick={() => setIsAddModalOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors hover:opacity-90"
             style={{ backgroundColor: '#6B7EFF', color: 'white' }}
@@ -497,6 +554,11 @@ export default function CalendarViews() {
           </button>
         </div>
       </div>
+      {syncMsg && (
+        <div className="mb-3 rounded-lg px-3 py-2 text-xs" style={{ background: 'rgba(107,126,255,0.12)', border: '1px solid rgba(107,126,255,0.28)', color: '#c7d2fe' }}>
+          {syncMsg}
+        </div>
+      )}
       {/* 2. CATEGORY FILTERS */}
       <div className="flex items-center gap-2 mb-4 overflow-x-auto hide-scrollbar">
         {(Object.keys(CATEGORIES) as CalCategory[]).map(cat => {

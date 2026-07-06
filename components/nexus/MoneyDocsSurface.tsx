@@ -37,16 +37,20 @@ function MoneyDocsCardButton({ card, onClick }: { card: MoneyDocsCard; onClick: 
 }
 
 function ActionButton({ label, onClick, muted }: { label: string; onClick?: () => void; muted?: boolean }) {
+  const displayLabel = muted ? `${label} — Coming Soon` : label
   return (
     <button
       type="button"
-      onClick={onClick}
-      className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-opacity hover:opacity-85"
+      // Muted = "Coming Soon": no destination yet, so it must not navigate.
+      onClick={muted ? undefined : onClick}
+      disabled={muted}
+      className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-opacity hover:opacity-85 disabled:cursor-not-allowed"
       style={muted
         ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.50)' }
         : { background: 'linear-gradient(135deg, rgba(0,124,255,0.22), rgba(0,200,255,0.10))', border: '1px solid rgba(0,200,255,0.26)', color: '#7dd3fc', boxShadow: '0 0 18px rgba(0,124,255,0.12)' }}
+      title={muted ? 'Coming soon' : displayLabel}
     >
-      {label}
+      {displayLabel}
     </button>
   )
 }
@@ -63,7 +67,7 @@ function MoneyDocsDetailShell({ title, subtitle, onClose, children, actions }: {
           backdropFilter: 'blur(28px)',
         }}
       >
-        <div className="min-h-0 overflow-y-auto pr-1">
+        <div className="min-h-0 overflow-y-auto pr-1" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
           <button type="button" onClick={onClose} className="mb-4 rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(251,191,36,0.14)', color: 'rgba(255,255,255,0.62)' }}>← Back to Money/Docs</button>
           <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(251,191,36,0.82)' }}>Money/Docs</div>
           <h2 className="mt-1 text-2xl font-semibold" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(251,191,36,0.16)' }}>{title}</h2>
@@ -137,7 +141,7 @@ export function MoneyDocsSurface() {
       )}
 
       {activePanel === 'renewals' && (
-        <MoneyDocsDetailShell title="Renewals" subtitle="Contracts, agreements, subscriptions, and services that are coming due." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Renewals" onClick={() => router.push('/renewals')} /><ActionButton label="Open Documents" onClick={() => router.push('/documents')} muted /></>}>
+        <MoneyDocsDetailShell title="Renewals" subtitle="Contracts, agreements, subscriptions, and services that are coming due." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Renewals" onClick={() => router.push('/renewals')} /><ActionButton label="Open Documents" onClick={() => router.push('/documents')} /></>}>
           <MoneyDocsRenewalsBoard />
         </MoneyDocsDetailShell>
       )}

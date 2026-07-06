@@ -75,6 +75,46 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'This item cannot be marked done yet.' }, { status: 400 })
     }
 
+    if (action === 'snooze') {
+      // Push the item's date forward by N days (default 1).
+      const rawDays = Number((body as Record<string, unknown>).days)
+      const days = Number.isFinite(rawDays) && rawDays > 0 ? Math.floor(rawDays) : 1
+
+      // Table + date-column mapping per item type.
+      const map: Record<string, { table: string; column: string; kind: 'date' | 'timestamptz' }> = {
+        todo:         { table: 'todos',          column: 'due_date',       kind: 'date' },
+        tracker_task: { table: 'tracker_items',  column: 'due_date',       kind: 'date' },
+        crm_activity: { table: 'crm_activities', column: 'due_at',         kind: 'timestamptz' },
+        work_order:   { table: 'work_orders',    column: 'scheduled_date', kind: 'date' },
+      }
+      const cfg = map[itemType]
+      if (!cfg) return NextResponse.json({ success: false, message: 'This item cannot be snoozed yet.' }, { status: 400 })
+
+      // Read the current date so we push from it (fall back to today).
+      const { data: current, error: readErr } = await supabase
+        .from(cfg.table)
+        .select(`id, ${cfg.column}`)
+        .eq('id', itemId)
+        .maybeSingle()
+      if (readErr) return NextResponse.json({ success: false, message: readErr.message }, { status: 500 })
+
+      const existing = current ? (current as unknown as Record<string, unknown>)[cfg.column] : null
+      const base = existing ? new Date(existing as string) : new Date()
+      if (Number.isNaN(base.getTime())) base.setTime(Date.now())
+      base.setDate(base.getDate() + days)
+
+      const nextValue = cfg.kind === 'date'
+        ? base.toISOString().slice(0, 10)          // YYYY-MM-DD
+        : base.toISOString()                        // full timestamptz
+
+      const patch: Record<string, unknown> = { [cfg.column]: nextValue }
+      if (cfg.table !== 'crm_activities') patch.updated_at = new Date().toISOString()
+
+      const { error } = await supabase.from(cfg.table).update(patch).eq('id', itemId)
+      if (error) return NextResponse.json({ success: false, message: error.message }, { status: 500 })
+      return NextResponse.json({ success: true, message: days === 1 ? 'Snoozed to tomorrow.' : `Snoozed ${days} days.` })
+    }
+
     if (action === 'add_note') {
       if (!note) return NextResponse.json({ success: false, message: 'Write a note first.' }, { status: 400 })
 

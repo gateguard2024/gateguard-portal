@@ -396,7 +396,7 @@ export default function DesignExplorer() {
                 </button>
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto px-5 py-3 flex flex-col gap-1.5">
+              <div className="flex-1 overflow-y-auto px-5 py-3 flex flex-col gap-1.5" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
                 {pickerSites.length === 0 ? (
                   <p className="text-xs text-center py-8" style={{ color: MUTED }}>No properties found.</p>
                 ) : (

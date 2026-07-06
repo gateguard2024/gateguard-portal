@@ -46,13 +46,15 @@ function ActionButton({ label, onClick, muted }: { label: string; onClick?: () =
   return (
     <button
       type="button"
-      onClick={onClick}
-      className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-all hover:-translate-y-0.5 hover:opacity-95 active:translate-y-0"
+      // Muted = "Coming Soon": no destination yet, so it must not navigate anywhere.
+      onClick={muted ? undefined : onClick}
+      disabled={muted}
+      className="w-full rounded-2xl px-3 py-3 text-left text-xs font-semibold transition-all hover:-translate-y-0.5 hover:opacity-95 active:translate-y-0 disabled:cursor-not-allowed disabled:hover:translate-y-0"
       style={muted
-        ? { background: 'linear-gradient(135deg, rgba(255,255,255,0.08), rgba(139,92,246,0.07))', border: '1px solid rgba(255,255,255,0.22)', color: 'rgba(255,255,255,0.92)', boxShadow: '0 0 16px rgba(139,92,246,0.10), inset 0 1px 0 rgba(255,255,255,0.08)' }
+        ? { background: 'linear-gradient(135deg, rgba(255,255,255,0.06), rgba(139,92,246,0.05))', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.55)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)' }
         : { background: 'linear-gradient(135deg, rgba(139,92,246,0.22), rgba(0,200,255,0.08))', border: '1px solid rgba(139,92,246,0.26)', color: '#ddd6fe', boxShadow: '0 0 18px rgba(139,92,246,0.12)' }}
       aria-label={displayLabel}
-      title={displayLabel}
+      title={muted ? 'Coming soon' : displayLabel}
     >
       {displayLabel}
     </button>
@@ -142,25 +144,25 @@ export function InternalSurface() {
       </div>
 
       {activePanel === 'tracker' && (
-        <InternalDetailShell title="Tracker" subtitle="Product work, build issues, bugs, and Nexus roadmap tasks." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Nexus Tracker" onClick={() => router.push('/tracker')} /><ActionButton label="Open Playbook" onClick={() => router.push('/playbook')} muted /></>}>
+        <InternalDetailShell title="Tracker" subtitle="Product work, build issues, bugs, and Nexus roadmap tasks." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Nexus Tracker" onClick={() => router.push('/tracker')} /><ActionButton label="Open Playbook" muted /></>}>
           <InternalTrackerBoard />
         </InternalDetailShell>
       )}
 
       {activePanel === 'dealer-onboarding' && (
-        <InternalDetailShell title="Dealer Onboarding" subtitle="See what each partner needs before access goes live." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Add Dealer" onClick={() => router.push('/admin/dealers/new')} /><ActionButton label="View All Dealers" onClick={() => router.push('/admin/dealers')} /><ActionButton label="Feature Settings" onClick={() => router.push('/admin/settings/features')} muted /></>}>
+        <InternalDetailShell title="Dealer Onboarding" subtitle="See what each partner needs before access goes live." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Add Dealer" onClick={() => router.push('/admin/dealers/new')} /><ActionButton label="View All Dealers" onClick={() => router.push('/admin/dealers')} /><ActionButton label="Feature Settings" onClick={() => router.push('/admin/settings/features')} /></>}>
           <InternalDealerOnboardingBoard />
         </InternalDetailShell>
       )}
 
       {activePanel === 'users-features' && (
-        <InternalDetailShell title="Users & Features" subtitle="Users, roles, feature flags, permissions, and platform setup." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Platform Users" onClick={() => router.push('/platform-users')} /><ActionButton label="Open Feature Settings" onClick={() => router.push('/feature-settings')} /><ActionButton label="Open Dealers" onClick={() => router.push('/dealer')} muted /></>}>
+        <InternalDetailShell title="Users & Features" subtitle="Users, roles, feature flags, permissions, and platform setup." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Platform Users" onClick={() => router.push('/admin/users')} /><ActionButton label="Open Feature Settings" onClick={() => router.push('/admin/settings/features')} /><ActionButton label="Open Dealers" onClick={() => router.push('/admin/dealers')} /></>}>
           <InternalUsersFeaturesBoard />
         </InternalDetailShell>
       )}
 
       {activePanel === 'integrations' && (
-        <InternalDetailShell title="Site Integrations" subtitle="Corporate setup: connect each property's Brivo, Eagle Eye, Shelly & UniFi logins. Dealers operate doors/cameras at their sites but never see these credentials." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Operations Hub" onClick={() => router.push('/cmms')} /><ActionButton label="Open Dealers" onClick={() => router.push('/admin/dealers')} muted /></>}>
+        <InternalDetailShell title="Site Integrations" subtitle="Corporate setup: connect each property's Brivo, Eagle Eye, Shelly & UniFi logins. Dealers operate doors/cameras at their sites but never see these credentials." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Operations Hub" onClick={() => router.push('/cmms')} /><ActionButton label="Open Dealers" onClick={() => router.push('/admin/dealers')} /></>}>
           <IntegrationsConsole />
         </InternalDetailShell>
       )}
@@ -172,7 +174,7 @@ export function InternalSurface() {
       )}
 
       {activePanel === 'playbooks' && (
-        <InternalDetailShell title="Playbooks" subtitle="Internal SOPs, scripts, operating instructions, and process guidance." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Playbook" onClick={() => router.push('/playbook')} /><ActionButton label="Open Knowledge Base" onClick={() => router.push('/kb')} muted /></>}>
+        <InternalDetailShell title="Playbooks" subtitle="Internal SOPs, scripts, operating instructions, and process guidance." onClose={() => setActivePanel(null)} actions={<><ActionButton label="Open Knowledge Base" onClick={() => router.push('/kb')} /><ActionButton label="Open Playbook" muted /></>}>
           <InternalInfoPanel copy="This board will make playbooks searchable and easy to follow without forcing users into a document maze." />
         </InternalDetailShell>
       )}

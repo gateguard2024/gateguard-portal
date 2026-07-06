@@ -270,7 +270,7 @@ function CustomersSitesDetailShell({ title, subtitle, onClose, children, actions
           backdropFilter: 'blur(28px)',
         }}
       >
-        <div className="min-h-0 overflow-y-auto pr-1">
+        <div className="min-h-0 overflow-y-auto pr-1" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
           <NexusGlassBackButton label="Back to Operations" onClick={onClose} />
           <div className="text-[10px] uppercase tracking-[0.24em]" style={{ color: 'rgba(0,200,255,0.82)' }}>Operations</div>
           <h2 className="mt-1 text-2xl font-semibold" style={{ color: 'rgba(255,255,255,0.97)', textShadow: '0 0 18px rgba(0,124,255,0.20)' }}>{title}</h2>

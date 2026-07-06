@@ -190,14 +190,14 @@ export function OpportunityGlassWindow({
   return (
     <div className="space-y-4">
       {editing && (
-        <div className="fixed inset-0 z-[120] overflow-y-auto px-4 py-4 sm:py-8" style={{ background: 'rgba(0,0,0,0.74)', backdropFilter: 'blur(10px)' }}>
+        <div className="fixed inset-0 z-[120] overflow-y-auto px-4 py-4 sm:py-8" style={{ background: 'rgba(0,0,0,0.74)', backdropFilter: 'blur(10px)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           <div className="mx-auto flex min-h-full w-full max-w-2xl items-start justify-center">
             <div className="w-full overflow-hidden rounded-[2rem]" style={{ background: 'linear-gradient(180deg, rgba(18,28,52,0.98), rgba(8,14,28,0.98))', border: '1px solid rgba(107,126,255,0.32)', boxShadow: '0 30px 100px rgba(0,0,0,0.55)' }}>
               <div className="sticky top-0 z-10 flex items-start justify-between gap-3 p-5" style={{ background: 'linear-gradient(180deg, rgba(18,28,52,0.98), rgba(18,28,52,0.92))', borderBottom: '1px solid rgba(107,126,255,0.18)' }}>
                 <div><div className="text-[10px] uppercase tracking-[0.22em]" style={{ color: 'rgba(190,200,255,0.9)' }}>Edit Opportunity</div><h3 className="mt-1 text-lg font-semibold" style={{ color: 'rgba(255,255,255,0.96)' }}>Contact &amp; property details</h3></div>
                 <button type="button" onClick={() => setEditing(false)} className="rounded-full px-3 py-1.5 text-[11px]" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.78)' }}>Close</button>
               </div>
-              <div className="max-h-[calc(100vh-12rem)] overflow-y-auto p-5">
+              <div className="max-h-[calc(100vh-12rem)] overflow-y-auto p-5" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
                 <div className="mb-2 text-[10px] uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.5)' }}>Contact</div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <input value={f.site_contact_name} onChange={e => setF({ ...f, site_contact_name: e.target.value })} placeholder="Contact name" className="rounded-xl px-3 py-2 text-sm outline-none" style={editInput} />
