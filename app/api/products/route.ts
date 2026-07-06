@@ -92,6 +92,7 @@ export async function POST(req: NextRequest) {
     manual_url,
     field_service,
     tags,
+    design_meta,
   } = body
 
   if (!name || typeof name !== 'string' || !name.trim()) {
@@ -125,6 +126,7 @@ export async function POST(req: NextRequest) {
   if (manual_url != null) row.manual_url = manual_url
   if (field_service != null) row.field_service = field_service === true
   if (Array.isArray(tags)) row.tags = tags
+  if (design_meta != null && typeof design_meta === 'object') row.design_meta = design_meta
 
   async function insertRow(r: Record<string, unknown>): Promise<{ data: unknown; error: { code?: string; message: string } | null }> {
     return serviceDb().from('products').insert(r).select('*').single()
@@ -188,6 +190,7 @@ export async function PATCH(req: NextRequest) {
     if (b[k] != null) patch[k] = b[k]
   }
   if (typeof b.sell_price === 'number') patch.sell_price = b.sell_price
+  if (b.design_meta != null && typeof b.design_meta === 'object') patch.design_meta = b.design_meta
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
 
   let { data, error } = await serviceDb().from('products').update(patch).eq('id', id).select('*').single()
