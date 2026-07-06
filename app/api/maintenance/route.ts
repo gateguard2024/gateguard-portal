@@ -51,23 +51,31 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
 
   const {
-    title, description, customer_name, assignee_id, assignee_name,
+    title, description, customer_name, assignee_id, assignee_name, assigned_to,
     priority = 'normal', status = 'open', job_type = 'Repair',
     scheduled_date, due_date, notes, site_id,
   } = body
 
-  if (!title || !customer_name) {
+  // A "task" is a general work item — not tied to a site or customer, just
+  // assigned to a tech. Everything else still needs a customer name.
+  const isTask = job_type === 'task' || (!site_id && !customer_name)
+  const resolvedCustomer = customer_name || (isTask ? 'General Task' : null)
+  if (!title || (!isTask && !resolvedCustomer)) {
     return NextResponse.json({ error: 'title and customer_name are required' }, { status: 400 })
   }
 
   // Auto-stamp org_id from the authenticated user
   const org_id = user.isCorporate ? (body.org_id ?? null) : (user.org_id ?? null)
+  // assigned_to (profile id) is what the jobs board "My Jobs" filters on — keep
+  // assignee_id in sync so a task shows up for the tech it's assigned to.
+  const owner = assigned_to ?? assignee_id ?? null
 
   const { data, error } = await supabase
     .from('work_orders')
     .insert({
-      title, description, customer_name,
-      assignee_id:    assignee_id ?? null,
+      title, description, customer_name: resolvedCustomer,
+      assigned_to:    owner,
+      assignee_id:    owner,
       assignee_name:  assignee_name ?? null,
       priority, status, job_type,
       scheduled_date: scheduled_date ?? null,

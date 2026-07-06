@@ -102,28 +102,37 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
 
   const {
-    customer_name, job_type = 'Repair', assignee_id, assignee_name,
-    priority = 'normal', scheduled_date, notes, title, site_id,
+    customer_name, job_type = 'Repair', assignee_id, assignee_name, assigned_to,
+    priority = 'normal', scheduled_date, notes, title, site_id, due_date,
     opportunity_id, description,
   } = body
 
-  if (!customer_name) {
+  // A "task" is a general work item — no site/customer needed, just a title
+  // (and optionally a tech). Everything else still needs a customer.
+  const isTask = job_type === 'task' || (!site_id && !customer_name)
+  const resolvedCustomer = customer_name || (isTask ? 'General Task' : null)
+  if (!title && !resolvedCustomer) {
     return NextResponse.json({ error: 'customer_name is required' }, { status: 400 })
   }
 
   const org_id = user.isCorporate ? (body.org_id ?? null) : (user.org_id ?? null)
+  // assigned_to (profile id) is what the jobs board "My Jobs" filters on — keep
+  // it in sync with assignee_id so assignment actually surfaces to the tech.
+  const owner = assigned_to ?? assignee_id ?? null
 
   // Drift-resilient insert: opportunity_id/description need migration 124.
   // If a column isn't present yet, strip it and retry rather than failing.
   let row: Record<string, unknown> = {
-    title:          title || `${job_type} — ${customer_name}`,
-    customer_name,
+    title:          title || `${job_type} — ${resolvedCustomer}`,
+    customer_name:  resolvedCustomer,
     job_type,
-    assignee_id:    assignee_id ?? null,
+    assigned_to:    owner,
+    assignee_id:    owner,
     assignee_name:  assignee_name ?? null,
     priority,
     status:         scheduled_date ? 'scheduled' : 'open',  // New until it actually has a date
     scheduled_date: scheduled_date ?? null,
+    due_date:       due_date ?? null,
     notes:          notes ?? null,
     description:    description ?? notes ?? null,
     site_id:        site_id ?? null,

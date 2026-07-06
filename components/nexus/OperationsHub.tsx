@@ -206,7 +206,7 @@ const WO_FILTERS = [
 ];
 function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen }: { jobs: RealWO[]; techs: RealTech[]; loading: boolean; onCreate: (p: Record<string, unknown>) => void; onUpdate: (id: string, patch: Record<string, unknown>) => void; onOpen: (id: string) => void }) {
   const [showNew, setShowNew] = useState(false);
-  const [form, setForm] = useState({ site_id: "", customer_name: "", title: "", priority: "medium", assignee_id: "", scheduled_date: "", notify: true });
+  const [form, setForm] = useState({ site_id: "", customer_name: "", title: "", priority: "medium", assignee_id: "", scheduled_date: "", notify: true, isTask: false });
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("open");
   // Site picker for the New WO popup.
@@ -222,13 +222,19 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen }: { jobs
       .catch(() => {}).finally(() => setSitesLoading(false));
   }, [showNew, sites.length]);
   const siteMatches = sites.filter(s => !siteQ || `${s.name ?? ""} ${s.address ?? ""} ${s.city ?? ""}`.toLowerCase().includes(siteQ.toLowerCase())).slice(0, 30);
-  function resetForm() { setForm({ site_id: "", customer_name: "", title: "", priority: "medium", assignee_id: "", scheduled_date: "", notify: true }); setSiteQ(""); }
+  function resetForm() { setForm({ site_id: "", customer_name: "", title: "", priority: "medium", assignee_id: "", scheduled_date: "", notify: true, isTask: false }); setSiteQ(""); }
   function submit() {
-    if (!form.customer_name.trim()) return;
     const t = techs.find(x => x.id === form.assignee_id);
-    onCreate({ site_id: form.site_id || null, customer_name: form.customer_name.trim(), title: form.title.trim() || form.customer_name.trim(), priority: form.priority, assignee_id: form.assignee_id || null, assignee_name: t?.name ?? null, scheduled_date: form.scheduled_date || null, notify: form.notify });
+    if (form.isTask) {
+      if (!form.title.trim()) return;
+      onCreate({ job_type: "task", title: form.title.trim(), priority: form.priority, assignee_id: form.assignee_id || null, assignee_name: t?.name ?? null, scheduled_date: form.scheduled_date || null, notify: form.notify });
+    } else {
+      if (!form.customer_name.trim()) return;
+      onCreate({ site_id: form.site_id || null, customer_name: form.customer_name.trim(), title: form.title.trim() || form.customer_name.trim(), priority: form.priority, assignee_id: form.assignee_id || null, assignee_name: t?.name ?? null, scheduled_date: form.scheduled_date || null, notify: form.notify });
+    }
     resetForm(); setShowNew(false);
   }
+  const canSubmit = form.isTask ? !!form.title.trim() : !!form.customer_name.trim();
   const shown = jobs.filter(w => {
     if (filter === "unassigned" && w.assignedTechId) return false;
     if (filter === "urgent" && !["Urgent", "High"].includes(w.priority)) return false;
@@ -245,8 +251,13 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen }: { jobs
       </div>
       {showNew && <Modal title="New work order" onClose={() => { resetForm(); setShowNew(false); }}>
         <div style={{ display: "grid", gap: 10 }}>
-          {/* Step 1: pick the site */}
-          <div>
+          {/* Task vs site-based work order */}
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "rgba(255,255,255,0.85)", cursor: "pointer", padding: "2px 0" }}>
+            <input type="checkbox" checked={form.isTask} onChange={e => setForm({ ...form, isTask: e.target.checked })} style={{ width: 16, height: 16 }} />
+            General task — not tied to a site
+          </label>
+          {/* Step 1: pick the site (site work orders only) */}
+          {!form.isTask && <div>
             <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginBottom: 4, fontWeight: 600 }}>1. Which site is this for? *</div>
             {form.site_id
               ? <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 12, background: "rgba(0,200,255,0.12)", border: "1px solid rgba(0,200,255,0.4)" }}>
@@ -265,10 +276,10 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen }: { jobs
                         </button>)}
                   </div>
                 </>}
-          </div>
+          </div>}
           {/* Step 2: what + who + when */}
           <div>
-            <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginBottom: 4, fontWeight: 600 }}>2. What needs doing?</div>
+            <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginBottom: 4, fontWeight: 600 }}>{form.isTask ? "What is the task?" : "2. What needs doing?"}</div>
             <input placeholder="e.g. Gate motor won't open" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} style={input} />
           </div>
           <div style={{ display: "flex", gap: 8 }}>
@@ -280,7 +291,7 @@ function WorkOrders({ jobs, techs, loading, onCreate, onUpdate, onOpen }: { jobs
             <input type="checkbox" checked={form.notify} onChange={e => setForm({ ...form, notify: e.target.checked })} style={{ width: 16, height: 16 }} />
             <Mail size={14} /> Email the assigned tech about this job
           </label>
-          <button onClick={submit} disabled={!form.customer_name.trim()} style={{ ...btn, opacity: form.customer_name.trim() ? 1 : 0.5 }}>{form.site_id ? "Create work order" : "Pick a site first"}</button>
+          <button onClick={submit} disabled={!canSubmit} style={{ ...btn, opacity: canSubmit ? 1 : 0.5 }}>{form.isTask ? (form.title.trim() ? "Create task" : "Enter a task") : (form.site_id ? "Create work order" : "Pick a site first")}</button>
         </div>
       </Modal>}
       {/* search + filter chips */}
