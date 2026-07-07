@@ -339,7 +339,7 @@ interface ElemMeta {
   manufacturer?: string; model?: string; price?: number; qty?: number; status?: string; color?: string;
   cost?: number; msrp?: number; imageUrl?: string; productId?: string;
   // Pulled from products.design_meta when a catalog product is bound (single source of truth).
-  role?: string; isBoard?: boolean; terminals?: { name: string; dx: number; dy: number }[];
+  role?: string; isBoard?: boolean; terminals?: { name: string; dx: number; dy: number; lx?: number; ly?: number }[];
   placementImageUrl?: string; wiringImageUrl?: string; defaultCable?: string;
   textEl?: { content: string; fontSize: number; fill: string };
   fov?: { angle: number; range: number; direction: number };
@@ -916,9 +916,10 @@ function EditorInner() {
       if (group.data.isBoard || (isDetailSheet && hasMappedTerminals)) {
         // Terminal layout precedence: this product's own map (from products.design_meta)
         // → saved layout for the board type → default computed layout.
-        const layout = (meta.terminals && meta.terminals.length > 0)
-          ? meta.terminals
-          : (boardTermsRef.current[key] ?? terminalLayout(key));
+        const layout: { name: string; dx: number; dy: number; lx?: number; ly?: number }[] =
+          (meta.terminals && meta.terminals.length > 0)
+            ? meta.terminals
+            : (boardTermsRef.current[key] ?? terminalLayout(key));
         group.data.terminals = layout;
         for (const t of layout) {
           const dot = new fabric.Circle({
@@ -926,14 +927,18 @@ function EditorInner() {
             originX: "center", originY: "center", selectable: false, evented: false,
           });
           dot.data = { kind: "terminal", deviceId: group.data.id, name: t.name, dx: t.dx, dy: t.dy };
-          // Label on the outer side of the strip (left-strip labels go left).
+          // Label placement: use the product's mapped label offset (lx/ly, set in
+          // the Catalog mapper) when present so text stays off the connection
+          // points; otherwise fall back to the outer side of the strip.
+          const hasLbl = typeof t.lx === "number" || typeof t.ly === "number";
           const leftSide = t.dx < 0;
-          const lblDx = leftSide ? t.dx - 5 : t.dx + 5;
+          const lblDx = hasLbl ? t.dx + (t.lx ?? 0) : (leftSide ? t.dx - 5 : t.dx + 5);
+          const lblDy = hasLbl ? t.dy + (t.ly ?? 0) : t.dy;
           const lbl = new fabric.Text(t.name, {
-            left: x + lblDx, top: y + t.dy, fontSize: 6, fontFamily: "Inter, sans-serif", fill: "#334155",
-            originX: leftSide ? "right" : "left", originY: "center", selectable: false, evented: false,
+            left: x + lblDx, top: y + lblDy, fontSize: 6, fontFamily: "Inter, sans-serif", fill: "#334155",
+            originX: hasLbl ? "center" : (leftSide ? "right" : "left"), originY: "center", selectable: false, evented: false,
           });
-          lbl.data = { kind: "terminal", deviceId: group.data.id, name: t.name, isLabel: true, dx: lblDx, dy: t.dy };
+          lbl.data = { kind: "terminal", deviceId: group.data.id, name: t.name, isLabel: true, dx: lblDx, dy: lblDy };
           fc.add(dot); fc.add(lbl);
         }
       }

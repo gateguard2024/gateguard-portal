@@ -33,7 +33,7 @@ const BRAND_COLORS: Record<string, string> = {
 };
 
 // ── Types ────────────────────────────────────────────────────────────────────
-interface Terminal { name: string; dx: number; dy: number }
+interface Terminal { name: string; dx: number; dy: number; lx?: number; ly?: number }
 interface DesignMeta {
   role?: string;
   abbr?: string;
@@ -175,9 +175,10 @@ function TerminalMapper({
   onChange: (t: Terminal[]) => void;
 }) {
   const CANVAS = 90; // detail-sheet symbol size the design tool renders at
+  const LBL_DY = -20; // default label offset (canvas px) — sits above the dot
   const boxRef = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 240, h: 160 });
-  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [drag, setDrag] = useState<{ i: number; mode: 'dot' | 'label' } | null>(null);
   const [selIdx, setSelIdx] = useState<number | null>(null);
 
   const measure = () => {
@@ -189,6 +190,7 @@ function TerminalMapper({
   const scale = CANVAS / Math.max(box.w, box.h); // dx/dy per on-screen px
   const toScreen = (dx: number, dy: number) => ({ x: box.w / 2 + dx / scale, y: box.h / 2 + dy / scale });
   const fromScreen = (x: number, y: number) => ({ dx: Math.round((x - box.w / 2) * scale), dy: Math.round((y - box.h / 2) * scale) });
+  const lblOff = (t: Terminal) => ({ lx: t.lx ?? 0, ly: t.ly ?? LBL_DY });
 
   const ptFromEvent = (e: { clientX: number; clientY: number }) => {
     const r = boxRef.current!.getBoundingClientRect();
@@ -196,7 +198,7 @@ function TerminalMapper({
   };
 
   const onBgClick = (e: React.MouseEvent) => {
-    if (dragIdx !== null) return;
+    if (drag) return;
     if ((e.target as HTMLElement).dataset.dot) return;
     const { x, y } = ptFromEvent(e);
     const { dx, dy } = fromScreen(x, y);
@@ -205,18 +207,22 @@ function TerminalMapper({
     setSelIdx(next.length - 1);
   };
 
-  const onDotDown = (i: number, e: React.PointerEvent) => {
+  const onDown = (i: number, mode: 'dot' | 'label', e: React.PointerEvent) => {
     e.stopPropagation();
     (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-    setDragIdx(i); setSelIdx(i);
+    setDrag({ i, mode }); setSelIdx(i);
   };
   const onMove = (e: React.PointerEvent) => {
-    if (dragIdx === null) return;
+    if (!drag) return;
     const { x, y } = ptFromEvent(e);
-    const { dx, dy } = fromScreen(x, y);
-    onChange(terminals.map((t, idx) => (idx === dragIdx ? { ...t, dx, dy } : t)));
+    const p = fromScreen(x, y);
+    onChange(terminals.map((t, idx) => {
+      if (idx !== drag.i) return t;
+      if (drag.mode === 'dot') return { ...t, dx: p.dx, dy: p.dy };
+      return { ...t, lx: p.dx - t.dx, ly: p.dy - t.dy }; // label offset from dot
+    }));
   };
-  const endDrag = () => setDragIdx(null);
+  const endDrag = () => setDrag(null);
 
   const rename = (name: string) => { if (selIdx === null) return; onChange(terminals.map((t, i) => (i === selIdx ? { ...t, name } : t))); };
   const removeSel = () => { if (selIdx === null) return; onChange(terminals.filter((_, i) => i !== selIdx)); setSelIdx(null); };
@@ -224,7 +230,7 @@ function TerminalMapper({
   return (
     <div className="space-y-2">
       <p className="text-[11px]" style={{ color: MUTED }}>
-        Tap the image to drop a port · drag a dot to move it · tap a dot to rename or remove.
+        Tap the image to drop a port · drag the <span style={{ color: CYAN }}>ring</span> onto the jack · drag the label out of the way · tap either to rename/remove.
       </p>
       <div
         ref={boxRef}
@@ -242,30 +248,51 @@ function TerminalMapper({
             No line drawing yet — tap to drop ports, or add a Line drawing above for exact placement.
           </div>
         )}
+        {/* connector lines from each dot to its label */}
+        <svg width={box.w} height={box.h} style={{ position: 'absolute', left: 0, top: 0, pointerEvents: 'none' }}>
+          {terminals.map((t, i) => {
+            const { lx, ly } = lblOff(t);
+            const d = toScreen(t.dx, t.dy);
+            const l = toScreen(t.dx + lx, t.dy + ly);
+            return <line key={i} x1={d.x} y1={d.y} x2={l.x} y2={l.y} stroke="rgba(0,150,200,0.55)" strokeWidth="1" strokeDasharray="2 2" />;
+          })}
+        </svg>
         {terminals.map((t, i) => {
-          const s = toScreen(t.dx, t.dy);
+          const { lx, ly } = lblOff(t);
+          const d = toScreen(t.dx, t.dy);
+          const l = toScreen(t.dx + lx, t.dy + ly);
           const sel = selIdx === i;
           return (
-            <div
-              key={i}
-              data-dot="1"
-              onPointerDown={(e) => onDotDown(i, e)}
-              className="absolute flex items-center gap-1"
-              style={{ left: s.x, top: s.y, transform: 'translate(-50%, -50%)', cursor: 'grab' }}
-            >
-              <span
+            <React.Fragment key={i}>
+              {/* connection point — the ring sits on the jack */}
+              <div
                 data-dot="1"
-                className="block rounded-full"
-                style={{ width: 12, height: 12, background: CYAN, border: `2px solid ${sel ? '#fff' : '#0B1728'}`, boxShadow: sel ? `0 0 0 2px ${CYAN}` : '0 0 0 1px rgba(0,0,0,0.4)' }}
-              />
-              <span
-                data-dot="1"
-                className="text-[9px] font-bold px-1 rounded whitespace-nowrap"
-                style={{ background: 'rgba(11,23,40,0.85)', color: '#fff', border: `1px solid ${BORDER}` }}
+                onPointerDown={(e) => onDown(i, 'dot', e)}
+                className="absolute"
+                style={{ left: d.x, top: d.y, transform: 'translate(-50%, -50%)', cursor: 'grab' }}
               >
-                {t.name || '·'}
-              </span>
-            </div>
+                <span
+                  data-dot="1"
+                  className="block rounded-full"
+                  style={{ width: 13, height: 13, background: 'transparent', border: `3px solid ${CYAN}`, boxShadow: sel ? `0 0 0 2px ${CYAN}` : '0 0 0 1px rgba(0,0,0,0.5)' }}
+                />
+              </div>
+              {/* label — drag it anywhere so it doesn't cover a jack */}
+              <div
+                data-dot="1"
+                onPointerDown={(e) => onDown(i, 'label', e)}
+                className="absolute"
+                style={{ left: l.x, top: l.y, transform: 'translate(-50%, -50%)', cursor: 'grab' }}
+              >
+                <span
+                  data-dot="1"
+                  className="text-[9px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap"
+                  style={{ background: 'rgba(11,23,40,0.92)', color: '#fff', border: `1px solid ${sel ? CYAN : BORDER}` }}
+                >
+                  {t.name || '·'}
+                </span>
+              </div>
+            </React.Fragment>
           );
         })}
       </div>
@@ -435,7 +462,7 @@ function ProductEditor({
     >
       <div
         className="w-full max-w-2xl rounded-2xl flex flex-col"
-        style={{ backgroundColor: CARD, border: `1px solid ${BORDER}` }}
+        style={{ backgroundColor: CARD, border: `1px solid ${BORDER}`, maxHeight: '92dvh' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -446,11 +473,12 @@ function ProductEditor({
           <button onClick={() => !saving && onClose()} style={{ color: MUTED }}><X size={18} /></button>
         </div>
 
-        {/* Scrollable body — modal-scroll containment (known app bug) */}
+        {/* Scrollable body — flex-1 + min-h-0 so the footer (Save) always stays
+            pinned & visible; modal-scroll containment (known app bug). */}
         <div
-          className="px-6 py-5 space-y-4"
+          className="px-6 py-5 space-y-4 flex-1"
           style={{
-            maxHeight: '85dvh',
+            minHeight: 0,
             overflowY: 'auto',
             overscrollBehavior: 'contain',
             WebkitOverflowScrolling: 'touch',
