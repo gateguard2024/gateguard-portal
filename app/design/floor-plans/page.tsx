@@ -348,6 +348,8 @@ interface ElemMeta {
   placementImageUrl?: string; wiringImageUrl?: string; defaultCable?: string;
   // Which of the product's images to draw on the canvas ('auto' = sheet-based).
   symbolChoice?: "auto" | "icon" | "placement" | "wiring";
+  // Where the device name sits on the drawing.
+  labelPos?: "bottom" | "top" | "hide";
   // Per-device network / access commissioning data (instance-specific).
   mac?: string; deviceId?: string; ip?: string; subnet?: string;
   username?: string; password?: string; ipMode?: "dhcp" | "static";
@@ -910,11 +912,13 @@ function EditorInner() {
           ? (meta.wiringImageUrl || meta.placementImageUrl || meta.imageUrl)
           : (meta.placementImageUrl || meta.imageUrl);
       const imgEl = (symbolUrl && imgCacheRef.current[symbolUrl]) || imgCacheRef.current[key];
+      let symHalf = 18; // half-height of the symbol — used to place the label clear of it
       if (imgEl && imgEl.complete && imgEl.naturalWidth > 0) {
         // Detail (wiring) sheets render the device large so ports + labels are
         // readable; overview sheets stay compact.
         const target = isDetailSheet ? 160 : 52;
         const s = target / Math.max(imgEl.naturalWidth, imgEl.naturalHeight);
+        symHalf = (imgEl.naturalHeight * s) / 2;
         const pic = new fabric.Image(imgEl, {
           originX: "center", originY: "center", scaleX: s, scaleY: s, left: 0, top: 0,
         });
@@ -930,13 +934,19 @@ function EditorInner() {
         });
         parts.push(circle, abbr);
       }
-      const labelTxt = new fabric.Text(label, {
-        fontSize: 9, fontWeight: "600", fontFamily: "Inter, sans-serif", fill: "#0f172a",
-        originX: "center", originY: "center", top: imgEl ? 34 : 26,
-        backgroundColor: "rgba(255,255,255,0.82)", padding: 2,
-      });
-      labelTxt.data = { role: "label" };
-      parts.push(labelTxt);
+      // Label position — bottom (default), top, or hidden.
+      const labelPos = meta.labelPos ?? "bottom";
+      if (labelPos !== "hide") {
+        const gap = 10;
+        const labelTxt = new fabric.Text(label, {
+          fontSize: 9, fontWeight: "600", fontFamily: "Inter, sans-serif", fill: "#0f172a",
+          originX: "center", originY: "center",
+          top: labelPos === "top" ? -(symHalf + gap) : (symHalf + gap),
+          backgroundColor: "rgba(255,255,255,0.82)", padding: 2,
+        });
+        labelTxt.data = { role: "label" };
+        parts.push(labelTxt);
+      }
 
       const group = new fabric.Group(parts, {
         left: x, top: y, originX: "center", originY: "center",
@@ -3152,6 +3162,21 @@ function Inspector({
 
       {field("Name / Label", (
         <input defaultValue={d.label} onBlur={(e) => onLabel(e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+      ))}
+
+      {isDevice && field("Name on drawing", (
+        <div className="flex items-center gap-1">
+          {(["top", "bottom", "hide"] as const).map((v) => {
+            const on = (meta.labelPos ?? "bottom") === v;
+            return (
+              <button key={v} onClick={() => { onMeta({ labelPos: v }); onRebuildCone(); }}
+                className="flex-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold capitalize"
+                style={{ border: `1px solid ${on ? CYAN : BORDER}`, backgroundColor: on ? "rgba(0,200,255,0.12)" : PANEL, color: on ? CYAN : MUTED }}>
+                {v}
+              </button>
+            );
+          })}
+        </div>
       ))}
 
       {isDevice && (

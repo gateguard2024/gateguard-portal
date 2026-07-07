@@ -41,8 +41,11 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   if (isStandalone) {
     return (
       <div style={{
-        minHeight: '100dvh',
-        height: isFullGlass ? '100dvh' : undefined,
+        // NB: use vh, not dvh — the desktop webview doesn't resolve dvh, which
+        // collapsed the height context and let full-screen tools (design canvas)
+        // grow the whole page instead of scrolling their inner panels.
+        minHeight: '100vh',
+        height: isFullGlass ? '100vh' : undefined,
         display: isFullGlass ? 'flex' : undefined,
         flexDirection: isFullGlass ? 'column' : undefined,
         overflow: isFullGlass ? 'hidden' : undefined,
