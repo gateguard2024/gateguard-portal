@@ -341,6 +341,11 @@ interface ElemMeta {
   // Pulled from products.design_meta when a catalog product is bound (single source of truth).
   role?: string; isBoard?: boolean; terminals?: { name: string; dx: number; dy: number; lx?: number; ly?: number }[];
   placementImageUrl?: string; wiringImageUrl?: string; defaultCable?: string;
+  // Which of the product's images to draw on the canvas ('auto' = sheet-based).
+  symbolChoice?: "auto" | "icon" | "placement" | "wiring";
+  // Per-device network / access commissioning data (instance-specific).
+  mac?: string; deviceId?: string; ip?: string; subnet?: string;
+  username?: string; password?: string; ipMode?: "dhcp" | "static";
   textEl?: { content: string; fontSize: number; fill: string };
   fov?: { angle: number; range: number; direction: number };
   zone?: { name: string };
@@ -475,7 +480,9 @@ function EditorInner() {
   const editTermDevIdRef = useRef<string | null>(null);
   editTermDevIdRef.current = editTermDevId;
 
-  const [expandedCat, setExpandedCat] = useState<Record<string, boolean>>({ Cameras: true });
+  // Generic templates collapsed by default — the catalog search up top is the
+  // primary way to place real gear; these are sketch-only shapes.
+  const [expandedCat, setExpandedCat] = useState<Record<string, boolean>>({});
   const [showLibrary, setShowLibrary] = useState(true);
   // Catalog product search in the library — place YOUR built product directly
   // (arrives with its placement image + mapped ports), not a blank template.
@@ -866,12 +873,17 @@ function EditorInner() {
         if (cone) parts.push(cone);
       }
 
-      // Detail sheets (Wiring Detail) show the product's line drawing + terminals;
-      // overview sheets show the clean placement symbol. Both fall back to the icon.
+      // Image precedence: an explicit per-device choice wins; otherwise detail
+      // sheets show the line drawing + terminals and overview sheets the clean
+      // placement symbol — both falling back to the icon.
       const isDetailSheet = normStage(planStatusRef.current) === "wiring_detail";
-      const symbolUrl = isDetailSheet
-        ? (meta.wiringImageUrl || meta.placementImageUrl || meta.imageUrl)
-        : (meta.placementImageUrl || meta.imageUrl);
+      const symbolUrl =
+        meta.symbolChoice === "icon" ? meta.imageUrl
+        : meta.symbolChoice === "placement" ? meta.placementImageUrl
+        : meta.symbolChoice === "wiring" ? meta.wiringImageUrl
+        : isDetailSheet
+          ? (meta.wiringImageUrl || meta.placementImageUrl || meta.imageUrl)
+          : (meta.placementImageUrl || meta.imageUrl);
       const imgEl = (symbolUrl && imgCacheRef.current[symbolUrl]) || imgCacheRef.current[key];
       if (imgEl && imgEl.complete && imgEl.naturalWidth > 0) {
         const target = isDetailSheet ? 90 : 52;
@@ -1967,6 +1979,15 @@ function EditorInner() {
     setInspectorTick((t) => t + 1);
     bumpBom();
   };
+  // Pick which product image draws on the canvas — preload then redraw.
+  const patchSelectedSymbol = async (choice: ElemMeta["symbolChoice"]) => {
+    if (!selected?.data || selected.data.kind !== "device") return;
+    const meta: ElemMeta = selected.data.meta ?? {};
+    const url = choice === "icon" ? meta.imageUrl : choice === "placement" ? meta.placementImageUrl : choice === "wiring" ? meta.wiringImageUrl : undefined;
+    selected.data.meta = { ...meta, symbolChoice: choice };
+    if (url) await loadSymbolImage(url, url);
+    rebuildSelectedDevice();
+  };
   const patchSelectedLabel = (label: string) => {
     if (!selected?.data) return;
     selected.data.label = label;
@@ -2379,6 +2400,10 @@ function EditorInner() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-2">
+              <div className="flex items-center gap-1.5 px-2 pb-1.5 mb-1 border-b" style={{ borderColor: BORDER }}>
+                <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: MUTED }}>Generic shapes</span>
+                <span className="text-[8px] font-bold px-1 rounded" style={{ backgroundColor: "rgba(148,163,184,0.16)", color: MUTED }}>SKETCH ONLY</span>
+              </div>
               {DEVICE_CATEGORIES.map((cat) => {
                 const open = expandedCat[cat];
                 const items = DEVICE_TYPES.filter((d) => d.category === cat);
@@ -2641,6 +2666,7 @@ function EditorInner() {
                 onColor={patchSelectedColor}
                 onProduct={patchSelectedProduct}
                 onFindImage={autoFindImage}
+                onSymbolChoice={patchSelectedSymbol}
                 onShape={patchSelectedShape}
                 onImage={patchSelectedImage}
                 onText={patchSelectedText}
@@ -2858,7 +2884,7 @@ function ProductPicker({ category, manufacturer, model, onPick }: {
 }
 
 function Inspector({
-  selected, onLabel, onMeta, onField, onWireKind, onWireAttrs, onWireRebuild, onRebuildCone, onColor, onProduct, onFindImage,
+  selected, onLabel, onMeta, onField, onWireKind, onWireAttrs, onWireRebuild, onRebuildCone, onColor, onProduct, onFindImage, onSymbolChoice,
   onShape, onImage, onText, onLayer, onEnterTerminalEdit, onSaveTerminalEdit, editingTerminals,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2874,6 +2900,7 @@ function Inspector({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onProduct: (p: any) => void;
   onFindImage: () => void;
+  onSymbolChoice: (choice: ElemMeta["symbolChoice"]) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onShape: (patch: Record<string, any>) => void;
   onImage: (patch: { opacity?: number }) => void;
@@ -2930,24 +2957,46 @@ function Inspector({
       {isDevice && (
         <>
           {field("Product (from catalog)", (
-            <ProductPicker
-              category={DEVICE_BY_KEY[d.deviceTypeKey]?.category ?? ""}
-              manufacturer={meta.manufacturer ?? ""}
-              model={meta.model ?? ""}
-              onPick={onProduct}
-            />
-          ))}
-          {field("Product image", (
-            <div className="flex items-center gap-2">
-              {meta.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={meta.imageUrl} alt="" className="w-9 h-9 object-contain rounded" style={{ backgroundColor: "#fff", border: `1px solid ${BORDER}` }} />
-              ) : (
-                <span className="text-[11px]" style={{ color: MUTED }}>None yet</span>
+            <>
+              <ProductPicker
+                category={DEVICE_BY_KEY[d.deviceTypeKey]?.category ?? ""}
+                manufacturer={meta.manufacturer ?? ""}
+                model={meta.model ?? ""}
+                onPick={onProduct}
+              />
+              {!meta.productId && (
+                <p className="text-[10px] mt-1 px-2 py-1 rounded-lg" style={{ backgroundColor: "rgba(245,158,11,0.12)", color: "#FBBF24" }}>
+                  Not linked to a catalog product — search above to pull its image, ports &amp; pricing.
+                </p>
               )}
+            </>
+          ))}
+          {field("Image on drawing", (
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {([
+                  { k: "auto" as const, label: "Auto", url: meta.placementImageUrl || meta.imageUrl },
+                  { k: "icon" as const, label: "Icon", url: meta.imageUrl },
+                  { k: "placement" as const, label: "Symbol", url: meta.placementImageUrl },
+                  { k: "wiring" as const, label: "Line", url: meta.wiringImageUrl },
+                ]).filter((o) => o.k === "auto" || o.url).map((o) => {
+                  const active = (meta.symbolChoice ?? "auto") === o.k;
+                  return (
+                    <button key={o.k} onClick={() => onSymbolChoice(o.k)} title={`Use the ${o.label.toLowerCase()} image`}
+                      className="flex flex-col items-center gap-0.5 p-1 rounded-lg"
+                      style={{ border: `1px solid ${active ? CYAN : BORDER}`, backgroundColor: active ? "rgba(0,200,255,0.1)" : PANEL }}>
+                      {o.url
+                        // eslint-disable-next-line @next/next/no-img-element
+                        ? <img src={o.url} alt="" className="w-8 h-8 object-contain rounded" style={{ backgroundColor: "#fff" }} />
+                        : <span className="w-8 h-8 rounded flex items-center justify-center text-[8px]" style={{ backgroundColor: CARD, color: MUTED }}>—</span>}
+                      <span className="text-[8px]" style={{ color: active ? CYAN : MUTED }}>{o.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
               <button onClick={onFindImage}
                 className="text-[11px] rounded-lg px-2 py-1.5" style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: CYAN }}>
-                🔍 Find image online
+                🔍 Find icon online
               </button>
             </div>
           ))}
@@ -2956,6 +3005,30 @@ function Inspector({
           ))}
           {field("Model #", (
             <input defaultValue={meta.model ?? ""} onBlur={(e) => onMeta({ model: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+          ))}
+          {field("Network & Access", (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <input defaultValue={meta.mac ?? ""} onBlur={(e) => onMeta({ mac: e.target.value })} placeholder="MAC address" className="px-2 py-1.5 rounded-lg text-xs outline-none" style={inputStyle} />
+                <input defaultValue={meta.deviceId ?? ""} onBlur={(e) => onMeta({ deviceId: e.target.value })} placeholder="Device ID #" className="px-2 py-1.5 rounded-lg text-xs outline-none" style={inputStyle} />
+                <input defaultValue={meta.ip ?? ""} onBlur={(e) => onMeta({ ip: e.target.value })} placeholder="IP address" className="px-2 py-1.5 rounded-lg text-xs outline-none" style={inputStyle} />
+                <input defaultValue={meta.subnet ?? ""} onBlur={(e) => onMeta({ subnet: e.target.value })} placeholder="Subnet mask" className="px-2 py-1.5 rounded-lg text-xs outline-none" style={inputStyle} />
+                <input defaultValue={meta.username ?? ""} onBlur={(e) => onMeta({ username: e.target.value })} placeholder="Username" className="px-2 py-1.5 rounded-lg text-xs outline-none" style={inputStyle} />
+                <input defaultValue={meta.password ?? ""} onBlur={(e) => onMeta({ password: e.target.value })} placeholder="Password" className="px-2 py-1.5 rounded-lg text-xs outline-none" style={inputStyle} />
+              </div>
+              <div className="flex items-center gap-1.5">
+                {(["dhcp", "static"] as const).map((mode) => {
+                  const on = (meta.ipMode ?? "dhcp") === mode;
+                  return (
+                    <button key={mode} onClick={() => onMeta({ ipMode: mode })}
+                      className="flex-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold capitalize"
+                      style={{ border: `1px solid ${on ? CYAN : BORDER}`, backgroundColor: on ? "rgba(0,200,255,0.12)" : PANEL, color: on ? CYAN : MUTED }}>
+                      {mode === "dhcp" ? "DHCP" : "Static"}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           ))}
           {field("Color on drawing", (
             <div className="flex items-center gap-1.5 flex-wrap">
