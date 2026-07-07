@@ -174,8 +174,8 @@ function TerminalMapper({
   terminals: Terminal[];
   onChange: (t: Terminal[]) => void;
 }) {
-  const CANVAS = 90; // detail-sheet symbol size the design tool renders at
-  const LBL_DY = -20; // default label offset (canvas px) — sits above the dot
+  const CANVAS = 160; // detail-sheet symbol size the design tool renders at
+  const LBL_DY = -30; // default label offset (canvas px) — sits above the dot
   const boxRef = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 240, h: 160 });
   const [drag, setDrag] = useState<{ i: number; mode: 'dot' | 'label' } | null>(null);

@@ -886,7 +886,9 @@ function EditorInner() {
           : (meta.placementImageUrl || meta.imageUrl);
       const imgEl = (symbolUrl && imgCacheRef.current[symbolUrl]) || imgCacheRef.current[key];
       if (imgEl && imgEl.complete && imgEl.naturalWidth > 0) {
-        const target = isDetailSheet ? 90 : 52;
+        // Detail (wiring) sheets render the device large so ports + labels are
+        // readable; overview sheets stay compact.
+        const target = isDetailSheet ? 160 : 52;
         const s = target / Math.max(imgEl.naturalWidth, imgEl.naturalHeight);
         const pic = new fabric.Image(imgEl, {
           originX: "center", originY: "center", scaleX: s, scaleY: s, left: 0, top: 0,
@@ -929,8 +931,10 @@ function EditorInner() {
       // so wire endpoints can snap to them). On a detail sheet, any product that
       // has a mapped terminal set shows them too — so the line drawing's terminals
       // are the connection points for the wire map.
+      // Ports show ONLY on Wiring Detail sheets — overview sheets stay clean
+      // (just the placement symbol). This declutters the standard drawing.
       const hasMappedTerminals = Array.isArray(meta.terminals) && meta.terminals.length > 0;
-      if (group.data.isBoard || (isDetailSheet && hasMappedTerminals)) {
+      if (isDetailSheet && (hasMappedTerminals || group.data.isBoard)) {
         // Terminal layout precedence: this product's own map (from products.design_meta)
         // → saved layout for the board type → default computed layout.
         const layout: { name: string; dx: number; dy: number; lx?: number; ly?: number }[] =
@@ -940,7 +944,7 @@ function EditorInner() {
         group.data.terminals = layout;
         for (const t of layout) {
           const dot = new fabric.Circle({
-            left: x + t.dx, top: y + t.dy, radius: 2.6, fill: color, stroke: "#0f172a", strokeWidth: 0.5,
+            left: x + t.dx, top: y + t.dy, radius: 4, fill: color, stroke: "#0f172a", strokeWidth: 1,
             originX: "center", originY: "center", selectable: false, evented: false,
           });
           dot.data = { kind: "terminal", deviceId: group.data.id, name: t.name, dx: t.dx, dy: t.dy };
@@ -952,7 +956,8 @@ function EditorInner() {
           const lblDx = hasLbl ? t.dx + (t.lx ?? 0) : (leftSide ? t.dx - 5 : t.dx + 5);
           const lblDy = hasLbl ? t.dy + (t.ly ?? 0) : t.dy;
           const lbl = new fabric.Text(t.name, {
-            left: x + lblDx, top: y + lblDy, fontSize: 6, fontFamily: "Inter, sans-serif", fill: "#334155",
+            left: x + lblDx, top: y + lblDy, fontSize: 9, fontWeight: "600", fontFamily: "Inter, sans-serif", fill: "#0f172a",
+            backgroundColor: "rgba(255,255,255,0.82)",
             originX: hasLbl ? "center" : (leftSide ? "right" : "left"), originY: "center", selectable: false, evented: false,
           });
           lbl.data = { kind: "terminal", deviceId: group.data.id, name: t.name, isLabel: true, dx: lblDx, dy: lblDy };
