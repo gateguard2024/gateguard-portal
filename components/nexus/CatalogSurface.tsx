@@ -618,7 +618,10 @@ export default function CatalogSurface() {
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
+  const [catFilter, setCatFilter] = useState<string>('All');
   const [editing, setEditing] = useState<ProductForm | null>(null);
+
+  const catOf = (p: ProductRow) => (p.category && p.category.trim()) ? p.category : 'Other';
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -634,16 +637,38 @@ export default function CatalogSurface() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Category chips: known categories first (in a fixed order), then any extras
+  // actually present, each with a live count. "All" always leads.
+  const catChips = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of products) counts.set(catOf(p), (counts.get(catOf(p)) ?? 0) + 1);
+    const ordered: string[] = [];
+    for (const c of CATEGORIES) if (counts.has(c)) ordered.push(c);
+    for (const c of Array.from(counts.keys()).sort()) if (!ordered.includes(c)) ordered.push(c);
+    return [{ label: 'All', count: products.length }, ...ordered.map((c) => ({ label: c, count: counts.get(c) ?? 0 }))];
+  }, [products]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return products;
-    return products.filter((p) =>
-      (p.name ?? '').toLowerCase().includes(q) ||
-      (p.sku ?? '').toLowerCase().includes(q) ||
-      (p.brand ?? '').toLowerCase().includes(q) ||
-      (p.category ?? '').toLowerCase().includes(q),
-    );
-  }, [products, query]);
+    return products.filter((p) => {
+      if (catFilter !== 'All' && catOf(p) !== catFilter) return false;
+      if (!q) return true;
+      return (p.name ?? '').toLowerCase().includes(q) ||
+        (p.sku ?? '').toLowerCase().includes(q) ||
+        (p.brand ?? '').toLowerCase().includes(q) ||
+        (p.category ?? '').toLowerCase().includes(q);
+    });
+  }, [products, query, catFilter]);
+
+  // When browsing "All" with no search, group cards under category headers so a
+  // long catalog stays scannable. Otherwise show a flat grid of the filtered set.
+  const groups = useMemo(() => {
+    if (catFilter !== 'All' || query.trim()) return null;
+    const m = new Map<string, ProductRow[]>();
+    for (const p of filtered) { const c = catOf(p); if (!m.has(c)) m.set(c, []); m.get(c)!.push(p); }
+    const order = catChips.filter((c) => c.label !== 'All').map((c) => c.label);
+    return order.filter((c) => m.has(c)).map((c) => ({ cat: c, items: m.get(c)! }));
+  }, [filtered, catFilter, query, catChips]);
 
   // On save: replace or prepend the returned row, then close the editor.
   const handleSaved = (row: ProductRow) => {
@@ -653,6 +678,47 @@ export default function CatalogSurface() {
       return [row, ...prev];
     });
     setEditing(null);
+  };
+
+  const renderCard = (p: ProductRow) => {
+    const sell = Number(p.sell_price) || 0;
+    const cost = Number(p.dealer_cost) || 0;
+    const margin = calcMargin(cost, sell);
+    return (
+      <button
+        key={p.id}
+        onClick={() => setEditing(rowToForm(p))}
+        className="w-full text-left rounded-2xl p-4 flex items-center gap-3 transition-colors hover:brightness-125"
+        style={{ backgroundColor: CARD, border: `1px solid ${BORDER}`, opacity: p.active === false ? 0.55 : 1 }}
+      >
+        <ProductThumb url={p.image_url} brand={p.brand ?? ''} size={48} />
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold truncate" style={{ color: TEXT }}>{p.name}</div>
+          <div className="text-[11px] truncate" style={{ color: MUTED }}>
+            {[p.brand, p.category].filter(Boolean).join(' · ') || '—'}
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            {p.sku && (
+              <span className="text-[10px] font-mono truncate" style={{ color: MUTED }}>{p.sku}</span>
+            )}
+            {p.active === false && (
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wide" style={{ backgroundColor: 'rgba(148,163,184,0.16)', color: MUTED }}>Inactive</span>
+            )}
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          <div className="text-sm font-semibold" style={{ color: sell > 0 ? CYAN : MUTED }}>{fmt$(sell)}</div>
+          {margin !== null && (
+            <div
+              className="text-[10px] font-medium mt-0.5"
+              style={{ color: margin >= 40 ? '#34D399' : margin >= 25 ? '#FBBF24' : '#F87171' }}
+            >
+              {margin}% margin
+            </div>
+          )}
+        </div>
+      </button>
+    );
   };
 
   return (
@@ -690,6 +756,28 @@ export default function CatalogSurface() {
         </button>
       </div>
 
+      {/* Category chips */}
+      {!loading && products.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto px-6 py-3 border-b shrink-0" style={{ borderColor: BORDER }}>
+          {catChips.map((c) => {
+            const active = catFilter === c.label;
+            return (
+              <button
+                key={c.label}
+                onClick={() => setCatFilter(c.label)}
+                className="flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-colors shrink-0"
+                style={active
+                  ? { background: `linear-gradient(135deg, ${BRAND}, rgba(0,200,255,0.2))`, border: `1px solid ${CYAN}88`, color: '#fff' }
+                  : { backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: MUTED }}
+              >
+                {c.label}
+                <span className="text-[10px] font-bold px-1.5 rounded-full" style={{ backgroundColor: active ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.06)', color: active ? '#fff' : MUTED }}>{c.count}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-6 py-6">
         {loading ? (
@@ -717,48 +805,24 @@ export default function CatalogSurface() {
               </button>
             )}
           </div>
+        ) : groups ? (
+          <div className="max-w-7xl mx-auto space-y-8">
+            {groups.map((g) => (
+              <div key={g.cat}>
+                <div className="flex items-center gap-2 mb-3">
+                  <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: TEXT }}>{g.cat}</h2>
+                  <span className="text-[11px]" style={{ color: MUTED }}>{g.items.length}</span>
+                  <div className="flex-1 h-px" style={{ backgroundColor: BORDER }} />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {g.items.map(renderCard)}
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 max-w-7xl mx-auto">
-            {filtered.map((p) => {
-              const sell = Number(p.sell_price) || 0;
-              const cost = Number(p.dealer_cost) || 0;
-              const margin = calcMargin(cost, sell);
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => setEditing(rowToForm(p))}
-                  className="w-full text-left rounded-2xl p-4 flex items-center gap-3 transition-colors hover:brightness-125"
-                  style={{ backgroundColor: CARD, border: `1px solid ${BORDER}`, opacity: p.active === false ? 0.55 : 1 }}
-                >
-                  <ProductThumb url={p.image_url} brand={p.brand ?? ''} size={48} />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold truncate" style={{ color: TEXT }}>{p.name}</div>
-                    <div className="text-[11px] truncate" style={{ color: MUTED }}>
-                      {[p.brand, p.category].filter(Boolean).join(' · ') || '—'}
-                    </div>
-                    <div className="flex items-center gap-2 mt-1">
-                      {p.sku && (
-                        <span className="text-[10px] font-mono truncate" style={{ color: MUTED }}>{p.sku}</span>
-                      )}
-                      {p.active === false && (
-                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wide" style={{ backgroundColor: 'rgba(148,163,184,0.16)', color: MUTED }}>Inactive</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <div className="text-sm font-semibold" style={{ color: sell > 0 ? CYAN : MUTED }}>{fmt$(sell)}</div>
-                    {margin !== null && (
-                      <div
-                        className="text-[10px] font-medium mt-0.5"
-                        style={{ color: margin >= 40 ? '#34D399' : margin >= 25 ? '#FBBF24' : '#F87171' }}
-                      >
-                        {margin}% margin
-                      </div>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
+            {filtered.map(renderCard)}
           </div>
         )}
       </div>
