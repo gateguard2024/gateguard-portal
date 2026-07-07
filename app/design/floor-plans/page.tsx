@@ -537,7 +537,7 @@ function EditorInner() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     fc.getObjects().forEach((o: any) => {
       const d = o.data;
-      if (!d || d.kind === "grid" || d.kind === "bg" || d.kind === "wirehandle" || d.kind === "terminal" || d.kind === "poebadge" || d.kind === "wiretag") return;
+      if (!d || d.kind === "grid" || d.kind === "bg" || d.kind === "wirehandle" || d.kind === "terminal" || d.kind === "poebadge" || d.kind === "wiretag" || d.kind === "wireconn") return;
       if (d.kind === "shape") {
         const c = o.getCenterPoint();
         rows.push({
@@ -1432,7 +1432,7 @@ function EditorInner() {
   }
 
   // Nearest device label to a point (to resolve a wire endpoint → device name).
-  function deviceLabelNear(x: number, y: number, threshold = 46): string | null {
+  function deviceLabelNear(x: number, y: number, threshold = 120): string | null {
     const fc = fcRef.current;
     if (!fc) return null;
     let best: string | null = null;
@@ -1450,7 +1450,7 @@ function EditorInner() {
 
   // Port names of the device nearest a point — used to populate the wire
   // inspector's From/To port dropdowns so a connection can be documented.
-  function deviceTerminalsNear(x: number, y: number, threshold = 70): string[] {
+  function deviceTerminalsNear(x: number, y: number, threshold = 130): string[] {
     const fc = fcRef.current;
     if (!fc) return [];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1497,7 +1497,7 @@ function EditorInner() {
 
   // Id of the device nearest a point (used to default a conductor's target to the
   // cable's end device).
-  function deviceIdNear(x: number, y: number, threshold = 70): string | null {
+  function deviceIdNear(x: number, y: number, threshold = 130): string | null {
     const fc = fcRef.current;
     if (!fc) return null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2231,10 +2231,16 @@ function EditorInner() {
     const meta: ElemMeta = { ...selected.data.meta };
     const condition = selected.data.condition, action = selected.data.action;
     const label = selected.data.label;
+    // Preserve any manual resize / rotation so a rebuild (e.g. changing the name
+    // position) doesn't snap the device back to its default size.
+    const sx = selected.scaleX ?? 1, sy = selected.scaleY ?? 1, ang = selected.angle ?? 0;
     if (selected.data.id) removeTerminalsFor(selected.data.id);
     fc.remove(selected);
     const g = buildDevice(c.x, c.y, key, meta, condition, action, label);
-    if (g) { fc.setActiveObject(g); setSelected(g); }
+    if (g) {
+      if (sx !== 1 || sy !== 1 || ang !== 0) { g.set({ scaleX: sx, scaleY: sy, angle: ang }); g.setCoords(); }
+      fc.setActiveObject(g); setSelected(g);
+    }
     fc.renderAll();
   };
   const patchSelectedColor = (color: string | undefined) => {
@@ -2465,6 +2471,36 @@ function EditorInner() {
     }
     fc.requestRenderAll();
   }, [showSchedule, schedule, canvasReady]);
+
+  // Draw a filled junction marker on the line drawing wherever a wire connects to
+  // a defined port (fromTerm/toTerm) — so the connection is visible on the sheet.
+  // Non-serialized overlay; re-runs whenever wires/ports change (schedule memo).
+  useEffect(() => {
+    const fc = fcRef.current;
+    const fabric = fabricRef.current;
+    if (!fc || !fabric || !canvasReady) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const t of (fc.getObjects() as any[]).filter((o) => o.data?.kind === "wireconn")) fc.remove(t);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mark = (p: [number, number], color: string) => {
+      const dot = new fabric.Circle({
+        left: p[0], top: p[1], radius: 3.2, fill: color, stroke: "#fff", strokeWidth: 1.2,
+        originX: "center", originY: "center", selectable: false, evented: false,
+      });
+      dot.data = { kind: "wireconn" };
+      fc.add(dot); fc.bringObjectToFront(dot);
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const o of fc.getObjects() as any[]) {
+      if (o.data?.kind !== "wire") continue;
+      const attrs: WireAttrs = o.data.wireAttrs || {};
+      const pts: [number, number][] = o.data.points || [o.data.from, o.data.to];
+      const col = WIRE_COLORS[normWireKind(o.data.wireKind)] || "#0f172a";
+      if (attrs.fromTerm && pts[0]) mark(pts[0], col);
+      if (attrs.toTerm && pts[pts.length - 1]) mark(pts[pts.length - 1], col);
+    }
+    fc.requestRenderAll();
+  }, [schedule, canvasReady]);
 
   // ── UI ───────────────────────────────────────────────────────────────────
   const toolBtn = (mode: ToolMode, Icon: React.ElementType, label: string) => (
