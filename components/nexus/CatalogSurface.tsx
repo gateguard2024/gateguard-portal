@@ -161,6 +161,135 @@ function Field({ label, required, children }: { label: string; required?: boolea
 const inputStyle: React.CSSProperties = { backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT };
 const inputCls = 'w-full px-3 py-2 rounded-lg text-sm outline-none';
 
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+// ── Visual terminal/port mapper ───────────────────────────────────────────────
+// Tap the image to drop a port, drag it into place, tap a dot to rename/remove.
+// Positions are stored as dx/dy (canvas px offset from the device center) so the
+// drawing tool overlays them on the exact same spots.
+function TerminalMapper({
+  imageUrl, terminals, onChange,
+}: {
+  imageUrl?: string;
+  terminals: Terminal[];
+  onChange: (t: Terminal[]) => void;
+}) {
+  const CANVAS = 90; // detail-sheet symbol size the design tool renders at
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 240, h: 160 });
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [selIdx, setSelIdx] = useState<number | null>(null);
+
+  const measure = () => {
+    const el = boxRef.current;
+    if (el) { const r = el.getBoundingClientRect(); if (r.width && r.height) setBox({ w: r.width, h: r.height }); }
+  };
+  useEffect(() => { measure(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [imageUrl]);
+
+  const scale = CANVAS / Math.max(box.w, box.h); // dx/dy per on-screen px
+  const toScreen = (dx: number, dy: number) => ({ x: box.w / 2 + dx / scale, y: box.h / 2 + dy / scale });
+  const fromScreen = (x: number, y: number) => ({ dx: Math.round((x - box.w / 2) * scale), dy: Math.round((y - box.h / 2) * scale) });
+
+  const ptFromEvent = (e: { clientX: number; clientY: number }) => {
+    const r = boxRef.current!.getBoundingClientRect();
+    return { x: clamp(e.clientX - r.left, 0, r.width), y: clamp(e.clientY - r.top, 0, r.height) };
+  };
+
+  const onBgClick = (e: React.MouseEvent) => {
+    if (dragIdx !== null) return;
+    if ((e.target as HTMLElement).dataset.dot) return;
+    const { x, y } = ptFromEvent(e);
+    const { dx, dy } = fromScreen(x, y);
+    const next = [...terminals, { name: `P${terminals.length + 1}`, dx, dy }];
+    onChange(next);
+    setSelIdx(next.length - 1);
+  };
+
+  const onDotDown = (i: number, e: React.PointerEvent) => {
+    e.stopPropagation();
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    setDragIdx(i); setSelIdx(i);
+  };
+  const onMove = (e: React.PointerEvent) => {
+    if (dragIdx === null) return;
+    const { x, y } = ptFromEvent(e);
+    const { dx, dy } = fromScreen(x, y);
+    onChange(terminals.map((t, idx) => (idx === dragIdx ? { ...t, dx, dy } : t)));
+  };
+  const endDrag = () => setDragIdx(null);
+
+  const rename = (name: string) => { if (selIdx === null) return; onChange(terminals.map((t, i) => (i === selIdx ? { ...t, name } : t))); };
+  const removeSel = () => { if (selIdx === null) return; onChange(terminals.filter((_, i) => i !== selIdx)); setSelIdx(null); };
+
+  return (
+    <div className="space-y-2">
+      <p className="text-[11px]" style={{ color: MUTED }}>
+        Tap the image to drop a port · drag a dot to move it · tap a dot to rename or remove.
+      </p>
+      <div
+        ref={boxRef}
+        onClick={onBgClick}
+        onPointerMove={onMove}
+        onPointerUp={endDrag}
+        onPointerLeave={endDrag}
+        className="relative inline-block select-none rounded-lg overflow-hidden"
+        style={{ cursor: 'crosshair', border: `1px solid ${BORDER}`, backgroundColor: '#fff', touchAction: 'none', maxWidth: 260 }}
+      >
+        {imageUrl ? (
+          <img src={imageUrl} onLoad={measure} draggable={false} alt="terminal map" style={{ display: 'block', maxWidth: 260, maxHeight: 260 }} />
+        ) : (
+          <div className="flex items-center justify-center text-center text-[11px] px-4" style={{ width: 240, height: 160, backgroundColor: PANEL, color: MUTED }}>
+            No line drawing yet — tap to drop ports, or add a Line drawing above for exact placement.
+          </div>
+        )}
+        {terminals.map((t, i) => {
+          const s = toScreen(t.dx, t.dy);
+          const sel = selIdx === i;
+          return (
+            <div
+              key={i}
+              data-dot="1"
+              onPointerDown={(e) => onDotDown(i, e)}
+              className="absolute flex items-center gap-1"
+              style={{ left: s.x, top: s.y, transform: 'translate(-50%, -50%)', cursor: 'grab' }}
+            >
+              <span
+                data-dot="1"
+                className="block rounded-full"
+                style={{ width: 12, height: 12, background: CYAN, border: `2px solid ${sel ? '#fff' : '#0B1728'}`, boxShadow: sel ? `0 0 0 2px ${CYAN}` : '0 0 0 1px rgba(0,0,0,0.4)' }}
+              />
+              <span
+                data-dot="1"
+                className="text-[9px] font-bold px-1 rounded whitespace-nowrap"
+                style={{ background: 'rgba(11,23,40,0.85)', color: '#fff', border: `1px solid ${BORDER}` }}
+              >
+                {t.name || '·'}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Selected port — rename / remove */}
+      {selIdx !== null && terminals[selIdx] && (
+        <div className="flex items-center gap-2">
+          <input
+            autoFocus
+            value={terminals[selIdx].name}
+            onChange={(e) => rename(e.target.value)}
+            placeholder="Port name (e.g. WAN, LAN1, PWR)"
+            className="flex-1 px-2 py-1.5 text-xs rounded-lg outline-none"
+            style={inputStyle}
+          />
+          <button type="button" onClick={removeSel} className="p-1.5 rounded-lg" style={{ color: '#F87171', border: `1px solid ${BORDER}` }}>
+            <Trash2 size={13} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Editor modal ──────────────────────────────────────────────────────────────
 function ProductEditor({
   initial, onClose, onSaved,
@@ -558,11 +687,18 @@ function ProductEditor({
                         <Plus size={11} />Add terminal
                       </button>
                     </div>
-                    {terminals.length === 0 && (
-                      <p className="text-[11px] italic" style={{ color: MUTED }}>
-                        No terminals yet. Add the labeled screws on this board (e.g. LOCK+, GND, RS485−). Position is where the dot sits relative to the device center.
-                      </p>
-                    )}
+
+                    {/* Visual mapper — drop & drag ports onto the drawing */}
+                    <TerminalMapper
+                      imageUrl={design.wiringImageUrl || design.placementImageUrl || form.imageUrl}
+                      terminals={terminals}
+                      onChange={(t) => setD('terminals', t)}
+                    />
+
+                    {terminals.length > 0 && (
+                      <details>
+                        <summary className="text-[10px] cursor-pointer" style={{ color: MUTED }}>Fine-tune positions (numbers)</summary>
+                        <div className="mt-2">
                     {terminals.length > 0 && (
                       <div className="space-y-1.5">
                         <div className="grid grid-cols-[1fr_64px_64px_28px] gap-2 px-1 text-[10px] font-medium" style={{ color: MUTED }}>
@@ -577,6 +713,9 @@ function ProductEditor({
                           </div>
                         ))}
                       </div>
+                    )}
+                        </div>
+                      </details>
                     )}
                   </div>
                 )}
