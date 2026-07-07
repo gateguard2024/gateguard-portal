@@ -128,7 +128,12 @@ function terminalLayout(key: string): { name: string; dx: number; dy: number }[]
 
 // ── Conductors (Detail mode) ──────────────────────────────────────────────────
 // A single wire (a cable) can be expanded into its individual conductors.
-interface Conductor { label: string; color: string; term?: string }
+// A conductor may land on the cable's end device (term), OR on a DIFFERENT
+// device's port (toName) — e.g. the negative broken through a relay while the
+// rest land on the power supply / mag lock. The target device is referenced by
+// BOTH its session id (fast, exact) and its label (stable across save/reload,
+// since ids are regenerated each load).
+interface Conductor { label: string; color: string; term?: string; toDeviceId?: string; toDeviceLabel?: string; toName?: string }
 // Standard conductor color palette (electrician-familiar).
 // Standard conductor colors (white/grey drawn as visible greys on the white sheet;
 // the label carries the true wire color). Black, Red, Green, White, Blue, Grey…
@@ -652,12 +657,27 @@ function EditorInner() {
       let obj: any;
       if (fan) {
         // Detail mode: fan the cable into its individual conductors (parallel strands).
-        // Map terminal name → dot position for the board near this cable's `to` end.
+        // Two lookups:
+        //  • termMap  — terminal name → position for the device near the cable's `to`
+        //               end (legacy: a conductor's `term` lands on the end device).
+        //  • termByRef — `${deviceId}:${name}` → position for EVERY device, so a
+        //               conductor can be routed to a different device's port.
         const termMap: Record<string, [number, number]> = {};
+        const termByRef: Record<string, [number, number]> = {};
+        const termByLabel: Record<string, [number, number]> = {};
+        // deviceId → label, so a terminal can also be indexed by its device label.
+        const devLabelById = new Map<string, string>();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const o of fc.getObjects() as any[]) if (o.data?.kind === "device" && o.data.id) devLabelById.set(o.data.id, o.data.label);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         for (const t of fc.getObjects() as any[]) {
           if (t.data?.kind === "terminal" && !t.data.isLabel) {
             if (Math.hypot(t.left - pTo.x, t.top - pTo.y) < 70) termMap[t.data.name] = [t.left, t.top];
+            if (t.data.deviceId) {
+              termByRef[`${t.data.deviceId}:${t.data.name}`] = [t.left, t.top];
+              const lbl = devLabelById.get(t.data.deviceId);
+              if (lbl) termByLabel[`${lbl}:${t.data.name}`] = [t.left, t.top];
+            }
           }
         }
         const mid = (conductors.length - 1) / 2;
@@ -668,7 +688,12 @@ function EditorInner() {
         conductors.forEach((c, i) => {
           const off = (i - mid) * 3.2;
           const offPts = offsetPolyline(path, off);       // parallel strand along the path
-          const dot = c.term ? termMap[c.term] : null;
+          // Explicit device+port target wins (by session id, then by stable label
+          // so it survives reload); else the legacy end-device `term`.
+          const dot: [number, number] | null =
+            (c.toDeviceId && c.toName && termByRef[`${c.toDeviceId}:${c.toName}`]) ||
+            (c.toDeviceLabel && c.toName && termByLabel[`${c.toDeviceLabel}:${c.toName}`]) ||
+            (c.term ? termMap[c.term] : null) || null;
           const pts = dot ? [...offPts.slice(0, -1), { x: dot[0], y: dot[1] }] : offPts;
           strands.push(new fabric.Polyline(pts, {
             stroke: c.color || WIRE_COLORS[kind],
@@ -945,7 +970,8 @@ function EditorInner() {
         for (const t of layout) {
           const dot = new fabric.Circle({
             left: x + t.dx, top: y + t.dy, radius: 4, fill: color, stroke: "#0f172a", strokeWidth: 1,
-            originX: "center", originY: "center", selectable: false, evented: false,
+            originX: "center", originY: "center", selectable: false, evented: true,
+            hoverCursor: "crosshair",
           });
           dot.data = { kind: "terminal", deviceId: group.data.id, name: t.name, dx: t.dx, dy: t.dy };
           // Label placement: use the product's mapped label offset (lx/ly, set in
@@ -1439,6 +1465,44 @@ function EditorInner() {
     return Array.isArray(bt) ? [...bt] : [];
   }
 
+  // Every placed device + its ports — for the conductor break-out picker, so a
+  // conductor can be routed to ANY device's port (e.g. the negative → a relay).
+  function allDevicePorts(): { id: string; label: string; ports: string[] }[] {
+    const fc = fcRef.current;
+    if (!fc) return [];
+    const out: { id: string; label: string; ports: string[] }[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const o of fc.getObjects() as any[]) {
+      if (o.data?.kind === "device" && o.data.id) {
+        const t = o.data.terminals || o.data.meta?.terminals;
+        let ports: string[] = [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (Array.isArray(t) && t.length > 0) ports = t.map((x: any) => (typeof x === "string" ? x : x?.name)).filter(Boolean);
+        else { const bt = BOARD_TERMINALS[o.data.deviceTypeKey]; if (Array.isArray(bt)) ports = [...bt]; }
+        out.push({ id: o.data.id, label: o.data.label, ports });
+      }
+    }
+    return out;
+  }
+
+  // Id of the device nearest a point (used to default a conductor's target to the
+  // cable's end device).
+  function deviceIdNear(x: number, y: number, threshold = 70): string | null {
+    const fc = fcRef.current;
+    if (!fc) return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let best: any = null; let bestD = threshold;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const o of fc.getObjects() as any[]) {
+      if (o.data?.kind === "device" && o.data.id) {
+        const c = o.getCenterPoint();
+        const d = Math.hypot(c.x - x, c.y - y);
+        if (d <= bestD) { bestD = d; best = o; }
+      }
+    }
+    return best?.data?.id ?? null;
+  }
+
   // Remove the PoE badge belonging to a wire.
   function removePoeBadgeFor(wireId: string) {
     const fc = fcRef.current;
@@ -1486,6 +1550,18 @@ function EditorInner() {
     if (!fc || !fabric) return;
     const p = scenePoint(opt);
     const mode = toolRef.current;
+
+    // Click a connection point (port dot) to start a wire there. Works from any
+    // tool: the port becomes the wire's anchor and is documented on the schedule.
+    if (mode !== "wire" && opt.target?.data?.kind === "terminal" && !opt.target.data.isLabel) {
+      // Need a wire type first — open the picker; the user then clicks the port again.
+      if (!wireKindRef.current) { setShowWirePicker(true); return; }
+      setTool("wire");
+      const tx = opt.target.left as number, ty = opt.target.top as number;
+      wirePtsRef.current = [{ x: tx, y: ty }];
+      wireFromTermRef.current = opt.target.data.name as string;
+      return;
+    }
 
     if (mode === "scale") {
       const pts = [...scalePtsRef.current, { x: p.x, y: p.y }];
@@ -1874,13 +1950,18 @@ function EditorInner() {
 
     // Wire / cable schedule rows (auto-numbered).
     const schedHtml = schedule.length
-      ? schedule.map((r) => `
+      ? schedule.map((r) => {
+          const condHtml = (r.conductors && r.conductors.length)
+            ? r.conductors.map((c) => `<div style="font-size:9px;color:#475569;padding-left:8px">• ${escapeHtml(c.label || "—")} → ${escapeHtml(c.to)}</div>`).join("")
+            : "";
+          return `
         <tr>
           <td class="l" style="font-family:monospace;font-weight:700">${escapeHtml(r.tag)}</td>
-          <td class="l">${escapeHtml(r.from)} → ${escapeHtml(r.to)}</td>
+          <td class="l">${escapeHtml(r.from)} → ${escapeHtml(r.to)}${condHtml}</td>
           <td class="l">${escapeHtml(r.cable)}</td>
           <td class="c">${escapeHtml(r.len)}</td>
-        </tr>`).join("")
+        </tr>`;
+        }).join("")
       : "";
 
     // Wiring legend — only the segment roles actually placed on the drawing.
@@ -2294,12 +2375,17 @@ function EditorInner() {
   }, [bomTick]);
 
   // ── Wire / cable schedule (auto-numbered W1, W2 …) ──────────────────────────
-  interface SchedRow { tag: string; wireId: string; from: string; to: string; type: string; cable: string; len: string; poe: string; color: string; }
+  interface SchedCond { label: string; color: string; to: string }
+  interface SchedRow { tag: string; wireId: string; from: string; to: string; type: string; cable: string; len: string; poe: string; color: string; conductors: SchedCond[]; }
   const schedule = React.useMemo<SchedRow[]>(() => {
     void bomTick;
     const fc = fcRef.current;
     if (!fc) return [];
     const px = pxPerFtRef.current;
+    // Device id → label, so each conductor's landing device can be named.
+    const devById = new Map<string, string>();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const o of fc.getObjects() as any[]) if (o.data?.kind === "device" && o.data.id) devById.set(o.data.id, o.data.label);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const wires = (fc.getObjects() as any[]).filter((o) => o.data?.kind === "wire");
     // Deterministic order — top-to-bottom, then left-to-right by start point.
@@ -2313,6 +2399,17 @@ function EditorInner() {
       const fromDev = deviceLabelNear(d.from[0], d.from[1]) || "—";
       const toDev = deviceLabelNear(d.to[0], d.to[1]) || "—";
       const kind = normWireKind(d.wireKind);
+      // Break-out conductor landings (only when the cable is fanned out).
+      const conductors: SchedCond[] = (attrs.showConductors && Array.isArray(attrs.conductors))
+        ? attrs.conductors.map((c) => {
+            let to = "";
+            if (c.toName) {
+              const devLbl = (c.toDeviceId && devById.get(c.toDeviceId)) || c.toDeviceLabel || "?";
+              to = `${devLbl} · ${c.toName}`;
+            } else if (c.term) to = `${toDev} · ${c.term}`;
+            return { label: c.label, color: c.color, to };
+          }).filter((c) => c.to)
+        : [];
       return {
         tag: `W${i + 1}`, wireId: d.id,
         from: fromDev + (attrs.fromTerm ? ` · ${attrs.fromTerm}` : ""),
@@ -2322,6 +2419,7 @@ function EditorInner() {
         len: px ? `${Math.round(len / px)}′` : (attrs.lengthFt ? `${attrs.lengthFt}′` : "—"),
         poe: attrs.poe ? (attrs.voltage ? `PoE ${attrs.voltage}` : "PoE") : "—",
         color: WIRE_COLORS[kind],
+        conductors,
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2447,7 +2545,7 @@ function EditorInner() {
       <div className="flex-1 flex min-h-0">
         {/* Left library */}
         {showLibrary && (
-          <div className="w-64 shrink-0 border-r flex flex-col" style={{ borderColor: BORDER, backgroundColor: CARD }}>
+          <div className="w-72 shrink-0 border-r flex flex-col" style={{ borderColor: BORDER, backgroundColor: CARD, minWidth: 288 }}>
             <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: BORDER }}>
               <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: MUTED }}>Element Library</span>
               <button onClick={() => setShowLibrary(false)} style={{ color: MUTED }}><X size={14} /></button>
@@ -2762,6 +2860,8 @@ function EditorInner() {
                 onSymbolChoice={patchSelectedSymbol}
                 fromPorts={selected.data?.kind === "wire" && Array.isArray(selected.data.from) ? deviceTerminalsNear(selected.data.from[0], selected.data.from[1]) : []}
                 toPorts={selected.data?.kind === "wire" && Array.isArray(selected.data.to) ? deviceTerminalsNear(selected.data.to[0], selected.data.to[1]) : []}
+                devicePorts={selected.data?.kind === "wire" ? allDevicePorts() : []}
+                endDeviceId={selected.data?.kind === "wire" && Array.isArray(selected.data.to) ? deviceIdNear(selected.data.to[0], selected.data.to[1]) : null}
                 onShape={patchSelectedShape}
                 onImage={patchSelectedImage}
                 onText={patchSelectedText}
@@ -2980,7 +3080,7 @@ function ProductPicker({ category, manufacturer, model, onPick }: {
 
 function Inspector({
   selected, onLabel, onMeta, onField, onWireKind, onWireAttrs, onWireRebuild, onRebuildCone, onColor, onProduct, onFindImage, onSymbolChoice,
-  onShape, onImage, onText, onLayer, onEnterTerminalEdit, onSaveTerminalEdit, editingTerminals, fromPorts, toPorts,
+  onShape, onImage, onText, onLayer, onEnterTerminalEdit, onSaveTerminalEdit, editingTerminals, fromPorts, toPorts, devicePorts, endDeviceId,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   selected: any;
@@ -3007,6 +3107,8 @@ function Inspector({
   editingTerminals: boolean;
   fromPorts: string[];
   toPorts: string[];
+  devicePorts: { id: string; label: string; ports: string[] }[];
+  endDeviceId: string | null;
 }) {
   const d = selected.data;
   const meta: ElemMeta = d.meta ?? {};
@@ -3363,18 +3465,39 @@ function Inspector({
                 </div>
                 <datalist id="term-list">{termOptions.map((t) => <option key={t} value={t} />)}</datalist>
                 <div className="flex flex-col gap-1.5">
-                  {conductors.map((c, i) => (
-                    <div key={i} className="flex items-center gap-1.5">
-                      <button title="Cycle color"
-                        onClick={() => { const idx = CONDUCTOR_PALETTE.indexOf(c.color); const next = CONDUCTOR_PALETTE[(idx + 1) % CONDUCTOR_PALETTE.length]; const list = conductors.map((x, j) => j === i ? { ...x, color: next } : x); onWireAttrs({ conductors: list }); onWireRebuild(); }}
-                        className="w-5 h-5 rounded shrink-0" style={{ backgroundColor: c.color, border: `1px solid ${BORDER}` }} />
-                      <input defaultValue={c.label} onBlur={(e) => { const list = conductors.map((x, j) => j === i ? { ...x, label: e.target.value } : x); onWireAttrs({ conductors: list }); }}
-                        placeholder="Label" className="w-14 px-2 py-1 rounded text-[11px] outline-none" style={inputStyle} />
-                      <input list="term-list" defaultValue={c.term ?? ""} onBlur={(e) => { const list = conductors.map((x, j) => j === i ? { ...x, term: e.target.value } : x); onWireAttrs({ conductors: list }); }}
-                        placeholder="Terminal" className="flex-1 min-w-0 px-2 py-1 rounded text-[11px] outline-none" style={inputStyle} />
-                      <button onClick={() => { const list = conductors.filter((_, j) => j !== i); onWireAttrs({ conductors: list }); onWireRebuild(); }} style={{ color: MUTED }}><X size={13} /></button>
-                    </div>
-                  ))}
+                  {conductors.map((c, i) => {
+                    const selDevId = c.toDeviceId ?? endDeviceId ?? "";
+                    const selDev = devicePorts.find((dp) => dp.id === selDevId);
+                    const ports = selDev?.ports ?? [];
+                    return (
+                      <div key={i} className="rounded-lg p-1.5" style={{ border: `1px solid ${BORDER}`, backgroundColor: PANEL }}>
+                        <div className="flex items-center gap-1.5">
+                          <button title="Cycle color"
+                            onClick={() => { const idx = CONDUCTOR_PALETTE.indexOf(c.color); const next = CONDUCTOR_PALETTE[(idx + 1) % CONDUCTOR_PALETTE.length]; const list = conductors.map((x, j) => j === i ? { ...x, color: next } : x); onWireAttrs({ conductors: list }); onWireRebuild(); }}
+                            className="w-5 h-5 rounded shrink-0" style={{ backgroundColor: c.color, border: `1px solid ${BORDER}` }} />
+                          <input defaultValue={c.label} onBlur={(e) => { const list = conductors.map((x, j) => j === i ? { ...x, label: e.target.value } : x); onWireAttrs({ conductors: list }); }}
+                            placeholder="e.g. −, +, Data" className="flex-1 min-w-0 px-2 py-1 rounded text-[11px] outline-none" style={{ backgroundColor: CARD, border: `1px solid ${BORDER}`, color: TEXT }} />
+                          <button onClick={() => { const list = conductors.filter((_, j) => j !== i); onWireAttrs({ conductors: list }); onWireRebuild(); }} style={{ color: MUTED }}><X size={13} /></button>
+                        </div>
+                        {/* Lands on: pick ANY device + its port (e.g. negative → Relay). */}
+                        <div className="grid grid-cols-2 gap-1 mt-1">
+                          <select value={selDevId}
+                            onChange={(e) => { const dev = e.target.value || undefined; const lbl = devicePorts.find((dp) => dp.id === dev)?.label; const list = conductors.map((x, j) => j === i ? { ...x, toDeviceId: dev, toDeviceLabel: lbl, toName: undefined, term: undefined } : x); onWireAttrs({ conductors: list }); onWireRebuild(); }}
+                            className="px-1.5 py-1 rounded text-[10px] outline-none" style={{ backgroundColor: CARD, border: `1px solid ${BORDER}`, color: TEXT }}>
+                            <option value="">— device —</option>
+                            {devicePorts.map((dp) => <option key={dp.id} value={dp.id}>{dp.label}</option>)}
+                          </select>
+                          <select value={c.toName ?? ""}
+                            onChange={(e) => { const nm = e.target.value || undefined; const dev = c.toDeviceId ?? endDeviceId ?? undefined; const lbl = c.toDeviceLabel ?? devicePorts.find((dp) => dp.id === dev)?.label; const list = conductors.map((x, j) => j === i ? { ...x, toDeviceId: x.toDeviceId ?? dev, toDeviceLabel: x.toDeviceLabel ?? lbl, toName: nm, term: undefined } : x); onWireAttrs({ conductors: list }); onWireRebuild(); }}
+                            className="px-1.5 py-1 rounded text-[10px] outline-none" style={{ backgroundColor: CARD, border: `1px solid ${BORDER}`, color: TEXT }}>
+                            <option value="">— port —</option>
+                            {ports.map((p) => <option key={p} value={p}>{p}</option>)}
+                            {c.toName && !ports.includes(c.toName) && <option value={c.toName}>{c.toName}</option>}
+                          </select>
+                        </div>
+                      </div>
+                    );
+                  })}
                   {conductors.length === 0 && <p className="text-[10px]" style={{ color: MUTED }}>Add conductors, or Auto-fill from the cable type.</p>}
                 </div>
               </>
@@ -3558,6 +3681,20 @@ function SchedulePanel({ rows, scaled }: { rows: any[]; scaled: boolean }) {
               <div className="text-[10px] mt-0.5" style={{ color: MUTED }}>
                 {r.cable}{r.len !== "—" ? ` · ${r.len}` : ""}{r.poe !== "—" ? ` · ${r.poe}` : ""}
               </div>
+              {/* Break-out conductors — each strand's landing (e.g. − → Relay · COM) */}
+              {Array.isArray(r.conductors) && r.conductors.length > 0 && (
+                <div className="mt-1.5 pl-2 flex flex-col gap-0.5" style={{ borderLeft: `2px solid ${BORDER}` }}>
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  {r.conductors.map((c: any, ci: number) => (
+                    <div key={ci} className="flex items-center gap-1.5 text-[10px]">
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: c.color, border: `1px solid ${BORDER}` }} />
+                      <span style={{ color: TEXT }}>{c.label || "—"}</span>
+                      <span style={{ color: MUTED }}>→</span>
+                      <span style={{ color: CYAN }}>{c.to}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
