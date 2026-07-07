@@ -2918,6 +2918,7 @@ function Inspector({
 }) {
   const d = selected.data;
   const meta: ElemMeta = d.meta ?? {};
+  const [showChangeProduct, setShowChangeProduct] = useState(false);
   const isDevice = d.kind === "device";
   const isCam = isDevice && d.isCam;
   const isBoardDev = isDevice && d.isBoard;
@@ -2961,21 +2962,54 @@ function Inspector({
 
       {isDevice && (
         <>
-          {field("Product (from catalog)", (
-            <>
-              <ProductPicker
-                category={DEVICE_BY_KEY[d.deviceTypeKey]?.category ?? ""}
-                manufacturer={meta.manufacturer ?? ""}
-                model={meta.model ?? ""}
-                onPick={onProduct}
-              />
-              {!meta.productId && (
-                <p className="text-[10px] mt-1 px-2 py-1 rounded-lg" style={{ backgroundColor: "rgba(245,158,11,0.12)", color: "#FBBF24" }}>
-                  Not linked to a catalog product — search above to pull its image, ports &amp; pricing.
+          {meta.productId ? (
+            field("Catalog product", (
+              <div className="rounded-lg p-2.5" style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}` }}>
+                <div className="flex items-center gap-2">
+                  {meta.imageUrl
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={meta.imageUrl} alt="" className="w-8 h-8 object-contain rounded shrink-0" style={{ backgroundColor: "#fff" }} />
+                    : <span className="w-8 h-8 rounded flex items-center justify-center text-[8px] shrink-0" style={{ backgroundColor: CARD, color: MUTED }}>—</span>}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[12px] font-medium truncate" style={{ color: TEXT }}>{[meta.manufacturer, meta.model].filter(Boolean).join(" ") || d.label}</div>
+                    <div className="text-[9px] flex items-center gap-1" style={{ color: "#34D399" }}>● Linked to catalog</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  <button onClick={() => setShowChangeProduct((v) => !v)} className="text-[10px] rounded-lg px-2 py-1" style={{ backgroundColor: CARD, border: `1px solid ${BORDER}`, color: CYAN }}>
+                    {showChangeProduct ? "Cancel" : "Change"}
+                  </button>
+                  <button onClick={() => { onMeta({ productId: undefined }); setShowChangeProduct(false); }} className="text-[10px] rounded-lg px-2 py-1" style={{ backgroundColor: CARD, border: `1px solid ${BORDER}`, color: MUTED }}>
+                    Unlink
+                  </button>
+                </div>
+                {showChangeProduct && (
+                  <div className="mt-2">
+                    <ProductPicker
+                      category={DEVICE_BY_KEY[d.deviceTypeKey]?.category ?? ""}
+                      manufacturer={meta.manufacturer ?? ""}
+                      model={meta.model ?? ""}
+                      onPick={(p) => { onProduct(p); setShowChangeProduct(false); }}
+                    />
+                  </div>
+                )}
+              </div>
+            ))
+          ) : (
+            field("Link to catalog", (
+              <div className="space-y-1.5">
+                <p className="text-[10px] px-2 py-1 rounded-lg" style={{ backgroundColor: "rgba(245,158,11,0.12)", color: "#FBBF24" }}>
+                  Not a catalog product yet. Pick one to pull its image, ports &amp; pricing — or use “Add current to catalog” to save this as a new product.
                 </p>
-              )}
-            </>
-          ))}
+                <ProductPicker
+                  category={DEVICE_BY_KEY[d.deviceTypeKey]?.category ?? ""}
+                  manufacturer={meta.manufacturer ?? ""}
+                  model={meta.model ?? ""}
+                  onPick={onProduct}
+                />
+              </div>
+            ))
+          )}
           {field("Image on drawing", (
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5 flex-wrap">
