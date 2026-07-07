@@ -9,6 +9,7 @@ import { ActionFlowSurface, type NexusTabId } from '@/components/nexus/ActionFlo
 import { CustomersSitesSurface } from '@/components/nexus/CustomersSitesSurface'
 import DispatchConsole from '@/components/nexus/DispatchConsole'
 import DesignExplorer from '@/components/nexus/DesignExplorer'
+import CatalogSurface from '@/components/nexus/CatalogSurface'
 import SystemsExplorer from '@/components/nexus/SystemsExplorer'
 import { HelpSurface } from '@/components/nexus/HelpSurface'
 import { InternalSurface } from '@/components/nexus/InternalSurface'
@@ -31,6 +32,7 @@ const NAV_ITEMS: { label: string; id: NexusTabId }[] = [
   { label: 'Jobs', id: 'jobs' },
   { label: 'Operations', id: 'recent' },
   { label: 'Design', id: 'design' },
+  { label: 'Catalog', id: 'catalog' },
   { label: 'Systems', id: 'systems' },
   { label: 'Money/Docs', id: 'field' },
 ]
@@ -205,7 +207,7 @@ export default function NexusHomeClient() {
         )}
 
         <div key={`${activeTab}-${navNonce}`} className="w-full flex justify-center">
-          {activeTab === 'my-day' ? <MyDaySurface /> : activeTab === 'jobs' ? <JobsSurface onOpenDispatch={() => setActiveTab('dispatch')} /> : activeTab === 'opps' ? <SalesSurface /> : activeTab === 'recent' ? <CustomersSitesSurface /> : activeTab === 'dispatch' ? <DispatchConsole /> : activeTab === 'design' ? <DesignExplorer /> : activeTab === 'systems' ? <SystemsExplorer /> : activeTab === 'help' ? <HelpSurface /> : activeTab === 'field' ? <MoneyDocsSurfaceNext /> : activeTab === 'people' ? <InternalSurface /> : <ActionFlowSurface activeTab={activeTab} />}
+          {activeTab === 'my-day' ? <MyDaySurface /> : activeTab === 'jobs' ? <JobsSurface onOpenDispatch={() => setActiveTab('dispatch')} /> : activeTab === 'opps' ? <SalesSurface /> : activeTab === 'recent' ? <CustomersSitesSurface /> : activeTab === 'dispatch' ? <DispatchConsole /> : activeTab === 'design' ? <DesignExplorer /> : activeTab === 'catalog' ? <CatalogSurface /> : activeTab === 'systems' ? <SystemsExplorer /> : activeTab === 'help' ? <HelpSurface /> : activeTab === 'field' ? <MoneyDocsSurfaceNext /> : activeTab === 'people' ? <InternalSurface /> : <ActionFlowSurface activeTab={activeTab} />}
         </div>
       </main>
 

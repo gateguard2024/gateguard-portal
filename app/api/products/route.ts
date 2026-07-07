@@ -87,7 +87,10 @@ export async function POST(req: NextRequest) {
     subcategory,
     sell_price,
     list_price,
+    dealer_cost,
     msrp,
+    specs,
+    adi_sku,
     image_url,
     manual_url,
     field_service,
@@ -121,7 +124,10 @@ export async function POST(req: NextRequest) {
   if (subcategory != null) row.subcategory = subcategory
   if (typeof sell_price === 'number') row.sell_price = sell_price
   if (typeof list_price === 'number') row.list_price = list_price
+  if (typeof dealer_cost === 'number') row.dealer_cost = dealer_cost
   if (typeof msrp === 'number') row.msrp = msrp
+  if (specs != null) row.specs = specs
+  if (adi_sku != null) row.adi_sku = adi_sku
   if (image_url != null) row.image_url = image_url
   if (manual_url != null) row.manual_url = manual_url
   if (field_service != null) row.field_service = field_service === true
@@ -186,10 +192,15 @@ export async function PATCH(req: NextRequest) {
 
   const patch: Record<string, unknown> = {}
   const b = body as Record<string, unknown>
-  for (const k of ['name', 'brand', 'sku', 'category', 'subcategory', 'manual_url', 'image_url']) {
+  for (const k of ['name', 'brand', 'sku', 'category', 'subcategory', 'description', 'specs', 'adi_sku', 'manual_url', 'image_url']) {
     if (b[k] != null) patch[k] = b[k]
   }
-  if (typeof b.sell_price === 'number') patch.sell_price = b.sell_price
+  for (const k of ['sell_price', 'dealer_cost', 'list_price', 'msrp']) {
+    if (typeof b[k] === 'number') patch[k] = b[k]
+  }
+  if (typeof b.active === 'boolean') patch.active = b.active
+  if (typeof b.field_service === 'boolean') patch.field_service = b.field_service
+  if (Array.isArray(b.tags)) patch.tags = b.tags
   if (b.design_meta != null && typeof b.design_meta === 'object') patch.design_meta = b.design_meta
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
 

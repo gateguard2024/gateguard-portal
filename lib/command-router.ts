@@ -32,6 +32,7 @@ const TAB_KEYWORDS: { tab: NexusTabId; label: string; words: string[] }[] = [
   { tab: 'dispatch', label: 'Dispatch', words: ['dispatch', 'roster', 'assign techs', 'techs', 'technicians', 'whos available', "who's available"] },
   { tab: 'recent', label: 'Operations', words: ['operations', 'customers', 'customer', 'sites', 'site', 'properties', 'property', 'accounts'] },
   { tab: 'design', label: 'Design', words: ['design', 'designs', 'floor plan', 'floor plans', 'as-built', 'as built'] },
+  { tab: 'catalog', label: 'Catalog', words: ['catalog', 'catalogue', 'products', 'product', 'product catalog', 'price book'] },
   { tab: 'systems', label: 'Systems', words: ['systems', 'system', 'devices', 'device health', 'installed devices', 'cameras'] },
   { tab: 'field', label: 'Money/Docs', words: ['money', 'docs', 'money/docs', 'invoices', 'invoice', 'billing', 'renewals', 'documents'] },
   { tab: 'people', label: 'Admin', words: ['admin', 'internal', 'users', 'team', 'people', 'access', 'settings'] },
