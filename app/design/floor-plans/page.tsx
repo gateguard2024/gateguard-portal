@@ -477,6 +477,11 @@ function EditorInner() {
 
   const [expandedCat, setExpandedCat] = useState<Record<string, boolean>>({ Cameras: true });
   const [showLibrary, setShowLibrary] = useState(true);
+  // Catalog product search in the library — place YOUR built product directly
+  // (arrives with its placement image + mapped ports), not a blank template.
+  const [catQuery, setCatQuery] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [catResults, setCatResults] = useState<any[]>([]);
   const [showBom, setShowBom] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
   const [showInspector, setShowInspector] = useState(true);
@@ -1590,6 +1595,78 @@ function EditorInner() {
     setTool("device");
   };
 
+  // Catalog search (debounced) for the library "place your product" box.
+  useEffect(() => {
+    const term = catQuery.trim();
+    if (term.length < 2) { setCatResults([]); return; }
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/products?q=${encodeURIComponent(term)}&limit=8`);
+        const json = await res.json();
+        setCatResults(Array.isArray(json.products) ? json.products : []);
+      } catch { setCatResults([]); }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [catQuery]);
+
+  // Map a product's drawing role → a device-type key (affects FOV/camera behavior;
+  // the product's own placement image + color + ports override the rest).
+  const roleToDeviceKey = (role?: string): string => {
+    switch ((role ?? "").toLowerCase()) {
+      case "camera": return "camera_dome";
+      case "gateway": return "unifi_gateway";
+      case "switch": return "usw_8poe";
+      case "reader": return "reader";
+      case "intercom": return "g3_intercom";
+      case "gate": return "liftmaster";
+      case "lock": return "mag_lock";
+      case "sensor": return "motion";
+      case "power": return "xfmr_24vdc";
+      case "board": return "single_door_ctrl";
+      default: return "unifi_gateway";
+    }
+  };
+
+  // Drop a catalog product straight onto the canvas — bound + imaged + ported.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const placeCatalogProduct = async (prod: any) => {
+    const fc = fcRef.current;
+    if (!fc) return;
+    const dm = (prod.design_meta && typeof prod.design_meta === "object") ? prod.design_meta : {};
+    const meta: ElemMeta = {
+      productId: prod.id ? String(prod.id) : undefined,
+      manufacturer: prod.brand || undefined,
+      model: prod.name || undefined,
+      price: typeof prod.sell_price === "number" && prod.sell_price > 0 ? prod.sell_price : undefined,
+      cost: typeof prod.dealer_cost === "number" && prod.dealer_cost > 0 ? prod.dealer_cost : undefined,
+      msrp: typeof prod.msrp === "number" && prod.msrp > 0 ? prod.msrp : undefined,
+      imageUrl: prod.image_url || undefined,
+      color: typeof dm.color === "string" && dm.color ? dm.color : undefined,
+      role: typeof dm.role === "string" ? dm.role : undefined,
+      isBoard: typeof dm.isBoard === "boolean" ? dm.isBoard : undefined,
+      terminals: Array.isArray(dm.terminals) && dm.terminals.length > 0 ? dm.terminals : undefined,
+      placementImageUrl: typeof dm.placementImageUrl === "string" ? dm.placementImageUrl : undefined,
+      wiringImageUrl: typeof dm.wiringImageUrl === "string" ? dm.wiringImageUrl : undefined,
+      defaultCable: typeof dm.defaultCable === "string" ? dm.defaultCable : undefined,
+    };
+    // Preload all three images so the symbol renders immediately.
+    const imgs = [meta.placementImageUrl, meta.imageUrl, meta.wiringImageUrl].filter(Boolean) as string[];
+    if (imgs.length > 0) await Promise.all(imgs.map((u) => loadSymbolImage(u, u).catch(() => {})));
+    const key = roleToDeviceKey(dm.role);
+    const g = buildDevice(CANVAS_W / 2, CANVAS_H / 2, key, meta, undefined, undefined, prod.name);
+    if (g) {
+      fc.setActiveObject(g);
+      setSelected(g);
+      setInspectorTick((t) => t + 1);
+      bumpBom();
+      fc.requestRenderAll();
+    }
+    setCatQuery("");
+    setCatResults([]);
+    // No catalog image at all → auto-find one so it isn't a bare badge.
+    if (imgs.length === 0) void autoFindImage();
+  };
+
   const save = async () => {
     if (!planId) { setSaveMsg("No plan id"); return; }
     setSaving(true);
@@ -2261,6 +2338,46 @@ function EditorInner() {
               <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: MUTED }}>Element Library</span>
               <button onClick={() => setShowLibrary(false)} style={{ color: MUTED }}><X size={14} /></button>
             </div>
+
+            {/* Place YOUR catalog product directly (image + ports included) */}
+            <div className="px-3 pt-3 pb-2 border-b" style={{ borderColor: BORDER }}>
+              <p className="text-[10px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: CYAN }}>Your catalog</p>
+              <div className="relative">
+                <input
+                  value={catQuery}
+                  onChange={(e) => setCatQuery(e.target.value)}
+                  placeholder="Search your products…"
+                  className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+                  style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT }}
+                />
+                {catResults.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full mt-1 z-40 rounded-lg overflow-hidden max-h-60 overflow-y-auto" style={{ backgroundColor: CARD, border: `1px solid ${BORDER}` }}>
+                    {catResults.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => placeCatalogProduct(p)}
+                        className="w-full text-left px-2.5 py-2 flex items-center gap-2 transition-colors hover:brightness-125"
+                        style={{ borderBottom: `1px solid ${BORDER}`, backgroundColor: PANEL }}
+                      >
+                        {(p.design_meta?.placementImageUrl || p.image_url)
+                          // eslint-disable-next-line @next/next/no-img-element
+                          ? <img src={p.design_meta?.placementImageUrl || p.image_url} alt="" className="w-7 h-7 object-contain rounded shrink-0" style={{ backgroundColor: "#fff" }} />
+                          : <span className="w-7 h-7 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0" style={{ backgroundColor: "#33415522", border: `1px solid ${BORDER}`, color: MUTED }}>{(p.brand ?? p.name ?? "?").slice(0, 2).toUpperCase()}</span>}
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-[11px] font-medium truncate" style={{ color: TEXT }}>{p.name}</span>
+                          <span className="block text-[9px] truncate" style={{ color: MUTED }}>{[p.brand, p.category].filter(Boolean).join(" · ")}</span>
+                        </span>
+                        {Array.isArray(p.design_meta?.terminals) && p.design_meta.terminals.length > 0 && (
+                          <span className="text-[8px] font-bold px-1 rounded shrink-0" style={{ backgroundColor: "rgba(0,200,255,0.16)", color: CYAN }}>{p.design_meta.terminals.length}p</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <p className="text-[9px] mt-1.5" style={{ color: MUTED }}>Drops onto the sheet with its image &amp; ports. Templates below are generic.</p>
+            </div>
+
             <div className="flex-1 overflow-y-auto p-2">
               {DEVICE_CATEGORIES.map((cat) => {
                 const open = expandedCat[cat];

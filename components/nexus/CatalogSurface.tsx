@@ -456,13 +456,13 @@ function ProductEditor({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex justify-center overflow-y-auto p-4"
       style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
       onClick={() => !saving && onClose()}
     >
       <div
-        className="w-full max-w-2xl rounded-2xl flex flex-col"
-        style={{ backgroundColor: CARD, border: `1px solid ${BORDER}`, maxHeight: '92dvh' }}
+        className="w-full max-w-2xl rounded-2xl flex flex-col my-auto"
+        style={{ backgroundColor: CARD, border: `1px solid ${BORDER}`, maxHeight: 'calc(100vh - 2rem)' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
