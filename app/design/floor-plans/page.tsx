@@ -1371,7 +1371,7 @@ function EditorInner() {
   }
 
   // Nearest board terminal dot to a point (within threshold px), for snapping.
-  function nearestTerminal(x: number, y: number, threshold = 12): { x: number; y: number; name: string } | null {
+  function nearestTerminal(x: number, y: number, threshold = 20): { x: number; y: number; name: string } | null {
     const fc = fcRef.current;
     if (!fc) return null;
     let best: { x: number; y: number; name: string } | null = null;
@@ -1410,6 +1410,33 @@ function EditorInner() {
       }
     }
     return best;
+  }
+
+  // Port names of the device nearest a point — used to populate the wire
+  // inspector's From/To port dropdowns so a connection can be documented.
+  function deviceTerminalsNear(x: number, y: number, threshold = 70): string[] {
+    const fc = fcRef.current;
+    if (!fc) return [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let best: any = null;
+    let bestD = threshold;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const o of fc.getObjects() as any[]) {
+      if (o.data?.kind === "device") {
+        const c = o.getCenterPoint();
+        const d = Math.hypot(c.x - x, c.y - y);
+        if (d <= bestD) { bestD = d; best = o; }
+      }
+    }
+    if (!best) return [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const t = best.data.terminals || best.data.meta?.terminals;
+    if (Array.isArray(t) && t.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return t.map((x: any) => (typeof x === "string" ? x : x?.name)).filter(Boolean);
+    }
+    const bt = BOARD_TERMINALS[best.data.deviceTypeKey];
+    return Array.isArray(bt) ? [...bt] : [];
   }
 
   // Remove the PoE badge belonging to a wire.
@@ -2085,6 +2112,7 @@ function EditorInner() {
     if (!selected?.data || selected.data.kind !== "wire") return;
     selected.data.wireAttrs = { ...(selected.data.wireAttrs ?? {}), ...patch };
     setInspectorTick((t) => t + 1);
+    bumpBom(); // refresh the wire schedule (keyed off bomTick) so ports document live
   };
   // Redraw the selected wire (single line ↔ fanned conductors) after a change
   // to its conductor set. Mirrors rebuildSelectedCone for cameras.
@@ -2732,6 +2760,8 @@ function EditorInner() {
                 onProduct={patchSelectedProduct}
                 onFindImage={autoFindImage}
                 onSymbolChoice={patchSelectedSymbol}
+                fromPorts={selected.data?.kind === "wire" && Array.isArray(selected.data.from) ? deviceTerminalsNear(selected.data.from[0], selected.data.from[1]) : []}
+                toPorts={selected.data?.kind === "wire" && Array.isArray(selected.data.to) ? deviceTerminalsNear(selected.data.to[0], selected.data.to[1]) : []}
                 onShape={patchSelectedShape}
                 onImage={patchSelectedImage}
                 onText={patchSelectedText}
@@ -2950,7 +2980,7 @@ function ProductPicker({ category, manufacturer, model, onPick }: {
 
 function Inspector({
   selected, onLabel, onMeta, onField, onWireKind, onWireAttrs, onWireRebuild, onRebuildCone, onColor, onProduct, onFindImage, onSymbolChoice,
-  onShape, onImage, onText, onLayer, onEnterTerminalEdit, onSaveTerminalEdit, editingTerminals,
+  onShape, onImage, onText, onLayer, onEnterTerminalEdit, onSaveTerminalEdit, editingTerminals, fromPorts, toPorts,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   selected: any;
@@ -2975,6 +3005,8 @@ function Inspector({
   onEnterTerminalEdit: () => void;
   onSaveTerminalEdit: () => void;
   editingTerminals: boolean;
+  fromPorts: string[];
+  toPorts: string[];
 }) {
   const d = selected.data;
   const meta: ElemMeta = d.meta ?? {};
@@ -3246,11 +3278,33 @@ function Inspector({
             <span className="w-5 h-1 rounded-full" style={{ backgroundColor: WIRE_COLORS[normWireKind(d.wireKind)] }} />
             Color shown on the diagram
           </div>
-          {(wa.fromTerm || wa.toTerm) && (
-            <div className="mb-3 text-[11px] rounded-lg px-2 py-1.5" style={{ backgroundColor: PANEL, border: `1px solid ${BORDER}`, color: TEXT }}>
-              Lands on: <span style={{ color: CYAN }}>{wa.fromTerm ?? "—"}</span> → <span style={{ color: CYAN }}>{wa.toTerm ?? "—"}</span>
+          {/* Connect each end of the wire to a defined port — documents on the schedule. */}
+          <div className="mb-3">
+            <div className="text-[10px] font-semibold uppercase tracking-wide mb-1" style={{ color: MUTED }}>Connects to ports</div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[9px] block mb-0.5" style={{ color: MUTED }}>From port</label>
+                <select value={wa.fromTerm ?? ""} onChange={(e) => onWireAttrs({ fromTerm: e.target.value || undefined })}
+                  className="w-full px-2 py-1.5 rounded-lg text-xs outline-none" style={inputStyle}>
+                  <option value="">— none —</option>
+                  {fromPorts.map((p) => <option key={p} value={p}>{p}</option>)}
+                  {wa.fromTerm && !fromPorts.includes(wa.fromTerm) && <option value={wa.fromTerm}>{wa.fromTerm}</option>}
+                </select>
+              </div>
+              <div>
+                <label className="text-[9px] block mb-0.5" style={{ color: MUTED }}>To port</label>
+                <select value={wa.toTerm ?? ""} onChange={(e) => onWireAttrs({ toTerm: e.target.value || undefined })}
+                  className="w-full px-2 py-1.5 rounded-lg text-xs outline-none" style={inputStyle}>
+                  <option value="">— none —</option>
+                  {toPorts.map((p) => <option key={p} value={p}>{p}</option>)}
+                  {wa.toTerm && !toPorts.includes(wa.toTerm) && <option value={wa.toTerm}>{wa.toTerm}</option>}
+                </select>
+              </div>
             </div>
-          )}
+            {(fromPorts.length === 0 && toPorts.length === 0) && (
+              <p className="text-[9px] mt-1" style={{ color: MUTED }}>Tip: draw the wire to a device that has ports mapped (or bind one from the catalog) to pick a port here.</p>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-2">
             {field("Cable", (
               <select defaultValue={wa.cable ?? ""} onChange={(e) => onWireAttrs({ cable: e.target.value })} className="w-full px-2 py-2 rounded-lg text-sm outline-none" style={inputStyle}>
