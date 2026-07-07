@@ -1476,7 +1476,12 @@ function EditorInner() {
     if ((mode === "device" || mode === "fov") && devKeyRef.current) {
       if (opt.target) return;
       const g = buildDevice(p.x, p.y, devKeyRef.current, {});
-      if (g) { fc.setActiveObject(g); setSelected(g); }
+      if (g) {
+        fc.setActiveObject(g); setSelected(g);
+        // Auto-link a generic template to its matching catalog product on drop.
+        const dt = DEVICE_BY_KEY[devKeyRef.current];
+        if (dt) void autoLinkOnPlace(g, dt.label);
+      }
       fc.renderAll();
       bumpBom();
       return;
@@ -1682,6 +1687,61 @@ function EditorInner() {
     setCatResults([]);
     // No catalog image at all → auto-find one so it isn't a bare badge.
     if (imgs.length === 0) void autoFindImage();
+  };
+
+  // Apply a catalog product onto an already-placed device (rebuild in place).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const applyProductToGroup = async (g: any, prod: any) => {
+    const fc = fcRef.current;
+    if (!fc || !g?.data) return;
+    const dm = (prod.design_meta && typeof prod.design_meta === "object") ? prod.design_meta : {};
+    const patch: Partial<ElemMeta> = {
+      productId: prod.id ? String(prod.id) : undefined,
+      manufacturer: prod.brand || undefined,
+      model: prod.name || undefined,
+      price: typeof prod.sell_price === "number" && prod.sell_price > 0 ? prod.sell_price : undefined,
+      cost: typeof prod.dealer_cost === "number" && prod.dealer_cost > 0 ? prod.dealer_cost : undefined,
+      msrp: typeof prod.msrp === "number" && prod.msrp > 0 ? prod.msrp : undefined,
+      imageUrl: prod.image_url || undefined,
+      color: typeof dm.color === "string" && dm.color ? dm.color : undefined,
+      role: typeof dm.role === "string" ? dm.role : undefined,
+      isBoard: typeof dm.isBoard === "boolean" ? dm.isBoard : undefined,
+      terminals: Array.isArray(dm.terminals) && dm.terminals.length > 0 ? dm.terminals : undefined,
+      placementImageUrl: typeof dm.placementImageUrl === "string" ? dm.placementImageUrl : undefined,
+      wiringImageUrl: typeof dm.wiringImageUrl === "string" ? dm.wiringImageUrl : undefined,
+      defaultCable: typeof dm.defaultCable === "string" ? dm.defaultCable : undefined,
+    };
+    const meta: ElemMeta = { ...(g.data.meta ?? {}), ...patch };
+    const imgs = [meta.placementImageUrl, meta.imageUrl, meta.wiringImageUrl].filter(Boolean) as string[];
+    if (imgs.length > 0) await Promise.all(imgs.map((u) => loadSymbolImage(u, u).catch(() => {})));
+    const c = g.getCenterPoint();
+    const key = g.data.deviceTypeKey, cond = g.data.condition, act = g.data.action, label = g.data.label;
+    if (g.data.id) removeTerminalsFor(g.data.id);
+    fc.remove(g);
+    const ng = buildDevice(c.x, c.y, key, meta, cond, act, label);
+    if (ng) { fc.setActiveObject(ng); setSelected(ng); setInspectorTick((t) => t + 1); }
+    bumpBom();
+    fc.requestRenderAll();
+  };
+
+  // On placing a generic template, auto-link it to a matching catalog product
+  // (by name/SKU) so the placed device carries image + ports + pricing without
+  // the user having to search. The generic template is just the fallback.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const autoLinkOnPlace = async (g: any, label: string) => {
+    try {
+      const res = await fetch(`/api/products?q=${encodeURIComponent(label)}&limit=6`);
+      const json = await res.json();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const prods: any[] = Array.isArray(json.products) ? json.products : [];
+      if (prods.length === 0) return;
+      const norm = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const L = norm(label);
+      const match =
+        prods.find((p) => norm(p.name) === L || norm(p.sku) === L) ||
+        prods.find((p) => (norm(p.name) && (norm(p.name).includes(L) || L.includes(norm(p.name)))) || (norm(p.sku) && norm(p.sku).includes(L)));
+      if (match) await applyProductToGroup(g, match);
+    } catch { /* silent — leave as generic */ }
   };
 
   const save = async () => {
