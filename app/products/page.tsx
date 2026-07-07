@@ -24,13 +24,14 @@ type ProductCategory = "Camera" | "Access Control" | "Gate Operator" | "Callbox 
 // products.image_url; the WIRING/terminal image is design_meta.wiringImageUrl.
 interface Terminal { name: string; dx: number; dy: number }
 interface DesignMeta {
-  role?: string;          // camera | board | gateway | reader | switch | power | ...
-  abbr?: string;          // short badge shown when no image (e.g. "SDC")
-  color?: string;         // marker / accent color
-  isBoard?: boolean;      // shows a terminal strip in detail view
-  wiringImageUrl?: string;// terminal/wiring image (detail view)
-  terminals?: Terminal[]; // terminal positions relative to the device center
-  defaultCable?: string;  // default cable spec for runs to this device
+  role?: string;             // camera | board | gateway | reader | switch | power | ...
+  abbr?: string;             // short badge shown when no image (e.g. "SDC")
+  color?: string;            // marker / accent color
+  isBoard?: boolean;         // shows a terminal strip in detail view
+  placementImageUrl?: string;// clean symbol dropped on basic / overview drawings
+  wiringImageUrl?: string;   // line drawing: device + mapped terminal positions (detail view)
+  terminals?: Terminal[];    // all ports — label + position relative to device center
+  defaultCable?: string;     // default cable spec for runs to this device
 }
 
 interface Product {
@@ -356,13 +357,21 @@ function ProductModal({ product, onSave, onClose, saving }: { product:Partial<Pr
   const [showDesign, setShowDesign] = useState<boolean>(
     !!(product.designMeta && (product.designMeta.role || product.designMeta.isBoard || product.designMeta.wiringImageUrl))
   );
-  const [imgBusy,   setImgBusy]   = useState<""|"general"|"wiring"|"find-general"|"find-wiring">("");
+  type ImgKind = "general" | "placement" | "wiring";
+  const [imgBusy,   setImgBusy]   = useState<""|ImgKind|`find-${ImgKind}`>("");
   const [imgStatus, setImgStatus] = useState<string|null>(null);
-  const genRef  = useRef<HTMLInputElement>(null);
-  const wireRef = useRef<HTMLInputElement>(null);
+  const genRef   = useRef<HTMLInputElement>(null);
+  const placeRef = useRef<HTMLInputElement>(null);
+  const wireRef  = useRef<HTMLInputElement>(null);
+  const IMG_LABEL: Record<ImgKind,string> = { general:"Icon", placement:"Placement symbol", wiring:"Line drawing" };
+  const applyImg = (kind:ImgKind, url:string) => {
+    if (kind === "general") set("imageUrl", url);
+    else if (kind === "placement") setD("placementImageUrl", url);
+    else setD("wiringImageUrl", url);
+  };
 
-  const uploadImage = async (file: File, kind:"general"|"wiring") => {
-    setImgBusy(kind); setImgStatus(`Uploading ${kind} image…`);
+  const uploadImage = async (file: File, kind:ImgKind) => {
+    setImgBusy(kind); setImgStatus(`Uploading ${IMG_LABEL[kind].toLowerCase()}…`);
     try {
       const fd = new FormData();
       fd.append("file", file);
@@ -372,16 +381,17 @@ function ProductModal({ product, onSave, onClose, saving }: { product:Partial<Pr
       const res = await fetch("/api/products/upload-image", { method:"POST", body: fd });
       const d = await res.json().catch(()=>({error:`HTTP ${res.status}`}));
       if (!res.ok) throw new Error(d.error ?? "Upload failed");
-      if (kind === "general") set("imageUrl", d.url as string); else setD("wiringImageUrl", d.url as string);
-      setImgStatus(`✅ ${kind==="general"?"Product":"Wiring"} image uploaded`);
+      applyImg(kind, d.url as string);
+      setImgStatus(`✅ ${IMG_LABEL[kind]} uploaded`);
     } catch(e){ setImgStatus(`❌ ${e instanceof Error?e.message:"Upload failed"}`); }
     finally { setImgBusy(""); }
   };
 
-  const findImage = async (kind:"general"|"wiring") => {
-    setImgBusy(`find-${kind}`); setImgStatus(`🔍 Searching for ${kind} image…`);
+  const findImage = async (kind:ImgKind) => {
+    setImgBusy(`find-${kind}`); setImgStatus(`🔍 Searching for ${IMG_LABEL[kind].toLowerCase()}…`);
     try {
-      const searchName = kind === "wiring" ? `${form.name} wiring diagram terminals` : form.name;
+      const searchName = kind === "wiring" ? `${form.name} wiring diagram terminals`
+        : kind === "placement" ? `${form.name} line drawing symbol` : form.name;
       const res = await fetch("/api/products/find-image", {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({
@@ -391,8 +401,8 @@ function ProductModal({ product, onSave, onClose, saving }: { product:Partial<Pr
       });
       const d = await res.json().catch(()=>({error:`HTTP ${res.status}`}));
       if (!res.ok) throw new Error(d.error ?? "Search failed");
-      if (kind === "general") set("imageUrl", d.url as string); else setD("wiringImageUrl", d.url as string);
-      setImgStatus(`✅ Found ${kind==="general"?"product":"wiring"} image`);
+      applyImg(kind, d.url as string);
+      setImgStatus(`✅ Found ${IMG_LABEL[kind].toLowerCase()}`);
     } catch(e){ setImgStatus(`❌ ${e instanceof Error?e.message:"Search failed"}`); }
     finally { setImgBusy(""); }
   };
@@ -652,49 +662,33 @@ function ProductModal({ product, onSave, onClose, saving }: { product:Partial<Pr
                   <span className="text-[10px] text-muted-foreground">(shows a terminal strip in detail drawings)</span>
                 </div>
 
-                {/* Two images: general + wiring */}
-                <div className="grid grid-cols-2 gap-4">
-                  {/* General image */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-foreground">Product Image <span className="text-[10px] text-muted-foreground">(overview)</span></label>
-                    <div className="border border-border rounded-lg p-2 bg-slate-50 flex flex-col items-center gap-2">
-                      {form.imageUrl
-                        ? <img src={form.imageUrl} alt="general" className="w-20 h-20 object-contain rounded bg-white border border-border"/>
-                        : <div className="w-20 h-20 rounded bg-white border border-dashed border-border flex items-center justify-center text-[10px] text-muted-foreground">none</div>}
-                      <div className="flex gap-1.5 w-full">
-                        <input ref={genRef} type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f)uploadImage(f,"general");}}/>
-                        <button type="button" onClick={()=>genRef.current?.click()} disabled={imgBusy!==""}
-                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-blue-600 text-white text-[11px] font-semibold hover:bg-blue-700 disabled:opacity-50">
-                          {imgBusy==="general"?<Loader2 size={11} className="animate-spin"/>:<Upload size={11}/>}Upload
-                        </button>
-                        <button type="button" onClick={()=>findImage("general")} disabled={imgBusy!==""||!form.name}
-                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-violet-600 text-white text-[11px] font-semibold hover:bg-violet-700 disabled:opacity-50">
-                          {imgBusy==="find-general"?<Loader2 size={11} className="animate-spin"/>:<span>🔍</span>}Find
-                        </button>
+                {/* Three images — one product record carries all three */}
+                <div className="grid grid-cols-3 gap-3">
+                  {([
+                    { kind:"general"   as ImgKind, title:"Icon",            hint:"catalog · invoice · proposal", ref:genRef,   url:form.imageUrl },
+                    { kind:"placement" as ImgKind, title:"Placement symbol", hint:"basic / overview drawings",    ref:placeRef, url:design.placementImageUrl },
+                    { kind:"wiring"    as ImgKind, title:"Line drawing",     hint:"device + terminals (detail)",  ref:wireRef,  url:design.wiringImageUrl },
+                  ]).map(slot=>(
+                    <div key={slot.kind} className="space-y-1.5">
+                      <label className="text-xs font-medium text-foreground block leading-tight">{slot.title}<br/><span className="text-[10px] text-muted-foreground font-normal">{slot.hint}</span></label>
+                      <div className="border border-border rounded-lg p-2 bg-slate-50 flex flex-col items-center gap-2">
+                        {slot.url
+                          ? <img src={slot.url} alt={slot.title} className="w-16 h-16 object-contain rounded bg-white border border-border"/>
+                          : <div className="w-16 h-16 rounded bg-white border border-dashed border-border flex items-center justify-center text-[10px] text-muted-foreground">none</div>}
+                        <div className="flex gap-1 w-full">
+                          <input ref={slot.ref} type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f)uploadImage(f,slot.kind);}}/>
+                          <button type="button" onClick={()=>slot.ref.current?.click()} disabled={imgBusy!==""}
+                            className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg bg-blue-600 text-white text-[10px] font-semibold hover:bg-blue-700 disabled:opacity-50">
+                            {imgBusy===slot.kind?<Loader2 size={10} className="animate-spin"/>:<Upload size={10}/>}Upload
+                          </button>
+                          <button type="button" onClick={()=>findImage(slot.kind)} disabled={imgBusy!==""||!form.name}
+                            className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg bg-violet-600 text-white text-[10px] font-semibold hover:bg-violet-700 disabled:opacity-50">
+                            {imgBusy===`find-${slot.kind}`?<Loader2 size={10} className="animate-spin"/>:<span>🔍</span>}Find
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-
-                  {/* Wiring image */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-foreground">Wiring / Terminal Image <span className="text-[10px] text-muted-foreground">(detail)</span></label>
-                    <div className="border border-border rounded-lg p-2 bg-slate-50 flex flex-col items-center gap-2">
-                      {design.wiringImageUrl
-                        ? <img src={design.wiringImageUrl} alt="wiring" className="w-20 h-20 object-contain rounded bg-white border border-border"/>
-                        : <div className="w-20 h-20 rounded bg-white border border-dashed border-border flex items-center justify-center text-[10px] text-muted-foreground">none</div>}
-                      <div className="flex gap-1.5 w-full">
-                        <input ref={wireRef} type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f)uploadImage(f,"wiring");}}/>
-                        <button type="button" onClick={()=>wireRef.current?.click()} disabled={imgBusy!==""}
-                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-blue-600 text-white text-[11px] font-semibold hover:bg-blue-700 disabled:opacity-50">
-                          {imgBusy==="wiring"?<Loader2 size={11} className="animate-spin"/>:<Upload size={11}/>}Upload
-                        </button>
-                        <button type="button" onClick={()=>findImage("wiring")} disabled={imgBusy!==""||!form.name}
-                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-violet-600 text-white text-[11px] font-semibold hover:bg-violet-700 disabled:opacity-50">
-                          {imgBusy==="find-wiring"?<Loader2 size={11} className="animate-spin"/>:<span>🔍</span>}Find
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  ))}
                 </div>
                 {imgStatus&&(
                   <p className={cn("text-xs px-2 py-1 rounded-lg",

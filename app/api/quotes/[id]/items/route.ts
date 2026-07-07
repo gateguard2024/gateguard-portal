@@ -9,6 +9,17 @@ const supabase = createClient(
 )
 export const dynamic = 'force-dynamic'
 
+// Products are the single source of truth. Line items store only product_id;
+// the image is read live from the products catalog at display time.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function withCatalogImages(items: any[]): Promise<any[]> {
+  const ids = Array.from(new Set(items.map(i => i.product_id).filter(Boolean)))
+  if (ids.length === 0) return items.map(i => ({ ...i, image_url: null }))
+  const { data: prods } = await supabase.from('products').select('id, image_url').in('id', ids)
+  const imgById = new Map((prods ?? []).map(p => [p.id, p.image_url]))
+  return items.map(i => ({ ...i, image_url: i.product_id ? (imgById.get(i.product_id) ?? null) : null }))
+}
+
 async function recalcTotals(quoteId: string) {
   const { data: items } = await supabase
     .from('quote_line_items')
@@ -39,13 +50,13 @@ export async function GET(
     .select(`
       id, sort_order, category, description, qty, unit_price, is_recurring, created_at,
       section_name, product_id, item_type, unit, is_optional, is_included,
-      package_tier, image_url, model_number, notes, sku, line_discount_percent
+      package_tier, model_number, notes, sku, line_discount_percent
     `)
     .eq('quote_id', params.id)
     .order('sort_order', { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ items: data ?? [] })
+  return NextResponse.json({ items: await withCatalogImages(data ?? []) })
 }
 
 // POST /api/quotes/[id]/items — add a line item, recalculate quote totals
@@ -97,7 +108,8 @@ export async function POST(
       is_optional:  body.is_optional  ?? false,
       is_included:  body.is_included  ?? true,
       package_tier: body.package_tier ?? null,
-      image_url:             body.image_url             ?? null,
+      // image_url intentionally NOT stored — the photo lives only in products and
+      // is read live via product_id (single source of truth).
       model_number:          body.model_number          ?? null,
       notes:                 body.notes                 ?? null,
       sku:                   body.sku                   ?? null,
@@ -111,5 +123,6 @@ export async function POST(
   // Recalculate parent quote totals
   await recalcTotals(params.id)
 
-  return NextResponse.json({ item }, { status: 201 })
+  const [enriched] = await withCatalogImages([item])
+  return NextResponse.json({ item: enriched }, { status: 201 })
 }

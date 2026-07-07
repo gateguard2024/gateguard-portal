@@ -37,7 +37,7 @@ export async function GET(
       quote_line_items (
         id, sort_order, category, description, qty, unit_price, unit, is_recurring,
         section_name, product_id, item_type, is_optional, is_included,
-        package_tier, image_url, model_number, notes, sku, created_at,
+        package_tier, model_number, notes, sku, created_at,
         line_discount_percent
       )
     `)
@@ -77,7 +77,18 @@ export async function GET(
     (a: { sort_order: number }, b: { sort_order: number }) => a.sort_order - b.sort_order
   )
 
-  return NextResponse.json({ quote: { ...quote, quote_line_items: sortedItems, client_org_name, site_name } })
+  // Resolve each line's image live from the products catalog (single source of truth).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pids = Array.from(new Set(sortedItems.map((i: any) => i.product_id).filter(Boolean)))
+  let imgById = new Map<string, string | null>()
+  if (pids.length > 0) {
+    const { data: prods } = await supabase.from('products').select('id, image_url').in('id', pids)
+    imgById = new Map((prods ?? []).map(p => [p.id, p.image_url]))
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const itemsWithImages = sortedItems.map((i: any) => ({ ...i, image_url: i.product_id ? (imgById.get(i.product_id) ?? null) : null }))
+
+  return NextResponse.json({ quote: { ...quote, quote_line_items: itemsWithImages, client_org_name, site_name } })
 }
 
 // PATCH /api/quotes/[id] — update fields + handle status transitions

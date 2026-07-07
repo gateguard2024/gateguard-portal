@@ -29,8 +29,8 @@ export async function GET(
       accepted_by_rep, accepted_by_rep_name,
       quote_line_items (
         id, sort_order, category, description, qty, unit_price, unit, is_recurring,
-        section_name, item_type, is_optional, is_included,
-        package_tier, image_url, model_number, notes, sku
+        section_name, item_type, is_optional, is_included, product_id,
+        package_tier, model_number, notes, sku
       )
     `)
     .eq('id', params.id)
@@ -43,12 +43,21 @@ export async function GET(
     (a: { sort_order: number }, b: { sort_order: number }) => a.sort_order - b.sort_order
   )
 
+  // Resolve each line's image live from the products catalog (single source of truth).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pids = Array.from(new Set(rawItems.map((i: any) => i.product_id).filter(Boolean)))
+  let imgById = new Map<string, string | null>()
+  if (pids.length > 0) {
+    const { data: prods } = await supabase.from('products').select('id, image_url').in('id', pids)
+    imgById = new Map((prods ?? []).map(p => [p.id, p.image_url]))
+  }
+
   // Map to camelCase LineItem shape expected by the proposal page
   const lineItems = rawItems.map((i: {
     id: string; description: string; qty: number; unit_price: number;
     is_recurring: boolean; section_name?: string; is_optional?: boolean;
     is_included?: boolean; unit?: string; sku?: string; model_number?: string;
-    package_tier?: string; item_type?: string; notes?: string; image_url?: string | null;
+    package_tier?: string; item_type?: string; notes?: string; product_id?: string | null;
   }) => ({
     id:           i.id,
     description:  i.description,
@@ -64,7 +73,7 @@ export async function GET(
     model_number: i.model_number,
     package_tier: i.package_tier,
     item_type:    i.item_type,
-    imageUrl:     i.image_url ?? null,
+    imageUrl:     i.product_id ? (imgById.get(i.product_id) ?? null) : null,
   }))
 
   // Fetch org info for "Prepared by"

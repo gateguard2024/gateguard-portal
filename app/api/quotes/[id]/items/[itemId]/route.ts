@@ -47,11 +47,13 @@ export async function PATCH(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  // Note: image_url is NOT writable — a product's photo lives only in the
+  // products catalog and is read live via product_id (single source of truth).
   const allowedFields = [
     'sort_order', 'category', 'description', 'qty', 'unit_price', 'unit',
     'is_recurring', 'section_name', 'product_id', 'item_type',
     'is_optional', 'is_included', 'package_tier',
-    'image_url', 'model_number', 'notes', 'sku',
+    'model_number', 'notes', 'sku',
     'line_discount_percent',
   ]
 
@@ -75,7 +77,14 @@ export async function PATCH(
     await recalcTotals(params.id)
   }
 
-  return NextResponse.json({ item })
+  // Resolve the image live from the products catalog (single source of truth).
+  let image_url: string | null = null
+  if (item?.product_id) {
+    const { data: p } = await supabase.from('products').select('image_url').eq('id', item.product_id).single()
+    image_url = p?.image_url ?? null
+  }
+
+  return NextResponse.json({ item: { ...item, image_url } })
 }
 
 // DELETE /api/quotes/[id]/items/[itemId]

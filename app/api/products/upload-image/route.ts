@@ -3,9 +3,12 @@
  *
  * Uploads a product image directly (no Serper) into the public `design-plans`
  * bucket under product-images/, so the canvas + PDF export can read it without
- * CORS/taint issues. `kind` is "general" (default) or "wiring" — only used to
- * make the stored filename readable. If `id` is given, saves the URL to the
- * product: general → products.image_url, wiring → products.design_meta.wiringImageUrl.
+ * CORS/taint issues. `kind` is one of:
+ *   general   → products.image_url                    (icon: catalog / invoice / proposal)
+ *   placement → products.design_meta.placementImageUrl (symbol for basic drawings)
+ *   wiring    → products.design_meta.wiringImageUrl     (line drawing: device + terminals)
+ * If `id` is given, the URL is saved onto the product so the one catalog record
+ * carries all three images.
  *
  * Returns { ok, url, kind } or { error }.
  */
@@ -45,7 +48,9 @@ export async function POST(req: NextRequest) {
 
     const form = await req.formData()
     const file = form.get('file')
-    const kind = ((form.get('kind') as string) || 'general').toLowerCase() === 'wiring' ? 'wiring' : 'general'
+    const rawKind = ((form.get('kind') as string) || 'general').toLowerCase()
+    const kind: 'general' | 'placement' | 'wiring' =
+      rawKind === 'wiring' ? 'wiring' : rawKind === 'placement' ? 'placement' : 'general'
     const id = ((form.get('id') as string) || '').trim()
     const stem = slugify((form.get('name') as string) || id || 'product')
     if (!(file instanceof File)) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
@@ -66,15 +71,17 @@ export async function POST(req: NextRequest) {
 
     const url = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl
 
-    // Best-effort save onto the product record so the whole catalog benefits.
+    // Best-effort save onto the product record so the one catalog record carries
+    // all three images (icon + placement + line drawing).
     if (id) {
       try {
-        if (kind === 'wiring') {
+        if (kind === 'general') {
+          await supabase.from('products').update({ image_url: url }).eq('id', id)
+        } else {
           const { data: cur } = await supabase.from('products').select('design_meta').eq('id', id).single()
           const meta = (cur?.design_meta && typeof cur.design_meta === 'object') ? cur.design_meta : {}
-          await supabase.from('products').update({ design_meta: { ...meta, wiringImageUrl: url } }).eq('id', id)
-        } else {
-          await supabase.from('products').update({ image_url: url }).eq('id', id)
+          const key = kind === 'wiring' ? 'wiringImageUrl' : 'placementImageUrl'
+          await supabase.from('products').update({ design_meta: { ...meta, [key]: url } }).eq('id', id)
         }
       } catch { /* non-fatal */ }
     }

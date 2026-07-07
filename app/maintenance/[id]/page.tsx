@@ -94,6 +94,8 @@ interface InstalledEquipment {
   make?: string | null
   model?: string | null
   sku?: string | null
+  product_id?: string | null
+  image_url?: string | null
   serial_number?: string | null
   location?: string | null
   qty: number
@@ -3065,9 +3067,25 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
   const [equipForm, setEquipForm]     = useState({
     name: '', make: '', model: '', sku: '', qty: '1',
     condition: 'new', notes: '', added_by: 'management',
+    product_id: null as string | null, image_url: null as string | null,
   })
   const [confirmForm, setConfirmForm] = useState({ serial_number: '', location: '', confirmed_by: '' })
   const [savingEquip, setSavingEquip] = useState(false)
+  // Catalog picker for the Add-Equipment form (same products source as quotes/drawings)
+  const [eqCatalogQuery, setEqCatalogQuery] = useState('')
+  const [eqCatalog, setEqCatalog] = useState<Array<{ id: string; name: string; sku?: string; brand?: string; image_url?: string | null }>>([])
+  const [eqShowCatalog, setEqShowCatalog] = useState(false)
+  useEffect(() => {
+    if (!eqCatalogQuery.trim()) { setEqCatalog([]); return }
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/products?q=${encodeURIComponent(eqCatalogQuery)}&limit=8`)
+        const j = await r.json()
+        setEqCatalog(Array.isArray(j.products) ? j.products : [])
+      } catch { setEqCatalog([]) }
+    }, 300)
+    return () => clearTimeout(t)
+  }, [eqCatalogQuery])
 
   // ── Old field ticket collapse state ────────────────────────────────────────
   const [showLegacy, setShowLegacy] = useState(false)
@@ -3148,12 +3166,15 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
           condition: equipForm.condition,
           notes:     equipForm.notes.trim() || null,
           added_by:  equipForm.added_by,
+          product_id: equipForm.product_id,
+          image_url:  equipForm.image_url,
         }),
       })
       const json = await res.json()
       if (res.ok) {
         setEquipment(e => [...e, json.item])
-        setEquipForm({ name: '', make: '', model: '', sku: '', qty: '1', condition: 'new', notes: '', added_by: 'management' })
+        setEquipForm({ name: '', make: '', model: '', sku: '', qty: '1', condition: 'new', notes: '', added_by: 'management', product_id: null, image_url: null })
+        setEqCatalogQuery(''); setEqShowCatalog(false)
         setShowAddEquip(false)
       }
     } finally { setSavingEquip(false) }
@@ -3431,6 +3452,10 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
                   }
                 </div>
 
+                {item.image_url && (
+                  <img src={item.image_url} alt="" className="w-9 h-9 object-contain rounded bg-white border border-border shrink-0" />
+                )}
+
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-medium text-foreground">{item.name}</span>
@@ -3531,6 +3556,42 @@ function FieldTicketsTab({ workOrderId, initialChecklist, fieldTickets, onApprov
         {/* Add equipment form */}
         {showAddEquip && (
           <div className="px-5 py-4 border-t border-border space-y-3 bg-background/50">
+            {/* Catalog picker — bind to the same products used on drawings & quotes */}
+            <div className="relative">
+              <input
+                value={eqCatalogQuery}
+                onChange={e => { setEqCatalogQuery(e.target.value); setEqShowCatalog(true) }}
+                onFocus={() => setEqShowCatalog(true)}
+                placeholder="Search product catalog (optional)…"
+                className={inp}
+              />
+              {eqShowCatalog && eqCatalog.length > 0 && (
+                <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg overflow-hidden max-h-44 overflow-y-auto">
+                  {eqCatalog.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        setEquipForm(f => ({ ...f, name: p.name, sku: p.sku ?? '', make: p.brand ?? f.make, product_id: p.id, image_url: p.image_url ?? null }))
+                        setEqCatalogQuery(p.name); setEqShowCatalog(false)
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors flex items-center gap-2.5"
+                    >
+                      {p.image_url
+                        ? <img src={p.image_url} alt="" className="w-7 h-7 object-contain rounded bg-white border border-gray-100 shrink-0" />
+                        : <span className="w-7 h-7 rounded bg-gray-100 border border-gray-100 shrink-0 flex items-center justify-center text-[9px] font-semibold text-gray-400">{(p.brand ?? p.name ?? '?').slice(0,2).toUpperCase()}</span>}
+                      <span className="flex-1 min-w-0 text-xs font-medium text-gray-800 truncate">{p.name}</span>
+                      {p.sku && <span className="text-[10px] font-mono text-gray-400 shrink-0">{p.sku}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {equipForm.image_url && (
+              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <img src={equipForm.image_url} alt="" className="w-8 h-8 object-contain rounded bg-white border border-border" />
+                Linked to catalog product
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <input value={equipForm.name} onChange={e => setEquipForm(f => ({ ...f, name: e.target.value }))} placeholder="Equipment name *" className={inp} autoFocus />
               <input value={equipForm.make} onChange={e => setEquipForm(f => ({ ...f, make: e.target.value }))} placeholder="Make / Brand" className={inp} />

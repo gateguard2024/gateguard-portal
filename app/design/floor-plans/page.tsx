@@ -340,7 +340,7 @@ interface ElemMeta {
   cost?: number; msrp?: number; imageUrl?: string; productId?: string;
   // Pulled from products.design_meta when a catalog product is bound (single source of truth).
   role?: string; isBoard?: boolean; terminals?: { name: string; dx: number; dy: number }[];
-  wiringImageUrl?: string; defaultCable?: string;
+  placementImageUrl?: string; wiringImageUrl?: string; defaultCable?: string;
   textEl?: { content: string; fontSize: number; fill: string };
   fov?: { angle: number; range: number; direction: number };
   zone?: { name: string };
@@ -423,6 +423,10 @@ function EditorInner() {
 
   const [planName, setPlanName] = useState("Design");
   const [planStatus, setPlanStatus] = useState<string>("floor_plan");
+  // Mirror into a ref so buildDevice (empty-deps callback) can read the current
+  // sheet type: detail sheets render the product's line drawing + terminals.
+  const planStatusRef = useRef<string>("floor_plan");
+  planStatusRef.current = planStatus;
   const [planSite, setPlanSite] = useState<SiteInfo | null>(null);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -857,11 +861,15 @@ function EditorInner() {
         if (cone) parts.push(cone);
       }
 
-      // Product image: prefer a per-instance catalog image (meta.imageUrl), then
-      // the uploaded type image, else the color-coded badge. Preloaded → sync.
-      const imgEl = (meta.imageUrl && imgCacheRef.current[meta.imageUrl]) || imgCacheRef.current[key];
+      // Detail sheets (Wiring Detail) show the product's line drawing + terminals;
+      // overview sheets show the clean placement symbol. Both fall back to the icon.
+      const isDetailSheet = normStage(planStatusRef.current) === "wiring_detail";
+      const symbolUrl = isDetailSheet
+        ? (meta.wiringImageUrl || meta.placementImageUrl || meta.imageUrl)
+        : (meta.placementImageUrl || meta.imageUrl);
+      const imgEl = (symbolUrl && imgCacheRef.current[symbolUrl]) || imgCacheRef.current[key];
       if (imgEl && imgEl.complete && imgEl.naturalWidth > 0) {
-        const target = 52;
+        const target = isDetailSheet ? 90 : 52;
         const s = target / Math.max(imgEl.naturalWidth, imgEl.naturalHeight);
         const pic = new fabric.Image(imgEl, {
           originX: "center", originY: "center", scaleX: s, scaleY: s, left: 0, top: 0,
@@ -901,8 +909,11 @@ function EditorInner() {
       fc.add(group);
 
       // Board devices get labeled terminal dots (separate, non-selectable objects
-      // so wire endpoints can snap to them). They track the device on move.
-      if (group.data.isBoard) {
+      // so wire endpoints can snap to them). On a detail sheet, any product that
+      // has a mapped terminal set shows them too — so the line drawing's terminals
+      // are the connection points for the wire map.
+      const hasMappedTerminals = Array.isArray(meta.terminals) && meta.terminals.length > 0;
+      if (group.data.isBoard || (isDetailSheet && hasMappedTerminals)) {
         // Terminal layout precedence: this product's own map (from products.design_meta)
         // → saved layout for the board type → default computed layout.
         const layout = (meta.terminals && meta.terminals.length > 0)
@@ -963,6 +974,17 @@ function EditorInner() {
     fc.requestRenderAll();
     bumpBom();
   }, [buildDevice, bumpBom]);
+
+  // Switching the sheet type (e.g. → Wiring Detail) re-renders placed devices so
+  // they swap between placement symbol and line drawing + terminals.
+  useEffect(() => {
+    const fc = fcRef.current;
+    if (!fc) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const keys = new Set<string>((fc.getObjects() as any[]).filter((o) => o.data?.kind === "device").map((o) => o.data.deviceTypeKey));
+    if (keys.size === 0) return;
+    for (const k of keys) refreshDevicesOfType(k);
+  }, [planStatus, refreshDevicesOfType]);
 
   const uploadSymbol = useCallback(async (key: string, file: File) => {
     setUploadingKey(key);
@@ -1139,13 +1161,25 @@ function EditorInner() {
         }
         if (!tb.sheetTitle && plan?.name) tb.sheetTitle = plan.name;
         setTitleBlock(tb);
+        // Preload each device's canvas symbol (placement symbol → icon) so catalog
+        // images render immediately on open, not just after re-selecting.
+        const symbolUrls = new Set<string>();
+        for (const r of rows) {
+          if (r.device_type?.startsWith("__")) continue;
+          const m = parseMeta(r.notes);
+          // Cache all three so overview↔detail sheet switches render instantly.
+          for (const u of [m.placementImageUrl, m.imageUrl, m.wiringImageUrl]) if (u) symbolUrls.add(u);
+        }
+        if (symbolUrls.size > 0) {
+          await Promise.all(Array.from(symbolUrls).map((u) => loadSymbolImage(u, u).catch(() => {})));
+        }
         if (rows.length) loadDevices(rows);
       }
     } catch {
       /* ignore */
     }
     setLoading(false);
-  }, [planId, applyBackground, loadDevices]);
+  }, [planId, applyBackground, loadDevices, loadSymbolImage]);
 
   // ── Init Fabric ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1968,15 +2002,19 @@ function EditorInner() {
       if (typeof dm.role === "string" && dm.role) patch.role = dm.role;
       if (typeof dm.isBoard === "boolean") patch.isBoard = dm.isBoard;
       if (Array.isArray(dm.terminals) && dm.terminals.length > 0) patch.terminals = dm.terminals;
+      if (typeof dm.placementImageUrl === "string" && dm.placementImageUrl) patch.placementImageUrl = dm.placementImageUrl;
       if (typeof dm.wiringImageUrl === "string" && dm.wiringImageUrl) patch.wiringImageUrl = dm.wiringImageUrl;
       if (typeof dm.defaultCable === "string" && dm.defaultCable) patch.defaultCable = dm.defaultCable;
     }
     selected.data.meta = { ...(selected.data.meta ?? {}), ...patch };
     // Board-ness can flip based on the product → keep the group flag in sync before rebuild.
     if (dm && typeof dm.isBoard === "boolean") selected.data.isBoard = dm.isBoard;
-    if (img) {
-      await loadSymbolImage(img, img);   // cache the product photo by its URL
-      rebuildSelectedDevice();           // redraw so the image shows on the device
+    // Cache all three product images so both overview (placement/icon) and detail
+    // (line drawing) sheets render instantly without a re-fetch.
+    const toCache = [patch.placementImageUrl, patch.wiringImageUrl, img].filter(Boolean) as string[];
+    if (toCache.length > 0) {
+      await Promise.all(toCache.map((u) => loadSymbolImage(u, u).catch(() => {})));
+      rebuildSelectedDevice();                       // redraw so the symbol shows
     } else {
       // No catalog image: still redraw so design_meta (color / board / terminals)
       // takes effect immediately, then auto-find a product photo in the background.
