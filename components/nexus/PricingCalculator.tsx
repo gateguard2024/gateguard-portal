@@ -36,14 +36,16 @@ function Line({ label, value }: { label: string; value: string }) {
   )
 }
 
-export function PricingCalculator({ initialUnits, initialUnitAutomation, initialDoors, initialCommonLocks, initialCameras, onCompute }: { initialUnits?: number | string | null; initialUnitAutomation?: boolean; initialDoors?: number | string | null; initialCommonLocks?: number | string | null; initialCameras?: number | string | null; onCompute?: (c: { units: number; ggFee: number; ggCost: number; suggestedRetail: number; commission: number; dealerMonthlyNet: number; empty: boolean }) => void } = {}) {
+export function PricingCalculator({ initialUnits, initialUnitAutomation, initialDoors, initialCommonLocks, initialCameras, initialUnitsApp, initialUnitsGw, onCompute, onPersist }: { initialUnits?: number | string | null; initialUnitAutomation?: boolean; initialDoors?: number | string | null; initialCommonLocks?: number | string | null; initialCameras?: number | string | null; initialUnitsApp?: number | string | null; initialUnitsGw?: number | string | null; onCompute?: (c: { units: number; ggFee: number; ggCost: number; suggestedRetail: number; commission: number; dealerMonthlyNet: number; empty: boolean }) => void; onPersist?: (v: { livingUnits: string; unitsApp: string; unitsGw: string }) => void } = {}) {
   const seedUnits = initialUnits != null && initialUnits !== '' ? String(initialUnits) : ''
   const seed = (v: number | string | null | undefined) => (v != null && v !== '' && Number(v) > 0 ? String(v) : '')
   const [livingUnits, setLivingUnits] = useState(seedUnits)
   const [doors, setDoors] = useState(seed(initialDoors))
   const [commonLocks, setCommonLocks] = useState(seed(initialCommonLocks))
-  const [unitsApp, setUnitsApp] = useState(initialUnitAutomation ? seedUnits : '')
-  const [unitsGw, setUnitsGw] = useState('')
+  // Unit-lock add-ons persist too — seed from saved values, else fall back to the
+  // automation-implied default for the app column (Financials save bug fix).
+  const [unitsApp, setUnitsApp] = useState(seed(initialUnitsApp) || (initialUnitAutomation ? seedUnits : ''))
+  const [unitsGw, setUnitsGw] = useState(seed(initialUnitsGw))
   const [camMon, setCamMon] = useState(seed(initialCameras))
   const [camBackup, setCamBackup] = useState('')
   const [passesPerUnit, setPassesPerUnit] = useState('1.5')
@@ -79,6 +81,21 @@ export function PricingCalculator({ initialUnits, initialUnitAutomation, initial
     }, 250)
     return () => clearTimeout(t)
   }, [inputs, viewAsDealer])
+
+  // Persist the deal-critical counts (living units + unit-lock add-ons) back to the
+  // opportunity, debounced. Skips the initial render so seeded values don't
+  // immediately re-save. Fixes: these three fields never saved before.
+  const onPersistRef = useRef(onPersist)
+  useEffect(() => { onPersistRef.current = onPersist }, [onPersist])
+  const persistedFirst = useRef(false)
+  useEffect(() => {
+    if (!onPersistRef.current) return
+    if (!persistedFirst.current) { persistedFirst.current = true; return }
+    const t = setTimeout(() => {
+      onPersistRef.current?.({ livingUnits, unitsApp, unitsGw })
+    }, 600)
+    return () => clearTimeout(t)
+  }, [livingUnits, unitsApp, unitsGw])
 
   const showInternal = canViewInternal && internalView
   const ggFee = calc.ggFee ?? 0

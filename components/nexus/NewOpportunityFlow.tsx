@@ -6,7 +6,7 @@
 // Step 3: the glass opportunity form (prefilled), then create.
 import { useEffect, useState } from 'react'
 
-type Source = 'lead' | 'customer'
+type Source = 'lead' | 'customer' | 'blank'
 type Step = 'source' | 'pick' | 'form'
 
 type LeadRow = { id: string; name?: string; company?: string; company_name?: string; property_name?: string; contact_name?: string; stage?: string; units?: number; location?: string }
@@ -58,6 +58,9 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
 
   // form
   const [name, setName] = useState('')
+  // Manual account/contact — used when starting a standalone deal (no lead/customer).
+  const [manualAccount, setManualAccount] = useState('')
+  const [manualContact, setManualContact] = useState('')
   const [stage, setStage] = useState('info_request')
   const [units, setUnits] = useState('')
   const [mrr, setMrr] = useState('')
@@ -103,7 +106,14 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
   }, [query, step, source])
 
   function chooseSource(s: Source) {
-    setSource(s); setQuery(''); setLeads([]); setResults([]); setStep('pick')
+    setSource(s); setQuery(''); setLeads([]); setResults([])
+    // Standalone deal — skip the picker, go straight to a blank form (no lead_id).
+    if (s === 'blank') {
+      setSelected(null); setManualAccount(''); setManualContact('')
+      setName(''); setUnits(''); setMrr('')
+      setStep('form'); return
+    }
+    setStep('pick')
   }
 
   function pickLead(l: LeadRow) {
@@ -143,9 +153,9 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
       const body: Record<string, unknown> = {
         name: name.trim(),
         stage,
-        source: source === 'lead' ? 'lead' : 'customer',
-        account_name: selected?.account_name || null,
-        contact_name: selected?.contact_name || null,
+        source: source === 'lead' ? 'lead' : source === 'customer' ? 'customer' : 'manual',
+        account_name: selected?.account_name || manualAccount.trim() || null,
+        contact_name: selected?.contact_name || manualContact.trim() || null,
         description: notes.trim() || null,
       }
       if (mrr.trim()) body.est_mrr = Number(mrr) || 0
@@ -197,6 +207,10 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
                   <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>{sub}</div>
                 </button>
               ))}
+              <button type="button" onClick={() => chooseSource('blank')} className="rounded-2xl p-4 text-left transition-all hover:-translate-y-0.5 sm:col-span-2" style={{ background: 'rgba(52,211,153,0.06)', border: '1px solid rgba(52,211,153,0.22)' }}>
+                <div className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.92)' }}>Start from scratch</div>
+                <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>No lead or customer yet — just type the account and details.</div>
+              </button>
             </div>
           )}
 
@@ -232,6 +246,12 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
                   <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{selected.sublabel}</div>
                 </div>
               )}
+              {!selected && (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <Field label="Account / company"><input value={manualAccount} onChange={e => { setManualAccount(e.target.value); if (!name.trim()) setName(e.target.value ? `${e.target.value} — Opportunity` : '') }} placeholder="e.g. The Stratford" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle} /></Field>
+                  <Field label="Contact (optional)"><input value={manualContact} onChange={e => setManualContact(e.target.value)} placeholder="Contact name" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle} /></Field>
+                </div>
+              )}
               <Field label="Opportunity name"><input value={name} onChange={e => setName(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle} /></Field>
               <Field label="Stage">
                 <select value={stage} onChange={e => setStage(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
@@ -251,7 +271,7 @@ export function NewOpportunityFlow({ onClose, onCreated }: { onClose: () => void
         <div className="mt-4 flex items-center justify-between gap-2">
           <button type="button" onClick={() => {
             if (result) { onClose(); return }
-            if (step === 'form') { setStep('pick'); return }
+            if (step === 'form') { setStep(source === 'blank' ? 'source' : 'pick'); return }
             if (step === 'pick') { setStep('source'); return }
             onClose()
           }} className="rounded-2xl px-4 py-2 text-xs font-semibold" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)' }}>

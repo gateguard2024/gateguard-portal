@@ -72,11 +72,38 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
     }
   }
 
+  // Mark the deal lost — mirrors how leads are closed out (stage='lost' + reason).
+  const [markingLost, setMarkingLost] = useState(false)
+  const isLost = String(opp?.stage ?? '').toLowerCase() === 'lost'
+  async function markLost() {
+    if (!opportunityId || markingLost) return
+    const reason = typeof window !== 'undefined' ? window.prompt('Why was this deal lost? (optional)') : ''
+    if (reason === null) return   // user cancelled
+    setMarkingLost(true)
+    try {
+      await fetch(`/api/crm/opportunities/${opportunityId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: 'lost', lost_at: new Date().toISOString(), lost_reason: reason || null }),
+      })
+      await loadData()
+    } catch { /* best-effort */ } finally { setMarkingLost(false) }
+  }
+
   const dealName = (opp?.name || opp?.account_name || 'New opportunity') as string
   return (
     <div style={{ minHeight: '100vh', maxHeight: '100vh', overflowY: 'auto', background: 'radial-gradient(circle at top left, #11183a, #050712 50%)', color: 'white', fontFamily: 'Inter, Arial, sans-serif', padding: '24px 24px 160px' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-        {onClose && <button onClick={onClose} style={{ marginBottom: 14, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.8)', borderRadius: 999, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>← Back to Sales</button>}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+          {onClose ? <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.8)', borderRadius: 999, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>← Back to Sales</button> : <span />}
+          {opportunityId && !isLost && (
+            <button onClick={markLost} disabled={markingLost} style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.4)', color: '#fca5a5', borderRadius: 999, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: markingLost ? 'default' : 'pointer', opacity: markingLost ? 0.5 : 1 }}>{markingLost ? 'Marking…' : 'Mark Lost'}</button>
+          )}
+        </div>
+        {isLost && (
+          <div style={{ marginBottom: 14, background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5', borderRadius: 12, padding: '10px 14px', fontSize: 13, fontWeight: 600 }}>
+            This deal is marked Lost{opp?.lost_reason ? ` — ${opp.lost_reason}` : ''}.
+          </div>
+        )}
         <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#7DE5FF' }}>Opportunity · {dealName}{opp?.account_name && opp?.name ? ` · ${opp.account_name}` : ''}</div>
         <h1 style={{ margin: '4px 0 4px', fontSize: 26 }}>Deal life cycle</h1>
         <Sub>Move the deal from survey to signed &amp; paid. One step at a time.</Sub>
@@ -101,9 +128,9 @@ export function OpportunityLifecycle({ opportunityId, onClose, initialStage }: {
 
         {stage === 0 && <Overview data={data} opportunityId={opportunityId} onSaved={loadData} />}
         {stage === 1 && <Survey opportunityId={opportunityId} opp={opp} />}
-        {stage === 2 && <Financials opp={opp} />}
+        {stage === 2 && <Financials opp={opp} opportunityId={opportunityId} />}
         {stage === 3 && <Proposal opp={opp} opportunityId={opportunityId} onSaved={loadData} />}
-        {stage === 4 && <Negotiate />}
+        {stage === 4 && <Negotiate opp={opp} />}
         {stage === 5 && <ContractInvoice />}
         {stage === 6 && <Sign />}
         {stage === 7 && <Payment opp={opp} opportunityId={opportunityId} onConverted={loadData} />}
@@ -959,9 +986,29 @@ type LaborRate = { id: string; name: string; rate: number; unit: string }
 const usd0 = (n: number) => `$${Math.round(n).toLocaleString()}`
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function Financials({ opp }: { opp: Record<string, any> }) {
+function Financials({ opp, opportunityId }: { opp: Record<string, any>; opportunityId?: string }) {
   const sc = (opp?.site_counts ?? {}) as Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
   const doorsSeed = (Number(sc.gates) || 0) + (Number(sc.common_doors) || 0)   // calc combines gates + common doors
+
+  // Persist the calculator's deal-critical counts back to the opportunity:
+  // living units → units column; unit-lock add-ons → site_counts JSONB.
+  const persistFinancials = useCallback((v: { livingUnits: string; unitsApp: string; unitsGw: string }) => {
+    if (!opportunityId) return
+    const toNum = (s: string) => (s.trim() ? Number(s) : null)
+    const nextSiteCounts = {
+      ...(opp?.site_counts ?? {}),
+      units_app: toNum(v.unitsApp),
+      units_gw: toNum(v.unitsGw),
+    }
+    void fetch(`/api/crm/opportunities/${opportunityId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        units: v.livingUnits.trim() ? Number(v.livingUnits) : null,
+        site_counts: nextSiteCounts,
+      }),
+    }).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opportunityId])
 
   const [econ, setEcon] = useState<CalcEcon | null>(null)
   const onCompute = useCallback((c: CalcEcon) => setEcon(c), [])
@@ -1002,7 +1049,7 @@ function Financials({ opp }: { opp: Record<string, any> }) {
           </div>
         )}
       </Card>
-      <PricingCalculator initialUnits={opp?.units} initialUnitAutomation={!!opp?.unit_automation} initialDoors={doorsSeed || ''} initialCommonLocks={sc.common_locks} initialCameras={sc.cameras} onCompute={onCompute} />
+      <PricingCalculator initialUnits={opp?.units} initialUnitAutomation={!!opp?.unit_automation} initialDoors={doorsSeed || ''} initialCommonLocks={sc.common_locks} initialCameras={sc.cameras} initialUnitsApp={sc.units_app} initialUnitsGw={sc.units_gw} onCompute={onCompute} onPersist={persistFinancials} />
 
       {/* Install cost — real labor (from labor_rates) + one-time equipment */}
       <Card>
@@ -1215,17 +1262,61 @@ function Proposal({ opp, opportunityId, onSaved }: { opp: Record<string, any>; o
   )
 }
 
-function Negotiate() {
+function Negotiate({ opp }: { opp?: Record<string, any> } = {}) {
+  type Msg = { role: 'user' | 'coach'; text: string }
+  const [messages, setMessages] = useState<Msg[]>([])
+  const [question, setQuestion] = useState('')
+  const [asking, setAsking] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function ask() {
+    const q = question.trim()
+    if (!q || asking) return
+    setError(null)
+    setMessages(m => [...m, { role: 'user', text: q }])
+    setQuestion('')
+    setAsking(true)
+    try {
+      const res = await fetch('/api/nexus/opps/negotiate-coach', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: q,
+          deal: { name: opp?.name ?? opp?.account_name ?? null, units: opp?.units ?? null, mrr: opp?.est_mrr ?? null },
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error ?? 'Coach unavailable.')
+      setMessages(m => [...m, { role: 'coach', text: String(data.answer ?? 'No advice generated.') }])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Coach unavailable.')
+    } finally { setAsking(false) }
+  }
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px,1fr))', gap: 16 }}>
       <Card>
         <H>🤖 Negotiation coach</H>
         <Sub>Ask for advice — the coach keeps you inside profitable margins (tied to the IRR model).</Sub>
         <div style={{ display: 'grid', gap: 10, margin: '14px 0' }}>
-          <div style={{ alignSelf: 'flex-start', maxWidth: '85%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 12, padding: '10px 12px', fontSize: 13 }}>Customer says $1,250/mo is too high. What can I do?</div>
-          <div style={{ alignSelf: 'flex-end', maxWidth: '85%', background: 'rgba(0,124,255,0.18)', border: '1px solid rgba(0,124,255,0.4)', borderRadius: 12, padding: '10px 12px', fontSize: 13 }}>Offer 1 month free monitoring instead of cutting the rate — keeps your recurring margin and IRR above target. Holding the monthly protects 24-mo profit.</div>
+          {messages.length === 0 && !asking && (
+            <div style={{ alignSelf: 'flex-start', maxWidth: '85%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 12, padding: '10px 12px', fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>Try: “Customer says the monthly is too high. What can I do?”</div>
+          )}
+          {messages.map((m, i) => (
+            <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%', whiteSpace: 'pre-wrap', background: m.role === 'user' ? 'rgba(0,124,255,0.18)' : 'rgba(255,255,255,0.06)', border: `1px solid ${m.role === 'user' ? 'rgba(0,124,255,0.4)' : 'rgba(255,255,255,0.09)'}`, borderRadius: 12, padding: '10px 12px', fontSize: 13 }}>{m.text}</div>
+          ))}
+          {asking && <div style={{ alignSelf: 'flex-start', fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Coach is thinking…</div>}
+          {error && <div style={{ fontSize: 12, color: '#fca5a5' }}>{error}</div>}
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '10px 12px', color: 'rgba(255,255,255,0.45)', fontSize: 13 }}>Ask the coach…<span style={{ marginLeft: 'auto', ...btn, padding: '6px 12px' }}>Send</span></div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '6px 8px 6px 12px' }}>
+          <input
+            value={question}
+            onChange={e => setQuestion(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void ask() } }}
+            placeholder="Ask the coach…"
+            style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'rgba(255,255,255,0.92)', fontSize: 13 }}
+          />
+          <button type="button" onClick={() => void ask()} disabled={asking || !question.trim()} style={{ ...btn, padding: '6px 12px', opacity: asking || !question.trim() ? 0.5 : 1, cursor: asking || !question.trim() ? 'default' : 'pointer' }}>{asking ? '…' : 'Send'}</button>
+        </div>
       </Card>
       <Card>
         <H>Suggested moves</H>

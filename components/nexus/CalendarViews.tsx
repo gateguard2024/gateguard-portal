@@ -65,14 +65,52 @@ const mockEvents = (startISO: string): CalEvent[] => {
   ];
 };
 const createEvent = async (form: Partial<CalEvent> & { scope: 'me' | 'team' }): Promise<CalEvent> => {
+  const category: CalCategory = form.category || 'jobs';
   try {
-    const res = await fetch('/api/calendar/events', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: form.title, start: form.start, end: form.end, all_day: form.all_day, location: form.location }),
-    });
-    if (res.ok) {
-      const json = await res.json();
-      if (json.event) return json.event as CalEvent;
+    // Route the create by the chosen category — the type the user picked must
+    // decide where it's saved, not always the work-order/calendar endpoint.
+    if (category === 'todos') {
+      // To-Do → /api/todos (shows on the calendar via the To-Dos source).
+      const dueDate = form.start ? String(form.start).split('T')[0] : undefined;
+      const res = await fetch('/api/todos', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: form.title, due_date: dueDate ?? null }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const t = json.todo ?? json.record ?? json;
+        return {
+          id: String(t?.id ?? `td-${Date.now()}`),
+          title: (t?.title as string) ?? form.title ?? 'New To-Do',
+          start: (t?.due_date ? `${String(t.due_date).split('T')[0]}T00:00:00` : form.start) ?? new Date().toISOString(),
+          end: null,
+          all_day: true,
+          category: 'todos',
+          location: form.location,
+          href: '/todos',
+        };
+      }
+    } else if (category === 'google') {
+      // Google → save locally first, then push to Google Calendar (best-effort).
+      const res = await fetch('/api/calendar/events', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: form.title, start: form.start, end: form.end, all_day: form.all_day, location: form.location }),
+      });
+      void fetch('/api/calendar/google/sync', { method: 'POST' }).catch(() => {});
+      if (res.ok) {
+        const json = await res.json();
+        if (json.event) return { ...(json.event as CalEvent), category: 'google' };
+      }
+    } else {
+      // event / sales → local calendar_events (source of truth).
+      const res = await fetch('/api/calendar/events', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: form.title, start: form.start, end: form.end, all_day: form.all_day, location: form.location }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.event) return { ...(json.event as CalEvent), category };
+      }
     }
   } catch {
     /* fall through to local */
@@ -83,7 +121,7 @@ const createEvent = async (form: Partial<CalEvent> & { scope: 'me' | 'team' }): 
     start: form.start || new Date().toISOString(),
     end: form.end,
     all_day: form.all_day,
-    category: form.category || 'jobs',
+    category,
     location: form.location,
     href: null,
   };

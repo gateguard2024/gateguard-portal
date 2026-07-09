@@ -238,6 +238,40 @@ export async function GET(req: NextRequest) {
       })
     }
 
+    // ── Lead follow-ups (crm_activities tied to a lead, not an opportunity) ────
+    // schedule_followup on a lead writes a crm_activities row with a lead_id +
+    // due_at and no opportunity_id, so the opportunity-scoped query above skips
+    // it. Pull those here, scoped by dealer_org_id, so lead follow-ups land on
+    // the calendar too.
+    {
+      let leadActQ = supabase
+        .from('crm_activities')
+        .select('id, type, subject, due_at, completed_at, lead_id, leads(company_name, contact_name)')
+        .not('lead_id', 'is', null)
+        .is('opportunity_id', null)
+        .not('due_at', 'is', null)
+        .gte('due_at', `${startDate}T00:00:00`)
+        .lte('due_at', `${endDate}T23:59:59`)
+        .is('completed_at', null)
+        .order('due_at', { ascending: true })
+      leadActQ = byOrg(leadActQ as any, 'dealer_org_id')
+      const { data: leadActs } = await leadActQ
+      const ACTIVITY_COLORS_LEAD: Record<string, string> = { call: '#0B7285', email: '#6B7EFF', meeting: '#7C3AED', task: '#F59E0B', note: '#64748B' }
+      for (const act of leadActs ?? []) {
+        const dueIso = act.due_at as string
+        const leadName = (act as any).leads?.company_name ?? (act as any).leads?.contact_name ?? null
+        events.push({
+          id: `lead-act-${act.id}`, type: 'crm_activity',
+          title: act.subject ?? 'Lead follow-up',
+          date: dueIso.split('T')[0],
+          time: dueIso.includes('T') ? dueIso.split('T')[1]?.substring(0, 5) : undefined,
+          status: 'open', color: ACTIVITY_COLORS_LEAD[act.type] ?? '#7C3AED',
+          link: act.lead_id ? `/crm/leads/${act.lead_id}` : '/crm',
+          opportunity_name: leadName ? `Lead: ${leadName}` : undefined,
+        })
+      }
+    }
+
     // ── Tracker Tasks (scoped by org) ─────────────────────────────────────────
     let trackerQ = supabase
       .from('tracker_items')
