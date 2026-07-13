@@ -14,7 +14,6 @@ const { LayoutList, ArrowLeft, BarChart3, Edit2, Camera, DoorOpen, Lock, Smartph
 // Silence "unused" warnings — kept for downstream visual refinements
 void BarChart3; void Edit2; void LayoutList; void User;
 import { cn } from "@/lib/utils";
-import { TopBar } from "@/components/layout/TopBar";
 import { supabase } from "@/lib/supabase";
 import { AriaCaseFile } from "@/components/nexus/AriaCaseFile";
 import { SearchHistoryPanel } from "@/components/aria/SearchHistoryPanel";
@@ -641,6 +640,9 @@ export default function ARIAPage() {
   const [poolMsg, setPoolMsg]               = useState<string | null>(null);
   // Left-panel idle view: 'recent' (default) vs 'history' (date-grouped browser)
   const [leftTab, setLeftTab]               = useState<'recent' | 'history'>('recent');
+  // Collapsible accordion sections inside the Recent tab
+  const [recentOpen, setRecentOpen]         = useState<Record<string, boolean>>({ mem72: true, recent: false, suggested: false });
+  const toggleRecentSection = (k: string) => setRecentOpen(p => ({ ...p, [k]: !p[k] }));
   const [queryInterpretation, setQueryInterpretation] = useState('');
   const [viewMode, setViewMode]             = useState<ViewMode>('idle');
   const [socialResults, setSocialResults]   = useState<SocialSearchResult | null>(null);
@@ -924,6 +926,11 @@ export default function ARIAPage() {
   const researchSelected = useCallback(async () => {
     const picks = candidates.filter((_, i) => selectedCands.has(i));
     if (picks.length === 0) return;
+    // Guard — batch research runs one full search per property.
+    if (!window.confirm(
+      `Research ${picks.length} ${picks.length === 1 ? 'property' : 'properties'}? ` +
+      `This runs ${picks.length} full ${picks.length === 1 ? 'search' : 'searches'} in the background and adds ${picks.length === 1 ? 'it' : 'them'} to Researched Properties.`
+    )) return;
     setPoolBusy(true);
     setPoolMsg(null);
     try {
@@ -3469,11 +3476,21 @@ export default function ARIAPage() {
 
   return (
     <div className="flex flex-col h-full" style={{ background: '#0B1728', minHeight: '100dvh' }}>
-      <TopBar
-        title="ARIA"
-        subtitle="Account Research Intelligence Agent"
-        actions={topbarActions}
-      />
+      {/* Slim glass ARIA header — simple Back to Dashboard, no portal chrome */}
+      <header className="h-16 shrink-0 flex items-center px-5 gap-4 border-b border-white/[0.07]" style={{ background: '#0B1728' }}>
+        <a
+          href="/"
+          className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border border-white/10 text-slate-200 hover:bg-[#131B2E] hover:border-[#6B7EFF]/40 transition-all"
+        >
+          <ArrowLeft size={13} /> Back to Dashboard
+        </a>
+        <div className="min-w-0">
+          <h1 className="text-base font-bold text-slate-100 leading-tight">ARIA</h1>
+          <p className="text-[11px] text-slate-400 leading-tight hidden sm:block">Account Research Intelligence Agent</p>
+        </div>
+        <div className="flex-1" />
+        {topbarActions}
+      </header>
 
       {/* ── Desktop split layout ────────────────────────────────────────── */}
       <div className="hidden lg:flex flex-1 overflow-hidden" style={{ height: 'calc(100vh - 57px)' }}>
@@ -3605,12 +3622,17 @@ export default function ARIAPage() {
                 <>
                 {/* v9: 72-hour run memory */}
                 {!isRunning && recentRuns.length > 0 && (
-                  <div className="mb-5">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-2 mb-2 flex items-center gap-1.5">
-                      <Clock size={9} />
-                      72-Hour Memory
-                    </p>
-                    {recentRuns.slice(0, 6).map(run => (
+                  <div className="mb-2">
+                    <button
+                      onClick={() => toggleRecentSection('mem72')}
+                      className="w-full flex items-center gap-1.5 px-2 py-1.5 mb-1 rounded-lg hover:bg-[#131B2E] transition-colors"
+                    >
+                      <ChevronRight size={11} className={`text-slate-500 transition-transform duration-150 ${recentOpen.mem72 ? 'rotate-90' : ''}`} />
+                      <Clock size={9} className="text-slate-400" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">72-Hour Memory</span>
+                      <span className="ml-auto text-[9px] font-semibold text-slate-500">{recentRuns.length}</span>
+                    </button>
+                    {recentOpen.mem72 && recentRuns.slice(0, 6).map(run => (
                       <button
                         key={run.id}
                         onClick={() => { setQuery(run.query); inputRef.current?.focus(); }}
@@ -3635,15 +3657,28 @@ export default function ARIAPage() {
                   </div>
                 )}
                 {!isRunning && savedSearches.length > 0 && (
-                  <div className="mb-6">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-2 mb-3">Recent Memory</p>
-                    {savedSearches.map(s => <SavedSearchRow key={s.id} s={s} />)}
+                  <div className="mb-2">
+                    <button
+                      onClick={() => toggleRecentSection('recent')}
+                      className="w-full flex items-center gap-1.5 px-2 py-1.5 mb-1 rounded-lg hover:bg-[#131B2E] transition-colors"
+                    >
+                      <ChevronRight size={11} className={`text-slate-500 transition-transform duration-150 ${recentOpen.recent ? 'rotate-90' : ''}`} />
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Recent Memory</span>
+                      <span className="ml-auto text-[9px] font-semibold text-slate-500">{savedSearches.length}</span>
+                    </button>
+                    {recentOpen.recent && savedSearches.map(s => <SavedSearchRow key={s.id} s={s} />)}
                   </div>
                 )}
                 {!isRunning && (
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-2 mb-3">Suggested Operations</p>
-                    {EXAMPLE_QUERIES.map((q, i) => (
+                    <button
+                      onClick={() => toggleRecentSection('suggested')}
+                      className="w-full flex items-center gap-1.5 px-2 py-1.5 mb-1 rounded-lg hover:bg-[#131B2E] transition-colors"
+                    >
+                      <ChevronRight size={11} className={`text-slate-500 transition-transform duration-150 ${recentOpen.suggested ? 'rotate-90' : ''}`} />
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Suggested Operations</span>
+                    </button>
+                    {recentOpen.suggested && EXAMPLE_QUERIES.map((q, i) => (
                       <button key={i} onClick={() => { setQuery(q); inputRef.current?.focus(); }}
                         className="block w-full text-left text-[11px] font-medium px-3 py-2.5 rounded-xl text-slate-400 hover:bg-[#131B2E] hover:text-[#6B7EFF] hover:shadow-sm border border-transparent hover:border-white/10 transition-all leading-snug mb-1.5">
                         {q}
