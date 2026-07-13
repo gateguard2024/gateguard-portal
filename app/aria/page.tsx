@@ -1,4072 +1,607 @@
-"use client";
+'use client'
 
-import { useState, useRef, useCallback, useEffect, memo } from "react";
-import {
-  Cpu, Zap, Users, Radio, Target, X,
-  Building2, User, MapPin, CheckCircle2,
-  ExternalLink, Star, Copy, Send, Phone, MessageSquare,
-  Loader2, Shield, Package, Wifi, AlertCircle, Key, Activity,
-  ChevronRight, TrendingUp, Globe, Clock, Download, Trash2, Check, Search, RefreshCw,
-  AlertTriangle, Plus,
-} from "lucide-react";
+/**
+ * ARIA Explore — rebuilt property finder (Zillow / apartments.com model).
+ *
+ * The whole flow, 5th-grade simple:
+ *   1. Pick ONE word (Properties · Listings · Contacts), type an area, Find.
+ *   2. Results are lightweight: name · units · location · matched keywords.
+ *   3. Toggle Map / List before choosing.
+ *   4. After search there is ONE clear set of actions: tick cards → "Add to
+ *      Leads / Research", or click a card → View report · Research · Add to Lead.
+ */
+
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Search, MapPin, Building2, Wifi, Loader2, Check, Zap, X, Plus } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { LayoutList, ArrowLeft, BarChart3, Edit2, Camera, DoorOpen, Lock, Smartphone } = require("lucide-react") as any;
-// Silence "unused" warnings — kept for downstream visual refinements
-void BarChart3; void Edit2; void LayoutList; void User;
-import { cn } from "@/lib/utils";
-import { supabase } from "@/lib/supabase";
-import { AriaCaseFile } from "@/components/nexus/AriaCaseFile";
-import { SearchHistoryPanel } from "@/components/aria/SearchHistoryPanel";
+const { ArrowLeft, LayoutGrid, Map: MapIcon } = require('lucide-react') as any
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? ''
 
-interface SavedSearch {
-  id: string;
-  query: string;
-  query_interpretation: string | null;
-  imported_count: number;
-  imported_at: string | null;
-  expires_at: string;
-  created_at: string;
-  results: {
-    prospects: Array<{
-      property: { name: string; units: number; address: string };
-      decision_maker: { name: string; title: string };
-      profile: { buy_score: number };
-    }>;
-  };
+type Category = 'properties' | 'listings' | 'contacts'
+type ViewMode = 'list' | 'map'
+
+interface PropItem {
+  id: string
+  name: string
+  address: string
+  city: string
+  state: string
+  units?: number
+  management_company?: string
+  isp_signal?: string
+  bulk_detected?: boolean
+  gate_signal?: boolean
+  pain_brief?: string
+  buy_score?: number
+  researched?: boolean
+  contract_expiry_year?: number
+  lat?: number
+  lng?: number
 }
 
-interface BulkAgreement {
-  provider: string;
-  service_type: 'internet' | 'video' | 'bundled';
-  agreement_type: 'exclusive' | 'bulk' | 'preferred' | 'unknown';
-  expiry_estimate: string;
-  confidence: 'confirmed' | 'high' | 'medium' | 'low';
-  source_url?: string;
-  source_snippet?: string;
+type Source = 'discover' | 'saved'
+
+const CATEGORIES: { key: Category; label: string; hint: string }[] = [
+  { key: 'properties', label: 'Properties', hint: 'e.g. apartment complexes in Dallas, TX' },
+  { key: 'listings',   label: 'Listings',   hint: 'e.g. 300+ unit listings in Atlanta with gates' },
+  { key: 'contacts',   label: 'Contacts',   hint: 'e.g. property managers at Greystar Dallas' },
+]
+
+function scoreColor(s: number): string {
+  if (s >= 8) return '#ef4444'
+  if (s >= 6) return '#f59e0b'
+  if (s >= 4) return '#6B7EFF'
+  return '#64748b'
 }
 
-interface PropTech {
-  gate_operators?: string[];
-  access_control?: string[];
-  intercoms?: string[];
-  cameras?: string[];
-  smart_locks?: string[];
-  resident_apps?: string[];
-  package_solutions?: string[];
-  tech_generation?: 'legacy' | 'modern' | 'hybrid';
-  sara_signals?: boolean;
-  replacement_window?: string;
-  displacement_targets?: string[];
+// Gong-style "why now" trigger flags, computed from our fixed multifamily fields.
+function triggerFlags(it: PropItem): { label: string; tone: 'red' | 'amber' | 'blue' }[] {
+  const f: { label: string; tone: 'red' | 'amber' | 'blue' }[] = []
+  if (it.gate_signal || (it.pain_brief && /gate|access|call ?box|intercom/i.test(it.pain_brief))) f.push({ label: 'Gate complaints', tone: 'red' })
+  if (it.bulk_detected) f.push({ label: 'Bulk — needs expiry', tone: 'amber' })
+  if ((it.buy_score ?? 0) >= 8) f.push({ label: 'High intent', tone: 'red' })
+  else if (it.pain_brief) f.push({ label: 'Resident issues', tone: 'amber' })
+  if (it.isp_signal) f.push({ label: 'ISP known', tone: 'blue' })
+  return f
+}
+const toneClass = (t: 'red' | 'amber' | 'blue') =>
+  t === 'red' ? 'bg-rose-400/10 text-rose-300 border-rose-400/30'
+  : t === 'amber' ? 'bg-amber-400/10 text-amber-200 border-amber-400/30'
+  : 'bg-[#6B7EFF]/10 text-[#9AA8FF] border-[#6B7EFF]/25'
+
+// DM / contactability score (1–10) from a researched prospect.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function dmScore(p: any): number {
+  if (!p) return 0
+  let s = 0
+  const phone = p.property?.phone
+  if (phone && phone !== 'No data found' && String(phone).length > 5) s += 3
+  const chain: any[] = p.decision_maker_chain ?? [] // eslint-disable-line @typescript-eslint/no-explicit-any
+  if (chain.some(c => /manager/i.test(`${c.role_type || ''} ${c.title || ''}`))) s += 2
+  if (chain.some(c => /regional|asset|vp|director|owner|principal/i.test(`${c.role_type || ''} ${c.title || ''}`))) s += 2
+  if (p.ownership?.owner_entity && p.ownership.owner_entity !== 'Unknown' && p.ownership.owner_entity !== 'No data found') s += 2
+  if (p.decision_maker?.name && p.decision_maker.name !== 'No data found') s += 1
+  return Math.min(10, s)
 }
 
-interface Property {
-  name: string;
-  address: string;
-  city?: string;
-  state?: string;
-  units: number | string;
-  year_built: number | string;
-  management_company: string;
-  owner_entity: string;
-  property_type: string;
-  class: string;
-  occupancy: string;
-  last_sale_date?: string;
-  last_sale_price?: string;
-  assessed_value?: string;
-  phone?: string | null;
-  isp_providers?: string[];
-  video_providers?: string[];
-  bulk_agreements?: BulkAgreement[];
-  proptech?: PropTech;
-  inferred_proptech?: InferredProptech[];
-  _fcc_verified?: boolean;
-  _fcc_providers?: string[];
-  lat?: number | null;
-  lng?: number | null;
+async function geocode(it: PropItem): Promise<{ lat: number; lng: number } | null> {
+  if (!MAPBOX_TOKEN) return null
+  const q = [it.address, it.city, it.state].filter(Boolean).join(', ') || `${it.name} ${it.city} ${it.state}`
+  try {
+    const r = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&limit=1&country=us`)
+    const d = await r.json()
+    const c = d?.features?.[0]?.center
+    return Array.isArray(c) ? { lng: c[0], lat: c[1] } : null
+  } catch { return null }
 }
 
-interface InferredProptech {
-  category: 'gate_operator' | 'access_control' | 'intercom' | 'camera' | 'smart_lock' | 'resident_app' | 'package';
-  name: string;
-  confidence_pct: number;
-  reason: string;
-}
-
-interface DecisionMaker {
-  name: string;
-  title: string;
-  company: string;
-  linkedin_slug: string;
-  email: string;
-  top_email_format: string;
-  phone: string;
-  phone_source?: 'direct' | 'office_main' | null;
-  gatekeeper_tip?: string | null;
-  tenure_years: number;
-}
-
-interface PainSignal {
-  source: string;
-  date: string;
-  signal_type: string;
-  quote: string;
-  severity: "high" | "medium" | "low";
-  url?: string;
-}
-
-interface OutreachMonth {
-  theme: string;
-  actions?: string[];
-  goal?: string;
-}
-
-interface OutreachPlan {
-  month_1?: OutreachMonth;
-  month_2?: OutreachMonth;
-  month_3?: OutreachMonth;
-  month_4?: OutreachMonth;
-  month_5?: OutreachMonth;
-  month_6?: OutreachMonth;
-  total_touches?: number;
-  primary_channel?: string;
-  key_milestone?: string;
-  expected_close_quarter?: string;
-}
-
-interface Profile {
-  buy_score: number;
-  urgency: string;
-  primary_concern: string;
-  current_vendor: string;
-  contract_window: string;
-  communication_style: string;
-}
-
-interface ScoutBrief {
-  primary_contact: string;
-  outreach_angle: 'contract_window' | 'proptech_pain' | 'acquisition' | 'tech_displacement' | 'sara_bridge' | 'upgrade_path' | 'lease_up' | 'general';
-  contract_window_urgency: 'critical' | 'high' | 'medium' | 'low' | 'none';
-  key_data_points: string[];
-}
-
-interface ScoutQueue {
-  property: { name: string; address: string; city: string; state: string; units: number; class: string; management_company: string; owner_entity: string; old_name: string | null };
-  pain_angles: Array<{ type: string; quote: string; severity: string }>;
-  connectivity: { isp_providers: string[]; bulk_detected: boolean; provider_confirmed: boolean; bulk_agreements: BulkAgreement[]; video_providers?: string[]; roe_detected?: boolean; roe_expiry_year?: number; contract_urgency?: string; contract_window?: string };
-  proptech: { gate_operators: string[]; access_control: string[]; tech_generation: string; intercoms?: string[]; cameras?: string[]; smart_locks?: string[]; displacement_targets?: string[]; sara_signals?: boolean };
-  contact_chain: DecisionMakerChainItem[];
-  behavioral_profile?: Record<string, string>;
-  pitch_strategy?: { primary_hook?: string; secondary_hooks?: string[]; avoid?: string[] };
-  outreach_plan?: OutreachPlan;
-  outreach_sequence?: Array<{ touch: number; channel: string; message: string; timing: string }>;
-  market_context?: Record<string, string>;
-  objection_flags?: Record<string, boolean>;
-  key_finding?: string;
-}
-
-interface DecisionMakerChainItem {
-  name: string;
-  title: string;
-  company: string;
-  role_type: 'owner' | 'asset_manager' | 'regional_manager' | 'property_manager' | 'unknown';
-  linkedin_slug?: string;
-  email: string;
-  top_email_format: string;
-  phone?: string;
-  phone_source?: 'direct' | 'office_main' | null;
-  gatekeeper_tip?: string | null;
-  notes?: string;
-  dm_hooks?: string[];
-}
-
-interface Ownership {
-  owner_entity: string;
-  owner_type: string;
-  portfolio_size?: string;
-  acquisition_year?: string;
-  hold_period?: string;
-  capex_signal?: string;
-  dnb_duns?: string;
-}
-
-interface Prospect {
-  property: Property;
-  decision_maker: DecisionMaker;
-  decision_maker_chain?: DecisionMakerChainItem[];
-  ownership?: Ownership;
-  pain_signals: PainSignal[];
-  profile: Profile;
-  scout_brief: ScoutBrief;
-  scout_queue?: ScoutQueue;
-  behavioral_profile?: Record<string, string>;
-  pitch_strategy?: { primary_hook?: string; secondary_hooks?: string[]; avoid?: string[] };
-  freshness_score?: number;
-  buying_trends?: string;
-  outreach_plan?: OutreachPlan;
-}
-
-interface SocialPost {
-  platform: string;
-  date: string;
-  quote: string;
-  tech_mentioned: string[];
-  signal_type: string;
-  severity: 'high' | 'medium' | 'low';
-  url?: string;
-  source?: 'social_search';
-}
-
-interface CrossRefNote {
-  provider: string;
-  note: string;
-  confidence: 'high' | 'medium' | 'low';
-  evidence_count: number;
-  type: string;
-}
-
-interface SocialSearchResult {
-  social_posts: SocialPost[];
-  cross_reference_notes: CrossRefNote[];
-  property_phone?: string | null;
-}
-
-interface ResearchResult {
-  mode: string;
-  query_interpretation: string;
-  prospects: Prospect[];
-  fccVerified?: boolean;
-  webIntelligence?: boolean;
-}
-
-interface Candidate {
-  name: string;
-  address: string;
-  city: string;
-  state: string;
-  units?: number;
-  year_built?: number;
-  property_class?: string;
-  management_company?: string;
-  isp_signal?: string;
-  bulk_detected?: boolean;
-  pain_brief?: string;
-  buy_score_estimate?: number;
-}
-
-type ViewMode = 'idle' | 'running' | 'candidates' | 'result';
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-/* ─── DM Contact Score (1-10) ──────────────────────────────── */
-function computeDmScore(prospect: Prospect | null): { score: number; label: string; color: string; bg: string } {
-  if (!prospect) return { score: 0, label: 'No data', color: 'text-slate-400', bg: 'bg-[#131B2E] border-white/10' }
-  const chain = prospect.decision_maker_chain ?? []
-  const phone = prospect.property?.phone
-  let score = 0
-  if (phone && phone !== 'No data found' && String(phone).length > 5) score += 3
-  if (chain.some((c: DecisionMakerChainItem) => c.role_type === 'property_manager' && c.name && c.name !== 'Unknown')) score += 2
-  if (chain.some((c: DecisionMakerChainItem) => ['regional_manager', 'asset_manager'].includes(c.role_type) && c.name && c.name !== 'Unknown')) score += 2
-  if ((prospect.ownership?.owner_entity && prospect.ownership.owner_entity !== 'Unknown')
-    || chain.some((c: DecisionMakerChainItem) => c.role_type === 'owner' && c.name && c.name !== 'Unknown')) score += 2
-  if (chain.some((c: DecisionMakerChainItem) => c.email && c.email.includes('@'))) score += 1
-  score = Math.min(10, Math.max(1, score))
-  if (score <= 3) return { score, label: 'Phone only', color: 'text-red-300', bg: 'bg-red-400/10 border-red-400/30' }
-  if (score <= 5) return { score, label: "Manager ID'd", color: 'text-amber-300', bg: 'bg-amber-400/10 border-amber-400/30' }
-  if (score <= 7) return { score, label: 'Mgmt found', color: 'text-blue-300', bg: 'bg-blue-400/10 border-blue-400/30' }
-  if (score <= 9) return { score, label: "Owner ID'd", color: 'text-violet-300', bg: 'bg-violet-400/10 border-violet-400/30' }
-  return { score: 10, label: 'Full chain', color: 'text-emerald-300', bg: 'bg-emerald-400/10 border-emerald-400/30' }
-}
-
-const PHASES = [
-  { id: 1, name: "Listing Sites",   icon: Building2, sources: ["apartments.com", "RentCafe", "Zillow"] },
-  { id: 2, name: "Property Intel",  icon: MapPin,    sources: ["County Records", "FCC Broadband", "SEC EDGAR"] },
-  { id: 3, name: "Contact Chain",   icon: Users,     sources: ["LinkedIn", "Apollo", "NinjaPear"] },
-  { id: 4, name: "Signal Analysis", icon: Radio,     sources: ["Reddit", "Review Sites", "Pain Signals"] },
-  { id: 5, name: "AI Synthesis",    icon: Cpu,       sources: ["Claude Sonnet", "SCOUT Handoff"] },
-];
-
-const PHASE_DURATIONS = [0, 4000, 5000, 5000, 4000];
-
-const SYNTHESIS_STEPS = [
-  "Querying OSINT sources...",
-  "Searching SEC EDGAR filings...",
-  "Cross-referencing Wayback CDX...",
-  "Mining county recorder indexes...",
-  "Checking UCC-1 filings...",
-  "Scanning contract PDF database...",
-  "Correlating prior findings...",
-  "Synthesizing intelligence...",
-  "Building SCOUT handoff packet...",
-];
-
-const EXAMPLE_QUERIES = [
-  "Multifamily communities in Atlanta with gate access complaints",
-  "Properties managed by Lincoln Property Co in Dallas",
-  "350+ unit apartments in Phoenix — DirecTV MDU opportunity",
-  "Lease-up communities in Denver needing access control",
-  "Greystar properties near Nashville with resident complaints",
-];
-
-// Fixed particle positions for the 2035 pipeline animation (no Math.random in render)
-const PIPELINE_PARTICLES = [
-  { x: 5,  y: 12, s: 1.5, d: 0    },
-  { x: 18, y: 7,  s: 1,   d: 0.5  },
-  { x: 29, y: 25, s: 2,   d: 1    },
-  { x: 42, y: 15, s: 1,   d: 1.5  },
-  { x: 55, y: 6,  s: 1.5, d: 0.3  },
-  { x: 68, y: 20, s: 1,   d: 0.8  },
-  { x: 79, y: 10, s: 2,   d: 1.2  },
-  { x: 90, y: 28, s: 1.5, d: 0.2  },
-  { x: 95, y: 8,  s: 1,   d: 0.9  },
-  { x: 9,  y: 72, s: 1.5, d: 0.4  },
-  { x: 22, y: 85, s: 1,   d: 0.7  },
-  { x: 37, y: 65, s: 2,   d: 1.3  },
-  { x: 50, y: 90, s: 1,   d: 0.6  },
-  { x: 63, y: 75, s: 1.5, d: 1.1  },
-  { x: 76, y: 60, s: 2,   d: 0.1  },
-  { x: 84, y: 80, s: 1,   d: 0.95 },
-  { x: 92, y: 70, s: 1.5, d: 1.4  },
-  { x: 14, y: 50, s: 1,   d: 0.35 },
-];
-
-// ── PipelinePanel — module-level memo component ──────────────────────────────
-// MUST be defined outside the main component so React sees a stable component
-// type across renders. When nested inside a function component, React unmounts
-// and remounts it on every parent state change, resetting all CSS animations.
-const PipelinePanel = memo(function PipelinePanel({ phase, synthStep }: { phase: number; synthStep: number }) {
-  return (
-    <div className="flex flex-col h-full overflow-hidden relative select-none"
-      style={{ background: 'radial-gradient(ellipse at 50% 25%, #0a1628 0%, #050c1a 55%, #000208 100%)' }}>
-
-      {/* Perspective grid */}
-      <div className="absolute inset-0 pointer-events-none" aria-hidden="true"
-        style={{ backgroundImage: 'linear-gradient(rgba(107,126,255,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(107,126,255,0.035) 1px, transparent 1px)', backgroundSize: '48px 48px' }} />
-
-      {/* Top scan line */}
-      <div className="absolute top-0 left-0 right-0 h-px pointer-events-none" aria-hidden="true"
-        style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(107,126,255,0.9) 50%, transparent 100%)', animation: 'aria-shimmer 2.4s ease-in-out infinite' }} />
-
-      {/* Corner brackets */}
-      <div className="absolute top-4 left-4 w-8 h-8 pointer-events-none" aria-hidden="true">
-        <div className="absolute top-0 left-0 w-full h-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
-        <div className="absolute top-0 left-0 h-full w-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
-      </div>
-      <div className="absolute top-4 right-4 w-8 h-8 pointer-events-none" aria-hidden="true">
-        <div className="absolute top-0 right-0 w-full h-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
-        <div className="absolute top-0 right-0 h-full w-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
-      </div>
-      <div className="absolute bottom-4 left-4 w-8 h-8 pointer-events-none" aria-hidden="true">
-        <div className="absolute bottom-0 left-0 w-full h-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
-        <div className="absolute bottom-0 left-0 h-full w-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
-      </div>
-      <div className="absolute bottom-4 right-4 w-8 h-8 pointer-events-none" aria-hidden="true">
-        <div className="absolute bottom-0 right-0 w-full h-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
-        <div className="absolute bottom-0 right-0 h-full w-px" style={{ background: 'rgba(107,126,255,0.35)' }} />
-      </div>
-
-      {/* Floating particles */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-        {PIPELINE_PARTICLES.map((pt, i) => (
-          <div key={i} className="absolute rounded-full"
-            style={{ left: `${pt.x}%`, top: `${pt.y}%`, width: `${pt.s}px`, height: `${pt.s}px`, background: `rgba(107,126,255,${pt.s > 1.5 ? 0.5 : 0.3})`, boxShadow: `0 0 ${pt.s * 3}px rgba(107,126,255,0.4)`, animation: `aria-pulse ${2 + pt.d}s ease-in-out infinite`, animationDelay: `${pt.d}s` }} />
-        ))}
-      </div>
-
-      {/* Main content */}
-      <div className="relative z-10 flex flex-col items-center justify-center h-full gap-10 px-8 py-10">
-
-        {/* Central ARIA logo with orbital rings */}
-        <div className="relative flex items-center justify-center" style={{ width: '180px', height: '180px' }}>
-          {/* Ring 1 — fast inner */}
-          <div className="absolute rounded-full" style={{ width: '90px', height: '90px', border: '1px solid rgba(107,126,255,0.3)', animation: 'spin 7s linear infinite' }}>
-            <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full"
-              style={{ background: '#6B7EFF', boxShadow: '0 0 12px 5px rgba(107,126,255,0.7)' }} />
-          </div>
-          {/* Ring 2 — medium reverse */}
-          <div className="absolute rounded-full" style={{ width: '128px', height: '128px', border: '1px solid rgba(167,139,250,0.15)', animation: 'spin 13s linear infinite reverse' }}>
-            <div className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-2 h-2 rounded-full"
-              style={{ background: '#A78BFA', boxShadow: '0 0 9px 3px rgba(167,139,250,0.6)' }} />
-          </div>
-          {/* Ring 3 — slow outer */}
-          <div className="absolute rounded-full" style={{ width: '170px', height: '170px', border: '1px solid rgba(107,126,255,0.07)', animation: 'spin 21s linear infinite' }} />
-
-          {/* Core logo — enlarged */}
-          <div className="relative z-10 w-20 h-20 rounded-2xl flex flex-col items-center justify-center gap-1"
-            style={{ background: 'linear-gradient(145deg, #0d2150 0%, #1a3470 45%, #6B7EFF 100%)', boxShadow: '0 0 40px rgba(107,126,255,0.45), 0 0 80px rgba(107,126,255,0.14), inset 0 1px 0 rgba(255,255,255,0.12)', border: '1px solid rgba(107,126,255,0.35)' }}>
-            <span className="text-white font-bold text-xl tracking-tighter leading-none" style={{ textShadow: '0 0 20px rgba(107,126,255,1)' }}>AR</span>
-            <span className="text-[8px] font-bold tracking-[0.25em] leading-none" style={{ color: 'rgba(165,180,252,0.65)' }}>IA</span>
-          </div>
-        </div>
-
-        {/* Phase nodes row */}
-        <div className="w-full max-w-[420px]">
-          <div className="flex items-start">
-            {PHASES.map((p, idx) => {
-              const status = phase > p.id ? 'done' : phase === p.id ? 'running' : 'queued';
-              const Icon = p.icon;
-              const isLast = idx === PHASES.length - 1;
-              return (
-                <div key={p.id} className={cn('flex items-center min-w-0', isLast ? '' : 'flex-1')}>
-                  {/* Node */}
-                  <div className="flex flex-col items-center gap-2 shrink-0">
-                    <div className="relative">
-                      {status === 'running' && (
-                        <div className="absolute -inset-3 rounded-full pointer-events-none"
-                          style={{ background: 'radial-gradient(circle, rgba(107,126,255,0.25) 0%, transparent 70%)', animation: 'aria-pulse 1.4s ease-in-out infinite' }} />
-                      )}
-                      <div className="w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-700"
-                        style={{
-                          background: status === 'done' ? 'linear-gradient(135deg, #065f46, #059669)' :
-                                      status === 'running' ? 'linear-gradient(135deg, #1a3470, #6B7EFF)' :
-                                      'rgba(255,255,255,0.04)',
-                          border: `1px solid ${status === 'done' ? 'rgba(16,185,129,0.55)' : status === 'running' ? 'rgba(107,126,255,0.75)' : 'rgba(255,255,255,0.08)'}`,
-                          boxShadow: status === 'running' ? '0 0 24px rgba(107,126,255,0.6), 0 0 55px rgba(107,126,255,0.2), inset 0 1px 0 rgba(255,255,255,0.1)' :
-                                     status === 'done' ? '0 0 16px rgba(16,185,129,0.4)' : 'none',
-                        }}>
-                        {status === 'done' ? (
-                          <Check size={22} style={{ color: '#6ee7b7' }} />
-                        ) : status === 'running' ? (
-                          <Loader2 size={22} className="animate-spin" style={{ color: '#c7d2fe' }} />
-                        ) : (
-                          <Icon size={22} style={{ color: 'rgba(255,255,255,0.22)' }} />
-                        )}
-                      </div>
-                    </div>
-                    <span className="text-[9px] font-bold uppercase tracking-widest text-center leading-tight w-20 truncate"
-                      style={{ color: status === 'done' ? '#34D399' : status === 'running' ? '#818CF8' : 'rgba(255,255,255,0.18)' }}>
-                      {p.name}
-                    </span>
-                  </div>
-
-                  {/* Connector beam */}
-                  {!isLast && (
-                    <div className="flex-1 h-px relative overflow-hidden self-start mt-[31px] mx-1">
-                      <div className="absolute inset-0" style={{ background: 'rgba(255,255,255,0.05)' }} />
-                      {phase > p.id && (
-                        <div className="absolute inset-0"
-                          style={{ background: 'linear-gradient(90deg, rgba(16,185,129,0.6), rgba(16,185,129,0.2))' }} />
-                      )}
-                      {phase === p.id && p.id < 5 && (
-                        <div className="absolute inset-0"
-                          style={{ background: 'linear-gradient(90deg, rgba(107,126,255,0.8) 0%, rgba(107,126,255,0.05) 100%)', animation: `aria-fill ${PHASE_DURATIONS[p.id]}ms ease-in-out forwards` }} />
-                      )}
-                      {phase === p.id && p.id === 5 && (
-                        <div className="absolute inset-0"
-                          style={{ background: 'linear-gradient(90deg, #6B7EFF, #A78BFA, #6B7EFF)', backgroundSize: '200% 100%', animation: 'aria-shimmer 1.4s ease-in-out infinite' }} />
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Status readout */}
-        <div className="flex flex-col items-center gap-3">
-          <div className="flex items-center gap-2.5 px-5 py-2.5 rounded-full"
-            style={{ background: 'rgba(107,126,255,0.07)', border: '1px solid rgba(107,126,255,0.18)', backdropFilter: 'blur(8px)' }}>
-            <span className="w-1.5 h-1.5 rounded-full shrink-0"
-              style={{ background: '#6B7EFF', boxShadow: '0 0 8px rgba(107,126,255,1)', animation: 'aria-pulse 0.9s ease-in-out infinite' }} />
-            <span className="text-[10px] font-mono tracking-wide"
-              style={{ color: 'rgba(165,180,252,0.85)' }}>
-              {phase === 5
-                ? SYNTHESIS_STEPS[synthStep]
-                : phase > 0
-                  ? `[${PHASES[phase - 1]?.name?.toUpperCase() ?? 'SYS'}] — Acquiring telemetry...`
-                  : 'Initializing ARIA engine...'}
-            </span>
-          </div>
-          <div className="text-[8px] font-mono text-center tracking-widest uppercase"
-            style={{ color: 'rgba(255,255,255,0.12)' }}>
-            {phase === 5 ? 'Claude Sonnet · Synthesis Mode Active' : 'ARIA Intelligence Engine · v7.3'}
-          </div>
-        </div>
-
-      </div>
-    </div>
-  );
-});
-
-const SOURCE_DISPLAY: Record<string, string> = {
-  'listing-site': 'Property Listing', 'LISTING-SITE': 'Property Listing',
-  'social': 'Resident Review', 'REDDIT/REVIEW': 'Resident Review',
-  'county-deed': 'Public Record', 'COUNTY-DEED': 'Public Record',
-  'isp-partnership': 'Market Intelligence', 'ISP-PARTNERSHIP': 'Market Intelligence',
-  'commercial-re': 'Financial Filing', 'OFFERING-MEMO': 'Financial Filing',
-  'hoa-rfp': 'Property Document', 'HOA-MINUTES/RFP': 'Property Document',
-  'linkedin-mdu': 'Industry Signal', 'LINKEDIN-MDU-REP': 'Industry Signal',
-  'locator-site': 'Property Review', 'LOCATOR-REVIEW': 'Property Review',
-  'forced-service': 'Resident Complaint', 'FORCED-SERVICE': 'Resident Complaint',
-  'web': 'ARIA Verified', 'WEB': 'ARIA Verified',
-  'dm-hierarchy': 'DM Hierarchy', 'DM-HIERARCHY': 'DM Hierarchy',
-};
-
-function displaySource(raw: string | undefined): string {
-  if (!raw) return 'ARIA Verified';
-  return SOURCE_DISPLAY[raw] ?? 'ARIA Verified';
-}
-
-// ── Expiry urgency helper ─────────────────────────────────────────────────────
-// Parses expiry_estimate (e.g. "Est. 2027-2029", "2026", "Est. 2028") and
-// returns urgency tier based on how many years out the first year is.
-function getExpiryUrgency(expiryEstimate?: string | null): 'critical' | 'soon' | 'future' | null {
-  if (!expiryEstimate || expiryEstimate.toLowerCase() === 'unknown') return null;
-  const match = expiryEstimate.match(/20(\d{2})/);
-  if (!match) return null;
-  const year = parseInt('20' + match[1], 10);
-  const currentYear = new Date().getFullYear();
-  const yearsOut = year - currentYear;
-  if (yearsOut <= 1) return 'critical';   // Expiring this year or next — act now
-  if (yearsOut <= 2) return 'soon';       // Within 2 years — start conversation
-  return 'future';                         // 3+ years out — note for later
-}
-
-const SIGNAL_ICONS: Record<string, React.ElementType> = {
-  gate_access: Shield, package_theft: Package, internet: Wifi,
-  intercom: Radio, visitor_management: Users, mdu_tv: Globe,
-  video_service: Globe, access_control: Key, camera_security: Camera,
-  smart_lock: Key, automation: Zap, water_sensor: Activity,
-  crime: Shield, management: Users,
-};
-
-const SIGNAL_SEVERITY: Record<string, { bg: string; border: string; text: string; badge: string }> = {
-  high:   { bg: "bg-rose-500/10",   border: "border-rose-400/30",   text: "text-rose-300",   badge: "bg-rose-500/15 text-rose-200" },
-  medium: { bg: "bg-amber-500/10", border: "border-amber-400/30", text: "text-amber-300", badge: "bg-amber-500/15 text-amber-200" },
-  low:    { bg: "bg-[#0F1830]/50",  border: "border-white/10",  text: "text-slate-300",  badge: "bg-[#131B2E] text-slate-300" },
-};
-
-const URGENCY_PILL: Record<string, string> = {
-  critical: "bg-rose-400/15 text-rose-300",
-  high:     "bg-orange-400/15 text-orange-300",
-  medium:   "bg-amber-400/15 text-amber-300",
-  low:      "bg-[#131B2E] text-slate-200",
-};
-
-type DetailTab = 'property' | 'proptech' | 'dm' | 'intel' | 'social' | 'scout';
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function getInitials(name?: string) {
-  if (!name) return '?';
-  return name.split(" ").filter(Boolean).map(n => n[0]).join("").slice(0, 2).toUpperCase() || '?';
-}
-
-function ScoreGauge({ score }: { score: number }) {
-  const pct = (score / 10) * 100;
-  const color = score >= 8 ? "#10B981" : score >= 6 ? "#F59E0B" : "#6B7EFF";
-  return (
-    <div className="flex items-center gap-4">
-      <div className="flex-1">
-        <div className="h-2.5 bg-[#131B2E] rounded-full overflow-hidden shadow-inner">
-          <div className="h-full rounded-full transition-all duration-1000 relative"
-            style={{ width: `${pct}%`, background: `linear-gradient(90deg, #6B7EFF, ${color})` }}>
-              <div className="absolute inset-0 bg-[#ffffff]/[0.06] w-full h-full" style={{ animation: 'shimmer 2s infinite' }} />
-            </div>
-        </div>
-      </div>
-      <span className="text-2xl font-mono font-bold tabular-nums tracking-tighter" style={{ color }}>
-        {score}<span className="text-sm text-slate-300 font-sans">/10</span>
-      </span>
-    </div>
-  );
-}
-
-function formatAge(iso: string) {
-  if (!iso) return 'Unknown';
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
-
-function daysUntil(iso: string) {
-  if (!iso) return 0;
-  return Math.max(0, Math.floor((new Date(iso).getTime() - Date.now()) / 86400000));
-}
-
-function scoreBg(score: number) {
-  if (score >= 8) return { background: 'linear-gradient(135deg, #10B981, #059669)' };
-  if (score >= 6) return { background: 'linear-gradient(135deg, #F59E0B, #D97706)' };
-  return { background: 'linear-gradient(135deg, #6B7EFF, #4F46E5)' };
-}
-
-// ── Main Page ─────────────────────────────────────────────────────────────────
-
-export default function ARIAPage() {
-  const [query, setQuery]                   = useState("");
-  const [searchFocus, setSearchFocus] = useState<'all' | 'isp' | 'video' | 'gate' | 'cameras'>('all')
-  const [phase, setPhase]                   = useState(0);
-  const [synthStep, setSynthStep]           = useState(0);
-  const [results, setResults]               = useState<ResearchResult | null>(null);
-  const [error, setError]                   = useState<string | null>(null);
-  const [selectedProspect, setSelectedProspect] = useState(0);
-  const [activeTab, setActiveTab]           = useState<DetailTab>('property');
-  const [mobileTab, setMobileTab]           = useState<'list' | 'property' | 'proptech' | 'dm' | 'scout'>('list');
-  const [copied, setCopied]                 = useState(false);
-  const [savedSearchId, setSavedSearchId]   = useState<string | null>(null);
-  const [savedSearches, setSavedSearches]   = useState<SavedSearch[]>([]);
-  const [importing, setImporting]           = useState<string | null>(null);
-  const [importResult, setImportResult]     = useState<Record<string, { created: number; skipped: number }>>({});
-  const [scoutLoading, setScoutLoading]     = useState<string | null>(null);
-  const [scoutResult, setScoutResult]       = useState<Record<string, { sent: number; skipped: number; errors: number }>>({});
-  const [deleting, setDeleting]             = useState<string | null>(null);
-  const [usageStats, setUsageStats]         = useState<{
-    my_searches: { total: number; base: number; deep: number; this_week: number; this_month: number };
-    my_org:      { org_name: string | null; total: number; this_month: number; top_users: { user_name: string; count: number }[] };
-    hierarchy:   { org_id: string; org_name: string; org_tier: string; own_count: number; child_count: number; total_count: number; depth: number }[];
-    corporate_total: number;
-  } | null>(null);
-  const [dbTotal, setDbTotal]               = useState<number>(0);
-  const [dbView, setDbView]                 = useState(false);
-  const [dbProps, setDbProps]               = useState<any[]>([]);
-  const [dbLoading, setDbLoading]           = useState(false);
-  const [dbSearch, setDbSearch]             = useState('');
-  const [dbFilter, setDbFilter]             = useState<'all'|'critical'|'expiring'|'sara'>('all');
-  const [dbSelected, setDbSelected]         = useState<any | null>(null);
-  const [savingNote, setSavingNote]         = useState(false);
-  const [noteText, setNoteText]             = useState('');
-  const [noteStage, setNoteStage]           = useState('');
-  const [pendingRerun, setPendingRerun]     = useState(false);
-  const [candidates, setCandidates]         = useState<Candidate[]>([]);
-  // Lead-pool selection: which candidate cards are checked, + batch action state
-  const [selectedCands, setSelectedCands]   = useState<Set<number>>(new Set());
-  const [poolBusy, setPoolBusy]             = useState(false);
-  const [poolMsg, setPoolMsg]               = useState<string | null>(null);
-  // Batch-research progress tray: one job per property being researched
+export default function AriaExplorePage() {
+  const [category, setCategory] = useState<Category>('properties')
+  const [query, setQuery]       = useState('')
+  const [loading, setLoading]   = useState(false)
+  const [items, setItems]       = useState<PropItem[]>([])
+  const [view, setView]         = useState<ViewMode>('list')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [detail, setDetail]     = useState<PropItem | null>(null)
+  const [error, setError]       = useState<string | null>(null)
+  const [interp, setInterp]     = useState('')
+  const [msg, setMsg]           = useState<string | null>(null)
+  const [busy, setBusy]         = useState(false)
+  // Per-property research state shown in the detail panel
+  const [detailBusy, setDetailBusy]   = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  type ResearchJob = { id: string; name: string; query: string; loc: string; status: 'queued' | 'running' | 'done' | 'failed'; propertyId?: string; result?: any };
-  const [researchJobs, setResearchJobs]     = useState<ResearchJob[]>([]);
-  const updateJob = (id: string, patch: Partial<ResearchJob>) =>
-    setResearchJobs(prev => prev.map(j => j.id === id ? { ...j, ...patch } : j));
-  // Left-panel idle view: 'recent' (default) vs 'history' (date-grouped browser)
-  const [leftTab, setLeftTab]               = useState<'recent' | 'history'>('recent');
-  // Preserve the last candidate list so you can go BACK to it after opening a
-  // site — survives refresh via localStorage so a reload doesn't lose the list.
-  const [savedCandidates, setSavedCandidates] = useState<Candidate[]>([]);
-  const [savedInterp, setSavedInterp]         = useState('');
-  // Collapsible accordion sections inside the Recent tab
-  const [recentOpen, setRecentOpen]         = useState<Record<string, boolean>>({ mem72: true, recent: false, suggested: false });
-  const toggleRecentSection = (k: string) => setRecentOpen(p => ({ ...p, [k]: !p[k] }));
-  const [queryInterpretation, setQueryInterpretation] = useState('');
-  const [viewMode, setViewMode]             = useState<ViewMode>('idle');
-  const [socialResults, setSocialResults]   = useState<SocialSearchResult | null>(null);
-  // Mount gate — SSR and the first client render both output a stable placeholder so
-  // there's no hydration mismatch from time-relative text (formatAge) or Date-based
-  // values. Real UI renders after mount. Fixes React #418/#423/#425.
-  const [mounted, setMounted]               = useState(false);
-  useEffect(() => { setMounted(true); }, []);
-  // Lets the user cancel an in-flight search.
-  const abortRef = useRef<AbortController | null>(null);
-  const [socialLoading, setSocialLoading]   = useState(false);
-  const [cacheStatus, setCacheStatus]       = useState<'fresh' | 'stale' | 're-enriching' | null>(null);
-  const [cacheAgeHours, setCacheAgeHours]   = useState<number | null>(null);
-  const [propertyId, setPropertyId]         = useState<string | null>(null);
-  // v9: Credit system
-  const [creditBalance, setCreditBalance]   = useState<number | null>(null);
-  const [creditLoading, setCreditLoading]   = useState(false);
-  const [purchaseLoading, setPurchaseLoading] = useState(false);
-  // v9: 72-hour memory
-  const [recentRuns, setRecentRuns]         = useState<Array<{
-    id: string; query: string; created_at: string;
-    primary_property: { name: string; city: string; state: string } | null;
-    has_intel_cache: boolean;
-  }>>([]);
-  const inputRef = useRef<HTMLInputElement>(null);
-  // Suppress unused warnings — reserved for richer state tracking
-  void viewMode;
-  void creditLoading;
+  const [detailReport, setDetailReport] = useState<any | null>(null)
+  // Apollo-grade segmentation on multifamily fields
+  const [fMinUnits, setFMinUnits] = useState(0)
+  const [fGate, setFGate]         = useState(false)
+  const [fBulk, setFBulk]         = useState(false)
+  const [fNew, setFNew]           = useState(false) // not-yet-researched only
+  const [fExpBefore, setFExpBefore] = useState(0)   // contract expiry before year (0 = any)
+  const [source, setSource]       = useState<Source>('discover')
+  const [scoutLeadIds, setScoutLeadIds] = useState<string[]>([])
+  const [scoutMsg, setScoutMsg]   = useState<string | null>(null)
 
+  const mapRef     = useRef<any>(null)               // eslint-disable-line @typescript-eslint/no-explicit-any
+  const markersRef = useRef<Record<string, any>>({}) // eslint-disable-line @typescript-eslint/no-explicit-any
+
+  // Load Mapbox GL once
   useEffect(() => {
-    fetch('/api/aria/searches')
-      .then(r => r.ok ? r.json() : { searches: [] })
-      .then(d => setSavedSearches(d.searches ?? []))
-      .catch(() => {});
-    fetch('/api/aria/usage')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d && !d.error) setUsageStats(d); })
-      .catch(() => {});
-    fetch('/api/aria/properties?limit=1')
-      .then(r => r.ok ? r.json() : { total: 0 })
-      .then(d => setDbTotal(d.total ?? 0))
-      .catch(() => {});
-    // v9: Fetch credit balance
-    fetch('/api/aria/credits/balance')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d != null) setCreditBalance(d.balance ?? 0); })
-      .catch(() => {});
-    // v9: Fetch 72-hour search memory
-    fetch('/api/aria/search-runs?limit=10')
-      .then(r => r.ok ? r.json() : { runs: [] })
-      .then(d => setRecentRuns(d.runs ?? []))
-      .catch(() => {});
-  }, []);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (typeof window !== 'undefined' && (window as any).mapboxgl) return
+    const link = document.createElement('link')
+    link.rel = 'stylesheet'
+    link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css'
+    document.head.appendChild(link)
+    const s = document.createElement('script')
+    s.src = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js'
+    document.body.appendChild(s)
+  }, [])
 
-  const loadDbProperties = useCallback(async (search = '', filter: typeof dbFilter = 'all') => {
-    setDbLoading(true);
-    try {
-      const params = new URLSearchParams({ limit: '100', order_by: 'last_researched_at' });
-      if (search) params.set('search', search);
-      if (filter === 'critical') params.set('urgency', 'critical');
-      if (filter === 'sara')     params.set('sara', 'true');
-      if (filter === 'expiring') { params.set('expiry_before', String(new Date().getFullYear() + 2)); params.set('expiry_after', String(new Date().getFullYear())); }
-      const r = await fetch(`/api/aria/properties?${params}`);
-      const d = await r.json();
-      setDbProps(d.properties ?? []);
-      setDbTotal(d.total ?? 0);
-    } catch { /* fail silently */ } finally {
-      setDbLoading(false);
+  const initMap = useCallback(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mapboxgl = (window as any).mapboxgl
+    if (!mapboxgl || !MAPBOX_TOKEN || mapRef.current) return
+    mapboxgl.accessToken = MAPBOX_TOKEN
+    mapRef.current = new mapboxgl.Map({
+      container: 'aria-explore-map',
+      style: 'mapbox://styles/mapbox/dark-v11',
+      center: [-96.8, 32.8], zoom: 9,
+    })
+  }, [])
+
+  // (Re)draw markers when items change or the map view is shown
+  useEffect(() => {
+    if (view !== 'map') return
+    initMap()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mapboxgl = (window as any).mapboxgl
+    if (!mapboxgl || !mapRef.current) return
+    const map = mapRef.current
+    setTimeout(() => map.resize(), 60)
+    Object.values(markersRef.current).forEach((m: any) => m.remove()) // eslint-disable-line @typescript-eslint/no-explicit-any
+    markersRef.current = {}
+    const withCoords = items.filter(i => i.lat != null && i.lng != null
+      && (!fMinUnits || (i.units ?? 0) >= fMinUnits) && (!fGate || i.gate_signal) && (!fBulk || i.bulk_detected) && (!fNew || !i.researched)
+      && (!fExpBefore || (i.contract_expiry_year != null && i.contract_expiry_year <= fExpBefore))
+      && (source !== 'saved' || !query.trim() || i.name.toLowerCase().includes(query.trim().toLowerCase())))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const bounds = withCoords.length ? new mapboxgl.LngLatBounds() : null
+    for (const it of withCoords) {
+      const el = document.createElement('div')
+      const s = it.buy_score ?? 5
+      el.style.cssText = `width:26px;height:26px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${scoreColor(s)};border:2px solid #0B1728;box-shadow:0 2px 6px rgba(0,0,0,.4);cursor:pointer;display:flex;align-items:center;justify-content:center`
+      const inner = document.createElement('span')
+      inner.textContent = String(s)
+      inner.style.cssText = 'transform:rotate(45deg);color:#fff;font-size:10px;font-weight:700'
+      el.appendChild(inner)
+      el.onclick = () => setDetail(it)
+      const marker = new mapboxgl.Marker(el).setLngLat([it.lng!, it.lat!]).addTo(map)
+      markersRef.current[it.id] = marker
+      bounds?.extend([it.lng!, it.lat!])
     }
-  }, []);
+    if (bounds && withCoords.length) { try { map.fitBounds(bounds, { padding: 60, maxZoom: 13, duration: 500 }) } catch { /* noop */ } }
+  }, [items, view, initMap, fMinUnits, fGate, fBulk, fNew, fExpBefore, source, query])
 
-  async function savePropertyNote() {
-    if (!dbSelected) return;
-    setSavingNote(true);
+  const runSearch = useCallback(async () => {
+    if (!query.trim() || loading) return
+    setLoading(true); setError(null); setItems([]); setSelected(new Set()); setInterp(''); setMsg(null); setDetail(null)
     try {
-      const body: Record<string, string> = {};
-      if (noteText)  body.sales_notes  = noteText;
-      if (noteStage) body.sales_stage  = noteStage;
-      const r = await fetch(`/api/aria/properties/${dbSelected.id}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-      });
-      const d = await r.json();
-      if (!d.error) {
-        setDbSelected(d);
-        setDbProps(prev => prev.map(p => p.id === d.id ? d : p));
-        setNoteText('');
-        setNoteStage('');
-      }
-    } catch { /* fail silently */ } finally {
-      setSavingNote(false);
-    }
-  }
+      const knownNames = new Set<string>()
+      try {
+        const kr = await fetch('/api/aria/properties?limit=200')
+        if (kr.ok) { const kd = await kr.json(); for (const p of (kd.properties ?? [])) knownNames.add(String(p.property_name ?? '').toLowerCase()) }
+      } catch { /* non-blocking */ }
 
-  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+      const res = await fetch('/api/aria/research/deep', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: query.trim() }),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
 
-  const runARIA = useCallback(async () => {
-    if (!query.trim() || (phase >= 1 && phase <= 5)) return;
-    setError(null);
-    setResults(null);
-    setCandidates([]);
-    setQueryInterpretation('');
-    setSavedSearchId(null);
-    setSelectedProspect(0);
-    setActiveTab('property');
-    setViewMode('running');
-    setSocialResults(null);
-    setSocialLoading(false);
-    setCacheStatus(null);
-    setCacheAgeHours(null);
-    setPropertyId(null);
-
-    // ── SWR fast-path: check Intel DB cache first ──────────────────────────
-    try {
-      const cacheRes = await fetch(`/api/aria/cache?query=${encodeURIComponent(query.trim())}`);
-      if (cacheRes.ok) {
-        const cacheData = await cacheRes.json();
-        if (cacheData.hit && cacheData.prospects?.length > 0) {
-          // Cache hit — show result instantly (<200ms)
-          setResults({ mode: 'deep', query_interpretation: query.trim(), prospects: cacheData.prospects });
-          setViewMode('result');
-          setPhase(6);
-          const ageHours: number = cacheData.cache_age_hours ?? 9999;
-          setCacheAgeHours(ageHours);
-          setPropertyId(cacheData.property_id ?? null);
-          if (ageHours < 14 * 24) {
-            setCacheStatus('fresh');
-          } else {
-            // Stale — show cached data, fire Inngest background re-enrichment
-            setCacheStatus('stale');
-            fetch('/api/aria/enrich', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ query: query.trim(), propertyId: cacheData.property_id ?? undefined }),
-            }).then(r => { if (r.ok) setCacheStatus('re-enriching'); }).catch(() => {});
-          }
-          if (cacheData.savedSearchId) setSavedSearchId(cacheData.savedSearchId);
-          return;
-        }
-      }
-    } catch { /* cache miss — fall through to full pipeline */ }
-
-    // ── Full pipeline (cache miss) ─────────────────────────────────────────
-    setPhase(1);
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    const apiPromise = fetch('/api/aria/research/deep', {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: query.trim(), search_focus: searchFocus !== 'all' ? searchFocus : undefined }),
-      signal: controller.signal,
-    }).then(async r => {
-      const text = await r.text();
-      try { return JSON.parse(text); }
-      catch { throw new Error(`Server error (${r.status}) — ${text.slice(0, 120)}`); }
-    });
-
-    for (let p = 1; p <= 4; p++) {
-      if (controller.signal.aborted) return;   // user hit Stop
-      setPhase(p);
-      await sleep(PHASE_DURATIONS[p]);
-    }
-    if (controller.signal.aborted) return;
-
-    setPhase(5);
-    setSynthStep(0);
-    const synthInterval = setInterval(() => {
-      setSynthStep(s => (s + 1) % SYNTHESIS_STEPS.length);
-    }, 2800);
-
-    try {
-      const data = await apiPromise;
-      clearInterval(synthInterval);
-      // v9: Handle 402 insufficient credits — surface buy flow
-      if (data.error && data.credits_required) {
-        setCreditBalance(data.balance ?? 0);
-        throw new Error(`Insufficient credits — ${data.balance ?? 0} available, ${data.credits_required} required. Purchase credits to continue.`);
-      }
-      if (data.error) throw new Error(data.error);
-
-      // Candidate response — show grid of properties to research
+      let list: PropItem[] = []
       if (data.type === 'candidates') {
-        setCandidates(data.candidates ?? []);
-        setSavedCandidates(data.candidates ?? []);
-        setSavedInterp(data.query_interpretation ?? '');
-        setSelectedCands(new Set());
-        setPoolMsg(null);
-        setQueryInterpretation(data.query_interpretation ?? '');
-        setViewMode('candidates');
-        setPhase(0);
-        return;
+        setInterp(data.query_interpretation ?? '')
+        list = (data.candidates ?? []).map((c: any, i: number) => ({ // eslint-disable-line @typescript-eslint/no-explicit-any
+          id: `${c.name ?? 'prop'}-${i}`, name: c.name ?? 'Unknown Property',
+          address: c.address ?? '', city: c.city ?? '', state: c.state ?? '',
+          units: c.units, management_company: c.management_company,
+          isp_signal: c.isp_signal, bulk_detected: c.bulk_detected, gate_signal: c.gate_signal,
+          pain_brief: c.pain_brief, buy_score: c.buy_score_estimate,
+        }))
+      } else if (Array.isArray(data.prospects)) {
+        list = data.prospects.map((p: any, i: number) => ({ // eslint-disable-line @typescript-eslint/no-explicit-any
+          id: `${p.property?.name ?? 'prop'}-${i}`, name: p.property?.name ?? 'Unknown Property',
+          address: p.property?.address ?? '', city: p.property?.city ?? '', state: p.property?.state ?? '',
+          units: p.property?.units, management_company: p.property?.management_company,
+          isp_signal: (p.property?.isp_providers ?? [])[0], buy_score: p.profile?.buy_score, researched: true,
+        }))
       }
+      list = list.map(it => ({ ...it, researched: it.researched || knownNames.has(it.name.toLowerCase()) }))
+      setItems(list)
+      const geo = await Promise.all(list.map(async it => ({ ...it, ...(await geocode(it)) })))
+      setItems(geo)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Search failed')
+    } finally { setLoading(false) }
+  }, [query, loading])
 
-      setResults(data);
-      setViewMode('result');
-      setPhase(6);
-      setCacheStatus('fresh');
-      if (data.savedSearchId) {
-        setSavedSearchId(data.savedSearchId);
-        fetch('/api/aria/searches')
-          .then(r => r.ok ? r.json() : { searches: [] })
-          .then(d => setSavedSearches(d.searches ?? []))
-          .catch(() => {});
-      }
-    } catch (e: any) {
-      clearInterval(synthInterval);
-      // User cancelled — reset quietly, no error banner.
-      if (e?.name === 'AbortError' || controller.signal.aborted) { setViewMode('idle'); setPhase(0); return; }
-      setError(e.message || "Research failed — check API configuration and try again");
-      setViewMode('idle');
-      setPhase(0);
-    } finally {
-      abortRef.current = null;
-    }
-  }, [query, phase, searchFocus]);
+  // Browse the Intel DB — everything already researched, instant, no spend.
+  const loadSaved = useCallback(async () => {
+    setLoading(true); setError(null); setItems([]); setSelected(new Set()); setInterp(''); setMsg(null); setDetail(null)
+    try {
+      const params = new URLSearchParams({ limit: '200', order_by: 'last_researched_at' })
+      if (fExpBefore) { params.set('expiry_before', String(fExpBefore)); params.set('expiry_after', String(new Date().getFullYear())) }
+      const r = await fetch(`/api/aria/properties?${params}`)
+      const d = await r.json()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows: any[] = d.properties ?? []
+      const list: PropItem[] = rows.map(row => ({
+        id: row.id,
+        name: row.property_name ?? 'Unknown Property',
+        address: row.facts?.property?.address ?? row.address ?? '',
+        city: row.facts?.property?.city ?? '', state: row.facts?.property?.state ?? '',
+        units: row.units ?? row.facts?.property?.units,
+        management_company: row.management_company,
+        isp_signal: (row.isp_providers ?? [])[0],
+        bulk_detected: (row.bulk_agreements?.length ?? 0) > 0 || !!row.roe_detected,
+        gate_signal: (row.gate_operators?.length ?? 0) > 0,
+        buy_score: row.buy_score,
+        researched: true,
+        contract_expiry_year: row.contract_expiry_year ?? undefined,
+        lat: row.facts?.property?.lat ?? undefined,
+        lng: row.facts?.property?.lng ?? undefined,
+      }))
+      setItems(list)
+      const geo = await Promise.all(list.map(async it => (it.lat != null ? it : { ...it, ...(await geocode(it)) })))
+      setItems(geo)
+    } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load saved') }
+    finally { setLoading(false) }
+  }, [fExpBefore])
 
-  // Cancel an in-flight search.
-  const stopARIA = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    setViewMode('idle');
-    setPhase(0);
-    setError(null);
-  }, []);
+  const onFind = source === 'saved' ? loadSaved : runSearch
 
-  // Drill into a specific candidate from the candidate grid
-  const searchCandidate = useCallback((c: Candidate) => {
-    const q = `${c.name} ${c.city} ${c.state}`.trim();
-    setQuery(q);
-    setCandidates([]);
-    setQueryInterpretation('');
-    setViewMode('idle');
-    setPhase(0);
-    setPendingRerun(true);
-  }, []);
+  const toggle = (id: string) => setSelected(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const selectedItems = items.filter(i => selected.has(i.id))
+  const matchesFilters = (it: PropItem) =>
+    (!fMinUnits || (it.units ?? 0) >= fMinUnits) &&
+    (!fGate || it.gate_signal) &&
+    (!fBulk || it.bulk_detected) &&
+    (!fNew || !it.researched) &&
+    (!fExpBefore || (it.contract_expiry_year != null && it.contract_expiry_year <= fExpBefore)) &&
+    (source !== 'saved' || !query.trim() || it.name.toLowerCase().includes(query.trim().toLowerCase()))
+  const visible = items.filter(matchesFilters)
 
-  // ── Lead-pool selection + batch add-to-leads ──────────────────────────────
-  const toggleCand = useCallback((i: number) => {
-    setPoolMsg(null);
-    setSelectedCands(prev => {
-      const next = new Set(prev);
-      if (next.has(i)) next.delete(i); else next.add(i);
-      return next;
-    });
-  }, []);
-
-  const toggleAllCands = useCallback(() => {
-    setPoolMsg(null);
-    setSelectedCands(prev =>
-      prev.size === candidates.length ? new Set() : new Set(candidates.map((_, i) => i))
-    );
-  }, [candidates]);
-
-  const addSelectedToLeads = useCallback(async () => {
-    const picks = candidates.filter((_, i) => selectedCands.has(i));
-    if (picks.length === 0) return;
-    setPoolBusy(true);
-    setPoolMsg(null);
+  const addToLeads = useCallback(async (list: PropItem[]) => {
+    if (!list.length) return
+    setBusy(true); setMsg(null)
     try {
       const r = await fetch('/api/aria/candidates/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ candidates: picks }),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'Import failed');
-      const created = d.created ?? 0;
-      const skipped = d.skipped ?? 0;
-      setPoolMsg(
-        `Added ${created} to Leads${skipped ? ` · ${skipped} already existed` : ''}.`
-      );
-      setSelectedCands(new Set());
-    } catch (e) {
-      setPoolMsg(e instanceof Error ? e.message : 'Could not add to leads.');
-    } finally {
-      setPoolBusy(false);
-    }
-  }, [candidates, selectedCands]);
-
-  // Batch full-research selected candidates → queued as background jobs that
-  // upsert into aria_properties (the Researched Properties / Intel DB).
-  const researchSelected = useCallback(async () => {
-    const picks = candidates.filter((_, i) => selectedCands.has(i));
-    if (picks.length === 0) return;
-    // Guard — batch research runs one full search per property.
-    if (!window.confirm(
-      `Research ${picks.length} ${picks.length === 1 ? 'property' : 'properties'}? ` +
-      `This runs ${picks.length} full ${picks.length === 1 ? 'search' : 'searches'} in the background (about a minute each) and adds ${picks.length === 1 ? 'it' : 'them'} to Researched Properties.`
-    )) return;
-
-    // Build tracked jobs — the tray keeps these visible with live status.
-    const jobs: ResearchJob[] = picks.map((c, idx) => ({
-      id: `${c.name}-${idx}-${Date.now()}`,
-      name: c.name,
-      query: `${c.name} ${c.city ?? ''} ${c.state ?? ''}`.trim(),
-      loc: [c.city, c.state].filter(Boolean).join(', '),
-      status: 'queued',
-    }));
-    setResearchJobs(jobs);
-    setSelectedCands(new Set());
-    setPoolMsg(null);
-
-    // Research each property directly through the deep route, one at a time.
-    // The fetch resolving IS the completion signal — reliable, no Inngest/polling.
-    void (async () => {
-      for (const job of jobs) {
-        updateJob(job.id, { status: 'running' });
-        try {
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 130000);
-          const res = await fetch('/api/aria/research/deep', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: job.query }),
-            signal: controller.signal,
-          }).finally(() => clearTimeout(timer));
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
-          // Capture the actual result so "Open" shows it directly (no re-search).
-          updateJob(job.id, { status: 'done', result: (data?.prospects?.length ? data : undefined) });
-        } catch {
-          updateJob(job.id, { status: 'failed' });
-        }
-        // Refresh Intel DB count as each lands
-        fetch('/api/aria/properties?limit=1').then(r => r.ok ? r.json() : null)
-          .then(d => { if (d) setDbTotal(d.total ?? 0); }).catch(() => {});
-      }
-    })();
-  }, [candidates, selectedCands]);
-
-  // Open a finished research job's property. Show the captured result directly —
-  // never re-run the search. Falls back to a cache-first re-open only if we
-  // somehow don't have the result in hand.
-  const openResearchedJob = useCallback((job: ResearchJob) => {
-    setResearchJobs(prev => prev.filter(j => j.id !== job.id));
-    setQuery(job.query);
-    if (job.result?.prospects?.length) {
-      setResults(job.result);
-      setViewMode('result');
-      setPhase(6);
-      setSelectedProspect(0);
-      setActiveTab('property');
-      setCandidates([]);
-      setCacheStatus('fresh');
-    } else {
-      setPendingRerun(true); // fallback: cache fast-path (won't re-research if cached)
-    }
-  }, []);
-
-  // Go back to the candidate list from a single-site result.
-  const backToResults = useCallback(() => {
-    if (!savedCandidates.length) return;
-    setResults(null);
-    setCandidates(savedCandidates);
-    setQueryInterpretation(savedInterp);
-    setSelectedCands(new Set());
-    setViewMode('candidates');
-    setPhase(0);
-  }, [savedCandidates, savedInterp]);
-
-  // Persist the last candidate list so a refresh doesn't lose it.
-  useEffect(() => {
-    try {
-      if (savedCandidates.length) localStorage.setItem('aria_last_candidates', JSON.stringify({ c: savedCandidates, i: savedInterp }));
-    } catch { /* storage unavailable */ }
-  }, [savedCandidates, savedInterp]);
-
-  // Restore the last candidate list on mount (into savedCandidates only — the
-  // "Back to results" affordance appears; we don't auto-open the grid).
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem('aria_last_candidates');
-      if (raw) {
-        const d = JSON.parse(raw);
-        if (Array.isArray(d.c) && d.c.length) { setSavedCandidates(d.c); setSavedInterp(d.i || ''); }
-      }
-    } catch { /* ignore */ }
-  }, []);
-
-  // Trigger re-run after state reset (used by "Fetch Latest Intel" in IntelDBPanel)
-  useEffect(() => {
-    if (pendingRerun && phase === 0) {
-      setPendingRerun(false);
-      runARIA();
-    }
-  }, [pendingRerun, phase, runARIA]);
-
-  // Re-enriching: Supabase Realtime subscription — instant push when Inngest job completes
-  useEffect(() => {
-    if (cacheStatus !== 're-enriching' || !propertyId || !query) return;
-
-    const snapshotAgeHours = cacheAgeHours;
-
-    async function applyFreshResult() {
-      try {
-        const r = await fetch(`/api/aria/cache?query=${encodeURIComponent(query)}`);
-        if (!r.ok) return;
-        const d = await r.json();
-        if (d.hit && d.prospects?.length > 0) {
-          setResults({ mode: 'deep', query_interpretation: query, prospects: d.prospects });
-          setCacheStatus('fresh');
-          setCacheAgeHours(d.cache_age_hours ?? null);
-        }
-      } catch { /* ignore */ }
-    }
-
-    // Primary: Supabase Realtime — fires the instant the row is upserted by the deep route
-    const channel = supabase
-      .channel(`aria-prop-${propertyId}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'aria_properties', filter: `id=eq.${propertyId}` },
-        () => { void applyFreshResult(); }
-      )
-      .subscribe();
-
-    // Fallback: light poll every 30s in case Realtime isn't enabled for this table
-    // Detects re-enrichment completion when cache_age_hours drops below 1 (just re-enriched)
-    const poll = setInterval(async () => {
-      try {
-        const r = await fetch(`/api/aria/cache?query=${encodeURIComponent(query)}`);
-        if (!r.ok) return;
-        const d = await r.json();
-        const justRefreshed = d.hit && d.cache_age_hours !== null && d.cache_age_hours < 1;
-        const fresherThanSnapshot = d.hit && d.cache_age_hours !== null && snapshotAgeHours !== null && d.cache_age_hours < snapshotAgeHours - 0.5;
-        if (justRefreshed || fresherThanSnapshot) {
-          void applyFreshResult();
-          clearInterval(poll);
-        }
-      } catch { /* ignore */ }
-    }, 30_000);
-
-    // Stop both after 3 minutes
-    const timeout = setTimeout(() => { clearInterval(poll); void supabase.removeChannel(channel); }, 180_000);
-
-    return () => {
-      void supabase.removeChannel(channel);
-      clearInterval(poll);
-      clearTimeout(timeout);
-    };
-  }, [cacheStatus, propertyId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Engine 2 — social search fires automatically once Engine 1 completes
-  useEffect(() => {
-    if (phase !== 6 || !results) return;
-    const p = results.prospects?.[0];
-    if (!p?.property?.name) return;
-    const prop = p.property;
-    // Derive city/state: prefer explicit fields → scout_queue → parse from address
-    const sq = p.scout_queue;
-    const city  = prop.city  || sq?.property?.city  || prop.address?.split(',').slice(-3,-2)[0]?.trim() || '';
-    const state = prop.state || sq?.property?.state || prop.address?.split(',').slice(-2,-1)[0]?.trim() || '';
-    if (!city) return; // need at least city for social search to be meaningful
-    setSocialResults(null);
-    setSocialLoading(true);
-    fetch('/api/aria/social', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        property_name:      prop.name,
-        city,
-        state,
-        management_company: prop.management_company ?? '',
-        isp_providers:      prop.isp_providers      ?? [],
-        video_providers:    prop.video_providers     ?? [],
-        bulk_agreements:    prop.bulk_agreements     ?? [],
-        gate_operators:     prop.proptech?.gate_operators  ?? [],
-        access_control:     prop.proptech?.access_control  ?? [],
-      }),
-    })
-      .then(r => r.ok ? r.json() : { social_posts: [], cross_reference_notes: [] })
-      .then(d => setSocialResults(d))
-      .catch(() => setSocialResults({ social_posts: [], cross_reference_notes: [] }))
-      .finally(() => setSocialLoading(false));
-  }, [phase, results]);
-
-  async function importSearch(id: string) {
-    setImporting(id);
-    try {
-      const r = await fetch(`/api/aria/searches/${id}/import`, { method: 'POST' });
-      const d = await r.json();
-      if (d.error) throw new Error(d.error);
-      setImportResult(prev => ({ ...prev, [id]: { created: d.created, skipped: d.skipped } }));
-      setSavedSearches(prev => prev.map(s => s.id === id
-        ? { ...s, imported_count: (s.imported_count ?? 0) + d.created, imported_at: new Date().toISOString() }
-        : s
-      ));
-    } catch {
-      setImportResult(prev => ({ ...prev, [id]: { created: -1, skipped: 0 } }));
-    } finally {
-      setImporting(null);
-    }
-  }
-
-  async function launchScout(searchId: string) {
-    setScoutLoading(searchId);
-    try {
-      const importRes = await fetch(`/api/aria/searches/${searchId}/import`, { method: 'POST' });
-      const importData = await importRes.json();
-      const leadIds = importData.lead_ids ?? [];
-      if (leadIds.length === 0) throw new Error('No leads found for this search');
-      const scoutRes = await fetch('/api/aria/scout/launch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lead_ids: leadIds }),
-      });
-      const scoutData = await scoutRes.json();
-      if (scoutData.error) throw new Error(scoutData.error);
-      setScoutResult(prev => ({ ...prev, [searchId]: { sent: scoutData.sent, skipped: scoutData.skipped, errors: scoutData.errors } }));
-    } catch {
-      setScoutResult(prev => ({ ...prev, [searchId]: { sent: -1, skipped: 0, errors: 1 } }));
-    } finally {
-      setScoutLoading(null);
-    }
-  }
-
-  async function deleteSearch(id: string) {
-    setDeleting(id);
-    try {
-      await fetch(`/api/aria/searches/${id}`, { method: 'DELETE' });
-      setSavedSearches(prev => prev.filter(s => s.id !== id));
-    } catch { /* fail silently */ } finally {
-      setDeleting(null);
-    }
-  }
-
-  function restoreSearch(s: SavedSearch) {
-    const prospects = s.results?.prospects ?? [];
-    if (prospects.length === 0) return;
-    setResults(s.results as any);
-    setQuery(s.query);
-    setCandidates([]);
-    setQueryInterpretation('');
-    setViewMode('result');
-    setPhase(6);
-    setSavedSearchId(s.id);
-    setSelectedProspect(0);
-    setActiveTab('property');
-  }
-
-  const isRunning = phase >= 1 && phase <= 5;
-  const isDone    = phase === 6;
-  const prospect  = results?.prospects?.[selectedProspect];
-
-  // v9: Credit purchase helper
-  async function handleBuyCredits(packageId?: string) {
-    setPurchaseLoading(true)
-    try {
-      // If no package ID, open a simple tier chooser by defaulting to Standard (2000 credits)
-      // For now: fetch packages and pick Standard as default, or pass through
-      const res = await fetch('/api/billing/credits/purchase', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ package_id: packageId ?? '__standard__' }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ candidates: list }),
       })
-      const d = await res.json()
-      if (d.checkout_url) window.location.href = d.checkout_url
-    } catch {
-      // fail silently — user will see button re-enable
-    } finally {
-      setPurchaseLoading(false)
-    }
-  }
-
-  // ── TopBar actions ─────────────────────────────────────────────────────────
-  const topbarActions = (
-    <div className="flex items-center gap-2">
-      <button
-        onClick={() => {
-          if (!dbView) { setDbView(true); loadDbProperties(); }
-          else setDbView(false);
-        }}
-        className={cn(
-          "hidden lg:flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-bold border transition-all shadow-sm",
-          dbView
-            ? "bg-[#6B7EFF] text-white border-[#6B7EFF]"
-            : "bg-[#131B2E] text-slate-300 border-white/10 hover:border-[#6B7EFF]/50"
-        )}
-      >
-        <Globe size={11} />
-        Intel DB
-        {dbTotal > 0 && (
-          <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-md",
-            dbView ? "bg-[#ffffff]/[0.06] text-white" : "bg-[#131B2E] text-slate-400")}>
-            {dbTotal}
-          </span>
-        )}
-      </button>
-      {/* Cache freshness badge */}
-      {cacheStatus === 'fresh' && cacheAgeHours !== null && isDone && (
-        <div className="hidden lg:flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-lg bg-emerald-400/10 text-emerald-300 border border-emerald-400/30">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-          {cacheAgeHours < 1 ? 'Just fetched' : cacheAgeHours < 24 ? `Cached · ${Math.floor(cacheAgeHours)}h ago` : `Cached · ${Math.floor(cacheAgeHours / 24)}d ago`}
-        </div>
-      )}
-      {cacheStatus === 'stale' && cacheAgeHours !== null && isDone && (
-        <div className="hidden lg:flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-lg bg-amber-400/10 text-amber-300 border border-amber-400/30">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
-          Stale · {Math.floor(cacheAgeHours / 24)}d ago
-        </div>
-      )}
-      {cacheStatus === 're-enriching' && isDone && (
-        <div className="hidden lg:flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-lg text-[#6B7EFF] border border-[#6B7EFF]/20" style={{ background: 'rgba(107,126,255,0.05)' }}>
-          <Loader2 size={9} className="animate-spin shrink-0" />
-          Re-enriching...
-        </div>
-      )}
-      {usageStats && !dbView && (
-        <div className="hidden lg:flex items-center gap-3 mr-2 text-xs text-slate-400">
-          <span className="flex items-center gap-1">
-            <TrendingUp size={11} className="text-[#6B7EFF]" />
-            <span className="font-bold text-slate-200">{usageStats.my_searches.total}</span> mine
-          </span>
-          {usageStats.corporate_total > 0 && (
-            <span className="flex items-center gap-1">
-              <span className="font-bold text-slate-200">{usageStats.corporate_total}</span> network
-            </span>
-          )}
-        </div>
-      )}
-      {isDone && savedSearchId && (
-        <>
-          {!importResult[savedSearchId] && (
-            <button
-              onClick={() => importSearch(savedSearchId)}
-              disabled={importing === savedSearchId}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg text-white font-bold disabled:opacity-60 shadow-sm"
-              style={{ background: "#6B7EFF" }}
-            >
-              {importing === savedSearchId
-                ? <Loader2 size={11} className="animate-spin" />
-                : <><Download size={11} /> Import leads</>}
-            </button>
-          )}
-          {importResult[savedSearchId] && (importResult[savedSearchId].created ?? 0) >= 0 && !scoutResult[savedSearchId] && (
-            <button
-              onClick={() => launchScout(savedSearchId)}
-              disabled={scoutLoading === savedSearchId}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg text-white font-bold disabled:opacity-60 shadow-sm"
-              style={{ background: "linear-gradient(to right, #10B981, #059669)" }}
-            >
-              {scoutLoading === savedSearchId
-                ? <Loader2 size={11} className="animate-spin" />
-                : <><Zap size={11} /> SCOUT</>}
-            </button>
-          )}
-        </>
-      )}
-      {/* v9 Credit balance chip */}
-      <div className="hidden lg:flex items-center gap-2 pl-2 border-l border-white/10">
-        {creditBalance === null ? (
-          <div className="h-7 w-20 bg-[#131B2E] rounded-lg animate-pulse" />
-        ) : creditBalance >= 100 ? (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold border"
-            style={{ background: 'rgba(107,126,255,0.06)', borderColor: 'rgba(107,126,255,0.2)', color: '#5B6EE8' }}>
-            <Zap size={10} />
-            {creditBalance.toLocaleString()} credits
-          </div>
-        ) : (
-          <button
-            onClick={() => handleBuyCredits()}
-            disabled={purchaseLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold border text-amber-300 hover:bg-amber-400/10 transition-colors disabled:opacity-60"
-            style={{ borderColor: 'rgba(245,158,11,0.4)', background: 'rgba(251,191,36,0.06)' }}
-          >
-            {purchaseLoading ? <Loader2 size={10} className="animate-spin" /> : <><AlertCircle size={10} /> {creditBalance === 0 ? 'Buy Credits' : `${creditBalance} left`}</>}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-
-  // ── Left panel: prospect list item ────────────────────────────────────────
-  function ProspectListItem({ p, i }: { p: any; i: number }) {
-    const score = p.profile?.buy_score ?? 0;
-    const isActive = selectedProspect === i && isDone;
-    
-    return (
-      <button
-        onClick={() => { setSelectedProspect(i); setActiveTab('property'); }}
-        className={cn(
-          "w-full text-left p-3.5 rounded-xl transition-all duration-300 mb-3 relative overflow-hidden group",
-          isActive
-            ? "bg-[#131B2E] shadow-[0_8px_30px_rgb(107,126,255,0.12)] border border-[#6B7EFF]/20"
-            : "bg-[#131B2E]/70 border border-white/10 hover:bg-[#131B2E] hover:shadow-sm hover:border-slate-300"
-        )}
-      >
-        {isActive && (
-          <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-[#6B7EFF] to-[#A78BFA]" />
-        )}
-        
-        <div className="flex items-start gap-3 mb-2">
-          <div className={cn(
-            "w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0 shadow-sm transition-transform",
-            isActive ? "scale-110" : "group-hover:scale-105"
-          )}
-            style={scoreBg(score)}>
-            {score}
-          </div>
-          <div className="flex-1 min-w-0 pt-0.5">
-            <p className={cn("text-xs font-bold leading-tight truncate transition-colors", isActive ? "text-[#6B7EFF]" : "text-slate-100")}>
-              {p.property?.name}
-            </p>
-            <p className="text-[10px] text-slate-400 mt-0.5 truncate flex items-center gap-1">
-              <MapPin size={10} className="opacity-70" /> {p.property?.address?.split(',').slice(0,2).join(',')}
-            </p>
-          </div>
-        </div>
-        
-        <div className="flex flex-wrap gap-1.5 mt-2 pl-11">
-          {p.property?.units && (
-            <span className="text-[9px] px-2 py-0.5 rounded-md bg-[#131B2E]/80 text-slate-400 border border-white/10">{p.property.units} U</span>
-          )}
-          {(() => {
-            const dm = computeDmScore(p as Prospect)
-            return (
-              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${dm.bg} ${dm.color}`}>
-                DM {dm.score}/10
-              </span>
-            )
-          })()}
-          {p.property?.proptech?.sara_signals && (
-            <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-purple-400/10 text-purple-300 border border-purple-400/20">SARA</span>
-          )}
-          {p.profile?.urgency && p.profile.urgency !== 'low' && (
-            <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider border",
-              p.profile.urgency === 'critical' ? 'bg-rose-400/10 text-rose-300 border-rose-400/20' : 'bg-orange-400/10 text-orange-300 border-orange-400/20'
-            )}>{p.profile.urgency}</span>
-          )}
-        </div>
-      </button>
-    );
-  }
-
-  // ── Saved search row ──────────────────────────────────────────────────────
-  function SavedSearchRow({ s }: { s: SavedSearch }) {
-    const res = importResult[s.id];
-    const alreadyImported = s.imported_count > 0 || (res?.created ?? 0) > 0;
-    const prospects = s.results?.prospects ?? [];
-    const expDays = daysUntil(s.expires_at);
-    return (
-      <div className="flex items-start gap-2 p-2.5 rounded-lg hover:bg-[#131B2E] hover:shadow-sm border border-transparent hover:border-white/10 group transition-all mb-1">
-        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => restoreSearch(s)}>
-          <p className="text-[11px] font-bold text-slate-200 leading-tight truncate">{s.query}</p>
-          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-            <span className="text-[10px] text-slate-400">{formatAge(s.created_at)}</span>
-            <span className="text-[10px] text-slate-300">·</span>
-            <span className="text-[10px] text-slate-400 font-medium">{prospects.length} targets</span>
-            {alreadyImported && <span className="text-[9px] font-bold text-emerald-300">imported</span>}
-            {expDays <= 3 && <span className="text-[9px] text-amber-500 font-bold">{expDays}d</span>}
-          </div>
-        </div>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0">
-          <button
-            onClick={() => { setQuery(s.query); setPhase(0); setResults(null); setSavedSearchId(null); setPendingRerun(true); }}
-            title="Re-run with fresh data"
-            disabled={isRunning}
-            className="text-slate-400 hover:text-[#6B7EFF] p-1 rounded transition-colors disabled:opacity-30"
-          >
-            <RefreshCw size={12} />
-          </button>
-          <button
-            onClick={() => deleteSearch(s.id)}
-            disabled={deleting === s.id}
-            className="text-slate-400 hover:text-rose-500 p-1 rounded transition-colors disabled:opacity-40"
-          >
-            {deleting === s.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Detail header ─────────────────────────────────────────────────────────
-  function DetailHeader({ p }: { p: Prospect }) {
-    const score = p.profile?.buy_score ?? 0;
-    
-    return (
-      <div className="bg-[#131B2E]/90 backdrop-blur-xl border-b border-white/10 sticky top-0 z-10">
-        <div className="px-6 pt-6 pb-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <Shield size={14} className="text-[#6B7EFF]" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-[#6B7EFF]">Target Acquired</span>
-              </div>
-              <h2 className="text-xl font-bold text-slate-100 tracking-tight">{p.property?.name}</h2>
-              <p className="text-xs text-slate-400 mt-0.5 font-medium">{p.property?.address?.split(',').slice(-2).join(',').trim()}</p>
-            </div>
-            
-            <div className="flex flex-col items-end">
-              <div className="flex items-center gap-3 bg-[#0F1830] border border-white/10 rounded-2xl p-2 pr-4 shadow-sm">
-                 <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-bold shadow-inner" style={scoreBg(score)}>
-                    {score}
-                 </div>
-                 <div className="flex flex-col">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Buy Score</span>
-                    <span className="text-xs font-bold text-slate-100 capitalize">{p.profile?.urgency || 'medium'} Urgency</span>
-                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="px-6 pb-0">
-          <div className="flex gap-2 mb-[-1px]">
-            {([
-              { key: 'property', label: 'Property' },
-              { key: 'proptech', label: 'PropTech', badge: [p.property?.proptech?.gate_operators, p.property?.proptech?.access_control, p.property?.proptech?.cameras, p.property?.proptech?.intercoms].filter(a => a?.length).length || null },
-              { key: 'dm',       label: 'Decision Matrix' },
-              { key: 'intel',    label: 'AI Intel', badge: p.pain_signals?.length > 0 ? p.pain_signals.length : null },
-              { key: 'social',   label: 'Community', badge: ((p.pain_signals?.length ?? 0) + (socialResults?.social_posts?.length ?? 0)) || null },
-              { key: 'scout',    label: 'SCOUT', greenBadge: true },
-            ] as { key: DetailTab; label: string; badge?: number | null; greenBadge?: boolean }[]).map(tab => {
-              const isActive = activeTab === tab.key;
-              return (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
-                  className={cn(
-                    "px-4 py-2.5 text-xs font-bold transition-all relative rounded-t-lg",
-                    isActive
-                      ? "text-[#6B7EFF] bg-[#131B2E] border-t border-l border-r border-white/10 shadow-[0_-4px_6px_-1px_rgb(0,0,0,0.02)]"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-[#0F1830]"
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    {tab.label}
-                    {tab.badge != null && (
-                      <span className="flex items-center justify-center h-4 min-w-[16px] px-1 text-[9px] text-white bg-rose-500 rounded-full shadow-sm">{tab.badge}</span>
-                    )}
-                    {tab.greenBadge && (
-                      <span className="flex items-center justify-center h-4 w-4 text-[10px] text-white bg-emerald-500 rounded-full shadow-sm"><Check size={10}/></span>
-                    )}
-                  </div>
-                  {isActive && <div className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-[#131B2E] z-10" />}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Property tab ──────────────────────────────────────────────────────────
-  function PropertyTab({ p }: { p: Prospect }) {
-    return (
-      <div className="grid grid-cols-2 gap-5 max-w-5xl animate-in fade-in slide-in-from-bottom-2 duration-500">
-        <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Property Telemetry</p>
-          <div className="space-y-3">
-            {[
-              { label: "Units",      val: p.property?.units },
-              { label: "Type",       val: p.property?.property_type },
-              { label: "Class",      val: p.property?.class ? `Class ${p.property.class}` : null },
-              { label: "Year built", val: p.property?.year_built },
-              { label: "Occupancy",  val: p.property?.occupancy },
-            ].map(({ label, val }) => (
-              <div key={label} className="flex items-center justify-between text-xs">
-                <span className="text-slate-400">{label}</span>
-                <span className={`font-bold capitalize ${val != null && val !== '' && val !== 'null' ? 'text-slate-100' : 'text-slate-300'}`}>
-                  {val != null && val !== '' && val !== 'null' ? String(val) : '—'}
-                </span>
-              </div>
-            ))}
-            <div className="pt-3 border-t border-white/10 space-y-2">
-              <div>
-                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Management</p>
-                <p className="text-xs font-bold text-slate-200 mt-1">{p.property?.management_company || '—'}</p>
-              </div>
-              {p.property?.phone && (
-                <div>
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Leasing Office Phone</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Phone size={11} className="text-emerald-500 shrink-0" />
-                    <a href={`tel:${p.property.phone}`} className="text-xs font-bold text-emerald-300 hover:underline">{p.property.phone}</a>
-                    <button onClick={() => navigator.clipboard.writeText(p.property?.phone ?? '')} className="ml-1 text-slate-400 hover:text-[#6B7EFF] transition-colors">
-                      <Copy size={10} />
-                    </button>
-                  </div>
-                </div>
-              )}
-              <div>
-                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Owner entity</p>
-                <p className="text-[11px] text-slate-400 mt-1">{p.property?.owner_entity || '—'}</p>
-              </div>
-              {p.ownership?.dnb_duns && p.ownership.dnb_duns !== 'unknown' && (
-                <div>
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">D&B DUNS</p>
-                  <p className="text-[11px] text-slate-300 mt-1 flex items-center gap-1.5 bg-[#0F1830] px-2 py-1 rounded w-fit border border-white/10">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                    {p.ownership.dnb_duns}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Financial &amp; Connectivity</p>
-          {p.ownership && (
-            <div className="space-y-3 mb-4">
-              {[
-                { label: "Owner type",     val: p.ownership.owner_type },
-                { label: "Portfolio",      val: p.ownership.portfolio_size },
-                { label: "Acquired",       val: p.ownership.acquisition_year },
-                { label: "Hold period",    val: p.ownership.hold_period },
-                { label: "CapEx signal",   val: p.ownership.capex_signal },
-              ].filter(x => x.val).map(({ label, val }) => (
-                <div key={label} className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400">{label}</span>
-                  <span className="font-bold text-slate-100 capitalize text-right max-w-[140px] truncate">{val}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="border-t border-white/10 pt-4">
-            <div className="flex items-center gap-2 mb-3">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Connectivity Hub</p>
-              {p.property?._fcc_verified
-                ? <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-400/10 border border-emerald-400/20 text-emerald-300">FCC Verified</span>
-                : <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-amber-400/10 border border-amber-400/20 text-amber-300">AI Estimated</span>}
-            </div>
-
-            {/* ISP — always visible */}
-            <div className="mb-3">
-              <p className="text-[9px] text-slate-400 mb-1.5">Internet / ISP</p>
-              {(p.property?.isp_providers ?? []).length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {(p.property!.isp_providers!).map((isp: string) => (
-                    <span key={isp} className={cn("text-[10px] px-2 py-1 rounded-md font-bold border",
-                      p.property?._fcc_verified
-                        ? "bg-emerald-400/10 text-emerald-300 border-emerald-400/30"
-                        : "bg-blue-400/10 text-blue-300 border-blue-400/30"
-                    )}>{isp}</span>
-                  ))}
-                </div>
-              ) : (
-                <span className="text-[10px] text-slate-400 italic font-medium">No provider data found</span>
-              )}
-            </div>
-
-            {/* Video — always visible */}
-            <div className="mb-3">
-              <p className="text-[9px] text-slate-400 mb-1.5">Cable / Video</p>
-              {(p.property?.video_providers ?? []).length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {(p.property!.video_providers!).map((vid: string) => (
-                    <span key={vid} className="text-[10px] bg-violet-400/10 text-violet-300 border border-violet-400/30 px-2 py-1 rounded-md font-bold">{vid}</span>
-                  ))}
-                </div>
-              ) : (
-                <span className="text-[10px] text-slate-400 italic font-medium">No provider data found</span>
-              )}
-            </div>
-
-            {/* Bulk agreements — prominent when present, with expiry urgency */}
-            {(p.property?.bulk_agreements ?? []).length > 0 && (
-              <div className="space-y-2 mt-1">
-                <p className="text-[9px] text-slate-400 mb-1.5">Bulk / Exclusive Agreements</p>
-                {(p.property!.bulk_agreements!).map((a: BulkAgreement & { evidence?: string }, i: number) => {
-                  const urgency = getExpiryUrgency(a.expiry_estimate);
-                  return (
-                    <div key={i} className={cn("rounded-xl px-3 py-2 border shadow-sm",
-                      urgency === 'critical' ? 'bg-red-400/10 border-red-300' :
-                      urgency === 'soon'     ? 'bg-amber-400/10 border-amber-300' :
-                      a.agreement_type === 'exclusive' ? 'bg-amber-400/10 border-amber-400/30' :
-                      a.agreement_type === 'bulk'      ? 'bg-emerald-400/10 border-emerald-400/30' :
-                                                         'bg-[#0F1830]/50 border-white/10'
-                    )}>
-                      {urgency === 'critical' && (
-                        <div className="flex items-center gap-1.5 text-[9px] font-bold text-red-300 mb-1.5">
-                          <AlertTriangle size={10} className="shrink-0" />
-                          EXPIRING SOON — SALES WINDOW OPEN
-                        </div>
-                      )}
-                      {urgency === 'soon' && (
-                        <div className="flex items-center gap-1.5 text-[9px] font-bold text-amber-300 mb-1.5">
-                          <Clock size={10} className="shrink-0" />
-                          EXPIRING WITHIN 2 YEARS
-                        </div>
-                      )}
-                      <div className="flex items-center justify-between gap-1 mb-1">
-                        <span className="text-xs font-bold text-slate-100">{a.provider}</span>
-                        <span className={cn("text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-md",
-                          a.agreement_type === 'exclusive' ? 'bg-amber-400/15 text-amber-300' :
-                          a.agreement_type === 'bulk'      ? 'bg-emerald-400/15 text-emerald-300' :
-                                                             'bg-slate-200 text-slate-300'
-                        )}>{a.agreement_type}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium">
-                        <span className="capitalize">{a.service_type}</span>
-                        {a.expiry_estimate && a.expiry_estimate !== 'unknown' && (
-                          <><span>·</span>
-                          <span className={cn("font-bold px-1 rounded",
-                            urgency === 'critical' ? 'text-red-300 bg-red-400/10' :
-                            urgency === 'soon'     ? 'text-amber-300 bg-amber-400/10' :
-                                                     'text-slate-400 bg-[#131B2E]'
-                          )}>Exp: {a.expiry_estimate}</span></>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="col-span-2 flex items-center gap-2 p-3 rounded-xl border border-[#6B7EFF]/20 bg-[#6B7EFF]/5 cursor-pointer hover:bg-[#6B7EFF]/10 transition-colors"
-          onClick={() => setActiveTab('proptech')}>
-          <Package size={14} className="text-[#6B7EFF]" />
-          <span className="text-xs font-bold text-[#6B7EFF]">View PropTech Architecture →</span>
-          {p.property?.proptech?.sara_signals && (
-            <span className="ml-auto text-[9px] font-bold px-2 py-0.5 rounded-md bg-purple-400/10 text-purple-300 border border-purple-400/20">SARA Opportunity</span>
-          )}
-        </div>
-
-        {/* ── Location + Street View ─────────────────────────────────────────── */}
-        {p.property?.address && (
-          <div className="col-span-2 bg-[#131B2E]/90 rounded-2xl border border-white/10 overflow-hidden shadow-sm">
-            <div className="px-5 pt-4 pb-3 flex items-center justify-between border-b border-white/10">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Location</p>
-                <p className="text-sm font-bold text-slate-100 mt-0.5 flex items-center gap-1.5">
-                  <MapPin size={12} className="text-[#6B7EFF] shrink-0" />
-                  {p.property.address}
-                </p>
-              </div>
-              <a
-                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.property.address)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[10px] font-bold text-[#6B7EFF] hover:underline flex items-center gap-1 shrink-0"
-              >
-                Open in Maps ↗
-              </a>
-            </div>
-            {/* Google Maps embed — supports click-to-street-view */}
-            <div className="w-full h-64 relative">
-              <iframe
-                title="Property Location"
-                width="100%"
-                height="100%"
-                style={{ border: 0, display: 'block' }}
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-                src={`https://maps.google.com/maps?q=${encodeURIComponent(p.property.address)}&output=embed&z=17`}
-              />
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // ── DM tab ────────────────────────────────────────────────────────────────
-  function DMTab({ p }: { p: Prospect }) {
-    const [crmImporting, setCrmImporting] = useState(false);
-    const [crmImported, setCrmImported] = useState(false);
-
-    async function importToCRM() {
-      if (!savedSearchId || crmImporting) return;
-      setCrmImporting(true);
-      try {
-        const r = await fetch(`/api/aria/searches/${savedSearchId}/import`, { method: 'POST' });
-        const d = await r.json();
-        if (!d.error) {
-          setCrmImported(true);
-          setImportResult(prev => ({ ...prev, [savedSearchId]: { created: d.created, skipped: d.skipped } }));
-        }
-      } catch { /* fail silently */ } finally {
-        setCrmImporting(false);
-      }
-    }
-
-    const roleMeta: Record<string, { label: string; bg: string; text: string; border: string }> = {
-      owner:            { label: 'Owner / PE',     bg: 'bg-purple-400/15', text: 'text-purple-200', border: 'border-purple-400/30' },
-      asset_manager:    { label: 'Asset Manager',  bg: 'bg-[#6B7EFF]/15', text: 'text-[#a9b4ff]', border: 'border-[#6B7EFF]/30' },
-      regional_manager: { label: 'Regional VP',    bg: 'bg-emerald-400/15', text: 'text-emerald-200', border: 'border-emerald-400/30' },
-      property_manager: { label: 'Property Mgr',  bg: 'bg-[#0F1830]', text: 'text-slate-300', border: 'border-white/10' },
-      unknown:          { label: 'Contact',        bg: 'bg-[#0F1830]', text: 'text-slate-300', border: 'border-white/10' },
-    };
-
-    // Separate chain into property-level (pm, regional) vs ownership-level (owner, asset)
-    const chain = p.decision_maker_chain ?? [];
-    const propertyLevelRoles = ['property_manager', 'regional_manager', 'unknown'];
-    const ownershipLevelRoles = ['owner', 'asset_manager'];
-    const propertyContacts = chain.filter(c => propertyLevelRoles.includes(c.role_type));
-    const ownershipContacts = chain.filter(c => ownershipLevelRoles.includes(c.role_type));
-
-    const ContactCard = ({ dm, idx }: { dm: DecisionMakerChainItem; idx: number }) => {
-      const meta = roleMeta[dm.role_type] ?? roleMeta.unknown;
-      return (
-        <div className={cn("rounded-xl border p-4 bg-[#131B2E] shadow-sm transition-all hover:shadow-md", meta.border)}>
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[10px] shrink-0 shadow-sm"
-              style={{ background: dm.role_type === 'owner' ? 'linear-gradient(135deg, #7C3AED, #5B21B6)' : dm.role_type === 'asset_manager' ? 'linear-gradient(135deg, #6B7EFF, #3B4FCC)' : 'linear-gradient(135deg, #10B981, #059669)' }}>
-              {getInitials(dm.name)}
-            </div>
-            <div className="flex-1 min-w-0 pt-0.5">
-              <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                <p className="text-sm font-bold text-slate-100 truncate">{dm.name || 'Unknown'}</p>
-                <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-md border shadow-sm", meta.bg, meta.text, meta.border)}>{meta.label}</span>
-              </div>
-              <p className="text-xs font-medium text-slate-400 truncate">{dm.title}</p>
-              <p className="text-[10px] text-slate-400 truncate mt-0.5">{dm.company}</p>
-            </div>
-          </div>
-          {(dm.top_email_format || dm.email || dm.phone) && (
-            <div className="mt-3 pt-3 border-t border-white/10 space-y-1.5">
-              {(dm.top_email_format || dm.email) && (
-                <p className="text-[13px] font-medium text-slate-100 bg-[#0B1220] px-2.5 py-1.5 rounded-md w-fit border border-white/10 select-all break-all">{dm.top_email_format || dm.email}</p>
-              )}
-              {dm.phone && (
-                <div className="group relative">
-                  <div className="flex items-center gap-2">
-                    <Phone size={13} className={dm.phone_source === 'office_main' ? 'text-amber-300 shrink-0' : 'text-emerald-400 shrink-0'} />
-                    <span className={`text-sm font-semibold select-all ${dm.phone_source === 'office_main' ? 'text-amber-200' : 'text-slate-100'}`}>{dm.phone}</span>
-                    {dm.phone_source === 'office_main' && (
-                      <span className="text-[9px] font-bold uppercase text-amber-200 bg-amber-400/15 border border-amber-400/30 px-1.5 py-0.5 rounded">
-                        Office · Ask for {dm.name?.split(' ')[0]}
-                      </span>
-                    )}
-                  </div>
-                  {/* Gatekeeper tip tooltip */}
-                  {dm.gatekeeper_tip && (
-                    <div className="hidden group-hover:block absolute z-50 left-0 bottom-full mb-2 w-72 bg-slate-900 text-white text-[10px] leading-relaxed rounded-xl p-3 shadow-xl border border-slate-700/60">
-                      <p className="text-[8px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Gatekeeper Strategy</p>
-                      <p className="text-slate-200">{dm.gatekeeper_tip}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-          {dm.dm_hooks && dm.dm_hooks.length > 0 && dm.dm_hooks[0] !== 'no recent social activity found' && (
-            <div className="mt-3 space-y-1.5 bg-[#0F1830]/50 p-3 rounded-lg border border-white/10">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">AI Hooks ({dm.dm_hooks.length})</p>
-              {(dm.dm_hooks || []).map((hook, hi) => (
-                <p key={hi} className="text-[10px] text-slate-300 leading-relaxed font-medium">
-                  <span className={cn("font-bold mr-1.5", meta.text)}>↳</span>{hook}
-                </p>
-              ))}
-            </div>
-          )}
-          {dm.notes && (
-            <div className="mt-2 px-3 py-2 rounded-lg bg-amber-400/10 border border-amber-400/20">
-              <p className="text-[10px] text-amber-200 italic leading-relaxed">{dm.notes}</p>
-            </div>
-          )}
-          {dm.linkedin_slug && (
-            <a href={`https://linkedin.com/in/${dm.linkedin_slug}`} target="_blank" rel="noopener noreferrer"
-              className={cn("mt-3 flex items-center gap-1.5 text-[10px] font-bold w-fit px-2 py-1 rounded-md transition-colors", meta.bg, meta.text)}>
-              <ExternalLink size={10} /> LinkedIn Profile
-            </a>
-          )}
-        </div>
-      );
-    };
-
-    return (
-      <div className="space-y-5 max-w-4xl animate-in fade-in slide-in-from-bottom-2 duration-500">
-
-          {/* DM Score summary */}
-          {(() => {
-            const dm = computeDmScore(p)
-            return (
-              <div className={`flex items-center gap-3 p-3 rounded-xl border mb-4 ${dm.bg}`}>
-                <div className={`text-2xl font-black tabular-nums ${dm.color}`}>{dm.score}<span className="text-sm font-normal opacity-60">/10</span></div>
-                <div>
-                  <p className={`text-xs font-bold ${dm.color}`}>Contact Quality</p>
-                  <p className={`text-[10px] ${dm.color} opacity-75`}>{dm.label}</p>
-                </div>
-                <div className="ml-auto flex flex-col items-end gap-0.5">
-                  {([
-                    { label: 'Phone', met: !!(p.property?.phone && p.property.phone !== 'No data found') },
-                    { label: 'Manager', met: !!(p.decision_maker_chain ?? []).some((c: DecisionMakerChainItem) => c.role_type === 'property_manager' && c.name !== 'Unknown') },
-                    { label: 'Sr. Mgmt', met: !!(p.decision_maker_chain ?? []).some((c: DecisionMakerChainItem) => ['regional_manager','asset_manager'].includes(c.role_type)) },
-                    { label: 'Owner', met: !!(p.ownership?.owner_entity && p.ownership.owner_entity !== 'Unknown') },
-                  ] as {label:string; met:boolean}[]).map(row => (
-                    <div key={row.label} className="flex items-center gap-1.5">
-                      <span className={`text-[9px] ${dm.color} opacity-70`}>{row.label}</span>
-                      <span className={`text-[9px] font-bold ${row.met ? dm.color : 'text-slate-300'}`}>{row.met ? '' : '–'}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )
-          })()}
-
-        {/* Primary contact card + CRM import */}
-        <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Primary Contact</p>
-            {savedSearchId && !crmImported && !importResult[savedSearchId] && (
-              <button onClick={importToCRM} disabled={crmImporting}
-                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg text-white font-bold disabled:opacity-60 shadow-sm transition-all hover:opacity-90"
-                style={{ background: '#6B7EFF' }}>
-                {crmImporting ? <Loader2 size={11} className="animate-spin" /> : <><Download size={11} /> Import to CRM</>}
-              </button>
-            )}
-            {(crmImported || importResult[savedSearchId ?? '']?.created >= 0) && (
-              <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-300 bg-emerald-400/10 px-3 py-1.5 rounded-lg border border-emerald-400/20">
-                <CheckCircle2 size={12} /> Added to CRM
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-4 mb-5">
-            <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg shrink-0 shadow-sm"
-              style={{ background: "linear-gradient(135deg, #6B7EFF 0%, #3B4FCC 100%)" }}>
-              {getInitials(p.decision_maker?.name)}
-            </div>
-            <div>
-              <p className="text-base font-bold text-slate-100 tracking-tight">{p.decision_maker?.name || '—'}</p>
-              <p className="text-xs font-medium text-slate-400 mt-0.5">{p.decision_maker?.title || 'Contact pending'}</p>
-              <p className="text-[11px] text-slate-400">{p.decision_maker?.company || p.property?.management_company || '—'}</p>
-            </div>
-          </div>
-          <div className="space-y-3 text-xs border-t border-white/10 pt-4 bg-[#0F1830]/50 -mx-5 px-5 -mb-5 pb-5 rounded-b-2xl">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-300 mb-1.5">Verified Email Route</p>
-              <p className="text-sm font-medium text-slate-100 break-all bg-[#0B1220] px-3 py-2 rounded-lg border border-white/10 w-fit shadow-sm select-all">
-                {p.decision_maker?.top_email_format || p.decision_maker?.email || 'N/A'}
-              </p>
-            </div>
-            <div className="group relative">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-300 font-medium">
-                  {p.decision_maker?.phone_source === 'office_main' ? (
-                    <span className="flex items-center gap-1.5">
-                      <Phone size={13} className="text-amber-300" />
-                      <span>Office Main Line</span>
-                      <span className="text-[10px] text-amber-300 font-bold">(Ask for {p.decision_maker?.name?.split(' ')[0]})</span>
-                    </span>
-                  ) : 'Direct Line'}
-                </span>
-                <span className={`font-semibold text-sm select-all ${p.decision_maker?.phone_source === 'office_main' ? 'text-amber-200' : 'text-slate-100'}`}>
-                  {p.decision_maker?.phone || 'N/A'}
-                </span>
-              </div>
-              {/* Gatekeeper tip — visible on hover when phone is office line */}
-              {p.decision_maker?.gatekeeper_tip && (
-                <div className="hidden group-hover:block absolute z-50 right-0 top-full mt-2 w-80 bg-slate-900 text-white text-[10px] leading-relaxed rounded-xl p-3 shadow-xl border border-slate-700/60">
-                  <p className="text-[8px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Gatekeeper Strategy</p>
-                  <p className="text-slate-200">{p.decision_maker.gatekeeper_tip}</p>
-                </div>
-              )}
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-400 font-medium">Estimated Tenure</span>
-              <span className="text-slate-100 font-bold bg-[#131B2E] px-2 py-0.5 rounded border border-white/10 shadow-sm">{p.decision_maker?.tenure_years || 0}y</span>
-            </div>
-            {p.decision_maker?.linkedin_slug && (
-              <div className="pt-2">
-                <a href={`https://linkedin.com/in/${p.decision_maker.linkedin_slug}`} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-1.5 text-[11px] font-bold bg-[#0A66C2] text-white py-2 rounded-lg shadow-sm hover:bg-[#084e96] transition-colors">
-                  <ExternalLink size={12} /> View Professional Profile
-                </a>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Property-Level Contacts */}
-        {propertyContacts.length > 0 && (
-          <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-2 h-2 rounded-full bg-emerald-400" />
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Property Level</p>
-              <span className="text-[9px] text-slate-400 bg-[#131B2E] px-2 py-0.5 rounded-md ml-auto">{propertyContacts.length} contacts</span>
-            </div>
-            <p className="text-[10px] text-slate-400 mb-3 font-medium">On-site management: property managers, regional VPs — your primary outreach targets</p>
-            <div className="space-y-3">
-              {propertyContacts.map((dm, idx) => <ContactCard key={idx} dm={dm} idx={idx} />)}
-            </div>
-          </div>
-        )}
-
-        {/* Ownership-Level Contacts */}
-        {ownershipContacts.length > 0 && (
-          <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-2 h-2 rounded-full bg-purple-400" />
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Ownership Level</p>
-              <span className="text-[9px] text-slate-400 bg-[#131B2E] px-2 py-0.5 rounded-md ml-auto">{ownershipContacts.length} contacts</span>
-            </div>
-            <p className="text-[10px] text-slate-400 mb-3 font-medium">
-              {p.ownership?.owner_entity && <span className="font-bold text-slate-300">{p.ownership.owner_entity}</span>}
-              {p.ownership?.portfolio_size && <span> · {p.ownership.portfolio_size} portfolio</span>}
-              {' '}— asset managers, PE principals, key budget decision makers
-            </p>
-            <div className="space-y-3">
-              {ownershipContacts.map((dm, idx) => <ContactCard key={idx} dm={dm} idx={idx} />)}
-            </div>
-          </div>
-        )}
-
-        {/* Fallback: show all if not separated */}
-        {propertyContacts.length === 0 && ownershipContacts.length === 0 && chain.length > 0 && (
-          <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Corporate Hierarchy</p>
-              <span className="ml-auto text-[10px] text-slate-400 bg-[#131B2E] px-2 py-0.5 rounded-md">{chain.length} Nodes</span>
-            </div>
-            <div className="space-y-3">
-              {chain.map((dm, idx) => <ContactCard key={idx} dm={dm} idx={idx} />)}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // ── PropTech Architecture tab ─────────────────────────────────────────────
-  function PropTechTab({ p }: { p: Prospect }) {
-    const pt = p.property?.proptech ?? {};
-    const agreements = p.property?.bulk_agreements ?? [];
-    const videoAgreements = agreements.filter((a: BulkAgreement) => a.service_type === 'video' || a.service_type === 'bundled');
-    const internetAgreements = agreements.filter((a: BulkAgreement) => a.service_type === 'internet' || a.service_type === 'bundled');
-
-    const AgreementCard = ({ a }: { a: BulkAgreement }) => {
-      const urgency = getExpiryUrgency(a.expiry_estimate);
-      return (
-        <div className={cn("rounded-xl border p-4 shadow-sm",
-          urgency === 'critical' ? 'bg-red-400/10 border-red-300 ring-1 ring-red-200' :
-          urgency === 'soon'     ? 'bg-amber-400/10 border-amber-300' :
-          a.agreement_type === 'exclusive' ? 'bg-amber-400/10 border-amber-400/30' :
-          a.agreement_type === 'bulk' ? 'bg-emerald-400/10 border-emerald-400/30' : 'bg-[#0F1830] border-white/10'
-        )}>
-          {/* Urgency banner — shown only when expiry is actionable */}
-          {urgency === 'critical' && (
-            <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-red-400/15 border border-red-400/30">
-              <AlertTriangle size={13} className="text-red-300 shrink-0" />
-              <div>
-                <p className="text-[10px] font-bold text-red-300 uppercase tracking-wide">Sales Window Open — Expiring Soon</p>
-                <p className="text-[9px] text-red-300 mt-0.5">Start conversation 90 days before renewal. Do not wait.</p>
-              </div>
-            </div>
-          )}
-          {urgency === 'soon' && (
-            <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-amber-400/10 border border-amber-400/30">
-              <Clock size={12} className="text-amber-300 shrink-0" />
-              <p className="text-[10px] font-bold text-amber-300">Agreement expiring within 2 years — begin outreach</p>
-            </div>
-          )}
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-bold text-slate-100">{a.provider}</span>
-            <div className="flex items-center gap-2">
-              <span className={cn("text-[9px] font-bold uppercase px-2 py-0.5 rounded-md",
-                a.confidence === 'confirmed' ? 'bg-emerald-400/15 text-emerald-300' :
-                a.confidence === 'high' ? 'bg-blue-400/15 text-blue-300' : 'bg-slate-200 text-slate-300'
-              )}>{a.confidence}</span>
-              <span className={cn("text-[9px] font-bold uppercase px-2 py-0.5 rounded-md",
-                a.agreement_type === 'exclusive' ? 'bg-amber-400/15 text-amber-300' :
-                a.agreement_type === 'bulk' ? 'bg-emerald-400/15 text-emerald-300' : 'bg-slate-200 text-slate-300'
-              )}>{a.agreement_type}</span>
-            </div>
-          </div>
-          {a.expiry_estimate && a.expiry_estimate !== 'unknown' && (
-            <div className="flex items-center gap-1.5 mt-1">
-              <Clock size={12} className={urgency === 'critical' ? 'text-red-500' : urgency === 'soon' ? 'text-amber-500' : 'text-slate-400'} />
-              <span className={cn("text-xs font-bold",
-                urgency === 'critical' ? 'text-red-300' : urgency === 'soon' ? 'text-amber-300' : 'text-slate-300'
-              )}>Est. expiry: {a.expiry_estimate}</span>
-            </div>
-          )}
-          {a.source_snippet && (
-            <p className="text-[10px] text-slate-400 mt-2 leading-relaxed italic border-t border-white/10 pt-2">&ldquo;{a.source_snippet.slice(0, 120)}...&rdquo;</p>
-          )}
-        </div>
-      );
-    };
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const TechCategory = ({ label, icon: Icon, items, chipClass }: { label: string; icon: any; items?: string[]; chipClass: string }) => {
-      if (!items?.length) return null;
-      return (
-        <div className="space-y-2">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Icon size={13} className="text-slate-500" /> {label}</p>
-          <div className="flex flex-wrap gap-2">
-            {items.map(item => (
-              <span key={item} className={cn("text-[11px] px-3 py-1.5 rounded-lg font-bold border shadow-sm", chipClass)}>{item}</span>
-            ))}
-          </div>
-        </div>
-      );
-    };
-
-    const hasVideoAgreements = videoAgreements.length > 0;
-    const hasInternetAgreements = internetAgreements.length > 0;
-    const hasTechStack = [pt.gate_operators, pt.access_control, pt.intercoms, pt.cameras, pt.smart_locks, pt.resident_apps, pt.package_solutions].some(a => a?.length);
-    const hasDisplacementTargets = (pt.displacement_targets?.length ?? 0) > 0;
-    // Internet and Video sections always render now (with empty states), so only
-    // gate on tech stack data for the "no data at all" fallback
-    const noData = !hasTechStack && !hasVideoAgreements && !hasInternetAgreements
-      && !(p.property?.isp_providers?.length) && !(p.property?.video_providers?.length);
-
-    return (
-      <div className="space-y-6 max-w-5xl animate-in fade-in slide-in-from-bottom-2 duration-500">
-
-        {/* Video / Cable — always shown */}
-        <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
-          <div className="flex items-center gap-2 mb-4">
-            <Globe size={15} className="text-violet-500" />
-            <p className="text-xs font-bold uppercase tracking-widest text-slate-200">Cable / Video</p>
-            {hasVideoAgreements
-              ? <span className="ml-auto text-[10px] bg-violet-400/10 text-violet-300 border border-violet-400/20 px-2 py-0.5 rounded-md">{videoAgreements.length} agreement{videoAgreements.length !== 1 ? 's' : ''} detected</span>
-              : (p.property?.video_providers?.length
-                  ? <span className="ml-auto text-[10px] bg-violet-400/10 text-violet-500 border border-violet-400/20 px-2 py-0.5 rounded-md">{p.property.video_providers.length} provider{p.property.video_providers.length !== 1 ? 's' : ''}</span>
-                  : <span className="ml-auto text-[10px] text-slate-400 bg-[#0F1830] border border-white/10 px-2 py-0.5 rounded-md">No data found</span>)
-            }
-          </div>
-          {hasVideoAgreements ? (
-            <div className="space-y-3">
-              {videoAgreements.map((a, i) => <AgreementCard key={i} a={a} />)}
-              {/* Also show raw video providers beneath agreements if any */}
-              {(p.property?.video_providers ?? []).length > 0 && (
-                <div className="flex flex-wrap gap-2 pt-2 border-t border-white/10">
-                  {(p.property!.video_providers!).map(v => (
-                    <span key={v} className="text-[11px] px-3 py-1.5 rounded-lg font-bold border bg-violet-400/10 text-violet-300 border-violet-400/30 shadow-sm">{v}</span>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (p.property?.video_providers?.length) ? (
-            <div className="flex flex-wrap gap-2">
-              {(p.property.video_providers).map(v => (
-                <span key={v} className="text-[11px] px-3 py-1.5 rounded-lg font-bold border bg-violet-400/10 text-violet-300 border-violet-400/30 shadow-sm">{v}</span>
-              ))}
-            </div>
-          ) : (
-            <div className="flex items-center gap-2.5 py-3 px-4 rounded-xl bg-[#0F1830] border border-white/10">
-              <Globe size={14} className="text-slate-300 shrink-0" />
-              <p className="text-xs text-slate-400 italic">No cable or video provider data found for this property</p>
-            </div>
-          )}
-        </div>
-
-        {/* Internet / ISP — always shown */}
-        <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
-          <div className="flex items-center gap-2 mb-4">
-            <Wifi size={15} className="text-emerald-500" />
-            <p className="text-xs font-bold uppercase tracking-widest text-slate-200">Internet / ISP</p>
-            <div className="flex items-center gap-2 ml-auto">
-              {p.property?._fcc_verified
-                ? <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-emerald-400/10 border border-emerald-400/20 text-emerald-300">FCC Verified</span>
-                : <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-amber-400/10 border border-amber-400/20 text-amber-300">AI Estimated</span>}
-              {hasInternetAgreements
-                ? <span className="text-[10px] bg-emerald-400/10 text-emerald-300 border border-emerald-400/20 px-2 py-0.5 rounded-md">{internetAgreements.length} agreement{internetAgreements.length !== 1 ? 's' : ''} detected</span>
-                : (!p.property?.isp_providers?.length &&
-                    <span className="text-[10px] text-slate-400 bg-[#0F1830] border border-white/10 px-2 py-0.5 rounded-md">No data found</span>)
-              }
-            </div>
-          </div>
-          {hasInternetAgreements ? (
-            <div className="space-y-3">
-              {internetAgreements.map((a, i) => <AgreementCard key={i} a={a} />)}
-              {/* Also show raw ISP providers beneath agreements */}
-              {(p.property?.isp_providers ?? []).length > 0 && (
-                <div className="flex flex-wrap gap-2 pt-2 border-t border-white/10">
-                  {(p.property!.isp_providers!).map(v => (
-                    <span key={v} className={cn("text-[11px] px-3 py-1.5 rounded-lg font-bold border shadow-sm",
-                      p.property?._fcc_verified ? "bg-emerald-400/10 text-emerald-300 border-emerald-400/30" : "bg-blue-400/10 text-blue-300 border-blue-400/30"
-                    )}>{v}</span>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (p.property?.isp_providers?.length) ? (
-            <div className="flex flex-wrap gap-2">
-              {(p.property.isp_providers).map(v => (
-                <span key={v} className={cn("text-[11px] px-3 py-1.5 rounded-lg font-bold border shadow-sm",
-                  p.property?._fcc_verified ? "bg-emerald-400/10 text-emerald-300 border-emerald-400/30" : "bg-blue-400/10 text-blue-300 border-blue-400/30"
-                )}>{v}</span>
-              ))}
-            </div>
-          ) : (
-            <div className="flex items-center gap-2.5 py-3 px-4 rounded-xl bg-[#0F1830] border border-white/10">
-              <Wifi size={14} className="text-slate-300 shrink-0" />
-              <p className="text-xs text-slate-400 italic">No internet provider data found for this property</p>
-            </div>
-          )}
-        </div>
-
-        {/* Gates & Access Control */}
-        {(pt.gate_operators?.length || pt.access_control?.length || pt.intercoms?.length) && (
-          <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <Shield size={15} className="text-orange-500" />
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-200">Gates &amp; Access Control</p>
-              {pt.tech_generation && (
-                <span className={cn("ml-auto text-[9px] font-bold px-2 py-0.5 rounded-md capitalize",
-                  pt.tech_generation === 'legacy' ? 'bg-rose-400/10 text-rose-300 border border-rose-400/20' :
-                  pt.tech_generation === 'modern' ? 'bg-emerald-400/10 text-emerald-300 border border-emerald-400/20' :
-                                                    'bg-amber-400/10 text-amber-300 border border-amber-400/20'
-                )}>{pt.tech_generation} Generation</span>
-              )}
-            </div>
-            <div className="space-y-4">
-              <TechCategory label="Gate Operators" icon={DoorOpen} items={pt.gate_operators} chipClass="bg-orange-400/10 text-orange-300 border-orange-400/30" />
-              <TechCategory label="Access Control" icon={Key} items={pt.access_control} chipClass="bg-blue-400/10 text-blue-300 border-blue-400/30" />
-              <TechCategory label="Intercoms" icon={Radio} items={pt.intercoms} chipClass="bg-violet-400/10 text-violet-300 border-violet-400/30" />
-            </div>
-            {pt.replacement_window && (
-              <div className="mt-4 rounded-xl px-4 py-3 bg-amber-400/10 border border-amber-400/30 flex items-start gap-2">
-                <Clock size={13} className="text-amber-500 mt-0.5" />
-                <div>
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-amber-300 mb-0.5">Estimated Replacement Window</p>
-                  <p className="text-xs font-medium text-amber-100">{pt.replacement_window}</p>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Cameras & Security */}
-        {pt.cameras?.length && (
-          <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <Radio size={15} className="text-slate-400" />
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-200">Cameras &amp; Security</p>
-            </div>
-            <TechCategory label="Camera Systems" icon={Camera} items={pt.cameras} chipClass="bg-[#0F1830]/80 text-slate-200 border-white/10" />
-          </div>
-        )}
-
-        {/* SmartRent & other tech */}
-        {(pt.smart_locks?.length || pt.resident_apps?.length || pt.package_solutions?.length) && (
-          <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <Package size={15} className="text-indigo-500" />
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-200">SmartRent &amp; Other Tech</p>
-              {(pt.resident_apps?.some((a: string) => a.toLowerCase().includes('smartrent')) || pt.smart_locks?.some((a: string) => a.toLowerCase().includes('smartrent'))) && (
-                <span className="ml-auto text-[9px] font-bold px-2 py-0.5 rounded-md bg-[#141d3a] text-indigo-300 border border-white/10">SmartRent Detected</span>
-              )}
-            </div>
-            <div className="space-y-4">
-              <TechCategory label="Smart Locks" icon={Lock} items={pt.smart_locks} chipClass="bg-emerald-400/10 text-emerald-300 border-emerald-400/30" />
-              <TechCategory label="Resident App" icon={Smartphone} items={pt.resident_apps} chipClass="bg-[#141d3a]/80 text-indigo-300 border-indigo-400/30" />
-              <TechCategory label="Package Solutions" icon={Package} items={pt.package_solutions} chipClass="bg-amber-400/10 text-amber-300 border-amber-400/30" />
-            </div>
-          </div>
-        )}
-
-        {/* AI Recommendations */}
-        {(hasDisplacementTargets || p.pitch_strategy || pt.sara_signals) && (
-          <div className="bg-[#131B2E] rounded-2xl border border-[#6B7EFF]/20 p-5 shadow-sm relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-[#6B7EFF] to-[#A78BFA]" />
-            <div className="flex items-center gap-2 mb-4">
-              <Zap size={15} className="text-[#6B7EFF]" />
-              <p className="text-xs font-bold uppercase tracking-widest text-[#6B7EFF]">AI Recommendations</p>
-              {pt.sara_signals && <span className="ml-auto text-[9px] font-bold px-2 py-0.5 rounded-md bg-purple-400/10 text-purple-300 border border-purple-400/20">SARA Opportunity</span>}
-            </div>
-
-            {hasDisplacementTargets && (
-              <div className="mb-4">
-                <p className="text-[10px] font-bold text-slate-400 mb-2 flex items-center gap-1.5"><Target size={11} className="text-rose-500" /> GateGuard Displacement Targets</p>
-                <div className="flex flex-wrap gap-2">
-                  {(pt.displacement_targets || []).map((t: string) => (
-                    <span key={t} className="text-[11px] px-3 py-1.5 rounded-lg font-bold bg-[#131B2E] text-rose-300 border border-rose-400/30 shadow-sm">{t}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {p.pitch_strategy?.primary_hook && (
-              <div className="rounded-xl bg-amber-400/10 border border-amber-400/30 px-4 py-3 mb-3">
-                <p className="text-[9px] font-bold uppercase tracking-widest text-amber-300 mb-1.5">Recommended Opening Hook</p>
-                <p className="text-sm text-amber-100 leading-relaxed font-medium italic">&ldquo;{p.pitch_strategy.primary_hook}&rdquo;</p>
-              </div>
-            )}
-
-            {p.pitch_strategy?.secondary_hooks && p.pitch_strategy.secondary_hooks.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Secondary Angles</p>
-                {p.pitch_strategy.secondary_hooks.slice(0, 3).map((hook, i) => (
-                  <div key={i} className="flex items-start gap-2.5 text-[13px] text-slate-200">
-                    <span className="shrink-0 mt-0.5 w-4 h-4 rounded-full bg-[#6B7EFF]/15 text-[#a9b4ff] text-[10px] font-bold flex items-center justify-center">{i+1}</span>
-                    <span className="font-medium leading-relaxed">{hook}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {p.pitch_strategy?.avoid && p.pitch_strategy.avoid.length > 0 && (
-              <div className="mt-4 rounded-xl bg-rose-500/[0.07] border border-rose-400/20 p-4">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-rose-300 mb-2.5">Don&rsquo;t bring up</p>
-                <div className="space-y-2">
-                  {p.pitch_strategy.avoid.map((a, i) => (
-                    <div key={i} className="flex items-start gap-2.5 text-[13px] text-slate-200 leading-relaxed">
-                      <X size={14} className="text-rose-400 shrink-0 mt-0.5" />
-                      <span className="font-medium">{a}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Social evidence footnotes from Engine 2 cross-reference */}
-            {(socialResults?.cross_reference_notes?.length ?? 0) > 0 && (
-              <div className="mt-4 pt-3 border-t border-white/10">
-                <p className="text-[9px] font-bold uppercase tracking-widest text-[#6B7EFF] mb-2 flex items-center gap-1">
-                  <Globe size={9} /> Social Evidence
-                </p>
-                <div className="space-y-1.5">
-                  {(socialResults!.cross_reference_notes).map((n, i) => (
-                    <div key={i} className="flex items-start gap-2 text-[10px] text-slate-300">
-                      <span className={cn("shrink-0 mt-0.5 font-bold px-1.5 py-0.5 rounded text-[9px] border",
-                        n.type === 'confirmation'  ? 'bg-emerald-400/10 text-emerald-300 border-emerald-400/30' :
-                        n.type === 'contradiction' ? 'bg-red-400/10 text-red-300 border-red-400/30' :
-                        n.type === 'new_finding'   ? 'bg-amber-400/10 text-amber-300 border-amber-400/30' :
-                                                     'bg-[#131B2E] text-slate-300 border-white/10'
-                      )}>{n.provider}</span>
-                      <span className="font-medium leading-relaxed">{n.note}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-          {/* ── Cold Call Script ──────────────────────────── */}
-          {(p as Prospect | undefined)?.pitch_strategy?.primary_hook && (
-            <div className="bg-[#131B2E]/90 rounded-2xl border border-white/10 p-5 shadow-sm backdrop-blur-sm">
-              <div className="flex items-center gap-2 mb-4">
-                <Phone size={15} className="text-[#6B7EFF]" />
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-200">Cold Call Script</p>
-                <span className="ml-auto text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#6B7EFF]/15 text-[#a9b4ff] border border-[#6B7EFF]/30">AI-generated</span>
-              </div>
-              <div className="space-y-3 text-sm">
-                <div className="p-3 bg-[#0F1830] rounded-xl border border-white/10">
-                  <p className="text-[10px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">Opening</p>
-                  <p className="text-slate-200 leading-relaxed">
-                    {`"Hi, may I speak with ${(p as Prospect).decision_maker?.name || (p as Prospect).decision_maker_chain?.[0]?.name || 'the property manager'}? This is [your name] from GateGuard — we work with ${(p as Prospect).property.management_company || 'multifamily communities'} to modernize access and security systems."`}
-                  </p>
-                </div>
-                <div className="p-3 bg-[#6B7EFF]/10 rounded-xl border border-[#6B7EFF]/25">
-                  <p className="text-[10px] font-bold uppercase text-[#a9b4ff] mb-1.5 tracking-wider">Your Hook</p>
-                  <p className="text-slate-200 leading-relaxed">{`"${(p as Prospect).pitch_strategy!.primary_hook}"`}</p>
-                </div>
-                {(p as Prospect).pain_signals?.[0]?.quote && (
-                  <div className="p-3 bg-red-400/10 rounded-xl border border-red-400/20">
-                    <p className="text-[10px] font-bold uppercase text-red-500 mb-1.5 tracking-wider">Pain Signal Reference</p>
-                    <p className="text-slate-200 leading-relaxed italic">{`"I noticed residents have mentioned issues — one review said: '${(p as Prospect).pain_signals[0].quote.slice(0, 120)}…' — is that something your team is tracking?"`}</p>
-                  </div>
-                )}
-                {(p as Prospect).scout_queue?.connectivity?.roe_expiry_year && (
-                  <div className="p-3 bg-amber-400/10 rounded-xl border border-amber-400/20">
-                    <p className="text-[10px] font-bold uppercase text-amber-300 mb-1.5 tracking-wider">Contract Angle</p>
-                    <p className="text-slate-200 leading-relaxed">{`"I also know your bulk agreement is coming up around ${(p as Prospect).scout_queue!.connectivity.roe_expiry_year} — we like to start conversations 90 days before renewal so you can compare options without pressure."`}</p>
-                  </div>
-                )}
-                <div className="p-3 bg-emerald-400/10 rounded-xl border border-emerald-400/20">
-                  <p className="text-[10px] font-bold uppercase text-emerald-300 mb-1.5 tracking-wider">Close / CTA</p>
-                  <p className="text-slate-200 leading-relaxed">{`"Would it make sense to schedule a quick 15-minute call — I can walk you through what we've done for similar ${(p as Prospect).property.units ? (p as Prospect).property.units + '-unit' : 'comparable'} communities and you can tell me if it's even relevant for you."`}</p>
-                </div>
-                {((p as Prospect).pitch_strategy?.avoid?.length ?? 0) > 0 && (
-                  <div className="p-3 bg-[#0F1830] rounded-xl border border-white/10">
-                    <p className="text-[10px] font-bold uppercase text-slate-400 mb-1.5 tracking-wider">Things to Avoid</p>
-                    <ul className="space-y-1">
-                      {(p as Prospect).pitch_strategy!.avoid!.map((a: string, i: number) => (
-                        <li key={i} className="text-xs text-slate-300 flex items-start gap-1.5">
-                          <span className="text-red-400 mt-0.5"></span>{a}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ── Inferred Proptech ─────────────────────────── */}
-          {((p as Prospect | undefined)?.property?.inferred_proptech ?? []).length > 0 && (
-            <div className="bg-amber-400/10 rounded-2xl border border-amber-400/30 p-5 shadow-sm">
-              <div className="flex items-center gap-2 mb-4">
-                <Search size={15} className="text-amber-300" />
-                <p className="text-xs font-bold uppercase tracking-widest text-amber-300">Likely Equipment (Inferred)</p>
-                <span className="ml-auto text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-400/15 text-amber-300 border border-amber-400/30">AI inference</span>
-              </div>
-              <div className="space-y-3">
-                {((p as Prospect).property.inferred_proptech ?? []).map((item: InferredProptech, idx: number) => (
-                  <div key={idx} className="flex items-start gap-3 p-3 bg-[#131B2E]/90 rounded-xl border border-amber-400/20">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="text-sm font-semibold text-slate-100">{item.name}</span>
-                        <span className="text-[10px] text-amber-300 font-medium capitalize">{item.category.replace(/_/g, ' ')}</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 leading-relaxed">{item.reason}</p>
-                    </div>
-                    <div className={`shrink-0 text-center px-2 py-1 rounded-lg border ${
-                      item.confidence_pct >= 80 ? 'bg-emerald-400/10 border-emerald-400/30 text-emerald-300' :
-                      item.confidence_pct >= 60 ? 'bg-amber-400/10 border-amber-400/30 text-amber-300' :
-                      'bg-[#0F1830] border-white/10 text-slate-300'
-                    }`}>
-                      <p className="text-sm font-black">{item.confidence_pct}%</p>
-                      <p className="text-[9px] font-medium">confidence</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-      </div>
-    );
-  }
-
-  // ── Intel tab ─────────────────────────────────────────────────────────────
-  function IntelTab({ p }: { p: Prospect }) {
-    const cutoff = new Date();
-    cutoff.setMonth(cutoff.getMonth() - 6);
-    const recentSignals = (p.pain_signals || []).filter(sig => {
-      if (!sig.date || sig.date === 'unknown') return true;
-      const d = new Date(sig.date);
-      return isNaN(d.getTime()) || d >= cutoff;
-    });
-    const olderSignals = (p.pain_signals || []).filter(sig => {
-      if (!sig.date || sig.date === 'unknown') return false;
-      const d = new Date(sig.date);
-      return !isNaN(d.getTime()) && d < cutoff;
-    });
-    const [showOlder, setShowOlder] = useState(false);
-    const filteredSignals = showOlder ? [...recentSignals, ...olderSignals] : recentSignals;
-    const totalSignals = p.pain_signals?.length ?? 0;
-    const hiddenCount = olderSignals.length;
-
-    return (
-      <div className="space-y-6 max-w-4xl animate-in fade-in slide-in-from-bottom-2 duration-500">
-
-        {/* AI Synthesis Block */}
-        <div className="ai-border-glow active bg-[#131B2E] rounded-2xl p-6 shadow-sm border border-white/10">
-          <div className="flex items-center gap-2 mb-5">
-            <Cpu size={16} className="text-[#A78BFA]" />
-            <h3 className="text-xs font-bold uppercase tracking-widest text-[#A78BFA]">ARIA Synthesis</h3>
-            {p.freshness_score != null && (
-              <span className="ml-auto text-[10px] bg-[#6B7EFF]/10 text-[#6B7EFF] border border-[#6B7EFF]/20 px-2 py-0.5 rounded-md">
-                Freshness {p.freshness_score}/10
-              </span>
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-x-8 gap-y-6">
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Target size={12}/> Primary Vulnerability</p>
-              <p className="text-sm text-slate-100 leading-relaxed font-medium">{p.profile?.primary_concern || 'None detected'}</p>
-            </div>
-
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Clock size={12}/> Contract Window</p>
-              <p className={`text-sm leading-relaxed font-medium ${p.profile?.contract_window ? 'text-slate-100' : 'text-slate-300'}`}>
-                {p.profile?.contract_window || 'Not detected'}
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Globe size={12}/> Incumbent Vendor</p>
-              <p className={`text-sm leading-relaxed font-medium ${p.profile?.current_vendor ? 'text-slate-100' : 'text-slate-300'}`}>
-                {p.profile?.current_vendor || 'Not detected'}
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Users size={12}/> Comm Style</p>
-              <p className="text-sm text-slate-100 leading-relaxed font-medium capitalize">{p.profile?.communication_style?.replace(/-/g, " ") || 'Email'}</p>
-            </div>
-
-            {p.buying_trends && (
-              <div className="col-span-2 space-y-1.5 pt-2 border-t border-white/10">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><TrendingUp size={12}/> Buying Trends</p>
-                <p className="text-sm text-slate-200 leading-relaxed font-medium">{p.buying_trends}</p>
-              </div>
-            )}
-
-            {p.behavioral_profile && Object.keys(p.behavioral_profile).length > 0 && (
-              <div className="col-span-2 space-y-2 pt-2 border-t border-white/10">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Users size={12}/> Behavioral Profile</p>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                  {Object.entries(p.behavioral_profile).map(([key, val]) => (
-                    <div key={key}>
-                      <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">{key.replace(/_/g, ' ')}</p>
-                      <p className="text-xs font-medium text-slate-200 leading-relaxed">{String(val)}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Intent Signals / Anomalies — last 12 months, max 12 */}
-        <div>
-          <div className="flex items-center justify-between mb-4 px-1">
-            <div className="flex items-center gap-2">
-              <Radio size={16} className="text-rose-500" />
-              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-200">Intent Signals</h3>
-              <span className="text-[9px] font-bold text-slate-400 bg-[#131B2E] px-2 py-0.5 rounded-md">Last 6 months</span>
-            </div>
-            <div className="flex items-center gap-2">
-              {hiddenCount > 0 && (
-                <button onClick={() => setShowOlder(v => !v)}
-                  className="text-[10px] font-bold text-[#6B7EFF] hover:text-[#3B4FCC] transition-colors underline underline-offset-2">
-                  {showOlder ? 'Hide older' : `+${hiddenCount} older`}
-                </button>
-              )}
-              <span className="text-[10px] text-slate-400 bg-[#131B2E] px-2 py-1 rounded-md">
-                {filteredSignals.length} total
-              </span>
-            </div>
-          </div>
-
-          {filteredSignals.length === 0 ? (
-            <div className="text-center py-10 text-slate-400">
-              <Radio size={24} className="mx-auto mb-3 opacity-20" />
-              <p className="text-sm font-medium">No recent signals detected in the last 12 months</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {filteredSignals.map((sig, i) => {
-                const Icon = SIGNAL_ICONS[sig.signal_type] || AlertCircle;
-                const sev = SIGNAL_SEVERITY[sig.severity] ?? SIGNAL_SEVERITY.low;
-                return (
-                  <div key={i} className={cn("rounded-xl border bg-[#131B2E] shadow-sm p-4 relative overflow-hidden group", sev.border)}>
-                    <div className={cn("absolute left-0 top-0 bottom-0 w-1", sev.bg)} />
-                    <div className="flex items-start gap-4">
-                      <div className={cn("p-2 rounded-lg bg-[#0F1830] border", sev.text, sev.border.replace('200', '100'))}>
-                         <Icon size={16} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-2 flex-wrap">
-                          <span className={cn("text-[10px] font-bold uppercase tracking-wider", sev.text)}>{displaySource(sig.source)}</span>
-                          <span className="text-[10px] text-slate-400">• {sig.date}</span>
-                          <span className={cn("ml-auto text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm border", sev.badge, sev.border.replace('200','100'))}>{sig.severity} Alert</span>
-                        </div>
-                        <p className="text-sm text-slate-200 leading-relaxed font-medium">&ldquo;{sig.quote}&rdquo;</p>
-                        {sig.url && (
-                          <a href={sig.url} target="_blank" rel="noopener noreferrer"
-                            className="mt-1.5 inline-flex items-center gap-1 text-[9px] text-slate-400 hover:text-[#6B7EFF] transition-colors truncate max-w-xs">
-                            <ExternalLink size={9} className="shrink-0" />
-                            {sig.url.replace(/^https?:\/\//, '').split('/').slice(0,2).join('/')}
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
-  function isSocialSource(sig: PainSignal): boolean {
-    const src = (sig.source || '').toLowerCase();
-    const url = (sig.url  || '').toLowerCase();
-    return ['social','reddit','review','google','yelp','facebook','twitter','x.com','listing-site','listing','apartment','rentcafe','rent.com','apartmentlist'].some(k => src.includes(k) || url.includes(k));
-  }
-
-  function getPlatformMeta(sig: PainSignal): { name: string; bg: string; text: string; border: string } {
-    const url = (sig.url  || '').toLowerCase();
-    const src = (sig.source || '').toLowerCase();
-    if (url.includes('reddit')     || src.includes('reddit'))     return { name: 'Reddit',         bg: 'bg-orange-400/10',  text: 'text-orange-300', border: 'border-orange-400/30' };
-    if (url.includes('google')     || src.includes('google'))     return { name: 'Google Reviews',  bg: 'bg-blue-400/10',    text: 'text-blue-300',   border: 'border-blue-400/30'   };
-    if (url.includes('yelp')       || src.includes('yelp'))       return { name: 'Yelp',            bg: 'bg-rose-400/10',    text: 'text-rose-300',   border: 'border-rose-400/30'   };
-    if (url.includes('facebook')   || src.includes('facebook'))   return { name: 'Facebook',        bg: 'bg-[#141d3a]',  text: 'text-indigo-300', border: 'border-indigo-400/30' };
-    if (url.includes('twitter')    || url.includes('x.com') || src.includes('twitter')) return { name: 'Twitter/X', bg: 'bg-[#131B2E]', text: 'text-slate-200', border: 'border-white/10' };
-    if (url.includes('apartments') || src.includes('listing'))    return { name: 'Apartments.com',  bg: 'bg-red-400/10',     text: 'text-red-300',    border: 'border-red-400/30'    };
-    if (url.includes('rentcafe')   || url.includes('rent.com') || url.includes('apartmentlist')) return { name: 'Listing Site', bg: 'bg-violet-400/10', text: 'text-violet-300', border: 'border-violet-400/30' };
-    return { name: 'Resident Review', bg: 'bg-[#131B2E]', text: 'text-slate-300', border: 'border-white/10' };
-  }
-
-  const TECH_SIGNAL_TYPES = new Set([
-    'gate_access', 'internet', 'video_service', 'access_control', 'camera_security',
-    'package_theft', 'smart_lock', 'automation', 'water_sensor', 'intercom',
-    // legacy types from older data
-    'internet_complaint', 'access_complaint', 'gate_complaint', 'tech_complaint',
-    'wifi_complaint', 'intercom_complaint', 'lock_complaint', 'package_complaint',
-    'camera_complaint', 'fob_complaint',
-  ]);
-  const TECH_KEYWORDS = [
-    'gate', 'fob', 'access', 'intercom', 'internet', 'wifi', 'wi-fi',
-    'smart lock', 'package locker', 'package room', 'amazon hub', 'camera',
-    'buzzer', 'key card', 'app', 'entry', 'callbox', 'call box',
-    'liftmaster', 'doorking', 'linear', 'aiphone', 'butterflymx', 'brivo',
-    'thermostat', 'smart home', 'automation', 'water sensor', 'leak', 'flood',
-    'cable', 'streaming', 'directv', 'dish', 'fiber', 'gigabit',
-  ];
-
-  function isTechSignal(sig: PainSignal): boolean {
-    if (TECH_SIGNAL_TYPES.has(sig.signal_type)) return true;
-    const q = (sig.quote || '').toLowerCase();
-    return TECH_KEYWORDS.some(k => q.includes(k));
-  }
-
-  // ── Community tab ─────────────────────────────────────────────────────────
-  function SocialTab({ p }: { p: Prospect }) {
-    const [expandedE2, setExpandedE2] = useState<Set<number>>(new Set());
-    const toggleE2 = (i: number) => setExpandedE2(prev => {
-      const next = new Set(prev);
-      next.has(i) ? next.delete(i) : next.add(i);
-      return next;
-    });
-    const QUOTE_PREVIEW_LEN = 220;
-
-    const SEV_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
-
-    const allSocial = (p.pain_signals || [])
-      .sort((a, b) => {
-        const s = (SEV_ORDER[a.severity] ?? 2) - (SEV_ORDER[b.severity] ?? 2);
-        if (s !== 0) return s;
-        const da = a.date && a.date !== 'unknown' ? new Date(a.date).getTime() : 0;
-        const db = b.date && b.date !== 'unknown' ? new Date(b.date).getTime() : 0;
-        return db - da;
-      });
-
-    // Tech-specific posts first, everything else after
-    const techPosts  = allSocial.filter(isTechSignal);
-    const otherPosts = allSocial.filter(s => !isTechSignal(s));
-    const prioritized = [...techPosts, ...otherPosts];
-    const shown = prioritized.slice(0, 5);
-    const extra = prioritized.length - shown.length;
-
-    const e2Posts  = socialResults?.social_posts      ?? [];
-    const e2Notes  = socialResults?.cross_reference_notes ?? [];
-    const propPhone = socialResults?.property_phone ?? null;
-    const hasAny   = shown.length > 0 || e2Posts.length > 0 || socialLoading || propPhone;
-
-    if (!hasAny) {
-      return (
-        <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
-          <MessageSquare size={32} className="opacity-20" />
-          <p className="text-sm font-bold text-slate-400">No signals found for this property</p>
-          <p className="text-xs font-medium text-center max-w-xs">Run a fresh ARIA search — social searches, listing reviews, and pain signals populate here.</p>
-        </div>
-      );
-    }
-
-    const totalCount = prioritized.length + e2Posts.length;
-
-    return (
-      <div className="space-y-5 max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-500">
-
-        {/* Header */}
-        <div className="flex items-start justify-between px-1">
-          <div>
-            <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-              <MessageSquare size={15} className="text-rose-500" />
-              Community Temperature
-            </h3>
-            <p className="text-[11px] text-slate-400 mt-0.5 font-medium">What people are saying — Reddit, Google Reviews, listing sites, resident forums</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {techPosts.length > 0 && (
-              <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-rose-400/10 text-rose-300 border border-rose-400/30">{techPosts.length} tech complaints</span>
-            )}
-            <span className="text-[10px] text-slate-400 bg-[#131B2E] px-2 py-1 rounded-md border border-white/10">{totalCount} total</span>
-            {socialLoading && (
-              <span className="flex items-center gap-1 text-[10px] text-[#6B7EFF] font-bold">
-                <Loader2 size={11} className="animate-spin" /> Social search…
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Property phone — surfaced from Engine 2 social search */}
-        {propPhone && (
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-400/10 border border-emerald-400/30 shadow-sm">
-            <Phone size={14} className="text-emerald-300 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-300 mb-0.5">Property / Leasing Office</p>
-              <p className="text-sm font-bold text-emerald-100 tracking-wide">{propPhone}</p>
-            </div>
-            <button
-              onClick={() => { navigator.clipboard.writeText(propPhone); }}
-              className="p-1.5 rounded-lg bg-[#131B2E] border border-emerald-400/30 text-emerald-300 hover:bg-emerald-400/10 transition-colors"
-              title="Copy phone number"
-            >
-              <Copy size={12} />
-            </button>
-          </div>
-        )}
-
-        {/* Cross-reference notes from Engine 2 */}
-        {e2Notes.length > 0 && (
-          <div className="rounded-2xl bg-gradient-to-br from-[#141d3a] to-[#131B2E] border border-blue-400/20 p-4 shadow-sm">
-            <p className="text-[9px] font-bold uppercase tracking-widest text-blue-300 mb-3 flex items-center gap-1.5">
-              <Zap size={10} /> AI Cross-Reference — Engine 1 × Social Search
-            </p>
-            <div className="space-y-2">
-              {e2Notes.map((note, i) => (
-                <div key={i} className={cn("rounded-xl px-3.5 py-2.5 text-xs flex items-start gap-2.5 border",
-                  note.type === 'confirmation'  ? 'bg-emerald-400/10 border-emerald-400/30 text-emerald-100' :
-                  note.type === 'contradiction' ? 'bg-red-400/10 border-red-400/30 text-red-100' :
-                  note.type === 'new_finding'   ? 'bg-amber-400/10 border-amber-400/30 text-amber-100' :
-                                                  'bg-[#131B2E] border-white/10 text-slate-100'
-                )}>
-                  <span className="shrink-0 mt-0.5 font-bold text-[10px] px-1.5 py-0.5 rounded-md border"
-                    style={{ background: note.type === 'confirmation' ? 'rgba(52,211,153,0.15)' : note.type === 'contradiction' ? 'rgba(248,113,113,0.15)' : note.type === 'new_finding' ? 'rgba(251,191,36,0.15)' : 'rgba(255,255,255,0.06)',
-                             color: note.type === 'confirmation' ? '#6EE7B7' : note.type === 'contradiction' ? '#FCA5A5' : note.type === 'new_finding' ? '#FBBF24' : '#94A3B8',
-                             borderColor: note.type === 'confirmation' ? 'rgba(52,211,153,0.35)' : note.type === 'contradiction' ? 'rgba(248,113,113,0.35)' : note.type === 'new_finding' ? 'rgba(251,191,36,0.35)' : 'rgba(255,255,255,0.12)',
-                           }}>
-                    {note.provider}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <span className="font-medium leading-relaxed">{note.note}</span>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-[9px] opacity-60">{note.type.replace('_',' ')} · {note.confidence} confidence · {note.evidence_count} post{note.evidence_count !== 1 ? 's' : ''}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Post cards */}
-        {shown.map((sig, i) => {
-          const plat = getPlatformMeta(sig);
-          const sev  = SIGNAL_SEVERITY[sig.severity] ?? SIGNAL_SEVERITY.low;
-          const Icon = SIGNAL_ICONS[sig.signal_type] || AlertCircle;
-          const isTech = isTechSignal(sig);
-          const isLong = sig.quote.length > QUOTE_PREVIEW_LEN;
-          // Engine 1 cards use a separate expanded set keyed by 'e1-{i}'
-          const e1Key = 1000 + i;
-          const isExpanded = expandedE2.has(e1Key);
-          const displayText = isLong && !isExpanded
-            ? sig.quote.slice(0, QUOTE_PREVIEW_LEN) + '…'
-            : sig.quote;
-          return (
-            <div key={i} className={cn("rounded-2xl bg-[#131B2E] shadow-sm overflow-hidden relative border", sev.border)}>
-              {/* Severity stripe */}
-              <div className={cn("absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl", sev.bg)} />
-
-              <div className="p-5 pl-6">
-                {/* Post header */}
-                <div className="flex items-start justify-between gap-3 mb-4">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={cn("text-[10px] font-bold px-2.5 py-1 rounded-full border", plat.bg, plat.text, plat.border)}>
-                      {plat.name}
-                    </span>
-                    {isTech && (
-                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-rose-400/10 text-rose-300 border border-rose-400/30">Tech Complaint</span>
-                    )}
-                    <span className="text-[10px] text-slate-400">
-                      {sig.date && sig.date !== 'unknown' ? sig.date : 'Date unknown'}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider border", sev.badge, sev.border.replace('200','100'))}>{sig.severity}</span>
-                    <div className={cn("p-1.5 rounded-lg bg-[#131B2E] border", sev.text, sev.border.replace('200','100'))}>
-                      <Icon size={13} />
-                    </div>
-                  </div>
-                </div>
-
-                {/* The quote — styled as a social post, collapsible if long */}
-                <blockquote className="relative pl-5">
-                  <span className="absolute left-0 top-[-4px] text-3xl leading-none text-slate-200 font-serif select-none" aria-hidden>&ldquo;</span>
-                  <p className="text-sm text-slate-100 leading-relaxed font-medium">{displayText}</p>
-                </blockquote>
-                {isLong && (
-                  <button
-                    onClick={() => toggleE2(e1Key)}
-                    className="mt-2 ml-5 text-[10px] font-bold text-[#6B7EFF] hover:underline underline-offset-2"
-                  >
-                    {isExpanded ? '▲ Show less' : '▼ Show full post'}
-                  </button>
-                )}
-
-                {/* Source link */}
-                {sig.url && (
-                  <a href={sig.url} target="_blank" rel="noopener noreferrer"
-                    className="mt-4 flex items-center gap-1.5 text-[10px] text-slate-400 hover:text-[#6B7EFF] transition-colors border-t border-white/10 pt-3 group">
-                    <ExternalLink size={10} className="shrink-0 group-hover:text-[#6B7EFF]" />
-                    <span className="truncate">{sig.url.replace(/^https?:\/\//, '')}</span>
-                  </a>
-                )}
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Overflow notice */}
-        {extra > 0 && (
-          <p className="text-center text-[11px] text-slate-400 font-medium py-2">
-            +{extra} more signals in the{' '}
-            <button onClick={() => setActiveTab('intel')} className="text-[#6B7EFF] font-bold hover:underline underline-offset-2">
-              AI Intel tab
-            </button>
-          </p>
-        )}
-
-        {/* ── Engine 2: Social Search (last 6 months) ── */}
-        {(e2Posts.length > 0 || socialLoading) && (
-          <div className="pt-2">
-            <div className="flex items-center gap-2 mb-3 px-1">
-              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-[#6B7EFF]/30 to-transparent" />
-              <span className="text-[9px] font-bold uppercase tracking-widest text-[#6B7EFF] flex items-center gap-1">
-                <Globe size={10} /> Social Search — Last 6 Months
-              </span>
-              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-[#6B7EFF]/30 to-transparent" />
-            </div>
-
-            {socialLoading && e2Posts.length === 0 && (
-              <div className="flex items-center justify-center gap-2 py-8 text-[#6B7EFF]">
-                <Loader2 size={16} className="animate-spin" />
-                <span className="text-xs font-bold">Searching Reddit, Google Reviews, Yelp…</span>
-              </div>
-            )}
-
-            {e2Posts.map((post, i) => {
-              const SEV_COLORS = {
-                high:   { bg: 'bg-red-400',    border: 'border-red-400/30',   badge: 'bg-red-400/10 text-red-300',      text: 'text-red-500' },
-                medium: { bg: 'bg-amber-400',  border: 'border-amber-400/30', badge: 'bg-amber-400/10 text-amber-300',  text: 'text-amber-500' },
-                low:    { bg: 'bg-slate-300',  border: 'border-white/10', badge: 'bg-[#131B2E] text-slate-400', text: 'text-slate-400' },
-              };
-              const sc = SEV_COLORS[post.severity] ?? SEV_COLORS.low;
-              return (
-                <div key={i} className={cn("rounded-2xl bg-[#131B2E] shadow-sm overflow-hidden relative border mb-4", sc.border)}>
-                  <div className={cn("absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl", sc.bg)} />
-                  <div className="p-5 pl-6">
-                    <div className="flex items-start justify-between gap-3 mb-4">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] font-bold px-2.5 py-1 rounded-full border bg-[#6B7EFF]/10 text-[#4F46E5] border-[#6B7EFF]/25">
-                          {post.platform}
-                        </span>
-                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-blue-400/10 text-blue-300 border border-blue-400/30">Social Search</span>
-                        <span className="text-[10px] text-slate-400">
-                          {post.date && post.date !== 'unknown' ? post.date : 'Date unknown'}
-                        </span>
-                      </div>
-                      <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider border shrink-0", sc.badge, sc.border.replace('200','100'))}>{post.severity}</span>
-                    </div>
-
-                    {post.tech_mentioned?.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mb-3">
-                        {post.tech_mentioned.map((t, j) => (
-                          <span key={j} className="text-[9px] px-2 py-0.5 rounded-md bg-[#131B2E] text-slate-300 border border-white/10">{t}</span>
-                        ))}
-                      </div>
-                    )}
-
-                    {(() => {
-                      const isLong = post.quote.length > QUOTE_PREVIEW_LEN;
-                      const isExpanded = expandedE2.has(i);
-                      const displayText = isLong && !isExpanded
-                        ? post.quote.slice(0, QUOTE_PREVIEW_LEN) + '…'
-                        : post.quote;
-                      return (
-                        <div>
-                          <blockquote className="relative pl-5">
-                            <span className="absolute left-0 top-[-4px] text-3xl leading-none text-slate-200 font-serif select-none" aria-hidden>&ldquo;</span>
-                            <p className="text-sm text-slate-100 leading-relaxed font-medium">{displayText}</p>
-                          </blockquote>
-                          {isLong && (
-                            <button
-                              onClick={() => toggleE2(i)}
-                              className="mt-2 ml-5 text-[10px] font-bold text-[#6B7EFF] hover:underline underline-offset-2"
-                            >
-                              {isExpanded ? '▲ Show less' : '▼ Show full post'}
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })()}
-
-                    {post.url && (
-                      <a href={post.url} target="_blank" rel="noopener noreferrer"
-                        className="mt-4 flex items-center gap-1.5 text-[10px] text-slate-400 hover:text-[#6B7EFF] transition-colors border-t border-white/10 pt-3 group">
-                        <ExternalLink size={10} className="shrink-0 group-hover:text-[#6B7EFF]" />
-                        <span className="truncate">{post.url.replace(/^https?:\/\//, '')}</span>
-                      </a>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // ── SCOUT tab ─────────────────────────────────────────────────────────────
-  function ScoutTab({ p }: { p: Prospect }) {
-    const sq = p.scout_queue;
-    const sb = p.scout_brief;
-
-    if (!sq && !sb) return (
-      <div className="flex flex-col items-center justify-center py-16 text-slate-300 gap-3">
-        <Send size={32} className="opacity-20" />
-        <p className="text-sm font-medium">No SCOUT context available for this target</p>
-      </div>
-    );
-
-    const copyPayload = () => {
-      const payload = sq
-        ? JSON.stringify(sq, null, 2)
-        : `SCOUT Brief\n\nContact: ${sb?.primary_contact}\nAngle: ${sb?.outreach_angle?.replace(/_/g, ' ')}\nUrgency: ${sb?.contract_window_urgency}\n\n${(sb?.key_data_points || []).map((pt, i) => `[${i+1}] ${pt}`).join('\n')}`;
-      navigator.clipboard.writeText(payload);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    };
-
-    return (
-      <div className="space-y-5 max-w-4xl animate-in fade-in slide-in-from-bottom-2 duration-500">
-
-        {/* Header bar */}
-        <div className="bg-[#131B2E] rounded-2xl border border-white/10 shadow-sm overflow-hidden">
-          <div className="bg-[#0F1830]/50 border-b border-white/10 px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Zap size={16} className="text-emerald-500" />
-              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-200">SCOUT Context Queue</h3>
-            </div>
-            <span className="text-[10px] text-emerald-300 bg-emerald-400/10 px-2 py-1 rounded-md border border-emerald-400/20">Status: Ready</span>
-          </div>
-
-          <div className="px-6 py-4 flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#6B7EFF]/10 border border-[#6B7EFF]/20">
-              <Target size={12} className="text-[#6B7EFF]" />
-              <span className="text-[11px] font-bold text-[#6B7EFF] tracking-wide">
-                {(sb?.outreach_angle || 'General').replace(/_/g, ' ').toUpperCase()}
-              </span>
-            </div>
-            <span className={cn("text-[11px] font-bold px-3 py-1.5 rounded-lg uppercase tracking-wide border",
-              URGENCY_PILL[sb?.contract_window_urgency ?? ''] || "bg-[#131B2E] text-slate-300 border-white/10")}>
-              {sb?.contract_window_urgency || 'medium'} urgency
-            </span>
-            <div className="ml-auto flex items-center gap-2">
-              <button onClick={copyPayload}
-                className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-white/10 text-slate-300 hover:bg-[#0F1830] font-bold shadow-sm transition-colors">
-                <Copy size={12} /> {copied ? "Copied!" : "Copy JSON"}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Property context block */}
-        {sq?.property && (
-          <div className="bg-[#131B2E] rounded-2xl border border-white/10 p-5 shadow-sm">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
-              <span className="text-[#6B7EFF]">[PROPERTY]</span> Identity Context
-            </p>
-            <div className="grid grid-cols-3 gap-4 text-xs">
-              {[
-                { label: 'Name', val: sq.property.name },
-                { label: 'Units', val: sq.property.units },
-                { label: 'Class', val: sq.property.class },
-                { label: 'Management', val: sq.property.management_company },
-                { label: 'Owner', val: sq.property.owner_entity },
-                { label: 'Formerly', val: sq.property.old_name },
-              ].filter(r => r.val).map(({ label, val }) => (
-                <div key={label}>
-                  <p className="text-slate-400 text-[9px] uppercase font-bold">{label}</p>
-                  <p className="font-bold text-slate-100 mt-0.5 truncate">{String(val)}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Connectivity context */}
-        {sq?.connectivity && (sq.connectivity.isp_providers?.length || sq.connectivity.bulk_detected) && (
-          <div className="bg-[#131B2E] rounded-2xl border border-white/10 p-5 shadow-sm">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
-              <span className="text-emerald-300">[CONNECTIVITY]</span> Internet Signal
-            </p>
-            <div className="flex items-center gap-3 flex-wrap">
-              {sq.connectivity.isp_providers.map(isp => (
-                <span key={isp} className="text-[11px] px-3 py-1.5 rounded-lg font-bold bg-emerald-400/10 text-emerald-300 border border-emerald-400/30">{isp}</span>
-              ))}
-              {sq.connectivity.bulk_detected && (
-                <span className="text-[11px] px-3 py-1.5 rounded-lg font-bold bg-amber-400/10 text-amber-300 border border-amber-400/30">Bulk Agreement Detected</span>
-              )}
-              {sq.connectivity.provider_confirmed && (
-                <span className="text-[11px] px-3 py-1.5 rounded-lg font-bold bg-emerald-400/10 text-emerald-300 border border-emerald-400/30">Provider Confirmed</span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Pain angles */}
-        {sq?.pain_angles && sq.pain_angles.length > 0 && (
-          <div className="bg-[#131B2E] rounded-2xl border border-white/10 p-5 shadow-sm">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
-              <span className="text-rose-500">[PAIN_ANGLES]</span> Top Vulnerability Signals
-            </p>
-            <div className="bg-[#0B1220] rounded-xl p-4 text-[11px] leading-relaxed overflow-x-auto">
-              {sq.pain_angles.slice(0, 6).map((sig, i) => (
-                <div key={i} className="flex items-start gap-3 mb-2 last:mb-0">
-                  <span className="text-[#6B7EFF] shrink-0">[{i+1}]</span>
-                  <span className={sig.severity === 'high' ? 'text-rose-300' : sig.severity === 'medium' ? 'text-amber-300' : 'text-slate-400'}>
-                    <span className="text-slate-400">{sig.type}:</span> {sig.quote}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* PropTech context */}
-        {sq?.proptech && (sq.proptech.gate_operators?.length || sq.proptech.access_control?.length) && (
-          <div className="bg-[#131B2E] rounded-2xl border border-white/10 p-5 shadow-sm">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
-              <span className="text-orange-500">[PROPTECH]</span> Gate &amp; Access Stack
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {[...(sq.proptech.gate_operators || []), ...(sq.proptech.access_control || [])].map(t => (
-                <span key={t} className="text-[11px] px-3 py-1.5 rounded-lg font-bold bg-orange-400/10 text-orange-300 border border-orange-400/30">{t}</span>
-              ))}
-              {sq.proptech.tech_generation && (
-                <span className="text-[11px] px-3 py-1.5 rounded-lg font-bold bg-[#131B2E] text-slate-300 border border-white/10 capitalize">{sq.proptech.tech_generation} gen</span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Contact chain */}
-        {sq?.contact_chain && sq.contact_chain.length > 0 && (
-          <div className="bg-[#131B2E] rounded-2xl border border-white/10 p-5 shadow-sm">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
-              <span className="text-violet-500">[CONTACTS]</span> Outreach Chain ({sq.contact_chain.length} nodes)
-            </p>
-            <div className="space-y-2">
-              {sq.contact_chain.slice(0, 4).map((c, i) => (
-                <div key={i} className="flex items-center gap-3 text-xs bg-[#0F1830] px-3 py-2 rounded-lg border border-white/10">
-                  <span className="text-[#6B7EFF] text-[10px]">[{i+1}]</span>
-                  <span className="font-bold text-slate-100">{c.name || '—'}</span>
-                  <span className="text-slate-400 capitalize">{(c.role_type || 'unknown').replace('_', ' ')}</span>
-                  {(c.top_email_format || c.email) && (
-                    <span className="ml-auto text-slate-400 text-[10px]">{c.top_email_format || c.email}</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Key Finding */}
-        {sq?.key_finding && (
-          <div className="bg-amber-400/10 rounded-2xl border border-amber-400/30 p-5 shadow-sm">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-amber-300 mb-2 flex items-center gap-1.5">
-              <span className="text-amber-300">[KEY_FINDING]</span> Primary Intelligence
-            </p>
-            <p className="text-sm text-amber-100 leading-relaxed font-medium">{sq.key_finding}</p>
-          </div>
-        )}
-
-        {/* Behavioral Profile (from scout_queue) */}
-        {sq?.behavioral_profile && Object.keys(sq.behavioral_profile).length > 0 && (
-          <div className="bg-[#131B2E] rounded-2xl border border-white/10 p-5 shadow-sm">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
-              <span className="text-violet-500">[PROFILE]</span> Behavioral Intelligence
-            </p>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-              {Object.entries(sq.behavioral_profile).map(([key, val]) => (
-                <div key={key}>
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">{key.replace(/_/g, ' ')}</p>
-                  <p className="text-xs font-medium text-slate-200">{String(val)}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Objection Flags */}
-        {sq?.objection_flags && Object.values(sq.objection_flags).some(Boolean) && (
-          <div className="bg-[#131B2E] rounded-2xl border border-rose-400/30 p-5 shadow-sm">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
-              <span className="text-rose-500">[OBJECTIONS]</span> Flags to Prepare For
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(sq.objection_flags).filter(([, v]) => v).map(([key]) => (
-                <span key={key} className="text-[11px] px-3 py-1.5 rounded-lg font-bold bg-rose-400/10 text-rose-300 border border-rose-400/30 capitalize">
-                  {key.replace(/_/g, ' ')}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* 6-Month Outreach Plan */}
-        {(sq?.outreach_plan || p.outreach_plan) && (() => {
-          const plan = sq?.outreach_plan ?? p.outreach_plan;
-          if (!plan) return null;
-          const months = ([1,2,3,4,5,6] as const).map(n => ({ n, data: plan[`month_${n}` as keyof OutreachPlan] as OutreachMonth | undefined })).filter(m => m.data);
-          if (months.length === 0) return null;
-          return (
-            <div className="bg-[#131B2E] rounded-2xl border border-[#6B7EFF]/20 p-5 shadow-sm relative overflow-hidden">
-              <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-[#6B7EFF] to-[#A78BFA]" />
-              <div className="flex items-start justify-between mb-4">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B7EFF] flex items-center gap-1.5">
-                  6-Month Outreach Plan
-                </p>
-                <div className="flex items-center gap-2 flex-wrap justify-end">
-                  {plan.primary_channel && (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#6B7EFF]/10 text-[#6B7EFF] border border-[#6B7EFF]/20 capitalize">{plan.primary_channel}</span>
-                  )}
-                  {plan.total_touches != null && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#131B2E] text-slate-300 border border-white/10">{plan.total_touches} touches</span>
-                  )}
-                  {plan.expected_close_quarter && (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-400/10 text-emerald-300 border border-emerald-400/20">Close: {plan.expected_close_quarter}</span>
-                  )}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
-                {months.map(({ n, data }) => data && (
-                  <div key={n} className="rounded-xl border border-white/10 p-3 bg-[#0F1830]/50 hover:bg-[#131B2E] hover:shadow-sm transition-all">
-                    <div className="flex items-center gap-1.5 mb-2">
-                      <span className="text-[9px] font-bold text-white bg-[#6B7EFF] px-1.5 py-0.5 rounded">M{n}</span>
-                      <span className="text-[11px] font-bold text-slate-100 leading-tight">{data.theme}</span>
-                    </div>
-                    {(data.actions || []).length > 0 && (
-                      <ul className="space-y-1 mb-2">
-                        {(data.actions || []).map((action, ai) => (
-                          <li key={ai} className="text-[10px] text-slate-300 flex items-start gap-1">
-                            <span className="text-[#6B7EFF] shrink-0 mt-0.5 font-bold">›</span>
-                            <span>{action}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {data.goal && (
-                      <p className="text-[9px] font-bold text-emerald-300 bg-emerald-400/10 px-2 py-0.5 rounded border border-emerald-400/20 mt-1">{data.goal}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {plan.key_milestone && (
-                <div className="pt-3 border-t border-white/10 flex items-start gap-2">
-                  <Target size={13} className="text-amber-500 shrink-0 mt-0.5" />
-                  <p className="text-xs font-medium text-slate-200"><span className="font-bold text-amber-300">Key Milestone:</span> {plan.key_milestone}</p>
-                </div>
-              )}
-            </div>
-          );
-        })()}
-
-        {/* Outreach Sequence — individual touches */}
-        {sq?.outreach_sequence && sq.outreach_sequence.length > 0 && (
-          <div className="bg-[#131B2E] rounded-2xl border border-white/10 p-5 shadow-sm">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
-              <span className="text-emerald-300">[SEQUENCE]</span> Recommended Touch Sequence ({sq.outreach_sequence.length} touches)
-            </p>
-            <div className="space-y-2">
-              {sq.outreach_sequence.map((touch, i) => (
-                <div key={i} className="flex items-start gap-3 bg-[#0F1830] rounded-xl p-3 border border-white/10">
-                  <div className="w-6 h-6 rounded-full bg-[#6B7EFF] flex items-center justify-center text-white text-[10px] font-bold shrink-0">
-                    {touch.touch ?? i+1}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-[10px] font-bold text-slate-200 capitalize">{(touch.channel || 'email').replace('_', ' ')}</span>
-                      {touch.timing && <span className="text-[9px] text-slate-400 bg-[#131B2E] px-1.5 py-0.5 rounded border border-white/10">{touch.timing}</span>}
-                    </div>
-                    <p className="text-[11px] text-slate-300 leading-relaxed">{touch.message}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Key data points fallback from scout_brief */}
-        {!sq && sb?.key_data_points && sb.key_data_points.length > 0 && (
-          <div className="bg-[#0F1830]/80 rounded-xl p-6 border border-white/10 shadow-inner relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#6B7EFF] to-[#A78BFA]" />
-            <p className="text-[10px] font-bold text-slate-400 mb-4 uppercase tracking-widest flex items-center gap-2">
-              <Cpu size={12} className="text-[#6B7EFF]"/> Key Intel
-            </p>
-            <div className="space-y-4">
-              {sb.key_data_points.map((point, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <span className="text-[11px] font-bold text-[#6B7EFF] mt-0.5">[{i + 1}]</span>
-                  <p className="text-[13px] font-medium text-slate-200 leading-relaxed">{point}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex items-center gap-3 pt-1">
-          {savedSearchId && !importResult[savedSearchId] && (
-            <button onClick={() => importSearch(savedSearchId)} disabled={importing === savedSearchId}
-              className="flex items-center gap-2 text-xs px-5 py-2.5 rounded-lg text-white font-bold transition-all hover:opacity-90 disabled:opacity-60 shadow-sm"
-              style={{ background: "#6B7EFF" }}>
-              {importing === savedSearchId ? <Loader2 size={14} className="animate-spin" /> : <><Download size={14} /> Import to Queue</>}
-            </button>
-          )}
-          {savedSearchId && (importResult[savedSearchId]?.created ?? 0) >= 0 && !scoutResult[savedSearchId] && (
-            <button onClick={() => launchScout(savedSearchId)} disabled={scoutLoading === savedSearchId}
-              className="ai-border-glow active flex items-center gap-2 text-xs px-6 py-2.5 rounded-lg text-white font-bold transition-all hover:scale-105 disabled:opacity-60 shadow-[0_4px_14px_0_rgba(16,185,129,0.39)]"
-              style={{ background: "linear-gradient(to right, #10B981, #059669)" }}>
-              {scoutLoading === savedSearchId ? <Loader2 size={14} className="animate-spin" /> : <><Zap size={14} /> INITIALIZE SCOUT</>}
-            </button>
-          )}
-          {savedSearchId && scoutResult[savedSearchId] && (
-            <div className="flex items-center gap-2 text-xs font-bold text-emerald-300 bg-emerald-400/10 px-4 py-2.5 rounded-lg border border-emerald-400/20">
-              <CheckCircle2 size={14} /> Sequence Deployed ({scoutResult[savedSearchId].sent} sent)
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // ── Candidate grid panel ──────────────────────────────────────────────────
-  function CandidateGrid() {
-    if (candidates.length === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3 px-8 text-center">
-          <Search size={32} className="opacity-20" />
-          <p className="text-sm font-bold text-slate-400">No matching properties found</p>
-          <p className="text-xs font-medium">Try a more specific query — include a city, state, or property name.</p>
-          <button
-            onClick={() => { setCandidates([]); setQueryInterpretation(''); setViewMode('idle'); }}
-            className="mt-3 flex items-center gap-1.5 text-xs px-4 py-2 rounded-lg border border-white/10 text-slate-300 hover:bg-[#0F1830] font-bold transition-colors"
-          >
-            <ArrowLeft size={12} /> New Search
-          </button>
-        </div>
-      );
-    }
-
-    return (
-      <div className="flex flex-col h-full overflow-hidden">
-        <div className="bg-[#131B2E] border-b border-white/10 px-6 py-4 shadow-sm z-10">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <button
-                  onClick={() => { setCandidates([]); setQueryInterpretation(''); setViewMode('idle'); }}
-                  className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 hover:text-slate-100 transition-colors"
-                >
-                  <ArrowLeft size={12} /> New Search
-                </button>
-              </div>
-              <h2 className="text-base font-bold text-slate-100 tracking-tight">
-                Found {candidates.length} {candidates.length === 1 ? 'property' : 'properties'} matching your search
-              </h2>
-              {queryInterpretation && (
-                <p className="text-xs text-slate-400 mt-1 font-medium">{queryInterpretation}</p>
-              )}
-            </div>
-            <button
-              onClick={toggleAllCands}
-              className="shrink-0 flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-lg border border-white/10 text-slate-300 hover:bg-[#0F1830] transition-colors"
-            >
-              {selectedCands.size === candidates.length ? 'Clear all' : 'Select all'}
-            </button>
-          </div>
-        </div>
-
-        {/* Batch action bar — appears when candidates are selected */}
-        {selectedCands.size > 0 && (
-          <div className="bg-[#0F1830] border-b border-[#6B7EFF]/30 px-6 py-3 flex items-center gap-3 z-10">
-            <span className="text-xs font-bold text-slate-200">
-              {selectedCands.size} selected
-            </span>
-            <button
-              onClick={researchSelected}
-              disabled={poolBusy}
-              className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg text-white shadow-sm hover:opacity-90 disabled:opacity-50 transition-all"
-              style={{ background: 'linear-gradient(135deg, #0d2150 0%, #1a3a7c 45%, #6B7EFF 100%)' }}
-            >
-              <Zap size={13} /> {poolBusy ? 'Working…' : `Research ${selectedCands.size}`}
-            </button>
-            <button
-              onClick={addSelectedToLeads}
-              disabled={poolBusy}
-              className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg border border-[#6B7EFF]/40 text-slate-200 hover:bg-[#6B7EFF]/10 disabled:opacity-50 transition-all"
-            >
-              <Plus size={13} /> Add {selectedCands.size} to Leads
-            </button>
-            <button
-              onClick={() => { setSelectedCands(new Set()); setPoolMsg(null); }}
-              className="text-[11px] font-bold text-slate-400 hover:text-slate-200 transition-colors"
-            >
-              Cancel
-            </button>
-            {poolMsg && <span className="text-[11px] font-semibold text-emerald-300 ml-auto">{poolMsg}</span>}
-          </div>
-        )}
-        {selectedCands.size === 0 && poolMsg && (
-          <div className="bg-emerald-400/10 border-b border-emerald-400/30 px-6 py-2 text-[11px] font-semibold text-emerald-200 z-10">
-            {poolMsg}
-          </div>
-        )}
-
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 max-w-6xl mx-auto">
-            {candidates.map((c, i) => {
-              const score = c.buy_score_estimate ?? 5;
-              const selected = selectedCands.has(i);
-              return (
-                <div
-                  key={`${c.name}-${i}`}
-                  className={`bg-[#131B2E] rounded-xl border p-5 shadow-sm hover:shadow-md transition-all duration-200 relative group ${selected ? 'border-[#6B7EFF] ring-1 ring-[#6B7EFF]/40' : 'border-white/10 hover:border-[#6B7EFF]'}`}
-                >
-                  {/* Selection checkbox */}
-                  <button
-                    onClick={() => toggleCand(i)}
-                    aria-label={selected ? 'Deselect property' : 'Select property'}
-                    className={`absolute top-4 left-4 w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${selected ? 'bg-[#6B7EFF] border-[#6B7EFF]' : 'border-white/25 hover:border-[#6B7EFF] bg-[#0F1830]'}`}
-                  >
-                    {selected && <Check size={13} className="text-white" />}
-                  </button>
-
-                  <div className="absolute top-4 right-4">
-                    <div
-                      className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm"
-                      style={scoreBg(score)}
-                    >
-                      {score}
-                    </div>
-                  </div>
-
-                  <div className="pr-12 pl-7">
-                    <h3 className="text-lg font-bold text-slate-100 leading-tight">{c.name}</h3>
-                    <p className="text-sm text-slate-400 mt-1 flex items-center gap-1.5">
-                      <MapPin size={12} className="shrink-0 opacity-70" />
-                      <span className="truncate">
-                        {[c.address, c.city, c.state].filter(Boolean).join(', ') || `${c.city || ''}, ${c.state || ''}`}
-                      </span>
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-1.5 mt-3">
-                    {c.units && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#131B2E] text-slate-300 border border-white/10">
-                        {c.units} units
-                      </span>
-                    )}
-                    {c.year_built && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#131B2E] text-slate-300 border border-white/10">
-                        {c.year_built}
-                      </span>
-                    )}
-                    {c.property_class && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#141d3a] text-indigo-300 border border-white/10">
-                        Class {c.property_class}
-                      </span>
-                    )}
-                  </div>
-
-                  {c.management_company && (
-                    <div className="flex items-center gap-1.5 mt-3 text-xs">
-                      <Building2 size={11} className="text-slate-400" />
-                      <span className="font-bold text-slate-200">{c.management_company}</span>
-                    </div>
-                  )}
-
-                  {(c.isp_signal || c.bulk_detected) && (
-                    <div className="flex items-center gap-1.5 mt-2 text-xs flex-wrap">
-                      <Wifi size={11} className="text-emerald-500" />
-                      {c.isp_signal && (
-                        <span className="font-medium text-slate-200">{c.isp_signal}</span>
-                      )}
-                      {c.bulk_detected && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-400/10 text-emerald-300 border border-emerald-400/30">
-                          BULK DETECTED
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  {c.pain_brief && (
-                    <div className="mt-3 rounded-lg bg-amber-400/10 border border-amber-400/30 px-3 py-2">
-                      <p className="text-[11px] text-amber-100 italic leading-relaxed">
-                        &ldquo;{c.pain_brief}&rdquo;
-                      </p>
-                    </div>
-                  )}
-
-                  <button
-                    onClick={() => searchCandidate(c)}
-                    className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-white text-xs font-bold transition-all shadow-sm hover:opacity-90"
-                    style={{ background: '#6B7EFF' }}
-                  >
-                    <Zap size={12} /> Research This Property
-                    <ChevronRight size={12} />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Intelligence DB panel ─────────────────────────────────────────────────
-  function IntelDBPanel() {
-    const STAGES: Record<string, { label: string; color: string }> = {
-      prospect:    { label: 'Prospect',     color: 'bg-[#131B2E] text-slate-300' },
-      contacted:   { label: 'Contacted',    color: 'bg-blue-400/15 text-blue-300' },
-      proposal:    { label: 'Proposal',     color: 'bg-violet-400/15 text-violet-300' },
-      negotiation: { label: 'Negotiating',  color: 'bg-amber-400/15 text-amber-300' },
-      won:         { label: 'Won',          color: 'bg-emerald-400/15 text-emerald-300' },
-      lost:        { label: 'Lost',         color: 'bg-rose-400/15 text-rose-300' },
-      'no-contact':{ label: 'No contact',   color: 'bg-[#131B2E] text-slate-400' },
-    };
-
-    return (
-      <div className="flex flex-col h-full overflow-hidden bg-[#0F1830]/70">
-        <div className="bg-[#131B2E] border-b border-white/10 px-6 py-4 shadow-sm z-10">
-          <div className="flex items-center gap-3 mb-3">
-            {(isDone || candidates.length > 0) && (
-              <button onClick={() => setDbView(false)}
-                className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 hover:text-[#6B7EFF] transition-colors -ml-1 mr-1">
-                <ArrowLeft size={13} />
-                Back
-              </button>
-            )}
-            <Globe size={16} className="text-[#6B7EFF]" />
-            <h2 className="text-base font-bold text-slate-100 tracking-tight">Intelligence Database</h2>
-            <span className="text-[10px] px-2 py-1 rounded-md bg-[#6B7EFF]/10 border border-[#6B7EFF]/20 text-[#6B7EFF] font-bold">{dbTotal} logged</span>
-            <button onClick={() => setDbView(false)} className="ml-auto p-1.5 rounded-lg hover:bg-[#131B2E] text-slate-400 hover:text-slate-200 transition-colors" title="Close Intel DB">
-              <X size={14} />
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="flex-1 flex items-center gap-2 bg-[#0F1830] border border-white/10 rounded-xl px-3 py-2 focus-within:border-[#6B7EFF]/50 focus-within:bg-[#131B2E] transition-colors shadow-inner">
-              <Search size={14} className="text-slate-400 shrink-0" />
-              <input
-                value={dbSearch}
-                onChange={e => { setDbSearch(e.target.value); loadDbProperties(e.target.value, dbFilter); }}
-                placeholder="Search telemetry..."
-                className="flex-1 text-xs font-medium bg-transparent text-slate-100 placeholder:text-slate-400 outline-none"
-              />
-            </div>
-            {(['all','critical','expiring','sara'] as const).map(f => (
-              <button key={f} onClick={() => { setDbFilter(f); loadDbProperties(dbSearch, f); }}
-                className={cn("text-[11px] px-4 py-2 rounded-xl font-bold capitalize transition-all shadow-sm",
-                  dbFilter === f ? "bg-[#6B7EFF] text-white" : "bg-[#131B2E] text-slate-300 border border-white/10 hover:bg-[#0F1830]"
-                )}>
-                {f === 'expiring' ? 'Expiring' : f === 'sara' ? 'SARA' : f === 'critical' ? 'Critical' : 'All'}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex-1 flex overflow-hidden">
-          <div className="w-80 border-r border-white/10 bg-[#0F1830]/30 overflow-y-auto shrink-0">
-            {dbLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 size={20} className="text-[#6B7EFF] animate-spin" />
-              </div>
-            ) : dbProps.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3 px-4 text-center">
-                <Globe size={32} className="opacity-20" />
-                <p className="text-sm font-bold text-slate-400">No properties in DB</p>
-                <p className="text-xs font-medium">Run ARIA to begin populating telemetry.</p>
-              </div>
-            ) : (
-              <div className="p-3">
-                {dbProps.map(p => {
-                  const stageInfo = STAGES[p.sales_stage] ?? STAGES.prospect;
-                  return (
-                    <button key={p.id}
-                      onClick={() => { setDbSelected(p); setNoteText(p.sales_notes ?? ''); setNoteStage(p.sales_stage ?? 'prospect'); }}
-                      className={cn(
-                        "w-full text-left p-3.5 rounded-xl border mb-2 transition-all group",
-                        dbSelected?.id === p.id 
-                           ? "border-[#6B7EFF]/50 bg-[#131B2E] shadow-md relative overflow-hidden" 
-                           : "border-white/10 bg-[#131B2E]/70 hover:bg-[#131B2E] hover:border-slate-300 hover:shadow-sm"
-                      )}>
-                      {dbSelected?.id === p.id && <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#6B7EFF]" />}
-                      <div className="flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0 shadow-sm"
-                          style={scoreBg(p.buy_score ?? 0)}>{p.buy_score ?? '?'}</div>
-                        <div className="flex-1 min-w-0 pt-0.5">
-                          <p className="text-[11px] font-bold text-slate-100 truncate leading-tight">{p.property_name}</p>
-                          <p className="text-[9px] font-medium text-slate-400 truncate mt-0.5">{(p.address ?? '').split(',').slice(0,2).join(',')}</p>
-                          <div className="flex items-center gap-1 mt-2 flex-wrap">
-                            <span className={cn("text-[8px] font-bold px-1.5 py-0.5 rounded-md", stageInfo.color)}>{stageInfo.label}</span>
-                            {p.sara_signals && <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-purple-400/10 text-purple-300 border border-purple-400/20">SARA</span>}
-                            {p.contract_expiry_year && <span className="text-[8px] text-amber-300 font-bold bg-amber-400/10 px-1.5 py-0.5 rounded-md border border-amber-400/20">Exp {p.contract_expiry_year}</span>}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-6 bg-transparent">
-            {!dbSelected ? (
-              <div className="flex items-center justify-center h-full text-slate-400">
-                <p className="text-sm font-medium">Select a property to view deep intel</p>
-              </div>
-            ) : (
-              <div className="space-y-5 max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-500">
-                <div className="bg-[#131B2E] rounded-2xl border border-white/10 p-6 shadow-sm">
-                  <div className="flex items-start gap-4">
-                    <div>
-                      <h3 className="text-lg font-bold text-slate-100 tracking-tight">{dbSelected.property_name}</h3>
-                      <p className="text-xs font-medium text-slate-400 mt-1 flex items-center gap-1.5">
-                        <MapPin size={12} /> {dbSelected.address}
-                      </p>
-                    </div>
-                    <div className="ml-auto flex flex-col items-end gap-1.5">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-inner"
-                        style={scoreBg(dbSelected.buy_score ?? 0)}>{dbSelected.buy_score ?? '?'}</div>
-                      <span className="text-[10px] text-slate-400">Updated {formatAge(dbSelected.last_researched_at)}</span>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-white/10">
-                    {dbSelected.management_company && <span className="text-[10px] font-bold px-3 py-1 rounded-lg border border-white/10 text-slate-300 bg-[#0F1830] shadow-sm">{dbSelected.management_company}</span>}
-                    {dbSelected.owner_entity && <span className="text-[10px] font-bold px-3 py-1 rounded-lg border border-blue-400/30 bg-blue-400/10 text-blue-300 shadow-sm">{dbSelected.owner_entity}</span>}
-                    {dbSelected.sara_signals && <span className="text-[10px] px-3 py-1 rounded-lg bg-purple-400/10 text-purple-300 border border-purple-400/20 font-bold shadow-sm">SARA Bridge</span>}
-                    {dbSelected.contract_expiry_year && (
-                      <span className={cn("text-[10px] px-3 py-1 rounded-lg border font-bold shadow-sm",
-                        dbSelected.contract_expiry_year <= new Date().getFullYear() + 1
-                          ? "bg-rose-400/10 border-rose-400/30 text-rose-300"
-                          : "bg-amber-400/10 border-amber-400/30 text-amber-300"
-                      )}>Contract exp. ~{dbSelected.contract_expiry_year}</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Sales notes & Update */}
-                <div className="bg-[#131B2E] rounded-2xl border border-white/10 p-6 shadow-sm relative overflow-hidden">
-                  <div className="absolute top-0 left-0 w-1 h-full bg-[#6B7EFF]" />
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Pipeline Control</p>
-                  <div className="flex items-center gap-3 mb-4">
-                    <p className="text-xs font-bold text-slate-300 shrink-0">CRM Stage:</p>
-                    <select
-                      value={noteStage || dbSelected.sales_stage || 'prospect'}
-                      onChange={e => setNoteStage(e.target.value)}
-                      className="text-xs font-bold border border-white/10 rounded-xl px-3 py-2 text-slate-100 bg-[#0F1830] outline-none focus:border-[#6B7EFF] focus:bg-[#131B2E] transition-colors cursor-pointer shadow-sm"
-                    >
-                      {Object.entries(STAGES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                    </select>
-                    {dbSelected.last_contacted_at && (
-                      <span className="text-[10px] text-slate-400 ml-auto bg-[#0F1830] px-2 py-1 rounded border border-white/10">Last contact: {formatAge(dbSelected.last_contacted_at)}</span>
-                    )}
-                  </div>
-                  <textarea
-                    value={noteText !== '' ? noteText : (dbSelected.sales_notes ?? '')}
-                    onChange={e => setNoteText(e.target.value)}
-                    placeholder="Input human intelligence, meeting notes, or disposition details..."
-                    rows={4}
-                    className="w-full text-sm font-medium border border-white/10 rounded-xl px-4 py-3 text-slate-100 placeholder:text-slate-400 resize-none outline-none focus:border-[#6B7EFF] focus:ring-2 focus:ring-[#6B7EFF]/20 transition-all shadow-inner mb-4"
-                  />
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={savePropertyNote}
-                      disabled={savingNote}
-                      className="flex items-center gap-2 text-xs px-5 py-2.5 rounded-lg text-white font-bold disabled:opacity-60 shadow-sm transition-all hover:scale-105"
-                      style={{ background: '#6B7EFF' }}
-                    >
-                      {savingNote ? <Loader2 size={14} className="animate-spin" /> : <><Check size={14} /> Commit Update</>}
-                    </button>
-                    <button
-                      onClick={() => { setQuery(dbSelected.property_name); setDbView(false); setPhase(0); setResults(null); setSavedSearchId(null); setPendingRerun(true); }}
-                      className="flex items-center gap-2 text-xs px-5 py-2.5 rounded-lg border border-white/10 text-slate-300 hover:bg-[#0F1830] hover:text-slate-100 font-bold transition-all shadow-sm"
-                    >
-                      <RefreshCw size={14} /> Fetch Latest Intel
-                    </button>
-                  </div>
-                </div>
-
-                {dbSelected.pitch_strategy?.primary_hook && (
-                  <div className="bg-amber-400/10 rounded-2xl border border-amber-400/30 p-6 shadow-sm">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-amber-300 mb-2 flex items-center gap-1.5"><Target size={12}/> AI Recommended Hook</p>
-                    <p className="text-sm text-amber-100 leading-relaxed font-medium italic">&ldquo;{dbSelected.pitch_strategy.primary_hook}&rdquo;</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Render ────────────────────────────────────────────────────────────────
-
-  if (!mounted) return <div className="flex flex-col h-full" style={{ background: '#0B1728', minHeight: '100dvh' }} />;
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'Failed')
+      setMsg(`Added ${d.created ?? 0} to Leads${d.skipped ? ` · ${d.skipped} already there` : ''}.`)
+      setScoutLeadIds(Array.isArray(d.lead_ids) ? d.lead_ids : [])
+      setScoutMsg(null)
+      setSelected(new Set())
+    } catch (e) { setMsg(e instanceof Error ? e.message : 'Could not add to Leads.') }
+    finally { setBusy(false) }
+  }, [])
+
+  // Start the SCOUT outreach cadence on the leads we just created.
+  const launchScout = useCallback(async () => {
+    if (!scoutLeadIds.length) return
+    setBusy(true); setScoutMsg(null)
+    try {
+      const r = await fetch('/api/aria/scout/launch', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lead_ids: scoutLeadIds }),
+      })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'Failed')
+      setScoutMsg(`SCOUT: ${d.sent ?? 0} sent${d.skipped ? ` · ${d.skipped} skipped` : ''}${d.errors ? ` · ${d.errors} errors` : ''}.`)
+      setScoutLeadIds([])
+    } catch (e) { setScoutMsg(e instanceof Error ? e.message : 'SCOUT failed') }
+    finally { setBusy(false) }
+  }, [scoutLeadIds])
+
+  // View/Research a single property in the detail panel (view-first: cache-hits
+  // instantly if already researched, else runs the full search once).
+  const researchDetail = useCallback(async (it: PropItem) => {
+    setDetailBusy(true); setDetailReport(null)
+    try {
+      const r = await fetch('/api/aria/research/deep', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: `${it.name} ${it.city} ${it.state}`.trim() }),
+      })
+      const d = await r.json()
+      if (d.error) throw new Error(d.error)
+      setDetailReport(d?.prospects?.[0] ?? null)
+      setItems(prev => prev.map(x => x.id === it.id ? { ...x, researched: true } : x))
+    } catch { setDetailReport({ _error: true }) }
+    finally { setDetailBusy(false) }
+  }, [])
 
   return (
-    <div className="flex flex-col h-full" style={{ background: '#0B1728', minHeight: '100dvh' }}>
-      {/* Slim glass ARIA header — simple Back to Dashboard, no portal chrome */}
-      <header className="h-16 shrink-0 flex items-center px-5 gap-4 border-b border-white/[0.07]" style={{ background: '#0B1728' }}>
-        <a
-          href="/"
-          className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border border-white/10 text-slate-200 hover:bg-[#131B2E] hover:border-[#6B7EFF]/40 transition-all"
-        >
+    <div className="flex flex-col h-full" style={{ background: '#0B1728', minHeight: '100vh' }}>
+      {/* Header */}
+      <header className="h-16 shrink-0 flex items-center px-5 gap-4 border-b border-white/[0.07]">
+        <a href="/" className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border border-white/10 text-slate-200 hover:bg-[#131B2E] transition-all">
           <ArrowLeft size={13} /> Back to Dashboard
         </a>
         <div className="min-w-0">
           <h1 className="text-base font-bold text-slate-100 leading-tight">ARIA</h1>
-          <p className="text-[11px] text-slate-400 leading-tight hidden sm:block">Account Research Intelligence Agent</p>
+          <p className="text-[11px] text-slate-400 leading-tight hidden sm:block">Find properties</p>
         </div>
         <div className="flex-1" />
-        {topbarActions}
+        <a href="/aria/classic" className="text-[11px] font-semibold text-slate-500 hover:text-slate-300 transition-colors">Classic view</a>
       </header>
 
-      {/* Batch-research progress tray */}
-      {researchJobs.length > 0 && (() => {
-        const total = researchJobs.length;
-        const doneCount = researchJobs.filter(j => j.status === 'done').length;
-        const allDone = doneCount === total;
-        return (
-          <div className="fixed bottom-4 right-4 z-50 w-80 rounded-2xl border border-white/10 shadow-2xl overflow-hidden" style={{ background: 'rgba(11,23,40,0.97)', backdropFilter: 'blur(16px)' }}>
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10">
-              {allDone
-                ? <CheckCircle2 size={14} className="text-emerald-400" />
-                : <Loader2 size={14} className="text-[#6B7EFF] animate-spin" />}
-              <span className="text-xs font-bold text-slate-100">
-                {allDone ? 'Research complete' : 'Researching…'} {doneCount}/{total}
-              </span>
-              <button onClick={() => setResearchJobs([])} className="ml-auto text-slate-500 hover:text-slate-200 transition-colors" aria-label="Dismiss">
-                <X size={14} />
-              </button>
-            </div>
-            <div className="max-h-72 overflow-y-auto">
-              {researchJobs.map(job => (
-                <div key={job.id} className="flex items-center gap-2.5 px-4 py-2.5 border-b border-white/5 last:border-0">
-                  <span className="shrink-0">
-                    {job.status === 'done'    ? <CheckCircle2 size={14} className="text-emerald-400" />
-                     : job.status === 'failed' ? <AlertCircle size={14} className="text-rose-400" />
-                     : job.status === 'running' ? <Loader2 size={14} className="text-[#6B7EFF] animate-spin" />
-                     : <Clock size={13} className="text-slate-500" />}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-semibold text-slate-200 truncate">{job.name}</p>
-                    <p className="text-[9px] text-slate-500 truncate">
-                      {job.status === 'done' ? 'Done · in Researched Properties'
-                       : job.status === 'failed' ? 'Could not research'
-                       : job.status === 'running' ? 'Searching…'
-                       : 'Queued'}
-                      {job.loc ? ` · ${job.loc}` : ''}
-                    </p>
-                  </div>
-                  {job.status === 'done' && (
-                    <button
-                      onClick={() => openResearchedJob(job)}
-                      className="shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-md text-white hover:opacity-90 transition-opacity"
-                      style={{ background: '#6B7EFF' }}
-                    >
-                      Open
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-            <div className="px-4 py-2.5 border-t border-white/10">
-              <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.round((doneCount / total) * 100)}%`, background: 'linear-gradient(90deg,#6B7EFF,#A78BFA)' }} />
-              </div>
-              <p className="text-[9px] text-slate-500 mt-1.5">Researches one at a time (~1 min each). Keep this page open.</p>
-            </div>
+      {/* Search: one word + area */}
+      <div className="shrink-0 px-5 py-3 border-b border-white/[0.07]">
+        <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+          {/* Source: live discovery vs the saved Intel DB */}
+          <div className="flex items-center rounded-full border border-white/10 overflow-hidden mr-2">
+            <button onClick={() => { setSource('discover'); setItems([]); setDetail(null) }}
+              className={`text-[11px] font-bold px-3 py-1.5 ${source === 'discover' ? 'bg-[#6B7EFF] text-white' : 'text-slate-300 hover:bg-[#131B2E]'}`}>Discover</button>
+            <button onClick={() => { setSource('saved'); loadSaved() }}
+              className={`text-[11px] font-bold px-3 py-1.5 ${source === 'saved' ? 'bg-[#6B7EFF] text-white' : 'text-slate-300 hover:bg-[#131B2E]'}`}>Saved</button>
           </div>
-        );
-      })()}
-
-      {/* ── Desktop split layout ────────────────────────────────────────── */}
-      <div className="hidden lg:flex flex-1 overflow-hidden" style={{ height: 'calc(100vh - 57px)' }}>
-
-        {/* Left panel — v9 glassmorphism */}
-        <div className="flex flex-col shrink-0" style={{
-          width: 280,
-          background: 'rgba(11,23,40,0.85)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
-          borderRight: '1px solid rgba(107,126,255,0.1)',
-        }}>
-          <div className="p-4 border-b" style={{ borderColor: 'rgba(107,126,255,0.08)', background: 'rgba(11,23,40,0.6)', backdropFilter: 'blur(16px)' }}>
-            <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 mb-3 transition-all focus-within:ring-2 focus-within:ring-[#6B7EFF]/15" style={{ background: 'rgba(15,24,48,0.9)', border: '1px solid rgba(107,126,255,0.2)', backdropFilter: 'blur(8px)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.2)' }}>
-              <Search size={14} className="text-slate-400 shrink-0" />
-              <input
-                ref={inputRef}
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && !isRunning && runARIA()}
-                placeholder="Property, area, or company..."
-                className="flex-1 bg-transparent text-xs font-medium text-slate-100 placeholder:text-slate-400 outline-none"
-                disabled={isRunning}
-              />
-              {isRunning && <Loader2 size={12} className="text-[#6B7EFF] animate-spin shrink-0" />}
-            </div>
-          {/* Search focus filter chips */}
-          <div className="flex gap-1.5 flex-wrap mb-2">
-            {([
-              { key: 'all',     label: 'All' },
-              { key: 'isp',     label: 'ISP / Internet' },
-              { key: 'video',   label: 'Cable / Video' },
-              { key: 'gate',    label: 'Gate & Access' },
-              { key: 'cameras', label: 'Cameras' },
-            ] as const).map(f => (
-              <button
-                key={f.key}
-                onClick={() => setSearchFocus(f.key)}
-                className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all ${
-                  searchFocus === f.key
-                    ? 'bg-[#6B7EFF] text-white border-[#6B7EFF]'
-                    : 'bg-[#ffffff]/[0.05] text-slate-400 border-white/20 hover:border-[#6B7EFF]/60 hover:text-white'
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-            {/* v9 Credit gate — buy if balance=0, else show cost */}
-            {creditBalance === 0 ? (
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={() => handleBuyCredits()}
-                  disabled={purchaseLoading}
-                  className="w-full py-2.5 rounded-xl text-white text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-60 transition-all shadow-sm"
-                  style={{ background: 'linear-gradient(135deg, #D97706, #F59E0B)' }}
-                >
-                  {purchaseLoading ? <Loader2 size={12} className="animate-spin" /> : <><AlertCircle size={12} /> Buy Credits to Search</>}
-                </button>
-                <p className="text-[9px] text-center text-slate-400 font-medium">100 credits / search · Starting at $5</p>
-              </div>
-            ) : isRunning ? (
-              <button
-                onClick={stopARIA}
-                className="w-full py-2.5 rounded-xl text-white text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm hover:opacity-90"
-                style={{ background: 'linear-gradient(135deg, #b91c1c, #ef4444)' }}
-              >
-                <X size={13} /> Stop search
-              </button>
-            ) : (
-              <button
-                onClick={runARIA}
-                disabled={!query.trim()}
-                className="w-full py-2.5 rounded-xl text-white text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-sm hover:opacity-90"
-                style={{ background: "linear-gradient(135deg, #0d2150 0%, #1a3a7c 45%, #6B7EFF 100%)" }}
-              >
-                <Zap size={12} /> Launch ARIA <span className="opacity-60 font-medium text-[10px]">· 100 credits</span>
-              </button>
-            )}
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-3 py-4">
-            {isDone && results && results.prospects.length > 0 ? (
-              <div className="animate-in fade-in duration-300">
-                {savedCandidates.length > 0 && (
-                  <button
-                    onClick={backToResults}
-                    className="w-full mb-3 py-2 text-[11px] font-bold text-slate-200 hover:text-white bg-[#131B2E] hover:bg-[#1a2540] border border-white/10 hover:border-[#6B7EFF]/40 rounded-lg transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <ArrowLeft size={12} /> Back to {savedCandidates.length} results
-                  </button>
-                )}
-                <div className="flex items-center gap-2 mb-4 px-1">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{results.prospects.length} targets found</span>
-                  {results.query_interpretation && (
-                    <span className="ml-auto text-[9px] text-[#6B7EFF] font-bold truncate max-w-[120px] bg-[#6B7EFF]/10 px-2 py-0.5 rounded border border-[#6B7EFF]/20">ARIA Verified</span>
-                  )}
-                </div>
-                {results.prospects.map((p, i) => (
-                  <ProspectListItem key={i} p={p} i={i} />
-                ))}
-                <button
-                  onClick={() => { setPhase(0); setResults(null); setQuery(""); setSavedSearchId(null); setCandidates([]); setQueryInterpretation(''); setViewMode('idle'); }}
-                  className="w-full mt-4 py-2.5 text-[11px] font-bold text-slate-400 hover:text-slate-100 hover:bg-[#131B2E] rounded-lg transition-colors flex items-center justify-center gap-1.5"
-                >
-                  <ArrowLeft size={12} /> Clear Session
-                </button>
-              </div>
-            ) : (
-              <div className="animate-in fade-in duration-300">
-                {/* Recent / History segmented toggle */}
-                {!isRunning && (
-                  <div className="flex items-center gap-1 p-1 mb-4 rounded-xl bg-[#0F1830] border border-white/10">
-                    {(['recent', 'history'] as const).map(t => (
-                      <button
-                        key={t}
-                        onClick={() => setLeftTab(t)}
-                        className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold capitalize transition-all ${
-                          leftTab === t ? 'bg-[#6B7EFF] text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* History tab — date-grouped browser */}
-                {!isRunning && leftTab === 'history' && (
-                  <div className="h-[calc(100vh-320px)] min-h-[300px]">
-                    <SearchHistoryPanel onPick={(q) => { setLeftTab('recent'); setQuery(q); setPendingRerun(true); }} />
-                  </div>
-                )}
-
-                {/* Recent tab content (default) */}
-                {!isRunning && leftTab === 'recent' && (
-                <>
-                {/* Restore the last candidate list (survives refresh) */}
-                {savedCandidates.length > 0 && viewMode !== 'candidates' && (
-                  <button
-                    onClick={backToResults}
-                    className="w-full mb-3 py-2 text-[11px] font-bold text-slate-100 bg-[#6B7EFF]/10 hover:bg-[#6B7EFF]/20 border border-[#6B7EFF]/30 rounded-lg transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <ArrowLeft size={12} /> Your last {savedCandidates.length} results
-                  </button>
-                )}
-                {/* v9: 72-hour run memory */}
-                {!isRunning && recentRuns.length > 0 && (
-                  <div className="mb-2">
-                    <button
-                      onClick={() => toggleRecentSection('mem72')}
-                      className="w-full flex items-center gap-1.5 px-2 py-1.5 mb-1 rounded-lg hover:bg-[#131B2E] transition-colors"
-                    >
-                      <ChevronRight size={11} className={`text-slate-500 transition-transform duration-150 ${recentOpen.mem72 ? 'rotate-90' : ''}`} />
-                      <Clock size={9} className="text-slate-400" />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">72-Hour Memory</span>
-                      <span className="ml-auto text-[9px] font-semibold text-slate-500">{recentRuns.length}</span>
-                    </button>
-                    {recentOpen.mem72 && recentRuns.slice(0, 6).map(run => (
-                      <button
-                        key={run.id}
-                        onClick={() => { setQuery(run.query); setPendingRerun(true); }}
-                        className="block w-full text-left px-3 py-2 rounded-xl mb-1 border border-transparent hover:bg-[#131B2E] hover:border-white/10 hover:shadow-sm transition-all group"
-                      >
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className="text-[11px] font-semibold text-slate-200 truncate flex-1 group-hover:text-[#6B7EFF]">
-                            {run.primary_property?.name ?? run.query}
-                          </span>
-                          {run.has_intel_cache && (
-                            <span className="shrink-0 text-[8px] font-bold px-1.5 py-0.5 rounded bg-emerald-400/10 text-emerald-300 border border-emerald-400/30">cached</span>
-                          )}
-                        </div>
-                        {run.primary_property && (
-                          <p className="text-[9px] text-slate-400 truncate">
-                            {run.primary_property.city}, {run.primary_property.state}
-                          </p>
-                        )}
-                        <p className="text-[9px] text-slate-400 mt-0.5">{formatAge(run.created_at)}</p>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {!isRunning && savedSearches.length > 0 && (
-                  <div className="mb-2">
-                    <button
-                      onClick={() => toggleRecentSection('recent')}
-                      className="w-full flex items-center gap-1.5 px-2 py-1.5 mb-1 rounded-lg hover:bg-[#131B2E] transition-colors"
-                    >
-                      <ChevronRight size={11} className={`text-slate-500 transition-transform duration-150 ${recentOpen.recent ? 'rotate-90' : ''}`} />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Recent Memory</span>
-                      <span className="ml-auto text-[9px] font-semibold text-slate-500">{savedSearches.length}</span>
-                    </button>
-                    {recentOpen.recent && savedSearches.map(s => <SavedSearchRow key={s.id} s={s} />)}
-                  </div>
-                )}
-                {!isRunning && (
-                  <div>
-                    <button
-                      onClick={() => toggleRecentSection('suggested')}
-                      className="w-full flex items-center gap-1.5 px-2 py-1.5 mb-1 rounded-lg hover:bg-[#131B2E] transition-colors"
-                    >
-                      <ChevronRight size={11} className={`text-slate-500 transition-transform duration-150 ${recentOpen.suggested ? 'rotate-90' : ''}`} />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Suggested Operations</span>
-                    </button>
-                    {recentOpen.suggested && EXAMPLE_QUERIES.map((q, i) => (
-                      <button key={i} onClick={() => { setQuery(q); inputRef.current?.focus(); }}
-                        className="block w-full text-left text-[11px] font-medium px-3 py-2.5 rounded-xl text-slate-400 hover:bg-[#131B2E] hover:text-[#6B7EFF] hover:shadow-sm border border-transparent hover:border-white/10 transition-all leading-snug mb-1.5">
-                        {q}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                </>
-                )}
-              </div>
-            )}
-          </div>
+          {source === 'discover' && CATEGORIES.map(c => (
+            <button key={c.key} onClick={() => setCategory(c.key)}
+              className={`text-[11px] font-bold px-3 py-1.5 rounded-full border transition-all ${category === c.key ? 'bg-[#6B7EFF] text-white border-[#6B7EFF]' : 'text-slate-300 border-white/10 hover:border-[#6B7EFF]/50'}`}>
+              {c.label}
+            </button>
+          ))}
+          {source === 'saved' && <span className="text-[11px] text-slate-500 font-medium">Everything you&apos;ve already researched — instant, no spend.</span>}
         </div>
-
-        {/* Right panel — v9 glass */}
-        <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'radial-gradient(ellipse at 50% 0%, #131B2E 0%, #0B1728 60%)' }}>
-          {dbView ? (
-            <IntelDBPanel />
-) : isRunning ? (
-  <PipelinePanel phase={phase} synthStep={synthStep} />
-) : viewMode === 'candidates' ? (
-  <CandidateGrid />
-) : error ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="max-w-md bg-[#131B2E] border border-rose-400/30 rounded-2xl p-6 flex items-start gap-4 shadow-sm">
-                <div className="p-2 bg-rose-400/10 rounded-lg">
-                  <AlertCircle size={20} className="text-rose-500" />
-                </div>
-                <div>
-                  <p className="text-base font-bold text-slate-100 mb-1">Telemetry Error</p>
-                  <p className="text-sm font-medium text-slate-400 leading-relaxed">{error}</p>
-                </div>
-              </div>
-            </div>
-          ) : prospect ? (
-            <div className="flex flex-col h-full overflow-hidden">
-              <DetailHeader p={prospect} />
-              <div className="flex-1 overflow-y-auto p-6 lg:p-8">
-                {activeTab === 'property' && <AriaCaseFile prospect={prospect as unknown as Record<string, unknown>} social={socialResults} />}
-                {activeTab === 'proptech' && <PropTechTab p={prospect} />}
-                {activeTab === 'dm'       && <DMTab p={prospect} />}
-                {activeTab === 'intel'    && <IntelTab p={prospect} />}
-                {activeTab === 'social'   && <SocialTab p={prospect} />}
-                {activeTab === 'scout'    && <ScoutTab p={prospect} />}
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full relative overflow-hidden"
-              style={{ background: 'radial-gradient(ellipse at 50% 70%, #0d2150 0%, #060e28 38%, #020810 68%, #000306 100%)' }}>
-              {/* Pulsing rings */}
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none" aria-hidden="true">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="absolute rounded-full border border-[#6B7EFF]/10"
-                    style={{ width: `${i * 160}px`, height: `${i * 160}px`, animation: `aria-pulse ${2 + i * 0.6}s ease-in-out infinite`, animationDelay: `${i * 0.35}s` }} />
-                ))}
-              </div>
-              <div className="relative z-10 flex flex-col items-center gap-6 px-8">
-                {/* ARIA logo */}
-                <div className="w-20 h-20 rounded-3xl flex items-center justify-center font-bold text-2xl relative overflow-hidden"
-                  style={{ background: 'linear-gradient(135deg, #0d2150 0%, #1e3a7c 50%, #6B7EFF 100%)', boxShadow: '0 0 40px rgba(107,126,255,0.3), 0 20px 40px rgba(0,0,0,0.5)' }}>
-                  <span className="text-white tracking-tight select-none" style={{ textShadow: '0 0 20px rgba(107,126,255,0.9)' }}>AR</span>
-                  <div className="absolute bottom-0 left-0 right-0 h-1/2" style={{ background: 'linear-gradient(to top, rgba(107,126,255,0.2), transparent)' }} />
-                </div>
-                <div className="text-center">
-                  <p className="text-lg font-bold text-white tracking-tight">ARIA Intelligence Engine</p>
-                  <p className="text-sm font-medium text-slate-400 mt-1.5 max-w-xs leading-relaxed">
-                    Search any property, management company, or market — ARIA will profile it.
-                  </p>
-                </div>
-                <div className="flex items-center gap-6 mt-2 pt-5 border-t border-white/10 text-[11px] font-bold text-slate-400">
-                  <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> FCC Broadband</span>
-                  <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#6B7EFF]" /> SEC EDGAR</span>
-                  <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-purple-400" /> 14 Sources</span>
-                </div>
-              </div>
+        <div className="flex items-center gap-2">
+          <div className="flex-1 flex items-center gap-2 rounded-xl px-3 py-2.5 max-w-2xl" style={{ background: 'rgba(15,24,48,0.9)', border: '1px solid rgba(107,126,255,0.2)' }}>
+            <Search size={15} className="text-slate-400 shrink-0" />
+            <input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && onFind()}
+              placeholder={source === 'saved' ? 'Filter saved properties by name…' : CATEGORIES.find(c => c.key === category)?.hint}
+              className="flex-1 bg-transparent text-sm font-medium text-slate-100 placeholder:text-slate-500 outline-none" disabled={loading} />
+          </div>
+          <button onClick={onFind} disabled={loading || (source === 'discover' && !query.trim())}
+            className="flex items-center gap-1.5 text-sm font-bold px-5 py-2.5 rounded-xl text-white disabled:opacity-50 transition-all"
+            style={{ background: 'linear-gradient(135deg,#0d2150,#1a3a7c 45%,#6B7EFF)' }}>
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}{loading ? 'Loading…' : source === 'saved' ? 'Reload' : 'Find'}
+          </button>
+          {/* List / Map toggle */}
+          {items.length > 0 && (
+            <div className="flex items-center rounded-lg border border-white/10 overflow-hidden ml-1">
+              <button onClick={() => setView('list')} className={`flex items-center gap-1 text-[11px] font-bold px-3 py-2 ${view === 'list' ? 'bg-[#6B7EFF] text-white' : 'text-slate-300 hover:bg-[#131B2E]'}`}><LayoutGrid size={12} /> List</button>
+              <button onClick={() => setView('map')} className={`flex items-center gap-1 text-[11px] font-bold px-3 py-2 ${view === 'map' ? 'bg-[#6B7EFF] text-white' : 'text-slate-300 hover:bg-[#131B2E]'}`}><MapIcon size={12} /> Map</button>
             </div>
           )}
         </div>
+        {interp && <p className="text-[11px] text-slate-400 mt-2">{interp}</p>}
+        {error && <p className="text-[11px] text-rose-300 mt-2">{error}</p>}
+        {msg && <p className="text-[11px] text-emerald-300 mt-2 font-semibold">{msg}</p>}
       </div>
 
-      {/* ── Mobile layout ───────────────────────────────────────────────── */}
-      <div className="lg:hidden flex flex-col flex-1" style={{ paddingBottom: '16px' }}>
-        <div className="bg-[#131B2E]/90 backdrop-blur-md border-b border-white/10 p-4 sticky top-0 z-20">
-          <div className="flex gap-2">
-            <div className="flex-1 flex items-center gap-2 bg-[#0F1830] border border-white/10 rounded-xl px-3 py-2.5 shadow-inner">
-              <Search size={14} className="text-slate-400 shrink-0" />
-              <input
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && !isRunning && runARIA()}
-                placeholder="Property or area..."
-                className="flex-1 bg-transparent text-xs font-medium text-slate-100 placeholder:text-slate-400 outline-none"
-                disabled={isRunning}
-              />
-            </div>
-            {isRunning ? (
-              <button onClick={stopARIA}
-                className="px-4 py-2.5 rounded-xl text-white text-xs font-bold flex items-center gap-1 shadow-sm"
-                style={{ background: "linear-gradient(135deg, #b91c1c, #ef4444)" }}>
-                <X size={14} /> Stop
-              </button>
-            ) : (
-              <button onClick={runARIA} disabled={!query.trim()}
-                className="px-4 py-2.5 rounded-xl text-white text-xs font-bold flex items-center gap-1 disabled:opacity-50 shadow-sm"
-                style={{ background: "linear-gradient(135deg, #0d2150 0%, #1a3a7c 45%, #6B7EFF 100%)" }}>
-                <Zap size={14} />
-              </button>
-            )}
-          </div>
+      {/* Filters */}
+      {items.length > 0 && (
+        <div className="shrink-0 px-5 py-2 border-b border-white/[0.07] flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mr-1">Filter</span>
+          {([['Has gate', fGate, setFGate], ['Bulk', fBulk, setFBulk], ['New only', fNew, setFNew]] as const).map(([label, val, set]) => (
+            <button key={label} onClick={() => set(v => !v)}
+              className={`text-[11px] font-bold px-3 py-1.5 rounded-full border transition-all ${val ? 'bg-[#6B7EFF] text-white border-[#6B7EFF]' : 'text-slate-300 border-white/10 hover:border-[#6B7EFF]/50'}`}>
+              {label}
+            </button>
+          ))}
+          <select value={fMinUnits} onChange={e => setFMinUnits(Number(e.target.value))}
+            className="text-[11px] font-bold px-2.5 py-1.5 rounded-full bg-[#0F1830] text-slate-300 border border-white/10 outline-none">
+            <option value={0}>Any units</option>
+            <option value={100}>100+ units</option>
+            <option value={200}>200+ units</option>
+            <option value={300}>300+ units</option>
+          </select>
+          {source === 'saved' && (
+            <select value={fExpBefore} onChange={e => setFExpBefore(Number(e.target.value))}
+              className="text-[11px] font-bold px-2.5 py-1.5 rounded-full bg-[#0F1830] text-slate-300 border border-white/10 outline-none">
+              <option value={0}>Any contract</option>
+              <option value={new Date().getFullYear() + 1}>Expiring ≤ {new Date().getFullYear() + 1}</option>
+              <option value={new Date().getFullYear() + 2}>Expiring ≤ {new Date().getFullYear() + 2}</option>
+              <option value={new Date().getFullYear() + 3}>Expiring ≤ {new Date().getFullYear() + 3}</option>
+            </select>
+          )}
+          <span className="ml-auto text-[10px] font-semibold text-slate-500">{visible.length} of {items.length}</span>
         </div>
+      )}
 
-        <div className="flex-1 overflow-y-auto">
-          {isRunning ? (
-            <div className="h-full min-h-[75vh]"><PipelinePanel phase={phase} synthStep={synthStep} /></div>
-          ) : viewMode === 'candidates' ? (
-            <CandidateGrid />
-          ) : error ? (
-            <div className="p-4">
-              <div className="bg-rose-400/10 border border-rose-400/30 rounded-xl p-4 flex items-center gap-3">
-                <AlertCircle size={16} className="text-rose-500 shrink-0" />
-                <p className="text-sm font-medium text-rose-300">{error}</p>
-              </div>
-            </div>
-          ) : mobileTab === 'list' ? (
-            <div className="p-4">
-              {isDone && results ? (
-                <>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-1 mb-3">{(results.prospects || []).length} targets found</p>
-                  {(results.prospects || []).map((p, i) => (
-                    <button key={i} onClick={() => { setSelectedProspect(i); setMobileTab('property'); }}
-                      className="w-full text-left p-4 rounded-xl border border-white/10 bg-[#131B2E] shadow-sm mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold shadow-sm"
-                          style={scoreBg(p.profile?.buy_score ?? 0)}>{p.profile?.buy_score ?? 0}</div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-slate-100 truncate">{p.property?.name}</p>
-                          <p className="text-[10px] font-medium text-slate-400 truncate mt-0.5">{p.property?.address?.split(',').slice(0,2).join(',')}</p>
-                        </div>
-                        <ChevronRight size={16} className="text-slate-300" />
+      {/* Results */}
+      <div className="flex-1 overflow-hidden relative">
+        {items.length === 0 && !loading && (
+          <div className="flex flex-col items-center justify-center h-full text-center text-slate-500 gap-3 px-6">
+            <MapPin size={30} className="opacity-25" />
+            <p className="text-sm font-bold text-slate-400">Pick a word, type an area, hit Find</p>
+            <p className="text-[11px]">Properties show up here as a list or on the map.</p>
+          </div>
+        )}
+        {loading && items.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3">
+            <Loader2 size={22} className="animate-spin text-[#6B7EFF]" /><p className="text-xs font-semibold">Finding properties…</p>
+          </div>
+        )}
+
+        {/* LIST VIEW */}
+        {items.length > 0 && view === 'list' && (
+          <div className="h-full overflow-y-auto p-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 max-w-5xl mx-auto pb-20">
+              {visible.map(it => {
+                const s = it.buy_score ?? 5
+                const isSel = selected.has(it.id)
+                return (
+                  <div key={it.id} className={`relative rounded-xl border p-4 transition-all ${isSel ? 'border-[#6B7EFF] ring-1 ring-[#6B7EFF]/40 bg-[#131B2E]' : 'border-white/10 bg-[#131B2E]/70 hover:border-[#6B7EFF]/50'}`}>
+                    <button onClick={() => toggle(it.id)} aria-label="Select"
+                      className={`absolute top-3.5 left-3.5 w-5 h-5 rounded-md border flex items-center justify-center ${isSel ? 'bg-[#6B7EFF] border-[#6B7EFF]' : 'border-white/25 bg-[#0F1830]'}`}>
+                      {isSel && <Check size={12} className="text-white" />}
+                    </button>
+                    <div className="absolute top-3.5 right-3.5 w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold" style={{ background: scoreColor(s) }}>{s}</div>
+                    <button onClick={() => { setDetail(it); setDetailReport(null) }} className="w-full text-left pl-7 pr-10">
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="text-sm font-bold text-slate-100 truncate">{it.name}</h3>
+                        {it.researched && <span className="shrink-0 text-[8px] font-bold px-1.5 py-0.5 rounded bg-emerald-400/10 text-emerald-300 border border-emerald-400/30">✓</span>}
+                      </div>
+                      <p className="text-[11px] text-slate-400 truncate flex items-center gap-1 mt-0.5"><MapPin size={10} className="opacity-70" /> {[it.city, it.state].filter(Boolean).join(', ') || '—'}</p>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        {it.units ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#0F1830] text-slate-300 border border-white/10">{it.units} units</span> : null}
+                        {triggerFlags(it).map(f => <span key={f.label} className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${toneClass(f.tone)}`}>{f.label}</span>)}
                       </div>
                     </button>
-                  ))}
-                </>
-              ) : (
-                <>
-                  {savedSearches.length > 0 && (
-                    <div className="mb-6">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-1 mb-2">Recent Memory</p>
-                      {savedSearches.map(s => <SavedSearchRow key={s.id} s={s} />)}
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-1 mb-2">Suggested Operations</p>
-                    {EXAMPLE_QUERIES.map((q, i) => (
-                      <button key={i} onClick={() => setQuery(q)}
-                        className="block w-full text-left text-xs font-medium px-4 py-3 rounded-xl border border-white/10 bg-[#131B2E] shadow-sm text-slate-300 hover:text-[#6B7EFF] transition-all mb-2">
-                        {q}
-                      </button>
-                    ))}
                   </div>
-                </>
-              )}
+                )
+              })}
             </div>
-          ) : prospect ? (
-            <div>
-              <div className="bg-[#131B2E] border-b border-white/10 p-4 sticky top-0 z-10">
-                <button onClick={() => setMobileTab('list')} className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-slate-100 mb-3">
-                  <ArrowLeft size={14} /> Return to list
-                </button>
-                <p className="text-lg font-bold text-slate-100 tracking-tight">{prospect.property?.name}</p>
-                <p className="text-xs font-medium text-slate-400 mt-0.5">{prospect.property?.address}</p>
-              </div>
-              <div className="bg-[#131B2E] border-b border-white/10 flex overflow-x-auto no-scrollbar">
-                {(['property', 'proptech', 'dm', 'intel', 'social', 'scout'] as DetailTab[]).map(tab => (
-                  <button key={tab} onClick={() => setActiveTab(tab)}
-                    className={cn("whitespace-nowrap px-5 py-3 text-xs font-bold capitalize border-b-2 transition-colors",
-                      activeTab === tab ? "border-[#6B7EFF] text-[#6B7EFF]" : "border-transparent text-slate-400")}>
-                    {tab === 'dm' ? 'DM' : tab === 'proptech' ? 'PropTech' : tab === 'social' ? 'Community' : tab}
-                  </button>
-                ))}
-              </div>
-              <div className="p-4">
-                {activeTab === 'property' && <AriaCaseFile prospect={prospect as unknown as Record<string, unknown>} social={socialResults} />}
-                {activeTab === 'proptech' && <PropTechTab p={prospect} />}
-                {activeTab === 'dm'       && <DMTab p={prospect} />}
-                {activeTab === 'intel'    && <IntelTab p={prospect} />}
-                {activeTab === 'social'   && <SocialTab p={prospect} />}
-                {activeTab === 'scout'    && <ScoutTab p={prospect} />}
-              </div>
-            </div>
-          ) : null}
+          </div>
+        )}
+
+        {/* MAP VIEW */}
+        <div className={`absolute inset-0 ${items.length > 0 && view === 'map' ? '' : 'hidden'}`}>
+          {!MAPBOX_TOKEN && <div className="absolute inset-0 flex items-center justify-center text-slate-500 text-sm">Map needs NEXT_PUBLIC_MAPBOX_TOKEN.</div>}
+          <div id="aria-explore-map" className="absolute inset-0" />
         </div>
+
+        {/* Bulk action bar */}
+        {selected.size > 0 && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3 px-4 py-3 rounded-2xl border border-white/10 shadow-2xl" style={{ background: 'rgba(11,23,40,0.97)', backdropFilter: 'blur(12px)' }}>
+            <span className="text-xs font-bold text-slate-200">{selected.size} selected</span>
+            <button onClick={() => addToLeads(selectedItems)} disabled={busy}
+              className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg text-white disabled:opacity-50" style={{ background: '#6B7EFF' }}>
+              <Plus size={13} /> {busy ? 'Adding…' : 'Add to Leads'}
+            </button>
+            <button onClick={() => { const first = selectedItems[0]; if (first) { setDetail(first); setDetailReport(null); researchDetail(first) } }} disabled={busy}
+              className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg border border-[#6B7EFF]/40 text-slate-200 hover:bg-[#6B7EFF]/10">
+              <Zap size={13} /> Research
+            </button>
+            <button onClick={() => setSelected(new Set())} className="text-[11px] font-bold text-slate-400 hover:text-slate-200">Clear</button>
+          </div>
+        )}
       </div>
 
-      {/* Animation keyframes */}
-      <style>{`
-        @keyframes aria-fill {
-          from { width: 0%; }
-          to   { width: 100%; }
-        }
-        @keyframes aria-pulse {
-          0%, 100% { transform: scale(1); opacity: 0.6; }
-          50%       { transform: scale(1.08); opacity: 1; }
-        }
-        @keyframes aria-shimmer {
-          0%   { background-position: 200% center; }
-          100% { background-position: -200% center; }
-        }
-        @keyframes shimmer {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
-        }
-        @keyframes gradient-xy {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
-        }
-        .ai-border-glow {
-          position: relative;
-        }
-        .ai-border-glow::before {
-          content: "";
-          position: absolute;
-          inset: -1px;
-          border-radius: inherit;
-          background: linear-gradient(90deg, #6B7EFF, #A78BFA, #6B7EFF);
-          background-size: 200% 200%;
-          animation: gradient-xy 3s ease infinite;
-          z-index: -1;
-          opacity: 0;
-          transition: opacity 0.3s ease;
-        }
-        .ai-border-glow:hover::before, .ai-border-glow.active::before {
-          opacity: 1;
-        }
-        /* Utilities */
-        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-      `}</style>
+      {/* Detail panel */}
+      {detail && (
+        <div className="fixed inset-0 z-40 flex justify-end" onClick={() => setDetail(null)}>
+          <div className="absolute inset-0 bg-black/50" />
+          <div className="relative w-full max-w-md h-full overflow-y-auto shadow-2xl" style={{ background: '#0B1728', borderLeft: '1px solid rgba(255,255,255,0.08)' }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-start gap-3 p-5 border-b border-white/10">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-lg font-bold text-slate-100">{detail.name}</h2>
+                <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5"><MapPin size={11} /> {[detail.address, detail.city, detail.state].filter(Boolean).join(', ') || '—'}</p>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {detail.units ? <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#131B2E] text-slate-300 border border-white/10">{detail.units} units</span> : null}
+                  {detail.management_company && <span className="text-[10px] px-2 py-0.5 rounded bg-[#131B2E] text-slate-400 border border-white/10 inline-flex items-center gap-1"><Building2 size={10} />{detail.management_company}</span>}
+                  {triggerFlags(detail).map(f => <span key={f.label} className={`text-[10px] font-bold px-2 py-0.5 rounded border ${toneClass(f.tone)}`}>{f.label}</span>)}
+                </div>
+              </div>
+              <button onClick={() => setDetail(null)} className="text-slate-500 hover:text-slate-200"><X size={18} /></button>
+            </div>
+
+            {/* Three clear actions */}
+            <div className="p-5 space-y-2.5">
+              <button onClick={() => researchDetail(detail)} disabled={detailBusy}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm font-bold disabled:opacity-60" style={{ background: 'linear-gradient(135deg,#0d2150,#1a3a7c 45%,#6B7EFF)' }}>
+                {detailBusy ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                {detailBusy ? 'Researching…' : detail.researched ? 'View report' : 'Research this property'}
+              </button>
+              <button onClick={() => addToLeads([detail])} disabled={busy}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-white/10 text-slate-200 text-sm font-bold hover:bg-[#131B2E] disabled:opacity-60">
+                <Plus size={14} /> Add to Leads
+              </button>
+              {scoutLeadIds.length > 0 && (
+                <button onClick={launchScout} disabled={busy}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm font-bold disabled:opacity-60" style={{ background: 'linear-gradient(to right,#10B981,#059669)' }}>
+                  <Zap size={14} /> Start SCOUT outreach
+                </button>
+              )}
+              {msg && <p className="text-[11px] text-emerald-300 font-semibold text-center">{msg}</p>}
+              {scoutMsg && <p className="text-[11px] text-emerald-300 font-semibold text-center">{scoutMsg}</p>}
+            </div>
+
+            {/* Report */}
+            {detailBusy && <div className="px-5 pb-8 flex items-center gap-2 text-slate-400 text-xs"><Loader2 size={13} className="animate-spin" /> Pulling the report…</div>}
+            {detailReport && !detailReport._error && (() => {
+              const p = detailReport
+              const v = (x: unknown) => (x === null || x === undefined || x === '' || (Array.isArray(x) && !x.length)) ? 'No data found' : (Array.isArray(x) ? x.join(', ') : String(x))
+              const pt = p.property?.proptech ?? {}
+              const found = [...(pt.gate_operators ?? []), ...(pt.access_control ?? []), ...(pt.intercoms ?? []), ...(pt.cameras ?? []), ...(pt.smart_locks ?? [])]
+              const inferred: any[] = p.property?.inferred_proptech ?? [] // eslint-disable-line @typescript-eslint/no-explicit-any
+              const chain: any[] = (p.decision_maker_chain?.length ? p.decision_maker_chain : (p.decision_maker ? [p.decision_maker] : [])) // eslint-disable-line @typescript-eslint/no-explicit-any
+              const dm = dmScore(p)
+              const Row = ({ k, val }: { k: string; val: string }) => (
+                <div className="flex gap-2 py-1.5 border-b border-white/5 last:border-0">
+                  <span className="text-[11px] text-slate-500 w-28 shrink-0">{k}</span>
+                  <span className={`text-[11px] font-medium ${val === 'No data found' ? 'text-slate-500 italic' : 'text-slate-200'}`}>{val}</span>
+                </div>
+              )
+              const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
+                <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{title}</p>
+                  {children}
+                </div>
+              )
+              return (
+                <div className="px-5 pb-10 space-y-3">
+                  {/* Scores */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg text-white" style={{ background: scoreColor(p.profile?.buy_score ?? 5) }}>Buy {p.profile?.buy_score ?? '—'}/10</span>
+                    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border ${dm >= 7 ? 'bg-emerald-400/10 text-emerald-300 border-emerald-400/30' : dm >= 4 ? 'bg-amber-400/10 text-amber-200 border-amber-400/30' : 'bg-slate-500/10 text-slate-400 border-white/10'}`}>Contactability {dm}/10</span>
+                  </div>
+                  {/* Facts */}
+                  <Section title="Property (facts)">
+                    <Row k="Phone" val={v(p.property?.phone)} />
+                    <Row k="Units" val={v(p.property?.units)} />
+                    <Row k="Year built" val={v(p.property?.year_built)} />
+                    <Row k="Occupancy" val={v(p.property?.occupancy)} />
+                    <Row k="Management" val={v(p.property?.management_company)} />
+                    <Row k="Owner" val={v(p.ownership?.owner_entity ?? p.property?.owner_entity)} />
+                  </Section>
+                  <Section title="Connectivity (facts)">
+                    <Row k="ISP" val={v(p.property?.isp_providers)} />
+                    <Row k="Video" val={v(p.property?.video_providers)} />
+                    <Row k="Bulk deal" val={(p.property?.bulk_agreements?.length ? `Yes — ${p.property.bulk_agreements.map((b: any) => b.provider).filter(Boolean).join(', ')}` : 'No data found')} /> {/* eslint-disable-line @typescript-eslint/no-explicit-any */}
+                    <Row k="ROE expiry" val={v(p.property?.roe_expiry_year)} />
+                  </Section>
+                  <Section title="Proptech">
+                    <Row k="Found" val={v(found)} />
+                    {inferred.length > 0 && (
+                      <div className="pt-2 space-y-1">
+                        <p className="text-[10px] text-slate-500 mb-1">Inferred (AI-deduced):</p>
+                        {inferred.map((x, i) => (
+                          <div key={i} className="flex items-center gap-2 text-[11px]">
+                            <span className="text-slate-200 font-medium">{x.name}</span>
+                            <span className="text-[9px] text-slate-500">{x.category}</span>
+                            <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#6B7EFF]/10 text-[#9AA8FF] border border-[#6B7EFF]/25">~{x.confidence_pct}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </Section>
+                  <Section title="Decision makers (facts)">
+                    {chain.length === 0 && <p className="text-[11px] text-slate-500 italic">No data found</p>}
+                    {chain.slice(0, 5).map((c, i) => (
+                      <div key={i} className="py-1.5 border-b border-white/5 last:border-0">
+                        <p className="text-[11px] font-semibold text-slate-200">{c.name || 'Unknown'} <span className="text-slate-500 font-normal">· {c.title || c.role_type || '—'}</span></p>
+                        <p className="text-[10px] text-slate-400">{[c.email, c.phone].filter(x => x && x !== 'No data found').join(' · ') || 'No email/phone found'}</p>
+                      </div>
+                    ))}
+                  </Section>
+                  <Section title="AI intel (deductions)">
+                    <Row k="Key finding" val={v(p.profile?.primary_concern ?? p.key_finding)} />
+                    <Row k="Buying trends" val={v(p.buying_trends)} />
+                    <Row k="Pitch hook" val={v(p.pitch_strategy?.primary_hook)} />
+                  </Section>
+                </div>
+              )
+            })()}
+            {detailReport?._error && <div className="px-5 pb-8 text-rose-300 text-xs">Could not pull the report — try again.</div>}
+          </div>
+        </div>
+      )}
     </div>
-  );
+  )
 }
