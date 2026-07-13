@@ -949,39 +949,31 @@ export default function ARIAPage() {
     setSelectedCands(new Set());
     setPoolMsg(null);
 
-    // Fire each enrich job; mark running on success, failed on error.
-    jobs.forEach(job => {
-      fetch('/api/aria/enrich', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: job.query }),
-      })
-        .then(r => { if (!r.ok) throw new Error('queue failed'); updateJob(job.id, { status: 'running' }); })
-        .catch(() => updateJob(job.id, { status: 'failed' }));
-    });
-
-    // Poll the cache endpoint per job to detect completion (fresh row in Intel DB).
-    const startedAt = Date.now();
-    const done = new Set<string>();
-    const poll = setInterval(async () => {
-      if (Date.now() - startedAt > 5 * 60 * 1000) { clearInterval(poll); return; } // 5-min cap
-      await Promise.all(jobs.map(async job => {
-        if (done.has(job.id)) return;
+    // Research each property directly through the deep route, one at a time.
+    // The fetch resolving IS the completion signal — reliable, no Inngest/polling.
+    void (async () => {
+      for (const job of jobs) {
+        updateJob(job.id, { status: 'running' });
         try {
-          const r = await fetch(`/api/aria/cache?query=${encodeURIComponent(job.query)}`);
-          if (!r.ok) return;
-          const d = await r.json();
-          if (d.hit && (d.prospects?.length ?? 0) > 0 && (d.cache_age_hours ?? 999) < 1) {
-            done.add(job.id);
-            updateJob(job.id, { status: 'done', propertyId: d.property_id ?? undefined });
-          }
-        } catch { /* keep polling */ }
-      }));
-      // Refresh Intel DB count as rows land
-      fetch('/api/aria/properties?limit=1').then(r => r.ok ? r.json() : null)
-        .then(d => { if (d) setDbTotal(d.total ?? 0); }).catch(() => {});
-      if (done.size >= jobs.length) clearInterval(poll);
-    }, 6000);
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 130000);
+          const res = await fetch('/api/aria/research/deep', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: job.query }),
+            signal: controller.signal,
+          }).finally(() => clearTimeout(timer));
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+          updateJob(job.id, { status: 'done' });
+        } catch {
+          updateJob(job.id, { status: 'failed' });
+        }
+        // Refresh Intel DB count as each lands
+        fetch('/api/aria/properties?limit=1').then(r => r.ok ? r.json() : null)
+          .then(d => { if (d) setDbTotal(d.total ?? 0); }).catch(() => {});
+      }
+    })();
   }, [candidates, selectedCands]);
 
   // Open a finished research job's property in the result view.
@@ -3575,7 +3567,7 @@ export default function ARIAPage() {
               <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
                 <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.round((doneCount / total) * 100)}%`, background: 'linear-gradient(90deg,#6B7EFF,#A78BFA)' }} />
               </div>
-              <p className="text-[9px] text-slate-500 mt-1.5">Each runs in the background (~1 min). You can keep working.</p>
+              <p className="text-[9px] text-slate-500 mt-1.5">Researches one at a time (~1 min each). Keep this page open.</p>
             </div>
           </div>
         );
