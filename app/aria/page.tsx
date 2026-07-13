@@ -639,7 +639,8 @@ export default function ARIAPage() {
   const [poolBusy, setPoolBusy]             = useState(false);
   const [poolMsg, setPoolMsg]               = useState<string | null>(null);
   // Batch-research progress tray: one job per property being researched
-  type ResearchJob = { id: string; name: string; query: string; loc: string; status: 'queued' | 'running' | 'done' | 'failed'; propertyId?: string };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  type ResearchJob = { id: string; name: string; query: string; loc: string; status: 'queued' | 'running' | 'done' | 'failed'; propertyId?: string; result?: any };
   const [researchJobs, setResearchJobs]     = useState<ResearchJob[]>([]);
   const updateJob = (id: string, patch: Partial<ResearchJob>) =>
     setResearchJobs(prev => prev.map(j => j.id === id ? { ...j, ...patch } : j));
@@ -965,7 +966,8 @@ export default function ARIAPage() {
           }).finally(() => clearTimeout(timer));
           const data = await res.json().catch(() => ({}));
           if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
-          updateJob(job.id, { status: 'done' });
+          // Capture the actual result so "Open" shows it directly (no re-search).
+          updateJob(job.id, { status: 'done', result: (data?.prospects?.length ? data : undefined) });
         } catch {
           updateJob(job.id, { status: 'failed' });
         }
@@ -976,11 +978,23 @@ export default function ARIAPage() {
     })();
   }, [candidates, selectedCands]);
 
-  // Open a finished research job's property in the result view.
+  // Open a finished research job's property. Show the captured result directly —
+  // never re-run the search. Falls back to a cache-first re-open only if we
+  // somehow don't have the result in hand.
   const openResearchedJob = useCallback((job: ResearchJob) => {
-    setQuery(job.query);
     setResearchJobs(prev => prev.filter(j => j.id !== job.id));
-    setPendingRerun(true);
+    setQuery(job.query);
+    if (job.result?.prospects?.length) {
+      setResults(job.result);
+      setViewMode('result');
+      setPhase(6);
+      setSelectedProspect(0);
+      setActiveTab('property');
+      setCandidates([]);
+      setCacheStatus('fresh');
+    } else {
+      setPendingRerun(true); // fallback: cache fast-path (won't re-research if cached)
+    }
   }, []);
 
   // Trigger re-run after state reset (used by "Fetch Latest Intel" in IntelDBPanel)
