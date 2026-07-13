@@ -646,6 +646,10 @@ export default function ARIAPage() {
     setResearchJobs(prev => prev.map(j => j.id === id ? { ...j, ...patch } : j));
   // Left-panel idle view: 'recent' (default) vs 'history' (date-grouped browser)
   const [leftTab, setLeftTab]               = useState<'recent' | 'history'>('recent');
+  // Preserve the last candidate list so you can go BACK to it after opening a
+  // site — survives refresh via localStorage so a reload doesn't lose the list.
+  const [savedCandidates, setSavedCandidates] = useState<Candidate[]>([]);
+  const [savedInterp, setSavedInterp]         = useState('');
   // Collapsible accordion sections inside the Recent tab
   const [recentOpen, setRecentOpen]         = useState<Record<string, boolean>>({ mem72: true, recent: false, suggested: false });
   const toggleRecentSection = (k: string) => setRecentOpen(p => ({ ...p, [k]: !p[k] }));
@@ -833,6 +837,8 @@ export default function ARIAPage() {
       // Candidate response — show grid of properties to research
       if (data.type === 'candidates') {
         setCandidates(data.candidates ?? []);
+        setSavedCandidates(data.candidates ?? []);
+        setSavedInterp(data.query_interpretation ?? '');
         setSelectedCands(new Set());
         setPoolMsg(null);
         setQueryInterpretation(data.query_interpretation ?? '');
@@ -995,6 +1001,36 @@ export default function ARIAPage() {
     } else {
       setPendingRerun(true); // fallback: cache fast-path (won't re-research if cached)
     }
+  }, []);
+
+  // Go back to the candidate list from a single-site result.
+  const backToResults = useCallback(() => {
+    if (!savedCandidates.length) return;
+    setResults(null);
+    setCandidates(savedCandidates);
+    setQueryInterpretation(savedInterp);
+    setSelectedCands(new Set());
+    setViewMode('candidates');
+    setPhase(0);
+  }, [savedCandidates, savedInterp]);
+
+  // Persist the last candidate list so a refresh doesn't lose it.
+  useEffect(() => {
+    try {
+      if (savedCandidates.length) localStorage.setItem('aria_last_candidates', JSON.stringify({ c: savedCandidates, i: savedInterp }));
+    } catch { /* storage unavailable */ }
+  }, [savedCandidates, savedInterp]);
+
+  // Restore the last candidate list on mount (into savedCandidates only — the
+  // "Back to results" affordance appears; we don't auto-open the grid).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('aria_last_candidates');
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (Array.isArray(d.c) && d.c.length) { setSavedCandidates(d.c); setSavedInterp(d.i || ''); }
+      }
+    } catch { /* ignore */ }
   }, []);
 
   // Trigger re-run after state reset (used by "Fetch Latest Intel" in IntelDBPanel)
@@ -3670,6 +3706,14 @@ export default function ARIAPage() {
           <div className="flex-1 overflow-y-auto px-3 py-4">
             {isDone && results && results.prospects.length > 0 ? (
               <div className="animate-in fade-in duration-300">
+                {savedCandidates.length > 0 && (
+                  <button
+                    onClick={backToResults}
+                    className="w-full mb-3 py-2 text-[11px] font-bold text-slate-200 hover:text-white bg-[#131B2E] hover:bg-[#1a2540] border border-white/10 hover:border-[#6B7EFF]/40 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <ArrowLeft size={12} /> Back to {savedCandidates.length} results
+                  </button>
+                )}
                 <div className="flex items-center gap-2 mb-4 px-1">
                   <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{results.prospects.length} targets found</span>
                   {results.query_interpretation && (
@@ -3715,6 +3759,15 @@ export default function ARIAPage() {
                 {/* Recent tab content (default) */}
                 {!isRunning && leftTab === 'recent' && (
                 <>
+                {/* Restore the last candidate list (survives refresh) */}
+                {savedCandidates.length > 0 && viewMode !== 'candidates' && (
+                  <button
+                    onClick={backToResults}
+                    className="w-full mb-3 py-2 text-[11px] font-bold text-slate-100 bg-[#6B7EFF]/10 hover:bg-[#6B7EFF]/20 border border-[#6B7EFF]/30 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <ArrowLeft size={12} /> Your last {savedCandidates.length} results
+                  </button>
+                )}
                 {/* v9: 72-hour run memory */}
                 {!isRunning && recentRuns.length > 0 && (
                   <div className="mb-2">
