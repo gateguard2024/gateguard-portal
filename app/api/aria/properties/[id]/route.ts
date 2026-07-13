@@ -18,8 +18,11 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    await getCurrentUser()
-    
+    const caller = await getCurrentUser()
+    if (!caller?.id || caller.id === 'anonymous') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     if (!params.id) {
       return NextResponse.json({ error: 'Property ID is required' }, { status: 400 })
     }
@@ -47,7 +50,12 @@ export async function PATCH(
 ) {
   try {
     const caller = await getCurrentUser()
-    
+
+    // Only CRM-capable users may edit the shared intel DB (not clients/anon).
+    if (!caller?.canViewCRM) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     if (!params.id) {
       return NextResponse.json({ error: 'Property ID is required' }, { status: 400 })
     }

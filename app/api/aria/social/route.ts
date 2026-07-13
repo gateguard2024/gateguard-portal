@@ -24,6 +24,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentUser } from '@/lib/current-user'
 
 export const maxDuration = 30
 export const dynamic = 'force-dynamic'
@@ -107,6 +108,13 @@ async function haikusExtractArray<T>(prompt: string, content: string, maxTokens:
 
 export async function POST(req: NextRequest) {
   try {
+    // Requires a signed-in user — this route burns paid Serper/Haiku calls.
+    // getCurrentUser returns an 'anonymous' fallback (never throws) when not signed in.
+    const user = await getCurrentUser()
+    if (!user?.id || user.id === 'anonymous') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const body = await req.json()
     const {
       property_name,

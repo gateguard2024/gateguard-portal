@@ -30,7 +30,9 @@ export function eagleEyeRedirectUri(requestOrigin: string): string {
 
 export function eagleEyeAuthorizeUrl(clientId: string, redirectUri: string, state: string): string {
   const u = new URL(`${EEN_AUTH_BASE}/authorize`)
-  u.searchParams.set('client_id', clientId)
+  // Trim — a stray space/newline from copy-paste makes EEN reject the client_id
+  // with "invalid_request: client_id".
+  u.searchParams.set('client_id', clientId.trim())
   u.searchParams.set('response_type', 'code')
   u.searchParams.set('scope', EEN_SCOPE)
   u.searchParams.set('redirect_uri', redirectUri)
@@ -39,7 +41,7 @@ export function eagleEyeAuthorizeUrl(clientId: string, redirectUri: string, stat
 }
 
 function basic(clientId: string, clientSecret: string) {
-  return Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
+  return Buffer.from(`${clientId.trim()}:${clientSecret.trim()}`).toString('base64')
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentUser } from '@/lib/current-user'
 
 export const dynamic = 'force-dynamic'
 
@@ -176,6 +177,23 @@ function renderSearch(s: any, idx: number): string {
 }
 
 export async function GET(_req: NextRequest) {
+  // This tool dumps the last 5 searches across ALL users (queries, emails, full
+  // prospect payloads) via the service-role client — corporate-only.
+  try {
+    const user = await getCurrentUser()
+    if (!user?.isCorporate) {
+      return new NextResponse(
+        `<html><body style="font-family:sans-serif;padding:24px;color:#991b1b"><h2>Forbidden</h2><p>This diagnostic is restricted to Gate Guard corporate.</p></body></html>`,
+        { headers: { 'Content-Type': 'text/html' }, status: 403 }
+      )
+    }
+  } catch {
+    return new NextResponse(
+      `<html><body style="font-family:sans-serif;padding:24px;color:#991b1b"><h2>Sign in required</h2></body></html>`,
+      { headers: { 'Content-Type': 'text/html' }, status: 401 }
+    )
+  }
+
   // Debug: check env vars are present
   const hasSupabaseUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL
   const hasServiceKey  = !!process.env.SUPABASE_SERVICE_ROLE_KEY

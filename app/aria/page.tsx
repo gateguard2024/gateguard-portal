@@ -7,7 +7,7 @@ import {
   ExternalLink, Star, Copy, Send, Phone, MessageSquare,
   Loader2, Shield, Package, Wifi, AlertCircle, Key, Activity,
   ChevronRight, TrendingUp, Globe, Clock, Download, Trash2, Check, Search, RefreshCw,
-  AlertTriangle,
+  AlertTriangle, Plus,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { LayoutList, ArrowLeft, BarChart3, Edit2, Camera, DoorOpen, Lock, Smartphone } = require("lucide-react") as any;
@@ -634,6 +634,10 @@ export default function ARIAPage() {
   const [noteStage, setNoteStage]           = useState('');
   const [pendingRerun, setPendingRerun]     = useState(false);
   const [candidates, setCandidates]         = useState<Candidate[]>([]);
+  // Lead-pool selection: which candidate cards are checked, + batch action state
+  const [selectedCands, setSelectedCands]   = useState<Set<number>>(new Set());
+  const [poolBusy, setPoolBusy]             = useState(false);
+  const [poolMsg, setPoolMsg]               = useState<string | null>(null);
   const [queryInterpretation, setQueryInterpretation] = useState('');
   const [viewMode, setViewMode]             = useState<ViewMode>('idle');
   const [socialResults, setSocialResults]   = useState<SocialSearchResult | null>(null);
@@ -818,6 +822,8 @@ export default function ARIAPage() {
       // Candidate response — show grid of properties to research
       if (data.type === 'candidates') {
         setCandidates(data.candidates ?? []);
+        setSelectedCands(new Set());
+        setPoolMsg(null);
         setQueryInterpretation(data.query_interpretation ?? '');
         setViewMode('candidates');
         setPhase(0);
@@ -866,6 +872,49 @@ export default function ARIAPage() {
     setPhase(0);
     setPendingRerun(true);
   }, []);
+
+  // ── Lead-pool selection + batch add-to-leads ──────────────────────────────
+  const toggleCand = useCallback((i: number) => {
+    setPoolMsg(null);
+    setSelectedCands(prev => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i); else next.add(i);
+      return next;
+    });
+  }, []);
+
+  const toggleAllCands = useCallback(() => {
+    setPoolMsg(null);
+    setSelectedCands(prev =>
+      prev.size === candidates.length ? new Set() : new Set(candidates.map((_, i) => i))
+    );
+  }, [candidates]);
+
+  const addSelectedToLeads = useCallback(async () => {
+    const picks = candidates.filter((_, i) => selectedCands.has(i));
+    if (picks.length === 0) return;
+    setPoolBusy(true);
+    setPoolMsg(null);
+    try {
+      const r = await fetch('/api/aria/candidates/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ candidates: picks }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Import failed');
+      const created = d.created ?? 0;
+      const skipped = d.skipped ?? 0;
+      setPoolMsg(
+        `Added ${created} to Leads${skipped ? ` · ${skipped} already existed` : ''}.`
+      );
+      setSelectedCands(new Set());
+    } catch (e) {
+      setPoolMsg(e instanceof Error ? e.message : 'Could not add to leads.');
+    } finally {
+      setPoolBusy(false);
+    }
+  }, [candidates, selectedCands]);
 
   // Trigger re-run after state reset (used by "Fetch Latest Intel" in IntelDBPanel)
   useEffect(() => {
@@ -3041,18 +3090,63 @@ export default function ARIAPage() {
                 <p className="text-xs text-slate-400 mt-1 font-medium">{queryInterpretation}</p>
               )}
             </div>
+            <button
+              onClick={toggleAllCands}
+              className="shrink-0 flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-lg border border-white/10 text-slate-300 hover:bg-[#0F1830] transition-colors"
+            >
+              {selectedCands.size === candidates.length ? 'Clear all' : 'Select all'}
+            </button>
           </div>
         </div>
+
+        {/* Batch action bar — appears when candidates are selected */}
+        {selectedCands.size > 0 && (
+          <div className="bg-[#0F1830] border-b border-[#6B7EFF]/30 px-6 py-3 flex items-center gap-3 z-10">
+            <span className="text-xs font-bold text-slate-200">
+              {selectedCands.size} selected
+            </span>
+            <button
+              onClick={addSelectedToLeads}
+              disabled={poolBusy}
+              className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg text-white shadow-sm hover:opacity-90 disabled:opacity-50 transition-all"
+              style={{ background: '#6B7EFF' }}
+            >
+              <Plus size={13} /> {poolBusy ? 'Adding…' : `Add ${selectedCands.size} to Leads`}
+            </button>
+            <button
+              onClick={() => { setSelectedCands(new Set()); setPoolMsg(null); }}
+              className="text-[11px] font-bold text-slate-400 hover:text-slate-200 transition-colors"
+            >
+              Cancel
+            </button>
+            {poolMsg && <span className="text-[11px] font-semibold text-emerald-300 ml-auto">{poolMsg}</span>}
+          </div>
+        )}
+        {selectedCands.size === 0 && poolMsg && (
+          <div className="bg-emerald-400/10 border-b border-emerald-400/30 px-6 py-2 text-[11px] font-semibold text-emerald-200 z-10">
+            {poolMsg}
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto p-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 max-w-6xl mx-auto">
             {candidates.map((c, i) => {
               const score = c.buy_score_estimate ?? 5;
+              const selected = selectedCands.has(i);
               return (
                 <div
                   key={`${c.name}-${i}`}
-                  className="bg-[#131B2E] rounded-xl border border-white/10 p-5 shadow-sm hover:border-[#6B7EFF] hover:shadow-md transition-all duration-200 relative group"
+                  className={`bg-[#131B2E] rounded-xl border p-5 shadow-sm hover:shadow-md transition-all duration-200 relative group ${selected ? 'border-[#6B7EFF] ring-1 ring-[#6B7EFF]/40' : 'border-white/10 hover:border-[#6B7EFF]'}`}
                 >
+                  {/* Selection checkbox */}
+                  <button
+                    onClick={() => toggleCand(i)}
+                    aria-label={selected ? 'Deselect property' : 'Select property'}
+                    className={`absolute top-4 left-4 w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${selected ? 'bg-[#6B7EFF] border-[#6B7EFF]' : 'border-white/25 hover:border-[#6B7EFF] bg-[#0F1830]'}`}
+                  >
+                    {selected && <Check size={13} className="text-white" />}
+                  </button>
+
                   <div className="absolute top-4 right-4">
                     <div
                       className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm"
@@ -3062,7 +3156,7 @@ export default function ARIAPage() {
                     </div>
                   </div>
 
-                  <div className="pr-12">
+                  <div className="pr-12 pl-7">
                     <h3 className="text-lg font-bold text-slate-100 leading-tight">{c.name}</h3>
                     <p className="text-sm text-slate-400 mt-1 flex items-center gap-1.5">
                       <MapPin size={12} className="shrink-0 opacity-70" />

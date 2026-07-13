@@ -96,12 +96,26 @@ export async function POST(req: NextRequest) {
     const senderName  = from_name  ?? DEFAULT_FROM_NAME
     const senderEmail = from_email ?? DEFAULT_FROM_EMAIL
 
-    const { data: leads, error: fetchErr } = await supabase
+    const { data: leadsRaw, error: fetchErr } = await supabase
       .from('leads')
-      .select('id, contact_name, email, property_name, property_intel, scout_status')
+      .select('id, contact_name, email, property_name, property_intel, scout_status, org_id, assigned_to_user_id')
       .in('id', lead_ids)
 
     if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 })
+
+    // Ownership scope — non-corporate callers may only launch SCOUT on leads they
+    // own (assigned_to_user_id) or that belong to their org. Corporate sees all.
+    const leads = user.isCorporate
+      ? (leadsRaw ?? [])
+      : (leadsRaw ?? []).filter(
+          (l: { org_id?: string | null; assigned_to_user_id?: string | null }) =>
+            l.assigned_to_user_id === user.id ||
+            (!!l.org_id && !!user.org_id && l.org_id === user.org_id)
+        )
+
+    if (leads.length === 0) {
+      return NextResponse.json({ ok: true, sent: 0, skipped: 0, errors: 0, results: [], message: 'No leads you can act on.' })
+    }
 
     const results: Array<{
       lead_id: string;

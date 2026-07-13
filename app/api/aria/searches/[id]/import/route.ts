@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { auth, currentUser } from '@clerk/nextjs/server'
+import { getCurrentUser } from '@/lib/current-user'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -43,6 +44,17 @@ export async function POST(
 
     if (searchErr || !search) {
       return NextResponse.json({ error: 'Search not found' }, { status: 404 })
+    }
+
+    // Ownership guard — only the rep who ran the search (or same-org / corporate)
+    // may import its prospects into leads.
+    const scopeUser = await getCurrentUser()
+    const ownsSearch =
+      search.user_id === userId ||
+      (!!search.org_id && !!scopeUser.org_id && search.org_id === scopeUser.org_id) ||
+      scopeUser.isCorporate
+    if (!ownsSearch) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     if (new Date(search.expires_at) < new Date()) {
