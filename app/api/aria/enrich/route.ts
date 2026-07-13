@@ -22,7 +22,7 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
   const user = await getCurrentUser();
-  if (!user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!user?.id || user.id === 'anonymous') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   let query: string;
   let propertyId: string | undefined;

@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { TopBar } from "@/components/layout/TopBar";
 import { supabase } from "@/lib/supabase";
 import { AriaCaseFile } from "@/components/nexus/AriaCaseFile";
+import { SearchHistoryPanel } from "@/components/aria/SearchHistoryPanel";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -638,6 +639,8 @@ export default function ARIAPage() {
   const [selectedCands, setSelectedCands]   = useState<Set<number>>(new Set());
   const [poolBusy, setPoolBusy]             = useState(false);
   const [poolMsg, setPoolMsg]               = useState<string | null>(null);
+  // Left-panel idle view: 'recent' (default) vs 'history' (date-grouped browser)
+  const [leftTab, setLeftTab]               = useState<'recent' | 'history'>('recent');
   const [queryInterpretation, setQueryInterpretation] = useState('');
   const [viewMode, setViewMode]             = useState<ViewMode>('idle');
   const [socialResults, setSocialResults]   = useState<SocialSearchResult | null>(null);
@@ -911,6 +914,41 @@ export default function ARIAPage() {
       setSelectedCands(new Set());
     } catch (e) {
       setPoolMsg(e instanceof Error ? e.message : 'Could not add to leads.');
+    } finally {
+      setPoolBusy(false);
+    }
+  }, [candidates, selectedCands]);
+
+  // Batch full-research selected candidates → queued as background jobs that
+  // upsert into aria_properties (the Researched Properties / Intel DB).
+  const researchSelected = useCallback(async () => {
+    const picks = candidates.filter((_, i) => selectedCands.has(i));
+    if (picks.length === 0) return;
+    setPoolBusy(true);
+    setPoolMsg(null);
+    try {
+      const settled = await Promise.allSettled(
+        picks.map(c =>
+          fetch('/api/aria/enrich', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: `${c.name} ${c.city ?? ''} ${c.state ?? ''}`.trim() }),
+          }).then(r => { if (!r.ok) throw new Error('queue failed'); })
+        )
+      );
+      const ok = settled.filter(s => s.status === 'fulfilled').length;
+      const failed = picks.length - ok;
+      setPoolMsg(
+        `Queued ${ok} for research${failed ? ` · ${failed} failed` : ''}. They'll appear in Researched Properties as each finishes.`
+      );
+      setSelectedCands(new Set());
+      // Refresh the Intel DB count so the badge reflects the incoming rows.
+      fetch('/api/aria/properties?limit=1')
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d) setDbTotal(d.total ?? 0); })
+        .catch(() => {});
+    } catch (e) {
+      setPoolMsg(e instanceof Error ? e.message : 'Could not queue research.');
     } finally {
       setPoolBusy(false);
     }
@@ -3106,12 +3144,19 @@ export default function ARIAPage() {
               {selectedCands.size} selected
             </span>
             <button
-              onClick={addSelectedToLeads}
+              onClick={researchSelected}
               disabled={poolBusy}
               className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg text-white shadow-sm hover:opacity-90 disabled:opacity-50 transition-all"
-              style={{ background: '#6B7EFF' }}
+              style={{ background: 'linear-gradient(135deg, #0d2150 0%, #1a3a7c 45%, #6B7EFF 100%)' }}
             >
-              <Plus size={13} /> {poolBusy ? 'Adding…' : `Add ${selectedCands.size} to Leads`}
+              <Zap size={13} /> {poolBusy ? 'Working…' : `Research ${selectedCands.size}`}
+            </button>
+            <button
+              onClick={addSelectedToLeads}
+              disabled={poolBusy}
+              className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg border border-[#6B7EFF]/40 text-slate-200 hover:bg-[#6B7EFF]/10 disabled:opacity-50 transition-all"
+            >
+              <Plus size={13} /> Add {selectedCands.size} to Leads
             </button>
             <button
               onClick={() => { setSelectedCands(new Set()); setPoolMsg(null); }}
@@ -3531,6 +3576,33 @@ export default function ARIAPage() {
               </div>
             ) : (
               <div className="animate-in fade-in duration-300">
+                {/* Recent / History segmented toggle */}
+                {!isRunning && (
+                  <div className="flex items-center gap-1 p-1 mb-4 rounded-xl bg-[#0F1830] border border-white/10">
+                    {(['recent', 'history'] as const).map(t => (
+                      <button
+                        key={t}
+                        onClick={() => setLeftTab(t)}
+                        className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold capitalize transition-all ${
+                          leftTab === t ? 'bg-[#6B7EFF] text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* History tab — date-grouped browser */}
+                {!isRunning && leftTab === 'history' && (
+                  <div className="h-[calc(100vh-320px)] min-h-[300px]">
+                    <SearchHistoryPanel onPick={(q) => { setLeftTab('recent'); setQuery(q); inputRef.current?.focus(); }} />
+                  </div>
+                )}
+
+                {/* Recent tab content (default) */}
+                {!isRunning && leftTab === 'recent' && (
+                <>
                 {/* v9: 72-hour run memory */}
                 {!isRunning && recentRuns.length > 0 && (
                   <div className="mb-5">
@@ -3578,6 +3650,8 @@ export default function ARIAPage() {
                       </button>
                     ))}
                   </div>
+                )}
+                </>
                 )}
               </div>
             )}
