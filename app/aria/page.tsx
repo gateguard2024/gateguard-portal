@@ -638,6 +638,11 @@ export default function ARIAPage() {
   const [selectedCands, setSelectedCands]   = useState<Set<number>>(new Set());
   const [poolBusy, setPoolBusy]             = useState(false);
   const [poolMsg, setPoolMsg]               = useState<string | null>(null);
+  // Batch-research progress tray: one job per property being researched
+  type ResearchJob = { id: string; name: string; query: string; loc: string; status: 'queued' | 'running' | 'done' | 'failed'; propertyId?: string };
+  const [researchJobs, setResearchJobs]     = useState<ResearchJob[]>([]);
+  const updateJob = (id: string, patch: Partial<ResearchJob>) =>
+    setResearchJobs(prev => prev.map(j => j.id === id ? { ...j, ...patch } : j));
   // Left-panel idle view: 'recent' (default) vs 'history' (date-grouped browser)
   const [leftTab, setLeftTab]               = useState<'recent' | 'history'>('recent');
   // Collapsible accordion sections inside the Recent tab
@@ -929,37 +934,62 @@ export default function ARIAPage() {
     // Guard — batch research runs one full search per property.
     if (!window.confirm(
       `Research ${picks.length} ${picks.length === 1 ? 'property' : 'properties'}? ` +
-      `This runs ${picks.length} full ${picks.length === 1 ? 'search' : 'searches'} in the background and adds ${picks.length === 1 ? 'it' : 'them'} to Researched Properties.`
+      `This runs ${picks.length} full ${picks.length === 1 ? 'search' : 'searches'} in the background (about a minute each) and adds ${picks.length === 1 ? 'it' : 'them'} to Researched Properties.`
     )) return;
-    setPoolBusy(true);
+
+    // Build tracked jobs — the tray keeps these visible with live status.
+    const jobs: ResearchJob[] = picks.map((c, idx) => ({
+      id: `${c.name}-${idx}-${Date.now()}`,
+      name: c.name,
+      query: `${c.name} ${c.city ?? ''} ${c.state ?? ''}`.trim(),
+      loc: [c.city, c.state].filter(Boolean).join(', '),
+      status: 'queued',
+    }));
+    setResearchJobs(jobs);
+    setSelectedCands(new Set());
     setPoolMsg(null);
-    try {
-      const settled = await Promise.allSettled(
-        picks.map(c =>
-          fetch('/api/aria/enrich', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: `${c.name} ${c.city ?? ''} ${c.state ?? ''}`.trim() }),
-          }).then(r => { if (!r.ok) throw new Error('queue failed'); })
-        )
-      );
-      const ok = settled.filter(s => s.status === 'fulfilled').length;
-      const failed = picks.length - ok;
-      setPoolMsg(
-        `Queued ${ok} for research${failed ? ` · ${failed} failed` : ''}. They'll appear in Researched Properties as each finishes.`
-      );
-      setSelectedCands(new Set());
-      // Refresh the Intel DB count so the badge reflects the incoming rows.
-      fetch('/api/aria/properties?limit=1')
-        .then(r => r.ok ? r.json() : null)
-        .then(d => { if (d) setDbTotal(d.total ?? 0); })
-        .catch(() => {});
-    } catch (e) {
-      setPoolMsg(e instanceof Error ? e.message : 'Could not queue research.');
-    } finally {
-      setPoolBusy(false);
-    }
+
+    // Fire each enrich job; mark running on success, failed on error.
+    jobs.forEach(job => {
+      fetch('/api/aria/enrich', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: job.query }),
+      })
+        .then(r => { if (!r.ok) throw new Error('queue failed'); updateJob(job.id, { status: 'running' }); })
+        .catch(() => updateJob(job.id, { status: 'failed' }));
+    });
+
+    // Poll the cache endpoint per job to detect completion (fresh row in Intel DB).
+    const startedAt = Date.now();
+    const done = new Set<string>();
+    const poll = setInterval(async () => {
+      if (Date.now() - startedAt > 5 * 60 * 1000) { clearInterval(poll); return; } // 5-min cap
+      await Promise.all(jobs.map(async job => {
+        if (done.has(job.id)) return;
+        try {
+          const r = await fetch(`/api/aria/cache?query=${encodeURIComponent(job.query)}`);
+          if (!r.ok) return;
+          const d = await r.json();
+          if (d.hit && (d.prospects?.length ?? 0) > 0 && (d.cache_age_hours ?? 999) < 1) {
+            done.add(job.id);
+            updateJob(job.id, { status: 'done', propertyId: d.property_id ?? undefined });
+          }
+        } catch { /* keep polling */ }
+      }));
+      // Refresh Intel DB count as rows land
+      fetch('/api/aria/properties?limit=1').then(r => r.ok ? r.json() : null)
+        .then(d => { if (d) setDbTotal(d.total ?? 0); }).catch(() => {});
+      if (done.size >= jobs.length) clearInterval(poll);
+    }, 6000);
   }, [candidates, selectedCands]);
+
+  // Open a finished research job's property in the result view.
+  const openResearchedJob = useCallback((job: ResearchJob) => {
+    setQuery(job.query);
+    setResearchJobs(prev => prev.filter(j => j.id !== job.id));
+    setPendingRerun(true);
+  }, []);
 
   // Trigger re-run after state reset (used by "Fetch Latest Intel" in IntelDBPanel)
   useEffect(() => {
@@ -3492,6 +3522,65 @@ export default function ARIAPage() {
         {topbarActions}
       </header>
 
+      {/* Batch-research progress tray */}
+      {researchJobs.length > 0 && (() => {
+        const total = researchJobs.length;
+        const doneCount = researchJobs.filter(j => j.status === 'done').length;
+        const allDone = doneCount === total;
+        return (
+          <div className="fixed bottom-4 right-4 z-50 w-80 rounded-2xl border border-white/10 shadow-2xl overflow-hidden" style={{ background: 'rgba(11,23,40,0.97)', backdropFilter: 'blur(16px)' }}>
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10">
+              {allDone
+                ? <CheckCircle2 size={14} className="text-emerald-400" />
+                : <Loader2 size={14} className="text-[#6B7EFF] animate-spin" />}
+              <span className="text-xs font-bold text-slate-100">
+                {allDone ? 'Research complete' : 'Researching…'} {doneCount}/{total}
+              </span>
+              <button onClick={() => setResearchJobs([])} className="ml-auto text-slate-500 hover:text-slate-200 transition-colors" aria-label="Dismiss">
+                <X size={14} />
+              </button>
+            </div>
+            <div className="max-h-72 overflow-y-auto">
+              {researchJobs.map(job => (
+                <div key={job.id} className="flex items-center gap-2.5 px-4 py-2.5 border-b border-white/5 last:border-0">
+                  <span className="shrink-0">
+                    {job.status === 'done'    ? <CheckCircle2 size={14} className="text-emerald-400" />
+                     : job.status === 'failed' ? <AlertCircle size={14} className="text-rose-400" />
+                     : job.status === 'running' ? <Loader2 size={14} className="text-[#6B7EFF] animate-spin" />
+                     : <Clock size={13} className="text-slate-500" />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-semibold text-slate-200 truncate">{job.name}</p>
+                    <p className="text-[9px] text-slate-500 truncate">
+                      {job.status === 'done' ? 'Done · in Researched Properties'
+                       : job.status === 'failed' ? 'Could not research'
+                       : job.status === 'running' ? 'Searching…'
+                       : 'Queued'}
+                      {job.loc ? ` · ${job.loc}` : ''}
+                    </p>
+                  </div>
+                  {job.status === 'done' && (
+                    <button
+                      onClick={() => openResearchedJob(job)}
+                      className="shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-md text-white hover:opacity-90 transition-opacity"
+                      style={{ background: '#6B7EFF' }}
+                    >
+                      Open
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="px-4 py-2.5 border-t border-white/10">
+              <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.round((doneCount / total) * 100)}%`, background: 'linear-gradient(90deg,#6B7EFF,#A78BFA)' }} />
+              </div>
+              <p className="text-[9px] text-slate-500 mt-1.5">Each runs in the background (~1 min). You can keep working.</p>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── Desktop split layout ────────────────────────────────────────── */}
       <div className="hidden lg:flex flex-1 overflow-hidden" style={{ height: 'calc(100vh - 57px)' }}>
 
@@ -3613,7 +3702,7 @@ export default function ARIAPage() {
                 {/* History tab — date-grouped browser */}
                 {!isRunning && leftTab === 'history' && (
                   <div className="h-[calc(100vh-320px)] min-h-[300px]">
-                    <SearchHistoryPanel onPick={(q) => { setLeftTab('recent'); setQuery(q); inputRef.current?.focus(); }} />
+                    <SearchHistoryPanel onPick={(q) => { setLeftTab('recent'); setQuery(q); setPendingRerun(true); }} />
                   </div>
                 )}
 
@@ -3635,7 +3724,7 @@ export default function ARIAPage() {
                     {recentOpen.mem72 && recentRuns.slice(0, 6).map(run => (
                       <button
                         key={run.id}
-                        onClick={() => { setQuery(run.query); inputRef.current?.focus(); }}
+                        onClick={() => { setQuery(run.query); setPendingRerun(true); }}
                         className="block w-full text-left px-3 py-2 rounded-xl mb-1 border border-transparent hover:bg-[#131B2E] hover:border-white/10 hover:shadow-sm transition-all group"
                       >
                         <div className="flex items-center gap-1.5 mb-0.5">

@@ -214,7 +214,90 @@ export async function POST(req: NextRequest) {
       const mergedVideoProviders = mergeArr(existing?.video_providers, prop.video_providers)
       const mergedRoeProviders   = mergeArr(existing?.roe_providers, prop.roe_providers)
 
+      // ── Canonical record: facts (Data In) + deductions (Data Out) ─────────────
+      // Uniform shape for every site. Facts = scraped/verified; deductions =
+      // reasoning built on the facts. Arrays union with existing (never shrink).
+      const exFacts = (existing?.facts ?? {}) as any
+      const exDeduc = (existing?.deductions ?? {}) as any
+      const unionBy = <T,>(ex: T[] | undefined, fr: T[] | undefined, key: (t: T) => string): T[] => {
+        const map = new Map<string, T>()
+        for (const it of (ex ?? [])) map.set(key(it), it)
+        for (const it of (fr ?? [])) map.set(key(it), it) // fresh overrides same-key
+        return Array.from(map.values())
+      }
+      const freshDMs: any[] = (p.decision_maker_chain?.length
+        ? p.decision_maker_chain
+        : (dm.name ? [{ name: dm.name, title: dm.title, company: dm.company, role_type: 'unknown', email: dm.email ?? dm.top_email_format, phone: dm.phone, linkedin_slug: dm.linkedin_slug }] : []))
+      const freshCommunity: any[] = Array.isArray(p.social_posts) ? p.social_posts : (existing?.social_posts ?? [])
+      const freshInferred: any[]  = Array.isArray(prop.inferred_proptech) ? prop.inferred_proptech : []
+
+      const facts = {
+        property: {
+          name: propName, address: propAddr,
+          city:  mergeVal(exFacts?.property?.city,  prop.city),
+          state: mergeVal(exFacts?.property?.state, prop.state),
+          units: mergeVal(existing?.units, prop.units),
+          year_built: mergeVal(existing?.year_built, prop.year_built),
+          occupancy:  mergeVal(existing?.occupancy, prop.occupancy),
+          property_type: mergeVal(existing?.property_type, prop.property_type),
+          class: mergeVal(existing?.class, prop.class),
+          phone: mergeVal(exFacts?.property?.phone, prop.phone),
+          website: mergeVal(exFacts?.property?.website, prop.website),
+          management_company: mergeVal(existing?.management_company, prop.management_company),
+          owner_entity: mergeVal(existing?.owner_entity, prop.owner_entity),
+          last_sale: mergeVal(exFacts?.property?.last_sale, own.sale_price ?? null),
+        },
+        connectivity: {
+          isp_providers:   mergedIspProviders ?? [],
+          video_providers: mergedVideoProviders ?? [],
+          bulk_agreements: mergedBulkAgreements ?? [],
+          roe_detected:    prop.roe_detected || existing?.roe_detected || false,
+          roe_providers:   mergedRoeProviders ?? [],
+          roe_expiry_year: mergeVal(existing?.roe_expiry_year, prop.roe_expiry_year),
+          fcc_verified:    prop._fcc_verified || existing?.fcc_verified || false,
+        },
+        proptech_found: {
+          gate_operators:    mergeArr(existing?.gate_operators, pt.gate_operators) ?? [],
+          access_control:    mergeArr(existing?.access_control, pt.access_control) ?? [],
+          intercoms:         mergeArr(existing?.intercoms, pt.intercoms) ?? [],
+          cameras:           mergeArr(existing?.cameras, pt.cameras) ?? [],
+          smart_locks:       mergeArr(existing?.smart_locks, pt.smart_locks) ?? [],
+          resident_apps:     mergeArr(existing?.resident_apps, pt.resident_apps) ?? [],
+          package_solutions: mergeArr(existing?.package_solutions, pt.package_solutions) ?? [],
+          tech_generation:   mergeVal(existing?.tech_generation, pt.tech_generation),
+        },
+        decision_makers: unionBy<any>(exFacts?.decision_makers, freshDMs, d => (d?.name ?? '').toLowerCase()),
+        ownership: {
+          owner_entity:     mergeVal(existing?.owner_entity, own.owner_entity ?? prop.owner_entity),
+          owner_type:       mergeVal(existing?.owner_type, own.owner_type),
+          portfolio_size:   mergeVal(existing?.portfolio_size, own.portfolio_size),
+          acquisition_year: mergeVal(existing?.acquisition_year, own.acquisition_year ? parseInt(own.acquisition_year) : null),
+          capex_signal:     mergeVal(existing?.capex_signal, own.capex_signal),
+        },
+        community_posts: unionBy<any>(exFacts?.community_posts, freshCommunity, c => `${c?.quote ?? ''}|${c?.url ?? ''}`),
+      }
+
+      const deductions = {
+        ai_intel: {
+          key_finding:        mergeVal(exDeduc?.ai_intel?.key_finding, p.scout_queue?.key_finding ?? profile.primary_concern),
+          buying_trends:      mergeVal(exDeduc?.ai_intel?.buying_trends, p.buying_trends),
+          behavioral_profile: mergeVal(existing?.behavioral_profile, p.behavioral_profile),
+          primary_concern:    mergeVal(existing?.primary_concern, profile.primary_concern),
+          buy_score:          mergeVal(existing?.buy_score, profile.buy_score),
+          urgency:            mergeVal(existing?.urgency, profile.urgency),
+        },
+        scout: {
+          scout_brief:       mergeVal(existing?.scout_brief, p.scout_brief),
+          pitch_strategy:    mergeVal(existing?.pitch_strategy, p.pitch_strategy),
+          outreach_plan:     mergeVal(exDeduc?.scout?.outreach_plan, p.scout_queue?.outreach_plan),
+          outreach_sequence: mergeVal(exDeduc?.scout?.outreach_sequence, p.scout_queue?.outreach_sequence),
+        },
+        proptech_inferred: unionBy<any>(exDeduc?.proptech_inferred, freshInferred, x => `${x?.category ?? ''}:${(x?.name ?? '').toLowerCase()}`),
+      }
+
       const upsertData: Record<string, any> = {
+        facts,
+        deductions,
         property_name:         propName,
         address:               propAddr,
         units:                 mergeVal(existing?.units, prop.units),
