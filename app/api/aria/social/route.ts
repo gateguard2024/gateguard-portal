@@ -118,8 +118,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const {
       property_name,
-      city,
       state,
+      address,
+      property_id,
       management_company,
       isp_providers   = [] as string[],
       video_providers  = [] as string[],
@@ -128,8 +129,20 @@ export async function POST(req: NextRequest) {
       access_control   = [] as string[],
     } = body
 
+    // Derive the city from the address when it isn't supplied. Saved properties
+    // have no city column populated, and bailing here returned an empty 200 that
+    // looked exactly like "this property has no resident posts".
+    let city: string = body.city ?? ''
+    if (!city && typeof address === 'string') {
+      const parts = address.split(',').map((s: string) => s.trim()).filter(Boolean)
+      if (parts.length >= 3) city = parts[1] ?? ''
+    }
+
     if (!property_name || !city) {
-      return NextResponse.json({ social_posts: [], cross_reference_notes: [] })
+      return NextResponse.json({
+        social_posts: [], cross_reference_notes: [],
+        error: 'A property name and city are required to search resident posts.',
+      }, { status: 400 })
     }
 
     const loc = [city, state].filter(Boolean).join(', ')
@@ -310,9 +323,23 @@ Rules:
     // so the rep always sees everything ever found, not just this run.
     let outPosts = social_posts
     try {
-      const { data: rows } = await supaSocial.from('aria_properties')
-        .select('id, social_posts').ilike('property_name', property_name).limit(1)
-      const row = rows?.[0] as { id: string; social_posts?: unknown[] } | undefined
+      // Match the row the client is actually looking at. `property_id` is exact.
+      // Falling back to an EXACT ilike on the name silently missed every property
+      // the engine had renamed ("Avana on Main" → "Avana Uptown Apartments"), so
+      // posts were fetched, never persisted, and re-fetched (re-paid) every open.
+      type PropRow = { id: string; social_posts?: unknown[] }
+      let rows: PropRow[] = []
+      if (property_id) {
+        const r = await supaSocial.from('aria_properties').select('id, social_posts').eq('id', property_id).limit(1)
+        rows = (r.data ?? []) as PropRow[]
+      }
+      if (!rows.length) {
+        const r = await supaSocial.from('aria_properties')
+          .select('id, social_posts').ilike('property_name', `%${property_name}%`)
+          .order('last_researched_at', { ascending: false, nullsFirst: false }).limit(1)
+        rows = (r.data ?? []) as PropRow[]
+      }
+      const row = rows[0] as PropRow | undefined
       if (row) {
         const prev = Array.isArray(row.social_posts) ? row.social_posts : []
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

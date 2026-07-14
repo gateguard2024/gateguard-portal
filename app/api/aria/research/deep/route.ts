@@ -3356,27 +3356,37 @@ ${JSON.stringify({ pain_signals: cappedPainSignals, proptech: p3Final.proptech, 
     // NOTE: Use the same baseUrl pattern as Inngest — NEXT_PUBLIC_APP_URL first,
     // then VERCEL_URL (deployment URL), then localhost. NEXT_PUBLIC_APP_URL alone
     // was falling back to localhost:3000 in production when the env var wasn't set.
-    void (async () => {
-      try {
-        const baseUrl =
-          process.env.NEXT_PUBLIC_APP_URL ||
-          (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-        const upsertRes = await fetch(`${baseUrl}/api/aria/properties`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-service-key': process.env.ARIA_SERVICE_KEY ?? '',
-          },
-          body: JSON.stringify({ prospects: [prospectPayload] }),
-        })
-        if (!upsertRes.ok) {
-          const errText = await upsertRes.text().catch(() => '')
-          console.error(`[aria/deep] Intel DB upsert failed ${upsertRes.status}: ${errText.slice(0, 200)}`)
-        }
-      } catch (e) {
-        console.error('[aria/deep] Intel DB upsert threw:', e instanceof Error ? e.message : e)
+    // MUST be awaited. This used to be `void (async () => {...})()` — a
+    // fire-and-forget in a serverless function. Vercel freezes/kills the
+    // instance the moment the response is returned, so the in-flight save was
+    // routinely killed and the property never landed in the Intel DB. That is
+    // why researched sites kept disappearing and had to be searched again.
+    // Saving is the whole point of the search, so we wait for it.
+    let savedToIntelDb = false
+    let saveError: string | null = null
+    try {
+      const baseUrl =
+        process.env.NEXT_PUBLIC_APP_URL ||
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+      const upsertRes = await fetch(`${baseUrl}/api/aria/properties`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-service-key': process.env.ARIA_SERVICE_KEY ?? '',
+        },
+        body: JSON.stringify({ prospects: [prospectPayload] }),
+      })
+      const upsertBody = await upsertRes.json().catch(() => ({}))
+      if (!upsertRes.ok || !(upsertBody?.upserted > 0)) {
+        saveError = upsertBody?.error || `HTTP ${upsertRes.status}`
+        console.error(`[aria/deep] Intel DB save FAILED for "${property_name}": ${saveError}`)
+      } else {
+        savedToIntelDb = true
       }
-    })()
+    } catch (e) {
+      saveError = e instanceof Error ? e.message : String(e)
+      console.error(`[aria/deep] Intel DB save THREW for "${property_name}":`, saveError)
+    }
 
     // Suppress unused warning for contractExpiryYear (used in non-blocking write)
     void contractExpiryYear

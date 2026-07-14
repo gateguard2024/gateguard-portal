@@ -56,6 +56,80 @@ function scoreColor(s: number): string {
   return '#64748b'
 }
 
+// The gauge ramp — a TRUE gradient across the whole arc, not a per-band colour.
+// Red at 0, quickly into orange so the cold end doesn't drag, amber through the
+// middle, light green from ~65% (the first genuinely positive signal), and a
+// rich, deep green at 100%.
+const GAUGE_STOPS: { at: number; c: [number, number, number] }[] = [
+  { at: 0.00, c: [225, 29, 72] },   // #e11d48 red
+  { at: 0.15, c: [249, 115, 22] },  // #f97316 orange (early, so red doesn't linger)
+  { at: 0.38, c: [245, 158, 11] },  // #f59e0b amber
+  { at: 0.65, c: [74, 222, 128] },  // #4ade80 light green — positive territory
+  { at: 0.85, c: [34, 160, 84] },   // #22a054 green
+  { at: 1.00, c: [17, 110, 51] },   // #116e33 rich deep green
+]
+
+/** Colour at a 0–10 value, interpolated along the same ramp the arc paints. */
+function gaugeColorAt(val: number): string {
+  const t = Math.max(0, Math.min(10, val)) / 10
+  let a = GAUGE_STOPS[0], b = GAUGE_STOPS[GAUGE_STOPS.length - 1]
+  for (let i = 0; i < GAUGE_STOPS.length - 1; i++) {
+    if (t >= GAUGE_STOPS[i].at && t <= GAUGE_STOPS[i + 1].at) { a = GAUGE_STOPS[i]; b = GAUGE_STOPS[i + 1]; break }
+  }
+  const span = b.at - a.at || 1
+  const k = (t - a.at) / span
+  const ch = (i: number) => Math.round(a.c[i] + (b.c[i] - a.c[i]) * k)
+  return `rgb(${ch(0)}, ${ch(1)}, ${ch(2)})`
+}
+
+// Proptech fit — how replaceable/underserved the site looks (0–10).
+// No gate/access hardware found = wide-open greenfield = high fit.
+function proptechFit(it: PropItem): number {
+  let s = 5
+  if (it.gate_signal) s += 2            // there IS a gate → we have something to sell
+  if (!it.bulk_detected) s += 1.5       // no incumbent bulk deal → easier entry
+  if ((it.units ?? 0) >= 200) s += 1.5  // bigger site → bigger job
+  else if ((it.units ?? 0) >= 100) s += 0.75
+  return Math.max(0, Math.min(10, Math.round(s * 10) / 10))
+}
+
+// Network/internet opportunity — a locked bulk deal that's expiring is the prize.
+function netScore(it: PropItem): number {
+  let s = 5
+  if (it.bulk_detected) s += 1          // a bulk deal exists → displaceable
+  if (it.contract_expiry_year != null) {
+    const yrs = it.contract_expiry_year - new Date().getFullYear()
+    if (yrs <= 0) s += 3                // already expired → act now
+    else if (yrs <= 1) s += 2.5
+    else if (yrs <= 2) s += 1.5
+  }
+  if (!it.isp_signal) s += 0.5          // no ISP found → likely underserved
+  return Math.max(0, Math.min(10, Math.round(s * 10) / 10))
+}
+
+// Compact arc for the results list — same ramp as the big gauges.
+function MiniGauge({ label, val }: { label: string; val: number }) {
+  const v = Math.max(0, Math.min(10, val))
+  const f = v / 10, AL = Math.PI * 20
+  const gid = `mg-${label}`
+  return (
+    <div className="flex flex-col items-center" title={`${label}: ${v.toFixed(1)}/10`}>
+      <svg width="38" height="23" viewBox="0 0 46 27">
+        <defs>
+          <linearGradient id={gid} gradientUnits="userSpaceOnUse" x1="3" y1="0" x2="43" y2="0">
+            {GAUGE_STOPS.map(s => <stop key={s.at} offset={`${s.at * 100}%`} stopColor={`rgb(${s.c[0]},${s.c[1]},${s.c[2]})`} />)}
+          </linearGradient>
+        </defs>
+        <path d="M 3 24 A 20 20 0 0 1 43 24" fill="none" stroke="#1c2740" strokeWidth="5" strokeLinecap="round" />
+        <path d="M 3 24 A 20 20 0 0 1 43 24" fill="none" stroke={`url(#${gid})`} strokeWidth="5" strokeLinecap="round"
+          strokeDasharray={AL} strokeDashoffset={AL * (1 - f)} />
+        <text x="23" y="22" textAnchor="middle" fontSize="10" fontWeight="800" fill="#e2e8f0">{v.toFixed(1)}</text>
+      </svg>
+      <span className="text-[7.5px] font-bold text-slate-500 uppercase tracking-wide -mt-0.5">{label}</span>
+    </div>
+  )
+}
+
 // Gong-style "why now" trigger flags, computed from our fixed multifamily fields.
 function triggerFlags(it: PropItem): { label: string; tone: 'red' | 'amber' | 'blue' }[] {
   const f: { label: string; tone: 'red' | 'amber' | 'blue' }[] = []
@@ -174,16 +248,29 @@ function staticThumb(lat?: number, lng?: number, w = 240, h = 150): string | nul
   return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${lng},${lat},16.5,0/${w}x${h}@2x?access_token=${MAPBOX_TOKEN}&attribution=false&logo=false`
 }
 
+// "123 Main St, Dallas, TX 75201" → { city: 'Dallas', state: 'TX' }
+// Legacy rows have city/state NULL (they were never written) and facts NULL
+// (migration 148 didn't backfill), but `address` has always been populated.
+function cityStateFromAddress(address?: string): { city: string; state: string } {
+  const parts = (address ?? '').split(',').map(s => s.trim()).filter(Boolean)
+  if (parts.length < 3) return { city: '', state: '' }
+  return { city: parts[1] ?? '', state: (parts[2] ?? '').split(/\s+/)[0] ?? '' }
+}
+
 // Map a saved aria_properties row → a list card. The row's real UUID id is kept,
 // so opening it loads the canonical record instantly (no re-search, no spend).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function savedRowToItem(row: any): PropItem {
+  const addr = row.facts?.property?.address ?? row.address ?? ''
+  const fromAddr = cityStateFromAddress(addr)
   return {
     id: row.id,
     name: row.property_name ?? row.facts?.property?.name ?? 'Unknown Property',
-    address: row.facts?.property?.address ?? row.address ?? '',
-    city: row.facts?.property?.city ?? row.city ?? '',
-    state: row.facts?.property?.state ?? row.state ?? '',
+    address: addr,
+    // Community/social needs a city — fall back to parsing the address so saved
+    // rows aren't silently skipped.
+    city: row.facts?.property?.city ?? row.city ?? fromAddr.city,
+    state: row.facts?.property?.state ?? row.state ?? fromAddr.state,
     units: row.units ?? row.facts?.property?.units,
     management_company: row.management_company ?? row.facts?.property?.management_company,
     isp_signal: (row.isp_providers ?? row.facts?.connectivity?.isp_providers ?? [])[0],
@@ -216,6 +303,7 @@ export default function AriaExplorePage() {
   const [detailReport, setDetailReport] = useState<any | null>(null)
   const [openCard, setOpenCard]       = useState<null | 'network' | 'community' | 'proptech' | 'ai'>(null)
   const [communityBusy, setCommunityBusy] = useState(false)
+  const [communityErr, setCommunityErr]   = useState<string | null>(null)
   // Apollo-grade segmentation on multifamily fields
   const [fMinUnits, setFMinUnits] = useState(0)
   const [fGate, setFGate]         = useState(false)
@@ -275,7 +363,12 @@ export default function AriaExplorePage() {
     initMap()
     if (!mapRef.current) { const t = setTimeout(() => setMapTick(x => x + 1), 200); return () => clearTimeout(t) }
     const map = mapRef.current
-    setTimeout(() => map.resize(), 60)
+    // Mapbox measures its container on create. If it was 0×0 (hidden, or the
+    // flex row hadn't laid out yet) it renders blank until told to re-measure.
+    // Resize on the next frame AND after layout settles.
+    requestAnimationFrame(() => { try { map.resize() } catch { /* noop */ } })
+    setTimeout(() => { try { map.resize() } catch { /* noop */ } }, 120)
+    setTimeout(() => { try { map.resize() } catch { /* noop */ } }, 400)
     Object.values(markersRef.current).forEach((m: any) => m.remove()) // eslint-disable-line @typescript-eslint/no-explicit-any
     markersRef.current = {}
     // Same predicate as matchesFilters, so pin numbers line up 1:1 with the
@@ -315,15 +408,24 @@ export default function AriaExplorePage() {
   // has none — so fetch them on open and persist. Without this, Community stays
   // blank forever on every known site.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const hydrateCommunity = useCallback(async (rep: any, it: { name: string; city?: string; state?: string }) => {
+  const hydrateCommunity = useCallback(async (rep: any, it: { name: string; city?: string; state?: string; address?: string; id?: string }) => {
     if (!rep || (rep.community?.length ?? 0) > 0) return
-    if (!it.name || !it.city) return   // the social route requires name + city
-    setCommunityBusy(true)
+    // The social route needs a city. Saved rows often have none (the column was
+    // never written), so derive it from the address rather than silently giving
+    // up — that guard is exactly what made Community return zero on every
+    // saved property.
+    const city = it.city || cityStateFromAddress(it.address ?? rep.property?.address).city
+    const state = it.state || cityStateFromAddress(it.address ?? rep.property?.address).state
+    if (!it.name || !city) { setCommunityErr('No city on this property, so resident posts can’t be searched.'); return }
+    setCommunityBusy(true); setCommunityErr(null)
     try {
       const r = await fetch('/api/aria/social', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          property_name: it.name, city: it.city, state: it.state,
+          property_name: it.name, city, state,
+          address: it.address ?? rep.property?.address,
+          // Exact row match — survives the engine renaming a property.
+          property_id: (it.id && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(it.id)) ? it.id : undefined,
           management_company: rep.property?.management_company,
           isp_providers: rep.property?.isp_providers,
           video_providers: rep.property?.video_providers,
@@ -332,13 +434,20 @@ export default function AriaExplorePage() {
           access_control: rep.property?.proptech?.access_control,
         }),
       })
-      if (!r.ok) return
+      // Never fail silently — "no posts exist" and "we never asked" must look different.
+      if (!r.ok) {
+        const t = await r.text().catch(() => '')
+        setCommunityErr(r.status === 401 ? 'Sign-in expired — reload the page.' : `Couldn’t search posts (${r.status}). ${t.slice(0, 80)}`)
+        return
+      }
       const sd = await r.json()
       if (sd?.social_posts?.length) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         setDetailReport((prev: any) => prev ? { ...prev, community: sd.social_posts } : prev)
       }
-    } catch { /* non-blocking */ }
+    } catch (e) {
+      setCommunityErr(e instanceof Error ? e.message : 'Couldn’t search resident posts.')
+    }
     finally { setCommunityBusy(false) }
   }, [])
 
@@ -900,8 +1009,11 @@ export default function AriaExplorePage() {
           </div>
         )}
 
-        {/* MAP + RESULTS — map fills the centre, results live in the right third */}
-        <div className={`absolute inset-0 flex ${items.length > 0 && view === 'map' ? '' : 'hidden'}`}>
+        {/* MAP + RESULTS — map fills the centre, results live in the right third.
+            NOTE: this must NOT be hidden when items is empty. Mapbox initialises
+            into a display:none container at 0×0 and paints nothing, which is why
+            the centre came up blank. Keep it mounted whenever we're in map view. */}
+        <div className={`absolute inset-0 flex ${view === 'map' ? '' : 'hidden'}`}>
           {/* Map (centre) */}
           <div className="relative flex-1 min-w-0">
             {!MAPBOX_TOKEN && <div className="absolute inset-0 flex items-center justify-center text-slate-500 text-sm">Map needs NEXT_PUBLIC_MAPBOX_TOKEN.</div>}
@@ -936,6 +1048,12 @@ export default function AriaExplorePage() {
                         {it.units ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#0F1830] text-slate-300 border border-white/10">{it.units} units</span> : null}
                         {it.researched && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">✓ Saved</span>}
                         {triggerFlags(it).slice(0, 1).map(f => <span key={f.label} className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${toneClass(f.tone)}`}>{f.label}</span>)}
+                      </div>
+                      {/* At-a-glance valuations — same ramp as the big gauges */}
+                      <div className="flex items-center gap-3 mt-2">
+                        <MiniGauge label="Buy" val={s} />
+                        <MiniGauge label="Fit" val={proptechFit(it)} />
+                        <MiniGauge label="Net" val={netScore(it)} />
                       </div>
                     </div>
                     {/* Select */}
@@ -1053,16 +1171,28 @@ export default function AriaExplorePage() {
               // Premium two-tone gradient speedometer — green→teal (strong),
               // amber→orange (mid), rose→red (weak). White numerals for contrast.
               const SemiGauge = ({ label, val, size = 96 }: { label: string; val: number; size?: number }) => {
-                const f = Math.max(0, Math.min(10, val)) / 10, AL = Math.PI * 44
-                const [c1, c2] = val >= 7 ? ['#34d399', '#06b6d4'] : val >= 4.5 ? ['#fbbf24', '#f97316'] : ['#fb7185', '#e11d48']
-                const gid = `gg-${label.replace(/\s+/g, '')}-${Math.round(val * 10)}`
+                const v = Math.max(0, Math.min(10, val))
+                const f = v / 10, AL = Math.PI * 44
+                // One fixed ramp painted along the arc (red → orange → amber →
+                // light green → rich green). The dash offset reveals it up to the
+                // value, so the colour you land on IS the colour for that score.
+                const gid = `gg-${label.replace(/\s+/g, '')}`
+                const tip = gaugeColorAt(v)
                 return (
                   <div className="flex flex-col items-center">
                     <svg width={size} height={size * 0.58} viewBox="0 0 100 58">
-                      <defs><linearGradient id={gid} x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor={c1} /><stop offset="100%" stopColor={c2} /></linearGradient></defs>
+                      <defs>
+                        <linearGradient id={gid} gradientUnits="userSpaceOnUse" x1="6" y1="0" x2="94" y2="0">
+                          {GAUGE_STOPS.map(s => (
+                            <stop key={s.at} offset={`${s.at * 100}%`} stopColor={`rgb(${s.c[0]},${s.c[1]},${s.c[2]})`} />
+                          ))}
+                        </linearGradient>
+                      </defs>
                       <path d="M 6 52 A 44 44 0 0 1 94 52" fill="none" stroke="#1c2740" strokeWidth="9" strokeLinecap="round" />
-                      <path d="M 6 52 A 44 44 0 0 1 94 52" fill="none" stroke={`url(#${gid})`} strokeWidth="9" strokeLinecap="round" strokeDasharray={AL} strokeDashoffset={AL * (1 - f)} style={{ filter: `drop-shadow(0 0 4px ${c1}88)` }} />
-                      <text x="50" y="46" textAnchor="middle" fontSize="19" fontWeight="800" fill="#f8fafc">{val.toFixed(1)}</text>
+                      <path d="M 6 52 A 44 44 0 0 1 94 52" fill="none" stroke={`url(#${gid})`} strokeWidth="9" strokeLinecap="round"
+                        strokeDasharray={AL} strokeDashoffset={AL * (1 - f)}
+                        style={{ filter: `drop-shadow(0 0 5px ${tip})`, transition: 'stroke-dashoffset 600ms ease-out' }} />
+                      <text x="50" y="46" textAnchor="middle" fontSize="19" fontWeight="800" fill="#f8fafc">{v.toFixed(1)}</text>
                       <text x="50" y="56" textAnchor="middle" fontSize="7" fontWeight="700" fill="#64748b">/10</text>
                     </svg>
                     <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wide -mt-1 text-center leading-tight">{label}</span>
@@ -1140,9 +1270,13 @@ export default function AriaExplorePage() {
                       {openCard === 'community' && (
                         <div className="space-y-2">
                           {community.length === 0 && (
-                            <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4 text-[11px] text-slate-500 italic">
-                              {communityBusy ? 'Looking for resident posts…' : 'No resident posts found yet'}
-                            </div>
+                            communityErr ? (
+                              <div className="rounded-xl border border-rose-400/30 bg-rose-500/10 p-4 text-[11px] text-rose-200">{communityErr}</div>
+                            ) : (
+                              <div className="rounded-xl border border-white/10 bg-[#131B2E] p-4 text-[11px] text-slate-500 italic">
+                                {communityBusy ? 'Looking for resident posts…' : 'No resident posts found yet'}
+                              </div>
+                            )
                           )}
                           {community.slice(0, 12).map((c, i) => (
                             <div key={i} className="rounded-xl border border-white/10 bg-[#131B2E] p-3">

@@ -138,6 +138,7 @@ export async function POST(req: NextRequest) {
     if (!prospects.length) return NextResponse.json({ upserted: 0 })
 
     let upserted = 0
+    const writeErrors: string[] = []
     const techProviderUpdates: Map<string, { category: string; names: string[] }> = new Map()
 
     for (const p of prospects) {
@@ -312,6 +313,11 @@ export async function POST(req: NextRequest) {
         deductions,
         property_name:         propName,
         address:               propAddr,
+        // city/state were READ in 4 places but never WRITTEN — a phantom column.
+        // That left every saved row with city = NULL, which silently disabled the
+        // Community/social lookup (it requires a city). Always write them.
+        city:                  mergeVal(existing?.city, prop.city),
+        state:                 mergeVal(existing?.state, prop.state),
         units:                 mergeVal(existing?.units, prop.units),
         property_type:         mergeVal(existing?.property_type, prop.property_type),
         class:                 mergeVal(existing?.class, prop.class),
@@ -371,24 +377,47 @@ export async function POST(req: NextRequest) {
         updated_at:            new Date().toISOString(),
       }
 
-      const { error: upsertErr } = await supabase
-        .from('aria_properties')
-        .upsert(upsertData, {
-          onConflict: 'property_name,address',
-          ignoreDuplicates: false,
-        })
+      // ── Write ────────────────────────────────────────────────────────────
+      // NOTE: do NOT use .upsert({ onConflict: 'property_name,address' }) here.
+      // The only unique index is an EXPRESSION index —
+      //   (lower(trim(property_name)), lower(trim(address)))
+      // — which Postgres cannot match to `ON CONFLICT (property_name, address)`.
+      // That threw 42P10 on every write, and the error was swallowed, so this
+      // route returned 200 { upserted: 0 } and nothing was ever saved. Resolve
+      // the target row ourselves and do an explicit update/insert instead.
+      let upsertErr: { message: string; code?: string } | null = null
+      if (existing?.id) {
+        const { error } = await supabase.from('aria_properties').update(upsertData).eq('id', existing.id)
+        upsertErr = error
+      } else {
+        const { error } = await supabase.from('aria_properties').insert(upsertData)
+        // 23505 = someone inserted the same identity concurrently → update it.
+        if (error?.code === '23505') {
+          const { data: raced } = await supabase
+            .from('aria_properties').select('id')
+            .ilike('property_name', propName).limit(1)
+          if (raced?.[0]?.id) {
+            const { error: e2 } = await supabase.from('aria_properties').update(upsertData).eq('id', raced[0].id)
+            upsertErr = e2
+          } else { upsertErr = error }
+        } else {
+          upsertErr = error
+        }
+      }
 
-      // Bump the counter separately for existing rows
-      void (async () => {
+      if (upsertErr) {
+        console.error(`[aria/properties] save FAILED for "${propName}": ${upsertErr.message}`)
+        writeErrors.push(`${propName}: ${upsertErr.message}`)
+      } else {
+        upserted++
+        // Bump the research counter (best-effort, must not fail the save).
         try {
           await supabase.rpc('increment_aria_property_research_count', {
             p_name: upsertData.property_name,
             p_addr: upsertData.address,
           })
-        } catch (_) {}
-      })()
-
-      if (!upsertErr) upserted++
+        } catch { /* counter is non-critical */ }
+      }
     }
 
     // ── Auto-grow the tech provider catalog ─────────────────────────────────
@@ -412,7 +441,19 @@ export async function POST(req: NextRequest) {
       })()
     }
 
-    return NextResponse.json({ upserted, tech_providers_seen: techProviderUpdates.size })
+    // Report failures loudly. A 200 with { upserted: 0 } is how this silently
+    // lost every property for months — never let that happen quietly again.
+    if (writeErrors.length && upserted === 0) {
+      return NextResponse.json(
+        { upserted: 0, errors: writeErrors, error: `Nothing saved: ${writeErrors[0]}` },
+        { status: 500 }
+      )
+    }
+    return NextResponse.json({
+      upserted,
+      tech_providers_seen: techProviderUpdates.size,
+      ...(writeErrors.length ? { errors: writeErrors } : {}),
+    })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error: msg }, { status: 500 })
