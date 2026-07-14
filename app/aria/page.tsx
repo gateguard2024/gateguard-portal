@@ -185,8 +185,7 @@ export default function AriaExplorePage() {
   const [source, setSource]       = useState<Source>('discover')
   const [scoutLeadIds, setScoutLeadIds] = useState<string[]>([])
   const [scoutMsg, setScoutMsg]   = useState<string | null>(null)
-  const [historyOpen, setHistoryOpen] = useState(false)
-  const [panel, setPanel] = useState<null | 'leads' | 'contacts' | 'settings'>(null)
+  const [panel, setPanel] = useState<null | 'leads' | 'contacts' | 'settings' | 'history'>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [panelItems, setPanelItems] = useState<any[]>([])
   const [panelLoading, setPanelLoading] = useState(false)
@@ -345,7 +344,7 @@ export default function AriaExplorePage() {
 
   // Load data for the Leads / Contacts nav panels (both derived from searches).
   useEffect(() => {
-    if (!panel || panel === 'settings') return
+    if (!panel || panel === 'settings' || panel === 'history') return
     setPanelLoading(true); setPanelItems([])
     void (async () => {
       try {
@@ -431,6 +430,14 @@ export default function AriaExplorePage() {
       if (d.error) throw new Error(d.error)
       setDetailReport(d?.prospects?.[0] ? normalizeReport(d.prospects[0]) : null)
       setItems(prev => prev.map(x => x.id === it.id ? { ...x, researched: true } : x))
+      // GUARANTEE all data (facts + inferred) is saved to Supabase — post the full
+      // prospect to the canonical upsert (builds facts + deductions incl. inferred).
+      if (d?.prospects?.length) {
+        void fetch('/api/aria/properties', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prospects: d.prospects }),
+        }).catch(() => {})
+      }
     } catch { setDetailReport({ _error: true }) }
     finally { setDetailBusy(false) }
   }, [])
@@ -467,6 +474,7 @@ export default function AriaExplorePage() {
   const NAV: { href?: string; onClick?: () => void; active?: boolean; Icon: any; label: string }[] = [
     { href: '/', Icon: LayoutGrid, label: 'Home' },
     { onClick: () => { setPanel(null); setSource('discover') }, active: !panel && source === 'discover', Icon: MapPin, label: 'Discover' },
+    { onClick: () => setPanel('history'), active: panel === 'history', Icon: Clock, label: 'History' },
     { onClick: () => setPanel('leads'), active: panel === 'leads', Icon: Star, label: 'Leads' },
     { onClick: () => { setPanel(null); setSource('saved'); loadSaved() }, active: !panel && source === 'saved', Icon: Building2, label: 'Portfolio' },
     { onClick: () => setPanel('contacts'), active: panel === 'contacts', Icon: Users, label: 'Contacts' },
@@ -506,42 +514,27 @@ export default function AriaExplorePage() {
           <p className="text-[11px] text-slate-400 leading-tight hidden sm:block">Find properties</p>
         </div>
         <div className="flex-1" />
-        <button onClick={() => setHistoryOpen(true)}
-          className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border border-white/10 text-slate-200 hover:bg-[#131B2E] transition-all">
-          <Clock size={13} /> History
-        </button>
-        <a href="/aria/classic" className="text-[11px] font-semibold text-slate-500 hover:text-slate-300 transition-colors">Classic view</a>
       </header>
 
-      {/* History rail — every past search, date-grouped, one click to re-open */}
-      {historyOpen && (
-        <div className="fixed inset-0 z-40 flex" onClick={() => setHistoryOpen(false)}>
-          <div className="relative w-full max-w-sm h-full overflow-hidden shadow-2xl p-4" style={{ background: '#0B1728', borderRight: '1px solid rgba(255,255,255,0.08)' }} onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-2 pb-3 mb-1">
-              <Clock size={14} className="text-[#6B7EFF]" />
-              <span className="text-sm font-bold text-slate-100">Search History</span>
-              <button onClick={() => setHistoryOpen(false)} className="ml-auto text-slate-500 hover:text-slate-200"><X size={16} /></button>
-            </div>
-            <div className="h-[calc(100%-3rem)]">
-              <SearchHistoryPanel onPick={(qq) => { setHistoryOpen(false); setSource('discover'); runSearch(qq) }} />
-            </div>
-          </div>
-          <div className="flex-1 bg-black/50" />
-        </div>
-      )}
-
-      {/* Nav panels — Leads / Contacts / Settings (all derived from searches) */}
+      {/* Nav panels — History / Leads / Contacts / Settings (all derived from searches) */}
       {panel && (
         <div className="fixed inset-y-0 right-0 z-40 flex" style={{ left: 56 }} onClick={() => setPanel(null)}>
           <div className="relative w-full max-w-md h-full overflow-y-auto shadow-2xl" style={{ background: '#0B1728', borderRight: '1px solid rgba(255,255,255,0.08)' }} onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-2 px-5 py-4 border-b border-white/10 sticky top-0 z-10" style={{ background: '#0B1728' }}>
-              {panel === 'leads' ? <Star size={15} className="text-[#6B7EFF]" /> : panel === 'contacts' ? <Users size={15} className="text-[#6B7EFF]" /> : <Settings size={15} className="text-[#6B7EFF]" />}
-              <span className="text-base font-bold text-slate-100">{panel === 'leads' ? 'Leads from ARIA' : panel === 'contacts' ? 'Contacts found' : 'Search settings'}</span>
-              {panel !== 'settings' && <span className="text-[11px] font-semibold text-slate-500">{panelItems.length}</span>}
+              {panel === 'leads' ? <Star size={15} className="text-[#6B7EFF]" /> : panel === 'contacts' ? <Users size={15} className="text-[#6B7EFF]" /> : panel === 'history' ? <Clock size={15} className="text-[#6B7EFF]" /> : <Settings size={15} className="text-[#6B7EFF]" />}
+              <span className="text-base font-bold text-slate-100">{panel === 'leads' ? 'Leads from ARIA' : panel === 'contacts' ? 'Contacts found' : panel === 'history' ? 'Search history' : 'Search settings'}</span>
+              {(panel === 'leads' || panel === 'contacts') && <span className="text-[11px] font-semibold text-slate-500">{panelItems.length}</span>}
               <button onClick={() => setPanel(null)} className="ml-auto text-slate-500 hover:text-slate-200"><X size={17} /></button>
             </div>
 
             {panelLoading && <div className="flex items-center gap-2 px-5 py-6 text-slate-400 text-xs"><Loader2 size={14} className="animate-spin" /> Loading…</div>}
+
+            {/* HISTORY */}
+            {panel === 'history' && (
+              <div className="p-4 h-[calc(100%-4.5rem)]">
+                <SearchHistoryPanel onPick={(qq) => { setPanel(null); setSource('discover'); runSearch(qq) }} />
+              </div>
+            )}
 
             {/* LEADS */}
             {panel === 'leads' && !panelLoading && (
@@ -841,51 +834,60 @@ export default function AriaExplorePage() {
               // Pro-Tech Fit: low modern saturation + displacement signals = high fit for us.
               const fit = Math.max(0, Math.min(10, 5 + (rep.property?.bulk_agreements?.length ? 2 : 0) + (detail?.gate_signal || /gate|access/i.test(String(rep.ai_intel?.key_finding || '')) ? 2 : 0) - Math.min(found.length, 4)))
               const gcol = (n: number) => n >= 8 ? '#22c55e' : n >= 5 ? '#f59e0b' : '#ef4444'
-              const Gauge = ({ label, val }: { label: string; val: number }) => {
-                const p = Math.max(0, Math.min(10, val)) / 10, C = 2 * Math.PI * 26
+              // Half-circle speedometer gauge (matches the mockup).
+              const SemiGauge = ({ label, val, size = 96 }: { label: string; val: number; size?: number }) => {
+                const f = Math.max(0, Math.min(10, val)) / 10, AL = Math.PI * 44
                 return (
                   <div className="flex flex-col items-center">
-                    <svg width="62" height="62" viewBox="0 0 64 64">
-                      <circle cx="32" cy="32" r="26" fill="none" stroke="#1e293b" strokeWidth="6" />
-                      <circle cx="32" cy="32" r="26" fill="none" stroke={gcol(val)} strokeWidth="6" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - p)} transform="rotate(-90 32 32)" />
-                      <text x="32" y="38" textAnchor="middle" fontSize="17" fontWeight="700" fill="#f1f5f9">{Math.round(val)}</text>
+                    <svg width={size} height={size * 0.58} viewBox="0 0 100 58">
+                      <path d="M 6 52 A 44 44 0 0 1 94 52" fill="none" stroke="#1e293b" strokeWidth="9" strokeLinecap="round" />
+                      <path d="M 6 52 A 44 44 0 0 1 94 52" fill="none" stroke={gcol(val)} strokeWidth="9" strokeLinecap="round" strokeDasharray={AL} strokeDashoffset={AL * (1 - f)} />
+                      <text x="50" y="47" textAnchor="middle" fontSize="18" fontWeight="800" fill={gcol(val)}>{val.toFixed(1)}</text>
+                      <text x="50" y="56" textAnchor="middle" fontSize="7" fontWeight="700" fill="#64748b">/10</text>
                     </svg>
-                    <span className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-wide">{label}</span>
+                    <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wide -mt-1 text-center leading-tight">{label}</span>
                   </div>
                 )
               }
+              const verdictLabel = buy >= 8 ? 'HOT LEAD' : buy >= 5 ? 'WARM LEAD' : 'COLD'
+              const verdictColor = buy >= 8 ? '#22c55e' : buy >= 5 ? '#f59e0b' : '#ef4444'
               const verdictText = (rep.ai_intel?.key_finding && rep.ai_intel.key_finding !== 'No data found')
                 ? rep.ai_intel.key_finding
                 : `${detail?.name} is a ${detail?.units ? `${detail.units}-unit ` : ''}property${rep.property?.bulk_agreements?.length ? ' with an existing bulk internet deal worth displacing' : ''}${found.length === 0 ? '. Low proptech saturation signals strong upgrade potential' : ''}. ${buy >= 8 ? 'Hot lead — prioritize.' : buy >= 5 ? 'Warm — worth a call.' : 'Cold for now.'}`
               const Card = ({ id, Icon, title, summary }: { id: typeof openCard; Icon: any; title: string; summary: string }) => ( // eslint-disable-line @typescript-eslint/no-explicit-any
                 <button onClick={() => setOpenCard(openCard === id ? null : id)}
-                  className={`text-left rounded-xl border p-3 transition-all ${openCard === id ? 'border-[#6B7EFF] bg-[#131B2E] shadow-[0_0_20px_rgba(107,126,255,0.15)]' : 'border-white/10 bg-[#131B2E]/70 hover:border-[#6B7EFF]/50'}`}>
-                  <Icon size={16} className="text-[#6B7EFF] mb-1.5" />
-                  <p className="text-[12px] font-bold text-slate-100 leading-tight">{title}</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">{summary}</p>
+                  className={`text-left rounded-xl border p-3.5 transition-all ${openCard === id ? 'border-[#6B7EFF] bg-[#131B2E] shadow-[0_0_20px_rgba(107,126,255,0.15)]' : 'border-white/10 bg-[#131B2E]/70 hover:border-[#6B7EFF]/50'}`}>
+                  <Icon size={20} className="text-[#6B7EFF] mb-2" />
+                  <p className="text-[12px] font-bold text-slate-100 leading-tight uppercase tracking-wide">{title}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">{summary}</p>
+                  <p className="text-[9px] font-bold text-[#6B7EFF] mt-2 uppercase tracking-wide">{openCard === id ? 'Hide report' : 'Click for detailed report'}</p>
                 </button>
               )
               return (
                 <div className="pb-10">
-                  {/* Wow dials */}
-                  <div className="grid grid-cols-3 gap-2 px-5 pt-1 pb-4">
-                    <Gauge label="Buy score" val={buy} />
-                    <Gauge label="Contactability" val={dm} />
-                    <Gauge label="Pro-Tech fit" val={fit} />
+                  {/* Top speedometers */}
+                  <div className="grid grid-cols-3 gap-1 px-4 pt-2 items-end">
+                    <SemiGauge label="Buy score" val={buy} size={92} />
+                    <SemiGauge label="Opportunity" val={Math.round((buy + fit) / 2)} size={108} />
+                    <SemiGauge label="Contactability" val={dm} size={92} />
                   </div>
                   {/* ARIA's opportunity verdict */}
-                  <div className="px-5">
-                    <div className="rounded-xl border border-[#6B7EFF]/25 p-4" style={{ background: 'rgba(107,126,255,0.06)' }}>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#9AA8FF] mb-1.5">ARIA&apos;s verdict</p>
-                      <p className="text-[12px] text-slate-200 leading-relaxed">{verdictText}</p>
-                    </div>
+                  <div className="px-5 pt-1">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 text-center">ARIA&apos;s opportunity verdict</p>
+                    <p className="text-xl font-extrabold text-center mt-0.5" style={{ color: verdictColor }}>{verdictLabel}</p>
+                    <p className="text-[12px] text-slate-300 leading-relaxed mt-2">{verdictText}</p>
+                  </div>
+                  {/* Second gauge row */}
+                  <div className="grid grid-cols-2 gap-2 px-5 pt-4 border-t border-white/10 mt-4">
+                    <SemiGauge label="Pro-Tech fit" val={fit} size={100} />
+                    <SemiGauge label="Team contactability" val={dm} size={100} />
                   </div>
                   {/* Insight cards */}
                   <div className="grid grid-cols-2 gap-2.5 px-5 pt-4">
-                    <Card id="network" Icon={Wifi} title="Network overview" summary={rep.property?.isp_providers?.length ? rep.property.isp_providers.slice(0, 2).join(', ') : 'Wi-Fi & TV audit'} />
-                    <Card id="community" Icon={Users} title="Community insights" summary={`${community.length} resident post${community.length === 1 ? '' : 's'}`} />
-                    <Card id="proptech" Icon={Cpu} title="Proptech ops" summary={`${found.length} found · ${inferred.length} likely`} />
-                    <Card id="ai" Icon={Zap} title="Deep AI audit" summary={`${contacts.length} contact${contacts.length === 1 ? '' : 's'} · playbook`} />
+                    <Card id="network" Icon={Wifi} title="Network overview" summary="Comprehensive Wi-Fi & TV audit." />
+                    <Card id="community" Icon={Users} title="Community insights" summary="Resident feedback & engagement." />
+                    <Card id="proptech" Icon={Cpu} title="Proptech ops" summary="Hardware & software stack." />
+                    <Card id="ai" Icon={Zap} title="Deep AI audit" summary="Analysis & recommendations." />
                   </div>
                   {/* Expanded card */}
                   {openCard && (
